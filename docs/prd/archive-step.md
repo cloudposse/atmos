@@ -1,8 +1,8 @@
 # PRD: Native Archive Step (`type: archive`)
 
 **Status:** Phase 1 implemented
-**Version:** 1.1
-**Last Updated:** 2026-07-11
+**Version:** 1.2
+**Last Updated:** 2026-07-12
 **Author:** Erik Osterman
 
 ---
@@ -87,6 +87,61 @@ This halves the implementation versus the original draft — no
 kind-level tests — while producing an identical user-facing capability, consistent
 with how every other step type reaches hooks.
 
+## Design: reproducible output
+
+By default, `replace`/`update` write every entry with the source file's real mtime and
+permission bits, straight through from `os.Stat`. That's a problem for the exact use
+case this PRD targets: rebuilding an artifact archive (a Lambda `handler.zip`) fresh
+before every `plan`/`apply`. A fresh `git clone` — or any CI checkout — sets every
+file's mtime to checkout time, and umask differs across machines/containers/CI images.
+So identical source content produces a *different* archive, byte for byte, on every
+rebuild — which defeats anything downstream that keys off the archive's hash (Lambda
+only redeploying when the zip's checksum changes, a build cache, provenance/attestation
+checks that expect the same input to produce the same output).
+
+This is not a hypothetical: it's the same failure mode behind Terraform's
+`hashicorp/archive` provider's long-standing `archive_file` non-determinism reports —
+investigation for this PRD traced the root cause to exactly these two inputs (real
+mtime, real permission bits), not to anything inherent to zip/tar as formats. Neither
+`SOURCE_DATE_EPOCH` (an env-var convention some tools honor, but not a general fix — it
+has to be threaded through every tool in the chain) nor `git archive` (which only
+archives tracked files at a ref — not usable here, since this step packages *build
+artifacts*, e.g. compiled/bundled output that typically isn't committed to git at all)
+is a fit for this step's actual use case.
+
+**Decision: an opt-in `reproducible` field, not a default-on behavior.** Changing the
+default would silently alter output for every existing user of this step (and of
+`archive_file`-style tools generally, if anyone diffs archive bytes today). Two modes,
+selected by one field, both git-derived per explicit direction to use git's own commit
+history as the timestamp source rather than introducing a new convention:
+
+- `reproducible: epoch` — resolve one timestamp (the most recent commit touching
+  anything under `source`) and stamp every entry with it. Cheapest option: one Git log
+  walk per archive operation, regardless of file count.
+- `reproducible: git` — resolve each entry's *own* most recent commit and stamp it
+  individually. More precise (unrelated files don't share a timestamp just because
+  something else in the tree changed), at the cost of one Git log walk per file.
+  Files with no commit history (the common case for this step, since it typically
+  packages build output — `node_modules/`, compiled binaries — rather than tracked
+  source) fall back to the same value `epoch` would compute.
+
+Both modes also normalize permission bits (every entry becomes `0644`, or `0755` if the
+source is executable) — independent of the timestamp strategy, since inconsistent
+umask-derived permission bits are just as capable of producing different archive bytes
+as inconsistent timestamps are. Outside a git repository, or for a source path with no
+commit history, both modes fall back to a fixed reference date (1980-01-01, the
+earliest a zip entry's DOS timestamp field can represent) rather than failing the
+step — a temp build directory or shallow clone should still degrade gracefully rather
+than block the archive operation.
+
+Implemented via `go-git/go-git` (already a direct dependency) rather than shelling out
+to `git log` — consistent with the step's zero-external-binary design goal. Only the
+`replace` path is fully reproducible; `update`'s copy-forward entries intentionally
+keep whatever mtime/mode a prior write already gave them (re-encoding every existing
+entry on every incremental update would defeat the point of `update` being cheaper
+than `replace`), so only the entries a given `update` call actually adds/refreshes are
+normalized.
+
 ## Non-Goals (V1)
 
 - **`action: create` and `action: extract` are reserved in the schema but not
@@ -143,6 +198,8 @@ include:
 exclude:
   - "**/*.test.js"
   - "**/node_modules/**"
+reproducible: ""            # "" (default, real mtime/mode) | epoch | git — see
+                            # Design: reproducible output
 ```
 
 `action` and `source` are shared fields on the step schema (`pkg/schema/workflow.go`,
@@ -197,13 +254,16 @@ ambiguous or absent.
     `included_paths`/`excluded_paths` already uses), and archive-path joining
     (always forward-slash, independent of OS).
   - `zip.go` / `tar.go` — format-specific pack/update, using stdlib only.
+  - `reproducible.go` — resolves the `reproducible` mode's deterministic mtime via
+    `go-git`, and normalizes permission bits; see
+    [Design: reproducible output](#design-reproducible-output).
 - **`pkg/runner/step/archive.go`** — the `ArchiveHandler` step type (`Register`ed
   as `"archive"`), following the `http` step type's structural precedent (own
   config, own error taxonomy, no shelling out).
 - **`pkg/schema/workflow.go`, `pkg/schema/task.go`** — new `Format`, `Destination`,
-  `Subpath`, `Include`, `Exclude` fields (flat, matching the `http` step's
-  precedent), reusing the existing `Action` and `Source` fields; wired through
-  `Task.ToWorkflowStep()` / `TaskFromWorkflowStep()`.
+  `Subpath`, `Include`, `Exclude`, `Reproducible` fields (flat, matching the `http`
+  step's precedent), reusing the existing `Action` and `Source` fields; wired
+  through `Task.ToWorkflowStep()` / `TaskFromWorkflowStep()`.
 - **`errors/errors.go`** — new sentinel errors for both the `pkg/archive` package
   and the step's own validation, built via the `errUtils.Build(...)` error-builder
   pattern.
@@ -220,6 +280,14 @@ out to `zip`/`tar`/`unzip` — archives are built and read back purely through G
 `archive/zip`/`archive/tar` packages, proving the cross-platform claim structurally
 rather than asserting it in prose. `pkg/runner/step/archive_test.go` covers
 `Validate`/`Execute` following the `http` step's test pattern.
+
+`pkg/archive/reproducible_test.go` builds a real temp git repository (via `go-git`,
+not by shelling out to `git`) with commits at controlled timestamps, and asserts
+`epoch`/`git` mode resolution against exact expected values — plus the fallback paths
+(no repo, no commit history, untracked file). `pkg/archive/archive_test.go` proves the
+end-to-end claim directly: two builds from identical content but different real
+fs mtime/mode produce byte-identical `zip`/`tar` output when `reproducible: epoch` is
+set, and (as a control) different output when it isn't.
 
 ### Docs
 

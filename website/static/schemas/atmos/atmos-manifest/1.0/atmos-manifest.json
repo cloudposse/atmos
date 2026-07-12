@@ -2459,6 +2459,10 @@
           },
           "description": "Glob(s); drop matching files, evaluated before include, for the archive step type."
         },
+        "reproducible": {
+          "type": "string",
+          "description": "Deterministic output for the archive step type: epoch pins every entry to the same git-derived timestamp; git resolves each entry's own timestamp, falling back to the epoch value. Both modes also normalize permission bits. Omit for the default (real source mtime/mode)."
+        },
         "files": {
           "type": "array",
           "items": {

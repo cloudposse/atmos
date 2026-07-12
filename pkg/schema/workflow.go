@@ -375,11 +375,12 @@ type WorkflowStep struct {
 	// Archive step fields (type: archive). Action reuses the container step's
 	// Action field (create | extract | update | replace); Source reuses the
 	// workdir step's Source field (archive requires it to be a string path).
-	Format      string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
-	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Pack: archive file to write. Extract: directory to extract into.
-	Subpath     string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`             // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
-	Include     []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`             // Glob(s); keep only matching files.
-	Exclude     []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`             // Glob(s); drop matching files, evaluated before include.
+	Format       string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                   // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
+	Destination  string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"`    // Pack: archive file to write. Extract: directory to extract into.
+	Subpath      string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`                // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
+	Include      []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`                // Glob(s); keep only matching files.
+	Exclude      []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`                // Glob(s); drop matching files, evaluated before include.
+	Reproducible string   `yaml:"reproducible,omitempty" json:"reproducible,omitempty" mapstructure:"reproducible"` // "" (default, real mtime/mode) | epoch (one timestamp for the whole archive) | git (per-file timestamps); both modes also normalize permission bits.
 
 	// JUnit step fields.
 	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Glob(s) of JUnit XML files to summarize/annotate (junit step type).

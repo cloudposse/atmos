@@ -7,11 +7,16 @@ date: 2026-07-11
 ---
 
 Packaging a directory into a deployable archive — most commonly zipping a Lambda
-function's source into `handler.zip` before `terraform plan`/`apply` — had no native
-Atmos primitive. The only option was shelling out to `zip`/`tar` via a `kind: command`
-hook or `type: shell` step, which breaks on a Windows CI runner and gives you no typed
-validation. A new `archive` step type fixes that: it's implemented on the Go standard
-library only, so it behaves identically on macOS, Linux, and Windows.
+function's source into `handler.zip` before `terraform plan`/`apply` — has always
+meant reaching for a shell-based hook that wraps the `zip`/`tar` binary. That works
+until you actually depend on it: the flags aren't even the same between BSD `tar`
+(macOS) and GNU `tar` (most Linux CI images), errors surface as opaque shell exit
+codes instead of anything typed, and — the part that's easy to miss — the archive you
+get back isn't reproducible. Build the exact same source twice and you get two
+different files. A new `archive` step type fixes all three: implemented on the Go
+standard library only, it behaves identically everywhere Atmos runs, validates its
+config before touching the filesystem, and can now produce byte-identical output for
+identical input.
 
 <!--truncate-->
 
@@ -32,17 +37,34 @@ hooks:
     events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
 ```
 
-That works on macOS and Linux, but `zip` isn't guaranteed to exist on a Windows CI
-runner — and any pattern like this that Atmos documents gets copied straight into
-user projects, spreading the same portability gap. A `data "archive_file"` Terraform
-data source was tried first; it failed for an unrelated reason — nothing forces it to
-run before a `locals` block elsewhere in the module reads the file it produces.
+Three problems with this, once you look past "it worked when I tested it":
+
+- **The invocation isn't even portable between macOS and Linux**, let alone Windows.
+  `zip -x` and `tar --exclude` take different glob syntax; BSD `tar` (what macOS
+  ships) and GNU `tar` (most Linux CI images) disagree on flags like `--exclude` vs.
+  `-X excludefile`. Two engineers on the same team can get different results running
+  the "same" hook.
+- **Failures are opaque.** A typo in a glob, a missing source directory — all of it
+  surfaces as a shell exit code with no structure Atmos can validate ahead of time.
+- **The output isn't reproducible.** Zip and tar both bake in each file's real
+  modification time and permission bits. A fresh `git clone` sets every file's mtime
+  to checkout time, and umask varies across machines and CI images — so identical
+  source content produces a *different archive* on every rebuild. This is the same
+  failure mode Terraform's own `archive_file` provider has been reported for over the
+  years: two runs, same input, different checksum. Anything downstream that keys off
+  the archive's hash — Lambda only redeploying when the zip's checksum changes, a
+  build cache, a provenance check — sees a "change" that isn't one.
+
+A `data "archive_file"` Terraform data source was tried first for the packaging step
+itself; it failed for an unrelated reason — nothing forces it to run before a
+`locals` block elsewhere in the module reads the file it produces.
 
 ## The Fix
 
 The new `archive` step type packages a directory or file into a `zip`, `tar`, or
 `tgz` archive using only Go's standard library — `archive/zip`, `archive/tar`,
-`compress/gzip`. No shelling out, so it behaves identically everywhere Atmos runs:
+`compress/gzip`. No shelling out, so the same config produces the same archive
+structure everywhere Atmos runs:
 
 ```yaml
 steps:
@@ -88,6 +110,36 @@ hooks:
 
 `create` and `extract` are reserved in the schema for a future release, so it won't
 need a breaking change to add them later.
+
+## Reproducible Output
+
+A native step type fixes the shelling-out problems, but not the reproducibility one
+by itself — by default, entries still carry the source files' real mtime and
+permission bits. Set `reproducible` to fix that too:
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    reproducible: epoch
+```
+
+- `epoch` — every entry gets the same timestamp: the most recent Git commit that
+  touched anything under `source`. One timestamp for the whole archive.
+- `git` — each entry gets its own timestamp, from its own most recent commit. Files
+  with no Git history (build output, `node_modules/`) fall back to the same value
+  `epoch` would use.
+
+Both modes also normalize permission bits (`0644`, or `0755` if the source is
+executable), since inconsistent umask-derived permissions produce different archive
+bytes just as reliably as inconsistent timestamps do. Timestamps come from Git commit
+history via `go-git` — no shelling out to `git log`, and no dependency on
+`SOURCE_DATE_EPOCH` being threaded through every tool in the chain. Outside a Git
+repository, both modes fall back to a fixed reference date rather than failing the
+step. It's opt-in: existing workflows that don't set `reproducible` see no change in
+behavior.
 
 ## Get Involved
 

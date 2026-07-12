@@ -57,6 +57,9 @@ hooks:
 
   <dt>`exclude`</dt>
   <dd>Glob(s); matching files are dropped, evaluated before `include`.</dd>
+
+  <dt>`reproducible`</dt>
+  <dd>`epoch`, `git`, or omitted (default). Pins every archived entry's timestamp and permission bits so identical content produces byte-identical output regardless of when or where it's built. See [Reproducible archives](#reproducible-archives). Supports Go templates.</dd>
 </dl>
 
 ## Update vs. replace
@@ -64,6 +67,39 @@ hooks:
 `update` can only add or refresh entries without rewriting the whole archive stream, which is possible for `zip` (each entry is compressed independently) and uncompressed `tar` (no compression at all). `tgz`, `tar.bz2`, and `tar.xz` wrap the *entire* tar byte stream in one continuous compression pass, so touching a single entry requires decompressing and recompressing everything — not meaningfully cheaper than `replace`. Selecting `update` on one of these formats fails with a typed error naming the format; it is never silently downgraded to a full rebuild.
 
 For the common "always rebuild this archive fresh before every plan/apply" use case, `replace` (the default) is the right choice on every format.
+
+## Reproducible archives
+
+By default, archived entries carry the source files' real modification time and permission bits. That means the same source content can produce a *different* archive — different bytes, different checksum — depending on when it was checked out and which machine built it: a fresh `git clone` sets every file's mtime to "now," and umask differences across environments change which permission bits land on disk. If anything downstream keys off the archive's hash (a Lambda deployment that only redeploys when the zip's checksum changes, a cache, a build-provenance check), a rebuild from identical source can look like a change when nothing actually changed.
+
+Set `reproducible` to make the archive's bytes depend only on file *content*, not on when or where it was built:
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    reproducible: epoch
+```
+
+<dl>
+  <dt>`epoch`</dt>
+  <dd>Every entry gets the same timestamp: the most recent Git commit that touched anything under `source`. Simplest option — one timestamp for the whole archive.</dd>
+
+  <dt>`git`</dt>
+  <dd>Each entry gets its own timestamp: the most recent Git commit that touched that specific file. Files with no Git history (generated output, `node_modules/`, compiled binaries) fall back to the same value `epoch` would use.</dd>
+</dl>
+
+Both modes also normalize permission bits — every entry becomes `0644`, or `0755` if the source file is executable — replacing whatever the source's actual umask-dependent mode happens to be. This is independent of the timestamp strategy, since inconsistent permission bits are just as capable of producing a different archive byte-for-byte.
+
+`source` must be inside a Git repository for either mode to use commit timestamps. Outside a repository, or for a path with no commit history, both modes fall back to a fixed reference date (1980-01-01, the earliest a zip entry can represent) rather than failing the step — reproducibility degrades gracefully instead of blocking the archive.
+
+`reproducible` is opt-in and defaults to unset (real source mtime/mode) — existing workflows are unaffected.
+
+:::note
+This only normalizes the `replace` path. `action: update`'s copied-forward entries keep whatever mtime/mode a prior write already gave them; only the entries a given `update` call actually adds or refreshes are normalized.
+:::
 
 ## Result
 

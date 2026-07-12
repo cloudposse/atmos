@@ -33,6 +33,12 @@ var archiveValidActions = map[string]bool{
 	string(archive.ActionReplace): true,
 }
 
+var archiveValidReproducibleModes = map[string]bool{
+	"":                        true,
+	archive.ReproducibleEpoch: true,
+	archive.ReproducibleGit:   true,
+}
+
 // Validate checks the archive step configuration before execution.
 func (h *ArchiveHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.ArchiveHandler.Validate")()
@@ -46,6 +52,13 @@ func (h *ArchiveHandler) Validate(step *schema.WorkflowStep) error {
 			WithContext("step", step.Name).
 			WithContext("action", action).
 			WithHint("Use one of: create, extract, update, replace").
+			Err()
+	}
+	if !archiveValidReproducibleModes[step.Reproducible] {
+		return errUtils.Build(errUtils.ErrArchiveInvalidReproducibleMode).
+			WithContext("step", step.Name).
+			WithContext("reproducible", step.Reproducible).
+			WithHint("Use one of: epoch, git").
 			Err()
 	}
 
@@ -104,6 +117,10 @@ func resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.
 	if err != nil {
 		return archive.PackOptions{}, "", fmt.Errorf("step '%s': failed to resolve exclude: %w", step.Name, err)
 	}
+	reproducible, err := vars.Resolve(step.Reproducible)
+	if err != nil {
+		return archive.PackOptions{}, "", fmt.Errorf("step '%s': failed to resolve reproducible: %w", step.Name, err)
+	}
 
 	action := archive.Action(step.Action)
 	if action == "" {
@@ -111,12 +128,13 @@ func resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.
 	}
 
 	return archive.PackOptions{
-		Source:      source,
-		Destination: destination,
-		Format:      format,
-		Subpath:     subpath,
-		Include:     include,
-		Exclude:     exclude,
+		Source:       source,
+		Destination:  destination,
+		Format:       format,
+		Subpath:      subpath,
+		Include:      include,
+		Exclude:      exclude,
+		Reproducible: reproducible,
 	}, action, nil
 }
 

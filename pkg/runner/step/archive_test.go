@@ -213,6 +213,10 @@ func TestArchiveHandler_Execute_ResolveErrors(t *testing.T) {
 			name: "malformed exclude template",
 			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Exclude: []string{malformed}},
 		},
+		{
+			name: "malformed reproducible template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Reproducible: malformed},
+		},
 	}
 
 	for _, tt := range tests {
@@ -221,4 +225,48 @@ func TestArchiveHandler_Execute_ResolveErrors(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestArchiveHandler_Validate_RejectsInvalidReproducibleMode(t *testing.T) {
+	err := mustGetArchiveHandler(t).Validate(&schema.WorkflowStep{
+		Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Reproducible: "bogus",
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidReproducibleMode))
+}
+
+func TestArchiveHandler_Validate_AcceptsReproducibleModes(t *testing.T) {
+	handler := mustGetArchiveHandler(t)
+	for _, mode := range []string{"", "epoch", "git"} {
+		t.Run(mode, func(t *testing.T) {
+			err := handler.Validate(&schema.WorkflowStep{
+				Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Reproducible: mode,
+			})
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestArchiveHandler_Execute_Reproducible(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o664))
+	dest := filepath.Join(dir, "out.zip")
+
+	step := &schema.WorkflowStep{
+		Name: "pkg", Type: "archive", Source: src, Destination: dest, Reproducible: "epoch",
+	}
+
+	result, err := mustGetArchiveHandler(t).Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	assert.Equal(t, dest, result.Value)
+
+	r, err := zip.OpenReader(dest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	// 0o644, not the source file's actual 0o664 — proves Reproducible
+	// reached pkg/archive and normalized the entry's permission bits.
+	assert.Equal(t, os.FileMode(0o644), r.File[0].Mode().Perm())
 }

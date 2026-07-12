@@ -10,18 +10,18 @@ import (
 )
 
 // writeZip creates destination fresh, writing every entry, via atomicRewrite.
-func writeZip(destination string, entries []packEntry) error {
+func writeZip(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
 	defer perf.Track(nil, "archive.writeZip")()
 
 	return atomicRewrite(destination, ".archive-write-*.zip", func(tmp *os.File) error {
-		return writeZipEntries(tmp, destination, entries)
+		return writeZipEntries(tmp, destination, entries, repro)
 	})
 }
 
-func writeZipEntries(tmp *os.File, destination string, entries []packEntry) error {
+func writeZipEntries(tmp *os.File, destination string, entries []packEntry, repro *reproducibleTimestamps) error {
 	zw := zip.NewWriter(tmp)
 	for _, e := range entries {
-		if err := addZipEntry(zw, e); err != nil {
+		if err := addZipEntry(zw, e, repro); err != nil {
 			zw.Close()
 			return err
 		}
@@ -38,7 +38,7 @@ func writeZipEntries(tmp *os.File, destination string, entries []packEntry) erro
 // written through the same zip.Writer, since a zip.Writer tracks byte
 // offsets from the start of the underlying stream — two independent writers
 // over the same file would corrupt those offsets.
-func updateZip(destination string, entries []packEntry) error {
+func updateZip(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
 	defer perf.Track(nil, "archive.updateZip")()
 
 	changed := make(map[string]bool, len(entries))
@@ -47,11 +47,11 @@ func updateZip(destination string, entries []packEntry) error {
 	}
 
 	return atomicRewrite(destination, ".archive-update-*.zip", func(tmp *os.File) error {
-		return writeZipUpdate(tmp, destination, changed, entries)
+		return writeZipUpdate(tmp, destination, changed, entries, repro)
 	})
 }
 
-func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry) error {
+func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry, repro *reproducibleTimestamps) error {
 	zw := zip.NewWriter(dst)
 
 	if err := copyUnchangedZipEntries(zw, destination, changed); err != nil {
@@ -59,7 +59,7 @@ func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, e
 		return err
 	}
 	for _, e := range entries {
-		if err := addZipEntry(zw, e); err != nil {
+		if err := addZipEntry(zw, e, repro); err != nil {
 			zw.Close()
 			return err
 		}
@@ -74,6 +74,13 @@ func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, e
 // archive that isn't about to be replaced, using zip.Writer.Copy's raw copy
 // (no decompress/recompress). A missing destination is not an error — the
 // update behaves like a fresh write.
+//
+// These entries are not touched by reproducible normalization: they carry
+// whatever mtime/mode a prior write already gave them. Making an update
+// fully reproducible on top of a non-reproducible archive would require
+// re-encoding every existing entry instead of raw-copying it, which is a
+// materially different (and much more expensive) operation than update's
+// incremental contract promises. Only action: replace is the reproducible path.
 func copyUnchangedZipEntries(zw *zip.Writer, destination string, changed map[string]bool) error {
 	existing, err := zip.OpenReader(destination)
 	if err != nil {
@@ -99,7 +106,7 @@ func copyUnchangedZipEntries(zw *zip.Writer, destination string, changed map[str
 	return nil
 }
 
-func addZipEntry(zw *zip.Writer, e packEntry) error {
+func addZipEntry(zw *zip.Writer, e packEntry, repro *reproducibleTimestamps) error {
 	src, err := os.Open(e.fsPath)
 	if err != nil {
 		return writeFailedError(e.fsPath, err)
@@ -117,6 +124,10 @@ func addZipEntry(zw *zip.Writer, e packEntry) error {
 	}
 	header.Name = e.archivePath
 	header.Method = zip.Deflate
+	if modTime := repro.modTimeFor(e.fsPath); !modTime.IsZero() {
+		header.Modified = modTime
+		header.SetMode(normalizeMode(info.Mode()))
+	}
 
 	w, err := zw.CreateHeader(header)
 	if err != nil {

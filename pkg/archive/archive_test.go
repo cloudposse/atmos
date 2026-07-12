@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -438,7 +439,7 @@ func TestWriteZip_AtomicOnFailure(t *testing.T) {
 	dest := filepath.Join(dir, "out.zip")
 	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
 
-	err := writeZip(dest, entries)
+	err := writeZip(dest, entries, nil)
 	require.Error(t, err)
 
 	_, statErr := os.Stat(dest)
@@ -456,7 +457,7 @@ func TestWriteZip_AtomicOnFailure_PreservesExistingArchive(t *testing.T) {
 
 	missing := filepath.Join(dir, "missing.txt")
 	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
-	err := writeZip(dest, entries)
+	err := writeZip(dest, entries, nil)
 	require.Error(t, err)
 
 	after := zipEntries(t, dest)
@@ -470,7 +471,7 @@ func TestWriteTar_AtomicOnFailure(t *testing.T) {
 	dest := filepath.Join(dir, "out.tar")
 	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
 
-	err := writeTar(dest, entries, false)
+	err := writeTar(dest, entries, false, nil)
 	require.Error(t, err)
 
 	_, statErr := os.Stat(dest)
@@ -488,7 +489,7 @@ func TestWriteTar_AtomicOnFailure_PreservesExistingArchive(t *testing.T) {
 
 	missing := filepath.Join(dir, "missing.txt")
 	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
-	err := writeTar(dest, entries, false)
+	err := writeTar(dest, entries, false, nil)
 	require.Error(t, err)
 
 	after := tarEntries(t, dest, false)
@@ -671,7 +672,7 @@ func TestUpdateZip_MissingSourceEntry(t *testing.T) {
 	dir := t.TempDir()
 	dest := filepath.Join(dir, "out.zip")
 
-	err := updateZip(dest, []packEntry{{fsPath: filepath.Join(dir, "missing.txt"), archivePath: "missing.txt"}})
+	err := updateZip(dest, []packEntry{{fsPath: filepath.Join(dir, "missing.txt"), archivePath: "missing.txt"}}, nil)
 	require.Error(t, err)
 	assertNoLeftoverTempFiles(t, dir)
 }
@@ -680,7 +681,7 @@ func TestUpdateTar_MissingSourceEntry(t *testing.T) {
 	dir := t.TempDir()
 	dest := filepath.Join(dir, "out.tar")
 
-	err := updateTar(dest, []packEntry{{fsPath: filepath.Join(dir, "missing.txt"), archivePath: "missing.txt"}})
+	err := updateTar(dest, []packEntry{{fsPath: filepath.Join(dir, "missing.txt"), archivePath: "missing.txt"}}, nil)
 	require.Error(t, err)
 	assertNoLeftoverTempFiles(t, dir)
 }
@@ -762,4 +763,131 @@ func TestCollectDirEntries_PropagatesGenericWalkError(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrArchiveWalkFailed), "got %v", err)
 	assert.False(t, errors.Is(err, errUtils.ErrArchiveInvalidGlobPattern))
+}
+
+func TestRun_Replace_InvalidReproducibleMode(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+
+	err := Run(ActionReplace, &PackOptions{Source: src, Destination: filepath.Join(dir, "out.zip"), Reproducible: "bogus"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidReproducibleMode))
+}
+
+// writeVariantFixture writes the same logical content as writeFixture, but
+// lets the caller control the real filesystem mtime/mode — simulating "two
+// different machines/checkouts" so a reproducibility test can prove the
+// *archive* output doesn't depend on that metadata, only content.
+func writeVariantFixture(t *testing.T, dir string, mtime time.Time, mode os.FileMode) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "nested"), 0o755))
+	write := func(rel, content string) {
+		p := filepath.Join(dir, rel)
+		require.NoError(t, os.WriteFile(p, []byte(content), mode))
+		require.NoError(t, os.Chtimes(p, mtime, mtime))
+	}
+	write("handler.js", "exports.handler = 1;")
+	write("nested/util.js", "module.exports = {};")
+}
+
+func TestRun_Replace_Reproducible_ByteIdenticalRegardlessOfSourceMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		ext  string
+	}{
+		{"zip", ".zip"},
+		{"tar", ".tar"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dirA := t.TempDir()
+			srcA := filepath.Join(dirA, "src")
+			writeVariantFixture(t, srcA, time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC), 0o644)
+			destA := filepath.Join(dirA, "out"+tt.ext)
+			require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcA, Destination: destA, Reproducible: ReproducibleEpoch}))
+
+			dirB := t.TempDir()
+			srcB := filepath.Join(dirB, "src")
+			writeVariantFixture(t, srcB, time.Date(2024, 6, 30, 12, 0, 0, 0, time.UTC), 0o664)
+			destB := filepath.Join(dirB, "out"+tt.ext)
+			require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcB, Destination: destB, Reproducible: ReproducibleEpoch}))
+
+			bytesA, err := os.ReadFile(destA)
+			require.NoError(t, err)
+			bytesB, err := os.ReadFile(destB)
+			require.NoError(t, err)
+			assert.Equal(t, bytesA, bytesB, "archives built from identical content but different mtimes/modes must be byte-identical when reproducible: epoch is set")
+		})
+	}
+}
+
+func TestRun_Replace_Reproducible_NotSetProducesDifferentBytes(t *testing.T) {
+	// Sanity check for the test above: without Reproducible, the same
+	// content with different source mtimes/modes must NOT be byte-identical
+	// — otherwise the prior test wouldn't be proving anything.
+	dirA := t.TempDir()
+	srcA := filepath.Join(dirA, "src")
+	writeVariantFixture(t, srcA, time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC), 0o644)
+	destA := filepath.Join(dirA, "out.zip")
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcA, Destination: destA}))
+
+	dirB := t.TempDir()
+	srcB := filepath.Join(dirB, "src")
+	writeVariantFixture(t, srcB, time.Date(2024, 6, 30, 12, 0, 0, 0, time.UTC), 0o644)
+	destB := filepath.Join(dirB, "out.zip")
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcB, Destination: destB}))
+
+	bytesA, err := os.ReadFile(destA)
+	require.NoError(t, err)
+	bytesB, err := os.ReadFile(destB)
+	require.NoError(t, err)
+	assert.NotEqual(t, bytesA, bytesB, "without reproducible: epoch, differing source mtimes must produce different archive bytes")
+}
+
+func TestRun_Replace_Reproducible_NormalizesZipPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode bits are not meaningfully enforced on Windows")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o664)) // group-writable, unlike the normalized 0644
+	dest := filepath.Join(dir, "out.zip")
+
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Reproducible: ReproducibleEpoch}))
+
+	r, err := zip.OpenReader(dest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, os.FileMode(reproducibleFileMode), r.File[0].Mode().Perm())
+	assert.Equal(t, reproducibleFallbackEpoch, r.File[0].Modified.UTC())
+}
+
+func TestRun_Replace_Reproducible_NormalizesTarPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode bits are not meaningfully enforced on Windows")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o664))
+	dest := filepath.Join(dir, "out.tar")
+
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Reproducible: ReproducibleEpoch}))
+
+	f, err := os.Open(dest)
+	require.NoError(t, err)
+	defer f.Close()
+	tr := tar.NewReader(f)
+	hdr, err := tr.Next()
+	require.NoError(t, err)
+	assert.Equal(t, int64(reproducibleFileMode), hdr.Mode)
+	assert.Equal(t, reproducibleFallbackEpoch, hdr.ModTime.UTC())
+	assert.Equal(t, 0, hdr.Uid)
+	assert.Equal(t, 0, hdr.Gid)
+	assert.Empty(t, hdr.Uname)
+	assert.Empty(t, hdr.Gname)
 }

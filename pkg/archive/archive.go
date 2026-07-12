@@ -36,6 +36,14 @@ type PackOptions struct {
 	Include []string
 	// Exclude drops files matching any glob, evaluated before Include.
 	Exclude []string
+	// Reproducible enables deterministic output: "epoch" pins every entry
+	// to the same timestamp (the most recent git commit touching Source),
+	// "git" resolves each entry's own most recent commit and falls back to
+	// the epoch value for files git has no history for. Either mode also
+	// normalizes permission bits, since umask differences are the actual
+	// root cause of non-reproducible archives, not just timestamps. Empty
+	// (the default) preserves each source file's real mtime and mode.
+	Reproducible string
 }
 
 // defaultDirPerm is the mode used when creating a destination's parent
@@ -95,7 +103,8 @@ func replace(opts *PackOptions) error {
 	if err := os.MkdirAll(filepath.Dir(opts.Destination), defaultDirPerm); err != nil {
 		return writeFailedError(opts.Destination, err)
 	}
-	return writer(opts.Destination, entries)
+	repro := newReproducibleTimestamps(opts.Reproducible, opts.Source)
+	return writer(opts.Destination, entries, repro)
 }
 
 // update adds new / refreshes changed entries from Source into the existing
@@ -127,12 +136,13 @@ func update(opts *PackOptions) error {
 	if err := os.MkdirAll(filepath.Dir(opts.Destination), defaultDirPerm); err != nil {
 		return writeFailedError(opts.Destination, err)
 	}
+	repro := newReproducibleTimestamps(opts.Reproducible, opts.Source)
 
 	switch format {
 	case FormatZip:
-		return updateZip(opts.Destination, entries)
+		return updateZip(opts.Destination, entries, repro)
 	case FormatTar:
-		return updateTar(opts.Destination, entries)
+		return updateTar(opts.Destination, entries, repro)
 	default:
 		// Unreachable: updatable() only returns true for FormatZip/FormatTar.
 		return errUtils.Build(errUtils.ErrArchiveUpdateUnsupportedFormat).
@@ -151,7 +161,7 @@ func validatePackOptions(opts *PackOptions) error {
 	if strings.TrimSpace(opts.Destination) == "" {
 		return errUtils.Build(errUtils.ErrArchiveDestinationRequired).Err()
 	}
-	return nil
+	return validateReproducibleMode(opts.Reproducible)
 }
 
 // destinationMode returns the file mode to apply to a rebuilt/updated
@@ -215,17 +225,17 @@ func atomicRewrite(destination, tmpPattern string, write func(tmp *os.File) erro
 // formatWriter returns the fresh-write function for format, or a typed
 // "not implemented" error for formats recognized but not yet supported for
 // writing (tar.bz2, tar.xz — see docs/prd/archive-step.md Open Questions).
-func formatWriter(format string) (func(destination string, entries []packEntry) error, error) {
+func formatWriter(format string) (func(destination string, entries []packEntry, repro *reproducibleTimestamps) error, error) {
 	switch format {
 	case FormatZip:
 		return writeZip, nil
 	case FormatTar:
-		return func(destination string, entries []packEntry) error {
-			return writeTar(destination, entries, false)
+		return func(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+			return writeTar(destination, entries, false, repro)
 		}, nil
 	case FormatTGZ:
-		return func(destination string, entries []packEntry) error {
-			return writeTar(destination, entries, true)
+		return func(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+			return writeTar(destination, entries, true, repro)
 		}, nil
 	default:
 		return nil, errUtils.Build(errUtils.ErrArchiveFormatNotImplemented).
