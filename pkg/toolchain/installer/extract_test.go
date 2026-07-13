@@ -690,9 +690,15 @@ func TestInstaller_extractZip(t *testing.T) {
 		err := installer.extractZip(zipPath, binaryPath, tool)
 		assert.NoError(t, err)
 
-		// Verify primary binary was extracted.
-		_, err = os.Stat(binaryPath)
+		// The archive has an undeclared "secondary" file alongside "primary", so
+		// this is a onedir (multi-file) install: the tree is preserved and the
+		// primary entrypoint is exposed via the sidecar manifest rather than at
+		// binaryPath directly (Atmos creates no symlink for it).
+		manifest, ok := readOnedirManifest(binDir)
+		require.True(t, ok)
+		content, err := os.ReadFile(filepath.Join(binDir, manifest.Entrypoints[manifest.Primary]))
 		assert.NoError(t, err)
+		assert.Equal(t, "#!/bin/sh\nprimary", string(content))
 	})
 }
 

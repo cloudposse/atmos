@@ -702,6 +702,17 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
 	}
 
+	// Onedir (multi-file) installs record the real entrypoint path in a sidecar
+	// manifest instead of exposing a root symlink (Atmos creates no symlinks of
+	// its own; see onedir.go). Resolve it here so the caller (chmod, mtime, lock
+	// file) targets the file that was actually installed. Flat installs are
+	// unaffected: with no manifest present, binaryPath is returned unchanged.
+	if manifest, ok := readOnedirManifest(versionDir); ok {
+		if rel, ok := manifest.Entrypoints[manifest.Primary]; ok {
+			return filepath.Join(versionDir, rel), nil
+		}
+	}
+
 	return binaryPath, nil
 }
 
@@ -724,6 +735,17 @@ func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) strin
 	// If binary name is explicitly provided, use it directly.
 	if binaryName != "" {
 		return filepath.Join(versionDir, binaryName)
+	}
+
+	// Onedir (multi-file) installs record the primary entrypoint's real path in
+	// a sidecar manifest instead of exposing a root symlink (Atmos creates no
+	// symlinks of its own; see onedir.go). Prefer it over the auto-detect scan
+	// below, which only looks at the version-dir root and would otherwise miss
+	// the entrypoint (it lives nested inside the preserved .pkg tree).
+	if manifest, ok := readOnedirManifest(versionDir); ok {
+		if rel, ok := manifest.Entrypoints[manifest.Primary]; ok {
+			return filepath.Join(versionDir, rel)
+		}
 	}
 
 	// Try to find the actual binary in the version directory.
@@ -767,12 +789,15 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 		return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
 	}
 
-	// Get the version directory containing the binary.
-	binaryDir := filepath.Dir(binaryPath)
+	// Get the version directory to remove. A onedir (multi-file) package's
+	// resolved binary lives nested inside a preserved .pkg tree (see the sidecar
+	// manifest in onedir.go), so walk up to the directory that actually holds
+	// the manifest/tree; a flat install's binary already lives directly in its
+	// version dir, so this is a no-op there.
+	binaryDir := versionDirFromBinaryPath(i.binDir, binaryPath)
 
-	// Remove the entire version directory. A onedir (multi-file) package keeps a
-	// preserved archive tree (.pkg) and entrypoint symlinks alongside the primary
-	// binary, so removing just the binary file would orphan the rest.
+	// Remove the entire version directory, including any preserved onedir tree
+	// and manifest, so nothing is orphaned.
 	if err := os.RemoveAll(binaryDir); err != nil {
 		return fmt.Errorf("%w: failed to remove %s: %w", ErrFileOperation, binaryDir, err)
 	}

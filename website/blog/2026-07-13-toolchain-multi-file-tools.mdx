@@ -36,11 +36,12 @@ works for a single self-contained binary like `jq` or `terraform`. It breaks for
 
 Atmos now mirrors how the upstream `aqua` CLI installs these packages:
 
-- **Preserves the whole archive** for multi-file tools under a `.pkg` directory,
-  and exposes each entrypoint as a symlink into that tree — so every executable
-  stays next to the runtime files it needs.
-- **Keeps symlink entrypoints** (like `npm` → `../lib/node_modules/...`) instead
-  of dropping them.
+- **Preserves the whole archive** for multi-file tools under a `.pkg` directory
+  — so every executable stays next to the runtime files it needs — and records
+  each entrypoint's real path in a small sidecar manifest, without creating any
+  symlinks of its own (a design choice used consistently across Atmos).
+- **Keeps the archive's own symlink entrypoints** (like `npm` → `../lib/node_modules/...`)
+  instead of dropping them.
 - **Resolves versions consistently**, so a pinned `24.18.0` correctly finds the
   `v24.18.0` archive that actually downloads.
 - **Fails honestly**: a broken or incomplete extraction no longer reports success

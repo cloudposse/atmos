@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,14 +16,94 @@ import (
 
 // onedirTreeName is the subdirectory within a tool's version directory that
 // holds the complete, preserved archive tree for "onedir" (multi-file) packages
-// such as aws-cli and nodejs/node. The registry `files:` entrypoints are exposed
-// as symlinks at the version-dir root that point into this tree, so a bundled
-// binary keeps its runtime siblings (shared libraries, node_modules, ...)
-// alongside it.
+// such as aws-cli and nodejs/node.
+//
+// Atmos does not create symlinks to expose these entrypoints (symlinks have
+// intentionally been avoided elsewhere in Atmos, e.g. the source provisioner's
+// "Copy Strategy"; see docs/prd/source-provisioner.md). Instead, each
+// entrypoint's real path inside this tree is recorded in a sidecar manifest
+// (see onedirManifestName) and resolved on demand by GetBinaryPath, so a
+// bundled binary is invoked from its real location and keeps its runtime
+// siblings (shared libraries, node_modules, ...) alongside it — without any
+// symlink privilege required on Windows.
+//
+// The only symlinks a onedir install may contain are ones the upstream archive
+// itself ships (e.g. Node's `bin/npm -> ../lib/node_modules/...` on Unix);
+// those are reproduced by extractSymlink/extractHardLink during extraction,
+// not created by Atmos's install/exposure logic.
 //
 // Single-binary tools do not use this directory; they remain flat in the version
 // dir (see the onedir gate in extractFilesFromDir).
 const onedirTreeName = ".pkg"
+
+// onedirManifestName is the sidecar file recorded in a preserved onedir version
+// directory. Its presence is also how callers (Uninstall, GetBinaryPath)
+// distinguish a onedir install from a flat one.
+const onedirManifestName = ".atmos-onedir.json"
+
+// onedirManifest records, for a onedir install, where each entrypoint really
+// lives inside the version directory.
+type onedirManifest struct {
+	// Entrypoints maps a configured entrypoint name (e.g. "node", "npm") to its
+	// path relative to the version directory (e.g. ".pkg/node-v1.2.3-.../bin/node").
+	Entrypoints map[string]string `json:"entrypoints"`
+	// Primary is the entrypoint name representing the tool's main binary
+	// (registry files[0]), returned when callers ask for the version's binary
+	// without naming a specific entrypoint.
+	Primary string `json:"primary"`
+}
+
+// writeOnedirManifest persists the manifest for a onedir install, creating the
+// version directory if it does not already exist.
+func writeOnedirManifest(versionDir string, manifest onedirManifest) error {
+	if err := os.MkdirAll(versionDir, defaultMkdirPermissions); err != nil {
+		return fmt.Errorf("%w: failed to create version directory: %w", ErrFileOperation, err)
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("%w: failed to encode onedir manifest: %w", ErrFileOperation, err)
+	}
+	path := filepath.Join(versionDir, onedirManifestName)
+	if err := os.WriteFile(path, data, defaultFileWritePermissions); err != nil {
+		return fmt.Errorf("%w: failed to write onedir manifest %s: %w", ErrFileOperation, path, err)
+	}
+	return nil
+}
+
+// readOnedirManifest reads a version directory's onedir manifest, if present.
+// The second return value is false for a flat (non-onedir) install or when the
+// manifest is missing/unreadable.
+func readOnedirManifest(versionDir string) (onedirManifest, bool) {
+	data, err := os.ReadFile(filepath.Join(versionDir, onedirManifestName)) // #nosec G304 -- versionDir is the installer-managed version directory.
+	if err != nil {
+		return onedirManifest{}, false
+	}
+	var manifest onedirManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return onedirManifest{}, false
+	}
+	return manifest, true
+}
+
+// versionDirFromBinaryPath returns the tool's version directory given a
+// resolved binary path. For a flat install the binary lives directly in the
+// version dir, so this is just filepath.Dir(binaryPath). For a onedir install
+// the resolved binary is nested inside the preserved tree, so this walks up
+// looking for the directory that holds the onedir manifest.
+func versionDirFromBinaryPath(binDir, binaryPath string) string {
+	dir := filepath.Dir(binaryPath)
+	for dir != binDir && dir != "." && dir != string(filepath.Separator) {
+		if _, err := os.Stat(filepath.Join(dir, onedirManifestName)); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return filepath.Dir(binaryPath)
+}
 
 // entrypoint is a resolved registry files[] entry: the exposed command name and
 // the template-expanded source path within the extracted archive tree.
@@ -175,9 +256,11 @@ func moveEntrypointFileForOS(src, dst, goos string) error {
 }
 
 // installOnedir preserves the complete extracted tree under <versionDir>/.pkg and
-// exposes each entrypoint as a symlink at the version-dir root that points into
-// the tree, so a bundled binary keeps its runtime siblings alongside it (matching
-// the way the aqua CLI installs onedir packages).
+// records each entrypoint's real path in a sidecar manifest (see
+// onedirManifestName), so a bundled binary is invoked from its real location and
+// keeps its runtime siblings alongside it — matching the way the aqua CLI
+// installs onedir packages, but without Atmos creating any symlinks of its own
+// (see the package doc on onedirTreeName).
 func (i *Installer) installOnedir(stagingDir, binaryPath string, eps []entrypoint) error {
 	return i.installOnedirForOS(stagingDir, binaryPath, eps, runtime.GOOS)
 }
@@ -191,8 +274,8 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 	treeDir := filepath.Join(versionDir, onedirTreeName)
 
 	// Validate every entrypoint BEFORE replacing an existing tree. A failed
-	// reinstall must leave the known-good package and root entrypoint links
-	// intact rather than turning a missing secondary file into a broken install.
+	// reinstall must leave the known-good package and manifest intact rather
+	// than turning a missing secondary file into a broken install.
 	resolvedEntrypoints, err := resolveOnedirEntrypoints(stagingDir, eps, goos)
 	if err != nil {
 		return err
@@ -207,18 +290,17 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 		return err
 	}
 
-	// Expose each entrypoint as a symlink into the preserved tree.
+	// Record each entrypoint's real path relative to the version dir. This is
+	// the ONLY exposure mechanism Atmos uses for onedir installs — no root
+	// symlink is created (see the package doc on onedirTreeName).
+	manifest := onedirManifest{Entrypoints: make(map[string]string, len(resolvedEntrypoints))}
 	for idx, ep := range resolvedEntrypoints {
-		dst := filepath.Join(versionDir, ep.name)
+		manifest.Entrypoints[ep.name] = filepath.Join(onedirTreeName, ep.src)
 		if idx == 0 {
-			dst = binaryPath // The first file is the primary binary.
-		}
-		target := filepath.Join(treeDir, ep.src)
-		if err := linkEntrypoint(target, dst); err != nil {
-			return err
+			manifest.Primary = ep.name // The first file is the tool's main binary.
 		}
 	}
-	return nil
+	return writeOnedirManifest(versionDir, manifest)
 }
 
 // resolveOnedirEntrypoints verifies that every configured entrypoint exists in
@@ -259,24 +341,6 @@ func resolveOnedirEntrypointSourceForOS(stagingDir, src, goos string) (string, e
 	return "", fmt.Errorf("%w: entrypoint not found in archive: %s", ErrToolNotFound, src)
 }
 
-// linkEntrypoint creates a relative symlink at linkPath pointing to target so the
-// install remains relocatable.
-func linkEntrypoint(target, linkPath string) error {
-	if err := os.MkdirAll(filepath.Dir(linkPath), defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
-	}
-	_ = os.Remove(linkPath) // Replace any existing entry (idempotent reinstall).
-
-	rel, err := filepath.Rel(filepath.Dir(linkPath), target)
-	if err != nil {
-		rel = target // Fall back to an absolute link target.
-	}
-	if err := os.Symlink(rel, linkPath); err != nil {
-		return fmt.Errorf("%w: failed to link entrypoint %s: %w", ErrFileOperation, filepath.Base(linkPath), err)
-	}
-	return nil
-}
-
 // extractSymlink materializes a symlink entry, preserving the (relative) link
 // target from the archive. The resolved target must stay within dest so a
 // malicious archive cannot link outside the extraction root.
@@ -287,14 +351,12 @@ func extractSymlink(linkPath, linkname, dest string) error {
 // extractSymlinkForOS is the OS-parameterized implementation of extractSymlink,
 // so the Windows fallback (skip-with-warning) is testable on any platform.
 func extractSymlinkForOS(linkPath, linkname, dest, goos string) error {
-	// Validate the resolved target lexically (do NOT stat it: in a tar stream the
-	// target may be extracted after the link).
-	resolved := linkname
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(filepath.Dir(linkPath), linkname)
-	}
-	if !isSafePath(resolved, dest) {
-		return fmt.Errorf("%w: illegal symlink target: %s -> %s", ErrFileOperation, linkPath, linkname)
+	// Validate the archive-supplied target and re-derive a safe one BEFORE any
+	// filesystem mutation (a rejected target is always fatal, even on Windows —
+	// it may be a path-traversal attempt).
+	safeTarget, err := safeSymlinkTarget(linkPath, linkname, dest)
+	if err != nil {
+		return err
 	}
 
 	if err := os.MkdirAll(filepath.Dir(linkPath), defaultMkdirPermissions); err != nil {
@@ -302,7 +364,7 @@ func extractSymlinkForOS(linkPath, linkname, dest, goos string) error {
 	}
 	_ = os.Remove(linkPath)
 
-	if err := os.Symlink(linkname, linkPath); err != nil {
+	if err := os.Symlink(safeTarget, linkPath); err != nil {
 		if goos == "windows" {
 			// Windows onedir support is tracked separately; preserve the legacy
 			// behavior of skipping links rather than failing the whole extract.
@@ -312,6 +374,40 @@ func extractSymlinkForOS(linkPath, linkname, dest, goos string) error {
 		return fmt.Errorf("%w: failed to create symlink %s: %w", ErrFileOperation, linkPath, err)
 	}
 	return nil
+}
+
+// safeSymlinkTarget validates that a symlink placed at linkPath and pointing at
+// linkname cannot resolve outside root, and returns a sanitized, relocatable
+// (relative) target to hand to os.Symlink.
+//
+// Security (CodeQL go/zipslip — "arbitrary file write via archive symlinks"):
+// the raw, archive-supplied linkname is NEVER passed to os.Symlink. We reject
+// absolute targets outright, resolve the target relative to the link's own
+// directory, and require the cleaned result to stay within root using the
+// canonical filepath.Rel + ".." check. Only a target re-derived from that
+// validated path is returned, so a malicious archive header cannot create a
+// link that escapes the extraction root (which a later entry could then be
+// written through).
+func safeSymlinkTarget(linkPath, linkname, root string) (string, error) {
+	if linkname == "" || filepath.IsAbs(linkname) {
+		return "", fmt.Errorf("%w: illegal symlink target: %s -> %q", ErrFileOperation, linkPath, linkname)
+	}
+
+	linkDir := filepath.Dir(linkPath)
+	resolved := filepath.Clean(filepath.Join(linkDir, linkname))
+
+	rel, err := filepath.Rel(filepath.Clean(root), resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("%w: symlink target escapes extraction root: %s -> %q", ErrFileOperation, linkPath, linkname)
+	}
+
+	// Re-derive the (relative) target from the validated, cleaned path rather
+	// than reusing the raw archive string.
+	safeTarget, err := filepath.Rel(linkDir, resolved)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to compute symlink target for %s: %w", ErrFileOperation, linkPath, err)
+	}
+	return safeTarget, nil
 }
 
 // extractHardLink materializes a tar hard-link entry. The target is relative to
@@ -379,8 +475,14 @@ func copyTree(src, dst string) error {
 			if linkErr != nil {
 				return linkErr
 			}
+			// Validate + re-derive the target so the copy cannot introduce a
+			// link escaping dst (same guard as archive extraction).
+			safeTarget, targetErr := safeSymlinkTarget(target, link, dst)
+			if targetErr != nil {
+				return targetErr
+			}
 			_ = os.Remove(target)
-			return os.Symlink(link, target)
+			return os.Symlink(safeTarget, target)
 		default:
 			return copyRegularFile(path, target, info.Mode().Perm())
 		}
