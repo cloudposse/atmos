@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -184,6 +185,15 @@ func ProcessComponentConfig(
 		componentOverridesSection = map[string]any{}
 	}
 
+	// Decode the component-level `retry:` block (if any) into a typed *RetryConfig.
+	// Inheritance/deep-merge has already happened at the stack-processor level, so the
+	// retry value found here reflects the final effective configuration for this
+	// component within this stack.
+	componentRetrySection, err := schema.DecodeRetryConfig(componentSection[cfg.RetrySectionName])
+	if err != nil {
+		return fmt.Errorf("'components.%s.%s.retry' in the stack manifest '%s': %w", componentType, component, stack, err)
+	}
+
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -217,6 +227,7 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
+	configAndStacksInfo.ComponentRetrySection = componentRetrySection
 	configAndStacksInfo.BaseComponentPath = baseComponentName
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
@@ -397,7 +408,7 @@ func processStackContextPrefix(
 
 	switch {
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return err
 		}
@@ -790,13 +801,27 @@ func ProcessStacks(
 			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
+		componentTemplateContext := make(map[string]any, len(configAndStacksInfo.ComponentSection))
+		for k, v := range configAndStacksInfo.ComponentSection {
+			componentTemplateContext[k] = v
+		}
+		componentTemplateContext, err = manager.AddTemplateContext(
+			atmosConfig,
+			componentSectionStr,
+			componentTemplateContext,
+			manager.EffectiveTrackFromStack(atmosConfig, &configAndStacksInfo),
+		)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
+
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
 			atmosConfig,
 			&configAndStacksInfo,
 			settingsSectionStruct,
 			"templates-all-atmos-sections",
 			componentSectionStr,
-			configAndStacksInfo.ComponentSection,
+			componentTemplateContext,
 			true,
 		)
 		if err != nil {
@@ -1166,6 +1191,17 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
 		configAndStacksInfo.ComponentBackendType = i
+	}
+
+	// Restore retry configuration after template / YAML-function processing.
+	// Decode errors here are logged but do not fail post-processing — the initial
+	// extraction in ProcessStackConfig is the authoritative validation point.
+	if retryCfg, err := schema.DecodeRetryConfig(configAndStacksInfo.ComponentSection[cfg.RetrySectionName]); err != nil {
+		log.Warn("Failed to restore retry configuration after template processing", "error", err)
+	} else {
+		// Always assign — including nil — so a retry section removed via templates
+		// or YAML functions clears any previously decoded config.
+		configAndStacksInfo.ComponentRetrySection = retryCfg
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {

@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -83,6 +84,10 @@ func (p *Provider) Context() (*provider.Context, error) {
 		Branch:     getFirstEnvOrGit("ATMOS_CI_BRANCH", "GIT_BRANCH", "CI_COMMIT_REF_NAME", "BRANCH_NAME", gitBranchFallback),
 		Repository: getFirstEnv("ATMOS_CI_REPOSITORY", "CI_PROJECT_PATH"),
 		Actor:      getFirstEnv("ATMOS_CI_ACTOR", "CI_COMMIT_AUTHOR", "USER"),
+		// Checkout metadata from common CI conventions (GitLab CI_SERVER_URL/
+		// CI_REPOSITORY_URL, Jenkins GIT_URL); empty when undeterminable.
+		ServerURL: getFirstEnv("ATMOS_CI_SERVER_URL", "CI_SERVER_URL"),
+		CloneURL:  getFirstEnv("ATMOS_CI_REPOSITORY_URL", "CI_REPOSITORY_URL", "GIT_URL"),
 	}
 
 	// If we have a repository, try to split into owner/name.
@@ -153,7 +158,7 @@ func (w *OutputWriter) WriteOutput(key, value string) error {
 
 	// No output file configured - log the output.
 	// log.Debug("CI output", "key", key, "value", value)
-	fmt.Fprintln(os.Stderr, fmt.Sprintf("%s=%s", key, value))
+	ui.Writef("%s=%s\n", key, value)
 	return nil
 }
 
@@ -175,7 +180,7 @@ func (w *OutputWriter) WriteSummary(content string) error {
 
 	// No summary file configured - write to stderr.
 	// This makes the summary visible in local testing.
-	fmt.Fprintln(os.Stderr, content)
+	ui.Writef("%s\n", content)
 	return nil
 }
 

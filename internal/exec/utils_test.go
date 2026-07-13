@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -98,6 +99,57 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			assert.Equal(t, tt.expected.TerraformWorkspace, input.TerraformWorkspace, "TerraformWorkspace mismatch")
 		})
 	}
+}
+
+// TestPostProcessTemplatesAndYamlFunctions_RetrySection covers the retry decode path
+// added to postProcessTemplatesAndYamlFunctions, including the nil-clears-stale-config
+// fix where a retry section removed by a template/!terraform.output must clear any
+// previously populated ComponentRetrySection.
+func TestPostProcessTemplatesAndYamlFunctions_RetrySection(t *testing.T) {
+	t.Run("retry-section-present-populates", func(t *testing.T) {
+		input := schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 3,
+					"conditions":   []any{"/Bad Gateway/"},
+				},
+			},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		require.NotNil(t, input.ComponentRetrySection)
+		require.NotNil(t, input.ComponentRetrySection.MaxAttempts)
+		assert.Equal(t, 3, *input.ComponentRetrySection.MaxAttempts)
+		assert.Equal(t, []string{"/Bad Gateway/"}, input.ComponentRetrySection.Conditions)
+	})
+
+	t.Run("retry-section-absent-clears-stale", func(t *testing.T) {
+		// Pre-populate ComponentRetrySection to simulate a value decoded at extraction
+		// time, then run post-processing on a section where retry was removed via a
+		// template. The post-processor must reset the field to nil so stale retry
+		// settings don't keep firing.
+		stale := &schema.RetryConfig{MaxAttempts: intPtr(5)}
+		input := schema.ConfigAndStacksInfo{
+			ComponentRetrySection: stale,
+			ComponentSection:      map[string]any{},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		assert.Nil(t, input.ComponentRetrySection, "stale retry config must be cleared when section is absent")
+	})
+
+	t.Run("retry-section-invalid-keeps-prior", func(t *testing.T) {
+		// A decode error here is logged but must not overwrite the prior value (the
+		// extraction stage in ProcessStackConfig is the authoritative validator).
+		stale := &schema.RetryConfig{MaxAttempts: intPtr(2)}
+		input := schema.ConfigAndStacksInfo{
+			ComponentRetrySection: stale,
+			ComponentSection: map[string]any{
+				cfg.RetrySectionName: "not-a-map", // triggers ErrInvalidRetryConfig.
+			},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		require.NotNil(t, input.ComponentRetrySection, "decode error must not overwrite prior config")
+		assert.Same(t, stale, input.ComponentRetrySection)
+	})
 }
 
 func TestGenerateComponentProviderOverrides(t *testing.T) {

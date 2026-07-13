@@ -1,0 +1,172 @@
+---
+title: atmos git init
+sidebar_label: init
+sidebar_class_name: command
+id: init
+description: Initialize a managed Git repository from scratch, optionally seeded from another repository.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Initialize a named repository configured under [`git.repositories`](/cli/configuration/git) whose remote has no content yet — the inverse of [`atmos git clone`](/cli/commands/git/clone). Atmos creates the workdir, runs `git init` on the configured branch, and wires the configured remote so [`atmos git commit`](/cli/commands/git/commit) and [`atmos git push`](/cli/commands/git/push) work immediately. With `--from=<uri>`, the new repository is seeded from a template or migrated from an existing repository.
+</Intro>
+
+<CastPlayer title="atmos git init --help" src="/casts/screengrabs/atmos-git-init--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos git init [name] [flags] [-- <native git args>]
+```
+
+Configure the repository once in `atmos.yaml`, then initialize it by name:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+```
+
+```shell
+atmos git init flux-deploy
+```
+
+The seed source can also be configured per repository under `init`, so a plain
+`atmos git init flux-deploy` reproduces the same bootstrap every time:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+      init:
+        from: https://github.com/acme/flux-template.git
+        keep_history: false
+```
+
+The `--from` and `--keep-history` flags override these configured defaults.
+
+## Examples
+
+```shell
+# Initialize an empty repository on the configured branch with origin wired up
+atmos git init flux-deploy
+
+# Initialize the single configured repository when only one exists
+atmos git init
+
+# Seed from a template repository (fresh history: one initial commit,
+# no link to the template remains)
+atmos git init flux-deploy --from=https://github.com/acme/flux-template.git
+
+# Migrate an existing repository: keep its full history and keep it pullable
+# as the 'upstream' remote
+atmos git init flux-deploy --from=https://github.com/acme/old-deploy.git --keep-history
+
+# Re-running init is idempotent: reconciles an existing repo in place
+atmos git init flux-deploy
+
+# Force a clean re-create from scratch (destructive: deletes the workdir first)
+atmos git init flux-deploy --force
+
+# Preview without touching the filesystem
+atmos git init flux-deploy --from=https://github.com/acme/flux-template.git --dry-run
+
+# Pass native arguments to the underlying git invocation
+atmos git init flux-deploy -- --template=/path/to/git-template
+```
+
+## Seeding Modes
+
+| Mode | History | Remotes |
+| --- | --- | --- |
+| No `--from` | New, empty (no commits) | `origin` → configured `uri` |
+| `--from=<uri>` (default) | Single fresh initial commit (`Initialize from <uri>`); source history discarded | `origin` → configured `uri` |
+| `--from=<uri> --keep-history` | Source's full history preserved | `origin` → configured `uri`, `upstream` → source `uri` (pull future template updates with `git pull upstream`) |
+
+In fresh mode the configured `branch` names the **new** history (`git init -b <branch>`); the source's default branch supplies the content. In keep-history mode the configured `branch` must exist in the source repository, because the history is the source's.
+
+The initial commit created in fresh mode honors the repository's [`commit.signing`](/cli/configuration/git) mode and `commit.author` override.
+
+:::note Idempotent by default; `--force` re-creates
+Re-running `atmos git init` is safe: when the resolved workdir is **already an initialized Git repository**, init reconciles it in place — it re-runs `git init` (idempotent) and re-points the configured remote, without re-seeding or erroring. This holds whether or not `init.from` is configured (the repository already exists, so there is nothing to seed).
+
+Any **other non-empty directory** (not a Git repository) is refused, so init never clobbers unrelated content.
+
+Pass `--force` to **delete the existing workdir and re-initialize from scratch** — this is destructive (uncommitted/unpushed local content is lost) and re-runs the full create or seed. Use [`--dry-run`](#flags) to preview, or [`atmos git clean`](/cli/commands/git/clean) to remove the workdir explicitly.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`name` <em>(optional)</em></dt>
+    <dd>
+        A repository name configured under `git.repositories`. The repository's `uri` is required — it becomes the configured remote. When omitted, Atmos initializes the single configured repository when exactly one entry exists.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--from` <em>(optional)</em></dt>
+    <dd>
+        Seed the new repository's content from another repository URI (a template, or a repository being migrated). Overrides the repository's configured `init.from`.
+        Environment variable: `ATMOS_GIT_FROM`
+    </dd>
+
+    <dt>`--keep-history` <em>(optional)</em></dt>
+    <dd>
+        Keep the seed repository's full history and keep the source reachable as the `upstream` remote so future updates can be pulled. Requires a seed source from either `--from` or the repository's configured `init.from`. Also settable as `init.keep_history`.
+        Environment variable: `ATMOS_GIT_KEEP_HISTORY`
+    </dd>
+
+    <dt>`--branch` / `-b` <em>(optional)</em></dt>
+    <dd>
+        Initial branch name. Precedence: flag &gt; repository config &gt; Git's own `init.defaultBranch`.
+        Environment variable: `ATMOS_GIT_BRANCH`
+    </dd>
+
+    <dt>`--workdir` <em>(optional)</em></dt>
+    <dd>
+        Override the destination directory. Default: the repository's configured `workdir`, or the automatic XDG workdir (`$XDG_CACHE_HOME/atmos/git/repositories/<name>`).
+        Environment variable: `ATMOS_GIT_WORKDIR`
+    </dd>
+
+    <dt>`--force` / `-f` <em>(optional)</em></dt>
+    <dd>
+        Delete the existing workdir and re-initialize from scratch. Destructive — uncommitted/unpushed local content is lost. Without `--force`, re-running init reconciles an existing repository in place (idempotent); use `--force` only when you want a clean re-create or re-seed.
+        Environment variable: `ATMOS_GIT_FORCE`
+    </dd>
+
+    <dt>`--dry-run` / `-n` <em>(optional)</em></dt>
+    <dd>
+        Report what would be done without initializing.
+        Environment variable: `ATMOS_GIT_DRY_RUN`
+    </dd>
+
+    <dt>`--identity` <em>(optional)</em></dt>
+    <dd>
+        Atmos Auth identity to use for this operation (global flag). Overrides the repository's `auth.identity`.
+        Environment variable: `ATMOS_IDENTITY`
+    </dd>
+</dl>
+
+## Native Git Arguments
+
+Arguments after `--` are passed verbatim to the underlying git invocation: `git init` for an empty init, or the `git clone` of the `--from` repository.
+
+```shell
+# Clone the template without tags
+atmos git init flux-deploy --from=https://github.com/acme/flux-template.git -- --no-tags
+```
+
+## Related
+
+- [`atmos git clone`](/cli/commands/git/clone) — clone or reconcile an existing repository
+- [`atmos git commit`](/cli/commands/git/commit) — stage and commit changes
+- [`atmos git push`](/cli/commands/git/push) — publish commits to the remote
+- [Git Configuration](/cli/configuration/git) — repository fields and defaults

@@ -2,6 +2,10 @@
 
 **Error:** Unknown command non-existent for atmos about
 
+## Usage
+
+ atmos about [flags]
+
 ## Usage Examples:
 
   • Learn about atmos

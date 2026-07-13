@@ -84,6 +84,9 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	var node yaml.Node
 	err = yaml.Unmarshal([]byte(result), &node)
 	if err != nil {
+		if !strings.Contains(trimmedResult, "\n") {
+			return trimmedResult, nil
+		}
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to unmarshal result: %w", err)
 	}
 
@@ -101,6 +104,9 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 
 	res, err := UnmarshalYAML[any](string(resultBytes))
 	if err != nil {
+		if !strings.Contains(trimmedResult, "\n") {
+			return trimmedResult, nil
+		}
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert YAML to Go type: %w", err)
 	}
 

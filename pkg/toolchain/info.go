@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 )
 
 const (
@@ -29,6 +30,7 @@ const (
 	dateFormatYYYYMMDDLen = 10  // Length of "YYYY-MM-DD".
 	fallbackTerminalWidth = 120 // Default terminal width when detection fails.
 	emptyValuePlaceholder = " " // Placeholder for empty values in output.
+	indicatorColumnWidth  = 3   // 1-char indicator + 1 char padding each side; keeps the dot column from being stretched by lipgloss/table's auto-expand.
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
@@ -270,6 +272,8 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
+			case col == 0: // Indicator column: pin the width so lipgloss/table's expand step doesn't stretch this 1-char column.
+				return lipgloss.NewStyle().Padding(0, 1).Width(indicatorColumnWidth)
 			case row == lipglosstable.HeaderRow:
 				return headerStyle.Padding(0, 1)
 			case col == 2: // Date column.
@@ -489,6 +493,7 @@ func fetchGitHubVersionsWithSpinner(owner, repo string) ([]versionItem, error) {
 		// Create spinner model.
 		s := spinner.New()
 		s.Spinner = spinner.Dot
+		fps.Apply(&s)
 
 		// Fetch versions with spinner.
 		m := &versionFetchModel{spinner: s, owner: owner, repo: repo}

@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/inspector2"
+	itypes "github.com/aws/aws-sdk-go-v2/service/inspector2/types"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
 	shtypes "github.com/aws/aws-sdk-go-v2/service/securityhub/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -210,6 +214,77 @@ func TestFetchFindings_MaxLimit(t *testing.T) {
 	result, err := fetcher.FetchFindings(context.Background(), &opts)
 	require.NoError(t, err)
 	assert.Len(t, result, 3)
+}
+
+func TestFetchFindings_SourceDispatchAndDedupe(t *testing.T) {
+	securityHubMock := &mockSecurityHubClient{
+		findings: []shtypes.AwsSecurityFinding{
+			{
+				Id:          aws.String("securityhub-inspector-copy"),
+				Title:       aws.String("Security Hub Inspector copy"),
+				ProductName: aws.String("Inspector"),
+				Severity: &shtypes.Severity{
+					Label:      shtypes.SeverityLabelCritical,
+					Normalized: aws.Int32(90),
+				},
+				Resources: []shtypes.Resource{
+					{Id: aws.String("arn:aws:ecr:us-east-1:123456789012:repository/app"), Type: aws.String("AwsEcrContainerImage"), Region: aws.String("us-east-1")},
+				},
+				Vulnerabilities: []shtypes.Vulnerability{
+					{Id: aws.String("CVE-2026-1234")},
+				},
+			},
+		},
+	}
+	ctrl := gomock.NewController(t)
+	inspectorMock := NewMockInspector2API(ctrl)
+	inspectorFindings := []itypes.Finding{
+		{
+			FindingArn:     aws.String("arn:aws:inspector2:us-east-1:123456789012:finding/native"),
+			Title:          aws.String("Native Inspector finding"),
+			Description:    aws.String("Native finding"),
+			AwsAccountId:   aws.String("123456789012"),
+			Severity:       itypes.SeverityCritical,
+			Status:         itypes.FindingStatusActive,
+			InspectorScore: aws.Float64(9.7),
+			Resources: []itypes.Resource{
+				{Id: aws.String("arn:aws:ecr:us-east-1:123456789012:repository/app"), Type: itypes.ResourceTypeAwsEcrContainerImage, Region: aws.String("us-east-1")},
+			},
+			PackageVulnerabilityDetails: &itypes.PackageVulnerabilityDetails{
+				VulnerabilityId: aws.String("CVE-2026-1234"),
+			},
+		},
+	}
+	inspectorMock.EXPECT().
+		ListFindings(gomock.Any(), gomock.Any()).
+		Return(&inspector2.ListFindingsOutput{Findings: inspectorFindings}, nil).
+		Times(2)
+
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.securityHub["us-east-1"] = securityHubMock
+	fetcher.clients.inspector2["us-east-1"] = inspectorMock
+
+	inspectorOnly, err := fetcher.FetchFindings(context.Background(), &QueryOptions{Source: SourceInspector, MaxFindings: 50})
+	require.NoError(t, err)
+	require.Len(t, inspectorOnly, 1)
+	assert.Equal(t, "Native Inspector finding", inspectorOnly[0].Title)
+
+	fetcher.cache.Invalidate()
+	all, err := fetcher.FetchFindings(context.Background(), &QueryOptions{Source: SourceAll, MaxFindings: 50})
+	require.NoError(t, err)
+	require.Len(t, all, 1, "native Inspector finding should replace duplicate Security Hub ASFF copy")
+	assert.Equal(t, "Native Inspector finding", all[0].Title)
+	require.NotNil(t, all[0].SourceLifecycle)
+	assert.Equal(t, "ACTIVE", all[0].SourceLifecycle.InspectorStatus)
+
+	fetcher.cache.Invalidate()
+	securityHubOnly, err := fetcher.FetchFindings(context.Background(), &QueryOptions{Source: SourceSecurityHub, MaxFindings: 50})
+	require.NoError(t, err)
+	require.Len(t, securityHubOnly, 1)
 }
 
 func TestDetectSource(t *testing.T) {
@@ -577,6 +652,188 @@ func TestReachedLimit(t *testing.T) {
 	}
 }
 
+// TestPaginateFindings_UnlimitedFetchesAllPages is a regression guard for the
+// silent 500-finding cap that used to clamp Security Hub exports. With
+// MaxFindings <= 0 the pagination must walk every NextToken until exhausted.
+func TestPaginateFindings_UnlimitedFetchesAllPages(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockSecurityHubAPI(ctrl)
+
+	const totalPages = 7
+	const findingsPerPage = 100 // Matches securityHubPageSize.
+	// Build a paginated mock: each call returns a page plus a NextToken,
+	// except the last which returns no NextToken.
+	for page := 0; page < totalPages; page++ {
+		findings := make([]shtypes.AwsSecurityFinding, findingsPerPage)
+		for i := 0; i < findingsPerPage; i++ {
+			findings[i] = shtypes.AwsSecurityFinding{
+				Id:          aws.String(fmt.Sprintf("p%d-f%d", page, i)),
+				Title:       aws.String("Test"),
+				ProductName: aws.String("Security Hub"),
+				Severity:    &shtypes.Severity{Label: shtypes.SeverityLabelHigh},
+				Resources:   []shtypes.Resource{{Id: aws.String("arn:aws:s3:::b")}},
+			}
+		}
+		out := &securityhub.GetFindingsOutput{Findings: findings}
+		if page < totalPages-1 {
+			out.NextToken = aws.String(fmt.Sprintf("token-%d", page))
+		}
+		mock.EXPECT().
+			GetFindings(gomock.Any(), gomock.Any()).
+			Return(out, nil).
+			Times(1)
+	}
+
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.securityHub["us-east-1"] = mock
+
+	// MaxFindings: 0 means "unlimited" — must fetch every page.
+	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{MaxFindings: 0})
+	require.NoError(t, err)
+	require.Len(t, got, totalPages*findingsPerPage,
+		"unlimited fetch must return every page of results (regression for silent 500 cap)")
+	assert.Equal(t, "p0-f0", got[0].ID)
+	assert.Equal(t, fmt.Sprintf("p%d-f%d", totalPages-1, findingsPerPage-1), got[len(got)-1].ID)
+}
+
+// TestPaginateFindings_TruncatesAndStopsAtLimit verifies the bounded path still
+// works: pagination halts once the limit is reached, and the result is trimmed
+// to exactly the requested count.
+func TestPaginateFindings_TruncatesAndStopsAtLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockSecurityHubAPI(ctrl)
+
+	// Two pages of 100 each available, with a NextToken on page 1 — the
+	// fetcher should stop after page 1 once the limit of 50 is hit and never
+	// call GetFindings a second time.
+	mock.EXPECT().
+		GetFindings(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, in *securityhub.GetFindingsInput, _ ...func(*securityhub.Options)) (*securityhub.GetFindingsOutput, error) {
+			// The page size requested should equal the limit since limit < default page size.
+			require.NotNil(t, in.MaxResults)
+			assert.Equal(t, int32(50), *in.MaxResults)
+			findings := make([]shtypes.AwsSecurityFinding, 50)
+			for i := range findings {
+				findings[i] = shtypes.AwsSecurityFinding{
+					Id:          aws.String(fmt.Sprintf("f%d", i)),
+					Title:       aws.String("Test"),
+					ProductName: aws.String("Security Hub"),
+					Severity:    &shtypes.Severity{Label: shtypes.SeverityLabelHigh},
+					Resources:   []shtypes.Resource{{Id: aws.String("arn:aws:s3:::b")}},
+				}
+			}
+			// NextToken non-nil — would indicate more results exist, which is
+			// exactly the condition that should fire the truncation warning.
+			return &securityhub.GetFindingsOutput{Findings: findings, NextToken: aws.String("more")}, nil
+		}).
+		Times(1)
+
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.securityHub["us-east-1"] = mock
+
+	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{MaxFindings: 50})
+	require.NoError(t, err)
+	require.Len(t, got, 50, "bounded fetch must return exactly --max-findings results")
+	assert.Equal(t, "f0", got[0].ID)
+	assert.Equal(t, "f49", got[len(got)-1].ID)
+}
+
+// TestPaginateInspector2Findings_UnlimitedFetchesAllPages verifies that
+// MaxFindings: 0 fetches every page from Inspector2 without truncation.
+func TestPaginateInspector2Findings_UnlimitedFetchesAllPages(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockInspector2API(ctrl)
+
+	const totalPages = 3
+	const findingsPerPage = 100
+	for page := 0; page < totalPages; page++ {
+		findings := make([]itypes.Finding, findingsPerPage)
+		for i := 0; i < findingsPerPage; i++ {
+			findings[i] = itypes.Finding{
+				FindingArn:  aws.String(fmt.Sprintf("arn:aws:inspector2:us-east-1:123:finding/p%d-f%d", page, i)),
+				Title:       aws.String("Test"),
+				Description: aws.String("desc"),
+				Severity:    itypes.SeverityHigh,
+				Resources:   []itypes.Resource{{Id: aws.String("arn:aws:ec2:us-east-1:123:instance/i-abc")}},
+			}
+		}
+		out := &inspector2.ListFindingsOutput{Findings: findings}
+		if page < totalPages-1 {
+			out.NextToken = aws.String(fmt.Sprintf("token-%d", page))
+		}
+		mock.EXPECT().
+			ListFindings(gomock.Any(), gomock.Any()).
+			Return(out, nil).
+			Times(1)
+	}
+
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.inspector2["us-east-1"] = mock
+
+	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{
+		MaxFindings: 0,
+		Source:      SourceInspector,
+	})
+	require.NoError(t, err)
+	require.Len(t, got, totalPages*findingsPerPage)
+	assert.Equal(t, "arn:aws:inspector2:us-east-1:123:finding/p0-f0", got[0].ID)
+	assert.Equal(t, fmt.Sprintf("arn:aws:inspector2:us-east-1:123:finding/p%d-f%d", totalPages-1, findingsPerPage-1), got[len(got)-1].ID)
+}
+
+// TestPaginateInspector2Findings_TruncatesAtLimit verifies that Inspector2
+// pagination stops at the limit and emits a truncation warning.
+func TestPaginateInspector2Findings_TruncatesAtLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockInspector2API(ctrl)
+
+	mock.EXPECT().
+		ListFindings(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, in *inspector2.ListFindingsInput, _ ...func(*inspector2.Options)) (*inspector2.ListFindingsOutput, error) {
+			require.NotNil(t, in.MaxResults)
+			assert.Equal(t, int32(50), *in.MaxResults)
+			findings := make([]itypes.Finding, 50)
+			for i := range findings {
+				findings[i] = itypes.Finding{
+					FindingArn:  aws.String(fmt.Sprintf("arn:aws:inspector2:us-east-1:123:finding/f%d", i)),
+					Title:       aws.String("Test"),
+					Description: aws.String("desc"),
+					Severity:    itypes.SeverityHigh,
+					Resources:   []itypes.Resource{{Id: aws.String("arn:aws:ec2:us-east-1:123:instance/i-abc")}},
+				}
+			}
+			return &inspector2.ListFindingsOutput{Findings: findings, NextToken: aws.String("more")}, nil
+		}).
+		Times(1)
+
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.inspector2["us-east-1"] = mock
+
+	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{
+		MaxFindings: 50,
+		Source:      SourceInspector,
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 50)
+	assert.Equal(t, "arn:aws:inspector2:us-east-1:123:finding/f0", got[0].ID)
+	assert.Equal(t, "arn:aws:inspector2:us-east-1:123:finding/f49", got[len(got)-1].ID)
+}
+
 func TestResolveRegion(t *testing.T) {
 	t.Run("override wins", func(t *testing.T) {
 		fetcher := &awsFindingFetcher{atmosConfig: &schema.AtmosConfiguration{}}
@@ -784,6 +1041,157 @@ func TestNormalizeSecurityHubFinding_WithComplianceAndTags(t *testing.T) {
 	require.NotNil(t, result.ResourceTags)
 	assert.Equal(t, "prod", result.ResourceTags["atmos:stack"])
 	assert.Equal(t, "web", result.ResourceTags["atmos:component"])
+}
+
+func TestNormalizeSecurityHubFinding_SourceData(t *testing.T) {
+	finding := &shtypes.AwsSecurityFinding{
+		Id:           aws.String("securityhub-finding-1"),
+		Title:        aws.String("Package vulnerability"),
+		Description:  aws.String("OpenSSL vulnerability"),
+		ProductName:  aws.String("Security Hub"),
+		SourceUrl:    aws.String("https://security.example/finding/1"),
+		AwsAccountId: aws.String("123456789012"),
+		Region:       aws.String("us-east-2"),
+		Severity: &shtypes.Severity{
+			Label:      shtypes.SeverityLabelCritical,
+			Normalized: aws.Int32(98),
+			Original:   aws.String("vendor-critical"),
+		},
+		Workflow:        &shtypes.Workflow{Status: shtypes.WorkflowStatusNotified},
+		RecordState:     shtypes.RecordStateActive,
+		CreatedAt:       aws.String("2026-05-01T10:00:00Z"),
+		UpdatedAt:       aws.String("2026-05-02T10:00:00Z"),
+		FirstObservedAt: aws.String("2026-04-29T10:00:00Z"),
+		LastObservedAt:  aws.String("2026-05-03T10:00:00Z"),
+		Resources: []shtypes.Resource{
+			{Id: aws.String("arn:aws:ec2:us-east-2:123456789012:instance/i-abc"), Type: aws.String("AwsEc2Instance")},
+		},
+		Compliance: &shtypes.Compliance{
+			Status:            shtypes.ComplianceStatusFailed,
+			SecurityControlId: aws.String("EC2.18"),
+			AssociatedStandards: []shtypes.AssociatedStandard{
+				{StandardsId: aws.String("ruleset/cis-aws-foundations-benchmark/v/1.4.0")},
+			},
+		},
+		Remediation: &shtypes.Remediation{
+			Recommendation: &shtypes.Recommendation{
+				Text: aws.String("Update the package."),
+				Url:  aws.String("https://remediation.example/update"),
+			},
+		},
+		Vulnerabilities: []shtypes.Vulnerability{
+			{
+				Id:        aws.String("CVE-2026-0001"),
+				EpssScore: aws.Float64(0.91),
+				RelatedVulnerabilities: []string{
+					"CWE-79",
+				},
+				VulnerablePackages: []shtypes.SoftwarePackage{
+					{
+						Name:           aws.String("openssl"),
+						Version:        aws.String("1.0.1"),
+						FixedInVersion: aws.String("1.0.2"),
+						PackageManager: aws.String("OS"),
+					},
+				},
+			},
+		},
+	}
+
+	result := normalizeSecurityHubFinding(finding)
+	require.NotNil(t, result.SourceSeverity)
+	require.NotNil(t, result.SourceSeverity.Score)
+	assert.Equal(t, 9.8, *result.SourceSeverity.Score)
+	assert.Equal(t, "vendor-critical", result.SourceSeverity.Label)
+	require.NotNil(t, result.SourceLifecycle)
+	assert.Equal(t, "NOTIFIED", result.SourceLifecycle.WorkflowStatus)
+	assert.Equal(t, "ACTIVE", result.SourceLifecycle.RecordState)
+	assert.Equal(t, "FAILED", result.SourceLifecycle.ComplianceStatus)
+	require.NotNil(t, result.SourceTimestamps)
+	assert.Equal(t, "2026-04-29T10:00:00Z", result.SourceTimestamps.FirstObservedAt.UTC().Format(time.RFC3339))
+	require.NotNil(t, result.SourceRemediation)
+	assert.Equal(t, "Update the package.", result.SourceRemediation.Text)
+	assert.Equal(t, "https://remediation.example/update", result.SourceRemediation.URL)
+	assert.Equal(t, "https://security.example/finding/1", result.SourceURL)
+	require.Len(t, result.ComplianceStandards, 1)
+	assert.Equal(t, "ruleset/cis-aws-foundations-benchmark/v/1.4.0", result.ComplianceStandards[0].ID)
+	require.NotNil(t, result.Vulnerability)
+	assert.Equal(t, "CVE-2026-0001", result.Vulnerability.CVEID)
+	assert.Equal(t, []string{"CWE-79"}, result.Vulnerability.CWEIDs)
+	assert.Equal(t, 0.91, result.Vulnerability.EPSSScore)
+	assert.Equal(t, "openssl", result.Vulnerability.PackageName)
+	assert.Equal(t, "1.0.2", result.Vulnerability.FixedInVersion)
+}
+
+func TestNormalizeInspector2Finding_PackageVulnerability(t *testing.T) {
+	firstObserved := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	lastObserved := time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC)
+	updated := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+	finding := &itypes.Finding{
+		FindingArn:      aws.String("arn:aws:inspector2:us-east-2:123456789012:finding/native-1"),
+		Title:           aws.String("CVE in package"),
+		Description:     aws.String("Package vulnerability found"),
+		AwsAccountId:    aws.String("123456789012"),
+		Severity:        itypes.SeverityCritical,
+		Status:          itypes.FindingStatusActive,
+		Type:            itypes.FindingTypePackageVulnerability,
+		InspectorScore:  aws.Float64(9.9),
+		FirstObservedAt: &firstObserved,
+		LastObservedAt:  &lastObserved,
+		UpdatedAt:       &updated,
+		Epss:            &itypes.EpssDetails{Score: 0.42},
+		Resources: []itypes.Resource{
+			{
+				Id:     aws.String("arn:aws:ecr:us-east-2:123456789012:repository/app"),
+				Type:   itypes.ResourceTypeAwsEcrContainerImage,
+				Region: aws.String("us-east-2"),
+				Tags:   map[string]string{"atmos:component": "app"},
+			},
+		},
+		Remediation: &itypes.Remediation{
+			Recommendation: &itypes.Recommendation{
+				Text: aws.String("Upgrade libssl."),
+				Url:  aws.String("https://inspector.example/remediate"),
+			},
+		},
+		PackageVulnerabilityDetails: &itypes.PackageVulnerabilityDetails{
+			VulnerabilityId: aws.String("CVE-2026-0002"),
+			SourceUrl:       aws.String("https://nvd.nist.gov/vuln/detail/CVE-2026-0002"),
+			RelatedVulnerabilities: []string{
+				"CWE-20",
+			},
+			VulnerablePackages: []itypes.VulnerablePackage{
+				{
+					Name:           aws.String("libssl"),
+					Version:        aws.String("3.0.0"),
+					FixedInVersion: aws.String("3.0.1"),
+					PackageManager: itypes.PackageManagerOs,
+					Remediation:    aws.String("apt update libssl"),
+				},
+			},
+		},
+	}
+
+	result := normalizeInspector2Finding(finding)
+	assert.Equal(t, SourceInspector, result.Source)
+	assert.Equal(t, SeverityCritical, result.Severity)
+	assert.Equal(t, "us-east-2", result.Region)
+	assert.Equal(t, "AWS_ECR_CONTAINER_IMAGE", result.ResourceType)
+	require.NotNil(t, result.SourceSeverity)
+	require.NotNil(t, result.SourceSeverity.Score)
+	assert.Equal(t, 9.9, *result.SourceSeverity.Score)
+	assert.Equal(t, "CRITICAL", result.SourceSeverity.Label)
+	require.NotNil(t, result.SourceLifecycle)
+	assert.Equal(t, "ACTIVE", result.SourceLifecycle.InspectorStatus)
+	require.NotNil(t, result.SourceRemediation)
+	assert.Equal(t, "Upgrade libssl.", result.SourceRemediation.Text)
+	assert.Equal(t, "https://inspector.example/remediate", result.SourceURL)
+	require.NotNil(t, result.Vulnerability)
+	assert.Equal(t, "CVE-2026-0002", result.Vulnerability.CVEID)
+	assert.Equal(t, []string{"CWE-20"}, result.Vulnerability.CWEIDs)
+	assert.Equal(t, 0.42, result.Vulnerability.EPSSScore)
+	assert.Equal(t, "libssl", result.Vulnerability.PackageName)
+	assert.Equal(t, "3.0.1", result.Vulnerability.FixedInVersion)
 }
 
 func TestNormalizeSecurityHubFinding_NoSeverity(t *testing.T) {

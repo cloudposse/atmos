@@ -47,6 +47,7 @@ type Flags struct {
 
 	// Output configuration.
 	Pager PagerSelector
+	Cast  string // Record command output as an asciinema cast (--cast).
 
 	// Authentication.
 	Identity IdentitySelector
@@ -78,12 +79,10 @@ type Flags struct {
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
 
-	// SkipHooks controls runtime hook execution. Empty / "false" runs all
-	// hooks normally; "*" / "true" (set when --skip-hooks is passed without
-	// a value) skips every hook; a comma-separated list (e.g. "cost,sec")
-	// skips only the named hooks. Per-invocation only — does not propagate
-	// to nested commands or workflows.
-	SkipHooks string
+	// SettingsListMergeStrategy overrides settings.list_merge_strategy for
+	// this invocation. Controls how lists are merged in Atmos stack manifests
+	// (replace, append, merge).
+	SettingsListMergeStrategy string
 }
 
 // NewFlags creates a Flags with default values.
@@ -100,6 +99,7 @@ func NewFlags() Flags {
 		Mask:         true,       // Enabled by default for security.
 		Interactive:  true,       // Enabled by default for better UX.
 		Profile:      []string{}, // No profiles active by default.
+		Cast:         "",
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",
 		ProfileType:  "cpu",

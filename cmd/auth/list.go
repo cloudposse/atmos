@@ -427,7 +427,7 @@ func suggestProfilesForAuth(atmosConfig *schema.AtmosConfiguration) error {
 
 	return errUtils.Build(errUtils.ErrAuthNotConfigured).
 		WithExplanation("No authentication providers or identities are configured in the current configuration").
-		WithHintf("Available profiles: `%s`", strings.Join(profileNames, "`, `")).
+		WithExplanationf("Available profiles: `%s`", strings.Join(profileNames, "`, `")).
 		WithHint("Try: `atmos auth list --profile <name>` to load auth configuration from a profile").
 		WithHint("Run `atmos profile list` for detailed information about each profile").
 		WithExitCode(1).

@@ -1,5 +1,11 @@
 {
   "base_path": "./",
+  "cast": {
+    "recording": {
+      "width": 120,
+      "height": 36
+    }
+  },
   "components": {
     "terraform": {
       "base_path": "components/terraform",
@@ -9,7 +15,7 @@
       "init_run_reconfigure": true,
       "auto_generate_backend_file": false,
       "auto_generate_files": false,
-      "command": "",
+      "command": "tofu",
       "shell": {
         "prompt": ""
       },
@@ -48,6 +54,15 @@
       "command": "",
       "auto_generate_files": false
     },
+    "kubernetes": {
+      "base_path": "",
+      "provider": "",
+      "auto_generate_files": false
+    },
+    "helm": {
+      "base_path": "",
+      "auto_generate_files": false
+    },
     "list": {
       "format": "",
       "columns": null
@@ -70,6 +85,7 @@
     },
     "inherit": {}
   },
+  "imports": {},
   "workflows": {
     "base_path": "",
     "list": {
@@ -80,6 +96,11 @@
   "logs": {
     "file": "/dev/stderr",
     "level": "Info"
+  },
+  "diagnostics": {
+    "enabled": false,
+    "file": "",
+    "include_output": false
   },
   "errors": {
     "format": {},
@@ -124,6 +145,9 @@
         "enabled": false
       }
     },
+    "yaml": {
+      "key_delimiter": ""
+    },
     "experimental": "warn",
     "docs": {
       "max_width": 0,
@@ -162,6 +186,7 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
+    "AtmosProGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
     "BitbucketToken": "",
@@ -173,7 +198,8 @@
     "pro": {
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
-      "github_oidc": {}
+      "github_oidc": {},
+      "git_sts": {}
     },
     "telemetry": {
       "enabled": true,
@@ -186,8 +212,10 @@
     }
   },
   "describe": {
-    "settings": {}
+    "settings": {},
+    "affected": {}
   },
+  "secrets": {},
   "vendor": {
     "base_path": "",
     "list": {
@@ -208,10 +236,15 @@
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "kubernetesDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "helmDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},
-    "constraint": {}
+    "constraint": {},
+    "defaults": {
+      "update": {}
+    }
   },
   "validate": {
     "editorconfig": {}
@@ -238,6 +271,9 @@
     "providers": null,
     "identities": null
   },
+  "container": {
+    "runtime": {}
+  },
   "profiler": {
     "enabled": false,
     "port": 0,
@@ -252,6 +288,9 @@
     "versions_file": "",
     "use_tool_versions": false,
     "use_lock_file": false
+  },
+  "git": {
+    "list": {}
   },
   "profiles": {},
   "metadata": {},
@@ -272,11 +311,15 @@
   "ci": {
     "output": {},
     "summary": {},
+    "annotations": {},
+    "results": {},
     "checks": {
       "statuses": {}
     },
     "comments": {},
-    "templates": {}
+    "templates": {},
+    "cache": {},
+    "groups": {}
   },
   "ai": {
     "sessions": {

@@ -1,0 +1,55 @@
+---
+title: atmos vendor set
+sidebar_label: set
+sidebar_class_name: command
+id: vendor-set
+description: Set the pinned version of a vendored component in vendor.yaml, preserving comments, anchors, and templates.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Set the version pinned for a component in your `vendor.yaml` manifest. The source is
+matched by component name (not by index), and the edit preserves comments, anchors,
+and Go templates such as `{{.Version}}` in source URLs.
+</Intro>
+
+:::info
+`atmos vendor set` is an alias for [`atmos vendor config set`](/cli/commands/vendor/config/set): it resolves `<component>` to its `spec.sources[N].version` path and delegates to the canonical form.
+:::
+
+<CastPlayer title="atmos vendor set --help" src="/casts/screengrabs/atmos-vendor-set--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos vendor set <component> <version> [--file <manifest>]
+```
+
+## Examples
+
+```shell
+atmos vendor set vpc v1.5.0
+atmos vendor set eks 1.3.0 --file ./vendor.yaml
+```
+
+## Arguments
+
+<dl>
+  <dt>`<component>` (required)</dt>
+  <dd>The component name as it appears in `spec.sources[].component`.</dd>
+  <dt>`<version>` (required)</dt>
+  <dd>The new version to pin.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest file to edit.</dd>
+</dl>
+
+:::note
+If no source matches the given component name, the command fails rather than silently
+making no change.
+:::

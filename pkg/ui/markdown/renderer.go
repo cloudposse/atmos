@@ -2,7 +2,6 @@ package markdown
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -10,9 +9,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 const defaultWidth = 80
@@ -37,12 +36,12 @@ func trimTrailingSpaces(s string) string {
 
 // Renderer is a markdown renderer using Glamour.
 type Renderer struct {
-	renderer              *glamour.TermRenderer
-	width                 uint
-	profile               termenv.Profile
-	atmosConfig           *schema.AtmosConfiguration
-	isTTYSupportForStdout func() bool
-	isTTYSupportForStderr func() bool
+	renderer     *glamour.TermRenderer
+	width        uint
+	profile      termenv.Profile
+	atmosConfig  *schema.AtmosConfiguration
+	terminal     terminal.Terminal
+	shouldRender func(terminal.Stream) bool
 }
 
 // NewRenderer creates a new Markdown renderer with the given options.
@@ -50,11 +49,10 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
 	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,                              // default width
-		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
-		isTTYSupportForStdout: term.IsTTYSupportForStdout,
-		isTTYSupportForStderr: term.IsTTYSupportForStderr,
-		atmosConfig:           &atmosConfig,
+		width:       defaultWidth,                              // default width
+		profile:     lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
+		terminal:    terminal.New(),
+		atmosConfig: &atmosConfig,
 	}
 
 	// Apply options
@@ -107,11 +105,10 @@ func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*R
 	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
 	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,                              // default width
-		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
-		isTTYSupportForStdout: term.IsTTYSupportForStdout,
-		isTTYSupportForStderr: term.IsTTYSupportForStderr,
-		atmosConfig:           atmosConfig,
+		width:       defaultWidth,                              // default width
+		profile:     lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
+		terminal:    terminal.New(),
+		atmosConfig: atmosConfig,
 	}
 
 	// Apply options
@@ -196,7 +193,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		}
 	}
 	result := ""
-	if r.shouldRenderStyled(r.isTTYSupportForStdout) {
+	if r.shouldRenderStyled(terminal.Stdout) {
 		result, err = out.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
@@ -215,7 +212,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
-	if r.shouldRenderStyled(r.isTTYSupportForStdout) {
+	if r.shouldRenderStyled(terminal.Stdout) {
 		rendered, err = r.renderer.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout.
@@ -233,7 +230,7 @@ func (r *Renderer) Render(content string) (string, error) {
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "$") && r.shouldRenderStyled(r.isTTYSupportForStdout) {
+		if strings.HasPrefix(trimmed, "$") && r.shouldRenderStyled(terminal.Stdout) {
 			// Add custom styling for command examples.
 			styled := purpleStyle.Styled(line)
 			result = append(result, " "+styled)
@@ -339,7 +336,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
 	var result string
 	var err error
-	if r.shouldRenderStyled(r.isTTYSupportForStderr) {
+	if r.shouldRenderStyled(terminal.Stderr) {
 		result, err = r.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stderr
@@ -360,18 +357,18 @@ func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	return r.Render(content)
 }
 
-// shouldRenderStyled returns true if the renderer should use styled (colored) output
-// instead of plain ASCII. This is true when either:
-// 1. The target stream is a TTY, OR
-// 2. Running in a CI environment (CI=true) without NO_COLOR set.
-// This mirrors the CI color detection in pkg/terminal/terminal.go:ShouldUseColor().
-func (r *Renderer) shouldRenderStyled(isTTY func() bool) bool {
-	if isTTY() {
-		return true
+// shouldRenderStyled returns true when the shared Atmos terminal layer enables
+// styled output. This keeps markdown rendering aligned
+// with --force-tty, ATMOS_FORCE_TTY, --force-color, ATMOS_FORCE_COLOR,
+// CLICOLOR_FORCE, NO_COLOR, CI, and terminal settings.
+func (r *Renderer) shouldRenderStyled(stream terminal.Stream) bool {
+	if r.shouldRender != nil {
+		return r.shouldRender(stream)
 	}
-	// CI systems like GitHub Actions support ANSI color but have no TTY.
-	// Respect NO_COLOR standard (https://no-color.org/).
-	return os.Getenv("CI") != "" && os.Getenv("NO_COLOR") == "" //nolint:forbidigo // Standard CI/terminal env vars
+	if r.terminal == nil {
+		r.terminal = terminal.New()
+	}
+	return r.terminal.ColorProfile() != terminal.ColorNone
 }
 
 // Option is a function that configures the renderer.
@@ -384,24 +381,29 @@ func WithWidth(width uint) Option {
 	}
 }
 
+// WithTerminal sets the terminal capability provider used for stream detection.
+func WithTerminal(term terminal.Terminal) Option {
+	return func(r *Renderer) {
+		r.terminal = term
+	}
+}
+
 func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
 	maxWidth := atmosConfig.Settings.Docs.MaxWidth
-	// Create a terminal writer to get the optimal width
-	termWriter := term.NewResponsiveWriter(os.Stdout)
-	var wr *term.TerminalWriter
-	var ok bool
-	var screenWidth uint = 1000
-	if wr, ok = termWriter.(*term.TerminalWriter); ok {
-		screenWidth = wr.GetWidth()
+	term := terminal.New()
+	screenWidth := uint(defaultWidth)
+	if width := term.Width(terminal.Stdout); width > 0 {
+		screenWidth = uint(width)
 	}
-	if maxWidth > 0 && ok {
-		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
-	} else if maxWidth > 0 {
-		// Fallback: if type assertion fails, use maxWidth as the screen width.
+	if maxWidth > 0 {
 		screenWidth = uint(maxWidth)
+		if width := term.Width(terminal.Stdout); width > 0 {
+			screenWidth = uint(min(maxWidth, width))
+		}
 	}
 	return NewRenderer(
 		atmosConfig,
+		WithTerminal(term),
 		WithWidth(screenWidth),
 	)
 }

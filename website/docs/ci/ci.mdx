@@ -16,7 +16,10 @@ import Experimental from '@site/src/components/Experimental'
 <Intro>
 Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands in
 GitHub Actions and get rich job summaries, status checks, output variables, and stored planfile
-verification — no extra actions required.
+verification — no extra actions required. And because every command is **git-aware**, the same
+CLI powers GitOps end to end: plan and apply only what changed, vendor reusable catalogs across
+repositories, and commit results back to your source of truth. Kubernetes components also write
+native job summaries, with a deliberately smaller v1 surface.
 </Intro>
 
 <Experimental />
@@ -65,6 +68,10 @@ ci:
 ## GitHub Actions Workflows
 
 Running Atmos in GitHub Actions reduces to two steps: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries, output variables, status checks, and stored planfiles without any wrapper actions.
+
+Terraform commands use the full native CI feature set. Kubernetes commands currently emit
+human-readable job summaries only; they do not write `$GITHUB_OUTPUT` values, commit statuses,
+PR comments, or stored artifacts.
 
 The examples below pin the Atmos version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) named `ATMOS_VERSION` (e.g. set to `1.200.0`). We don't publish a `latest` tag, so always pin to a specific release.
 
@@ -138,7 +145,14 @@ jobs:
 ```
 </File>
 
-`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. Pass `--verify-plan` (or set `ATMOS_TERRAFORM_VERIFY_PLAN=true`) to additionally download the planfile uploaded during the PR run, generate a fresh plan, and perform a semantic comparison before applying — this opt-in verification is experimental. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
+`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. When [planfile storage](/ci/planfile-storage) is configured under `components.terraform.planfiles` in `atmos.yaml`, a CI deploy **automatically** downloads the planfile uploaded during the PR run, generates a fresh plan, and performs a semantic comparison before applying (failing on drift by default). The `--verify-plan` flag (or `ATMOS_TERRAFORM_VERIFY_PLAN=true`) is only a per-run override — it forces verification on (and `--verify-plan=false` forces it off), and it **requires planfile storage to be configured**: without it there is no stored plan to verify against, and the deploy errors. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
+
+:::note
+Storing planfiles in the `github/artifacts` backend requires the runner's artifact credentials,
+which GitHub withholds from `run:` steps. Add the
+[`github-runtime` action](/ci/planfile-storage#using-github-artifacts-in-github-actions) before the
+`plan`/`deploy` steps in the workflows above.
+:::
 
 ### Deploy Affected
 
@@ -191,6 +205,37 @@ jobs:
 </File>
 
 The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel.
+
+### Caching the Toolchain
+
+Every CI job reinstalls the same toolchain (Terraform, Helm, and friends). The **build cache** restores the Atmos cache root — which includes the toolchain install path — at the start of a job and saves it at the end, using the same GitHub Actions cache store that `actions/cache` uses. A warm cache turns a multi-minute toolchain install into a near-instant restore.
+
+The most secure, lowest-boilerplate wiring is the `actions/cache` composite: Atmos derives the cache key and paths, native `actions/cache` does the storage, and **no runtime token is exposed to your job.**
+
+<File title=".github/workflows/plan.yml">
+```yaml
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: cloudposse/atmos/actions/cache@v1   # pin to a release or SHA
+
+      - run: atmos toolchain install              # near-instant on a cache hit
+      - run: atmos terraform plan vpc -s prod
+```
+</File>
+
+Prefer fully automatic caching? Set `ci.cache.auto: both` in `atmos.yaml` and Atmos restores on start and saves on exit for every invocation — no extra workflow steps:
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  cache:
+    enabled: true     # master switch (required)
+    auto: both        # restore on start AND save on end
+```
+</File>
+
+You can also drive the cache explicitly with the [`atmos ci cache`](/cli/commands/ci/cache) subcommands (`restore`, `save`, `paths`, `list`, `delete`). The cache key defaults to a hash of the toolchain lockfile plus OS/arch with a prefix restore-key fallback, mirroring `actions/cache`; entries are write-once, so an exact hit skips the save. See the [cache configuration reference](/cli/configuration/ci/cache) for keys, paths, and the four GitHub Actions integration options with their security trade-offs.
 
 ### Deploy All
 
@@ -347,14 +392,20 @@ For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concep
 
 ### [Job Summaries](/ci/job-summaries)
 
-Rich Markdown summaries with resource counts, inline badges, and collapsible diffs written
-to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results. Templates
-are fully customizable with Go template syntax.
+Rich Markdown summaries with resource counts, inline badges, collapsible diffs, and captured
+command output written to `$GITHUB_STEP_SUMMARY`. Terraform includes plan/apply summaries plus
+the broader native CI features below. Helm and Helmfile currently write summaries only.
+Templates are fully customizable with Go template syntax.
+
+Kubernetes summaries are intentionally compact: `plan`/`diff` show created, changed, and
+no-change objects; `apply`/`deploy` show applied or delivered objects; `delete` shows deleted
+and not-found objects; `validate` shows valid and invalid objects plus errors.
 
 ### [Outputs](/cli/configuration/ci/output)
 
 Terraform plan and apply results exported as CI output variables for use in downstream jobs.
-On GitHub Actions, these are written to `$GITHUB_OUTPUT`.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes commands do not emit
+output variables in v1.
 
 ### [Checks](/cli/configuration/ci/checks)
 
@@ -367,9 +418,35 @@ Store and retrieve planfiles across CI pipeline stages using S3, GitHub Artifact
 filesystem. The `deploy` command downloads stored planfiles, generates a fresh plan, and
 performs a semantic comparison to detect drift before applying.
 
+### [Build Cache](/cli/configuration/ci/cache)
+
+Warm-start the toolchain across CI jobs by restoring and saving the Atmos cache root via the
+CI provider's cache store — the same store `actions/cache` uses. Runs automatically with
+`ci.cache.auto: both`, or explicitly with the [`atmos ci cache`](/cli/commands/ci/cache)
+subcommands.
+
+### [GitOps](/cli/configuration/git)
+
+Atmos is **git-aware**, which is what makes true GitOps possible: the repository is the source of
+truth, and the pipeline reconciles only what changed.
+
+<dl>
+  <dt>Plan what's affected</dt>
+  <dd>[`atmos describe affected`](/cli/commands/describe/affected) diffs two Git commits and reports exactly which components and stacks changed — including changes that ripple through dependencies, imports, and remote state. See [Deploy Affected](#deploy-affected) for the matrix workflow.</dd>
+
+  <dt>Apply only what changed</dt>
+  <dd>Fan out across just the affected components, so a PR plans — and a merge applies — only the work that actually changed, instead of re-running the entire estate on every commit.</dd>
+
+  <dt>Reusable across repositories</dt>
+  <dd>Publish service catalogs and module libraries once and [vendor](/vendor/) them into every workload repository, so many repos share one versioned source of truth instead of copy-pasting configuration.</dd>
+
+  <dt>Automate workload repositories</dt>
+  <dd>Commit generated artifacts back to a source-of-truth repository as part of the pipeline. Define managed repositories once under `git.repositories`, then have Atmos commit and push automatically — with signed commits, a bot author identity, and bounded non-fast-forward retries — from [`kind: git` hooks](/stacks/hooks#kind-git), the [`atmos git`](/cli/commands/git/usage) commands, or CI workflows. This is the foundation for GitOps with Argo CD, Flux, or downstream CI consuming the committed output.</dd>
+</dl>
+
 ## Commands
 
-CI features are activated with the `--ci` flag on existing Terraform commands or automatically when running in a CI environment (e.g. GitHub Actions):
+CI features are activated with the `--ci` flag on supported commands or automatically when running in a CI environment (e.g. GitHub Actions):
 
 <dl>
   <dt>[`atmos terraform plan [--ci]`](/cli/commands/terraform/plan)</dt>
@@ -381,11 +458,20 @@ CI features are activated with the `--ci` flag on existing Terraform commands or
   <dt>[`atmos terraform deploy [--ci]`](/cli/commands/terraform/deploy)</dt>
   <dd>Deploy with stored planfile verification, drift detection, and full CI reporting.</dd>
 
+  <dt>[`atmos helm template|diff|apply|deploy|delete [--ci]`](/cli/commands/helm/usage)</dt>
+  <dd>Run native Helm components with job summaries for rendered/applied object metadata.</dd>
+
+  <dt>[`atmos helmfile template|diff|apply|sync|deploy|destroy [--ci]`](/cli/commands/helmfile/usage)</dt>
+  <dd>Run Helmfile components with job summaries that include captured masked command output.</dd>
+
   <dt>[`atmos terraform planfile`](/cli/commands/terraform/planfile)</dt>
   <dd>Manage stored planfiles: upload, download, list, delete, and show.</dd>
 
   <dt>[`atmos describe affected --format=matrix`](/cli/commands/describe/affected)</dt>
   <dd>Generate GitHub Actions matrix strategy from affected components.</dd>
+
+  <dt>[`atmos kubernetes render|plan|diff|apply|deploy|delete|validate [--ci]`](/cli/commands/kubernetes/usage)</dt>
+  <dd>Run Kubernetes operations with a native job summary only. No output variables, status checks, comments, or artifacts are emitted.</dd>
 </dl>
 
 ## Providers

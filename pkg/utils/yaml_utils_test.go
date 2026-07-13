@@ -8,8 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func clearDecodedYAMLCache() {
+	decodedYAMLCache.Range(func(key, _ any) bool {
+		decodedYAMLCache.Delete(key)
+		return true
+	})
+}
 
 // TestUnmarshalYAMLFromFileWithPositions_BasicParsing tests basic YAML unmarshaling behavior.
 func TestUnmarshalYAMLFromFileWithPositions_BasicParsing(t *testing.T) {
@@ -39,7 +47,7 @@ list:
 }
 
 // TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent tests that different content produces different results.
-// This indirectly validates the cache key includes content hash.
+// This indirectly validates the cache key includes a content fingerprint.
 func TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -50,7 +58,7 @@ func TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent(t *testing.T) {
 	assert.Equal(t, "value1", result1["key"])
 
 	// Second call with SAME file path but DIFFERENT content "value2"
-	// This tests the P8.1 fix: cache key should include content hash
+	// This tests the P8.1 fix: cache key should include a content fingerprint.
 	input2 := `key: value2`
 	result2, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input2, "test.yaml")
 	require.NoError(t, err)
@@ -111,6 +119,74 @@ func TestUnmarshalYAMLFromFileWithPositions_NilConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
 }
 
+func TestUnmarshalYAMLFromFileWithPositions_KeyDelimiterExpansion(t *testing.T) {
+	clearParsedYAMLCache()
+	clearDecodedYAMLCache()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+
+	input := `
+metadata.component: vpc-base
+"output.json": true
+image: repo/app:1.2.3
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "stack.yaml")
+	require.NoError(t, err)
+
+	metadata, ok := result["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-base", metadata["component"])
+	assert.Equal(t, true, result["output.json"])
+	assert.Equal(t, "repo/app:1.2.3", result["image"], "dotted values are not expanded")
+	assert.NotContains(t, result, "metadata.component")
+}
+
+func TestUnmarshalYAMLFromFile_KeyDelimiterExpansion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+
+	result, err := UnmarshalYAMLFromFile[map[string]any](atmosConfig, "settings.validation.check_cloudformation: true", "stack.yaml")
+	require.NoError(t, err)
+
+	settings, ok := result["settings"].(map[string]any)
+	require.True(t, ok)
+	validation := settings["validation"].(map[string]any)
+	assert.Equal(t, true, validation["check_cloudformation"])
+}
+
+func TestUnmarshalYAMLFromFileWithPositions_KeyDelimiterCacheIsolation(t *testing.T) {
+	clearParsedYAMLCache()
+	clearDecodedYAMLCache()
+
+	input := `metadata.component: vpc-base`
+	file := "same-stack.yaml"
+	withDelimiter := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+	withoutDelimiter := &schema.AtmosConfiguration{}
+
+	expanded, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](withDelimiter, input, file)
+	require.NoError(t, err)
+	metadata, ok := expanded["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-base", metadata["component"])
+
+	literal, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](withoutDelimiter, input, file)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-base", literal["metadata.component"])
+	assert.NotContains(t, literal, "metadata")
+}
+
 // TestGenerateParsedYAMLCacheKey_Basic tests cache key generation behavior.
 func TestGenerateParsedYAMLCacheKey_Basic(t *testing.T) {
 	// Test with valid inputs
@@ -132,6 +208,10 @@ func TestGenerateParsedYAMLCacheKey_Basic(t *testing.T) {
 	// Same file and content should produce same key
 	key4 := generateParsedYAMLCacheKey("file1.yaml", "content1")
 	assert.Equal(t, key1, key4, "Same file and content should produce same cache key")
+
+	// Same file and content with different key delimiters should produce different keys
+	key5 := generateParsedYAMLCacheKey("file1.yaml", "content1", ".")
+	assert.NotEqual(t, key1, key5, "Different key delimiters should produce different cache keys")
 }
 
 // TestGenerateParsedYAMLCacheKey_EmptyInputs tests cache key generation with empty inputs.
@@ -760,13 +840,27 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Validate that atmosYamlTagsMap contains all tags from AtmosYamlTags slice.
 	expectedTags := []string{
 		AtmosYamlFuncExec,
+		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
 		AtmosYamlFuncStoreGet,
 		AtmosYamlFuncTemplate,
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCEL,
+		AtmosYamlFuncGitRoot,
+		AtmosYamlFuncGitRootAlias,
+		AtmosYamlFuncGitSha,
+		AtmosYamlFuncGitBranch,
+		AtmosYamlFuncGitRef,
+		AtmosYamlFuncGitRepository,
+		AtmosYamlFuncGitOwner,
+		AtmosYamlFuncGitName,
+		AtmosYamlFuncGitHost,
+		AtmosYamlFuncGitUrl,
+		AtmosYamlFuncAppend,
 		AtmosYamlFuncCwd,
+		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
@@ -774,6 +868,8 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncEmulator,
+		AtmosYamlFuncVersion,
 	}
 
 	for _, tag := range expectedTags {
@@ -784,6 +880,21 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Verify the map has exactly the expected number of tags.
 	assert.Equal(t, len(expectedTags), len(atmosYamlTagsMap),
 		"atmosYamlTagsMap should contain exactly %d tags", len(expectedTags))
+}
+
+func TestFntagPackage_ContainsAllSupportedYamlTags(t *testing.T) {
+	expectedTags := append([]string{
+		AtmosYamlFuncInclude,
+		AtmosYamlFuncIncludeRaw,
+	}, AtmosYamlTags...)
+
+	allTags := fntag.AllYAML()
+	for _, expectedTag := range expectedTags {
+		assert.True(t, fntag.IsValidYAML(expectedTag), "fntag.AllYAML() should contain tag: %s", expectedTag)
+	}
+
+	assert.Equal(t, len(expectedTags), len(allTags),
+		"fntag.AllYAML() should contain exactly %d tags", len(expectedTags))
 }
 
 // TestAtmosYamlTagsMap_O1Lookup tests that atmosYamlTagsMap provides O(1) lookup.
@@ -801,6 +912,17 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 		{AtmosYamlFuncTerraformOutput, true},
 		{AtmosYamlFuncTerraformState, true},
 		{AtmosYamlFuncEnv, true},
+		{AtmosYamlFuncCEL, true},
+		{AtmosYamlFuncGitRoot, true},
+		{AtmosYamlFuncGitRootAlias, true},
+		{AtmosYamlFuncGitSha, true},
+		{AtmosYamlFuncGitBranch, true},
+		{AtmosYamlFuncGitRef, true},
+		{AtmosYamlFuncGitRepository, true},
+		{AtmosYamlFuncGitOwner, true},
+		{AtmosYamlFuncGitName, true},
+		{AtmosYamlFuncGitHost, true},
+		{AtmosYamlFuncGitUrl, true},
 		{AtmosYamlFuncRandom, true},
 		{"!unknown", false},
 		{"!invalid", false},
@@ -961,40 +1083,6 @@ root:
 	assert.Equal(t, "value", level3_2["deep"], "Deep nested value should not be affected by modification")
 }
 
-// TestPrintParsedYAMLCacheStats_NoDivideByZero tests that PrintParsedYAMLCacheStats
-// doesn't panic with divide-by-zero when uniqueFiles or uniqueHashes is 0.
-func TestPrintParsedYAMLCacheStats_NoDivideByZero(t *testing.T) {
-	// Save current stats
-	parsedYAMLCacheStats.Lock()
-	savedHits := parsedYAMLCacheStats.hits
-	savedMisses := parsedYAMLCacheStats.misses
-	savedTotalCalls := parsedYAMLCacheStats.totalCalls
-	savedFiles := parsedYAMLCacheStats.uniqueFiles
-	savedHashes := parsedYAMLCacheStats.uniqueHashes
-
-	// Reset stats to zero to trigger divide-by-zero scenario
-	parsedYAMLCacheStats.hits = 0
-	parsedYAMLCacheStats.misses = 0
-	parsedYAMLCacheStats.totalCalls = 0
-	parsedYAMLCacheStats.uniqueFiles = make(map[string]int)
-	parsedYAMLCacheStats.uniqueHashes = make(map[string]int)
-	parsedYAMLCacheStats.Unlock()
-
-	// This should not panic with divide-by-zero
-	assert.NotPanics(t, func() {
-		PrintParsedYAMLCacheStats()
-	}, "PrintParsedYAMLCacheStats should not panic with zero uniqueFiles/uniqueHashes")
-
-	// Restore stats
-	parsedYAMLCacheStats.Lock()
-	parsedYAMLCacheStats.hits = savedHits
-	parsedYAMLCacheStats.misses = savedMisses
-	parsedYAMLCacheStats.totalCalls = savedTotalCalls
-	parsedYAMLCacheStats.uniqueFiles = savedFiles
-	parsedYAMLCacheStats.uniqueHashes = savedHashes
-	parsedYAMLCacheStats.Unlock()
-}
-
 // TestLiteralTag_PreservesTemplateSyntax tests that !literal preserves template-like syntax.
 // This is the primary use case: passing {{...}} to downstream tools without Atmos processing.
 func TestLiteralTag_PreservesTemplateSyntax(t *testing.T) {
@@ -1152,145 +1240,6 @@ db_users: [!literal "{{external.email}}", !literal "{{external.admin}}", regular
 	assert.Equal(t, "{{external.email}}", users[0])
 	assert.Equal(t, "{{external.admin}}", users[1])
 	assert.Equal(t, "regular_user", users[2])
-}
-
-// TestGetUserHomeDir tests that GetUserHomeDir returns a valid home directory.
-func TestGetUserHomeDir(t *testing.T) {
-	homeDir := GetUserHomeDir()
-
-	// Should return a non-empty string on all platforms.
-	assert.NotEmpty(t, homeDir, "GetUserHomeDir should return non-empty home directory")
-
-	// The returned path should be an absolute path.
-	assert.True(t, filepath.IsAbs(homeDir), "Home directory should be an absolute path")
-
-	// The directory should exist.
-	info, err := os.Stat(homeDir)
-	require.NoError(t, err, "Home directory should exist")
-	assert.True(t, info.IsDir(), "Home directory should be a directory")
-}
-
-// TestObfuscateSensitivePaths_Map tests obfuscation of paths in maps.
-func TestObfuscateSensitivePaths_Map(t *testing.T) {
-	homeDir := "/Users/testuser"
-
-	data := map[string]any{
-		"path":       "/Users/testuser/projects/atmos",
-		"other":      "some value",
-		"number":     42,
-		"nested_dir": "/Users/testuser/.config/atmos.yaml",
-	}
-
-	result := ObfuscateSensitivePaths(data, homeDir)
-
-	resultMap, ok := result.(map[string]any)
-	require.True(t, ok, "Result should be a map")
-
-	assert.Equal(t, "~/projects/atmos", resultMap["path"], "Path should be obfuscated with ~")
-	assert.Equal(t, "some value", resultMap["other"], "Non-path values should be unchanged")
-	assert.Equal(t, 42, resultMap["number"], "Number values should be unchanged")
-	assert.Equal(t, "~/.config/atmos.yaml", resultMap["nested_dir"], "Nested dir path should be obfuscated")
-}
-
-// TestObfuscateSensitivePaths_Slice tests obfuscation of paths in slices.
-func TestObfuscateSensitivePaths_Slice(t *testing.T) {
-	homeDir := "/home/user"
-
-	data := []any{
-		"/home/user/file1.txt",
-		"/home/user/dir/file2.txt",
-		"not a path",
-		123,
-		"/other/path",
-	}
-
-	result := ObfuscateSensitivePaths(data, homeDir)
-
-	resultSlice, ok := result.([]any)
-	require.True(t, ok, "Result should be a slice")
-
-	assert.Equal(t, "~/file1.txt", resultSlice[0], "First path should be obfuscated")
-	assert.Equal(t, "~/dir/file2.txt", resultSlice[1], "Second path should be obfuscated")
-	assert.Equal(t, "not a path", resultSlice[2], "Non-path strings should be unchanged")
-	assert.Equal(t, 123, resultSlice[3], "Numbers should be unchanged")
-	assert.Equal(t, "/other/path", resultSlice[4], "Paths not starting with homeDir should be unchanged")
-}
-
-// TestObfuscateSensitivePaths_Nested tests obfuscation of paths in nested structures.
-func TestObfuscateSensitivePaths_Nested(t *testing.T) {
-	homeDir := "/Users/dev"
-
-	data := map[string]any{
-		"config": map[string]any{
-			"base_path": "/Users/dev/atmos",
-			"files": []any{
-				"/Users/dev/stack1.yaml",
-				"/Users/dev/stack2.yaml",
-			},
-		},
-		"metadata": map[string]any{
-			"author":  "John Doe",
-			"version": 1,
-			"paths": map[string]any{
-				"source": "/Users/dev/src",
-				"build":  "/tmp/build",
-			},
-		},
-	}
-
-	result := ObfuscateSensitivePaths(data, homeDir)
-
-	resultMap, ok := result.(map[string]any)
-	require.True(t, ok)
-
-	config := resultMap["config"].(map[string]any)
-	assert.Equal(t, "~/atmos", config["base_path"])
-
-	files := config["files"].([]any)
-	assert.Equal(t, "~/stack1.yaml", files[0])
-	assert.Equal(t, "~/stack2.yaml", files[1])
-
-	metadata := resultMap["metadata"].(map[string]any)
-	assert.Equal(t, "John Doe", metadata["author"])
-	assert.Equal(t, 1, metadata["version"])
-
-	paths := metadata["paths"].(map[string]any)
-	assert.Equal(t, "~/src", paths["source"])
-	assert.Equal(t, "/tmp/build", paths["build"], "Non-matching paths should be unchanged")
-}
-
-// TestObfuscateSensitivePaths_EmptyHomeDir tests that empty homeDir returns data unchanged.
-func TestObfuscateSensitivePaths_EmptyHomeDir(t *testing.T) {
-	data := map[string]any{
-		"path": "/Users/testuser/projects",
-	}
-
-	result := ObfuscateSensitivePaths(data, "")
-
-	resultMap, ok := result.(map[string]any)
-	require.True(t, ok)
-
-	// With empty homeDir, paths should not be changed.
-	assert.Equal(t, "/Users/testuser/projects", resultMap["path"], "Path should be unchanged when homeDir is empty")
-}
-
-// TestObfuscateSensitivePaths_NilData tests that nil data is handled gracefully.
-func TestObfuscateSensitivePaths_NilData(t *testing.T) {
-	result := ObfuscateSensitivePaths(nil, "/Users/test")
-	assert.Nil(t, result, "Nil input should return nil")
-}
-
-// TestObfuscateSensitivePaths_StringInput tests direct string input.
-func TestObfuscateSensitivePaths_StringInput(t *testing.T) {
-	homeDir := "/Users/testuser"
-
-	// String that starts with homeDir.
-	result1 := ObfuscateSensitivePaths("/Users/testuser/file.txt", homeDir)
-	assert.Equal(t, "~/file.txt", result1)
-
-	// String that doesn't start with homeDir.
-	result2 := ObfuscateSensitivePaths("/other/path/file.txt", homeDir)
-	assert.Equal(t, "/other/path/file.txt", result2)
 }
 
 // TestWriteToFileAsYAML tests writing YAML to a file.
@@ -1599,60 +1548,4 @@ value: 123`
 
 	// Verify cache hit (hits should increase).
 	assert.Greater(t, hitsAfter, hitsBefore, "Cache hits should increase on second call")
-}
-
-// TestClearParsedYAMLCache_Public exercises the exported ClearParsedYAMLCache
-// helper so tests in other packages can rely on it. The internal
-// clearParsedYAMLCache is already covered by other tests via the t.Cleanup
-// pattern, but the public wrapper itself needs its own coverage so the
-// "all exported APIs have a behavioral test" convention holds.
-func TestClearParsedYAMLCache_Public(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	// Seed an entry into the parsed cache via the public API.
-	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, "key: value", "public-clear-test.yaml")
-	require.NoError(t, err)
-
-	// Confirm at least one entry is present.
-	var beforeCount int
-	parsedYAMLCache.Range(func(_, _ any) bool {
-		beforeCount++
-		return true
-	})
-	require.Positive(t, beforeCount, "cache should have at least one entry before clearing")
-
-	ClearParsedYAMLCache()
-
-	var afterCount int
-	parsedYAMLCache.Range(func(_, _ any) bool {
-		afterCount++
-		return true
-	})
-	assert.Equal(t, 0, afterCount, "ClearParsedYAMLCache should empty the cache")
-}
-
-// TestClearDecodedYAMLCache_Public exercises the exported ClearDecodedYAMLCache
-// helper. The decoded-result cache is populated by UnmarshalYAMLFromFileWithPositions
-// when T == map[string]any (the production fast path); this test seeds an entry
-// and then verifies the public clear API empties it.
-func TestClearDecodedYAMLCache_Public(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	// Seed an entry into the decoded cache via the public API.
-	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, "key: value", "public-decoded-clear-test.yaml")
-	require.NoError(t, err)
-
-	var beforeCount int
-	decodedYAMLCache.Range(func(_, _ any) bool {
-		beforeCount++
-		return true
-	})
-	require.Positive(t, beforeCount, "decoded cache should have at least one entry before clearing")
-
-	ClearDecodedYAMLCache()
-
-	var afterCount int
-	decodedYAMLCache.Range(func(_, _ any) bool {
-		afterCount++
-		return true
-	})
-	assert.Equal(t, 0, afterCount, "ClearDecodedYAMLCache should empty the cache")
 }

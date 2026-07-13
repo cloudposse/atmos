@@ -6,12 +6,15 @@ sidebar_class_name: command
 id: terraform
 description: Configure Terraform and OpenTofu component behavior in atmos.yaml.
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import DocCardList from "@theme/DocCardList";
 
 <Intro>
-Configure how Atmos executes Terraform and OpenTofu commands, including the base path for components, auto-approve behavior, backend file generation, and initialization options.
+  Configure how Atmos executes Terraform and OpenTofu commands, including the
+  base path for components, auto-approve behavior, backend file generation, and
+  initialization options.
 </Intro>
 
 :::note Disambiguation
@@ -57,9 +60,15 @@ components:
     plugin_cache: true
     plugin_cache_dir: ""  # Uses ~/.cache/atmos/terraform/plugins by default
 
+    # Registry cache proxy (disabled by default)
+    cache:
+      enabled: false
+      location: ""  # Uses ~/.cache/atmos/terraform/registry by default
+
     # Interactive shell configuration
     shell:
       prompt: "Terraform Shell"
+
 ```
 </File>
 
@@ -135,6 +144,8 @@ components:
   <dd>
     When `true`, Atmos passes the generated varfile to `terraform init` using `--var-file`. This is primarily useful with OpenTofu, which supports [passing varfiles to init](https://opentofu.org/docs/cli/commands/init/#general-options) for dynamic backend configuration.
 
+    This also applies to the implicit `init` that Atmos runs while resolving a component referenced through [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component) — its vars are forwarded as `TF_VAR_*` environment variables so that modules with init-time variable dependencies (for example, a module `version` bound to a `var`) can initialize.
+
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`
     **Command-line flag:** `--init-pass-vars`
     **Default:** `false`
@@ -149,9 +160,57 @@ components:
     **Default:** `false`
   </dd>
 
+  <dt>`planfiles`</dt>
+  <dd>
+    Configures [planfile storage](/ci/planfile-storage) and
+    [drift verification](/components/terraform/planfiles#drift-verification) for CI pipelines.
+    Storage is opt-in: when this section is absent, planfile upload, download, and verification are
+    skipped (and an explicit `--verify-plan` request errors, since there is no stored plan to verify
+    against).
+
+    ```yaml
+    components:
+      terraform:
+        planfiles:
+          stores:
+            github:
+              type: github/artifacts
+          priority: [github]
+          verify: fail
+    ```
+
+    <dl>
+      <dt>`planfiles.stores`</dt>
+      <dd>Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`) and backend-specific `options`.</dd>
+
+      <dt>`planfiles.default`</dt>
+      <dd>Name of the store to use when no priority list is set.</dd>
+
+      <dt>`planfiles.priority`</dt>
+      <dd>Ordered list of store names to try in turn for upload and download.</dd>
+
+      <dt>`planfiles.verify`</dt>
+      <dd>
+        Drift-verification behavior on `deploy`: `fail` (default under CI), `warn`, or `off`.
+        Precedence is **CLI flag (`--verify-plan` / `--verify-plan=false`) > config > CI default**.
+
+        **Environment variable (per-run override):** `ATMOS_TERRAFORM_VERIFY_PLAN`
+      </dd>
+
+      <dt>`planfiles.required`</dt>
+      <dd>Whether a stored planfile **must exist** for `deploy` to proceed. Unset, it tracks `verify` strictness (required when verification resolves to `fail`).</dd>
+    </dl>
+
+    See [Planfile Storage](/ci/planfile-storage) for backend configuration and
+    [Terraform Planfiles](/components/terraform/planfiles#drift-verification) for verification
+    semantics.
+  </dd>
+
   <dt>`plugin_cache`</dt>
   <dd>
     When `true`, Atmos enables Terraform provider plugin caching by automatically setting `TF_PLUGIN_CACHE_DIR`. This improves performance by reusing downloaded providers across components, reducing init times and network bandwidth.
+
+    This is Terraform's **own** provider cache and is independent of the [registry cache](#cache) (`cache`). The plugin cache stores provider plugins that Terraform manages itself; the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic. The two are separate layers and can be used together.
 
     When caching is enabled, Atmos also sets `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true` as required by Terraform.
 
@@ -206,6 +265,7 @@ components:
     command: tofu
     base_path: components/terraform
 ```
+
 </File>
 
 OpenTofu supports additional features like passing variables to `init` for dynamic backend configuration:
@@ -220,6 +280,100 @@ components:
 ```
 </File>
 
+## CLI Configuration (`rc`) {#rc}
+
+The `rc` section declares the Terraform/OpenTofu CLI configuration (`.terraformrc` / `.tofurc`). Atmos renders it and exposes it to the subprocess via `TF_CLI_CONFIG_FILE` and `TOFU_CLI_CONFIG_FILE` — no hand-managed dotfiles. It is a **near-opaque passthrough**: keys map directly to CLI-config directives, so new directives work without an Atmos release.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>Enable rendering of the CLI configuration. Defaults to <code>false</code>.</dd>
+  <dt>(remaining keys)</dt>
+  <dd>Rendered verbatim into Terraform's native CLI config (HCL): <code>provider_installation</code>, <code>host</code>, <code>credentials</code>, <code>plugin_cache_dir</code>, etc.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    rc:
+      enabled: true
+      provider_installation:
+        - network_mirror:
+            url: "https://terraform-mirror.example.com/"
+        - direct:
+            exclude:
+              - "registry.terraform.io/hashicorp/*"
+```
+
+If you already manage your own CLI config (via `TF_CLI_CONFIG_FILE`, `TOFU_CLI_CONFIG_FILE`, or the legacy `TERRAFORM_CONFIG`), Atmos detects it and defers to you.
+
+## Registry Cache (`cache`) {#cache}
+
+The `cache` section enables the [Terraform registry cache](/cli/commands/terraform/cache) — transparent provider and module caching via an ephemeral local network-mirror proxy. It is execution-environment (runner) configuration that merges through the stack hierarchy.
+
+This is **not** the same as Terraform's [`plugin_cache`](#configuration-reference): the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic (default root `~/.cache/atmos/terraform/registry`), whereas `plugin_cache` is Terraform's own provider plugin cache (`~/.cache/atmos/terraform/plugins`). They are independent layers.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>
+    Enable the registry cache. Defaults to <code>false</code>.
+
+    <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED</code>
+  </dd>
+  <dt><code>location</code></dt>
+  <dd>
+    Cache root. Defaults to the XDG cache directory under <code>terraform/registry</code>.
+
+    <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION</code>
+  </dd>
+  <dt><code>backend.type</code></dt>
+  <dd>Storage backend. <code>filesystem</code> (default).</dd>
+  <dt><code>metadata_ttl</code></dt>
+  <dd>Time-to-live for registry metadata (Go duration). Defaults to <code>24h</code>.</dd>
+  <dt><code>stale_while_revalidate</code></dt>
+  <dd>Window during which stale metadata may be served while revalidating (Go duration). Defaults to <code>168h</code>.</dd>
+  <dt><code>mirror.enabled</code></dt>
+  <dd>Express fleet pre-seeding policy. The <a href="/cli/commands/terraform/cache/mirror"><code>cache mirror</code></a> command runs regardless. Defaults to <code>false</code>.</dd>
+</dl>
+
+Target platforms are configured at the project level via [`platforms`](#platforms) (not under `cache`), since the same list also drives multi-platform lock completion.
+
+```yaml
+components:
+  terraform:
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+    cache:
+      enabled: true
+      metadata_ttl: 24h
+      stale_while_revalidate: 168h
+```
+
+Manage the cache with [`atmos terraform cache list|stats|prune|delete|mirror`](/cli/commands/terraform/cache).
+
+## Platforms (`platforms`) {#platforms}
+
+`components.terraform.platforms` is the list of target platforms a project builds for, as `<os>_<arch>` (e.g. `linux_amd64`, `darwin_arm64`). A single list drives two things:
+
+<dl>
+  <dt>Eager pre-seeding</dt>
+  <dd>The lazy proxy only caches the platform Terraform requests at run time (your host's). Run <a href="/cli/commands/terraform/cache/mirror"><code>atmos terraform cache mirror</code></a> to pre-fetch every platform in <code>platforms</code> into the same cache directory — for mixed CI/developer fleets or air-gapped bundles.</dd>
+  <dt>Complete lock files</dt>
+  <dd>When a customized provider installation method is active (Terraform's default <a href="#configuration-reference"><code>plugin_cache</code></a>, or the registry <a href="#cache"><code>cache</code></a>), <code>init</code> writes a <code>.terraform.lock.hcl</code> with checksums for only the host platform and warns <em>"Incomplete lock file information for providers"</em>. With <code>platforms</code> declared, Atmos runs <code>providers lock</code> after init to complete the lock for every platform, so a committed lock installs cleanly across a fleet.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+```
+
+For **ephemeral or vendored** components ([`provision.workdir`](/cli/commands/terraform/workdir) or a [`source:`](/vendor/)) the canonical `.terraform.lock.hcl` has no committable home, so Atmos keeps the committed lock per instance as `.<stack>-<component>.terraform.lock.hcl` — restored into the working directory before `init` and persisted after. Keep canonical `**/.terraform.lock.hcl` ignored and un-ignore `!**/.*-*.terraform.lock.hcl` in `.gitignore`. Plain in-repo components keep committing the canonical lock as usual.
+
 ## Generated Files
 
 When `auto_generate_backend_file` is enabled, Atmos generates a `backend.tf.json` file in each component directory. Add this to your `.gitignore`:
@@ -231,16 +385,58 @@ backend.tf.json
 
 ## Related Commands
 
-<DocCardList items={[
-  {type: 'link', href: '/cli/commands/terraform/usage', label: 'atmos terraform', description: 'Execute Terraform/OpenTofu commands'},
-  {type: 'link', href: '/cli/commands/terraform/plan', label: 'atmos terraform plan', description: 'Generate and show execution plan'},
-  {type: 'link', href: '/cli/commands/terraform/apply', label: 'atmos terraform apply', description: 'Apply infrastructure changes'},
-  {type: 'link', href: '/cli/commands/terraform/deploy', label: 'atmos terraform deploy', description: 'Run init, plan, and apply in sequence'},
-  {type: 'link', href: '/cli/commands/terraform/shell', label: 'atmos terraform shell', description: 'Open an interactive shell'},
-  {type: 'link', href: '/cli/commands/terraform/generate/backends', label: 'atmos terraform generate backends', description: 'Generate backend configuration files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/varfiles', label: 'atmos terraform generate varfiles', description: 'Generate variable files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/files', label: 'atmos terraform generate files', description: 'Generate auxiliary configuration files'},
-]} />
+<DocCardList
+  items={[
+    {
+      type: "link",
+      href: "/cli/commands/terraform/usage",
+      label: "atmos terraform",
+      description: "Execute Terraform/OpenTofu commands",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/plan",
+      label: "atmos terraform plan",
+      description: "Generate and show execution plan",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/apply",
+      label: "atmos terraform apply",
+      description: "Apply infrastructure changes",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/deploy",
+      label: "atmos terraform deploy",
+      description: "Run init, plan, and apply in sequence",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/shell",
+      label: "atmos terraform shell",
+      description: "Open an interactive shell",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/backends",
+      label: "atmos terraform generate backends",
+      description: "Generate backend configuration files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/varfiles",
+      label: "atmos terraform generate varfiles",
+      description: "Generate variable files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/files",
+      label: "atmos terraform generate files",
+      description: "Generate auxiliary configuration files",
+    },
+  ]}
+/>
 
 ## Related
 

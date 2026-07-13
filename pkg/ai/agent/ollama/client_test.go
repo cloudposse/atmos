@@ -1,11 +1,16 @@
 package ollama
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -140,6 +145,65 @@ func TestNewClient_Disabled(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "AI features are disabled")
+}
+
+func TestClientSendMethods(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Contains(t, r.URL.Path, "/chat/completions")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"chatcmpl-test",
+			"object":"chat.completion",
+			"created":0,
+			"model":"llama3.3:70b",
+			"choices":[{
+				"index":0,
+				"message":{"role":"assistant","content":"hello from ollama"},
+				"finish_reason":"stop"
+			}],
+			"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(&schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"ollama": {
+					BaseURL:   server.URL,
+					MaxTokens: 128,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	messages := []types.Message{{Role: types.RoleUser, Content: "hello"}}
+
+	text, err := client.SendMessage(ctx, "hello")
+	require.NoError(t, err)
+	assert.Equal(t, "hello from ollama", text)
+
+	text, err = client.SendMessageWithHistory(ctx, messages)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from ollama", text)
+
+	response, err := client.SendMessageWithTools(ctx, "hello", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from ollama", response.Content)
+	require.NotNil(t, response.Usage)
+	assert.Equal(t, int64(7), response.Usage.TotalTokens)
+
+	response, err = client.SendMessageWithToolsAndHistory(ctx, messages, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.StopReasonEndTurn, response.StopReason)
+
+	response, err = client.SendMessageWithSystemPromptAndTools(ctx, "system", "memory", messages, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from ollama", response.Content)
 }
 
 func TestClientGetters(t *testing.T) {

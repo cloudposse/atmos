@@ -36,6 +36,7 @@ func init() {
 
 // GetType returns the component type.
 func (p *Plugin) GetType() string {
+	defer perf.Track(nil, "terraform.Plugin.GetType")()
 	return "terraform"
 }
 
@@ -54,6 +55,10 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterPlan,
 		},
 		{
+			Event:   "after.terraform.plan.aggregate",
+			Handler: p.onAfterTerraformAggregate,
+		},
+		{
 			Event:   "before.terraform.apply",
 			Handler: p.onBeforeApply,
 		},
@@ -62,12 +67,28 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterApply,
 		},
 		{
+			Event:   "after.terraform.apply.aggregate",
+			Handler: p.onAfterTerraformAggregate,
+		},
+		{
+			Event:   "before.terraform.test",
+			Handler: p.onBeforeTest,
+		},
+		{
+			Event:   "after.terraform.test",
+			Handler: p.onAfterTest,
+		},
+		{
 			Event:   "before.terraform.deploy",
 			Handler: p.onBeforeDeploy,
 		},
 		{
 			Event:   "after.terraform.deploy",
 			Handler: p.onAfterDeploy,
+		},
+		{
+			Event:   "after.terraform.destroy.aggregate",
+			Handler: p.onAfterTerraformAggregate,
 		},
 	}
 }
@@ -105,14 +126,20 @@ func (p *Plugin) buildTemplateContext(
 		Custom:        make(map[string]any),
 	}
 
-	// Extract terraform-specific data.
+	// Extract terraform-specific data. The data shape depends on the command:
+	// plan/apply/destroy carry *TerraformOutputData; test carries
+	// *TerraformTestOutputData.
 	var tfData *plugin.TerraformOutputData
+	var testData *plugin.TerraformTestOutputData
 	if result != nil && result.Data != nil {
 		tfData, _ = result.Data.(*plugin.TerraformOutputData)
+		testData, _ = result.Data.(*plugin.TerraformTestOutputData)
 	}
 
 	// Return extended context with terraform-specific fields.
-	return NewTemplateContext(baseCtx, tfData), nil
+	tfCtx := NewTemplateContext(baseCtx, tfData)
+	tfCtx.TestResult = testData
+	return tfCtx, nil
 }
 
 // getOutputVariables returns CI output variables for a command.
@@ -131,8 +158,8 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string)
 	vars["has_errors"] = strconv.FormatBool(result.HasErrors)
 	vars["exit_code"] = strconv.Itoa(result.ExitCode)
 
-	// Add success indicator for apply commands.
-	if command == "apply" {
+	// Add success indicator for apply and test commands.
+	if command == "apply" || command == "test" {
 		vars["success"] = strconv.FormatBool(!result.HasErrors)
 	}
 
@@ -143,6 +170,13 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string)
 			vars["resources_to_change"] = strconv.Itoa(data.ResourceCounts.Change)
 			vars["resources_to_replace"] = strconv.Itoa(data.ResourceCounts.Replace)
 			vars["resources_to_destroy"] = strconv.Itoa(data.ResourceCounts.Destroy)
+		}
+		if data, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
+			vars["tests_total"] = strconv.Itoa(data.Total)
+			vars["tests_passed"] = strconv.Itoa(data.Pass)
+			vars["tests_failed"] = strconv.Itoa(data.Fail)
+			vars["tests_errored"] = strconv.Itoa(data.Error)
+			vars["tests_skipped"] = strconv.Itoa(data.Skip)
 		}
 	}
 
@@ -196,7 +230,8 @@ var applyProgressLineRe = regexp.MustCompile(
 		`|(?:Creation|Modifications|Destruction|Read) complete` +
 		`|Refreshing state` +
 		`|Provisioning with` +
-		`).*\n?`)
+		`).*\n?`,
+)
 
 // multiBlankLinesRe matches 3 or more consecutive newlines for collapsing.
 var multiBlankLinesRe = regexp.MustCompile(`\n{3,}`)
@@ -205,10 +240,22 @@ var multiBlankLinesRe = regexp.MustCompile(`\n{3,}`)
 // For plan: strips data source reads and state refreshes, returns empty for no-changes.
 // For apply: strips preamble and progress lines, keeps plan diffs and apply result.
 func cleanOutput(output, command string) string {
-	if command == "apply" {
+	switch command {
+	case "apply", "destroy":
 		return cleanApplyOutput(output)
+	case "test":
+		// In CI the captured output is the machine-readable `test -json` event
+		// stream (mixed with terraform init/workspace preamble). Render it to a
+		// clean, human-readable summary so the job summary never shows raw JSON.
+		// When the output is already human (non-CI runs emit no `-json`),
+		// RenderTestText finds no events and returns "", so we keep it verbatim.
+		if rendered := RenderTestText([]byte(output)); rendered != "" {
+			return strings.TrimSpace(rendered)
+		}
+		return strings.TrimSpace(output)
+	default:
+		return cleanPlanOutput(output)
 	}
-	return cleanPlanOutput(output)
 }
 
 // cleanPlanOutput strips noisy preamble (data source reads, state refreshes)

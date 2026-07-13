@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,7 +31,12 @@ func cleanPodmanOutput(output []byte) string {
 }
 
 // PodmanRuntime implements the Runtime interface for Podman.
-type PodmanRuntime struct{}
+type PodmanRuntime struct {
+	// env is the complete environment for podman CLI subprocesses. When nil the
+	// commands inherit os.Environ(); when set (via SetEnv) it carries credentials
+	// materialized by auth integrations, e.g. DOCKER_CONFIG for ECR login.
+	env []string
+}
 
 // NewPodmanRuntime creates a new Podman runtime.
 func NewPodmanRuntime() *PodmanRuntime {
@@ -39,13 +45,32 @@ func NewPodmanRuntime() *PodmanRuntime {
 	return &PodmanRuntime{}
 }
 
+// SetEnv sets the environment for podman CLI subprocesses launched by this runtime.
+// See EnvSetter for the rationale.
+func (p *PodmanRuntime) SetEnv(env []string) {
+	defer perf.Track(nil, "container.PodmanRuntime.SetEnv")()
+
+	p.env = env
+}
+
+// command builds a podman CLI command with the runtime's configured environment applied.
+func (p *PodmanRuntime) command(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	applyCommandEnv(cmd, p.env)
+	return cmd
+}
+
 // Build builds a container image from a Dockerfile.
 func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Build")()
 
+	if config.Engine == "buildx" || config.Bake != nil {
+		return fmt.Errorf("%w: Docker Buildx requires Docker in V1; Podman uses the native `podman build` path", errUtils.ErrContainerRuntimeOperation)
+	}
+
 	args := buildBuildArgs(config)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -55,13 +80,28 @@ func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	return nil
 }
 
+// EnsureNetwork idempotently creates a user-defined podman network. It implements
+// NetworkEnsurer so emulators in a stack can share a network and resolve each
+// other by component name.
+func (p *PodmanRuntime) EnsureNetwork(ctx context.Context, name string) error {
+	defer perf.Track(nil, "container.PodmanRuntime.EnsureNetwork")()
+
+	cmd := p.command(ctx, "network", "create", name)
+	output, err := cmd.CombinedOutput()
+	return networkCreateResult(err, string(output))
+}
+
 // Create creates a new container.
 func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (string, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Create")()
 
+	if err := prepareHostRuntime(ctx, p, config); err != nil {
+		return "", err
+	}
+
 	args := buildCreateArgs(config)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%w: podman create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -69,16 +109,7 @@ func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 
 	// When podman pulls an image, it outputs pull progress followed by container ID on last line.
 	// Extract the last non-empty line as the container ID.
-	lines := strings.Split(string(output), "\n")
-	var containerID string
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line != "" {
-			containerID = line
-			break
-		}
-	}
-
+	containerID := extractContainerID(output)
 	if containerID == "" {
 		return "", fmt.Errorf("%w: podman create returned no container ID", errUtils.ErrContainerRuntimeOperation)
 	}
@@ -92,7 +123,7 @@ func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 func (p *PodmanRuntime) Start(ctx context.Context, containerID string) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Start")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, "start", containerID)
+	cmd := p.command(ctx, "start", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman start failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -109,7 +140,7 @@ func (p *PodmanRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	timeoutSecs := int(timeout.Seconds())
 	args := buildStopArgs(containerID, timeoutSecs)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman stop failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -125,7 +156,7 @@ func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bo
 
 	args := buildRemoveArgs(containerID, force)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman rm failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -137,9 +168,9 @@ func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bo
 
 // findContainerByIDOrName searches for a container in the given list by ID or name.
 func findContainerByIDOrName(containers []Info, searchID string) (*Info, error) {
-	for _, container := range containers {
-		if container.ID == searchID || container.Name == searchID {
-			return &container, nil
+	for i := range containers {
+		if containers[i].ID == searchID || containers[i].Name == searchID {
+			return &containers[i], nil
 		}
 	}
 	return nil, fmt.Errorf("%w: %s", errUtils.ErrContainerNotFound, searchID)
@@ -163,7 +194,7 @@ func (p *PodmanRuntime) Inspect(ctx context.Context, containerID string) (*Info,
 func (p *PodmanRuntime) List(ctx context.Context, filters map[string]string) ([]Info, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.List")()
 
-	output, err := executePodmanList(ctx, filters)
+	output, err := p.executePodmanList(ctx, filters)
 	if err != nil {
 		return nil, err
 	}
@@ -187,10 +218,10 @@ func buildPodmanListArgs(filters map[string]string) []string {
 	return args
 }
 
-func executePodmanList(ctx context.Context, filters map[string]string) ([]byte, error) {
+func (p *PodmanRuntime) executePodmanList(ctx context.Context, filters map[string]string) ([]byte, error) {
 	args := buildPodmanListArgs(filters)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: podman ps failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -218,13 +249,167 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 		Name:   name,
 		Image:  getString(containerJSON, "Image"),
 		Status: getString(containerJSON, "State"),
+		Health: podmanHealth(containerJSON),
 	}
 
 	if labels, ok := containerJSON["Labels"].(map[string]interface{}); ok {
 		info.Labels = parseLabelsMap(labels)
 	}
+	if raw, ok := containerJSON["Ports"]; ok {
+		info.Ports = parsePodmanPorts(raw)
+	}
+	if networks := parsePodmanNetworks(containerJSON["Networks"]); len(networks) > 0 {
+		info.Networks = networks
+	}
+	if networkIPs := parsePodmanNetworkIPs(containerJSON["Networks"]); len(networkIPs) > 0 {
+		info.NetworkIPs = networkIPs
+	}
 
 	return info
+}
+
+func parsePodmanNetworkIPs(raw interface{}) map[string]string {
+	networks, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	result := make(map[string]string, len(networks))
+	for name, networkRaw := range networks {
+		network, ok := networkRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ip := getString(network, "IPAddress"); ip != "" {
+			result[name] = ip
+			continue
+		}
+		if ip := getString(network, "ip_address"); ip != "" {
+			result[name] = ip
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func parsePodmanNetworks(raw interface{}) []string {
+	switch v := raw.(type) {
+	case []interface{}:
+		networks := make([]string, 0, len(v))
+		for _, item := range v {
+			if name, ok := item.(string); ok && name != "" {
+				networks = append(networks, name)
+			}
+		}
+		sort.Strings(networks)
+		return networks
+	case map[string]interface{}:
+		networks := make([]string, 0, len(v))
+		for name := range v {
+			if name != "" {
+				networks = append(networks, name)
+			}
+		}
+		sort.Strings(networks)
+		return networks
+	default:
+		return nil
+	}
+}
+
+// parsePodmanPorts extracts published port bindings from a podman `ps --format json`
+// record. Podman represents ports as a structured array with snake_case keys
+// (host_port/container_port/protocol), unlike docker's `ps` string column parsed by
+// parseDockerPorts. Without this, Info.Ports is empty under podman and emulator
+// endpoint resolution yields an empty URL (see pkg/emulator manager.endpoint), so
+// Terraform falls back to real cloud endpoints.
+func parsePodmanPorts(raw interface{}) []PortBinding {
+	if containerJSON, ok := raw.(map[string]interface{}); ok {
+		raw = containerJSON["Ports"]
+	}
+	entries, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var ports []PortBinding
+	seen := make(map[PortBinding]struct{})
+	for _, entry := range entries {
+		binding, span, ok := parsePodmanPort(entry)
+		if !ok {
+			continue
+		}
+		if span <= 0 {
+			span = 1
+		}
+		// Expand consecutive host/container ports within the range.
+		for i := 0; i < span; i++ {
+			expanded := PortBinding{
+				ContainerPort: binding.ContainerPort + i,
+				HostPort:      binding.HostPort + i,
+				Protocol:      binding.Protocol,
+			}
+			if _, dup := seen[expanded]; dup {
+				continue
+			}
+			seen[expanded] = struct{}{}
+			ports = append(ports, expanded)
+		}
+	}
+
+	return ports
+}
+
+// parsePodmanPort converts one podman port entry into a PortBinding and the
+// port range span. Unpublished ports (host_port 0) are skipped; a missing
+// protocol defaults to tcp. The span field reflects Podman's `range` key for
+// consecutive port ranges; callers must expand [base, base+span) themselves.
+func parsePodmanPort(entry interface{}) (PortBinding, int, bool) {
+	m, ok := entry.(map[string]interface{})
+	if !ok {
+		return PortBinding{}, 0, false
+	}
+	hostPort := jsonFieldInt(m["host_port"])
+	containerPort := jsonFieldInt(m["container_port"])
+	if hostPort == 0 || containerPort == 0 {
+		return PortBinding{}, 0, false
+	}
+	protocol, _ := m["protocol"].(string)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+	span := jsonFieldInt(m["range"])
+	if span <= 0 {
+		span = 1
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, span, true
+}
+
+// JsonFieldInt coerces a JSON-decoded numeric field to an int. The json.Unmarshal
+// call into interface{} yields float64 for numbers; int and json.Number are handled defensively.
+func jsonFieldInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	default:
+		return 0
+	}
+}
+
+// podmanHealth extracts the health state from a podman ps record. Podman embeds
+// the health token in the human `.Status` string (like docker) and, on newer
+// versions, exposes a machine-readable `.Health` field; both are checked.
+func podmanHealth(containerJSON map[string]interface{}) string {
+	if h := parseHealth(getString(containerJSON, "Status")); h != "" {
+		return h
+	}
+	return normalizeHealth(getString(containerJSON, "Health"))
 }
 
 func extractPodmanName(containerJSON map[string]interface{}) string {
@@ -254,28 +439,81 @@ func parseLabelsMap(labels map[string]interface{}) map[string]string {
 func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Exec")()
 
-	return execWithRuntime(ctx, podmanCmd, containerID, cmd, opts)
+	return runExecCommand(p.command(ctx, buildExecArgs(containerID, cmd, opts)...), podmanCmd, opts)
 }
 
-// Attach attaches to a running container with an interactive shell.
+// Shell opens an interactive shell in a running container (a new shell process via `exec`).
+func (p *PodmanRuntime) Shell(ctx context.Context, containerID string, opts *ShellOptions) error {
+	defer perf.Track(nil, "container.PodmanRuntime.Shell")()
+
+	cmd, execOpts := buildShellCommand(opts)
+	return p.Exec(ctx, containerID, cmd, execOpts)
+}
+
+// Attach connects to a running container's main process (PID 1) via `podman attach`.
 func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Attach")()
 
-	cmd, execOpts := buildAttachCommand(opts)
-	return p.Exec(ctx, containerID, cmd, execOpts)
+	args, execOpts := buildAttachArgs(containerID, opts)
+	return runExecCommand(p.command(ctx, args...), podmanCmd, execOpts)
 }
 
 // Pull pulls a container image.
 func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Pull")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, "pull", image)
+	cmd := p.command(ctx, "pull", image)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman pull failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
 	}
 
 	return nil
+}
+
+// Tag tags a container image.
+func (p *PodmanRuntime) Tag(ctx context.Context, source, target string) error {
+	defer perf.Track(nil, "container.PodmanRuntime.Tag")()
+
+	cmd := p.command(ctx, buildTagArgs(source, target)...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: podman tag failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
+	}
+
+	return nil
+}
+
+// Push pushes a container image.
+func (p *PodmanRuntime) Push(ctx context.Context, image string) (*PushResult, error) {
+	defer perf.Track(nil, "container.PodmanRuntime.Push")()
+
+	cmd := p.command(ctx, buildPushArgs(image)...)
+	output, err := cmd.CombinedOutput()
+	cleanOutput := cleanPodmanOutput(output)
+	result := &PushResult{
+		Image:  image,
+		Digest: parsePushDigest(cleanOutput),
+		Output: cleanOutput,
+	}
+	if err != nil {
+		return result, fmt.Errorf("%w: podman push failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanOutput)
+	}
+
+	return result, nil
+}
+
+// ImageInspect returns metadata for a local container image.
+func (p *PodmanRuntime) ImageInspect(ctx context.Context, image string) (*ImageInfo, error) {
+	defer perf.Track(nil, "container.PodmanRuntime.ImageInspect")()
+
+	cmd := p.command(ctx, buildImageInspectArgs(image)...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: podman image inspect failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
+	}
+
+	return parseImageInspectOutput(output)
 }
 
 // Logs shows logs from a container.
@@ -294,7 +532,7 @@ func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow boo
 
 	args := buildLogsArgs(containerID, follow, tail)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -305,7 +543,7 @@ func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow boo
 func (p *PodmanRuntime) Info(ctx context.Context) (*RuntimeInfo, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Info")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, "version", "--format", "{{.Version}}")
+	cmd := p.command(ctx, "version", "--format", "{{.Version}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: podman version failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))

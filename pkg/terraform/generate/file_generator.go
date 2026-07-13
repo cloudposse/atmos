@@ -205,7 +205,7 @@ func relativePath(absPath string) string {
 func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	if dryRun {
 		result.Skipped = true
-		ui.Writef("Would delete: %s\n", relativePath(filePath))
+		ui.Infof("Would delete `%s`", relativePath(filePath))
 		return
 	}
 
@@ -219,7 +219,6 @@ func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	}
 
 	result.Deleted = true
-	ui.Writef("Deleted: %s\n", relativePath(filePath))
 }
 
 // processGenerateFile handles file generation in generate mode.
@@ -232,7 +231,7 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 
 	if ctx.dryRun {
 		result.Skipped = true
-		ui.Writef("Would generate: %s\n", relativePath(ctx.filePath))
+		ui.Infof("Would generate `%s`", relativePath(ctx.filePath))
 		return
 	}
 
@@ -260,12 +259,6 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 	if err := os.WriteFile(ctx.filePath, fileContent, filePermissions); err != nil {
 		result.Error = fmt.Errorf("%w: failed to write %s: %w", errUtils.ErrFileOperation, ctx.filePath, err)
 		return
-	}
-
-	if result.Created {
-		ui.Writef("Created: %s\n", relativePath(ctx.filePath))
-	} else {
-		ui.Writef("Updated: %s\n", relativePath(ctx.filePath))
 	}
 }
 

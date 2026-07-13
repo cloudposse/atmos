@@ -39,7 +39,7 @@ the PR is, because the fork point doesn't move when `main` advances.
 
 The bug is in step 3. `MergeBase` requires the local repo to have
 `origin/<target>` available *and* enough history to find a common
-ancestor. In CI shallow checkouts (`actions/checkout@v4` defaults to
+ancestor. In CI shallow checkouts (`actions/checkout@v6` defaults to
 `fetch-depth: 1`) neither is guaranteed:
 
 - `origin/<target>` may not be fetched at all.
@@ -106,7 +106,7 @@ instead because:
 
 - It keeps the existing PRD architecture (merge-base as primary).
 - It does not require fetching `M`'s parent separately.
-- It handles `actions/checkout@v4`'s default behavior (which checks
+- It handles `actions/checkout@v6`'s default behavior (which checks
   out the merge commit for `pull_request` events) naturally — when
   HEAD is the merge commit, `merge-base(HEAD, origin/main)` already
   resolves to the merge commit's first parent.
@@ -205,7 +205,7 @@ In the customer's reproduction:
 
 1. PR forked from `main@B`, main since advanced to `E` with commits
    that touched components the PR didn't.
-2. Workflow uses `actions/checkout@v4` defaults (`fetch-depth: 1`,
+2. Workflow uses `actions/checkout@v6` defaults (`fetch-depth: 1`,
    merge-ref checkout).
 3. Before this fix: `atmos describe affected` reported every
    component as affected.

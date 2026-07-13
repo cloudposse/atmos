@@ -1,0 +1,162 @@
+base_path: "."
+
+workflows:
+  base_path: "workflows"
+
+# Enable native CI summaries for the container build/push examples when they run
+# under GitHub Actions or another detected CI provider.
+ci:
+  enabled: true
+  summary:
+    enabled: true
+
+# Global container runtime defaults (the top-level `container:` namespace).
+container:
+  runtime:
+    # Auto-init/start the Podman machine when no running runtime is found, so the
+    # examples work out of the box on macOS/Linux. Also settable via the
+    # ATMOS_CONTAINER_RUNTIME_AUTO_START env var. With Docker running this is a no-op.
+    auto_start: true
+    # provider: podman   # optional: pin docker|podman (default: auto-detect docker, then podman)
+
+# Auth is only exercised when a step (or `--identity`) names an identity, e.g. the
+# `push-ecr` workflow. Authenticating `dev-admin` auto-provisions the linked
+# `aws/ecr` integration, which performs the Docker login used by the push.
+# Replace the provider, account, and region with your own to try it against ECR.
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start/
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+  integrations:
+    dev/ecr/primary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+
+commands:
+  # Named `example` (not `container`) so it is obvious these are user-defined
+  # custom commands, not a built-in `atmos container` subcommand.
+  - name: example
+    description: Run container action examples
+    commands:
+      - name: hello
+        description: Run a simple command in Alpine
+        steps:
+          - name: hello
+            type: container
+            action: run
+            with:
+              image: alpine:latest
+              command: echo "hello from a custom command container"
+
+      - name: build-run
+        description: Build a local image, show its metadata, and run it
+        steps:
+          - name: build
+            type: container
+            action: build
+            with:
+              context: .
+              dockerfile: Dockerfile
+              tags:
+                - atmos-container-step:local
+            outputs:
+              image: "{{ .metadata.image }}"
+
+          - name: inspect
+            type: container
+            action: inspect
+            with:
+              image: "{{ .steps.build.outputs.image }}"
+
+          - name: run
+            type: container
+            action: run
+            with:
+              image: "{{ .steps.build.outputs.image }}"
+              command: |
+                /usr/local/bin/example
+                uname -a
+
+      - name: push
+        description: Push the local example image to a local registry
+        steps:
+          - name: build
+            type: container
+            action: build
+            with:
+              context: .
+              dockerfile: Dockerfile
+              tags:
+                - atmos-container-step:local
+            outputs:
+              image: "{{ .metadata.image }}"
+
+          - name: push
+            type: container
+            action: push
+            with:
+              image: "{{ .steps.build.outputs.image }}"
+              tags:
+                - localhost:5000/atmos-container-step:local
+            outputs:
+              image: "{{ .metadata.image }}"
+              digest: "{{ .metadata.digest }}"
+
+          - name: run
+            type: container
+            action: run
+            with:
+              image: "{{ .steps.push.outputs.image }}"
+              command: |
+                /usr/local/bin/example
+                uname -a
+
+      - name: flat-run
+        description: Run a single command using the with params block
+        steps:
+          - name: hello
+            type: container
+            action: run
+            with:
+              image: alpine:latest
+              command: echo "hello from with params"
+
+      - name: workspace
+        description: Show the mounted workspace from a container
+        steps:
+          - name: workspace
+            type: container
+            action: run
+            with:
+              image: alpine:latest
+              command: |
+                uname -a
+                pwd
+                ls -la
+
+      - name: env
+        description: Pass an Atmos step environment variable into a container
+        steps:
+          - name: env
+            type: container
+            env:
+              EXAMPLE_MESSAGE: "hello from env"
+            action: run
+            with:
+              image: alpine:latest
+              command: echo "$EXAMPLE_MESSAGE"

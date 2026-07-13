@@ -32,24 +32,25 @@ jobs:
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: "website/.nvmrc"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 9
 
@@ -64,10 +65,9 @@ jobs:
 
       - name: Copy Website to S3 Bucket
         run: |
-          cd website/build
-          aws sts get-caller-identity
-          aws s3 sync . s3://${{ env.S3_BUCKET_NAME }} --delete
-          aws s3 ls s3://${{ env.S3_BUCKET_NAME }} --recursive --human-readable --summarize
+          ./.github/scripts/s3-deploy-with-charset.sh \
+            website/build \
+            s3://${{ env.S3_BUCKET_NAME }}/
 
       - name: Trigger ReIndexing of atmos.tools and docs.cloudposse.com Docs
         run: |

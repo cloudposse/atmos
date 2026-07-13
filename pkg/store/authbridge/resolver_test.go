@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -46,6 +47,7 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 				ConfigFile:      expectedConfigFile,
 				Profile:         "prod",
 				Region:          "us-east-1",
+				EndpointURL:     "http://localhost:4566",
 			},
 		},
 	}
@@ -66,6 +68,7 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	assert.Equal(t, expectedConfigFile, authConfig.ConfigFile)
 	assert.Equal(t, "prod", authConfig.Profile)
 	assert.Equal(t, "us-east-1", authConfig.Region)
+	assert.Equal(t, "http://localhost:4566", authConfig.EndpointURL)
 }
 
 func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
@@ -298,12 +301,15 @@ func TestResolveGCPAuthContext_Success(t *testing.T) {
 
 	// Simulate realm-scoped credential path (as populated by auth system with realm).
 	realmCredsFile := filepath.Join(".config", "atmos", "my-realm", "gcp", "gcp-adc", "adc", "gcp-prod", "application_default_credentials.json")
+	tokenExpiry := time.Now().Add(time.Hour).UTC()
 
 	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			GCP: &schema.GCPAuthContext{
 				CredentialsFile: realmCredsFile,
 				ProjectID:       "my-gcp-project",
+				AccessToken:     "ya29.identity-token",
+				TokenExpiry:     tokenExpiry,
 			},
 		},
 	}
@@ -323,6 +329,8 @@ func TestResolveGCPAuthContext_Success(t *testing.T) {
 	// Verify realm-scoped path and project ID flow through.
 	assert.Equal(t, realmCredsFile, authConfig.CredentialsFile)
 	assert.Equal(t, "my-gcp-project", authConfig.ProjectID)
+	assert.Equal(t, "ya29.identity-token", authConfig.AccessToken)
+	assert.Equal(t, tokenExpiry, authConfig.TokenExpiry)
 }
 
 func TestResolveGCPAuthContext_AuthFailure(t *testing.T) {

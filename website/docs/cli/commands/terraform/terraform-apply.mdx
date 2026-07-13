@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: apply
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Experimental from '@site/src/components/Experimental'
 
@@ -13,7 +13,7 @@ import Experimental from '@site/src/components/Experimental'
 Use this command to apply Terraform changes for an Atmos component in a stack. Supports both direct applies and applying from previously generated planfiles.
 </Intro>
 
-<Screengrab title="atmos terraform apply --help" slug="atmos-terraform-apply--help" />
+<CastPlayer title="atmos terraform apply --help" src="/casts/screengrabs/atmos-terraform-apply--help.cast" static chrome />
 
 ## Usage
 
@@ -31,6 +31,16 @@ This command applies Terraform changes to your infrastructure. You can:
 
 :::tip
 For automated deployments, consider using `atmos terraform deploy` which automatically includes `-auto-approve`.
+:::
+
+:::note
+`apply` does **not** download stored planfiles or run
+[drift verification](/components/terraform/planfiles#drift-verification). It applies a planfile passed
+with `--planfile`, or—when none is given—lets Terraform plan and apply in one step; in neither case does
+Atmos capture a separate fresh plan to diff a stored plan against. The automatic download → verify →
+apply flow lives on
+[`atmos terraform deploy`](/cli/commands/terraform/deploy#automatic-plan-verification-in-ci), which runs
+a discrete `plan` step as part of the command.
 :::
 
 ## Examples
@@ -82,6 +92,25 @@ Apply changes only to specific resources:
 ```shell
 atmos terraform apply vpc -s dev -target=aws_subnet.private
 ```
+
+### Graph-backed Bulk Apply
+
+Run applies for multiple components through the Terraform dependency graph:
+
+```shell
+# Apply every Terraform component in dependency order
+atmos terraform apply --all -s dev
+
+# Apply a named subset, preserving dependency edges between selected components
+atmos terraform apply --components vpc,eks/cluster,eks/apps -s dev
+
+# Apply components selected by query
+atmos terraform apply --query '.settings.tier == "network"' -s dev
+```
+
+The graph is built from [`dependencies.components`](/stacks/dependencies/components) first, with `settings.depends_on` as a fallback. Atmos applies prerequisites before dependents so components that consume another component's outputs run after the component they depend on.
+
+Use `--failure-mode keep-going` to continue independent graph branches after one component fails. The default is `fail-fast`.
 
 ## Planfile Usage
 
@@ -208,6 +237,47 @@ atmos terraform apply vpc -s dev
 
         ```shell
         atmos terraform apply vpc -s dev --process-templates=false
+        ```
+    </dd>
+
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of components to apply concurrently when running with `--all`, `--affected`, `--components`, or `--query`. Default is `1` (sequential).
+
+        **Environment variable:** `ATMOS_TERRAFORM_APPLY_MAX_CONCURRENCY`
+
+        ```shell
+        atmos terraform apply --all -s dev --max-concurrency 4
+        ```
+    </dd>
+
+    <dt>`--failure-mode` <em>(optional)</em></dt>
+    <dd>
+        Controls how the concurrent scheduler handles a failed component when using `--all`, `--affected`, `--components`, or `--query` with `--max-concurrency > 1`.
+
+        Supported values:
+        - `fail-fast` *(default)* — stop scheduling new components as soon as one fails
+        - `keep-going` — continue applying independent graph branches even after a failure
+
+        **Environment variable:** `ATMOS_TERRAFORM_APPLY_FAILURE_MODE`
+
+        ```shell
+        atmos terraform apply --all -s dev --max-concurrency 4 --failure-mode keep-going
+        ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_APPLY_LOG_ORDER`
+
+        ```shell
+        atmos terraform apply --all -s dev --max-concurrency 4 --log-order grouped
         ```
     </dd>
 

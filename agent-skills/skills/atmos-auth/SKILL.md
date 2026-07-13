@@ -1,6 +1,6 @@
 ---
 name: atmos-auth
-description: "Authentication and identity management: providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, identity chaining, login/exec/shell/console"
+description: "Authentication and identity management: providers (SSO/SAML/OIDC/GCP/Atmos Pro), identities, keyring, identity chaining, login/exec/shell/console, and github/sts for private GitHub access"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,10 +9,10 @@ metadata:
 # Atmos Authentication and Identity Management
 
 Atmos Auth provides a unified authentication layer for multiple cloud providers. It consolidates AWS SSO, SAML,
-OIDC, GitHub Actions, GCP Workload Identity Federation, Azure, and static credentials into a single configuration
+OIDC, GitHub Actions, GCP Workload Identity Federation, Azure, Atmos Pro, and static credentials into a single configuration
 model in `atmos.yaml`. Credentials are managed through providers (upstream authentication systems) and identities
 (the roles and accounts obtained from those providers), with support for identity chaining, keyring-based
-credential storage, and integrations like ECR.
+credential storage, and integrations like ECR, EKS, and GitHub STS.
 
 ## Architecture Overview
 
@@ -21,7 +21,7 @@ The auth system has four layers configured under the `auth:` key in `atmos.yaml`
 1. **Providers** -- Upstream systems that issue initial credentials (SSO, SAML, OIDC, GCP ADC/WIF).
 2. **Identities** -- Roles, permission sets, or accounts obtained from providers or chained from other identities.
 3. **Keyring** -- Secure credential storage backend (system keyring, encrypted file, or in-memory).
-4. **Integrations** -- Client-side credential materializations (e.g., ECR Docker login) triggered by identity auth.
+4. **Integrations** -- Client-side credential materializations (ECR Docker login, EKS kubeconfig, GitHub STS).
 
 ```yaml
 auth:
@@ -43,6 +43,15 @@ auth:
       kind: aws/ecr
       # Integration-specific fields
 ```
+
+## Related Skills
+
+| Need | Load |
+|---|---|
+| Atmos Pro setup, uploads, workflow dispatch, drift detection | [atmos-pro](../atmos-pro/SKILL.md) |
+| Private GitHub remote imports and component source | [atmos-imports](../atmos-imports/SKILL.md) |
+| Native CI using OIDC | [atmos-ci](../atmos-ci/SKILL.md) |
+| GitOps repositories and signed commits | [atmos-git](../atmos-git/SKILL.md) |
 
 ## Provider Types
 
@@ -84,6 +93,7 @@ auth:
 ### GitHub Actions OIDC
 
 For CI/CD pipelines in GitHub Actions. Requires `id-token: write` permission in the workflow.
+Use this through a CI profile selected with `ATMOS_PROFILE`.
 
 ```yaml
 auth:
@@ -94,6 +104,31 @@ auth:
       spec:
         audience: sts.us-east-1.amazonaws.com   # Optional, defaults to STS endpoint
 ```
+
+The cloud IAM trust policy must constrain GitHub OIDC `sub` claims to the intended repository
+and branch or GitHub environment, for example `repo:ORG/REPO:ref:refs/heads/main` or
+`repo:ORG/REPO:environment:prod`.
+
+### Atmos Pro Provider
+
+Use `kind: atmos/pro` when the Atmos CLI needs to authenticate to Atmos Pro, including
+`github/sts` token minting.
+
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: !env ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via:
+        provider: atmos-pro
+```
+
+In GitHub Actions, this uses the runner OIDC token. Grant `permissions.id-token: write`.
 
 ### GCP Application Default Credentials
 
@@ -319,7 +354,11 @@ Disable Atmos-managed auth to use native cloud provider credentials:
 
 ```bash
 atmos terraform plan mycomponent --stack=dev --identity=false
-# or
+```
+
+Or:
+
+```bash
 export ATMOS_IDENTITY=false
 ```
 
@@ -335,13 +374,17 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      ATMOS_PROFILE: github
     steps:
-      - uses: actions/checkout@v4
-      - run: atmos terraform apply mycomponent -s prod
+      - uses: actions/checkout@v6
+      - run: atmos terraform deploy mycomponent -s prod
 ```
 
 For AWS OIDC, configure `github/oidc` provider with `aws/assume-role` identity. For GCP WIF, configure
 `gcp/workload-identity-federation` provider -- `token_source` is auto-detected in GitHub Actions.
+Do not add a routine `atmos auth login` step to non-interactive OIDC workflows; Atmos exchanges
+the OIDC token when the command runs.
 
 ### Disabling Auth in CI
 
@@ -355,14 +398,17 @@ run: atmos terraform apply mycomponent --stack=prod
 
 ## Profiles for Environment Switching
 
-Use Atmos profiles to swap provider and identity configurations while keeping names consistent:
+Use Atmos profiles to swap provider and identity configurations while keeping names consistent.
+For profile directory layout, activation, and merge behavior, load
+[atmos-profiles](../atmos-profiles/SKILL.md):
 
 ```bash
 atmos --profile developer terraform plan myapp -s dev
 ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 ```
 
-Each profile is a directory (e.g., `profiles/developer/auth.yaml`) containing auth overrides.
+Keep this skill focused on the auth sections inside a profile, such as providers, identities, and
+keyring settings.
 
 ## ECR Integrations
 
@@ -384,6 +430,44 @@ auth:
 
 Integration failures are non-blocking during `atmos auth login`. Use `atmos auth ecr-login` to retry.
 
+## GitHub STS Integration
+
+Use `kind: github/sts` to mint short-lived, least-privilege GitHub App tokens through Atmos Pro.
+This is the preferred CI path for private GitHub vendoring, component `source:`, remote `import:`,
+Terraform private modules, `atmos git`, and other Git subprocesses.
+
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: !env ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via:
+        provider: atmos-pro
+  integrations:
+    github-sts:
+      kind: github/sts
+      via:
+        provider: atmos-pro
+      spec:
+        auto_provision: true
+        repos: [acme/modules]
+        policy_name: default
+        git_config_mode: env
+        revoke_on_exit: true
+        token_env: ATMOS_PRO_GITHUB_TOKEN
+```
+
+In CI, `github/sts` can auto-provision lazily before the first private remote read when
+`atmos/pro` plus `github/sts` are configured and `auto_provision` is not disabled. The same minted
+credentials cover `atmos vendor pull`, remote `import:`, component `source:`, private Terraform
+module fetches, and managed Git operations. `ATMOS_PRO_GITHUB_TOKEN` is preferred for Atmos-native
+Git reads ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -393,6 +477,9 @@ Integration failures are non-blocking during `atmos auth login`. Use `atmos auth
 | `ATMOS_KEYRING_PASSWORD` | Password for file keyring |
 | `ATMOS_XDG_CONFIG_HOME` | Override config directory for AWS files |
 | `ATMOS_XDG_DATA_HOME` | Override data directory for file keyring |
+| `ATMOS_PRO_WORKSPACE_ID` | Atmos Pro workspace ID for `atmos/pro` |
+| `ATMOS_PRO_BASE_URL` | Override Atmos Pro base URL |
+| `ATMOS_PRO_GITHUB_TOKEN` | Preferred token for Atmos-native Git reads minted by `github/sts` |
 
 ## Security Best Practices
 

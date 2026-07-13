@@ -66,12 +66,14 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hashicorp/go-version"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Constants for git operations.
@@ -96,8 +98,6 @@ type gitOperationParams struct {
 	ref        string
 	depth      int
 }
-
-var lsRemoteSymRefRegexp = regexp.MustCompile(`ref: refs/heads/([^\s]+).*`)
 
 // gitCommitIDRegex is a pattern intended to match strings that seem
 // "likely to be" git commit IDs, rather than named refs. This cannot be
@@ -286,23 +286,75 @@ func getRunCommand(cmd *exec.Cmd) error {
 				errUtils.ErrGitCommandExited,
 				cmd.Path,
 				status.ExitStatus(),
-				buf.String())
+				buf.String(),
+			)
 		}
 	}
 
 	return fmt.Errorf("%w: %s: %s", errUtils.ErrGitCommandFailed, cmd.Path, buf.String())
 }
 
+// Bounded retry policy for brokered git operations. A just-minted GitHub App installation
+// token can briefly 401 before GitHub propagates it across its git frontends; the atmos-pro
+// server self-heals its own API calls on 401, and these give the CLI git path the same
+// tolerance — bounded to the propagation window, not minutes.
+const (
+	// The total time cap for retrying transient auth failures.
+	stsAuthRetryWindow = 30 * time.Second
+	// The first backoff delay.
+	stsAuthRetryInitialDelay = 1 * time.Second
+	// The per-attempt backoff delay cap.
+	stsAuthRetryMaxDelay = 8 * time.Second
+	// The exponential backoff growth factor.
+	stsAuthRetryMultiplier = 2.0
+	// The jitter fraction that randomizes delays to avoid synchronized retries.
+	stsAuthRetryJitter = 0.2
+)
+
+// defaultBrokeredAuthRetryConfig is the retry policy used for brokered git operations when
+// the source has no explicit `retry:` config. It is bounded by elapsed time (not just an
+// attempt count) with exponential backoff and jitter so we keep retrying across the short
+// post-mint propagation window without hammering GitHub.
+func defaultBrokeredAuthRetryConfig() *schema.RetryConfig {
+	initialDelay := stsAuthRetryInitialDelay
+	maxDelay := stsAuthRetryMaxDelay
+	maxElapsed := stsAuthRetryWindow
+	jitter := stsAuthRetryJitter
+	multiplier := stsAuthRetryMultiplier
+	return &schema.RetryConfig{
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		MaxElapsedTime:  &maxElapsed,
+		RandomJitter:    &jitter,
+		Multiplier:      &multiplier,
+		// MaxAttempts left nil => unlimited attempts, bounded by MaxElapsedTime.
+	}
+}
+
 // getRunCommandWithRetry wraps getRunCommand with retry logic for transient errors.
 func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.Cmd) error {
+	cfg := g.RetryConfig
+	shouldRetry := isRetryableGitError
+
+	if g.RetryAuthErrors {
+		// Atmos brokered a fresh token this process: also tolerate the brief post-mint
+		// window where GitHub may 401 a valid token. Fall back to a bounded default policy
+		// when the source did not configure its own `retry:`.
+		shouldRetry = isRetryableGitOrAuthError
+		if cfg == nil {
+			cfg = defaultBrokeredAuthRetryConfig()
+		}
+	}
+
 	// Skip retry if no config, or if MaxAttempts is explicitly set to 1 (single attempt).
 	// nil MaxAttempts means unlimited retries, so we should proceed with retry logic.
-	if g.RetryConfig == nil || (g.RetryConfig.MaxAttempts != nil && *g.RetryConfig.MaxAttempts == 1) {
+	if cfg == nil || (cfg.MaxAttempts != nil && *cfg.MaxAttempts == 1) {
 		return getRunCommand(cmd)
 	}
 
 	attempt := 0
-	return retry.WithPredicate(ctx, g.RetryConfig, func() error {
+	err := retry.WithPredicate(ctx, cfg, func() error {
 		attempt++
 		// exec.Cmd can only run once, so we need to recreate it for retries.
 		if attempt > 1 {
@@ -315,7 +367,15 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 			return getRunCommand(newCmd)
 		}
 		return getRunCommand(cmd)
-	}, isRetryableGitError)
+	}, shouldRetry)
+
+	if err != nil && g.RetryAuthErrors && matchesAuthFailure(err) {
+		// We brokered the token and still got rejected after the bounded window: this is no
+		// longer "not propagated yet" — most likely the STS trust policy does not grant this
+		// repo, or the token was revoked. Surface it instead of leaving a bare git error.
+		log.Error("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked", "error", err)
+	}
+	return err
 }
 
 // isRetryableGitError determines if a git error should trigger a retry.
@@ -355,6 +415,49 @@ func isRetryableGitError(err error) bool {
 	return false
 }
 
+// authFailurePatterns are git stderr substrings that indicate the remote rejected the
+// credentials. These are terminal by default (see isRetryableGitError) and only become
+// retryable when Atmos brokered a fresh token this process (isRetryableGitOrAuthError),
+// because a just-minted GitHub token can momentarily 401 before it propagates.
+var authFailurePatterns = []string{
+	"authentication failed",
+	"could not read username",
+	"could not read password",
+	"terminal prompts disabled",
+	"invalid username or password",
+}
+
+// matchesAuthFailure reports whether err looks like a git credential rejection. It does not
+// log, so it is safe to call both inside a retry predicate and afterward for reporting.
+func matchesAuthFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	for _, pattern := range authFailurePatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// isRetryableGitOrAuthError extends isRetryableGitError to also treat authentication
+// failures as retryable. It is used ONLY when Atmos brokered a fresh token this process:
+// the token is valid but may not have propagated across GitHub's git frontends yet, so a
+// bounded retry (see defaultBrokeredAuthRetryConfig) clears the window. For ordinary static
+// credentials the default predicate keeps auth failures terminal so they fail fast.
+func isRetryableGitOrAuthError(err error) bool {
+	if isRetryableGitError(err) {
+		return true
+	}
+	if matchesAuthFailure(err) {
+		log.Warn("Transient auth failure on a brokered GitHub token; retrying (the freshly minted token may not have propagated yet)", "error", err)
+		return true
+	}
+	return false
+}
+
 // removeCaseInsensitiveGitDirectory removes all .git directory variations.
 func removeCaseInsensitiveGitDirectory(dst string) error {
 	files, err := os.ReadDir(dst)
@@ -370,20 +473,6 @@ func removeCaseInsensitiveGitDirectory(dst string) error {
 		}
 	}
 	return nil
-}
-
-// findRemoteDefaultBranch checks the remote repo's HEAD symref to return the remote repo's default branch. "master" is returned if no HEAD symref exists.
-func findRemoteDefaultBranch(ctx context.Context, u *url.URL) string {
-	var stdoutbuf bytes.Buffer
-	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
-	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", "--symref", gitArgSeparator, u.String(), "HEAD")
-	cmd.Stdout = &stdoutbuf
-	err := cmd.Run()
-	matches := lsRemoteSymRefRegexp.FindStringSubmatch(stdoutbuf.String())
-	if err != nil || matches == nil {
-		return "master"
-	}
-	return matches[len(matches)-1]
 }
 
 // checkGitVersion is used to check the version of git installed on the system
@@ -434,6 +523,23 @@ func (g *CustomGitGetter) checkout(ctx context.Context, dst string, ref string) 
 	return g.getRunCommandWithRetry(ctx, cmd)
 }
 
+// cloneFlagArgs builds the flag portion of a `git clone` invocation (everything before the URL and
+// destination). With no ref, a shallow clone gets the remote's default branch (HEAD) natively, so
+// `--branch` is added ONLY when a specific ref was requested. This deliberately avoids resolving the
+// default branch name ourselves via `git ls-remote` — that runs in the caller's CWD, where an
+// actions/checkout `http.<host>.extraheader` shadows the brokered token and yields the wrong default
+// ("master"), breaking clones of repos whose default branch is "main".
+func cloneFlagArgs(ref string, depth int) []string {
+	args := []string{"clone"}
+	if depth > 0 {
+		args = append(args, "--depth", strconv.Itoa(depth))
+		if ref != "" {
+			args = append(args, "--branch", ref)
+		}
+	}
+	return args
+}
+
 func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ctx := params.ctx
 	dst := params.dst
@@ -442,42 +548,25 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ref := params.ref
 	depth := params.depth
 
-	args := []string{"clone"}
-
-	originalRef := ref // we handle an unspecified ref differently than explicitly selecting the default branch below
-	if ref == "" {
-		ref = findRemoteDefaultBranch(ctx, u)
-	}
-	if depth > 0 {
-		args = append(args, "--depth", strconv.Itoa(depth))
-		args = append(args, "--branch", ref)
-	}
-	args = append(args, gitArgSeparator, u.String(), dst)
+	args := append(cloneFlagArgs(ref, depth), gitArgSeparator, u.String(), dst)
 
 	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	setupGitEnv(cmd, sshKeyFile)
 	err := g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
-		if depth > 0 && originalRef != "" {
-			// If we're creating a shallow clone then the given ref must be
-			// a named ref (branch or tag) rather than a commit directly.
-			// We can't accurately recognize the resulting error here without
-			// hard-coding assumptions about git's human-readable output, but
-			// we can at least try a heuristic.
-			if gitCommitIDRegex.MatchString(originalRef) {
-				return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
-			}
+		// A shallow clone of a specific ref requires a named ref (branch or tag) rather than a
+		// commit SHA; flag that case with a clearer hint. We can't recognize it precisely without
+		// hard-coding git's human-readable output, so this is a heuristic.
+		if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
+			return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
 		}
 		return err
 	}
 
-	if depth < 1 && originalRef != "" {
-		// If we didn't add --depth and --branch above then we will now be
-		// on the remote repository's default branch, rather than the selected
-		// ref, so we'll need to fix that before we return.
-		err := g.checkout(ctx, dst, originalRef)
-		if err != nil {
-			// Clean up git repository on disk
+	if depth < 1 && ref != "" {
+		// A full clone leaves us on the remote's default branch; check out the requested ref.
+		if err := g.checkout(ctx, dst, ref); err != nil {
+			// Clean up git repository on disk.
 			if removeErr := os.RemoveAll(dst); removeErr != nil {
 				log.Trace("Failed to remove git repository during cleanup", "error", removeErr, "dir", dst)
 			}
@@ -526,20 +615,36 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 		return err
 	}
 
-	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, ref)
+	// Fetch the requested ref. An unspecified ref means the remote's default branch, fetched via the
+	// symbolic "HEAD". This runs in dst (clean repo config + the broker's GIT_CONFIG_* insteadOf, so
+	// the minted token applies) — deliberately NOT a `git ls-remote` in the caller's CWD, whose
+	// actions/checkout `http.<host>.extraheader` (the ambient repo-scoped token) would shadow the
+	// minted token and mis-resolve the branch. It also avoids `git fetch -- ""`/`git checkout ""`,
+	// which fail with "empty string is not a valid pathspec".
+	fetchRef := ref
+	if fetchRef == "" {
+		fetchRef = "HEAD"
+	}
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, fetchRef)
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
-	// Reset the branch to the fetched ref
+	// Reset the working tree to the fetched ref (the default branch when ref was unspecified).
 	cmd = exec.CommandContext(ctx, gitCommand, "reset", "--hard", "FETCH_HEAD")
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
+	}
+
+	// With an unspecified ref, the reset above already placed the working tree on the default branch's
+	// HEAD; there is no named branch to check out or pull, so we're done (and `git checkout ""` would
+	// fail anyway).
+	if ref == "" {
+		return nil
 	}
 
 	// Checkout ref branch

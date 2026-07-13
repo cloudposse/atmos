@@ -1,0 +1,409 @@
+---
+title: atmos container
+sidebar_label: container
+sidebar_class_name: command
+id: usage
+description: Build, run, and operate persistent, stack-scoped container components.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use the `atmos container` subcommands to build, run, and operate **container components** — stack-scoped,
+Atmos-native, persistent containers. One component is one service. Atmos owns the image artifact
+(build/push/pull) and an optional long-running named container lifecycle (`up`/`start`/`ps`/`logs`/`exec`/
+`attach`/`restart`/`stop`/`rm`/`down`), discovered by labels derived from the canonical component instance
+address — not from local state files.
+</Intro>
+
+<CastPlayer title="atmos container --help" src="/casts/screengrabs/atmos-container--help.cast" static chrome />
+
+A container component is the per-service building block. A set of container components grouped by a
+[composition](#compositions) is effectively "your own Compose" — Atmos orchestrates a multi-container
+local system with no `compose.yaml`. This is distinct from the ephemeral [`type: container`
+step](/workflows), which is `docker run --rm` and workflow-scoped; the component is
+declarative, addressable infrastructure.
+
+## Usage
+
+<Terminal>
+```shell
+# Image artifact
+atmos container build <component> -s <stack>
+atmos container push <component> -s <stack>          # pushes every build tag (→ multiple registries)
+atmos container pull <component> -s <stack>
+
+# Lifecycle
+atmos container run <component> -s <stack>           # one-shot foreground process (run)
+atmos container up <component> -s <stack>            # create/start the long-running container
+atmos container down <component> -s <stack>          # stop + rm
+atmos container start <component> -s <stack>         # start an existing stopped container (inverse of stop)
+atmos container restart|stop|rm <component> -s <stack>
+
+# Bulk lifecycle (no component) — see "Bulk operation" below
+atmos container up --all                             # all container components in all stacks
+atmos container up --all --stack=<stack>             # all container components in one stack
+atmos container up                                   # interactive picker (stack + components)
+
+# Inspection
+atmos container list                                 # all container components + running state
+atmos container ps                                   # running state of all components (optionally -s <stack>)
+atmos container ps <component> -s <stack>            # running state of one component
+atmos container logs <component> -s <stack>          # one component
+atmos container logs --all --stack=<stack>           # all components in a stack
+atmos container logs --all --follow                  # tail all components, interleaved + prefixed
+atmos container exec <component> -s <stack> -- sh    # run a command / open a shell (new process)
+atmos container attach <component> -s <stack>        # attach to the container's main process (PID 1)
+```
+</Terminal>
+
+:::tip Build before start
+`up` and `run` build the image automatically when the component declares `build:` and the image
+is not present locally. Components that reference an existing `image:` are pulled on demand.
+:::
+
+## Configuration
+
+Define container components under `components.container` in your stack manifests. `image`, `build`, and
+`run` are **first-class component sections** (siblings of `composition`/`env`/`metadata`) — NOT nested
+under `vars`, consistent with the container workflow step:
+
+```yaml
+components:
+  container:
+    api:
+      composition: storefront            # first-class composition membership
+      image: "localhost:5001/api:{{ .git.sha }}"
+      build:
+        context: app
+        dockerfile: Dockerfile
+        tags:
+          - "localhost:5001/api:{{ .git.sha }}"
+      run:
+        command: ./api
+        ports:
+          - host: 8080
+            container: 8080
+        mounts:
+          - source: .
+            target: /workspace
+      secrets:
+        vars:
+          NPM_TOKEN:
+            store: app-secrets
+            required: true
+      env:                               # component env (resolved with secrets)
+        PORT: "8080"
+        NPM_TOKEN: !secret NPM_TOKEN
+```
+
+Inheritance (`metadata.inherits`), catalogs, and deep-merge apply exactly like other component kinds —
+abstract base components can carry shared `build`/`run` defaults.
+
+`build.tags` is a list — the build applies all of them to the image, and `push` sends **every** tag, so
+listing registry-qualified tags there pushes to multiple registries in one operation (see
+[Push to multiple registries](#push-to-multiple-registries)).
+
+### Push to multiple registries
+
+`atmos container push <component>` (and `atmos container push --all`) pushes **every entry in
+`build.tags`** — so a single push ships the image to as many registries as you list. The build already
+applied each tag to the image locally, so push just sends them in order:
+
+```yaml
+components:
+  container:
+    app:
+      image: app:v1                                   # local ref used by run/up
+      build:
+        context: .
+        tags:
+          - 1234.dkr.ecr.us-east-1.amazonaws.com/app:v1   # AWS ECR
+          - ghcr.io/cloudposse/app:v1                      # GitHub Container Registry
+```
+
+```shell
+atmos container build app --stack=prod    # builds once, applies both tags
+atmos container push app --stack=prod     # pushes to ECR and GHCR
+```
+
+Notes:
+
+- Pushes run **in order and fail fast** — the first registry that errors stops the push (fix it and
+  re-run; already-pushed registries are simply re-pushed, which is a no-op when the digest is unchanged).
+- When a component has **no `build.tags`**, `push` falls back to the single top-level `image` (the
+  original behavior).
+- Use `--dry-run` to preview exactly which references will be pushed:
+  ```shell
+  atmos container push app --stack=prod --dry-run
+  # ▶ [dry-run] push 1234.dkr.ecr.us-east-1.amazonaws.com/app:v1
+  # ▶ [dry-run] push ghcr.io/cloudposse/app:v1
+  ```
+
+Authenticate to each registry first (e.g. via `--identity` for cloud registries, or the runtime's own
+`docker/podman login`).
+
+### Health checks and restart policies
+
+`run.restart` and `run.healthcheck` are **first-class settings** that mirror Docker Compose, so you no
+longer need to hand-write `run.run_args`:
+
+```yaml
+components:
+  container:
+    api:
+      image: nginx:alpine
+      run:
+        # Restart policy → docker/podman --restart
+        restart:
+          policy: unless-stopped        # no | always | on-failure | unless-stopped
+          max_retries: 5                # only used with the `on-failure` policy
+        # Health check → docker/podman --health-* (mirrors Compose `healthcheck`)
+        healthcheck:
+          test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+          start_interval: 5s
+```
+
+**`test`** follows Compose semantics — a string, or a list whose **first element** selects the form:
+
+<dl>
+  <dt>`["CMD", "executable", "arg", …]`</dt>
+  <dd>Run the command directly. (The CLI runs `--health-cmd` through the container's shell, so the args
+  are joined into a shell command; for true exec-form, bake a `HEALTHCHECK` into the image.)</dd>
+
+  <dt>`["CMD-SHELL", "full shell command"]` or a bare string</dt>
+  <dd>Run the string with the container's default shell (`/bin/sh -c`). `test: "curl -f http://localhost || exit 1"`
+  is shorthand for `test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]`.</dd>
+
+  <dt>`["NONE"]` (or `disable: true`)</dt>
+  <dd>Disable any health check inherited from the image (`--no-healthcheck`).</dd>
+</dl>
+
+Field-to-flag mapping:
+
+| Field | Flag |
+|-------|------|
+| `restart.policy` (+ `max_retries`) | `--restart=<policy>[:<max_retries>]` |
+| `healthcheck.test` | `--health-cmd` (or `--no-healthcheck`) |
+| `healthcheck.interval` | `--health-interval` |
+| `healthcheck.timeout` | `--health-timeout` |
+| `healthcheck.retries` | `--health-retries` |
+| `healthcheck.start_period` | `--health-start-period` |
+| `healthcheck.start_interval` | `--health-start-interval` |
+
+Once a health check is configured, `atmos container ps` and `atmos container list` show the resulting
+state in a **`HEALTH`** column (`healthy` / `unhealthy` / `starting`, or `-` when no check is defined).
+Atmos validates the restart policy and health-check durations up front, so a typo surfaces as a clear
+error instead of an opaque runtime failure. For anything not modeled here, `run.run_args` remains the
+raw passthrough to `docker/podman create`.
+
+### Runtime selection
+
+The container runtime is auto-detected (Docker first, then Podman). Override it globally in `atmos.yaml`:
+
+```yaml
+container:
+  runtime:
+    provider: podman      # or docker, or empty for auto-detect
+    auto_start: true      # auto-init/start the Podman machine when needed
+```
+
+It can also be set with the `ATMOS_CONTAINER_RUNTIME` environment variable.
+
+## Component Instance Identity
+
+A container component instance is identified by `<stack>/<component_type>/<component>`. Atmos projects
+that onto a deterministic runtime name and labels:
+
+| Field | Value (example) |
+|-------|-----------------|
+| Instance | `dev/container/api` |
+| Runtime name | `atmos-dev-container-api` |
+| Labels | `tools.atmos.stack=dev`, `tools.atmos.component_type=container`, `tools.atmos.component=api`, `tools.atmos.instance=dev/container/api` |
+
+`start`, `ps`, `logs`, `exec`, `attach`, `restart`, `stop`, `rm`, and `down` discover the container by these
+labels — there are no local state files to lose or corrupt.
+
+## Lifecycle verbs: `up`/`down` vs `start`/`stop`
+
+The lifecycle has two complementary pairs, mirroring `docker compose`:
+
+- **`up` ↔ `down`** — the full lifecycle. `up` **creates or starts** the named container (building the
+  image first if needed); `down` **stops and removes** it (`stop` + `rm`).
+- **`start` ↔ `stop`** — toggle the running state of an **existing** container in place. `start` brings a
+  stopped container back without recreating it; `stop` halts it without removing it. `restart` is `stop`
+  then `start`.
+
+Use `start` to resume a container you previously `stop`ped; use `up` when the container may not exist yet
+(it will be created). `rm` removes a stopped container; `down` is the stop-and-remove shortcut.
+
+## `exec` vs `attach`
+
+Both connect you to a running container, but they are not the same:
+
+- **`exec`** starts a **new process** inside the container. With a command after `--` it runs that
+  command; with no command it opens a shell (`/bin/sh`). This is how you "shell in."
+- **`attach`** connects your terminal to the container's **existing main process (PID 1)** — the
+  process the container runs — mirroring `docker attach` / `docker compose attach`. Use it when PID 1
+  is itself interactive (a REPL, a foreground server streaming to stdout). Detach with the runtime's
+  detach keys (`Ctrl-P` `Ctrl-Q`), which leaves the container running.
+
+## Running state
+
+`atmos container list` shows the running state of every container component — a green ● dot on a TTY,
+and `running`/`stopped`/`unknown` text otherwise. A **`HEALTH`** column reports each container's health
+(`healthy` / `unhealthy` / `starting`, or `-` when the component defines no
+[health check](#health-checks-and-restart-policies)). When no container runtime is available, rows are
+reported as `unknown` rather than failing the listing. (Container running state lives here, not in the
+generic `atmos list components`, which treats all component kinds uniformly.)
+
+## Bulk operation
+
+The lifecycle verbs that are safe to batch — `build`, `push`, `pull`, `up`, `start`, `restart`, `stop`,
+`rm`, and `down` — can operate on **many components at once**. For these verbs the `<component>` argument
+is optional, and there are three ways to select what to operate on:
+
+<dl>
+  <dt>`--all`</dt>
+  <dd>Operate on **every** (non-abstract) container component, in dependency-free sorted order. Scope it
+  to a single stack with `--stack=<stack>`; without a stack it spans **all** stacks.</dd>
+
+  <dt>`--all --stack=<stack>`</dt>
+  <dd>Operate on every container component in just that stack.</dd>
+
+  <dt>no component (interactive)</dt>
+  <dd>In an interactive terminal, Atmos prompts for a **stack** (skipped if only one exists or `--stack`
+  is given) and then a **multi-select of components** (all pre-selected). Outside a TTY (CI, pipes) this
+  is an error — pass `--all` or a `<component>` instead.</dd>
+</dl>
+
+Bulk runs are **continue-on-error**: every selected component is attempted, per-component failures are
+reported as they happen, and the command exits non-zero with an aggregated summary if any failed.
+Teardown verbs (`down`, `stop`, `rm`) run in **reverse** order of the start verbs so dependents are
+removed before what they depend on.
+
+:::note Mutually exclusive
+A `<component>` argument and `--all` cannot be combined. `--all` is available on the bulk-capable
+lifecycle verbs and on `logs` (see below); `run`, `exec`, and `attach` remain single-component. `ps` and
+`list` need no `--all` — omitting the component already shows all (optionally filtered by `--stack`).
+:::
+
+### Following logs across components
+
+`logs` supports the same selection (`<component>`, `--all`, or interactive) plus `--follow`/`-f` and
+`--tail`:
+
+<Terminal>
+```shell
+atmos container logs api --stack=dev --follow          # tail one component
+atmos container logs --all --stack=dev                 # all components, printed in turn
+atmos container logs --all --follow                    # tail every component, interleaved
+```
+</Terminal>
+
+When following more than one component, the streams run **concurrently** and each line is prefixed with a
+colored, width-aligned **component label** — the same badge style as Atmos log levels, with a distinct
+color per component — like `docker compose logs -f`. Where color is unavailable (non-TTY, `NO_COLOR`,
+CI), the label degrades to a plain `[api]` / `[worker]` prefix. Press `Ctrl-C` to stop following. Without
+`--follow`, multiple components are printed sequentially under an `==> stack/component <==` header.
+
+## Compositions
+
+A composition groups components into a system. Components declare membership via the `composition`
+field; the top-level `compositions` section declares the closed set of services:
+
+```yaml
+compositions:
+  storefront:
+    description: Storefront system
+    services: [api, worker, database]
+```
+
+- Declaring `composition: X` for a service not listed in `compositions.X.services` is a **hard error**.
+- A declared service with no component in a stack is **allowed** (membership is closed, fulfillment is open).
+- `atmos composition validate <name> -s <stack>` reports fulfilled vs. not-provided-here services.
+
+## Arguments
+
+<dl>
+  <dt>`<component>`</dt>
+  <dd>The container component to operate on. Required for `run`, `exec`, and `attach`;
+  **optional** for the bulk-capable verbs (`build`, `push`, `pull`, `up`, `start`, `restart`, `stop`,
+  `rm`, `down`) and `logs`, where omitting it selects components via `--all` or an interactive picker (see
+  [Bulk operation](#bulk-operation)). For `ps`, omitting it lists all components' running state (like
+  `list`, optionally filtered by `--stack`). Not used by `list`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` <em>(required for single-component subcommands)</em></dt>
+  <dd>The stack the component is defined in. For bulk verbs it scopes the operation to one stack.</dd>
+
+  <dt>`--all` <em>(bulk verbs only)</em></dt>
+  <dd>Operate on all container components instead of a single one — across all stacks, or one stack when
+  combined with `--stack=<stack>`. Cannot be combined with a `<component>` argument. See
+  [Bulk operation](#bulk-operation).</dd>
+
+  <dt>`--follow` / `-f` <em>(logs)</em></dt>
+  <dd>Stream logs continuously. With multiple components the streams are interleaved and each line is
+  prefixed with the component name. Press `Ctrl-C` to stop.</dd>
+
+  <dt>`--tail` <em>(logs)</em></dt>
+  <dd>Number of lines to show from the end of the logs, or `all` (default).</dd>
+
+  <dt>`--identity`</dt>
+  <dd>Authenticate with the given identity before running (e.g. for registry access on build/push/pull).</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Print what would happen without touching the runtime.</dd>
+
+  <dt>`--` <em>(exec)</em></dt>
+  <dd>Everything after `--` is the command run inside the container, e.g. `atmos container exec api -s dev -- sh -c 'env'`. `attach` takes no command — it connects to the existing main process.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+# Build the image, start the long-running container, and confirm it is running.
+atmos container build api -s dev
+atmos container up api -s dev
+atmos container list             # api shows a ● running indicator
+
+# Build once and push the image to every registry in build.tags (e.g. ECR + GHCR).
+atmos container build api -s dev
+atmos container push api -s dev
+
+# Operate the running container (discovered by label).
+atmos container ps                       # running state of every component
+atmos container logs api -s dev
+atmos container exec api -s dev -- sh    # new shell process inside the container
+atmos container attach api -s dev        # connect to the container's main process (Ctrl-P Ctrl-Q to detach)
+
+# Stop and later resume the same container in place (no recreate).
+atmos container stop api -s dev
+atmos container start api -s dev
+
+# Tear down.
+atmos container down api -s dev
+
+# Bulk: bring up every container component in a stack, then everywhere.
+atmos container up --all --stack=dev
+atmos container up --all
+
+# Bulk: tear down a whole stack (reverse order), continue-on-error.
+atmos container down --all --stack=dev
+
+# Bulk: interactive picker (TTY) — choose a stack, then components.
+atmos container up
+
+# Report a composition's fulfilled vs. not-provided services.
+atmos composition validate storefront -s dev
+```
+</Terminal>

@@ -1,0 +1,2 @@
+import:
+  - github.com/cloudposse/infra-live//profiles/managers/atmos.yaml?ref=main

@@ -1,6 +1,6 @@
 ---
 name: atmos-stores
-description: "Store backends: AWS SSM, Azure Key Vault, Google Secret Manager, Redis, Artifactory configuration, hooks integration, cross-component data sharing"
+description: "Store backends: AWS SSM, AWS Secrets Manager, Azure Key Vault, Google Secret Manager, Redis, Artifactory configuration, hooks integration, cross-component data sharing"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -8,7 +8,7 @@ metadata:
 
 # Atmos External Stores
 
-Stores are external key-value backends configured in `atmos.yaml` that enable components to share data outside of Terraform state. Atmos supports five store providers: AWS SSM Parameter Store, Azure Key Vault, Google Secret Manager, Redis, and JFrog Artifactory.
+Stores are external key-value backends configured in `atmos.yaml` that enable components to share data outside of Terraform state. Atmos supports store providers including AWS SSM Parameter Store, AWS Secrets Manager, Azure Key Vault, Google Secret Manager, Redis, and JFrog Artifactory.
 
 ## When to Use Stores
 
@@ -23,23 +23,28 @@ For Terraform-managed outputs, prefer `!terraform.state` (fastest) or `!terrafor
 
 ## Configuring Stores in atmos.yaml
 
-All stores are declared under the top-level `stores:` key in `atmos.yaml`. Each store has a unique name, a `type`, and provider-specific `options`:
+All stores are declared under the top-level `stores:` key in `atmos.yaml`. Each store has a unique name, a `kind`, and provider-specific `options`. The legacy `type` field remains supported for compatibility, but `kind` is canonical:
 
 ```yaml
 # atmos.yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
+    options:
+      region: us-east-1
+
+  prod/asm:
+    kind: aws/asm
     options:
       region: us-east-1
 
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"
 
   prod/gcp:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     options:
       project_id: my-project
 
@@ -77,13 +82,13 @@ Stores that support identity-based authentication accept an `identity` field at 
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-aws  # References an identity defined in the auth section
     options:
       region: us-east-1
 ```
 
-Identity-based auth is supported by AWS SSM, Azure Key Vault, and Google Secret Manager. It is not supported by Redis or Artifactory (a warning is logged if configured).
+Identity-based auth is supported by AWS SSM, AWS Secrets Manager, Azure Key Vault, and Google Secret Manager. It is not supported by Redis or Artifactory (a warning is logged if configured).
 
 ## Store Provider Configuration
 
@@ -92,7 +97,7 @@ Identity-based auth is supported by AWS SSM, Azure Key Vault, and Google Secret 
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1           # Required
       prefix: myapp               # Optional: prepended to all key paths
@@ -105,12 +110,26 @@ Authentication uses the AWS default credential chain (environment variables, sha
 
 Key format: `/<prefix>/<stack-parts>/<component-parts>/<key>` (segments joined by `/`).
 
+### AWS Secrets Manager
+
+```yaml
+stores:
+  prod/asm:
+    kind: aws/asm
+    options:
+      region: us-east-1
+      prefix: myapp
+      stack_delimiter: "/"
+```
+
+Use `secret: true` with `kind: aws/asm` for declared secrets managed through `atmos secret` and `!secret`.
+
 ### Azure Key Vault
 
 ```yaml
 stores:
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"  # Required
       prefix: myapp               # Optional
@@ -126,7 +145,7 @@ Key format: `<prefix>-<stack-parts>-<component-parts>-<key>` (segments joined by
 ```yaml
 stores:
   prod/gcp:
-    type: google-secret-manager  # Also accepts "gsm"
+    kind: gcp/secretmanager
     options:
       project_id: my-project     # Required
       prefix: myapp              # Optional
@@ -312,7 +331,7 @@ Atmos merges these into a complete hook definition at resolution time.
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
       read_role_arn: arn:aws:iam::123456789012:role/SSMReader
@@ -328,12 +347,12 @@ Define separate stores per region:
 ```yaml
 stores:
   prod-us/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
 
   prod-eu/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: eu-west-1
 ```
@@ -347,7 +366,7 @@ Reference the appropriate store in each stack's configuration.
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
 ```
@@ -381,7 +400,7 @@ components:
 
 ## Security Best Practices
 
-- **Secrets exposure**: `!store` values appear in stdout when running `atmos describe stacks` or `atmos describe component`. Avoid storing highly sensitive secrets in stores that are frequently described.
+- **Secrets exposure**: `!store`, `!store.get`, and `atmos.Store` read values in cleartext and reject stores marked `secret: true`. Use `secret: true` plus `!secret` and `atmos secret` for sensitive values.
 - **Least privilege**: Use `read_role_arn`/`write_role_arn` to separate read and write permissions. Grant only the permissions each operation needs.
 - **Environment variables for tokens**: Never hardcode access tokens. Use `!env` or environment variables (`ARTIFACTORY_ACCESS_TOKEN`, `JFROG_ACCESS_TOKEN`, `ATMOS_REDIS_URL`).
 - **Cold-start handling**: Always provide `| default` values for store lookups that may reference unprovisioned components.
@@ -392,7 +411,7 @@ components:
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| `store type not found` | Invalid `type` in store config | Use one of: `aws-ssm-parameter-store`, `azure-key-vault`, `google-secret-manager`, `gsm`, `redis`, `artifactory` |
+| `store type not found` | Invalid `kind`/`type` in store config | Use one of: `aws/ssm`, `aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `redis`, `artifactory` |
 | `region is required` | Missing `region` for SSM store | Add `region` to store options |
 | `vault_url is required` | Missing `vault_url` for Azure | Add `vault_url` to store options |
 | `project_id is required` | Missing `project_id` for GCP | Add `project_id` to store options |

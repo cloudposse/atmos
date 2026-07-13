@@ -1,134 +1,147 @@
 package function
 
 import (
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Tag constants for Atmos configuration functions.
-// These are the canonical function names used across all formats.
-// In YAML they appear as !tag, in HCL as tag(), etc.
+// These are compatibility aliases; pkg/function/tag is the central tag catalog.
 const (
 	// TagExec executes a shell command and returns the output.
-	TagExec = "exec"
+	TagExec = fntag.Exec
+
+	// TagSecret resolves a declared secret from its configured backend.
+	TagSecret = fntag.Secret
 
 	// TagStore retrieves a value from a configured store.
-	TagStore = "store"
+	TagStore = fntag.Store
 
 	// TagStoreGet retrieves a value from a configured store (alternative syntax).
-	TagStoreGet = "store.get"
+	TagStoreGet = fntag.StoreGet
 
 	// TagTemplate processes a JSON template.
-	TagTemplate = "template"
+	TagTemplate = fntag.Template
 
 	// TagTerraformOutput retrieves a Terraform output value.
-	TagTerraformOutput = "terraform.output"
+	TagTerraformOutput = fntag.TerraformOutput
 
 	// TagTerraformState retrieves a value from Terraform state.
-	TagTerraformState = "terraform.state"
+	TagTerraformState = fntag.TerraformState
 
 	// TagEnv retrieves an environment variable value.
-	TagEnv = "env"
+	TagEnv = fntag.Env
+
+	// TagCEL evaluates a Common Expression Language condition.
+	TagCEL = fntag.CEL
 
 	// TagInclude includes content from another file.
-	TagInclude = "include"
+	TagInclude = fntag.Include
 
 	// TagIncludeRaw includes raw content from another file.
-	TagIncludeRaw = "include.raw"
+	TagIncludeRaw = fntag.IncludeRaw
 
 	// TagRepoRoot returns the git repository root path.
-	TagRepoRoot = "repo-root"
+	TagRepoRoot = fntag.RepoRoot
+
+	// TagGitRoot returns the git repository root path.
+	TagGitRoot = fntag.GitRoot
+
+	// TagGitSha returns the current Git HEAD commit SHA.
+	TagGitSha = fntag.GitSha
+
+	// TagGitBranch returns the current Git branch name.
+	TagGitBranch = fntag.GitBranch
+
+	// TagGitRef returns the immutable Git ref used for source pinning.
+	TagGitRef = fntag.GitRef
+
+	// TagGitRepository returns the repository owner/name slug.
+	TagGitRepository = fntag.GitRepository
+
+	// TagGitOwner returns the repository owner.
+	TagGitOwner = fntag.GitOwner
+
+	// TagGitName returns the repository name.
+	TagGitName = fntag.GitName
+
+	// TagGitHost returns the repository host.
+	TagGitHost = fntag.GitHost
+
+	// TagGitURL returns the repository URL.
+	TagGitURL = fntag.GitURL
+
+	// TagAppend appends list items during stack merging.
+	TagAppend = fntag.Append
+
+	// TagCwd returns the current working directory.
+	TagCwd = fntag.Cwd
+
+	// TagUnset removes a value during configuration processing.
+	TagUnset = fntag.Unset
 
 	// TagRandom generates a random number.
-	TagRandom = "random"
+	TagRandom = fntag.Random
 
 	// TagLiteral preserves values exactly as written, bypassing template processing.
-	TagLiteral = "literal"
+	TagLiteral = fntag.Literal
 
 	// TagAwsAccountID returns the AWS account ID.
-	TagAwsAccountID = "aws.account_id"
+	TagAwsAccountID = fntag.AwsAccountID
 
 	// TagAwsCallerIdentityArn returns the AWS caller identity ARN.
-	TagAwsCallerIdentityArn = "aws.caller_identity_arn"
+	TagAwsCallerIdentityArn = fntag.AwsCallerIdentityArn
 
 	// TagAwsCallerIdentityUserID returns the AWS caller identity user ID.
-	TagAwsCallerIdentityUserID = "aws.caller_identity_user_id"
+	TagAwsCallerIdentityUserID = fntag.AwsCallerIdentityUserID
 
 	// TagAwsRegion returns the AWS region.
-	TagAwsRegion = "aws.region"
+	TagAwsRegion = fntag.AwsRegion
 
 	// TagAwsOrganizationID returns the AWS Organization ID.
-	TagAwsOrganizationID = "aws.organization_id"
+	TagAwsOrganizationID = fntag.AwsOrganizationID
+
+	// TagEmulator resolves a value from a local emulator.
+	TagEmulator = fntag.Emulator
+
+	// TagVersion resolves a locked version from the Atmos Version Tracker.
+	TagVersion = fntag.Version
 )
 
 // YAMLTagPrefix is the prefix used for YAML custom tags.
-const YAMLTagPrefix = "!"
+const YAMLTagPrefix = fntag.YAMLPrefix
 
 // AllTags returns all registered tag names.
 func AllTags() []string {
-	defer perf.Track(nil, "function.AllTags")()
-
-	return []string{
-		TagExec,
-		TagStore,
-		TagStoreGet,
-		TagTemplate,
-		TagTerraformOutput,
-		TagTerraformState,
-		TagEnv,
-		TagInclude,
-		TagIncludeRaw,
-		TagRepoRoot,
-		TagRandom,
-		TagLiteral,
-		TagAwsAccountID,
-		TagAwsCallerIdentityArn,
-		TagAwsCallerIdentityUserID,
-		TagAwsRegion,
-		TagAwsOrganizationID,
-	}
-}
-
-// tagsMap provides O(1) lookup for tag names.
-var tagsMap = map[string]bool{
-	TagExec:                    true,
-	TagStore:                   true,
-	TagStoreGet:                true,
-	TagTemplate:                true,
-	TagTerraformOutput:         true,
-	TagTerraformState:          true,
-	TagEnv:                     true,
-	TagInclude:                 true,
-	TagIncludeRaw:              true,
-	TagRepoRoot:                true,
-	TagRandom:                  true,
-	TagLiteral:                 true,
-	TagAwsAccountID:            true,
-	TagAwsCallerIdentityArn:    true,
-	TagAwsCallerIdentityUserID: true,
-	TagAwsRegion:               true,
-	TagAwsOrganizationID:       true,
+	return fntag.All()
 }
 
 // IsValidTag checks if the given tag name is registered.
 func IsValidTag(tag string) bool {
-	defer perf.Track(nil, "function.IsValidTag")()
-
-	return tagsMap[tag]
+	return fntag.IsValid(tag)
 }
 
 // YAMLTag returns the YAML tag format for a function name (e.g., "env" -> "!env").
 func YAMLTag(name string) string {
-	defer perf.Track(nil, "function.YAMLTag")()
-
-	return YAMLTagPrefix + name
+	return fntag.ToYAML(name)
 }
 
 // FromYAMLTag extracts the function name from a YAML tag (e.g., "!env" -> "env").
 func FromYAMLTag(tag string) string {
-	defer perf.Track(nil, "function.FromYAMLTag")()
+	return fntag.FromYAML(tag)
+}
 
-	if len(tag) > 0 && tag[0] == '!' {
-		return tag[1:]
-	}
-	return tag
+// AllYAMLTags returns all registered tag names with the YAML prefix (e.g., "!env", "!exec").
+// This is useful for error messages that need to show supported YAML tags.
+func AllYAMLTags() []string {
+	defer perf.Track(nil, "function.AllYAMLTags")()
+
+	return fntag.AllYAML()
+}
+
+// IsValidYAMLTag checks if a YAML tag is registered. The tag should include the YAML prefix.
+func IsValidYAMLTag(tag string) bool {
+	defer perf.Track(nil, "function.IsValidYAMLTag")()
+
+	return fntag.IsValidYAML(tag)
 }

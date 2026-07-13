@@ -7,19 +7,26 @@ package exec
 // primary tools for reducing ExecuteTerraform's cyclomatic complexity from ~25 to ~10.
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
@@ -27,6 +34,7 @@ import (
 type componentExecContext struct {
 	componentPath string
 	varFile       string
+	testVarFile   string
 	planFile      string
 	workingDir    string
 	tenv          *dependencies.ToolchainEnvironment
@@ -64,6 +72,10 @@ func prepareComponentExecution(
 	}
 
 	varFile := constructTerraformComponentVarfileName(info)
+	testVarFile := ""
+	if hasTerraformTestVars(info) {
+		testVarFile = constructTerraformComponentTestVarfileName(info)
+	}
 	planFile := constructTerraformComponentPlanfileName(info)
 	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
 
@@ -74,6 +86,7 @@ func prepareComponentExecution(
 	return &componentExecContext{
 		componentPath: componentPath,
 		varFile:       varFile,
+		testVarFile:   testVarFile,
 		planFile:      planFile,
 		workingDir:    workingDir,
 		tenv:          tenv,
@@ -89,6 +102,11 @@ func runPreExecutionSteps(
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
 ) error {
+	// Partition variables into disk-safe vs. secret-bearing BEFORE writing the varfile or
+	// assembling env vars (and before the auth pre-hook registers credentials with the
+	// masker), so secrets are kept off disk and injected as TF_VAR_* env vars instead.
+	computeTerraformSecretVarKeys(info)
+
 	if err := printAndWriteVarFiles(atmosConfig, info); err != nil {
 		return err
 	}
@@ -104,6 +122,7 @@ func runPreExecutionSteps(
 		// Authentication setup failures must not silently produce unauthenticated terraform commands.
 		return err
 	}
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
 
 	// Generate backend and provider-override files. When AutoGenerateFiles=true,
 	// GenerateFilesForComponent was already called inside resolveAndProvisionComponentPath
@@ -122,6 +141,17 @@ func runPreExecutionSteps(
 // has been prepared: optional init pre-step, argument construction, workspace setup,
 // TTY guard, and final command execution + cleanup.
 // Extracting this reduces ExecuteTerraform's cyclomatic complexity by ~7 decision points.
+// This builds the CI log-group label for a terraform/tofu phase,
+// e.g. "terraform init" or "tofu plan". The command is the resolved executable
+// (often an absolute toolchain path), so it is reduced to its base name.
+func terraformPhaseLabel(info *schema.ConfigAndStacksInfo, phase string) string {
+	tool := filepath.Base(strings.TrimSpace(info.Command))
+	if tool == "" || tool == "." {
+		tool = "terraform"
+	}
+	return strings.TrimSpace(tool + " " + phase)
+}
+
 func executeCommandPipeline(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
@@ -131,8 +161,15 @@ func executeCommandPipeline(
 	componentPath := execCtx.componentPath
 
 	if shouldRunTerraformInit(atmosConfig, info) {
-		var err error
-		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
+		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
+		// into its own collapsible group. A no-op unless ci.groups.mode is "auto"
+		// and this is the outermost Atmos invocation (a terraform run nested inside
+		// a workflow step stays flat inside the step's group).
+		err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
+			var phaseErr error
+			componentPath, phaseErr = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
+			return phaseErr
+		})
 		if err != nil {
 			return err
 		}
@@ -140,13 +177,14 @@ func executeCommandPipeline(
 
 	handleDeploySubcommand(atmosConfig, info)
 	logTerraformContext(info, execCtx.workingDir)
+	addTerraformTestVarfileArg(info, execCtx.testVarFile)
 
 	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath)
 	if err != nil {
 		return err
 	}
 
-	if err = runWorkspaceSetup(atmosConfig, info, componentPath, opts...); err != nil {
+	if err = runWorkspaceSetupPhase(atmosConfig, info, componentPath, opts...); err != nil {
 		return err
 	}
 
@@ -156,17 +194,54 @@ func executeCommandPipeline(
 
 	addRegionEnvVarForImport(info)
 
-	if err = executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...); err != nil {
-		return err
+	if shouldRunMainTerraformCommand(info) {
+		// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
+		// (plan/apply/destroy/…) into its own collapsible group, separate from init
+		// and workspace setup.
+		err = ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
+			return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...)
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	cleanupTerraformFiles(atmosConfig, info)
 	return nil
 }
 
+// runWorkspaceSetupPhase selects or creates the Terraform workspace under its own
+// phase-level CI log group. The group is emitted only when workspace setup will
+// actually run, avoiding empty groups for backends/subcommands that skip setup.
+func runWorkspaceSetupPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	if shouldSkipWorkspaceSetup(info) {
+		return nil
+	}
+	return ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandWorkspace), func() error {
+		return runWorkspaceSetup(atmosConfig, info, componentPath, opts...)
+	})
+}
+
+func shouldRunMainTerraformCommand(info *schema.ConfigAndStacksInfo) bool {
+	return info.SubCommand != subcommandWorkspace || info.SubCommand2 != ""
+}
+
+func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile string) {
+	if info.SubCommand != "test" || testVarFile == "" {
+		return
+	}
+	info.AdditionalArgsAndFlags = append([]string{varFileFlag, testVarFile}, info.AdditionalArgsAndFlags...)
+}
+
 // shouldSkipWorkspaceSetup returns true when workspace setup should be skipped.
 func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 	if info.SubCommand == subcommandInit || (info.SubCommand == subcommandWorkspace && info.SubCommand2 != "") {
+		return true
+	}
+	// `providers` subcommands (mirror, lock, schema) operate on configuration, not
+	// state, so they need no workspace — and selecting one fails on never-applied
+	// components.
+	if strings.HasPrefix(info.SubCommand, "providers") {
 		return true
 	}
 	if info.ComponentBackendType == "http" {
@@ -183,28 +258,36 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return nil
 	}
 
-	// Default: redirect workspace-select stderr to stdout so it is visible.
+	// Default: merge workspace-select stderr into stdout and capture both streams.
+	// Workspace setup is an Atmos pre-command implementation detail; Terraform may
+	// print "Workspace doesn't exist" or "You're now on a new, empty workspace"
+	// during normal first-run setup, which is noisy in user-facing command output.
 	redirectStdErr := "/dev/stdout"
 	if info.RedirectStdErr != "" {
 		redirectStdErr = info.RedirectStdErr
 	}
 
-	// For data-producing subcommands redirect "Switched to workspace…" to stderr
-	// so it doesn't pollute captured stdout in $() substitutions.
 	// Merge caller-provided opts (e.g., WithEnvironment) with workspace-specific opts.
+	var workspaceOutput bytes.Buffer
 	wsOpts := append([]ShellCommandOption{}, opts...)
-	if info.SubCommand == "output" || info.SubCommand == "show" {
-		wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
-	}
+	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
 
-	err := ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		[]string{"workspace", "select", info.TerraformWorkspace},
-		componentPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		redirectStdErr,
+	err := executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		"workspace-select",
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				[]string{"workspace", "select", "-or-create", info.TerraformWorkspace},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				redirectStdErr,
+				o...,
+			)
+		},
 		wsOpts...,
 	)
 	if err == nil {
@@ -224,15 +307,32 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 // If workspace creation also fails with exit code 1 and the workspace is already
 // active (stale .terraform/environment file), it proceeds with a warning.
 func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
-	newErr := ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		[]string{"workspace", "new", info.TerraformWorkspace},
-		componentPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
-		opts...,
+	redirectStdErr := info.RedirectStdErr
+	if redirectStdErr == "" {
+		redirectStdErr = "/dev/stdout"
+	}
+
+	var workspaceOutput bytes.Buffer
+	wsOpts := append([]ShellCommandOption{}, opts...)
+	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
+
+	newErr := executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		"workspace-new",
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				[]string{"workspace", "new", info.TerraformWorkspace},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				redirectStdErr,
+				o...,
+			)
+		},
+		wsOpts...,
 	)
 	if newErr == nil {
 		return nil
@@ -258,7 +358,7 @@ func checkTTYRequirement(info *schema.ConfigAndStacksInfo) error {
 	if os.Stdin != nil {
 		return nil
 	}
-	if info.SubCommand == subcommandApply && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	if info.SubCommand == subcommandApply && !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		return fmt.Errorf(
 			"%w: 'terraform apply' requires a user interaction, but no TTY is attached. "+
 				"Use 'terraform apply -auto-approve' or 'terraform deploy' instead",
@@ -313,14 +413,22 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		return nil
 	}
 
-	err := ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		allArgsAndFlags,
-		componentPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
+	err := executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		info.SubCommand,
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				allArgsAndFlags,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 		opts...,
 	)
 
@@ -375,4 +483,79 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 			log.Trace("Failed to remove var file during cleanup", "error", err, "file", varFilePath)
 		}
 	}
+
+	if info.SubCommand == "test" {
+		testVarFilePath := constructTerraformComponentTestVarfilePath(atmosConfig, info)
+		if err := os.Remove(testVarFilePath); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove Terraform test var file during cleanup", "error", err, "file", testVarFilePath)
+		}
+	}
+}
+
+// invokeShellCommandFunc is the signature used by executeShellCommandWithRetry to delegate
+// the actual subprocess invocation back to its caller.  The caller provides a closure that
+// already binds the command, args, dir, env, etc., and only needs the variadic options
+// (used by the retry wrapper to inject stdout/stderr capture writers).
+type invokeShellCommandFunc func(opts ...ShellCommandOption) error
+
+// executeShellCommandWithRetry runs invoke exactly once when info.ComponentRetrySection is
+// nil or has no Conditions configured (zero behavioural change for non-retry components).
+//
+// When retry is configured, stdout and stderr are tee'd into a buffer and the buffer is
+// matched against the compiled retry conditions after each attempt.  Errors whose captured
+// output matches at least one condition trigger another attempt with the configured backoff;
+// other errors fail fast.  This is intentionally pattern-driven so that real terraform
+// failures (e.g., `plan` exit-code-2) are never retried unless the user opts in by listing
+// a matching condition.
+//
+// `phase` is included in retry log lines so users can see which subprocess invocation is
+// being retried (e.g. "init", "workspace-select", "apply").
+func executeShellCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	phase string,
+	invoke invokeShellCommandFunc,
+	baseOpts ...ShellCommandOption,
+) error {
+	defer perf.Track(atmosConfig, "exec.executeShellCommandWithRetry")()
+
+	cfg := info.ComponentRetrySection
+	if cfg == nil || len(cfg.Conditions) == 0 {
+		return invoke(baseOpts...)
+	}
+
+	patterns, err := retry.CompileConditions(cfg.Conditions)
+	if err != nil {
+		return errors.Join(errUtils.ErrInvalidConfig, err)
+	}
+
+	var buf bytes.Buffer
+	captureOpts := append([]ShellCommandOption{}, baseOpts...)
+	captureOpts = append(captureOpts, WithStdoutCapture(&buf), WithStderrCapture(&buf))
+
+	attempt := 0
+	return retry.WithPredicate(
+		context.Background(),
+		cfg,
+		func() error {
+			attempt++
+			buf.Reset()
+			if attempt > 1 {
+				log.Warn(
+					"Retrying terraform subprocess after recoverable error",
+					"phase", phase,
+					logFieldComponent, info.ComponentFromArg,
+					"stack", info.StackFromArg,
+					"attempt", attempt,
+				)
+			}
+			return invoke(captureOpts...)
+		},
+		func(invokeErr error) bool {
+			if invokeErr == nil {
+				return false
+			}
+			return retry.MatchesAny(patterns, buf.String())
+		},
+	)
 }

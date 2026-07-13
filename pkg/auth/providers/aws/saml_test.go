@@ -164,25 +164,31 @@ func (s stubSamlMgr) AuthenticateProvider(context.Context, string) (*types.Whoam
 	return nil, nil
 }
 func (s stubSamlMgr) Whoami(context.Context, string) (*types.WhoamiInfo, error) { return nil, nil }
-func (s stubSamlMgr) Validate() error                                           { return nil }
-func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)                 { return "", nil }
-func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
-func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
-func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return filepath.Join("~", ".aws", "atmos") }
-func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)         { return "", nil }
-func (s stubSamlMgr) GetChain() []string                                        { return s.chain }
-func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 { return nil }
-func (s stubSamlMgr) ListProviders() []string                                   { return nil }
-func (s stubSamlMgr) GetIdentities() map[string]schema.Identity                 { return s.idmap }
-func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  { return nil }
-func (s stubSamlMgr) Logout(context.Context, string, bool) error                { return nil }
-func (s stubSamlMgr) LogoutProvider(context.Context, string, bool) error        { return nil }
-func (s stubSamlMgr) LogoutAll(context.Context, bool) error                     { return nil }
+
+func (s stubSamlMgr) CredentialStoreType() string                        { return "" }
+func (s stubSamlMgr) Validate() error                                    { return nil }
+func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)          { return "", nil }
+func (s stubSamlMgr) ListIdentities() []string                           { return nil }
+func (s stubSamlMgr) GetProviderForIdentity(string) string               { return "" }
+func (s stubSamlMgr) GetFilesDisplayPath(string) string                  { return filepath.Join("~", ".aws", "atmos") }
+func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)  { return "", nil }
+func (s stubSamlMgr) GetChain() []string                                 { return s.chain }
+func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo          { return nil }
+func (s stubSamlMgr) ListProviders() []string                            { return nil }
+func (s stubSamlMgr) GetIdentities() map[string]schema.Identity          { return s.idmap }
+func (s stubSamlMgr) GetProviders() map[string]schema.Provider           { return nil }
+func (s stubSamlMgr) Logout(context.Context, string, bool) error         { return nil }
+func (s stubSamlMgr) LogoutProvider(context.Context, string, bool) error { return nil }
+func (s stubSamlMgr) LogoutAll(context.Context, bool) error              { return nil }
 func (s stubSamlMgr) GetEnvironmentVariables(string) (map[string]string, error) {
 	return make(map[string]string), nil
 }
 
 func (s stubSamlMgr) PrepareShellEnvironment(context.Context, string, []string) ([]string, error) {
+	return nil, nil
+}
+
+func (s stubSamlMgr) EnsureIdentityEnvironment(context.Context, string) (map[string]string, error) {
 	return nil, nil
 }
 
@@ -196,6 +202,10 @@ func (s stubSamlMgr) ExecuteIdentityIntegrations(context.Context, string) error 
 
 func (s stubSamlMgr) GetIntegration(string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (s stubSamlMgr) RevokeEphemeralIntegrations(context.Context, string, *bool) error {
+	return nil
 }
 
 func (s stubSamlMgr) ResolvePrincipalSetting(string, string) (interface{}, bool) {
@@ -703,18 +713,14 @@ func TestSAMLProvider_selectRole_PartialMatch(t *testing.T) {
 	assert.Equal(t, "arn:aws:iam::123:role/Development", sel.RoleARN)
 }
 
-func TestSAMLProvider_WithCustomResolver(t *testing.T) {
-	// Test SAML provider with custom resolver configuration
+func TestSAMLProvider_WithCustomEndpoint(t *testing.T) {
+	// Test SAML provider with custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:   "aws/saml",
 		Region: "us-east-1",
 		URL:    "https://idp.example.com/saml",
 		Spec: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -729,16 +735,14 @@ func TestSAMLProvider_WithCustomResolver(t *testing.T) {
 	assert.Equal(t, "us-east-1", sp.region)
 	assert.Equal(t, "https://idp.example.com/saml", sp.url)
 
-	// Verify the provider has the config with resolver
+	// Verify the provider has the config with endpoint
 	assert.NotNil(t, sp.config)
 	assert.NotNil(t, sp.config.Spec)
-	awsSpec, exists := sp.config.Spec["aws"]
-	assert.True(t, exists)
-	assert.NotNil(t, awsSpec)
+	assert.Equal(t, "http://localhost:4566", sp.config.Spec["endpoint_url"])
 }
 
-func TestSAMLProvider_WithoutCustomResolver(t *testing.T) {
-	// Test SAML provider without custom resolver configuration
+func TestSAMLProvider_WithoutCustomEndpoint(t *testing.T) {
+	// Test SAML provider without custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:   "aws/saml",
 		Region: "us-east-1",

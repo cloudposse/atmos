@@ -1,0 +1,78 @@
+---
+title: atmos kubernetes delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete the Kubernetes objects managed by a stack-configured component from the target cluster.
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+  Remove the Kubernetes objects managed by a stack-configured component. Atmos
+  renders the same manifests used for deployment, resolves each object, and
+  deletes it from the target cluster by name and namespace.
+</Intro>
+
+<CastPlayer title="atmos kubernetes delete --help" src="/casts/screengrabs/atmos-kubernetes-delete--help.cast" static chrome />
+
+<ActionCard title="Configure Kubernetes Components">
+  Keep the desired objects in stack configuration, then use `delete` when a
+  component should be removed from an environment.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes delete <component> --stack <stack>
+atmos kubernetes delete --all --stack <stack>
+```
+
+`delete` renders the final manifests, resolves each object from GVK to GVR using
+discovery and a RESTMapper, and deletes each object by name and namespace
+through the Kubernetes dynamic client.
+
+The command does not require the `kubectl` binary.
+
+## Example
+
+```shell
+atmos kubernetes delete argocd -s plat-ue2-dev
+```
+
+Example output:
+
+```text
+deleted apps/v1/Deployment argocd/argocd-server
+not-found v1/Service argocd/argocd-server
+```
+
+## Flags
+
+<dl>
+  <dt>
+    `--stack`, `-s` <em>(required)</em>
+  </dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Delete all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Delete affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+</dl>

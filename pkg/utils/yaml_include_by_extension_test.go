@@ -239,12 +239,6 @@ func TestIncludeWithNoExtension(t *testing.T) {
 	err = os.WriteFile(licenseFile, []byte(licenseContent), 0o644)
 	assert.NoError(t, err)
 
-	// Hidden file (no extension)
-	hiddenFile := filepath.Join(tempDir, ".env")
-	hiddenContent := `DATABASE_URL=postgres://localhost/db`
-	err = os.WriteFile(hiddenFile, []byte(hiddenContent), 0o644)
-	assert.NoError(t, err)
-
 	// Create a test manifest
 	manifestFile := filepath.Join(tempDir, "test_noext_manifest.yaml")
 	manifestContent := `---
@@ -254,8 +248,7 @@ components:
       vars:
         # Files without extensions should be raw strings
         readme: !include README
-        license: !include LICENSE
-        env: !include .env`
+        license: !include LICENSE`
 
 	err = os.WriteFile(manifestFile, []byte(manifestContent), 0o644)
 	assert.NoError(t, err)
@@ -281,10 +274,181 @@ components:
 	// Get the component vars
 	componentVars := manifest["components"].(map[string]any)["terraform"].(map[string]any)["test_component"].(map[string]any)["vars"].(map[string]any)
 
-	// All should be raw strings
 	assert.Equal(t, readmeContent, componentVars["readme"].(string))
 	assert.Equal(t, licenseContent, componentVars["license"].(string))
-	assert.Equal(t, hiddenContent, componentVars["env"].(string))
+}
+
+func TestIncludeDotenv(t *testing.T) {
+	tempDir := t.TempDir()
+
+	envContent := `DATABASE_URL=postgres://localhost/db
+BALH=from-dotenv
+QUOTED="hello world"
+`
+	err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte(envContent), 0o644)
+	assert.NoError(t, err)
+
+	envLocalContent := "LOCAL_ONLY=true\n"
+	err = os.WriteFile(filepath.Join(tempDir, ".env.local"), []byte(envLocalContent), 0o644)
+	assert.NoError(t, err)
+
+	fooEnvContent := "FOO_ENV=bar\n"
+	err = os.WriteFile(filepath.Join(tempDir, "foo.env"), []byte(fooEnvContent), 0o644)
+	assert.NoError(t, err)
+
+	envrcContent := "export ENVRC_SHOULD_BE_RAW=true\n"
+	err = os.WriteFile(filepath.Join(tempDir, ".envrc"), []byte(envrcContent), 0o644)
+	assert.NoError(t, err)
+
+	manifestFile := filepath.Join(tempDir, "test_dotenv_manifest.yaml")
+	manifestContent := `---
+components:
+  terraform:
+    test_component:
+      vars:
+        env_direct: !include .env
+        env_local: !include .env.local
+        foo_env: !include foo.env
+        env_merge:
+          <<: !include .env
+          BALH: inline
+          foo: blah
+        env_flow: { <<: !include .env, DATABASE_URL: postgres://override/db }
+        env_raw: !include.raw .env
+        envrc_raw: !include .envrc`
+
+	err = os.WriteFile(manifestFile, []byte(manifestContent), 0o644)
+	assert.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	yamlFileContent, err := os.ReadFile("test_dotenv_manifest.yaml")
+	assert.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: ".",
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	manifest, err := UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), "test_dotenv_manifest.yaml")
+	assert.NoError(t, err)
+
+	componentVars := manifest["components"].(map[string]any)["terraform"].(map[string]any)["test_component"].(map[string]any)["vars"].(map[string]any)
+
+	envDirect := componentVars["env_direct"].(map[string]any)
+	assert.Equal(t, "postgres://localhost/db", envDirect["DATABASE_URL"])
+	assert.Equal(t, "from-dotenv", envDirect["BALH"])
+	assert.Equal(t, "hello world", envDirect["QUOTED"])
+
+	envLocal := componentVars["env_local"].(map[string]any)
+	assert.Equal(t, "true", envLocal["LOCAL_ONLY"])
+
+	fooEnv := componentVars["foo_env"].(map[string]any)
+	assert.Equal(t, "bar", fooEnv["FOO_ENV"])
+
+	envMerge := componentVars["env_merge"].(map[string]any)
+	assert.Equal(t, "postgres://localhost/db", envMerge["DATABASE_URL"])
+	assert.Equal(t, "inline", envMerge["BALH"])
+	assert.Equal(t, "blah", envMerge["foo"])
+
+	envFlow := componentVars["env_flow"].(map[string]any)
+	assert.Equal(t, "postgres://override/db", envFlow["DATABASE_URL"])
+	assert.Equal(t, "from-dotenv", envFlow["BALH"])
+
+	assert.Equal(t, envContent, componentVars["env_raw"].(string))
+	assert.Equal(t, envrcContent, componentVars["envrc_raw"].(string))
+}
+
+func TestIncludeDotenvStackEnv(t *testing.T) {
+	tempDir := t.TempDir()
+
+	envContent := `DATABASE_URL=postgres://localhost/db
+AWS_REGION=from-dotenv
+`
+	err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte(envContent), 0o644)
+	assert.NoError(t, err)
+
+	envLocalContent := `AWS_REGION=from-local
+LOCAL_ONLY=true
+`
+	err = os.WriteFile(filepath.Join(tempDir, ".env.local"), []byte(envLocalContent), 0o644)
+	assert.NoError(t, err)
+
+	manifestContent := `---
+env:
+  <<:
+    - !include .env.local
+    - !include .env
+  AWS_REGION: inline
+  BALH: foo
+components:
+  terraform:
+    test_component:
+      env: !include .env
+      vars:
+        enabled: true`
+	err = os.WriteFile(filepath.Join(tempDir, "stack.yaml"), []byte(manifestContent), 0o644)
+	assert.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	yamlFileContent, err := os.ReadFile("stack.yaml")
+	assert.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: ".",
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	manifest, err := UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), "stack.yaml")
+	assert.NoError(t, err)
+
+	env := manifest["env"].(map[string]any)
+	assert.Equal(t, "postgres://localhost/db", env["DATABASE_URL"])
+	assert.Equal(t, "inline", env["AWS_REGION"])
+	assert.Equal(t, "true", env["LOCAL_ONLY"])
+	assert.Equal(t, "foo", env["BALH"])
+
+	componentEnv := manifest["components"].(map[string]any)["terraform"].(map[string]any)["test_component"].(map[string]any)["env"].(map[string]any)
+	assert.Equal(t, "postgres://localhost/db", componentEnv["DATABASE_URL"])
+	assert.Equal(t, "from-dotenv", componentEnv["AWS_REGION"])
+}
+
+func TestIncludeDotenvInvalid(t *testing.T) {
+	tempDir := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("BAD LINE\n"), 0o644)
+	assert.NoError(t, err)
+
+	manifestFile := filepath.Join(tempDir, "test_invalid_dotenv_manifest.yaml")
+	manifestContent := `---
+components:
+  terraform:
+    test_component:
+      vars:
+        env: !include .env`
+
+	err = os.WriteFile(manifestFile, []byte(manifestContent), 0o644)
+	assert.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	yamlFileContent, err := os.ReadFile("test_invalid_dotenv_manifest.yaml")
+	assert.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: ".",
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	_, err = UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), "test_invalid_dotenv_manifest.yaml")
+	assert.Error(t, err)
 }
 
 // TestIncludeMixedScenarios tests various mixed scenarios.

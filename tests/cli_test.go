@@ -35,9 +35,11 @@ import (
 
 	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -49,7 +51,9 @@ var (
 	repoRoot            string                   // Repository root directory for path normalization
 	skipReason          string                   // Package-level variable to track why tests should be skipped
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
-	coverDir            string                   // GOCOVERDIR environment variable value
+	atmosRunnerOnce     sync.Once
+	atmosRunnerErr      error
+	coverDir            string // GOCOVERDIR environment variable value.
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -433,13 +437,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
-	// 5b. Join hint paths that may be split across lines due to terminal width wrapping.
+	// 5b. Join diagnostic paths that may be split across lines due to terminal width wrapping.
 	// This ensures consistent snapshots across platforms with different terminal widths.
 	// Example:
 	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
 	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
-	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
-	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex := regexp.MustCompile(`((?:💡\s*)?[^:\n]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = diagnosticPathRegex.ReplaceAllString(result, "$1 $2")
 
 	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
 	// Example:
@@ -507,7 +511,23 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
 	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
 
-	// 15. Apply custom replacements if provided.
+	// 15. Drop the test-harness-injected terraform-command env var from debug logs.
+	// The suite forces OpenTofu via ATMOS_COMPONENTS_TERRAFORM_COMMAND=tofu (see runCLICommandTest),
+	// which Atmos echoes at debug level as "Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=tofu".
+	// That line is a test-setup artifact, not product behavior under test, so remove it entirely to keep
+	// debug-level snapshots stable and independent of how the suite selects the terraform binary.
+	terraformCommandEnvLogRegex := regexp.MustCompile(`(?m)^.*Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=[^\n]*\n?`)
+	result = terraformCommandEnvLogRegex.ReplaceAllString(result, "")
+
+	// 16. Drop environment-dependent GitHub authentication debug logs.
+	// These lines depend on whether gh is installed/authenticated in the runner and do not affect
+	// the command behavior under test.
+	githubCLITokenLookupLogRegex := regexp.MustCompile(`(?m)^.*GitHub CLI token lookup failed \(CLI may not be installed or authenticated\)[^\n]*\n?`)
+	result = githubCLITokenLookupLogRegex.ReplaceAllString(result, "")
+	anonymousGitHubAccessLogRegex := regexp.MustCompile(`(?m)^.*No GitHub token resolved; using anonymous \(unauthenticated\) GitHub access \(subject to rate limits\)[^\n]*\n?`)
+	result = anonymousGitHubAccessLogRegex.ReplaceAllString(result, "")
+
+	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
 	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
 	for pattern, replacement := range config.customReplacements {
@@ -543,12 +563,12 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
 	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
 
-	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
-	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// E.g., "Stacks directory not found:\n/absolute/path" vs "Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
-	hintPathRegex2 := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
-	result = hintPathRegex2.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex2 := regexp.MustCompile(`(?m)((?:💡\s*)?[A-Z][^\n]{0,200}?:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = diagnosticPathRegex2.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
@@ -684,6 +704,22 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
+// validateAtmosBinary checks if the atmos binary is available.
+// Returns the binary path and a skip reason if the binary is not suitable for testing.
+func validateAtmosBinary(repoRoot string) (string, string) {
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'atmos build' to build the binary.", os.Getenv("PATH"))
+	}
+
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		return binaryPath, fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+	}
+
+	return binaryPath, ""
+}
+
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
@@ -725,17 +761,51 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
 
-	// Check if we should collect coverage
+	// Check if we should collect coverage.
 	coverDir = os.Getenv("GOCOVERDIR")
 	if coverDir != "" {
 		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
+	}
+
+	// Check for the atmos binary. This is informational only: CLI tests execute via
+	// AtmosRunner, which builds atmos from source, so a missing or external PATH binary
+	// must NOT skip the suite (doing so silently reduces coverage on clean machines/CI).
+	binaryPath, binaryWarning := validateAtmosBinary(repoRoot)
+	if binaryWarning != "" {
+		logger.Info("Atmos binary check warning", "reason", binaryWarning)
+	}
+	if binaryPath != "" {
+		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
 
 	logger.Info("Starting directory", "dir", startingDir)
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
+	// Provision the external tool binaries (terraform/tofu/packer/helmfile/helm)
+	// via the Atmos toolchain so the suite is self-contained and deterministic,
+	// instead of depending on host-installed binaries. Only missing tools are
+	// installed; best-effort, so failures leave per-test preconditions to skip
+	// the affected tests.
+	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools)
+
+	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a
+	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
+	// so CI (which pre-sets them to its service containers) is unaffected. On machines
+	// without Docker it records a skip reason and the Floci tests skip cleanly.
+	flociCtx, flociCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer flociCancel()
+	flociCleanup, flociErr := maybeStartFloci(flociCtx)
+	if flociErr != nil {
+		logger.Warn("Floci auto-start failed; Floci tests will skip", "error", flociErr)
+	}
+
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
+
+	// Tear down any Floci emulators we auto-started.
+	if flociCleanup != nil {
+		flociCleanup()
+	}
 
 	// Clean up sandboxes.
 	cleanupSandboxes()
@@ -755,11 +825,13 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token":    RequireOCIAuthentication,
-		"aws_credentials": RequireAWSCredentials,
-		"terraform":       RequireTerraform,
-		"packer":          RequirePacker,
-		"helmfile":        RequireHelmfile,
+		"github_token":      RequireOCIAuthentication,
+		"aws_credentials":   RequireAWSCredentials,
+		"terraform":         RequireTerraform,
+		"tofu":              RequireTofu,
+		"terraform_or_tofu": RequireTerraformOrTofu,
+		"packer":            RequirePacker,
+		"helmfile":          RequireHelmfile,
 	}
 
 	// Check each precondition
@@ -781,6 +853,24 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 	return atmosRunner.CommandContext(ctx, args...)
 }
 
+func ensureAtmosRunner(t *testing.T) {
+	t.Helper()
+
+	atmosRunnerOnce.Do(func() {
+		if atmosRunner != nil {
+			return
+		}
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		atmosRunnerErr = atmosRunner.Build()
+		if atmosRunnerErr == nil {
+			logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		}
+	})
+	if atmosRunnerErr != nil {
+		t.Skipf("Failed to initialize Atmos: %v", atmosRunnerErr)
+	}
+}
+
 func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
@@ -791,12 +881,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	checkPreconditions(t, tc.Preconditions)
 
 	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
-	if tc.Command == "atmos" && atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	if tc.Command == "atmos" {
+		ensureAtmosRunner(t)
 	}
 
 	// Create a context with timeout if specified, defaulting to 10 minutes
@@ -1023,8 +1109,21 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
+		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
 	}
+
+	// Standardize the terraform binary on OpenTofu for the whole suite so the
+	// runtime is deterministic and host-independent (a dev box may have
+	// terraform, tofu, both, or neither). The product default stays "terraform"
+	// (pkg/config/const.go); this only affects tests. ATMOS_COMPONENTS_TERRAFORM_COMMAND
+	// is read in pkg/config/utils.go and overrides each fixture's
+	// components.terraform.command. Tests that specifically need terraform (e.g.
+	// the atmos-terraform-version parity test) opt out by setting this var to
+	// "terraform" in their own test-case env block.
+	if _, exists := tc.Env["ATMOS_COMPONENTS_TERRAFORM_COMMAND"]; !exists {
+		tc.Env["ATMOS_COMPONENTS_TERRAFORM_COMMAND"] = "tofu"
+	}
+
 	// Set any environment variables defined in the test case using t.Setenv for proper isolation.
 	for key, value := range tc.Env {
 		t.Setenv(key, value)
@@ -1085,24 +1184,27 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Filter out ATMOS_* environment variables that shouldn't be inherited from developer's shell.
+	// Filter out environment variables that shouldn't be inherited from developer's shell.
 	// This ensures test reproducibility between local and CI environments.
-	// Only allow ATMOS_* vars explicitly set in tc.Env.
-	atmosVarsToFilter := []string{
+	// Only allow vars explicitly set in tc.Env.
+	varsToFilter := []string{
 		"ATMOS_LOGS_LEVEL", // Can change log verbosity and affect snapshot output
 		"ATMOS_CHDIR",      // Can change working directory resolution
 		"ATMOS_LOGS_FILE",  // Can redirect logs to unexpected locations
+		"ATMOS_PAGER",      // Can change settings.terminal.pager in snapshots
+		"PAGER",            // Can change settings.terminal.pager in snapshots
+		"NO_PAGER",         // Can change settings.terminal.pager in snapshots
 	}
 
-	for _, atmosVar := range atmosVarsToFilter {
+	for _, envVarToFilter := range varsToFilter {
 		// Skip if test explicitly sets this variable
-		if _, exists := tc.Env[atmosVar]; exists {
+		if _, exists := tc.Env[envVarToFilter]; exists {
 			continue
 		}
 
 		// Remove from inherited environment
 		for i, env := range envVars {
-			if strings.HasPrefix(env, atmosVar+"=") {
+			if strings.HasPrefix(env, envVarToFilter+"=") {
 				envVars = append(envVars[:i], envVars[i+1:]...)
 				break
 			}
@@ -1217,6 +1319,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate outputs
 	if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 		t.Errorf("Description: %s", tc.Description)
+		if stdout.Len() > 0 {
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+		}
+		if stderr.Len() > 0 {
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+		}
 	}
 
 	// Validate output based on TTY mode
@@ -1564,6 +1672,131 @@ func normalizeLineEndings(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
+func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
+	normalized := normalizeLineEndings(input)
+	normalized = unwrapMarkdownProseLines(normalized)
+	if ignoreTrailingWhitespace {
+		return stripTrailingWhitespace(normalized)
+	}
+	return normalized
+}
+
+func unwrapMarkdownProseLines(input string) string {
+	lines := strings.Split(input, "\n")
+	if len(lines) < 2 {
+		return input
+	}
+
+	var result []string
+	inFence := false
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(atmosansi.Strip(line))
+		if strings.HasPrefix(trimmed, "```") {
+			inFence = !inFence
+			result = append(result, line)
+			continue
+		}
+
+		for !inFence && i+1 < len(lines) && shouldUnwrapMarkdownProseLine(line, lines[i+1]) {
+			line = strings.TrimRight(line, " \t") + " " + strings.TrimLeft(lines[i+1], " \t")
+			i++
+		}
+
+		result = append(result, line)
+	}
+
+	return strings.Join(result, "\n")
+}
+
+func shouldUnwrapMarkdownProseLine(line, next string) bool {
+	plain := atmosansi.Strip(line)
+	nextPlain := atmosansi.Strip(next)
+	trimmed := strings.TrimSpace(plain)
+	nextTrimmed := strings.TrimSpace(nextPlain)
+	if trimmed == "" || nextTrimmed == "" {
+		return false
+	}
+	if strings.HasPrefix(plain, " ") || strings.HasPrefix(plain, "\t") ||
+		strings.HasPrefix(nextPlain, " ") || strings.HasPrefix(nextPlain, "\t") {
+		return false
+	}
+	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
+		return false
+	}
+	if looksLikeDataLine(trimmed) {
+		return false
+	}
+	if len([]rune(trimmed)) < 50 && !strings.HasPrefix(trimmed, "**Error:**") && !strings.HasPrefix(trimmed, "💡") {
+		return false
+	}
+	return true
+}
+
+// snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
+// at the start of a rendered log line. These must never be merged into
+// adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+
+// snapshotToastIconPrefixes lists the canonical single-line toast icons from
+// pkg/ui/theme/icons.go. A line starting with one of these icons is always an
+// independent ui.Success/Info/Warning/Error/Experimental call, never a
+// word-wrapped continuation of the previous line's markdown paragraph, so it
+// must never be merged during snapshot normalization. Sourced directly from
+// the theme package so new icons don't silently reopen this bug.
+var snapshotToastIconPrefixes = []string{
+	theme.IconCheckmark,
+	theme.IconXMark,
+	theme.IconWarning,
+	theme.IconInfo,
+	theme.IconExperimental,
+}
+
+func isSnapshotStructuralLine(line string) bool {
+	switch {
+	case strings.HasPrefix(line, "#"):
+		return true
+	case strings.HasPrefix(line, "- "):
+		return true
+	case strings.HasPrefix(line, "* "):
+		return true
+	// "• " is the glamour-rendered bullet glyph that markdown source "- "/"* "
+	// becomes after rendering; treat it the same as the raw markdown prefixes above.
+	case strings.HasPrefix(line, "• "):
+		return true
+	case strings.HasPrefix(line, "```"):
+		return true
+	case strings.HasPrefix(line, "│"):
+		return true
+	case strings.HasPrefix(line, "╷") || strings.HasPrefix(line, "╵"):
+		return true
+	// charm-log level prefixes must never be merged into adjacent markdown prose.
+	case snapshotLogLevelPrefixRe.MatchString(line):
+		return true
+	default:
+		for _, icon := range snapshotToastIconPrefixes {
+			if strings.HasPrefix(line, icon) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func looksLikeDataLine(line string) bool {
+	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "]") {
+		return true
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_.-]+:\s`).MatchString(line) && !strings.HasPrefix(line, "**Error:**") {
+		return true
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_.-]+\s*=`).MatchString(line) {
+		return true
+	}
+	return false
+}
+
 // Generate a unified diff using gotextdiff.
 func generateUnifiedDiff(actual, expected string) string {
 	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
@@ -1640,15 +1873,11 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
-	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		outputToSave := combinedOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			outputToSave = stripTrailingWhitespace(combinedOutput)
-		}
+	combinedOutput = normalizeSnapshotOutput(combinedOutput, tc.Expect.IgnoreTrailingWhitespace)
 
+	if regenerate {
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, outputToSave)
+		updateSnapshot(ttyPath, combinedOutput)
 		return true
 	}
 
@@ -1659,13 +1888,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	}
 
 	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
-	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredActual = stripTrailingWhitespace(filteredActual)
-		filteredExpected = stripTrailingWhitespace(filteredExpected)
-	}
+	filteredExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, ttyPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredExpected != filteredActual {
 		var diff string
@@ -1723,8 +1946,8 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Normalize line endings in actual output for cross-platform consistency.
 	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
-	stdoutOutput = normalizeLineEndings(stdoutOutput)
-	stderrOutput = normalizeLineEndings(stderrOutput)
+	stdoutOutput = normalizeSnapshotOutput(stdoutOutput, tc.Expect.IgnoreTrailingWhitespace)
+	stderrOutput = normalizeSnapshotOutput(stderrOutput, tc.Expect.IgnoreTrailingWhitespace)
 
 	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
@@ -1736,18 +1959,10 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		stdoutToSave := stdoutOutput
-		stderrToSave := stderrOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
-			stderrToSave = stripTrailingWhitespace(stderrOutput)
-		}
-
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutToSave)
+		updateSnapshot(stdoutPath, stdoutOutput)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrToSave)
+		updateSnapshot(stderrPath, stderrOutput)
 		return true
 	}
 
@@ -1759,13 +1974,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
-	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStdoutActual = stripTrailingWhitespace(filteredStdoutActual)
-		filteredStdoutExpected = stripTrailingWhitespace(filteredStdoutExpected)
-	}
+	filteredStdoutExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stdoutPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
@@ -1786,13 +1995,7 @@ Run the following command to create it:
 $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
-	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStderrActual = stripTrailingWhitespace(filteredStderrActual)
-		filteredStderrExpected = stripTrailingWhitespace(filteredStderrExpected)
-	}
+	filteredStderrExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stderrPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string

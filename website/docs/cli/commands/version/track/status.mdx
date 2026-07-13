@@ -1,0 +1,51 @@
+---
+title: atmos version track status
+sidebar_position: 90
+sidebar_label: status
+sidebar_class_name: command
+description: Show lock and update status for a version track.
+---
+
+Show policy-aware lock and update status for each entry in a track.
+
+## Status Values
+
+<dl>
+  <dt>`current`</dt>
+  <dd>The locked version matches the policy-eligible target.</dd>
+
+  <dt>`update-available`</dt>
+  <dd>A policy-eligible update differs from the locked version. `update` would take it.</dd>
+
+  <dt>`newer-available (blocked)`</dt>
+  <dd>A newer version exists upstream, but policy holds it back. The entry still passes `verify`.</dd>
+
+  <dt>`unlocked`</dt>
+  <dd>The entry has no lock file record.</dd>
+
+  <dt>`locked`</dt>
+  <dd>The entry is locked, but its target could not be resolved.</dd>
+</dl>
+
+## Usage
+
+```shell
+atmos version track status [track] [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit status to entries in the named version group.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show status for prod
+atmos version track status prod
+
+# Show infrastructure group status as JSON
+atmos version track status prod --group=infrastructure --format=json
+```

@@ -3,6 +3,7 @@ package terminal
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -171,30 +172,28 @@ func New(opts ...Option) Terminal {
 		opt(t)
 	}
 
-	// Detect color profile once at initialization.
-	// Priority order (highest to lowest):
-	// 1. NO_COLOR env var - always disables color (overrides --force-color)
-	// 2. --force-color flag - forces TrueColor
-	// 3. Standard detection via DetectColorProfile
+	t.initializeColorProfile()
+
+	return t
+}
+
+func (t *terminal) initializeColorProfile() {
 	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)
 	if !isTTYOut {
 		isTTYOut = t.IsTTY(Stdout)
 	}
 
-	// Determine color profile based on precedence
 	switch {
-	case cfg.EnvNoColor:
+	case t.config.EnvNoColor:
 		// NO_COLOR always wins, even over --force-color
 		t.colorProfile = ColorNone
 	case t.forceColor:
 		// Force color profile if --force-color is set (but NO_COLOR takes precedence)
 		t.colorProfile = ColorTrue
 	default:
-		t.colorProfile = cfg.DetectColorProfile(isTTYOut)
+		t.colorProfile = t.config.DetectColorProfile(isTTYOut)
 	}
-
-	return t
 }
 
 // Option configures Terminal.
@@ -230,7 +229,7 @@ func (t *terminal) Write(content string) error {
 
 	// Fallback: write directly to stderr (no masking)
 	// This should only happen in tests or when terminal is created without I/O
-	_, err := fmt.Fprint(os.Stderr, content)
+	_, err := os.Stderr.Write([]byte(content))
 	return err
 }
 
@@ -276,23 +275,32 @@ func (t *terminal) Width(stream Stream) int {
 
 	fd := streamToFd(stream)
 	if fd < 0 {
-		// If --force-tty is set, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	width, _, err := term.GetSize(fd)
 	if err != nil {
-		// If --force-tty is set and detection fails, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	return width
+}
+
+// fallbackWidth returns the terminal width when no real TTY size is available:
+// the forced default when --force-tty is set, and 0 otherwise. Non-TTY output
+// deliberately ignores the general-purpose COLUMNS variable so CI snapshots and
+// piped output keep Atmos' stable default wrapping; recording pipelines that
+// force TTY mode may still pin an explicit width via ATMOS_CAST_RECORDING_WIDTH
+// (e.g. 90 cols for docs screengrabs) since that variable is never set ambiently.
+func (t *terminal) fallbackWidth() int {
+	if t.forceTTY {
+		//nolint:forbidigo // ATMOS_CAST_RECORDING_WIDTH is a deliberate, purpose-specific override read before/without config.
+		if width, err := strconv.Atoi(os.Getenv("ATMOS_CAST_RECORDING_WIDTH")); err == nil && width > 0 {
+			return width
+		}
+		return defaultForcedWidth
+	}
+	return 0
 }
 
 func (t *terminal) Height(stream Stream) int {
@@ -347,7 +355,7 @@ func (t *terminal) SetTitle(title string) {
 		_ = t.io.Write(int(IOStreamUI), titleSeq)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, titleSeq)
+		_, _ = os.Stderr.Write([]byte(titleSeq))
 	}
 }
 
@@ -361,7 +369,7 @@ func (t *terminal) RestoreTitle() {
 		if t.io != nil {
 			_ = t.io.Write(int(IOStreamUI), titleSeq)
 		} else {
-			fmt.Fprint(os.Stderr, titleSeq)
+			_, _ = os.Stderr.Write([]byte(titleSeq))
 		}
 	}
 }
@@ -384,7 +392,7 @@ func (t *terminal) Alert() {
 		_ = t.io.Write(int(IOStreamUI), escBEL)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, escBEL)
+		_, _ = os.Stderr.Write([]byte(escBEL))
 	}
 }
 

@@ -57,6 +57,7 @@ var providerHintDefaults = map[string]struct{ model, envVar string }{
 	"azureopenai": {model: "gpt-4o", envVar: "AZURE_OPENAI_API_KEY"},
 	"ollama":      {model: "llama3", envVar: "OLLAMA_API_KEY"},
 	"grok":        {model: "grok-3", envVar: "GROK_API_KEY"},
+	"github":      {model: "openai/gpt-4o-mini", envVar: "GITHUB_TOKEN"},
 }
 
 // hintModel returns an example model name for the given provider.

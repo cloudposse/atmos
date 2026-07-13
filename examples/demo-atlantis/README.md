@@ -1,3 +1,11 @@
+---
+title: Atlantis
+tags: [Automation]
+cast:
+  file: /casts/examples/demo-atlantis/repo-config.cast
+  title: atmos Atlantis repo config
+---
+
 # Example: Demo Atlantis
 
 Generate Atlantis configuration for PR-based Terraform automation.

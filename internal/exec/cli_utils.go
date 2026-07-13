@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -188,6 +189,15 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
+	// Fallback: Cobra strips flags from the args passed to RunE, so when this
+	// flag is provided on the command line after the subcommand, the legacy
+	// raw-args scan above will not see it. Pull the value from Cobra directly
+	// when the legacy path produced nothing.
+	if configAndStacksInfo.SettingsListMergeStrategy == "" {
+		if flag := cmd.Flag("settings-list-merge-strategy"); flag != nil && flag.Changed {
+			configAndStacksInfo.SettingsListMergeStrategy = flag.Value.String()
+		}
+	}
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	postParsedIdentityValue, postParsedIdentitySet := getExplicitIdentityFlagValue(cmd)
 	configAndStacksInfo.Identity = resolveIdentityValue(
@@ -350,15 +360,15 @@ func parseQuotedCompoundSubcommand(arg string) *compoundSubcommandResult {
 			return &compoundSubcommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 1}
 		}
 	case cmdWorkspace:
-		if u.SliceContainsString(workspaceSubcommands, second) {
+		if slices.Contains(workspaceSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 1}
 		}
 	case cmdState:
-		if u.SliceContainsString(stateSubcommands, second) {
+		if slices.Contains(stateSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 1}
 		}
 	case cmdProviders:
-		if u.SliceContainsString(providersSubcommands, second) {
+		if slices.Contains(providersSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 1}
 		}
 	}
@@ -443,15 +453,15 @@ func parseSeparateCompoundSubcommand(first, second string) *compoundSubcommandRe
 			return &compoundSubcommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 2}
 		}
 	case cmdWorkspace:
-		if u.SliceContainsString(workspaceSubcommands, second) {
+		if slices.Contains(workspaceSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 2}
 		}
 	case cmdState:
-		if u.SliceContainsString(stateSubcommands, second) {
+		if slices.Contains(stateSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 2}
 		}
 	case cmdProviders:
-		if u.SliceContainsString(providersSubcommands, second) {
+		if slices.Contains(providersSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 2}
 		}
 	}

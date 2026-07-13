@@ -150,12 +150,6 @@ func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool
 	return vendor.ShouldExcludeFile(excludePaths, trimmedSrc)
 }
 
-// checkComponentIncludes checks if the file matches any of the included patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool, error) {
-	return vendor.ShouldIncludeFile(includePaths, trimmedSrc)
-}
-
 func ExecuteComponentVendorInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorComponentSpec *schema.VendorComponentSpec,
@@ -165,20 +159,78 @@ func ExecuteComponentVendorInternal(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
+	packages, err := buildComponentVendorPackages(vendorComponentSpec, component, componentPath)
+	if err != nil {
+		return err
+	}
+	if len(packages) > 0 {
+		return executeVendorModel(packages, dryRun, atmosConfig)
+	}
+	return nil
+}
+
+// ExecuteComponentVendorPullBatch resolves and pulls multiple components declared via their own
+// component.yaml manifests in a single batched run (one progress bar, one completion summary),
+// instead of one executeVendorModel call per component. Used by `atmos vendor update --pull`
+// to avoid a separate "0/1" progress block per updated component.
+//
+// Resolution errors are propagated immediately (fail-fast): silently skipping a component whose
+// component.yaml fails to parse would silently under-pull, matching the existing single-component
+// behavior in handleComponentVendor (internal/exec/vendor.go), which also fails fast.
+func ExecuteComponentVendorPullBatch(
+	atmosConfig *schema.AtmosConfiguration,
+	components []string,
+	componentType string,
+	dryRun bool,
+) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorPullBatch")()
+
+	if len(components) == 0 {
+		return nil
+	}
+
+	var allPackages []pkgComponentVendor
+	for _, component := range components {
+		config, componentPath, err := ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
+		if err != nil {
+			return fmt.Errorf("component %q: %w", component, err)
+		}
+		packages, err := buildComponentVendorPackages(&config.Spec, component, componentPath)
+		if err != nil {
+			return fmt.Errorf("component %q: %w", component, err)
+		}
+		allPackages = append(allPackages, packages...)
+	}
+
+	if len(allPackages) == 0 {
+		return nil
+	}
+	return executeVendorModel(allPackages, dryRun, atmosConfig)
+}
+
+// buildComponentVendorPackages resolves a single component's vendor spec (plus any mixins) into
+// the package list executeVendorModel consumes, without executing the pull. Extracted from
+// ExecuteComponentVendorInternal so ExecuteComponentVendorPullBatch can build package lists for
+// multiple components and combine them into one executeVendorModel call.
+func buildComponentVendorPackages(
+	vendorComponentSpec *schema.VendorComponentSpec,
+	component string,
+	componentPath string,
+) ([]pkgComponentVendor, error) {
 	if vendorComponentSpec.Source.Uri == "" {
-		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
+		return nil, fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
 	}
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
 		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		var tpl bytes.Buffer
 		err = t.Execute(&tpl, vendorComponentSpec.Source)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		uri = tpl.String()
 	}
@@ -211,14 +263,11 @@ func ExecuteComponentVendorInternal(
 	if len(vendorComponentSpec.Mixins) > 0 {
 		mixinPkgs, err := processComponentMixins(vendorComponentSpec, componentPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		packages = append(packages, mixinPkgs...)
 	}
-	if len(packages) > 0 {
-		return executeVendorModel(packages, dryRun, atmosConfig)
-	}
-	return nil
+	return packages, nil
 }
 
 // handleLocalFileScheme processes the URI for local file system paths.

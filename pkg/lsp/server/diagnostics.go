@@ -198,6 +198,9 @@ func (h *Handler) validateComponentsSection(stackContent map[string]interface{})
 	// Validate helmfile components.
 	diagnostics = append(diagnostics, h.validateHelmfileComponents(compMap)...)
 
+	// Validate kubernetes components.
+	diagnostics = append(diagnostics, h.validateKubernetesComponents(compMap)...)
+
 	return diagnostics
 }
 
@@ -236,6 +239,22 @@ func (h *Handler) validateHelmfileComponents(compMap map[string]interface{}) []p
 
 	if _, isMap := helmfile.(map[string]interface{}); !isMap {
 		diagnostics = append(diagnostics, h.createDiagnostic("'components.helmfile' should be a map"))
+	}
+
+	return diagnostics
+}
+
+// validateKubernetesComponents validates kubernetes components.
+func (h *Handler) validateKubernetesComponents(compMap map[string]interface{}) []protocol.Diagnostic {
+	var diagnostics []protocol.Diagnostic
+
+	kubernetes, ok := compMap["kubernetes"]
+	if !ok {
+		return diagnostics
+	}
+
+	if _, isMap := kubernetes.(map[string]interface{}); !isMap {
+		diagnostics = append(diagnostics, h.createDiagnostic("'components.kubernetes' should be a map"))
 	}
 
 	return diagnostics

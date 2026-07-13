@@ -1,0 +1,153 @@
+commands:
+  - name: casts generate cli interactive-menu
+    description: Regenerate the atmos (interactive) picker cast for the /cli docs page
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: interactive-menu
+        working_directory: "../../.context/cast-fixtures/quick-start-simple"
+        title: "atmos (interactive)"
+        mode: session
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 90ms
+        timeout: 45s
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+        # Inlines cast-defaults.yaml's .env.recording, but with
+        # ATMOS_LOGS_LEVEL: Info (default is Warning) — this demo's whole
+        # point is the "validate component" log.Info confirmation, so unlike
+        # other casts it needs Info-level logs to actually show up.
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Info
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/cli/interactive-menu.cast"
+        steps:
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "atmos"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Commands"
+            timeout: 10s
+          - type: pause
+            duration: 600ms
+          # Move focus to the Stacks column and browse to "staging".
+          - type: key
+            key: right
+          - type: pause
+            duration: 400ms
+          - type: key
+            key: down
+            repeat: 2
+            interval: 350ms
+          - type: pause
+            duration: 600ms
+          # Filter the Stacks column down to "staging", then clear the filter.
+          - type: key
+            key: "/"
+          - type: pause
+            duration: 250ms
+          - type: write
+            text: "sta"
+          - type: pause
+            duration: 600ms
+          - type: key
+            key: esc
+          - type: pause
+            duration: 400ms
+          # Flip to "Stacks for Components" (Mode 2) and back to "Components in
+          # Stacks" (Mode 1), demonstrating the Tab key.
+          - type: key
+            key: tab
+          - type: pause
+            duration: 900ms
+          - type: key
+            key: tab
+          - type: pause
+            duration: 500ms
+          # Back to the Commands column, scroll down to "validate component".
+          - type: key
+            key: left
+          - type: pause
+            duration: 400ms
+          - type: key
+            key: down
+            repeat: 11
+            interval: 90ms
+          - type: pause
+            duration: 600ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Validated"
+            timeout: 10s
+          - type: pause
+            duration: 800ms
+      - type: script
+        name: sanitize-runtime-paths
+        interpreter: python3
+        script: |
+          from pathlib import Path
+
+          path = Path("../../website/static/casts/cli/interactive-menu.cast")
+          fixture = Path("../../.context/cast-fixtures/quick-start-simple").resolve()
+          text = path.read_text()
+          text = text.replace(str(fixture), ".")
+          path.write_text(text)
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/cli/interactive-menu.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
+      - type: shell
+        name: validate
+        command: atmos casts validate cli interactive-menu
+  - name: casts validate cli interactive-menu
+    description: Validate the atmos (interactive) picker cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/cli/interactive-menu.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "Commands",
+              "Stacks",
+              "Components",
+              "staging",
+              "station",
+              "validate component",
+              "Validated successfully",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"interactive-menu cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"interactive-menu cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

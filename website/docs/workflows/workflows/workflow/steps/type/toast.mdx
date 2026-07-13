@@ -1,0 +1,33 @@
+---
+title: toast
+sidebar_label: toast
+slug: /workflows/steps/type/toast
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `toast` step type displays a themed status message in success, info, warning, or error variants — the same status styling Atmos uses to report results across the CLI.
+</Intro>
+
+```yaml
+steps:
+  - name: done
+    type: toast
+    level: success
+    content: Deployment complete.
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Required. Message text. Supports templates.</dd>
+
+  <dt>`level`</dt>
+  <dd>Optional status level. Supported values include `success`, `info`, `warn`, `warning`, and `error`. The default is `info`.</dd>
+</dl>
+
+`success`, `info`, `warn`, and `error` are `level` values, not step types.
+
+When a `toast` step runs inside a `type: cast` step, its rendered status message is written while the cast recorder is active and becomes part of the generated asciicast.

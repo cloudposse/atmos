@@ -1,8 +1,8 @@
 # Component Dependencies
 
-**Status**: ✅ Implemented
+**Status**: ✅ Implemented (v1 shipped in v1.210.0; v2 surface added in v1.211.0 — see "v2 Surface" section below)
 
-**Last Updated**: 2026-01-02
+**Last Updated**: 2026-05-05
 
 **Related PRDs**: [Tool Dependencies Integration](./tool-dependencies-integration.md)
 
@@ -233,6 +233,79 @@ dependencies:
     - kind: file
       path: configs/app.json
 ```
+
+## v2 Surface (additive, no breaking change)
+
+The original v1 shape that shipped in v1.210.0 layered three design smells:
+
+1. **Container/contents mismatch.** The container is named `dependencies.components` (a noun for the *category*) but its entries can be `kind: file`/`kind: folder` — files and folders are not components.
+2. **Two entry shapes mashed together.** Component entries use a value-bearing key (`component: vpc`); path entries use a discriminator pattern (`kind: file` + `path:`). Half-discriminated, half-typed-by-key.
+3. **`kind` overload.** `kind` at `components.<kind>.<name>` means *component type* (terraform/helmfile/packer). `kind` inside a dependency entry adds `file`/`folder`. Same word, overlapping but different domains.
+
+Hard renames are off the table — the v1 surface ships in a public release. The v2 surface is **purely additive** and reconciles the smells without breaking any existing YAML.
+
+### v2 input surface
+
+```yaml
+dependencies:
+  tools:                       # unchanged (map of tool → version)
+    terraform: "1.9.8"
+
+  components:                  # ONLY component-to-component deps
+    - name: vpc                # canonical (preferred over `component:`)
+      stack: prod
+    - name: nginx
+      kind: helmfile
+      stack: platform-stack
+
+  files:                       # NEW sibling key, replaces inline `kind: file`
+    - configs/lambda-settings.json
+
+  folders:                     # NEW sibling key, replaces inline `kind: folder`
+    - src/lambda/handler
+```
+
+### Backward-compatibility rules (parsed identically to v2)
+
+- `component:` continues to parse as the canonical struct field on `ComponentDependency`. The new `name:` field is an input-side alias.
+- `kind: file` / `kind: folder` entries inside `dependencies.components[]` continue to parse and behave identically.
+- `settings.depends_on` legacy path is unchanged.
+
+### Normalization (`Dependencies.Normalize`)
+
+After mapstructure decoding of any `dependencies` section, callers MUST invoke `Dependencies.Normalize`. The normalizer:
+
+1. **Resolves the `name` ↔ `component` alias** on every `Components[]` entry. If both are set to the same non-empty value, the alias is cleared. If both are set to *different* non-empty values, returns `schema.ErrComponentDependencyNameConflict`.
+2. **Validates inline path-based entries.** Any `Components[i]` with `Kind` ∈ {`file`, `folder`} that lacks `Path` returns `schema.ErrComponentDependencyMissingPath`.
+3. **Mirrors `Files` / `Folders` into `Components[]`** as synthetic entries `{Kind: "file"|"folder", Path: ...}`. Downstream code paths that filter `Components[]` by kind continue to see all path-based dependencies regardless of where they were declared.
+4. **Backfills typed slices** by promoting any inline file/folder entries from `Components[]` into `Files` / `Folders`. After Normalize, both views are complete and consistent (deduplicated by path).
+
+Net effect: a single internal representation exists post-Normalize, and downstream code paths (`getFileFolderDependencies`, `getComponentDependencies`, `isComponentDependentFolderOrFileChangedIndexed`) work unchanged.
+
+### Sentinel errors
+
+Defined in `pkg/schema/dependencies.go` (locally, to avoid an `errors → pkg/perf → pkg/schema` import cycle):
+
+- `schema.ErrComponentDependencyNameConflict` — both `name` and `component` set to different values on the same entry.
+- `schema.ErrComponentDependencyMissingPath` — inline `kind: file/folder` entry without a `path:` field.
+
+### Schema changes
+
+The JSON manifest schema (`website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` and its mirrored copy under `tests/fixtures/schemas/`) gains:
+
+- `dependencies.files` / `dependencies.folders` keys with `dependencies_files` / `dependencies_folders` definitions.
+- `dependencies_component_entry.properties.name` alongside `component`.
+- An updated `anyOf` accepting `name`, `component`, OR the legacy `kind: file/folder + path` shape.
+
+`additionalProperties: false` is preserved; the schema still rejects unknown keys.
+
+### Out-of-scope follow-ups
+
+Tracked separately:
+
+- Decide whether/when to emit a soft-deprecation log when `kind: file/folder` is seen inside `components[]`.
+- Consider a v2 schema namespace if more shape changes accumulate.
+- Same alias treatment for legacy `settings.depends_on` is intentionally NOT in scope.
 
 ## Related Documentation
 

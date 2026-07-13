@@ -197,6 +197,29 @@ func NewDefaultClient(opts ...ClientOption) *DefaultClient {
 	return client
 }
 
+// NewGitHubAuthenticatedHTTPClient returns a stdlib *http.Client configured to attach a
+// GitHub token to requests targeting GitHub hosts, for consumers that require a raw
+// *http.Client rather than the Client interface — e.g. hashicorp/go-getter's HttpGetter,
+// which only accepts *http.Client. Unlike NewDefaultClient, no overall http.Client.Timeout
+// is set: go-getter's own default (unauthenticated) client relies on transport-level
+// dial/handshake timeouts rather than a total-request deadline, so large downloads aren't
+// truncated; this preserves that behavior while adding token authentication.
+// Returns an unauthenticated *http.Client when token is empty.
+func NewGitHubAuthenticatedHTTPClient(token string) *http.Client {
+	defer perf.Track(nil, "http.NewGitHubAuthenticatedHTTPClient")()
+
+	client := &http.Client{}
+	if token == "" {
+		return client
+	}
+	client.Transport = &GitHubAuthenticatedTransport{
+		Base:        http.DefaultTransport,
+		GitHubToken: token,
+	}
+	client.CheckRedirect = stripAuthOnCrossHostRedirect
+	return client
+}
+
 // GitHubAuthenticatedTransport wraps an http.Transport to add GitHub token authentication.
 type GitHubAuthenticatedTransport struct {
 	Base        http.RoundTripper
@@ -301,8 +324,13 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 // GetGitHubTokenFromEnv retrieves GitHub token from the global configuration.
 // This function respects the standard Atmos precedence order:
 //  1. --github-token CLI flag (via viper, only available for toolchain commands)
-//  2. ATMOS_GITHUB_TOKEN environment variable
-//  3. GITHUB_TOKEN environment variable
+//  2. ATMOS_PRO_GITHUB_TOKEN environment variable (Atmos Pro-brokered, JIT token)
+//  3. ATMOS_GITHUB_TOKEN environment variable
+//  4. GITHUB_TOKEN environment variable
+//
+// The env-var precedence (ATMOS_PRO_GITHUB_TOKEN > ATMOS_GITHUB_TOKEN > GITHUB_TOKEN)
+// matches the go-getter token injector in pkg/downloader/custom_git_detector.go, so the
+// REST API client, HTTP downloads, and toolchain installs all prefer the same token.
 //
 // The viper binding is configured in cmd/toolchain/toolchain.go for toolchain commands.
 // For non-toolchain commands, we fall back to direct environment variable lookup.
@@ -324,7 +352,13 @@ func GetGitHubTokenFromEnv(v ...*viper.Viper) string {
 	}
 
 	// Fall back to direct environment variable lookup for non-toolchain commands.
-	// Check ATMOS_GITHUB_TOKEN first (Atmos-specific), then GITHUB_TOKEN (standard).
+	// Prefer ATMOS_PRO_GITHUB_TOKEN (Atmos Pro-brokered), then ATMOS_GITHUB_TOKEN
+	// (Atmos-specific), then GITHUB_TOKEN (standard).
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
+	if token := os.Getenv("ATMOS_PRO_GITHUB_TOKEN"); token != "" {
+		return token
+	}
+
 	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
 	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
 		return token
@@ -339,6 +373,15 @@ func (c *DefaultClient) Do(req *http.Request) (*http.Response, error) {
 	defer perf.Track(nil, "http.DefaultClient.Do")()
 
 	return c.client.Do(req)
+}
+
+// HTTPClient returns the underlying *http.Client, for callers that need the
+// concrete stdlib type (e.g. third-party libraries with a `Client *http.Client`
+// field) rather than the [Client] interface.
+func (c *DefaultClient) HTTPClient() *http.Client {
+	defer perf.Track(nil, "http.DefaultClient.HTTPClient")()
+
+	return c.client
 }
 
 // Get performs an HTTP GET request with context using the provided client.

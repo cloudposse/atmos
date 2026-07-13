@@ -16,8 +16,11 @@ import (
 
 var terraformStateCache = sync.Map{}
 
-// ResetStateCache clears the terraform state cache.
-// This is exported for use in tests to ensure cache isolation between test functions.
+// ResetStateCache clears the terraform state cache and the nested-component AuthManager cache.
+// This is exported for use in tests to ensure cache isolation between test functions. The two caches
+// are cleared together because the managers in nestedAuthManagerCache are what read the state held in
+// terraformStateCache: clearing state to force a fresh backend read while reusing a stale auth manager
+// would be inconsistent. Neither cache is reset in production.
 func ResetStateCache() {
 	defer perf.Track(nil, "exec.ResetStateCache")()
 
@@ -25,6 +28,8 @@ func ResetStateCache() {
 		terraformStateCache.Delete(key)
 		return true
 	})
+
+	ResetNestedAuthManagerCache()
 }
 
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
@@ -132,7 +137,10 @@ func GetTerraformState(
 		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		// Use double %w so that errors.Is can match both ErrDescribeComponent and
+		// any sentinel propagated from the inner describe (e.g., ErrCircularDependency
+		// from a !terraform.state cycle — see #2457).
+		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -162,14 +170,20 @@ func GetTerraformState(
 		return nil, er
 	}
 
-	// Cache the result.
-	terraformStateCache.Store(stackSlug, backend)
-
-	// If `backend` is `nil`, return a recoverable error (the component in the stack has not been provisioned yet).
-	// This allows callers to use YQ defaults if available.
+	// If `backend` is `nil`, the component in the stack has not been provisioned yet: return a
+	// recoverable error so callers can use YQ defaults if available. Do NOT cache this result -
+	// storing a nil map[string]any into the `any`-typed cache would box a non-nil interface with
+	// a nil value, which `found && backend != nil` below treats as a cache HIT forever (Go's
+	// typed-nil-in-interface semantics). During a `deploy --all` DAG run a dependency can be
+	// provisioned by an earlier node after this "not yet provisioned" read; later reads of the
+	// same component must see its real state once it exists, not a poisoned nil frozen from
+	// before the dependency was ever deployed.
 	if backend == nil {
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
+
+	// Cache the result now that we know it reflects a real, provisioned backend.
+	terraformStateCache.Store(stackSlug, backend)
 
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)

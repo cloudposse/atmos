@@ -6,19 +6,24 @@
  */
 
 .cardContainer {
-  --ifm-link-color: var(--ifm-color-emphasis-800);
-  --ifm-link-hover-color: var(--ifm-color-emphasis-700);
+  --ifm-link-color: var(--atmos-docs-text);
+  --ifm-link-hover-color: var(--atmos-docs-text);
   --ifm-link-hover-decoration: none;
 
-  box-shadow: 0 1.5px 3px 0 rgb(0 0 0 / 15%);
-  border: 1px solid var(--ifm-color-emphasis-200);
-  transition: all var(--ifm-transition-fast) ease;
-  transition-property: border, box-shadow;
+  background: var(--atmos-docs-surface-elevated);
+  border: 1px solid var(--atmos-docs-border);
+  border-radius: var(--atmos-docs-radius);
+  box-shadow: var(--atmos-docs-shadow);
+  color: var(--atmos-docs-text);
+  font-family: var(--atmos-docs-font-sans);
+  padding: 1rem !important;
+  transition: border-color var(--ifm-transition-fast) ease, background var(--ifm-transition-fast) ease;
 }
 
 .cardContainer:hover {
-  border-color: var(--ifm-color-primary);
-  box-shadow: 0 3px 6px 0 rgb(0 0 0 / 20%);
+  background: var(--atmos-docs-surface-subtle);
+  border-color: var(--atmos-docs-border-hover);
+  box-shadow: var(--atmos-docs-shadow);
 }
 
 .cardContainer *:last-child {
@@ -26,9 +31,55 @@
 }
 
 .cardTitle {
-  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--atmos-docs-text);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.cardIcon {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1px solid var(--atmos-docs-border);
+  border-radius: 4px;
+  background: var(--atmos-docs-surface-subtle);
+}
+
+.cardIconCategory::before,
+.cardIconLink::before,
+.cardIconExternal::before {
+  content: "";
+  position: absolute;
+  inset: 0.28rem;
+  border-radius: 2px;
+  background: var(--atmos-docs-accent);
+}
+
+.cardIconCategory::after {
+  content: "";
+  position: absolute;
+  top: 0.2rem;
+  left: 0.24rem;
+  width: 0.42rem;
+  height: 0.18rem;
+  border-radius: 2px 2px 0 0;
+  background: var(--atmos-docs-accent);
+}
+
+.cardIconExternal {
+  border-radius: 999px;
 }
 
 .cardDescription {
-  font-size: 0.8rem;
+  margin-top: 0.45rem;
+  color: var(--atmos-docs-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
 }

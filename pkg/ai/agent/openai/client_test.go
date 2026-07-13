@@ -1,11 +1,18 @@
 package openai
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	openaigo "github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -401,6 +408,66 @@ func TestNewClient_WithValidAPIKey(t *testing.T) {
 	assert.NotNil(t, client.config)
 	assert.Equal(t, DefaultModel, client.GetModel())
 	assert.Equal(t, DefaultMaxTokens, client.GetMaxTokens())
+}
+
+func TestClientSendMethods(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Contains(t, r.URL.Path, "/chat/completions")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"chatcmpl-test",
+			"object":"chat.completion",
+			"created":0,
+			"model":"gpt-4o",
+			"choices":[{
+				"index":0,
+				"message":{"role":"assistant","content":"hello from openai"},
+				"finish_reason":"stop"
+			}],
+			"usage":{"prompt_tokens":5,"completion_tokens":6,"total_tokens":11}
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	apiClient := openaigo.NewClient(
+		option.WithAPIKey("test-api-key-value"),
+		option.WithBaseURL(server.URL),
+	)
+	client := &Client{
+		client: &apiClient,
+		config: &base.Config{
+			Enabled:   true,
+			Model:     DefaultModel,
+			APIKey:    "test-api-key-value",
+			MaxTokens: 128,
+		},
+	}
+
+	ctx := context.Background()
+	messages := []types.Message{{Role: types.RoleUser, Content: "hello"}}
+
+	text, err := client.SendMessage(ctx, "hello")
+	require.NoError(t, err)
+	assert.Equal(t, "hello from openai", text)
+
+	text, err = client.SendMessageWithHistory(ctx, messages)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from openai", text)
+
+	response, err := client.SendMessageWithTools(ctx, "hello", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from openai", response.Content)
+	require.NotNil(t, response.Usage)
+	assert.Equal(t, int64(11), response.Usage.TotalTokens)
+
+	response, err = client.SendMessageWithToolsAndHistory(ctx, messages, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.StopReasonEndTurn, response.StopReason)
+
+	response, err = client.SendMessageWithSystemPromptAndTools(ctx, "system", "memory", messages, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from openai", response.Content)
 }
 
 func TestClient_StructFields(t *testing.T) {

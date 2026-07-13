@@ -1,0 +1,79 @@
+base_path: "./"
+
+components:
+  kubernetes:
+    base_path: "components/kubernetes"
+    provider: kubectl
+
+# Managed Git repositories for GitOps delivery. The `deployments` repository is the
+# LOCAL Gitea emulator (see stacks/catalog/emulator/gitea.yaml) — no GitHub account,
+# no real remote. Atmos renders a component's manifests and pushes them here with
+# `atmos kubernetes apply <component> -s local --target deployments`; Flux (running
+# in the k3s emulator) then reconciles them back into the cluster. The throwaway
+# `atmos:atmos` credentials are created by the Gitea bootstrap and embedded in the
+# URL on purpose — this is a self-contained local loop with nothing to protect.
+git:
+  repositories:
+    deployments:
+      uri: http://atmos:atmos@localhost:3000/atmos/deployments.git
+      branch: main
+      # Keep the managed clone inside the project (not the shared XDG cache) so the
+      # demo is self-contained and each fresh `gitserver` lines up with a fresh
+      # workdir. `atmos git clean deployments` removes it; the .gitignore keeps
+      # it out of git.
+      workdir: .atmos/git/deployments
+      commit:
+        signing: never
+        # Pin the committer identity so the provisioner's `git commit` works on a CI
+        # runner with no global git user configured (otherwise: "Please tell me who
+        # you are", exit 128). Passed as `git -c user.name -c user.email`.
+        author:
+          name: Atmos GitOps
+          email: atmos-gitops@localhost
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Two local emulators power the loop. The k3s emulator is bound by identity to its
+# `components.emulator.*` definition:
+#   - `local-k3s`  → the `kubernetes` emulator (k3s); harvests the kubeconfig and
+#                    injects KUBECONFIG so the Kubernetes SDK talks to the cluster.
+# The `gitserver` (Gitea) emulator needs no identity: Atmos pushes to it over the
+# host-published port, and Flux pulls from it over the shared emulator network.
+auth:
+  identities:
+    local-k3s:
+      kind: kubernetes/emulator
+      emulator: kubernetes
+
+# The whole loop behind one symmetric command: `atmos gitops up` stands everything
+# up (emulators + Flux + a Git round trip), `atmos gitops down` tears it back down.
+commands:
+  - name: "gitops"
+    description: "Run the local GitOps loop (use the up/down subcommands)"
+    commands:
+      - name: "up"
+        description: "Stand up the full local GitOps loop: emulators + Flux + a Git round trip"
+        steps:
+          - atmos emulator up gitserver -s local
+          - atmos emulator up kubernetes -s local
+          - atmos kubernetes apply flux -s local --identity local-k3s
+          - atmos kubernetes apply flux-sync -s local --identity local-k3s
+          - atmos kubernetes apply demo-app -s local --target deployments
+      - name: "down"
+        description: "Stop and remove both local emulators and the managed clone"
+        steps:
+          - atmos emulator down kubernetes -s local
+          - atmos emulator down gitserver -s local
+          # Remove the managed deployments clone so a later `atmos gitops up` starts
+          # from a fresh workdir that matches a fresh `gitserver` repository.
+          - atmos git clean deployments --force
