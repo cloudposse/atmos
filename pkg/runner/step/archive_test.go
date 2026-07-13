@@ -282,6 +282,11 @@ func TestArchiveHandler_Execute_Mtime(t *testing.T) {
 	src := filepath.Join(dir, "src")
 	require.NoError(t, os.MkdirAll(src, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o664))
+	// os.WriteFile's mode is subject to the process umask (0o664 becomes
+	// 0o644 under the common 0o022 umask), which would make the assertion
+	// below pass trivially even if normalization never ran. os.Chmod
+	// bypasses umask, guaranteeing the source is genuinely 0o664.
+	require.NoError(t, os.Chmod(filepath.Join(src, "handler.js"), 0o664))
 	dest := filepath.Join(dir, "out.zip")
 
 	step := &schema.WorkflowStep{
