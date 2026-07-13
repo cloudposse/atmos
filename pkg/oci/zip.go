@@ -10,33 +10,37 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 )
 
-// ErrArchiveEntryTooLarge indicates a zip entry decompressed past
-// maxZipEntrySize, the defense against zip-bomb style amplification.
-var ErrArchiveEntryTooLarge = errors.New("archive entry exceeds maximum extracted size")
+// maxZipArchiveSize bounds how many bytes of a layer blob are buffered into
+// memory before extraction. Applied to the raw (still-compressed-by-zip)
+// bytes, so it catches an oversized blob before any per-entry check runs.
+const maxZipArchiveSize = 512 * 1024 * 1024 // 512 MiB.
 
-// maxZipEntrySize bounds how many bytes a single zip entry may decompress to.
-// Module packages are source-code archives (KBs-MBs), so this is generous
-// while still bounding a maliciously crafted entry that expands far past its
-// declared size.
+// maxZipEntrySize bounds how many bytes a single zip entry may decompress
+// to. Module packages are source-code archives (KBs-MBs), so this is
+// generous while still bounding a maliciously crafted entry that expands
+// far past its declared size.
 const maxZipEntrySize = 512 * 1024 * 1024 // 512 MiB.
 
 // extractZip extracts a ZIP archive read from reader into the destination
 // directory. Since zip.Reader requires io.ReaderAt plus a known size, the
-// archive is buffered in memory first; module packages are small enough
-// (KBs-MBs) for this to be fine.
+// archive is buffered in memory first, bounded by maxZipArchiveSize.
 func extractZip(reader io.Reader, extractPath string) error {
-	data, err := io.ReadAll(reader)
+	data, err := io.ReadAll(io.LimitReader(reader, maxZipArchiveSize+1))
 	if err != nil {
 		return fmt.Errorf("failed to read zip archive: %w", err)
+	}
+	if int64(len(data)) > maxZipArchiveSize {
+		return fmt.Errorf("%w: archive exceeds %d bytes", errUtils.ErrArchiveTooLarge, maxZipArchiveSize)
 	}
 
 	zipReader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		log.Error("Error reading zip archive", "error", err)
-		return err
+		return fmt.Errorf("failed to parse zip archive: %w", err)
 	}
 
 	for _, file := range zipReader.File {
@@ -76,25 +80,25 @@ func processZipFile(file *zip.File, extractPath string) error {
 // specified path. It also sets the file mode.
 func createFileFromZip(filePath string, file *zip.File) error {
 	if file.UncompressedSize64 > maxZipEntrySize {
-		return fmt.Errorf("%w: %s (declared %d bytes, max %d)", ErrArchiveEntryTooLarge, filePath, file.UncompressedSize64, maxZipEntrySize)
+		return fmt.Errorf("%w: %s (declared %d bytes, max %d)", errUtils.ErrArchiveEntryTooLarge, filePath, file.UncompressedSize64, maxZipEntrySize)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
 		log.Error("Failed to create parent directory for file", "path", filePath, "error", err)
-		return err
+		return fmt.Errorf("failed to create parent directory for %s: %w", filePath, err)
 	}
 
 	src, err := file.Open()
 	if err != nil {
 		log.Error("Failed to open zip entry", "path", filePath, "error", err)
-		return err
+		return fmt.Errorf("failed to open zip entry %s: %w", filePath, err)
 	}
 	defer src.Close()
 
 	writer, err := os.Create(filePath)
 	if err != nil {
 		log.Error("Failed to create file", "path", filePath, "error", err)
-		return err
+		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
 	defer writer.Close()
 
@@ -104,10 +108,10 @@ func createFileFromZip(filePath string, file *zip.File) error {
 	_, err = io.CopyN(writer, src, maxZipEntrySize+1)
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.Error("Failed to write file contents", "path", filePath, "error", err)
-		return err
+		return fmt.Errorf("failed to write file contents to %s: %w", filePath, err)
 	}
 	if err == nil {
-		return fmt.Errorf("%w: %s (exceeded %d bytes during extraction)", ErrArchiveEntryTooLarge, filePath, maxZipEntrySize)
+		return fmt.Errorf("%w: %s (exceeded %d bytes during extraction)", errUtils.ErrArchiveEntryTooLarge, filePath, maxZipEntrySize)
 	}
 
 	// Remove setuid/setgid bits for security; standard cross-platform.

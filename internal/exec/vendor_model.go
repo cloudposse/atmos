@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -417,8 +418,11 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 		}
 
 	case pkgTypeOci:
-		// Process OCI images
-		if err := oci.ProcessImage(atmosConfig, p.uri, *tempDir); err != nil {
+		// Process OCI images. Bounded to the same 10-minute timeout as the
+		// go-getter path above.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if err := oci.ProcessImage(ctx, atmosConfig, p.uri, *tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image: %w", err)
 		}
 

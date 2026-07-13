@@ -54,6 +54,7 @@ func TestExtractTarball_SkipsDirectoryTraversal(t *testing.T) {
 
 	require.NoError(t, extractTarball(tarBuf, dest))
 
-	_, err := os.Stat(filepath.Join(dest, "..", "..", "etc", "passwd"))
-	assert.True(t, os.IsNotExist(err), "traversal entry must not be written outside dest")
+	entries, err := os.ReadDir(dest)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "traversal entry must not be written to dest")
 }

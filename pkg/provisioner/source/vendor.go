@@ -41,10 +41,11 @@ func WithReplaceTarget(replace bool) VendorSourceOption {
 // It uses go-getter via the existing downloader infrastructure.
 // Note: Authentication is not yet supported - credentials must be configured
 // via environment variables or cloud provider credential chains.
-// Note: The context parameter is currently unused but kept for API compatibility
-// with future cancellation support when the downloader is updated.
+// The context bounds the OCI download path (downloadOCISource derives a
+// DefaultVendorTimeout deadline from it); go-getter downloads keep their own
+// explicit timeout parameter independent of it.
 func VendorSource(
-	_ context.Context, // Context kept for future cancellation support.
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	sourceSpec *schema.VendorComponentSource,
 	targetDir string,
@@ -152,7 +153,7 @@ func VendorSource(
 	// (there is no getter.Getter implementation for them, and go-getter's model
 	// doesn't fit pulling registry layers), so oci:// sources go through pkg/oci
 	// directly; everything else still goes through go-getter.
-	if err := downloadSource(atmosConfig, sourceSpec, uri, tempDir); err != nil {
+	if err := downloadSource(ctx, atmosConfig, sourceSpec, uri, tempDir); err != nil {
 		return err
 	}
 
@@ -208,19 +209,23 @@ func VendorSource(
 
 // downloadSource populates tempDir from uri, branching between the OCI-native
 // path (oci.ProcessImage) and go-getter for everything else.
-func downloadSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
+func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
 	if vendor.IsOCIURI(uri) {
-		return downloadOCISource(atmosConfig, uri, tempDir)
+		return downloadOCISource(ctx, atmosConfig, uri, tempDir)
 	}
 	return downloadGoGetterSource(atmosConfig, sourceSpec, uri, tempDir)
 }
 
 // downloadOCISource pulls an oci:// source directly via pkg/oci. Go-containerregistry
 // doesn't understand the "oci://" scheme prefix itself, so it's trimmed first (mirroring
-// the legacy vendor pull path in internal/exec/vendor_component_utils.go).
-func downloadOCISource(atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
+// the legacy vendor pull path in internal/exec/vendor_component_utils.go). The pull is
+// bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
+func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
+	ctx, cancel := context.WithTimeout(ctx, DefaultVendorTimeout)
+	defer cancel()
+
 	imageRef := strings.TrimPrefix(uri, "oci://")
-	if err := oci.ProcessImage(atmosConfig, imageRef, tempDir); err != nil {
+	if err := oci.ProcessImage(ctx, atmosConfig, imageRef, tempDir); err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
 			WithExplanation("Failed to download OCI source").

@@ -72,7 +72,7 @@ func TestProcessOciImage_InvalidReference(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test with invalid image reference.
-	err := ProcessImage(atmosConfig, "invalid::image//name", "/tmp/dest")
+	err := ProcessImage(context.Background(), atmosConfig, "invalid::image//name", "/tmp/dest")
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference), "Expected ErrInvalidImageReference, got: %v", err)
@@ -132,7 +132,7 @@ func TestProcessOciImageWithFS_TempDirCreationFailure(t *testing.T) {
 		Return("", expectedErr)
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	err := processImageWithFS(atmosConfig, "test/image:latest", "/tmp/dest", mockFS)
+	err := processImageWithFS(context.Background(), atmosConfig, "test/image:latest", "/tmp/dest", mockFS)
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrCreateTempDirectory), "Expected ErrCreateTempDirectory, got: %v", err)
@@ -430,7 +430,7 @@ func TestPullImage_AnonymousFallback_403(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.NoError(t, err)
 	assert.NotNil(t, desc)
 	assert.Equal(t, 2, shim.calls, "expected one authed attempt followed by one anonymous retry")
@@ -446,7 +446,7 @@ func TestPullImage_AnonymousFallback_401(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.NoError(t, err)
 	assert.NotNil(t, desc)
 	assert.Equal(t, 2, shim.calls)
@@ -464,7 +464,7 @@ func TestPullImage_AnonymousFallback_DeniedString(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.NoError(t, err)
 	assert.NotNil(t, desc)
 	assert.Equal(t, 2, shim.calls)
@@ -479,7 +479,7 @@ func TestPullImage_NoFallback_DeadlineExceeded(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "deadline-exceeded must not trigger anonymous retry")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage), "error should wrap ErrPullImage")
@@ -495,7 +495,7 @@ func TestPullImage_NoFallback_500(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "5xx must not trigger anonymous retry")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
@@ -510,7 +510,7 @@ func TestPullImage_NoFallback_NetOpError(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "DNS-style errors must not trigger anonymous retry")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
@@ -527,7 +527,7 @@ func TestPullImage_NoRetry_WhenAlreadyAnonymous(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "registry.example.com/myimage:v1")
-	_, err := pullImage(&schema.AtmosConfiguration{}, ref)
+	_, err := pullImage(context.Background(), &schema.AtmosConfiguration{}, ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "anonymous 403 must not retry anonymously again")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
@@ -544,7 +544,7 @@ func TestPullImage_RichError_ContextAndHints(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 2, shim.calls, "expected authed + anonymous-retry attempts before failing")
 

@@ -2,6 +2,7 @@ package oci
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,15 +51,18 @@ var defaultFileSystem = filesystem.NewOSFileSystem()
 // httptest server. Production code must not reassign it.
 var remoteGet = remote.Get
 
-// ProcessImage pulls an OCI image and extracts its layers to the specified destination directory.
-func ProcessImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
+// ProcessImage pulls an OCI image and extracts its layers to the specified
+// destination directory. The context bounds the pull (registry auth plus
+// manifest/layer fetch) -- callers should pass one with a deadline, matching
+// the timeout the go-getter download path already enforces.
+func ProcessImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
 	defer perf.Track(atmosConfig, "oci.ProcessImage")()
 
-	return processImageWithFS(atmosConfig, imageName, destDir, defaultFileSystem)
+	return processImageWithFS(ctx, atmosConfig, imageName, destDir, defaultFileSystem)
 }
 
 // processImageWithFS processes an OCI image using a FileSystem implementation.
-func processImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
+func processImageWithFS(ctx context.Context, atmosConfig *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
 	tempDir, err := fs.MkdirTemp("", uuid.New().String())
 	if err != nil {
 		return errors.Join(errUtils.ErrCreateTempDirectory, err)
@@ -75,7 +79,7 @@ func processImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName string
 		return errors.Join(errUtils.ErrInvalidImageReference, err)
 	}
 
-	descriptor, err := pullImage(atmosConfig, ref)
+	descriptor, err := pullImage(ctx, atmosConfig, ref)
 	if err != nil {
 		// pullImage already wraps the error with errUtils.ErrPullImage via the
 		// builder, so errors.Is(err, ErrPullImage) is true. Returning it directly
@@ -116,7 +120,7 @@ func processImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName string
 // 1. User's Docker credentials (~/.docker/config.json via DefaultKeychain) - highest precedence
 // 2. ATMOS_GITHUB_TOKEN or GITHUB_TOKEN environment variables (for ghcr.io only)
 // 3. Anonymous authentication - fallback.
-func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*remote.Descriptor, error) {
+func pullImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*remote.Descriptor, error) {
 	var authMethod authn.Authenticator
 	var authSource string
 
@@ -146,7 +150,7 @@ func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*rem
 
 	log.Info("Authenticating to OCI registry", "registry", registry, "method", authSource)
 
-	descriptor, err := remoteGet(ref, remote.WithAuth(authMethod))
+	descriptor, err := remoteGet(ref, remote.WithAuth(authMethod), remote.WithContext(ctx))
 	if err == nil {
 		return descriptor, nil
 	}
@@ -156,7 +160,7 @@ func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*rem
 	// credentials lack the required scope. Non-auth errors (DNS, TLS, timeouts,
 	// 5xx) skip retry — they need a different remediation.
 	if authMethod != authn.Anonymous && isOCIAuthRejection(err) {
-		anonDescriptor, anonErr := remoteGet(ref, remote.WithAuth(authn.Anonymous))
+		anonDescriptor, anonErr := remoteGet(ref, remote.WithAuth(authn.Anonymous), remote.WithContext(ctx))
 		if anonErr == nil {
 			log.Warn("OCI auth rejected, succeeded with anonymous fallback",
 				"registry", registry, "auth_attempted", authSource)

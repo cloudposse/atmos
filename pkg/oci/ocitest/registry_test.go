@@ -1,8 +1,12 @@
 package ocitest
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/oci"
@@ -15,6 +19,10 @@ func TestNewRegistry_RoundTrip(t *testing.T) {
 	})
 
 	dest := t.TempDir()
-	err := oci.ProcessImage(&schema.AtmosConfiguration{}, imageRef, dest)
+	err := oci.ProcessImage(context.Background(), &schema.AtmosConfiguration{}, imageRef, dest)
 	require.NoError(t, err)
+
+	got, err := os.ReadFile(filepath.Join(dest, "marker.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "hello-from-ocitest\n", string(got))
 }

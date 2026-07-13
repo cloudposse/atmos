@@ -825,6 +825,8 @@ var (
 	ErrProcessLayer          = errors.New("failed to process layer")
 	ErrLayerDecompression    = errors.New("layer decompression error")
 	ErrLayerExtraction       = errors.New("layer extraction error")
+	ErrArchiveTooLarge       = errors.New("archive exceeds maximum size")
+	ErrArchiveEntryTooLarge  = errors.New("archive entry exceeds maximum extracted size")
 
 	// Initialization and configuration errors.
 	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
