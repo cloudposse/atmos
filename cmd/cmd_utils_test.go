@@ -308,6 +308,8 @@ func TestVersionManagementCommandClassification(t *testing.T) {
 }
 
 func TestEnableHeatmapIfRequested(t *testing.T) {
+	ensureIOInitialized(t)
+
 	oldArgs := os.Args
 	t.Cleanup(func() {
 		os.Args = oldArgs
@@ -471,6 +473,8 @@ func skipIfHelmfileNotInstalled(t *testing.T) {
 
 // TestPrintMessageForMissingAtmosConfig tests the printMessageForMissingAtmosConfig function.
 func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
+	ensureIOInitialized(t)
+
 	tests := []struct {
 		name        string
 		atmosConfig schema.AtmosConfiguration
@@ -2297,6 +2301,7 @@ func TestProcessCustomCommands(t *testing.T) {
 
 func TestExecuteCustomCommandShellStepPropagatesCILogGroupSentinel(t *testing.T) {
 	_ = NewTestKit(t)
+	ensureIOInitialized(t)
 
 	restore := ci.SwapRegistryForTest()
 	t.Cleanup(restore)

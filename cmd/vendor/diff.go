@@ -38,27 +38,22 @@ current pinned version and --to to the latest tag.`,
 				Err()
 		}
 
-		file, err := resolveVendorFileWithOverride(v.GetString("file"))
-		if err != nil {
-			return err
-		}
-		files, err := vendoring.CollectManifestFiles(file)
-		if err != nil {
-			return err
-		}
-
-		src, _, err := vendoring.FindSource(files, component)
+		resolved, err := vendoring.ResolveComponentSource(&vendoring.ResolveSourceParams{
+			VendorFile:    v.GetString("file"),
+			Component:     component,
+			ComponentType: v.GetString("type"),
+		})
 		if err != nil {
 			return err
 		}
 
 		from := v.GetString("from")
 		if from == "" {
-			from = src.Version
+			from = resolved.Source.Version
 		}
 
 		diff, err := vendoring.Diff(nil, &vendoring.DiffParams{
-			Source: src.Source,
+			Source: resolved.Source.Source,
 			From:   from,
 			To:     v.GetString("to"),
 			File:   v.GetString("diff-file"),
@@ -73,6 +68,7 @@ current pinned version and --to to the latest tag.`,
 func init() {
 	vendorDiffParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Component to diff (required)"),
+		flags.WithStringFlag("type", "t", "terraform", "Component type (terraform, helmfile, or packer)"),
 		flags.WithStringFlag("from", "", "", "Starting ref (default: current pinned version)"),
 		flags.WithStringFlag("to", "", "", "Ending ref (default: latest tag)"),
 		flags.WithStringFlag("diff-file", "", "", "Restrict the diff to a single file path within the component"),

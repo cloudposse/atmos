@@ -52,8 +52,9 @@ jobs:
     # and on top of that the post-job Go cache save (tar + zstd of
     # GOMODCACHE/GOCACHE) takes several minutes. A cold cache after dependency
     # changes plus that save pushes the job past a tight limit and the run gets
-    # cancelled. Give the slowest target enough headroom for build + cache save.
-    timeout-minutes: 30
+    # cancelled mid-save (see #2713's windows build being killed at 30m10s).
+    # Give the slowest target real headroom for build + cache save.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -106,23 +107,28 @@ jobs:
 
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          go mod download
+          # go mod download hits the network (proxy.golang.org, falling back to
+          # a direct github.com clone for modules it doesn't index) and has no
+          # built-in retry. A transient DNS resolution failure on the hosted
+          # runner otherwise fails this whole build matrix leg and cascades into
+          # skipped downstream jobs (e.g. k3s-required's "Check k3s matrix
+          # result" gate). `atmos build deps` (.atmos.d/build.yaml) wraps it
+          # with a retry policy instead of hand-rolling a shell loop here.
+          atmos build deps
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         shell: bash
         run: |
-          sh scripts/build-atmos.sh ${{ matrix.target }} test
+          atmos build binary --target=${{ matrix.target }} --version=test
 
       - name: Version
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         shell: bash
         run: |
-          case "${{ matrix.target }}" in
-            windows) ./build/atmos.exe version ;;
-            *) chmod +x ./build/atmos && ./build/atmos version ;;
-          esac
+          atmos build version --target=${{ matrix.target }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -275,7 +281,14 @@ jobs:
         run: TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
 
       - name: Acceptance tests
-        timeout-minutes: 45
+        # windows-latest is the slowest target for this suite too (see the
+        # Build job's timeout comment above): it has repeatedly run right up
+        # against a 45-minute cap and then gotten force-cancelled by the step
+        # timeout before finishing, failing the job with no real test failure
+        # in the logs. Give it the same headroom as Linux's coverage-enabled
+        # run (60m); macOS finishes this step in ~35m today so the extra
+        # headroom is a no-op for it.
+        timeout-minutes: 60
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -826,7 +826,9 @@ var (
 	ErrGetImageLayers        = errors.New("failed to get image layers")
 	ErrProcessLayer          = errors.New("failed to process layer")
 	ErrLayerDecompression    = errors.New("layer decompression error")
-	ErrTarballExtraction     = errors.New("tarball extraction error")
+	ErrLayerExtraction       = errors.New("layer extraction error")
+	ErrArchiveTooLarge       = errors.New("archive exceeds maximum size")
+	ErrArchiveEntryTooLarge  = errors.New("archive entry exceeds maximum extracted size")
 
 	// Initialization and configuration errors.
 	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
@@ -1299,6 +1301,7 @@ var (
 	ErrAIToolBlocked                = errors.New("tool is blocked")
 	ErrAIToolsDisabled              = errors.New("tools are disabled")
 	ErrAINoPrompter                 = errors.New("no prompter available")
+	ErrAIPermissionPromptFailed     = errors.New("permission prompt failed")
 	ErrAISessionsNotEnabled         = errors.New("sessions are not enabled in configuration")
 	ErrAIInvalidDurationFormat      = errors.New("invalid duration format")
 	ErrAIUnsupportedDurationUnit    = errors.New("unsupported duration unit")
@@ -1486,6 +1489,10 @@ var (
 	ErrParseVendorFile = errors.New("failed to parse vendor manifest")
 	// ErrInvalidGitRef indicates a Git ref (tag, branch, or commit) could not be resolved.
 	ErrInvalidGitRef = errors.New("invalid Git ref")
+	// ErrComponentManifestNotFound indicates no component.yaml/component.yml exists in a component's directory.
+	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
+	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
+	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

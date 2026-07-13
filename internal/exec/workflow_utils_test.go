@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -2123,4 +2124,42 @@ func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
 	err = ExecuteWorkflow(atmosConfig, "exec-not-last", "test.yaml", workflowDefinition, true, "", "", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
+}
+
+// TestExecuteWorkflowUI_TUIStartFailureIsReturned covers the line in
+// ExecuteWorkflowUI right after `w.Execute(...)` (`_ = data.Writeln("")`),
+// which unconditionally runs whether or not the TUI started successfully.
+//
+// In a headless test process there is no controlling TTY, so Bubble Tea's
+// Program.Run() cannot open one (see charmbracelet/bubbletea's
+// openInputTTY, which falls back to opening /dev/tty and fails fast when
+// none is available) and returns an error immediately instead of blocking on
+// input. That lets this test reach the `data.Writeln("")` line and the
+// subsequent `if err != nil { return ..., err }` branch without needing a
+// real interactive session.
+//
+// This fails-fast behavior is Unix-specific: on Windows, Bubble Tea reads
+// input via syscall.ReadConsole against the process's console handle, which
+// blocks waiting for real input instead of erroring when there's no
+// interactive session, hanging this test (and the whole package's test
+// binary) until the CI job's 40-minute timeout kills it.
+func TestExecuteWorkflowUI_TUIStartFailureIsReturned(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: Bubble Tea's console input read blocks instead of failing fast without a TTY")
+	}
+
+	tmpDir := t.TempDir()
+	workflowsDir := filepath.Join(tmpDir, "workflows")
+	require.NoError(t, os.MkdirAll(workflowsDir, 0o755))
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Workflows: schema.Workflows{
+			BasePath: "workflows",
+		},
+	}
+
+	_, _, _, err := ExecuteWorkflowUI(atmosConfig)
+
+	require.Error(t, err)
 }

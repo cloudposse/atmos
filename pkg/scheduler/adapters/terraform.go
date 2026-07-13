@@ -36,6 +36,7 @@ const (
 	terraformSubCommandApply   = "apply"
 	terraformSubCommandDeploy  = "deploy"
 	terraformSubCommandDestroy = "destroy"
+	terraformSubCommandInit    = "init"
 )
 
 const (
@@ -1491,7 +1492,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDeploy, terraformSubCommandDestroy:
+	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDeploy, terraformSubCommandDestroy, terraformSubCommandInit:
 		return true
 	default:
 		return false

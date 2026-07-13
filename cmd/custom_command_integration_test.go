@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,10 +19,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // stepsFromStrings is a helper to convert []string to schema.Tasks for tests.
@@ -33,6 +36,12 @@ func stepsFromStrings(commands ...string) schema.Tasks {
 	return tasks
 }
 
+// captureStdoutStderr redirects os.Stdout/os.Stderr while fn runs. Restoration
+// and pipe cleanup happen via defer (not just after fn returns normally) so a
+// panic inside fn can't leave the process's stdout/stderr permanently pointed
+// at closed pipes for the rest of the test binary. Draining the pipes on
+// background goroutines (rather than reading after fn returns) lets the close
+// step unblock those reads instead of deadlocking on a deferred restore.
 func captureStdoutStderr(t *testing.T, fn func()) (string, string) {
 	t.Helper()
 
@@ -46,23 +55,42 @@ func captureStdoutStderr(t *testing.T, fn func()) (string, string) {
 
 	os.Stdout = stdoutWriter
 	os.Stderr = stderrWriter
+	defer func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+	}()
+
+	var closeOnce sync.Once
+	closeWriters := func() {
+		closeOnce.Do(func() {
+			_ = stdoutWriter.Close()
+			_ = stderrWriter.Close()
+		})
+	}
+	defer closeWriters()
+
+	stdoutCh := make(chan string, 1)
+	stderrCh := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(stdoutReader)
+		stdoutCh <- string(data)
+	}()
+	go func() {
+		data, _ := io.ReadAll(stderrReader)
+		stderrCh <- string(data)
+	}()
 
 	fn()
 
-	require.NoError(t, stdoutWriter.Close())
-	require.NoError(t, stderrWriter.Close())
-	os.Stdout = oldStdout
-	os.Stderr = oldStderr
+	closeWriters()
 
-	stdout, err := io.ReadAll(stdoutReader)
-	require.NoError(t, err)
-	stderr, err := io.ReadAll(stderrReader)
-	require.NoError(t, err)
+	stdout := <-stdoutCh
+	stderr := <-stderrCh
 
 	require.NoError(t, stdoutReader.Close())
 	require.NoError(t, stderrReader.Close())
 
-	return string(stdout), string(stderr)
+	return stdout, stderr
 }
 
 func TestCustomCommandStepWorkingDirectory(t *testing.T) {
@@ -174,6 +202,9 @@ func TestCustomCommandCastStepInheritsWorkingDirectory(t *testing.T) {
 		t.Skip("uses POSIX shell redirection")
 	}
 	require.NoError(t, iolib.Initialize())
+	ioCtx := iolib.GetContext()
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
 
 	_ = NewTestKit(t)
 
@@ -220,9 +251,12 @@ func TestCustomCommandCastStepInheritsWorkingDirectory(t *testing.T) {
 
 	actual, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
-	expectedDir, err := filepath.EvalSymlinks(tmpDir)
-	require.NoError(t, err)
-	assert.Equal(t, expectedDir, strings.TrimSpace(string(actual)))
+	// The in-process shell interpreter sets $PWD literally to the resolved
+	// working directory (mirroring `pwd`'s default logical, non-symlink-
+	// resolving behavior), so the recorded output must match the raw
+	// tmpDir string rather than its symlink-resolved form (tmpDir sits
+	// under a symlinked path on macOS, e.g. /var -> /private/var).
+	assert.Equal(t, tmpDir, strings.TrimSpace(string(actual)))
 	require.FileExists(t, castPath)
 }
 
