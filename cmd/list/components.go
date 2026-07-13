@@ -39,6 +39,7 @@ type ComponentsOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	OnError          string
 }
 
 // componentsCmd lists atmos components.
@@ -101,6 +102,7 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
+		OnError:          v.GetString("on-error"),
 	}
 }
 
@@ -147,6 +149,7 @@ func init() {
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
+		WithOnErrorFlag,
 	)
 
 	// Register flags.
@@ -208,7 +211,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	}
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -217,6 +220,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		skip,
 		authManager,
 		authManager == nil,
+		describeStacksErrorOptions(opts.OnError),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)

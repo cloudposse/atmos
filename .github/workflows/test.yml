@@ -400,6 +400,7 @@ jobs:
         demo-folder:
           - emulator-aws
           - terraform-tests
+          - backend-provisioning
 
     timeout-minutes: 30
     steps:
@@ -897,6 +898,7 @@ jobs:
           - demo-context
           - emulator-aws
           - terraform-tests
+          - backend-provisioning
           - demo-stacks
           - quick-start-simple
           # Examples below use runtime Atmos YAML functions (`!terraform.state`, `!store`,

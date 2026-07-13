@@ -11,7 +11,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -61,122 +60,6 @@ func setupViperForTest(t *testing.T, values map[string]any) {
 			viper.Set(key, val)
 		}
 	})
-}
-
-// TestExecuteProvisionCommand tests the shared provision command implementation.
-func TestExecuteProvisionCommand(t *testing.T) {
-	tests := []struct {
-		name          string
-		args          []string
-		viperValues   map[string]any
-		setupMocks    func(*MockConfigInitializer, *MockProvisioner)
-		expectError   bool
-		expectedError error
-	}{
-		{
-			name: "successful provision",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-			},
-			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
-					Return(&schema.AtmosConfiguration{}, nil, nil)
-				mp.EXPECT().
-					CreateBackend(gomock.Any()).
-					Return(nil)
-			},
-			expectError: false,
-		},
-		{
-			name: "missing stack flag",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "",
-				"identity": "",
-			},
-			setupMocks:    func(*MockConfigInitializer, *MockProvisioner) {},
-			expectError:   true,
-			expectedError: errUtils.ErrRequiredFlagNotProvided,
-		},
-		{
-			name: "config init failure",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-			},
-			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
-					Return(nil, nil, errors.New("config init failed"))
-			},
-			expectError: true,
-		},
-		{
-			name: "provision failure",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-			},
-			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
-					Return(&schema.AtmosConfiguration{}, nil, nil)
-				mp.EXPECT().
-					CreateBackend(gomock.Any()).
-					Return(errors.New("provision failed"))
-			},
-			expectError: true,
-		},
-		{
-			name: "with auth context",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "prod",
-				"identity": "aws-prod",
-			},
-			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				mci.EXPECT().
-					InitConfigAndAuth("vpc", "prod", "aws-prod").
-					Return(&schema.AtmosConfiguration{}, &schema.AuthContext{AWS: &schema.AWSAuthContext{}}, nil)
-				mp.EXPECT().
-					CreateBackend(gomock.Any()).
-					Return(nil)
-			},
-			expectError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockConfigInit, mockProv := setupTestWithMocks(t)
-			setupViperForTest(t, tt.viperValues)
-			tt.setupMocks(mockConfigInit, mockProv)
-
-			cmd := &cobra.Command{Use: "test"}
-			parser := flags.NewStandardParser(
-				flags.WithStackFlag(),
-				flags.WithIdentityFlag(),
-			)
-			parser.RegisterFlags(cmd)
-			require.NoError(t, parser.BindToViper(viper.GetViper()))
-
-			err := ExecuteProvisionCommand(cmd, tt.args, parser, "test.RunE")
-
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.expectedError != nil {
-					assert.ErrorIs(t, err, tt.expectedError)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
 }
 
 // TestExecuteDeleteCommandWithValues tests the delete command helper function.
@@ -555,29 +438,6 @@ func TestCreateDescribeComponentFunc_ReturnsNonNil(t *testing.T) {
 	// without real config - the important thing is it doesn't panic.
 }
 
-// TestParseCommonFlags_Success tests successful parsing in ParseCommonFlags.
-func TestParseCommonFlags_Success(t *testing.T) {
-	// Test successful parsing with all flags.
-	setupViperForTest(t, map[string]any{
-		"stack":    "test-stack",
-		"identity": "test-identity",
-	})
-
-	cmd := &cobra.Command{Use: "test"}
-	parser := flags.NewStandardParser(
-		flags.WithStackFlag(),
-		flags.WithIdentityFlag(),
-	)
-	parser.RegisterFlags(cmd)
-	require.NoError(t, parser.BindToViper(viper.GetViper()))
-
-	opts, err := ParseCommonFlags(cmd, parser)
-	assert.NoError(t, err)
-	assert.NotNil(t, opts)
-	assert.Equal(t, "test-stack", opts.Stack)
-	assert.Equal(t, "test-identity", opts.Identity)
-}
-
 // TestExecuteProvisionCommandWithValues tests the provision command helper function.
 func TestExecuteProvisionCommandWithValues(t *testing.T) {
 	tests := []struct {
@@ -600,7 +460,12 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
 					CreateBackend(gomock.Any()).
-					Return(nil)
+					DoAndReturn(func(params *CreateBackendParams) error {
+						// Exercise the real DescribeFunc closure, not just verify it's
+						// non-nil, the way a real Provisioner implementation would use it.
+						_, _ = params.DescribeFunc("vpc", "dev")
+						return nil
+					})
 			},
 			expectError: false,
 		},
@@ -659,6 +524,11 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Run from an empty directory with no Atmos config: the "successful provision"
+			// case's DescribeFunc call fails fast against real ExecuteDescribeComponent
+			// rather than needing a real stack, keeping this a fast, isolated unit test.
+			t.Chdir(t.TempDir())
+
 			mockConfigInit, mockProv := setupTestWithMocks(t)
 			tt.setupMocks(mockConfigInit, mockProv)
 
@@ -733,6 +603,80 @@ func TestBackendSubcommands_BindStackFlagFromCommand(t *testing.T) {
 			if tt.name == "delete" {
 				require.NoError(t, tt.cmd.Flags().Set("force", "true"))
 			}
+
+			err := tt.cmd.RunE(tt.cmd, tt.args)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, expectedErr)
+			assert.NotErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+		})
+	}
+}
+
+// TestBackendSubcommands_StackFromViperWhenNotSetOnCLI covers the fallback path where --stack
+// (and --force, for delete) is not explicitly passed on the CLI but is available via Viper
+// (e.g. from an env var or config default) instead. Complements
+// TestBackendSubcommands_BindStackFlagFromCommand, which only exercises the CLI-flag path.
+func TestBackendSubcommands_StackFromViperWhenNotSetOnCLI(t *testing.T) {
+	tests := []struct {
+		name      string
+		cmd       *cobra.Command
+		args      []string
+		component string
+	}{
+		{
+			name:      "create",
+			cmd:       createCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "update",
+			cmd:       updateCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "delete",
+			cmd:       deleteCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "describe",
+			cmd:       describeCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "list",
+			cmd:       listCmd,
+			args:      nil,
+			component: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockConfigInit, _ := setupTestWithMocks(t)
+			setupViperForTest(t, map[string]any{
+				"stack":    "dev",
+				"identity": "",
+				"force":    true,
+			})
+
+			// These are package-level singleton *cobra.Command values shared across test
+			// functions; clear any Changed state a prior subtest may have left set so this
+			// test reliably exercises the "value came from Viper, not the CLI" fallback.
+			for _, name := range []string{"stack", "identity", "force"} {
+				if f := tt.cmd.Flags().Lookup(name); f != nil {
+					f.Changed = false
+				}
+			}
+
+			expectedErr := errors.New("stop after stack parse")
+			mockConfigInit.EXPECT().
+				InitConfigAndAuth(tt.component, "dev", "").
+				Return(nil, nil, expectedErr)
 
 			err := tt.cmd.RunE(tt.cmd, tt.args)
 			require.Error(t, err)

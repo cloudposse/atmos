@@ -40,6 +40,7 @@ type StacksOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	OnError          string
 }
 
 // stacksCmd lists atmos stacks.
@@ -82,6 +83,7 @@ func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
+		OnError:          v.GetString("on-error"),
 	}
 }
 
@@ -125,6 +127,7 @@ func init() {
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
+		WithOnErrorFlag,
 	)
 
 	// Register flags.
@@ -228,7 +231,7 @@ func executeAndExtractStacks(
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -237,6 +240,7 @@ func executeAndExtractStacks(
 		skip,
 		authManager,
 		authManager == nil,
+		describeStacksErrorOptions(opts.OnError),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
@@ -346,7 +350,7 @@ func renderStacksTreeFormat(
 	// caller-supplied template/function flags so tree output is consistent with
 	// non-tree runs of the same command invocation.
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -355,6 +359,7 @@ func renderStacksTreeFormat(
 		skip,
 		authManager,
 		authManager == nil,
+		describeStacksErrorOptions(opts.OnError),
 	)
 	if err != nil {
 		return fmt.Errorf("error re-processing stacks with provenance: %w", err)

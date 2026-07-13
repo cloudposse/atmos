@@ -27,23 +27,22 @@ versioning, encryption, and public access blocking to match secure defaults.`,
 		if err := updateParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
-		stack := getCommandFlagString(cmd, "stack")
-		identity := getCommandFlagString(cmd, "identity")
-		if stack == "" {
-			stack = v.GetString("stack")
-		}
-		if identity == "" {
-			identity = v.GetString("identity")
-		}
 		result, err := updateParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
+
+		// Prefer the CLI-supplied value (getCommandFlagString) over Viper: Viper's precedence
+		// gives an explicit Set() call priority over a bound pflag, so a caller that pre-seeds
+		// Viper (e.g. from config defaults) can otherwise shadow the flag the user just passed.
+		// Component comes from result since it may have been filled in by the interactive prompt.
+		stack := getCommandFlagString(cmd, "stack")
 		if stack == "" {
-			stack = result.Stack
+			stack = v.GetString("stack")
 		}
+		identity := getCommandFlagString(cmd, "identity")
 		if identity == "" {
-			identity = result.Identity.Value()
+			identity = v.GetString("identity")
 		}
 
 		return executeProvisionCommandWithValues(result.Component, stack, identity)

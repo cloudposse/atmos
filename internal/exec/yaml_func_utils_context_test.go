@@ -220,7 +220,7 @@ func TestProcessNodesWithContextNestedMaps(t *testing.T) {
 		},
 	}
 
-	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -241,7 +241,7 @@ func TestProcessNodesWithContextSlices(t *testing.T) {
 		},
 	}
 
-	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -263,7 +263,7 @@ func TestProcessNodesWithContextMixedTypes(t *testing.T) {
 		"complex": []any{map[string]any{"nested": true}},
 	}
 
-	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)

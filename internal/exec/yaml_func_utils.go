@@ -20,6 +20,16 @@ type UnsetMarker struct {
 	IsUnset bool
 }
 
+// DegradationWarning describes one YAML function value that could not be resolved and
+// was substituted with nil under a lenient (warn) processing pass. See
+// ProcessCustomYamlTagsLenient.
+type DegradationWarning struct {
+	Stack     string
+	Component string
+	Function  string
+	Reason    string
+}
+
 func ProcessCustomYamlTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input schema.AtmosSectionMapType,
@@ -42,7 +52,32 @@ func ProcessCustomYamlTags(
 	// so the context is empty when the top-level walk returns. Callers that need a
 	// hard reset (e.g., test isolation) can call ClearResolutionContext explicitly.
 	resolutionCtx := GetOrCreateResolutionContext()
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, nil)
+}
+
+// ProcessCustomYamlTagsLenient behaves like ProcessCustomYamlTags, except that when a
+// per-value YAML function error is classified recoverable (see isRecoverableTerraformError;
+// currently a Terraform backend/state that has not been provisioned yet), it substitutes
+// nil for that value, invokes onWarning with details, and continues processing sibling keys
+// and the rest of the tree instead of failing the whole call.
+//
+// Non-recoverable errors (auth failures, malformed YAML, misconfiguration, etc.) still fail
+// the whole call, exactly like ProcessCustomYamlTags — this deliberately does not blanket-catch
+// every error. A nil onWarning is allowed; degraded values are then substituted silently.
+//
+//nolint:revive // argument-limit: mirrors ProcessCustomYamlTags's 5 args plus the degradation callback.
+func ProcessCustomYamlTagsLenient(
+	atmosConfig *schema.AtmosConfiguration,
+	input schema.AtmosSectionMapType,
+	currentStack string,
+	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
+	onWarning func(DegradationWarning),
+) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsLenient")()
+
+	resolutionCtx := GetOrCreateResolutionContext()
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, onWarning)
 }
 
 func ProcessCustomYamlTagsWithContext(
@@ -55,7 +90,7 @@ func ProcessCustomYamlTagsWithContext(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsWithContext")()
 
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, nil)
 }
 
 func processNodes(
@@ -65,9 +100,14 @@ func processNodes(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (map[string]any, error) {
-	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo)
+	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo, nil)
 }
 
+// processNodesWithContext walks data and resolves every YAML function it finds. When
+// onWarning is non-nil, per-value errors classified recoverable by isRecoverableTerraformError
+// are tolerated: the value becomes nil, onWarning is invoked with details, and the walk
+// continues. All other errors — and every error when onWarning is nil — still abort the
+// whole call, matching the original strict behavior.
 func processNodesWithContext(
 	atmosConfig *schema.AtmosConfiguration,
 	data map[string]any,
@@ -75,6 +115,7 @@ func processNodesWithContext(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
+	onWarning func(DegradationWarning),
 ) (map[string]any, error) {
 	newMap := make(map[string]any)
 	var firstErr error
@@ -90,6 +131,19 @@ func processNodesWithContext(
 		case string:
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
+				if onWarning != nil && isRecoverableTerraformError(err) {
+					component := ""
+					if stackInfo != nil {
+						component = stackInfo.Component
+					}
+					onWarning(DegradationWarning{
+						Stack:     currentStack,
+						Component: component,
+						Function:  v,
+						Reason:    err.Error(),
+					})
+					return nil
+				}
 				log.Debug(
 					"Error processing YAML function",
 					"value", v,

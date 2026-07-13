@@ -1289,7 +1289,7 @@ func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
 		},
 	}
 
-	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil)
+	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil)
 	require.Error(t, err)
 }
 

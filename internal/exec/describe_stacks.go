@@ -114,6 +114,29 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 	})
 }
 
+// OnErrorMode selects how ExecuteDescribeStacksWithOptions handles a recoverable per-value
+// YAML function error (e.g. a Terraform backend that has not been provisioned yet).
+type OnErrorMode string
+
+const (
+	// OnErrorStrict fails the whole describe-stacks call on the first error. This is the
+	// zero value and matches the historical behavior of ExecuteDescribeStacks /
+	// ExecuteDescribeStacksWithAuthDisabled.
+	OnErrorStrict OnErrorMode = "strict"
+	// OnErrorWarn substitutes nil for an unresolved value classified recoverable, reports
+	// it via DescribeStacksErrorOptions.OnWarning, and continues processing the rest of the
+	// component/stack instead of aborting.
+	OnErrorWarn OnErrorMode = "warn"
+)
+
+// DescribeStacksErrorOptions configures how ExecuteDescribeStacksWithOptions handles
+// recoverable per-value YAML function errors. The zero value is OnErrorStrict, matching
+// ExecuteDescribeStacks's historical fail-fast behavior.
+type DescribeStacksErrorOptions struct {
+	OnError   OnErrorMode
+	OnWarning func(DegradationWarning)
+}
+
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
 func ExecuteDescribeStacks(
 	atmosConfig *schema.AtmosConfiguration,
@@ -128,7 +151,7 @@ func ExecuteDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 ) (map[string]any, error) {
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, DescribeStacksErrorOptions{})
 }
 
 // ExecuteDescribeStacksWithAuthDisabled processes stack manifests with auth explicitly disabled.
@@ -150,7 +173,35 @@ func ExecuteDescribeStacksWithAuthDisabled(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithAuthDisabled")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, DescribeStacksErrorOptions{})
+}
+
+// ExecuteDescribeStacksWithOptions is ExecuteDescribeStacksWithAuthDisabled plus opt-in
+// graceful degradation for recoverable per-value YAML function errors (see
+// DescribeStacksErrorOptions). Existing callers of ExecuteDescribeStacks /
+// ExecuteDescribeStacksWithAuthDisabled are unaffected — they implicitly pass
+// DescribeStacksErrorOptions{} (OnErrorStrict), which reproduces the original behavior
+// exactly.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacksWithAuthDisabled with one added options parameter.
+func ExecuteDescribeStacksWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithOptions")()
+
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, errOptions)
 }
 
 //nolint:revive // Internal wrapper preserves the existing ExecuteDescribeStacks call shape.
@@ -167,6 +218,7 @@ func executeDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
@@ -184,6 +236,9 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	if errOptions.OnError == OnErrorWarn {
+		processor.withDegradation(errOptions.OnWarning)
+	}
 
 	for stackFileName, stackSection := range stacksMap {
 		stackMap, ok := stackSection.(map[string]any)

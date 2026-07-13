@@ -27,27 +27,27 @@ Requires the --force flag for safety. The backend must be empty
 		if err := deleteParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
-		stack := getCommandFlagString(cmd, "stack")
-		identity := getCommandFlagString(cmd, "identity")
-		force, forceProvided := getCommandFlagBool(cmd, "force")
-		if stack == "" {
-			stack = v.GetString("stack")
-		}
-		if identity == "" {
-			identity = v.GetString("identity")
-		}
-		if !forceProvided {
-			force = v.GetBool("force")
-		}
 		result, err := deleteParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
+
+		// Prefer the CLI-supplied value (getCommandFlagString/Bool) over Viper: Viper's
+		// precedence gives an explicit Set() call priority over a bound pflag, so a caller
+		// that pre-seeds Viper (e.g. from config defaults) can otherwise shadow the flag the
+		// user just passed. Component comes from result since it may have been filled in by
+		// the interactive prompt. force isn't a StandardOptions field, so it's read here too.
+		stack := getCommandFlagString(cmd, "stack")
 		if stack == "" {
-			stack = result.Stack
+			stack = v.GetString("stack")
 		}
+		identity := getCommandFlagString(cmd, "identity")
 		if identity == "" {
-			identity = result.Identity.Value()
+			identity = v.GetString("identity")
+		}
+		force, forceProvided := getCommandFlagBool(cmd, "force")
+		if !forceProvided {
+			force = v.GetBool("force")
 		}
 
 		return executeDeleteCommandWithValues(result.Component, stack, identity, force)

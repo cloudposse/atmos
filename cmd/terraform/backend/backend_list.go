@@ -24,30 +24,24 @@ var listCmd = &cobra.Command{
 		if err := listParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
+		if _, err := listParser.Parse(ctx, args); err != nil {
+			return err
+		}
+
+		// Prefer the CLI-supplied value (getCommandFlagString) over Viper: Viper's precedence
+		// gives an explicit Set() call priority over a bound pflag, so a caller that pre-seeds
+		// Viper (e.g. from config defaults) can otherwise shadow the flag the user just passed.
 		stack := getCommandFlagString(cmd, "stack")
-		identity := getCommandFlagString(cmd, "identity")
-		format := getCommandFlagString(cmd, "format")
 		if stack == "" {
 			stack = v.GetString("stack")
 		}
+		identity := getCommandFlagString(cmd, "identity")
 		if identity == "" {
 			identity = v.GetString("identity")
 		}
+		format := getCommandFlagString(cmd, "format")
 		if format == "" {
 			format = v.GetString("format")
-		}
-		result, err := listParser.Parse(ctx, args)
-		if err != nil {
-			return err
-		}
-		if stack == "" {
-			stack = result.Stack
-		}
-		if identity == "" {
-			identity = result.Identity.Value()
-		}
-		if format == "" {
-			format = result.Format
 		}
 
 		return executeListCommandWithValues(stack, identity, format)

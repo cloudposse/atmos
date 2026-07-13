@@ -339,6 +339,25 @@ func WithProcessFunctionsFlag(options *[]flags.Option) {
 	)
 }
 
+// WithOnErrorFlag adds the --on-error flag controlling how recoverable YAML-function
+// failures (e.g. a Terraform backend that has not been provisioned yet) are handled during
+// processing.
+//
+//	strict (default): fail immediately, matching historical behavior.
+//	warn: substitute null for the unresolved value, print a warning, and continue.
+//
+// Used by: stacks, components, settings.
+func WithOnErrorFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithOnErrorFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("on-error", "", "strict", "How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): strict (fail, default) or warn (degrade with warnings)"),
+		flags.WithEnvVars("on-error", "ATMOS_LIST_ON_ERROR"),
+		flags.WithValidValues("on-error", "strict", "warn"),
+	)
+}
+
 // WithUploadFlag adds upload to Pro API flag.
 // Used by: instances.
 func WithUploadFlag(options *[]flags.Option) {

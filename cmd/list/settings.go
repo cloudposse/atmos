@@ -28,6 +28,7 @@ type SettingsOptions struct {
 	Query            string
 	ProcessTemplates bool
 	ProcessFunctions bool
+	OnError          string
 }
 
 // settingsCmd lists settings across stacks.
@@ -65,6 +66,7 @@ var settingsCmd = &cobra.Command{
 			Query:            v.GetString("query"),
 			ProcessTemplates: v.GetBool("process-templates"),
 			ProcessFunctions: v.GetBool("process-functions"),
+			OnError:          v.GetString("on-error"),
 		}
 
 		output, err := listSettingsWithOptions(cmd, v, opts, args)
@@ -84,6 +86,9 @@ func init() {
 		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+		flags.WithStringFlag("on-error", "", "strict", "How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): strict (fail, default) or warn (degrade with warnings)"),
+		flags.WithEnvVars("on-error", "ATMOS_LIST_ON_ERROR"),
+		flags.WithValidValues("on-error", "strict", "warn"),
 	)
 
 	// Register flags
@@ -139,8 +144,9 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	}
 
 	// Execute describe stacks.
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager)
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(&atmosConfig, "", nil, nil, nil, false,
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, false,
+		describeStacksErrorOptions(opts.OnError))
 	if err != nil {
 		return "", &listerrors.DescribeStacksError{Cause: err}
 	}
