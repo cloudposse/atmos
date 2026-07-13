@@ -395,6 +395,12 @@ func renderMarkdownSections(sections markdownSections, config FormatterConfig, u
 	return newline + strings.TrimRight(out.String(), " \t\n") + newline, true
 }
 
+// resolveFormatterWidth picks the width used to wrap and pad the rendered
+// error, honoring an explicit per-call MaxLineLength override first.
+// Otherwise, the configured width (settings.terminal.max_width) is a
+// maximum, not a fixed width -- it must never force content wider than the
+// actual terminal, or padded rows (like the title pill) wrap onto extra
+// visual lines in terminals narrower than the configured max.
 func resolveFormatterWidth(config FormatterConfig) int {
 	if config.MaxLineLength > 0 {
 		return config.MaxLineLength
@@ -403,11 +409,16 @@ func resolveFormatterWidth(config FormatterConfig) int {
 	configuredWidth := configuredFormatterWidth()
 	detectedWidth := detectFormatterTerminalWidth()
 
-	if configuredWidth > 0 && configuredWidth != detectedWidth {
+	switch {
+	case configuredWidth > 0 && detectedWidth > 0:
+		return min(configuredWidth, detectedWidth)
+	case configuredWidth > 0:
 		return configuredWidth
+	case detectedWidth > 0:
+		return detectedWidth
+	default:
+		return DefaultMarkdownWidth
 	}
-
-	return DefaultMarkdownWidth
 }
 
 func configuredFormatterWidth() int {
