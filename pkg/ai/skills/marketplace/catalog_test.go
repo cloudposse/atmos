@@ -234,6 +234,31 @@ func TestInstallAllBundled(t *testing.T) {
 	})
 }
 
+// TestInstallOneBundledSkill_Outcomes covers the three-way result
+// (installed/updated/skipped) the batch summary relies on to distinguish
+// fresh installs from --force updates and already-installed skips.
+func TestInstallOneBundledSkill_Outcomes(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	available, ok := LookupBundledSkill("atmos-terraform")
+	require.True(t, ok)
+
+	t.Run("fresh install reports outcomeInstalled", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true}
+		assert.Equal(t, outcomeInstalled, installer.installOneBundledSkill(&available, opts, nil))
+	})
+
+	t.Run("already installed without --force reports outcomeSkipped", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true}
+		assert.Equal(t, outcomeSkipped, installer.installOneBundledSkill(&available, opts, nil))
+	})
+
+	t.Run("already installed with --force reports outcomeUpdated", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true, Force: true}
+		assert.Equal(t, outcomeUpdated, installer.installOneBundledSkill(&available, opts, nil))
+	})
+}
+
 // TestInstall_BundledForceReplacesOnDiskDir covers the --force branch of
 // prepareInstallPath: an existing on-disk directory (with stale content that is
 // not in the registry) is removed and replaced rather than rejected.

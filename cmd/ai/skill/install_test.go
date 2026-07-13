@@ -138,9 +138,44 @@ func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, uiOutput.String(), "Discovered")
 	assert.Contains(t, uiOutput.String(), "skills installed successfully")
+	assert.Contains(t, uiOutput.String(), "Location:", "batch install should say where the skills landed")
+	assert.NotContains(t, uiOutput.String(), "atmos ai chat",
+		"a plain CLI install is never run from inside atmos ai chat, so this hint must never print")
 
 	// A representative skill actually landed on disk under the fake HOME.
 	assert.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+}
+
+// TestInstallCmd_RunE_AlreadyInstalledOmitsHintAndLocation covers the exact
+// screenshot bug: re-running install with everything already installed (0
+// new, 0 updated) must not claim a location or print the chat hint -- there
+// is nothing to report either did.
+func TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled(t *testing.T) {
+	resetFlags := func() {
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.RunE(installCmd, []string{}))
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.RunE(installCmd, []string{}))
+
+	assert.Contains(t, uiOutput.String(), "0 skills installed")
+	assert.NotContains(t, uiOutput.String(), "Location:", "nothing was installed, so there's no location to report")
+	assert.NotContains(t, uiOutput.String(), "atmos ai chat")
 }
 
 func TestInstallCmd_Examples(t *testing.T) {

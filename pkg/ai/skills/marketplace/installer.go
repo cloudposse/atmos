@@ -219,7 +219,6 @@ func printInstallSuccess(displayName, version, installPath string) error {
 	ui.Successf("Skill %q installed successfully", displayName)
 	ui.Infof("Version: %s", version)
 	ui.Infof("Location: %s", redactHomePath(installPath))
-	ui.Infof("Usage: Run `atmos ai chat` and switch to this skill with Ctrl+A")
 	return nil
 }
 
@@ -295,6 +294,59 @@ func BacktickJoin(items []string) string {
 	return strings.Join(quoted, ", ")
 }
 
+// batchInstallOutcome classifies the result of one skill in a batch install
+// (InstallAllBundled/installMultiSkillPackage), so the final summary can
+// distinguish freshly-installed skills from --force updates and
+// already-installed skips instead of a single opaque count.
+type batchInstallOutcome int
+
+const (
+	outcomeInstalled batchInstallOutcome = iota // Freshly installed; wasn't registered before.
+	outcomeUpdated                              // Was already registered; --force reinstalled it.
+	outcomeSkipped                              // Was already registered; --force not set.
+	outcomeFailed                               // Install attempt failed (see the logged warning).
+)
+
+// tallyBatchOutcomes counts each outcome type from a batch install loop.
+func tallyBatchOutcomes(outcomes []batchInstallOutcome) (installed, updated, skipped int) {
+	for _, outcome := range outcomes {
+		switch outcome {
+		case outcomeInstalled:
+			installed++
+		case outcomeUpdated:
+			updated++
+		case outcomeSkipped:
+			skipped++
+		case outcomeFailed:
+			// Already logged a warning; not counted in any tally.
+		}
+	}
+	return installed, updated, skipped
+}
+
+// printBatchInstallSummary prints the final tally for a batch install,
+// distinguishing new installs from --force updates and already-installed
+// skips, plus the canonical directory they landed in.
+func printBatchInstallSummary(installed, updated, skipped int, skillsDir string) {
+	total := installed + updated
+	switch {
+	case total == 0:
+		ui.Successf("0 skills installed")
+	case updated == 0:
+		ui.Successf("%d skills installed successfully", installed)
+	case installed == 0:
+		ui.Successf("%d skills updated successfully", updated)
+	default:
+		ui.Successf("%d skills installed successfully (%d new, %d updated)", total, installed, updated)
+	}
+	if skipped > 0 {
+		ui.Infof("%d already installed (use `--force` to reinstall)", skipped)
+	}
+	if total > 0 {
+		ui.Infof("Location: %s", redactHomePath(skillsDir))
+	}
+}
+
 // InstallAllBundled installs every skill in the embedded catalog. It mirrors
 // `atmos mcp install` with no server names given: omitting <source> entirely
 // means "act on the whole built-in set" rather than requiring a separate
@@ -327,63 +379,66 @@ func (i *Installer) InstallAllBundled(opts *InstallOptions) error {
 
 	clients := i.resolveAndAnnounceDistributionClients(opts.BasePath, opts)
 
-	installed := 0
+	outcomes := make([]batchInstallOutcome, len(catalog))
 	for idx := range catalog {
-		if i.installOneBundledSkill(&catalog[idx], opts, clients) {
-			installed++
-		}
+		outcomes[idx] = i.installOneBundledSkill(&catalog[idx], opts, clients)
 	}
+	installed, updated, skipped := tallyBatchOutcomes(outcomes)
 
-	ui.Successf("%d skills installed successfully", installed)
-	if installed > 0 {
-		ui.Infof("Usage: Run `atmos ai chat` and switch skills with Ctrl+A")
+	skillsDir, err := ResolveSkillsDir(opts.Path)
+	if err != nil {
+		skillsDir = opts.Path
 	}
+	printBatchInstallSummary(installed, updated, skipped, skillsDir)
 	return nil
 }
 
 // installOneBundledSkill installs a single bundled skill as part of an
 // InstallAllBundled batch. It skips the single-skill security confirmation
 // prompt (bundled skills are Atmos's own, already-reviewed content, and the
-// batch already got one upfront confirmation) and returns false with a
-// logged warning on a per-skill issue instead of returning an error, so the
-// rest of the batch keeps going; clients is the batch's pre-resolved
+// batch already got one upfront confirmation) and returns outcomeFailed with
+// a logged warning on a per-skill issue instead of returning an error, so
+// the rest of the batch keeps going; clients is the batch's pre-resolved
 // distribution list (empty when opts.Path is set); success is intentionally
 // silent per skill -- the batch-level summary and "Distributing to" line
 // already cover it, so only failures are worth a line.
-func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *InstallOptions, clients []string) bool {
+func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *InstallOptions, clients []string) batchInstallOutcome {
 	installName := available.Name
 	if opts.CustomName != "" {
 		installName = opts.CustomName
 	}
 
-	if !opts.Force {
-		if _, err := i.localRegistry.Get(installName); err == nil {
-			ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", installName)
-			return false
-		}
+	_, getErr := i.localRegistry.Get(installName)
+	wasInstalled := getErr == nil
+	if wasInstalled && !opts.Force {
+		ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", installName)
+		return outcomeSkipped
 	}
 
 	if _, err := readBundledMetadata(available.Name); err != nil {
 		log.Warnf("Skipping %s: %v", available.Name, err)
-		return false
+		return outcomeFailed
 	}
 
 	installPath, err := i.materializeBundledSkill(available.Name, installName, opts.Path, opts.Force)
 	if err != nil {
 		log.Warnf("Failed to install %s: %v", available.Name, err)
-		return false
+		return outcomeFailed
 	}
 
 	if err := i.registerBundledSkill(available, installName, installPath); err != nil {
 		log.Warnf("Failed to register %s: %v", available.Name, err)
-		return false
+		return outcomeFailed
 	}
 
 	if len(clients) > 0 {
 		i.distributeToClients(opts.BasePath, installPath, installName, clients, opts.Scope)
 	}
 
-	return true
+	if wasInstalled {
+		return outcomeUpdated
+	}
+	return outcomeInstalled
 }
 
 // materializeBundledSkill copies a bundled skill's files from the embedded FS
@@ -503,17 +558,39 @@ func confirmMultiSkillInstall(count int) error {
 	return requireConfirmation(fmt.Sprintf("Install all %d skills?", count), ErrInstallationCancelled)
 }
 
+// prepareOverwrite checks whether skillName is already registered and, if
+// so, either warns and reports skip=true (no --force) or best-effort removes
+// the stale install path and registry entry so the caller can reinstall
+// fresh (--force). Returns wasInstalled so the caller can distinguish
+// outcomeInstalled from outcomeUpdated once the reinstall succeeds.
+func (i *Installer) prepareOverwrite(skillName, installPath string, force bool) (wasInstalled, skip bool) {
+	_, getErr := i.localRegistry.Get(skillName)
+	wasInstalled = getErr == nil
+	if !wasInstalled {
+		return false, false
+	}
+	if !force {
+		ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", skillName)
+		return true, true
+	}
+	if err := os.RemoveAll(installPath); err != nil {
+		log.Warnf("Failed to remove existing installation for %s: %v", skillName, err)
+	}
+	_ = i.localRegistry.Remove(skillName)
+	return true, false
+}
+
 // installOneSkillFromPackage installs a single skill from a multi-skill
-// package. Returns true if the skill was successfully installed; clients is
-// the batch's pre-resolved distribution list (empty when opts.Path is set);
-// success is intentionally silent per skill -- the batch-level summary and
-// "Distributing to" line already cover it, so only failures are worth a line.
-func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts *InstallOptions, clients []string) bool {
+// package; clients is the batch's pre-resolved distribution list (empty when
+// opts.Path is set); success is intentionally silent per skill -- the
+// batch-level summary and "Distributing to" line already cover it, so only
+// failures are worth a line.
+func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts *InstallOptions, clients []string) batchInstallOutcome {
 	skillName := skill.metadata.Name
 	skillsDir, err := ResolveSkillsDir(opts.Path)
 	if err != nil {
 		log.Warnf("Failed to resolve install directory for %s: %v", skillName, err)
-		return false
+		return outcomeFailed
 	}
 	// An explicit --path flattens the layout to <path>/<skillName>, dropping
 	// the default owner/repo nesting VS Code/Copilot don't expect.
@@ -522,24 +599,19 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		installPath = filepath.Join(skillsDir, skillName)
 	}
 
-	if opts.Force {
-		if err := os.RemoveAll(installPath); err != nil {
-			log.Warnf("Failed to remove existing installation for %s: %v", skillName, err)
-		}
-		_ = i.localRegistry.Remove(skillName)
-	} else if _, err := i.localRegistry.Get(skillName); err == nil {
-		ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", skillName)
-		return false
+	wasInstalled, skip := i.prepareOverwrite(skillName, installPath, opts.Force)
+	if skip {
+		return outcomeSkipped
 	}
 
 	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
 		log.Warnf("Failed to create directory for %s: %v", skillName, err)
-		return false
+		return outcomeFailed
 	}
 
 	if err := copyDir(skill.dir, installPath); err != nil {
 		log.Warnf("Failed to install skill %s: %v", skillName, err)
-		return false
+		return outcomeFailed
 	}
 
 	installedSkill := &InstalledSkill{
@@ -556,14 +628,17 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 
 	if err := i.localRegistry.Add(installedSkill); err != nil {
 		log.Warnf("Failed to register skill %s: %v", skillName, err)
-		return false
+		return outcomeFailed
 	}
 
 	if len(clients) > 0 {
 		i.distributeToClients(opts.BasePath, installPath, skillName, clients, opts.Scope)
 	}
 
-	return true
+	if wasInstalled {
+		return outcomeUpdated
+	}
+	return outcomeInstalled
 }
 
 // installMultiSkillPackage installs multiple skills discovered in a package.
@@ -584,17 +659,17 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 
 	clients := i.resolveAndAnnounceDistributionClients(opts.BasePath, &opts)
 
-	installed := 0
-	for _, skill := range discovered {
-		if i.installOneSkillFromPackage(skill, sourceInfo, &opts, clients) {
-			installed++
-		}
+	outcomes := make([]batchInstallOutcome, len(discovered))
+	for idx, skill := range discovered {
+		outcomes[idx] = i.installOneSkillFromPackage(skill, sourceInfo, &opts, clients)
 	}
+	installed, updated, skipped := tallyBatchOutcomes(outcomes)
 
-	ui.Successf("%d skills installed successfully", installed)
-	if installed > 0 {
-		ui.Infof("Usage: Run `atmos ai chat` and switch skills with Ctrl+A")
+	skillsDir, err := ResolveSkillsDir(opts.Path)
+	if err != nil {
+		skillsDir = opts.Path
 	}
+	printBatchInstallSummary(installed, updated, skipped, skillsDir)
 	return nil
 }
 
