@@ -26,7 +26,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // UI layout constants.
@@ -936,7 +935,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 }
 
 // renderMarkdown renders markdown content to the UI channel (stderr).
-// It goes through utils.PrintfMarkdownToTUI (backed by pkg/ui/markdown and
+// It goes through ui.MarkdownMessagef (backed by pkg/ui/markdown and
 // pkg/terminal) rather than building a glamour renderer directly, so it
 // honors Atmos's own TTY/color-forcing flags (ATMOS_FORCE_TTY, FORCE_COLOR,
 // CLICOLOR_FORCE, NO_COLOR) instead of glamour's own raw os.Stdout.Fd() check,
@@ -944,7 +943,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 // (##, **, *) when stdout isn't a real TTY.
 func (ui *InitUI) renderMarkdown(markdownContent string) error {
 	atmosui.Writeln("")
-	u.PrintfMarkdownToTUI("%s", markdownContent)
+	atmosui.MarkdownMessagef("%s", markdownContent)
 
 	return nil
 }
