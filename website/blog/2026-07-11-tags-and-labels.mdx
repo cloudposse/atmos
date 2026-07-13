@@ -84,7 +84,7 @@ atmos auth login --tags admin,production   # auto-selects if exactly one match, 
 atmos auth logout --tags production        # logs out every matching provider
 ```
 
-**Bridging into your modules** — two new YAML functions read a component's own `metadata.tags`/`metadata.labels` without the usual `!template`/`toJson` boilerplate. The most common use is feeding `metadata.labels` into the `var.tags` a `terraform-null-label`-style module expects (Terraform and AWS call a map "tags"; Atmos calls it a "label" — same data, different name):
+**Bridging into your modules** — four new YAML functions read a component's own `metadata.tags`/`metadata.labels` without the usual `!template`/`toJson` boilerplate: `!tags` and `!labels` return the values directly, and `!labels.keys`/`!labels.values` return just the label map's keys or values. The most common use is feeding `metadata.labels` into the `var.tags` a `terraform-null-label`-style module expects (Terraform and AWS call a map "tags"; Atmos calls it a "label" — same data, different name):
 
 ```yaml title="stacks/orgs/acme/prod/network.yaml"
 components:
@@ -98,8 +98,6 @@ components:
         tags: !labels   # var.tags (map) <- metadata.labels
 ```
 
-`!tags`, `!labels.keys`, and `!labels.values` round out the family for when a module wants the list form or just the map's keys or values.
-
 ## Get Involved
 
-Tags and labels are supported today on components across terraform, Kubernetes, Helm, and container components, and on auth identities and providers. Auto-discovering tags/labels from cloud provider metadata (for example, mapping AWS SSO PermissionSet tags into Atmos labels automatically) is a natural next step — if that's something you need, open an issue and let us know your use case.
+Tags and labels are supported today on components across Terraform, Kubernetes, Helm, and container components, and on auth identities and providers. Auto-discovering tags/labels from cloud provider metadata (for example, mapping AWS SSO PermissionSet tags into Atmos labels automatically) is a natural next step — if that's something you need, open an issue and let us know your use case.
