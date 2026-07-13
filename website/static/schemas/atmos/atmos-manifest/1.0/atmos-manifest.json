@@ -1897,6 +1897,13 @@
         "command": {
           "type": "string"
         },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Command/scanner step arguments (supports templates)."
+        },
         "prompt": {
           "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
           "oneOf": [
