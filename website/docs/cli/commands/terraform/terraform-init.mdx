@@ -86,6 +86,28 @@ Initialize without configuring the backend (useful for syntax validation):
 atmos terraform init vpc -s dev -backend=false
 ```
 
+### Graph-backed Bulk Init
+
+Run init for multiple components through the Terraform dependency graph:
+
+```shell
+# Initialize every Terraform component, in dependency order
+atmos terraform init --all -s dev
+
+# Initialize only selected components
+atmos terraform init --components eks/apps,eks/cluster,vpc -s dev
+```
+
+Unlike `destroy`, init has no destructive-ordering requirement, so it keeps the natural forward dependency order: prerequisites are initialized before the components that depend on them.
+
+Independent init nodes can run concurrently when `--max-concurrency` is greater than `1`. Concurrent init disables the shared provider plugin cache for worker subprocesses, since it isn't safe for concurrent `terraform init` runs.
+
+```shell
+atmos terraform init --all -s dev --max-concurrency 4
+```
+
+Use `--failure-mode keep-going` to continue independent graph branches after one component fails. The default is `fail-fast`.
+
 ## Automatic Initialization
 
 Atmos automatically runs `terraform init` in these scenarios:
@@ -156,6 +178,67 @@ Atmos will:
 
         ```shell
         atmos terraform init vpc -s dev --init-pass-vars
+        ```
+    </dd>
+
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Initialize all components in all stacks, in dependency order, through the Terraform dependency graph.
+
+        **Environment variable:** `ATMOS_TERRAFORM_INIT_ALL`
+
+        ```shell
+        atmos terraform init --all -s dev
+        ```
+    </dd>
+
+    <dt>`--affected` <em>(optional)</em></dt>
+    <dd>
+        Initialize only the components affected by changes, in dependency order.
+
+        **Environment variable:** `ATMOS_TERRAFORM_INIT_AFFECTED`
+
+        ```shell
+        atmos terraform init --affected
+        ```
+    </dd>
+
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of Terraform init components to execute concurrently when using `--all`, `--affected`, or `--components`. Defaults to `1` (sequential).
+
+        **Environment variable:** `ATMOS_TERRAFORM_INIT_MAX_CONCURRENCY`
+
+        ```shell
+        atmos terraform init --all -s dev --max-concurrency 4
+        ```
+    </dd>
+
+    <dt>`--failure-mode` <em>(optional)</em></dt>
+    <dd>
+        Controls how the scheduler handles a failed component during multi-component init. Supported values:
+        - `fail-fast` *(default)* — stop scheduling new components after the first failure
+        - `keep-going` — continue independent graph branches, skipping only blocked dependents
+
+        **Environment variable:** `ATMOS_TERRAFORM_INIT_FAILURE_MODE`
+
+        ```shell
+        atmos terraform init --all -s dev --failure-mode keep-going
+        ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_INIT_LOG_ORDER`
+
+        ```shell
+        atmos terraform init --all -s dev --max-concurrency 4 --log-order grouped
         ```
     </dd>
 </dl>
