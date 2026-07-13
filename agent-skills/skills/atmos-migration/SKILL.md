@@ -188,7 +188,7 @@ those questions to the right skill:
 - **Deep merging, imports, overrides** → [atmos-stacks](../atmos-stacks/SKILL.md)
 - **Vendoring third-party components** → [atmos-vendoring](../atmos-vendoring/SKILL.md)
 - **Authentication / provider credentials** → migrating an existing AWS/GCP/Azure CLI config,
-  Leapp, Granted, or saml2aws setup? Start with the matching reference in
+  Leapp, Granted, saml2aws, or okta-aws-cli setup? Start with the matching reference in
   [Migrating Authentication](#migrating-authentication) above. For authoring new auth config
   beyond a migration, go straight to [atmos-auth](../atmos-auth/SKILL.md)
 - **Validation policies (OPA, JSON Schema)** → [atmos-validation](../atmos-validation/SKILL.md)

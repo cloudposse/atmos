@@ -19,9 +19,10 @@ the [atmos-auth](../../atmos-auth/SKILL.md) skill and its
 
 | Old gcloud CLI workflow                                                | `atmos auth` equivalent |
 |----------------------------------------------------------------------------|----------------------------|
-| `gcloud auth login` / `gcloud auth application-default login`              | `atmos auth login -i x` |
+| `gcloud auth login` (gcloud's own credential store, not ADC)               | Not relevant to `atmos auth` -- Atmos never reads gcloud's own credential store, only the ADC file (see the gotcha below) |
+| `gcloud auth application-default login`                                    | Still a required one-time prerequisite -- `gcp/adc` reads the resulting ADC file but doesn't perform this login itself. Run it once, then use `atmos auth login -i x` for the rest |
 | `gcloud config set project` / `gcloud config configurations activate x`    | No manual step -- the identity's `principal.project_id` selects this automatically |
-| `gcloud auth print-access-token`                                           | `atmos auth whoami -i x` |
+| `gcloud auth print-access-token`                                           | **No direct equivalent** -- `atmos auth whoami -i x` shows identity/account info, not a raw bearer token; nothing in Atmos prints one to stdout today |
 | Running `gcloud ...` / `terraform ...` under a specific config             | `atmos auth exec -i x -- gcloud ...` or `atmos auth shell -i x` |
 | Manual `export GOOGLE_APPLICATION_CREDENTIALS=...` scripts                 | `eval $(atmos auth env -i x)` |
 
@@ -155,8 +156,7 @@ long-lived key material.
   `gcp/adc`. This is the most common first-run failure.
 - **`gcp/service-account` needs `roles/iam.serviceAccountTokenCreator`** on the target SA for the
   base identity -- a missing grant here shows up as a 403, not a config error.
-- **`gcp/oidc` is a reserved constant, not an implemented provider kind.** Don't suggest it even
-  though it appears in the codebase's constants file -- it isn't wired up to any factory yet.
+- **`gcp/oidc` is not an available provider kind.** Don't suggest it.
 - **`lifetime` takes a duration-with-suffix string** (`"3600s"`), not a bare integer.
 
 ## Related Skills

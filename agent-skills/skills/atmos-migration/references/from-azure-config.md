@@ -20,7 +20,8 @@ auth configuration schema, see the [atmos-auth](../../atmos-auth/SKILL.md) skill
 
 | Old az CLI workflow                                                     | `atmos auth` equivalent |
 |----------------------------------------------------------------------------|----------------------------|
-| `az login` (+ device code / service principal)                             | `atmos auth login -i x` |
+| `az login` (interactive, incl. device code)                                | `atmos auth login -i x` |
+| `az login --service-principal -u <id> -p <secret>` (client secret)         | **No direct equivalent** -- see [No Direct Equivalent: Client-Secret Service Principal](#no-direct-equivalent-client-secret-service-principal) |
 | `az account set --subscription <id>`                                       | No manual step -- the identity's `principal.subscription_id` selects this automatically |
 | `az account show`                                                          | `atmos auth whoami -i x` |
 | Running `az ...` / `terraform ...` under a specific login                  | `atmos auth exec -i x -- az ...` or `atmos auth shell -i x` |
