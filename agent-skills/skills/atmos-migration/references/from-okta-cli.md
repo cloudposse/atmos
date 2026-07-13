@@ -14,6 +14,22 @@ For the full auth configuration schema, see the [atmos-auth](../../atmos-auth/SK
 its [providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md)
 reference.
 
+## Don't Confuse This With Okta's Other CLIs
+
+"Okta CLI" is overloaded across three distinct, unrelated tools -- verify which one a user
+actually means before assuming this guide applies:
+
+| Tool | Purpose | Relevant here? |
+|------|---------|----------------|
+| `okta-aws-cli` (github.com/okta/okta-aws-cli) | Generates temporary AWS IAM credentials via Okta SSO/SAML/OIDC federation | **Yes -- this is what this guide covers** |
+| "Okta CLI" (`cli.okta.com`, `okta start`/`okta apps create`) | Scaffolds sample OIDC apps and registers free developer orgs. Deprecated 2025-07-18. | No |
+| "Okta CLI Client" (github.com/okta/okta-cli-client, the deprecation notice's official replacement) | General Okta Management API client -- create/manage users, groups, and apps *within* an Okta org, authenticated to Okta itself via an API token or OAuth2 client-credentials/private-key JWT | No |
+
+The latter two never talk to AWS, never produce AWS credentials, and have no concept of a
+"profile" or "role" the way `okta-aws-cli`, saml2aws, or Granted do -- there is nothing in
+`atmos auth` that overlaps with "manage users/groups/apps in my Okta org," so no migration guide
+applies to them. Don't invent one if a user asks; confirm which tool they mean first.
+
 ## What okta-aws-cli Actually Does (verified against the upstream README)
 
 `okta-aws-cli` has three commands, not one:
