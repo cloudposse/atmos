@@ -4,6 +4,7 @@
 *.tfstate.*
 *.tfplan
 .terraform.lock.hcl
+!components/terraform/**/.terraform.lock.hcl
 
 # Generated files.
 *.generated.*

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1281,6 +1282,61 @@ func TestExecuteWorkflow_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test failure condition continuation",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "fail-step",
+				Command:          "echo fail > fail.txt && exit 7",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "implicit-success",
+				Command:          "echo skipped > skipped.txt",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "failure-handler",
+				Command:          "echo failure > failure.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateFailure),
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "always-handler",
+				Command:          "echo always > always.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateAlways),
+				WorkingDirectory: tmpDir,
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-failure-continuation", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
+	formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, strings.ReplaceAll(formattedErr, "\n", ""), "fail-step")
+
+	for _, name := range []string{"fail.txt", "failure.txt", "always.txt"} {
+		_, statErr := os.Stat(filepath.Join(tmpDir, name))
+		assert.NoError(t, statErr, "expected %s to be written", name)
+	}
+	_, statErr := os.Stat(filepath.Join(tmpDir, "skipped.txt"))
+	assert.True(t, os.IsNotExist(statErr), "implicit success step should be skipped after failure")
+}
+
 // TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand tests the fallback path
 // with a command that shell.Fields cannot parse but strings.Fields can handle.
 func TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand(t *testing.T) {
@@ -1392,6 +1448,38 @@ func TestExecuteWorkflow_DryRunShell(t *testing.T) {
 	// Dry run should not execute the command.
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
 	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	counterFile := filepath.Join(t.TempDir(), "script-ran")
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test script dry run",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "script-step",
+				Type:        schema.TaskTypeScript,
+				Interpreter: exe,
+				Script:      "echo should-not-run",
+				Env: map[string]string{
+					"_ATMOS_TEST_COUNTER_FILE": counterFile,
+				},
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-dryrun-script", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	assert.NoError(t, err)
+	_, err = os.Stat(counterFile)
+	assert.True(t, os.IsNotExist(err), "dry-run script step executed the helper process")
 }
 
 func TestExecuteWorkflow_DryRunShellWithCILogGrouping(t *testing.T) {
@@ -2036,4 +2124,42 @@ func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
 	err = ExecuteWorkflow(atmosConfig, "exec-not-last", "test.yaml", workflowDefinition, true, "", "", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
+}
+
+// TestExecuteWorkflowUI_TUIStartFailureIsReturned covers the line in
+// ExecuteWorkflowUI right after `w.Execute(...)` (`_ = data.Writeln("")`),
+// which unconditionally runs whether or not the TUI started successfully.
+//
+// In a headless test process there is no controlling TTY, so Bubble Tea's
+// Program.Run() cannot open one (see charmbracelet/bubbletea's
+// openInputTTY, which falls back to opening /dev/tty and fails fast when
+// none is available) and returns an error immediately instead of blocking on
+// input. That lets this test reach the `data.Writeln("")` line and the
+// subsequent `if err != nil { return ..., err }` branch without needing a
+// real interactive session.
+//
+// This fails-fast behavior is Unix-specific: on Windows, Bubble Tea reads
+// input via syscall.ReadConsole against the process's console handle, which
+// blocks waiting for real input instead of erroring when there's no
+// interactive session, hanging this test (and the whole package's test
+// binary) until the CI job's 40-minute timeout kills it.
+func TestExecuteWorkflowUI_TUIStartFailureIsReturned(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: Bubble Tea's console input read blocks instead of failing fast without a TTY")
+	}
+
+	tmpDir := t.TempDir()
+	workflowsDir := filepath.Join(tmpDir, "workflows")
+	require.NoError(t, os.MkdirAll(workflowsDir, 0o755))
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Workflows: schema.Workflows{
+			BasePath: "workflows",
+		},
+	}
+
+	_, _, _, err := ExecuteWorkflowUI(atmosConfig)
+
+	require.Error(t, err)
 }

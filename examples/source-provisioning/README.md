@@ -1,3 +1,11 @@
+---
+title: Source Provisioning
+tags: [Components]
+cast:
+  file: /casts/examples/source-provisioning/sources.cast
+  title: atmos source provisioning
+---
+
 # Source Provisioning
 
 Demonstrates JIT (Just-in-Time) source provisioning from both **local** and **remote** sources.

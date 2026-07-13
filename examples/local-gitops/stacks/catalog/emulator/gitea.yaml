@@ -8,9 +8,9 @@
 # watched by Flux.
 #
 # The host publishes Gitea on :3000 (pinned), so Atmos pushes to
-# http://atmos:atmos@localhost:3000/atmos/deployments.git. Inside the shared
-# emulator network the same server is reachable as `gitserver:3000`, which is how
-# Flux (running in the k3s emulator) pulls from it.
+# http://atmos:atmos@localhost:3000/atmos/deployments.git. Flux runs inside k3s
+# pods, so it pulls through a Kubernetes Service/EndpointSlice backed by this
+# emulator's live container IP (see stacks/catalog/flux.yaml).
 components:
   emulator:
     gitserver:

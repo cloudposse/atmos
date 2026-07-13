@@ -35,9 +35,11 @@ import (
 
 	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -1107,7 +1109,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
+		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
 	}
 
 	// Standardize the terraform binary on OpenTofu for the whole suite so the
@@ -1672,10 +1674,127 @@ func normalizeLineEndings(s string) string {
 
 func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
 	normalized := normalizeLineEndings(input)
+	normalized = unwrapMarkdownProseLines(normalized)
 	if ignoreTrailingWhitespace {
 		return stripTrailingWhitespace(normalized)
 	}
 	return normalized
+}
+
+func unwrapMarkdownProseLines(input string) string {
+	lines := strings.Split(input, "\n")
+	if len(lines) < 2 {
+		return input
+	}
+
+	var result []string
+	inFence := false
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(atmosansi.Strip(line))
+		if strings.HasPrefix(trimmed, "```") {
+			inFence = !inFence
+			result = append(result, line)
+			continue
+		}
+
+		for !inFence && i+1 < len(lines) && shouldUnwrapMarkdownProseLine(line, lines[i+1]) {
+			line = strings.TrimRight(line, " \t") + " " + strings.TrimLeft(lines[i+1], " \t")
+			i++
+		}
+
+		result = append(result, line)
+	}
+
+	return strings.Join(result, "\n")
+}
+
+func shouldUnwrapMarkdownProseLine(line, next string) bool {
+	plain := atmosansi.Strip(line)
+	nextPlain := atmosansi.Strip(next)
+	trimmed := strings.TrimSpace(plain)
+	nextTrimmed := strings.TrimSpace(nextPlain)
+	if trimmed == "" || nextTrimmed == "" {
+		return false
+	}
+	if strings.HasPrefix(plain, " ") || strings.HasPrefix(plain, "\t") ||
+		strings.HasPrefix(nextPlain, " ") || strings.HasPrefix(nextPlain, "\t") {
+		return false
+	}
+	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
+		return false
+	}
+	if looksLikeDataLine(trimmed) {
+		return false
+	}
+	if len([]rune(trimmed)) < 50 && !strings.HasPrefix(trimmed, "**Error:**") && !strings.HasPrefix(trimmed, "💡") {
+		return false
+	}
+	return true
+}
+
+// snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
+// at the start of a rendered log line. These must never be merged into
+// adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+
+// snapshotToastIconPrefixes lists the canonical single-line toast icons from
+// pkg/ui/theme/icons.go. A line starting with one of these icons is always an
+// independent ui.Success/Info/Warning/Error/Experimental call, never a
+// word-wrapped continuation of the previous line's markdown paragraph, so it
+// must never be merged during snapshot normalization. Sourced directly from
+// the theme package so new icons don't silently reopen this bug.
+var snapshotToastIconPrefixes = []string{
+	theme.IconCheckmark,
+	theme.IconXMark,
+	theme.IconWarning,
+	theme.IconInfo,
+	theme.IconExperimental,
+}
+
+func isSnapshotStructuralLine(line string) bool {
+	switch {
+	case strings.HasPrefix(line, "#"):
+		return true
+	case strings.HasPrefix(line, "- "):
+		return true
+	case strings.HasPrefix(line, "* "):
+		return true
+	// "• " is the glamour-rendered bullet glyph that markdown source "- "/"* "
+	// becomes after rendering; treat it the same as the raw markdown prefixes above.
+	case strings.HasPrefix(line, "• "):
+		return true
+	case strings.HasPrefix(line, "```"):
+		return true
+	case strings.HasPrefix(line, "│"):
+		return true
+	case strings.HasPrefix(line, "╷") || strings.HasPrefix(line, "╵"):
+		return true
+	// charm-log level prefixes must never be merged into adjacent markdown prose.
+	case snapshotLogLevelPrefixRe.MatchString(line):
+		return true
+	default:
+		for _, icon := range snapshotToastIconPrefixes {
+			if strings.HasPrefix(line, icon) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func looksLikeDataLine(line string) bool {
+	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "]") {
+		return true
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_.-]+:\s`).MatchString(line) && !strings.HasPrefix(line, "**Error:**") {
+		return true
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_.-]+\s*=`).MatchString(line) {
+		return true
+	}
+	return false
 }
 
 // Generate a unified diff using gotextdiff.

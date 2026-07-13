@@ -10,10 +10,13 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestNormalizeSessionOptionsDefaultsAndClampsDurations(t *testing.T) {
@@ -36,6 +39,29 @@ func TestNormalizeSessionOptionsDefaultsAndClampsDurations(t *testing.T) {
 	}
 	if opts.KeyInterval != 0 {
 		t.Fatalf("key interval = %s, want 0", opts.KeyInterval)
+	}
+	ps1, ok := opts.Env["PS1"]
+	if !ok || !strings.Contains(ps1, "> ") {
+		t.Fatalf("PS1 = %q, want a default prompt containing %q", ps1, "> ")
+	}
+}
+
+func TestNormalizeSessionOptionsPreservesExplicitPS1(t *testing.T) {
+	opts := &SessionOptions{Env: map[string]string{"PS1": "$ "}}
+	normalizeSessionOptions(opts)
+
+	if got := opts.Env["PS1"]; got != "$ " {
+		t.Fatalf("PS1 = %q, want caller-supplied %q to be preserved", got, "$ ")
+	}
+}
+
+func TestDefaultSessionPromptFallsBackWhenStylesUnavailable(t *testing.T) {
+	original := getCurrentStyles
+	getCurrentStyles = func() *theme.StyleSet { return nil }
+	t.Cleanup(func() { getCurrentStyles = original })
+
+	if got := defaultSessionPrompt(); got != "> " {
+		t.Fatalf("defaultSessionPrompt() = %q, want %q", got, "> ")
 	}
 }
 
@@ -888,5 +914,48 @@ func TestRunSessionReturnsActionErrors(t *testing.T) {
 	})
 	if !errors.Is(err, ErrUnknownSessionAction) {
 		t.Fatalf("expected unknown action error, got %v", err)
+	}
+}
+
+func TestSessionProcessWaitIsIdempotent(t *testing.T) {
+	want := errors.New("process exited")
+	var calls atomic.Int32
+	wait := newSessionProcessWait(func() error {
+		calls.Add(1)
+		time.Sleep(10 * time.Millisecond)
+		return want
+	})
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 3)
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- wait()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	if calls.Load() != 1 {
+		t.Fatalf("wait function calls = %d, want 1", calls.Load())
+	}
+	for err := range errs {
+		if !errors.Is(err, want) {
+			t.Fatalf("wait error = %v, want %v", err, want)
+		}
+	}
+}
+
+func TestWaitForSessionProcessTimesOut(t *testing.T) {
+	err := waitForSessionProcess(&sessionProcess{
+		wait: newSessionProcessWait(func() error {
+			time.Sleep(time.Hour)
+			return nil
+		}),
+	}, time.Nanosecond)
+	if !errors.Is(err, errSessionProcessWaitTimeout) {
+		t.Fatalf("expected session process wait timeout, got %v", err)
 	}
 }

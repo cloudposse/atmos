@@ -17,9 +17,9 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // webflowSpinnerPollInterval is the polling interval used by the spinner
@@ -71,15 +71,15 @@ func displayWebflowDialog(authURL string) {
 	content.WriteString("\n\n")
 	content.WriteString(urlStyle.Render(authURL))
 
-	utils.PrintfMessageToTUI("%s\n", boxStyle.Render(content.String()))
+	ui.Writef("%s\n", boxStyle.Render(content.String()))
 }
 
 // displayWebflowDialogPlainText shows the authentication URL in plain text (non-TTY).
 func displayWebflowDialogPlainText(authURL string) {
-	utils.PrintfMessageToTUI("🔐 **AWS Browser Authentication (Non-Interactive)**\n")
-	utils.PrintfMessageToTUI("Visit this URL on a device with a browser:\n")
-	utils.PrintfMessageToTUI("%s\n", authURL)
-	utils.PrintfMessageToTUI("After signing in, paste the authorization code below.\n")
+	ui.Writef("🔐 **AWS Browser Authentication (Non-Interactive)**\n")
+	ui.Writef("Visit this URL on a device with a browser:\n")
+	ui.Writef("%s\n", authURL)
+	ui.Writef("After signing in, paste the authorization code below.\n")
 }
 
 // Spinner model for interactive waiting (follows SSO pattern from sso.go).

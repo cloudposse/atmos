@@ -27,7 +27,6 @@
 # Demo binaries and large audio files
 tools/director/director
 demos/audio/
-demo/screengrabs/.bin/
 
 # Generated landing-page demo recordings (VHS output).
 # NEVER commit these — they bloat the repo. The build pipeline renders them and
@@ -116,11 +115,14 @@ tools/lintroller/.lintroller
 /custom-gcl
 tools/gomodcheck/.gomodcheck
 
-# golangci-lint cache. Worktrees point GOLANGCI_LINT_CACHE at a repo-local dir to
-# avoid cross-worktree lock contention; it's large (100MB+) and machine-local, so
-# never commit it.
+# golangci-lint per-worktree cache + lock isolation (see
+# scripts/run-custom-golangci-lint.sh). The cache is large (100MB+); .golangci-tmp
+# holds the relocated golangci-lint.lock (via TMPDIR) so parallel worktree lints
+# don't serialize on the machine-global lock. Both are machine-local — never commit.
 .golangci-cache/
 **/.golangci-cache/
+.golangci-tmp/
+**/.golangci-tmp/
 
 # Generic repo-local cache dir (e.g. GOLANGCI_LINT_CACHE, tool scratch space).
 .cache/
@@ -131,6 +133,7 @@ tools/gomodcheck/.gomodcheck
 .claude/plans/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/state/
 
 performance-optimization/
 node_modules
@@ -172,3 +175,9 @@ reply_to_*.sh
 
 # Generated JUnit test reports from `atmos terraform test` in CI.
 *.junit.xml
+
+# Python bytecode from cast validation helpers (demo/casts/cast_checks.py).
+__pycache__/
+
+# Per-worktree golangci-lint cache (GOLANGCI_LINT_CACHE).
+.cache/

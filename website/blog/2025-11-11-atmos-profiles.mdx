@@ -8,6 +8,8 @@ tags:
 release: v1.199.0
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Stop fighting with different Atmos configurations for development, CI/CD, and production. Profiles let you switch contexts with a single flag while keeping your core configuration consistent.
 
 <!--truncate-->
@@ -189,6 +191,12 @@ atmos profile show developer
 ```
 
 The output shows you exactly what settings the profile provides, where it's located, and how to use it.
+
+See it in action — listing available profiles and inspecting one in detail:
+
+<CastPlayer src="/casts/examples/config-profiles/list-and-show.cast" title="atmos config profiles" chrome controls scrubber />
+
+[View the full example](/examples/config-profiles)
 
 ## Why This Matters
 

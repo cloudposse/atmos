@@ -870,6 +870,11 @@ type CIGroupsConfig struct {
 // cache root) at Atmos startup and saves it at exit, using the active CI
 // provider's cache store (e.g. the GitHub Actions cache). All operations are
 // no-ops when no cache-capable CI provider is detected (i.e. outside CI).
+//
+// A fixed set of Atmos's own auth session-cache subdirectories (AWS SSO
+// tokens, Azure device-code tokens, AWS webflow refresh tokens, provisioned
+// identity metadata) is always excluded from the cache, regardless of Paths.
+// See docs/prd/native-ci/framework/ci-cache.md#default-excluded-auth-paths.
 type CICacheConfig struct {
 	// Enabled is the master switch for the CI cache (env: ATMOS_CI_CACHE_ENABLED).
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
@@ -1569,7 +1574,7 @@ type ConfigAndStacksInfo struct {
 	FailFast                   bool
 	KeepGoing                  bool
 	DisablePluginCache         bool
-	TerraformPlanLogOrder      string
+	TerraformLogOrder          string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
 	TerraformPlanSummaryFile   string

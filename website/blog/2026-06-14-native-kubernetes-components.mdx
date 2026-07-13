@@ -5,6 +5,8 @@ authors: [osterman]
 tags: [feature]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos now treats Kubernetes as a first-class component type. Define Kubernetes
 objects — inline manifests, files, directories, or Kustomize overlays — in your
 stack configuration, then `render`, `diff`, `apply`, and `delete` them through
@@ -46,6 +48,10 @@ atmos kubernetes apply  argocd -s plat-ue2-dev    # server-side apply
 
 `--all` and `--affected` run components in dependency order, so the same change
 detection that drives Terraform pipelines works for Kubernetes.
+
+<CastPlayer src="/casts/examples/kubernetes/lifecycle.cast" title="atmos kubernetes lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/kubernetes)
 
 When native CI is enabled, Kubernetes commands now write a compact job summary
 to the CI provider summary file, such as `$GITHUB_STEP_SUMMARY` in GitHub

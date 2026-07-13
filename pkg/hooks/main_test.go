@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // TestMain is the package's test entry point. It checks for two env-gate
@@ -37,5 +41,14 @@ func TestMain(m *testing.M) {
 		fmt.Fprint(os.Stdout, os.Getenv("_ATMOS_TEST_STDOUT_BODY"))
 		os.Exit(0)
 	}
+
+	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
+	// (used by pkg/ci CI annotations/log groups, exercised via command_engine.go)
+	// don't panic or silently no-op during tests.
+	if ioCtx, err := iolib.NewContext(); err == nil {
+		data.InitWriter(ioCtx)
+		ui.InitFormatter(ioCtx)
+	}
+
 	os.Exit(m.Run())
 }

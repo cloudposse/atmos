@@ -21,8 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -219,6 +218,9 @@ func generateDocument(
 	if err := applyTerraformDocs(baseDir, docsGenerate, mergedData); err != nil {
 		return err
 	}
+	if _, ok := mergedData["terraform_docs"]; !ok {
+		mergedData["terraform_docs"] = ""
+	}
 
 	// 3) Fetch the template.
 	chosenTemplate := fetchTemplate(atmosConfig, docsGenerate, baseDir)
@@ -238,7 +240,9 @@ func generateDocument(
 		return fmt.Errorf("%w: %s: %s", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
-	u.PrintfMessageToTUI("\n%s Generated docs\n\n", theme.Styles.Checkmark)
+	ui.Writeln("")
+	ui.Success("Generated docs")
+	ui.Writeln("")
 	log.Debug("Documentation generated", "output", outputPath)
 	return nil
 }

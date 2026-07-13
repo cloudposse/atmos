@@ -1,0 +1,79 @@
+commands:
+  - name: casts generate examples demo-workflows deploy
+    description: Regenerate the Demo Workflows example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-terraform-workdir
+        working_directory: &demo_workflows_fixture "../../.context/cast-fixtures/demo-workflows"
+        output: none
+        command: rm -rf components/myapp/.terraform components/myapp/.terraform.lock.hcl components/myapp/dev-myapp.terraform.tfvars.json
+      - type: cast
+        name: deploy
+        working_directory: *demo_workflows_fixture
+        title: "Workflows: run stack-aware commands in sequence"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-workflows/deploy.cast"
+        steps:
+          - type: simulate
+            text: "# list workflow definitions from stacks/workflows"
+          - type: simulate
+            text: &list_cmd atmos workflow list
+          - type: shell
+            name: list-workflows
+            duration: 450ms
+            interval: 750ms
+            command: *list_cmd
+          - type: simulate
+            text: "# run the deploy workflow for the dev stack"
+          - type: simulate
+            text: &deploy_cmd atmos workflow deploy -s dev
+          - type: shell
+            name: deploy
+            duration: 450ms
+            interval: 750ms
+            command: *deploy_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-workflows deploy
+  - name: casts validate examples demo-workflows deploy
+    description: Validate the Demo Workflows example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-workflows/deploy.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos workflow list",
+              "deploy.yaml",
+              "atmos workflow deploy -s dev",
+              "atmos describe component myapp --query .vars",
+              "app_name: workflow-demo",
+              "stage: dev",
+              "atmos terraform plan myapp",
+              'deployment = "workflow-demo-dev"',
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"demo-workflows cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[deploy]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"demo-workflows cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
