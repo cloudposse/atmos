@@ -11,7 +11,9 @@ vars:
 # https://atmos.tools/cli/commands/toolchain
 dependencies:
   tools:
-    [[ .Config.terraform_command ]]: "latest"
+    # `terraform_command` selects the invoked binary (see atmos.yaml); the toolchain
+    # registry key differs for OpenTofu (`opentofu`, not the `tofu` binary name).
+    '[[ if eq .Config.terraform_command "tofu" ]]opentofu[[ else ]]terraform[[ end ]]': "latest"
 
 components:
   emulator:
