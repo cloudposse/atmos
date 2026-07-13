@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // MockTool is a mock implementation of the Tool interface.
@@ -523,28 +524,6 @@ func TestChecker_CheckPermission_ModeYOLO(t *testing.T) {
 	assert.True(t, allowed)
 }
 
-// simulateStdin replaces os.Stdin with a pipe that feeds the given input,
-// calls f, then restores os.Stdin.
-func simulateStdin(t *testing.T, input string, f func()) {
-	t.Helper()
-
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	_, err = io.WriteString(w, input)
-	require.NoError(t, err)
-	w.Close()
-
-	old := os.Stdin
-	os.Stdin = r
-	defer func() {
-		os.Stdin = old
-		r.Close()
-	}()
-
-	f()
-}
-
 func TestNewCLIPrompter(t *testing.T) {
 	p := NewCLIPrompter()
 	assert.NotNil(t, p)
@@ -636,7 +615,8 @@ func TestCLIPrompter_displayPrompt_NoCache(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "test_tool")
 	assert.Contains(t, output, "A test tool.")
-	assert.Contains(t, output, "y/N")
+	// The choice options are now presented via a huh select/confirm form in
+	// Prompt, not printed as plain text by displayPrompt.
 }
 
 func TestCLIPrompter_displayPrompt_WithCache(t *testing.T) {
@@ -667,8 +647,6 @@ func TestCLIPrompter_displayPrompt_WithCache(t *testing.T) {
 
 	output := buf.String()
 	assert.Contains(t, output, "test_tool")
-	assert.Contains(t, output, "Always allow")
-	assert.Contains(t, output, "a/y/n/d")
 	// Parameters section should be printed.
 	assert.Contains(t, output, "key")
 }
@@ -870,326 +848,73 @@ func TestCLIPrompter_Prompt_CachedDenied(t *testing.T) {
 	assert.False(t, allowed)
 }
 
-func TestCLIPrompter_Prompt_NoCache_Yes(t *testing.T) {
-	p := NewCLIPrompter()
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "y\n", func() {
-		// Suppress stderr output.
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.True(t, allowed)
-}
-
-func TestCLIPrompter_Prompt_NoCache_No(t *testing.T) {
-	p := NewCLIPrompter()
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "n\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.False(t, allowed)
-}
-
-func TestCLIPrompter_Prompt_NoCache_YesLong(t *testing.T) {
-	p := NewCLIPrompter()
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "yes\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.True(t, allowed)
-}
-
-func TestCLIPrompter_Prompt_NoCache_Default(t *testing.T) {
-	p := NewCLIPrompter()
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.False(t, allowed)
-}
-
-func TestCLIPrompter_Prompt_WithCache_Always(t *testing.T) {
-	tmpDir := t.TempDir()
-	cache, err := NewPermissionCache(tmpDir)
-	require.NoError(t, err)
-
-	p := NewCLIPrompterWithCache(cache)
-	tool := &MockTool{name: "new_tool", description: "A new tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "a\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.True(t, allowed)
-	// Tool should be saved in cache.
-	assert.True(t, cache.IsAllowed("new_tool"))
-}
-
-func TestCLIPrompter_Prompt_WithCache_DenyPersistent(t *testing.T) {
-	tmpDir := t.TempDir()
-	cache, err := NewPermissionCache(tmpDir)
-	require.NoError(t, err)
-
-	p := NewCLIPrompterWithCache(cache)
-	tool := &MockTool{name: "new_tool", description: "A new tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "d\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.False(t, allowed)
-	// Tool should be saved in deny cache.
-	assert.True(t, cache.IsDenied("new_tool"))
-}
-
-func TestCLIPrompter_Prompt_WithParams(t *testing.T) {
-	p := NewCLIPrompter()
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	ctx := context.Background()
-	params := map[string]interface{}{"component": "vpc", "stack": "dev"}
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "y\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, params)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.True(t, allowed)
-}
-
-func TestCLIPrompter_Prompt_ReadError(t *testing.T) {
-	p := NewCLIPrompter()
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	ctx := context.Background()
-
-	// Create a pipe but close the write end immediately to cause EOF/error.
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	w.Close() // Close write end so reads return EOF.
-
-	oldStdin := os.Stdin
-	os.Stdin = r
-	defer func() {
-		os.Stdin = oldStdin
-		r.Close()
-	}()
-
-	// Suppress stderr output.
-	sr, sw, err := os.Pipe()
-	require.NoError(t, err)
-	oldStderr := os.Stderr
-	os.Stderr = sw
-
-	_, promptErr := p.Prompt(ctx, tool, nil)
-
-	sw.Close()
-	os.Stderr = oldStderr
-	sr.Close()
-
-	// EOF results in an error from ReadString.
-	assert.Error(t, promptErr)
-	assert.Contains(t, promptErr.Error(), "failed to read input")
-}
-
-func TestCLIPrompter_Prompt_WithCache_OnceAllow(t *testing.T) {
-	tmpDir := t.TempDir()
-	cache, err := NewPermissionCache(tmpDir)
-	require.NoError(t, err)
-
-	p := NewCLIPrompterWithCache(cache)
-	tool := &MockTool{name: "once_tool", description: "A once tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "y\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.True(t, allowed)
-	// "y" (allow once) should NOT be persisted.
-	assert.False(t, cache.IsAllowed("once_tool"))
-}
-
-// TestCLIPrompter_Prompt_WithCache_OnceDeny tests "n" (deny once) with cache.
-func TestCLIPrompter_Prompt_WithCache_OnceDeny(t *testing.T) {
-	tmpDir := t.TempDir()
-	cache, err := NewPermissionCache(tmpDir)
-	require.NoError(t, err)
-
-	p := NewCLIPrompterWithCache(cache)
-	tool := &MockTool{name: "once_tool", description: "A once tool."}
-	ctx := context.Background()
-
-	var allowed bool
-	var promptErr error
-
-	simulateStdin(t, "n\n", func() {
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		oldStderr := os.Stderr
-		os.Stderr = w
-
-		allowed, promptErr = p.Prompt(ctx, tool, nil)
-
-		w.Close()
-		os.Stderr = oldStderr
-		r.Close()
-	})
-
-	assert.NoError(t, promptErr)
-	assert.False(t, allowed)
-	// "n" (deny once) should NOT be persisted.
-	assert.False(t, cache.IsDenied("once_tool"))
-}
-
-// TestCLIPrompter_Prompt_WithCache_ReadError tests that read errors are propagated.
-func TestCLIPrompter_Prompt_WithCache_ReadError(t *testing.T) {
-	tmpDir := t.TempDir()
-	cache, err := NewPermissionCache(tmpDir)
-	require.NoError(t, err)
-
-	p := NewCLIPrompterWithCache(cache)
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	ctx := context.Background()
-
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	w.Close() // Immediately close the write end to cause EOF.
-
-	oldStdin := os.Stdin
-	os.Stdin = r
-	defer func() {
-		os.Stdin = oldStdin
-		r.Close()
-	}()
-
-	sr, sw, err := os.Pipe()
-	require.NoError(t, err)
-	oldStderr := os.Stderr
-	os.Stderr = sw
-
-	_, promptErr := p.Prompt(ctx, tool, nil)
-
-	sw.Close()
-	os.Stderr = oldStderr
-	sr.Close()
-
-	assert.Error(t, promptErr)
-	assert.Contains(t, promptErr.Error(), "failed to read input")
+// TestCLIPrompter_Prompt_NoTTY verifies that Prompt fails loudly with
+// ErrInteractiveNotAvailable instead of hanging or silently defaulting to
+// deny when stdin isn't a TTY, for both the cache and no-cache code paths.
+// Under `go test` there is no TTY, so the huh select/confirm form is never
+// actually driven here; see pkg/runner/step's
+// TestInteractiveHandlers_ExecuteWithoutTTY for the established pattern this
+// mirrors.
+func TestCLIPrompter_Prompt_NoTTY(t *testing.T) {
+	if terminal.New().IsTTY(terminal.Stdin) {
+		t.Skip("stdin is a TTY; Prompt would block on an interactive prompt")
+	}
+
+	tests := []struct {
+		name        string
+		newPrompter func(t *testing.T) *CLIPrompter
+		params      map[string]interface{}
+	}{
+		{
+			name: "no cache",
+			newPrompter: func(t *testing.T) *CLIPrompter {
+				t.Helper()
+				return NewCLIPrompter()
+			},
+		},
+		{
+			name: "no cache with params",
+			newPrompter: func(t *testing.T) *CLIPrompter {
+				t.Helper()
+				return NewCLIPrompter()
+			},
+			params: map[string]interface{}{"component": "vpc", "stack": "dev"},
+		},
+		{
+			name: "with cache",
+			newPrompter: func(t *testing.T) *CLIPrompter {
+				t.Helper()
+				tmpDir := t.TempDir()
+				cache, err := NewPermissionCache(tmpDir)
+				require.NoError(t, err)
+				return NewCLIPrompterWithCache(cache)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := tt.newPrompter(t)
+			tool := &MockTool{name: "test_tool", description: "A test tool."}
+			ctx := context.Background()
+
+			// Suppress the header written by displayPrompt.
+			r, w, err := os.Pipe()
+			require.NoError(t, err)
+			oldStderr := os.Stderr
+			os.Stderr = w
+
+			allowed, promptErr := p.Prompt(ctx, tool, tt.params)
+
+			w.Close()
+			os.Stderr = oldStderr
+			r.Close()
+
+			require.Error(t, promptErr)
+			assert.ErrorIs(t, promptErr, errUtils.ErrInteractiveNotAvailable)
+			assert.False(t, allowed)
+		})
+	}
 }
 
 // TestCLIPrompter_handleCachedResponse_SaveError verifies that when AddAllow/AddDeny
@@ -1235,7 +960,10 @@ func TestCLIPrompter_handleCachedResponse_SaveError(t *testing.T) {
 			r.Close()
 
 			assert.Equal(t, tt.expectedResult, result)
-			assert.Contains(t, buf.String(), "Warning")
+			// The message is rendered via ui.Warningf, which prefixes the
+			// themed warning icon (theme.IconWarning) rather than the
+			// hardcoded "⚠️  Warning: " text previously used.
+			assert.Contains(t, buf.String(), "Failed to save permission")
 		})
 	}
 }
