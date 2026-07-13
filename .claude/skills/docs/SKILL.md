@@ -71,10 +71,11 @@ Example:
 
 ## Changelog Posts
 
-Changelog posts live in `website/blog/` as dated `.mdx` files. Use the **`changelog` skill**
-(`.claude/skills/changelog/SKILL.md`) for the template, frontmatter, tag/author rules, and style requirements
-(problem-first framing, no backtick-opening prose, optional cast embeds, no Go-internals leakage) — don't
-restate them here.
+Changelog posts live in `website/blog/` as dated `.mdx` files (required only for non-draft PRs targeting
+`main`, labeled `minor`/`major` — CI also accepts `.md`, but `.mdx` is this repo's convention). Use the
+**`changelog` skill** (`.claude/skills/changelog/SKILL.md`) for the template, frontmatter, tag/author rules,
+and style requirements (problem-first framing, no backtick-opening prose, optional cast embeds, no
+Go-internals leakage) — don't restate them here.
 
 ## Release Docs
 

@@ -14,8 +14,11 @@ skill all point here instead of restating these rules. Don't re-duplicate them e
 
 ## When a post is required
 
-Only PRs labeled `minor` or `major` need one — see the `pull-request` skill's label decision tree. CI enforces
-this via `.github/workflows/changelog-check.yml`, which checks for a new `.mdx` file under `website/blog/`.
+Only non-draft PRs targeting `main`, labeled `minor` or `major`, need one — see the `pull-request` skill's
+label decision tree. CI enforces this via `.github/workflows/changelog-check.yml`, which checks for a new
+`website/blog/*.md` or `*.mdx` file (draft PRs, and PRs targeting a branch other than `main`, are exempt
+entirely). Write posts as `.mdx` regardless — Rule 3 below embeds `<CastPlayer>` as real JSX, which only
+`.mdx` renders; CI accepts `.md` but that's not this repo's convention.
 If a change is genuinely internal-only with zero user-visible effect, it doesn't get a post at all — that
 invariant belongs to the `roadmap` skill ("no changelog post for internal-only refactors"); don't work around
 it by writing an implementation-heavy post instead.

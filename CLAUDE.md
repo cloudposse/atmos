@@ -314,7 +314,8 @@ All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use keba
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
-- PRs labeled `minor`/`major` MUST include a blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
+- Non-draft PRs targeting `main`, labeled `minor`/`major`, MUST include a blog post:
+  `website/blog/YYYY-MM-DD-feature-name.mdx` (CI accepts `.md` too, but `.mdx` is this repo's convention)
 - See the `changelog` skill (`.claude/skills/changelog/SKILL.md`) for the MDX template, frontmatter,
   `tags.yml`/`authors.yml` rules, and style requirements (problem-first framing, no backtick-opening prose,
   optional cast embeds, no Go-internals leakage)
