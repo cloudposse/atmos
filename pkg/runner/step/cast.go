@@ -142,11 +142,11 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 		if discardErr := rec.Discard(); discardErr != nil {
 			runErr = errors.Join(runErr, discardErr)
 		}
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast discarded (recording failed): %s\n", rec.Path())
+		ui.Warningf("Cast discarded (recording failed): %s", rec.Path())
 	} else if closeErr := rec.Close(); closeErr != nil {
 		runErr = closeErr
 	} else {
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
+		ui.Successf("Cast recorded: %s", rec.Path())
 		runErr = renderCastOutputs(step, rec.Path())
 	}
 	result := NewStepResult(rec.Path()).WithMetadata("cast", rec.Path())
