@@ -64,3 +64,31 @@ atmos toolchain install
         Reinstall even if already installed
     </dd>
 </dl>
+
+## How Tools Are Installed on Disk
+
+Atmos installs each tool under a version-specific directory
+(`<install_path>/bin/<owner>/<repo>/<version>/`) and adapts the on-disk layout to
+the shape of the downloaded archive:
+
+- **Single-binary tools** (for example `jq`, `terraform`, `kubectl`) are placed
+  directly in the version directory as a flat executable.
+- **Multi-file ("onedir") tools** (for example `aws/aws-cli` and `nodejs/node`)
+  ship a binary together with runtime siblings — a bundled language runtime,
+  shared libraries, or `node_modules`. For these, Atmos preserves the complete
+  extracted archive under a `.pkg` subdirectory and exposes the registry
+  entrypoints (such as `aws`, `node`, `npm`, `npx`) as symlinks into that tree.
+  This keeps each executable next to the files it needs at runtime, matching how
+  the upstream `aqua` CLI installs the same packages.
+
+Symlink entrypoints inside an archive (such as `npm` → `../lib/node_modules/...`)
+are preserved, and the tool's directory on `PATH` is unchanged — so
+[`atmos toolchain env`](/cli/commands/toolchain/env),
+[`exec`](/cli/commands/toolchain/exec), and
+[`which`](/cli/commands/toolchain/which) work identically for both layouts.
+
+:::note Windows
+Onedir tools rely on symlinked entrypoints, which require elevated privileges or
+Developer Mode on Windows. Full Windows support for multi-file packages is
+tracked separately; single-binary tools are unaffected.
+:::
