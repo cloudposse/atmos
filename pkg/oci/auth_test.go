@@ -366,7 +366,7 @@ func TestGetGHCRAuth_NilConfig(t *testing.T) {
 	// Note: In practice, this shouldn't happen, but defensive programming is good.
 	defer func() {
 		if r := recover(); r != nil {
-			t.Errorf("getGHCRAuth panicked with nil config: %v", r)
+			t.Errorf("GHCRAuth panicked with nil config: %v", r)
 		}
 	}()
 

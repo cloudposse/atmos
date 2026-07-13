@@ -368,7 +368,7 @@ func installPullImageShim(t *testing.T, shim *pullImageShim) {
 	t.Cleanup(func() { remoteGet = original })
 }
 
-// ghcrConfigWithCreds returns a config that causes getGHCRAuth to resolve a
+// ghcrConfigWithCreds returns a config that causes GHCRAuth to resolve a
 // non-anonymous Basic auth for ghcr.io.
 func ghcrConfigWithCreds() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
