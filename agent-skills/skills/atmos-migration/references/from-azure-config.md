@@ -37,8 +37,7 @@ command -- and `eval $(atmos auth env -i <identity>)` if the user wants their no
 **Azure is the one cloud where this isn't a clean "never touches your default files" story --
 be upfront about that rather than overclaiming isolation:**
 
-- Atmos keeps its own per-identity token cache under `~/.azure/atmos/<realm>/msal_token_cache.json`
-  (confirmed in `pkg/auth/providers/azure/device_code.go` and `pkg/auth/cloud/azure/msal_cache.go`).
+- Atmos keeps its own per-identity token cache under `~/.azure/atmos/<realm>/msal_token_cache.json`.
 - It **also** writes to the shared `~/.azure/msal_token_cache.json` -- the same path bare `az`
   reads -- specifically so a plain `az` command picks up the Atmos-authenticated session without
   the user needing `atmos auth exec`/`shell` at all. This is a deliberate compatibility choice,

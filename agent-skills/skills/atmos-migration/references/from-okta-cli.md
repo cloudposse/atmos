@@ -27,9 +27,8 @@ reference.
 Atmos's `aws/saml` + `driver: Okta` provider (built on the vendored `saml2aws` library) is a
 **different client-side authentication method against the same kind of SAML AWS Federation App**:
 it calls Okta's classic `/api/v1/authn` API directly with username/password plus an MFA challenge
-(Push, TOTP, SMS, WebAuthn, YubiKey, Duo -- all confirmed in `pkg/provider/okta/okta.go` in the
-vendored `saml2aws` module), then exchanges the resulting session for the same SAML assertion
-`okta-aws-cli web` would get.
+(Push, TOTP, SMS, WebAuthn, YubiKey, Duo), then exchanges the resulting session for the same SAML
+assertion `okta-aws-cli web` would get.
 
 ## Identifying the User's Shape
 
@@ -102,20 +101,17 @@ phishing-resistant-auth policies).
 
 **After: there is no Atmos equivalent today.** Do not fabricate a mapping -- if `atmos auth login`
 with `driver: Okta` fails because the org blocks direct API auth, there's no workaround via
-`aws/saml`. This is a confirmed, explicitly tracked gap:
-
-- `docs/prd/okta-auth-identity.md` lists the current limitation verbatim: *"No device
-  authorization flow: Cannot use modern OAuth Device Authorization Grant."*
-- The roadmap tracks the fix as **"Native Okta Authentication (Device Code Flow)"**
-  (`website/src/data/roadmap.js`, status: planned, quarter: Q1 2026, PRD: `okta-auth-identity`) --
-  a dedicated `okta/*` identity provider using Device Authorization Grant, intended to federate
-  into AWS, Azure, and GCP plus direct Okta API access.
+`aws/saml`. This is a confirmed, publicly acknowledged gap, not a guess: Atmos's own team has
+scoped a dedicated `okta/*` identity provider using OAuth 2.0 Device Authorization Grant, intended
+to federate into AWS, Azure, and GCP plus direct Okta API access, as a planned (not yet shipped)
+feature -- check [atmos.tools/roadmap](https://atmos.tools/roadmap) for current status, since this
+guide's own state can drift out of date.
 
 Give the user honest options:
 
-1. **Keep using `okta-aws-cli web` standalone** alongside Atmos until the native `okta/*` provider
-   ships -- no harm running both during the gap.
-2. **Point them at the roadmap item** if they want to track when this lands.
+1. **Keep using `okta-aws-cli web` standalone** alongside Atmos until native Okta device-flow
+   support ships -- no harm running both during the gap.
+2. **Point them at the public roadmap** if they want to track when this lands.
 3. Do not suggest asking their org to weaken its auth policy just to unblock this migration --
    that trades a real security control for CLI convenience.
 
@@ -132,7 +128,7 @@ pointer as above; don't propose `aws/saml` as a substitute for these, it doesn't
 Users who want an Okta access token for Azure federated workload identity, GCP workload identity
 federation, direct Okta API calls (user info, groups), or third-party OIDC services hit the same
 gap -- Atmos's only Okta integration point today is the AWS-specific SAML `driver: Okta`. There is
-no general-purpose Okta identity provider yet. Same `okta-auth-identity` PRD/roadmap item as above.
+no general-purpose Okta identity provider yet. Same planned-but-not-shipped roadmap item as above.
 
 ## Common Gotchas
 

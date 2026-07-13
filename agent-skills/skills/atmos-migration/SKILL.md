@@ -103,9 +103,9 @@ credential tooling the user has today and route to the matching reference:
 
 All are pure config-translation guides -- there is no `atmos auth import`/`migrate` command.
 None of them require touching the user's IaC migration path; they can run before, after, or
-independently of one. `from-okta-cli.md` is the one exception to "full mapping exists": it
-covers a supported path (classic SAML Okta AWS app) and an explicitly unsupported one (OIDC
-Device Authorization Grant) -- read it fully before promising a user anything.
+independently of one. `from-okta-cli.md` is the one exception to "full mapping exists": whether it
+works depends on the org's Okta auth policy, not on a different AWS app type -- read it fully
+before promising a user anything.
 
 ## The Minimum-Viable Migration
 
@@ -232,5 +232,6 @@ Things to push back on if a user (or another agent) proposes them during migrati
 - [References/from-aws2saml.md](references/from-aws2saml.md) -- mapping saml2aws config to
   `aws/saml`, the provider it directly inspired
 - [References/from-okta-cli.md](references/from-okta-cli.md) -- okta-aws-cli migration: supported
-  for classic SAML Okta AWS apps, explicitly unsupported for OIDC Device Authorization Grant apps
-  (tracked in `docs/prd/okta-auth-identity.md`, roadmap: Native Okta Authentication)
+  when the org allows direct password+MFA API auth, explicitly unsupported for the OIDC
+  device-authorization flow (planned roadmap item, not yet shipped -- see
+  [atmos.tools/roadmap](https://atmos.tools/roadmap))

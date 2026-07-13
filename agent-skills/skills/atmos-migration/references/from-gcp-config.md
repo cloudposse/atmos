@@ -36,7 +36,7 @@ the [atmos-auth](../../atmos-auth/SKILL.md) skill and its
 If the user wants `gcloud`/`terraform`/other tools to "just work" in their normal shell without a
 subshell wrapper, `eval $(atmos auth env -i <identity>)` redirects the standard GCP SDK env vars
 (`GOOGLE_APPLICATION_CREDENTIALS`, `CLOUDSDK_CONFIG`, `GOOGLE_CLOUD_PROJECT`) to Atmos-managed
-files -- confirmed in `pkg/auth/cloud/gcp/env.go`. The user's actual
+files. The user's actual
 `~/.config/gcloud/application_default_credentials.json` and gcloud named configurations are never
 touched; Atmos just points the current shell at its own managed credential files instead. Safe to
 add to `.bashrc`/`.zshrc` -- doesn't trigger a login prompt by itself.
