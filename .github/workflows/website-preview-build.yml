@@ -40,6 +40,18 @@ jobs:
         with:
           version: 9
 
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Generate atmos-manifest schema
+        # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is
+        # never hand-maintained or committed, only generated here from the embedded schema
+        # (pkg/datafetcher/schema/atmos/manifest/1.0.json), the single source of truth.
+        run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
       - name: Install Dependencies and Build Website
         run: |
           node --version

@@ -186,3 +186,18 @@ commands:
                   else
                     go test ./tests -v -count=1 -timeout 40m -run "$filter" -regenerate-snapshots
                   fi
+
+          - name: schema
+            description: Regenerate the atmos-manifest JSON Schema website copy from the embedded schema
+            # No working_directory here (see the "notices" command above for why).
+            env:
+              <<: *go_auto_env
+              SCHEMA_OUTPUT: website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+            steps:
+              - type: spin
+                title: Generating atmos-manifest schema
+                command: go run . stack schema {{ .env.SCHEMA_OUTPUT }}
+                timeout: 2m
+              - type: toast
+                level: success
+                content: atmos-manifest schema regenerated at {{ .env.SCHEMA_OUTPUT }}.
