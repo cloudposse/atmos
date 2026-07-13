@@ -343,66 +343,6 @@ func TestParseTerraformRunOptionsNormalizesValidatedValues(t *testing.T) {
 	assert.Equal(t, terraformLogOrderGrouped, result.LogOrder)
 }
 
-func TestParseLabelsFlag(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     string
-		expected  map[string]string
-		expectErr bool
-	}{
-		{
-			name:     "empty string returns nil",
-			input:    "",
-			expected: nil,
-		},
-		{
-			name:     "single pair",
-			input:    "cost-center=platform",
-			expected: map[string]string{"cost-center": "platform"},
-		},
-		{
-			name:  "multiple pairs",
-			input: "cost-center=platform,compliance=sox",
-			expected: map[string]string{
-				"cost-center": "platform",
-				"compliance":  "sox",
-			},
-		},
-		{
-			name:     "whitespace around pairs and values is trimmed",
-			input:    " cost-center = platform , compliance=sox ",
-			expected: map[string]string{"cost-center": "platform", "compliance": "sox"},
-		},
-		{
-			name:     "blank segments between commas are skipped",
-			input:    "cost-center=platform,,compliance=sox",
-			expected: map[string]string{"cost-center": "platform", "compliance": "sox"},
-		},
-		{
-			name:      "missing equals sign errors",
-			input:     "not-valid",
-			expectErr: true,
-		},
-		{
-			name:      "empty key errors",
-			input:     "=platform",
-			expectErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseLabelsFlag(tt.input)
-			if tt.expectErr {
-				assert.Error(t, err)
-				return
-			}
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
-
 func TestTerraformRunOptions_Fields(t *testing.T) {
 	// Test that TerraformRunOptions struct has all expected fields.
 	opts := TerraformRunOptions{

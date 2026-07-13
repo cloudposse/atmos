@@ -683,18 +683,9 @@ func performTagsLogout(ctx context.Context, authManager auth.AuthManager, filter
 // buildNoProvidersMatchTagsError returns a helpful error listing tags that do exist,
 // so the user can retry with a valid tag.
 func buildNoProvidersMatchTagsError(providers map[string]schema.Provider, filterTags []string) error {
-	tagSet := make(map[string]struct{})
-	for name := range providers {
-		for _, tag := range providers[name].Tags {
-			tagSet[tag] = struct{}{}
-		}
-	}
-
-	availableTags := make([]string, 0, len(tagSet))
-	for tag := range tagSet {
-		availableTags = append(availableTags, tag)
-	}
-	sort.Strings(availableTags)
+	availableTags := tags.CollectAvailableTags(providers, func(provider schema.Provider) []string {
+		return provider.Tags
+	})
 
 	err := errUtils.Build(errUtils.ErrNoProvidersMatchTags).
 		WithExplanationf("No providers match tags %v", filterTags)

@@ -76,3 +76,24 @@ func TestSortedKeysAndValues(t *testing.T) {
 		}
 	}
 }
+
+func TestSortedKeysAndValues_NilAndEmpty(t *testing.T) {
+	t.Run("nil map", func(t *testing.T) {
+		if keys := SortedKeys(nil); len(keys) != 0 {
+			t.Fatalf("SortedKeys(nil) = %v, want empty", keys)
+		}
+		if values := SortedValues(nil); len(values) != 0 {
+			t.Fatalf("SortedValues(nil) = %v, want empty", values)
+		}
+	})
+
+	t.Run("empty map", func(t *testing.T) {
+		empty := map[string]string{}
+		if keys := SortedKeys(empty); len(keys) != 0 {
+			t.Fatalf("SortedKeys(empty) = %v, want empty", keys)
+		}
+		if values := SortedValues(empty); len(values) != 0 {
+			t.Fatalf("SortedValues(empty) = %v, want empty", values)
+		}
+	})
+}

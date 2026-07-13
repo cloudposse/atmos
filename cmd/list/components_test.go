@@ -339,57 +339,6 @@ func TestBuildComponentFilters(t *testing.T) {
 	}
 }
 
-func TestParseTagsFlag(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  []string
-	}{
-		{"empty string returns nil", "", nil},
-		{"single tag", "production", []string{"production"}},
-		{"comma list is split and trimmed", "production, tier-1 , admin", []string{"production", "tier-1", "admin"}},
-		{"blank entries are dropped", "production,,tier-1", []string{"production", "tier-1"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, parseTagsFlag(tt.input))
-		})
-	}
-}
-
-func TestParseLabelsFlag(t *testing.T) {
-	t.Run("empty string returns nil", func(t *testing.T) {
-		got, err := parseLabelsFlag("")
-		require.NoError(t, err)
-		assert.Nil(t, got)
-	})
-
-	t.Run("single pair", func(t *testing.T) {
-		got, err := parseLabelsFlag("cost-center=platform")
-		require.NoError(t, err)
-		assert.Equal(t, map[string]string{"cost-center": "platform"}, got)
-	})
-
-	t.Run("multiple pairs are split and trimmed", func(t *testing.T) {
-		got, err := parseLabelsFlag("cost-center=platform, compliance = sox")
-		require.NoError(t, err)
-		assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, got)
-	})
-
-	t.Run("missing equals sign errors", func(t *testing.T) {
-		got, err := parseLabelsFlag("cost-center")
-		require.Error(t, err)
-		assert.Nil(t, got)
-	})
-
-	t.Run("empty key errors", func(t *testing.T) {
-		got, err := parseLabelsFlag("=platform")
-		require.Error(t, err)
-		assert.Nil(t, got)
-	})
-}
-
 // TestBuildComponentFilters_TagsAndLabels covers the new filter wiring,
 // including that a malformed --labels value surfaces an error.
 func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {

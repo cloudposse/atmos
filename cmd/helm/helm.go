@@ -84,37 +84,57 @@ func newOperationCommand(name, short string) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().Bool("all", false, "Process all Helm components in dependency order.")
-	cmd.Flags().Bool("affected", false, "Process affected Helm components in dependency order.")
-	cmd.Flags().Bool("ci", false, "Enable CI mode for automated pipelines (writes job summary).")
-	cmd.Flags().Bool("include-dependents", false, "Include dependent components when processing affected Helm components.")
-	cmd.Flags().String("repo-path", "", "Path to the already cloned target repository to use as the affected baseline.")
-	cmd.Flags().String("base", "", "Git base ref or SHA to compare against for affected detection.")
-	cmd.Flags().String("ref", "", "Git ref to compare against for affected detection.")
-	cmd.Flags().String("sha", "", "Git SHA to compare against for affected detection.")
-	cmd.Flags().String("ssh-key", "", "Path to the SSH private key used to clone the target ref for affected detection.")
-	cmd.Flags().String("ssh-key-password", "", "Password for the SSH private key used to clone the target ref for affected detection.")
-	cmd.Flags().Bool("clone-target-ref", false, "Clone the target ref instead of checking it out in the current repository for affected detection.")
-	cmd.Flags().StringSlice("tags", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1")
-	cmd.Flags().String("labels", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox")
+	// Register operation-specific flags through the standard parser for CLI consistency.
+	flags.NewStandardParser(operationFlagOptions(name)...).RegisterFlags(cmd)
+
+	return cmd
+}
+
+// operationFlagOptions returns the standard-parser options for a Helm operation
+// command: the shared selection/affected flags plus operation-specific output and target flags.
+func operationFlagOptions(name string) []flags.Option {
+	options := []flags.Option{
+		flags.WithBoolFlag("all", "", false, "Process all Helm components in dependency order."),
+		flags.WithBoolFlag("affected", "", false, "Process affected Helm components in dependency order."),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary)."),
+		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected Helm components."),
+		flags.WithStringFlag("repo-path", "", "", "Path to the already cloned target repository to use as the affected baseline."),
+		flags.WithStringFlag("base", "", "", "Git base ref or SHA to compare against for affected detection."),
+		flags.WithStringFlag("ref", "", "", "Git ref to compare against for affected detection."),
+		flags.WithStringFlag("sha", "", "", "Git SHA to compare against for affected detection."),
+		flags.WithStringFlag("ssh-key", "", "", "Path to the SSH private key used to clone the target ref for affected detection."),
+		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
+		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
+		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+	}
 
 	if name == "template" {
-		cmd.Flags().String("output", "", "Write rendered manifests to a single multi-document YAML file.")
-		cmd.Flags().String("output-dir", "", "Write rendered manifests to a directory.")
-		cmd.Flags().Bool("split", false, "Write one rendered manifest file per object. Requires --output-dir.")
+		options = append(
+			options,
+			flags.WithStringFlag("output", "", "", "Write rendered manifests to a single multi-document YAML file."),
+			flags.WithStringFlag("output-dir", "", "", "Write rendered manifests to a directory."),
+			flags.WithBoolFlag("split", "", false, "Write one rendered manifest file per object. Requires --output-dir."),
+		)
 	}
 
 	if name == "apply" || name == "deploy" {
-		cmd.Flags().String("target", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster.")
+		options = append(
+			options,
+			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
+		)
 	}
 
 	if name == "diff" || name == "plan" {
-		cmd.Flags().String("against", "", "Baseline to diff against: 'release' (the deployed release, default), or 'target[:<name>]' for the git deployment-repo provision target (offline).")
-		cmd.Flags().String("from-manifest", "", "Diff against a local baseline manifest file instead of the cluster (offline).")
-		cmd.Flags().Int("context", 3, "Number of unchanged context lines to show around each change.")
+		options = append(
+			options,
+			flags.WithStringFlag("against", "", "", "Baseline to diff against: 'release' (the deployed release, default), or 'target[:<name>]' for the git deployment-repo provision target (offline)."),
+			flags.WithStringFlag("from-manifest", "", "", "Diff against a local baseline manifest file instead of the cluster (offline)."),
+			flags.WithIntFlag("context", "", 3, "Number of unchanged context lines to show around each change."),
+		)
 	}
 
-	return cmd
+	return options
 }
 
 func validateOperationArgs(cmd *cobra.Command, args []string) error {

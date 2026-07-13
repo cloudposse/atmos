@@ -53,6 +53,38 @@ func TestParseLabelsFlag(t *testing.T) {
 		}
 	})
 
+	t.Run("blank segments between commas are skipped", func(t *testing.T) {
+		got, err := ParseLabelsFlag("cost-center=platform,,compliance=sox")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"cost-center": "platform", "compliance": "sox"}
+		if len(got) != len(want) {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", k, got[k], v)
+			}
+		}
+	})
+
+	t.Run("value containing an additional equals sign", func(t *testing.T) {
+		got, err := ParseLabelsFlag("key=val=ue")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"key": "val=ue"}
+		if len(got) != len(want) {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", k, got[k], v)
+			}
+		}
+	})
+
 	t.Run("missing equals sign errors", func(t *testing.T) {
 		if _, err := ParseLabelsFlag("cost-center"); err == nil {
 			t.Fatal("expected error for missing '='")

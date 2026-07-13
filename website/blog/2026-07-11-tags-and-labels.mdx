@@ -7,7 +7,7 @@ tags: [feature]
 
 Your stack hierarchy picks one way to organize your infrastructure — org, account, region, component type — and it can only pick one. `vpc` in `stacks/orgs/acme/prod/network.yaml` tells you where it lives in that tree; it doesn't tell you it's tier-1, or that platform owns it, or that it's in scope for SOX. Those characteristics don't belong to one branch of the tree — they apply across many stacks and many components at once, and a single component is usually several of them simultaneously. Your AWS accounts and auth identities have the same problem: `prod-admin` doesn't tell you it's the production one, or the elevated one, until you already know that.
 
-Tags and labels give components — and stacks, accounts, and auth identities — that organizational context directly, so you can select and act on infrastructure by what it is instead of by where you filed it.
+Tags and labels give components that organizational context directly — components get both; auth identities and providers get tags — so you can select and act on infrastructure by what it is instead of by where you filed it.
 
 <!--truncate-->
 

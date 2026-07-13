@@ -151,11 +151,11 @@ func isAbstractComponent(compData any) bool {
 func tagsAndLabelsFromComponent(compData any) ([]string, map[string]string) {
 	compMap, ok := compData.(map[string]any)
 	if !ok {
-		return nil, nil
+		return tags.ToStringSlice(nil), tags.ToStringMap(nil)
 	}
 	metadata, ok := compMap["metadata"].(map[string]any)
 	if !ok {
-		return nil, nil
+		return tags.ToStringSlice(nil), tags.ToStringMap(nil)
 	}
 	return tags.ToStringSlice(metadata["tags"]), tags.ToStringMap(metadata["labels"])
 }

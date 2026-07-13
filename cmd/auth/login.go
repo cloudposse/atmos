@@ -260,18 +260,9 @@ func selectIdentityByTags(authManager auth.AuthManager, filterTags []string) (st
 // buildNoIdentitiesMatchTagsError returns a helpful error listing tags that do exist,
 // so the user can retry with a valid tag.
 func buildNoIdentitiesMatchTagsError(identities map[string]schema.Identity, filterTags []string) error {
-	tagSet := make(map[string]struct{})
-	for name := range identities {
-		for _, tag := range identities[name].Tags {
-			tagSet[tag] = struct{}{}
-		}
-	}
-
-	availableTags := make([]string, 0, len(tagSet))
-	for tag := range tagSet {
-		availableTags = append(availableTags, tag)
-	}
-	sort.Strings(availableTags)
+	availableTags := tags.CollectAvailableTags(identities, func(identity schema.Identity) []string {
+		return identity.Tags
+	})
 
 	err := errUtils.Build(errUtils.ErrNoIdentitiesMatchTags).
 		WithExplanationf("No identities match tags %v", filterTags)

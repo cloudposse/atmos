@@ -4,6 +4,8 @@
 package tags
 
 import (
+	"sort"
+
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -33,4 +35,25 @@ func MatchesTags(tags []string, filterTags []string, mode TagMode) bool {
 	}
 
 	return len(lo.Intersect(filterTags, tags)) > 0
+}
+
+// CollectAvailableTags returns the sorted, deduplicated set of tags across all
+// items, using getTags to extract each item's tags. Used to build "available
+// tags" hints for no-match errors (e.g. auth identities/providers).
+func CollectAvailableTags[T any](items map[string]T, getTags func(T) []string) []string {
+	defer perf.Track(nil, "tags.CollectAvailableTags")()
+
+	tagSet := make(map[string]struct{})
+	for name := range items {
+		for _, tag := range getTags(items[name]) {
+			tagSet[tag] = struct{}{}
+		}
+	}
+
+	availableTags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		availableTags = append(availableTags, tag)
+	}
+	sort.Strings(availableTags)
+	return availableTags
 }

@@ -20,6 +20,9 @@ func TestMatchesTags(t *testing.T) {
 		{"all: no overlap", []string{"a"}, []string{"x", "y"}, TagModeAll, false},
 		{"all: entity has no tags", nil, []string{"x"}, TagModeAll, false},
 		{"any: duplicate filter tags", []string{"a"}, []string{"a", "a"}, TagModeAny, true},
+		{"all: empty filter matches tagged entity", []string{"a"}, nil, TagModeAll, true},
+		{"all: empty filter matches untagged entity", nil, nil, TagModeAll, true},
+		{"all: duplicate filter tags with full overlap", []string{"a", "b"}, []string{"a", "a", "b"}, TagModeAll, true},
 	}
 
 	for _, tt := range tests {

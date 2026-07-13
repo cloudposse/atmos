@@ -117,4 +117,15 @@ func TestMatchesGraphTagsAndLabels(t *testing.T) {
 		require.True(t, matchesGraphTagsAndLabels(node, &schema.ConfigAndStacksInfo{Labels: map[string]string{"compliance": "sox"}}))
 		require.False(t, matchesGraphTagsAndLabels(node, &schema.ConfigAndStacksInfo{Labels: map[string]string{"compliance": "wrong"}}))
 	})
+
+	t.Run("tags and labels together", func(t *testing.T) {
+		require.True(t, matchesGraphTagsAndLabels(node, &schema.ConfigAndStacksInfo{
+			Tags:   []string{"production"},
+			Labels: map[string]string{"compliance": "sox"},
+		}))
+		require.False(t, matchesGraphTagsAndLabels(node, &schema.ConfigAndStacksInfo{
+			Tags:   []string{"production"},
+			Labels: map[string]string{"compliance": "wrong"},
+		}))
+	})
 }
