@@ -1,3 +1,11 @@
+---
+title: Background Steps
+tags: [Automation]
+cast:
+  file: /casts/examples/background-steps/service.cast
+  title: atmos background service
+---
+
 # Background container services
 
 This example shows how to start a long-running container service in the background,

@@ -31,7 +31,7 @@ type AIProviderConfig struct {
 	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
 	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"`   // Token caching settings
 
-	// CLI provider fields (for claude-code, codex-cli, gemini-cli).
+	// CLI provider fields (for claude-code, codex-cli, copilot-cli, gemini-cli).
 	Binary       string   `yaml:"binary,omitempty" json:"binary,omitempty" mapstructure:"binary"`
 	MaxTurns     int      `yaml:"max_turns,omitempty" json:"max_turns,omitempty" mapstructure:"max_turns"`
 	MaxBudgetUSD float64  `yaml:"max_budget_usd,omitempty" json:"max_budget_usd,omitempty" mapstructure:"max_budget_usd"`

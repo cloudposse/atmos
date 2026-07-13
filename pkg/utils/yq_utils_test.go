@@ -292,6 +292,19 @@ func TestEvaluateYqExpression_ExistingKeyNoDefault(t *testing.T) {
 	assert.Equal(t, "my-bucket", result)
 }
 
+func TestEvaluateYqExpression_TemplateScalar(t *testing.T) {
+	data := map[string]any{
+		"stacks": map[string]any{
+			"name_template": "{{ .vars.stage }}",
+		},
+	}
+
+	result, err := EvaluateYqExpression(nil, data, ".stacks.name_template")
+
+	require.NoError(t, err)
+	assert.Equal(t, "{{ .vars.stage }}", result)
+}
+
 // TestEvaluateYqExpression_NullValueWithDefault verifies that YQ default
 // values work when a key exists but has a null value.
 //

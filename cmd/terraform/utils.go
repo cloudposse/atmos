@@ -691,7 +691,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.TerraformFailureMode = opts.FailureMode
 	info.FailFast = opts.FailureMode == terraformFailureModeFailFast
 	info.KeepGoing = opts.FailureMode == terraformFailureModeKeepGoing
-	info.TerraformPlanLogOrder = opts.PlanLogOrder
+	info.TerraformLogOrder = opts.LogOrder
 	info.TerraformPlanHide = opts.PlanHide
 	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
 	info.TerraformPlanSummaryFile = opts.PlanSummaryFile
@@ -828,7 +828,8 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy
 // apply. It is a no-op for non-deploy commands, when planfile storage is not
-// configured, when planfile verification is off, or when no stored planfile was
+// configured (unless --verify-plan explicitly requested verification, which then
+// errors), when planfile verification is off, or when no stored planfile was
 // downloaded (the stored planfile only exists when the before.terraform.deploy
 // hook fetched it under CI). On a match, or under warn, it points info at the
 // freshly generated plan for apply.
@@ -848,11 +849,13 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	// Planfile verification is opt-in via planfile storage. Without it there is no
-	// stored plan to download, verify, or require, so deploy proceeds untouched
-	// (mirrors the before.terraform.deploy download hook's storage gate). This also
-	// keeps plain `deploy` (no planfile config) free of verification warnings.
+	// stored plan to download, verify, or require (mirrors the
+	// before.terraform.deploy download hook's storage gate): an explicit
+	// --verify-plan request fails loudly instead of silently no-op'ing, while plain
+	// `deploy` (no planfile config) proceeds untouched and free of verification
+	// warnings.
 	if !planfile.StorageConfigured(&verifyAtmosConfig.Components.Terraform.Planfiles) {
-		return nil
+		return handleUnconfiguredPlanfileStorage(&verifyAtmosConfig, info)
 	}
 
 	canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, info)
@@ -872,6 +875,27 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	return e.VerifyPlanfile(info, storedPlanPath, mode)
+}
+
+// handleUnconfiguredPlanfileStorage resolves a verification request that cannot be
+// honored because no planfile storage is configured. An explicit --verify-plan /
+// ATMOS_TERRAFORM_VERIFY_PLAN=true errors: verification depends on storage settings
+// (stores, default, priority) the flag alone cannot stand in for. A config-set
+// verify mode only warns (pre-existing configs may carry it without storage), and
+// the default (nothing requested) stays silent so plain deploys are unaffected.
+func handleUnconfiguredPlanfileStorage(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if info.VerifyPlanMode == schema.PlanfileVerifyFail {
+		return errUtils.Build(errUtils.ErrPlanfileStorageNotConfigured).
+			WithExplanationf("`--verify-plan` needs a stored planfile to verify component %q in stack %q against, but no planfile storage is configured", info.ComponentFromArg, info.Stack).
+			WithHint("Configure planfile storage in `atmos.yaml` under `components.terraform.planfiles` (named `stores` plus a `default` store or a `priority` list); see https://atmos.tools/ci/planfile-storage").
+			Err()
+	}
+
+	if v := atmosConfig.Components.Terraform.Planfiles.Verify; v == schema.PlanfileVerifyFail || v == schema.PlanfileVerifyWarn {
+		log.Warn("components.terraform.planfiles.verify is set but planfile storage is not configured; skipping planfile verification",
+			logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
+	}
+	return nil
 }
 
 // handleMissingStoredPlan applies the configured behavior when a deploy found no

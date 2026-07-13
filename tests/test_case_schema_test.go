@@ -20,6 +20,7 @@ import (
 // returned from cmd.Execute(). A non-zero exit code OR a non-nil error means failure.
 func runValidateSchema(t *testing.T) (exitCode int, err error) {
 	t.Helper()
+	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 
 	original := errUtils.OsExit
 	t.Cleanup(func() { errUtils.OsExit = original })

@@ -3,10 +3,10 @@ package env
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	pkgdata "github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -26,6 +26,7 @@ type outputConfig struct {
 	fileMode    os.FileMode
 	atmosConfig *schema.AtmosConfiguration
 	formatOpts  []Option // Options to pass to FormatData (e.g., WithExport).
+	maskStdout  bool
 }
 
 // WithFileMode sets the file permission mode for file output.
@@ -54,6 +55,15 @@ func WithFormatOptions(opts ...Option) OutputOption {
 
 	return func(c *outputConfig) {
 		c.formatOpts = opts
+	}
+}
+
+// WithMaskStdout masks secret-looking values when writing to stdout.
+func WithMaskStdout(mask bool) OutputOption {
+	defer perf.Track(nil, "env.WithMaskStdout")()
+
+	return func(c *outputConfig) {
+		c.maskStdout = mask
 	}
 }
 
@@ -104,8 +114,10 @@ func Output(data map[string]string, formatStr string, outputFile string, opts ..
 	}
 
 	// lgtm[go/clear-text-logging] - Intentional stdout output for shell evaluation.
-	fmt.Print(formatted)
-	return nil
+	if cfg.maskStdout {
+		return pkgdata.Write(formatted)
+	}
+	return pkgdata.WriteUnmasked(formatted)
 }
 
 // outputJSON handles JSON format output to file or stdout.
@@ -117,7 +129,22 @@ func outputJSON(data map[string]string, outputFile string, cfg *outputConfig) er
 	// For stdout, use PrintAsJSON if atmosConfig is available for pretty printing,
 	// otherwise fall back to standard JSON encoding.
 	if cfg.atmosConfig != nil {
+		if cfg.maskStdout {
+			content, err := u.GetHighlightedJSON(cfg.atmosConfig, data)
+			if err != nil {
+				return err
+			}
+			return pkgdata.Write(content)
+		}
 		return u.PrintAsJSON(cfg.atmosConfig, data)
+	}
+
+	if cfg.maskStdout {
+		content, err := u.GetHighlightedJSON(cfg.atmosConfig, data)
+		if err != nil {
+			return err
+		}
+		return pkgdata.Write(content)
 	}
 
 	// Fallback: encode JSON directly to stdout.

@@ -414,11 +414,17 @@ func TestShortImage(t *testing.T) {
 	assert.Equal(t, "floci/floci", shortImage("docker.io/floci/floci@sha256:c88ec20bf221"))
 	assert.Equal(t, "floci/aws:latest", shortImage("floci/aws:latest"))
 	assert.Equal(t, "floci/floci", shortImage("floci/floci@sha256:deadbeef"))
+	assert.Equal(t, "unknown", shortImage(""))
+	assert.Equal(t, "unknown", shortImage("  "))
+	assert.Equal(t, "unknown", shortImage("<image>"))
 }
 
 func TestShortID(t *testing.T) {
 	assert.Equal(t, "628b3ae8a73c", shortID("628b3ae8a73c92b361b8b5a9fe584cd"))
 	assert.Equal(t, "abc", shortID("abc"))
+	assert.Equal(t, "unknown", shortID(""))
+	assert.Equal(t, "unknown", shortID("  "))
+	assert.Equal(t, "unknown", shortID("<container>"))
 }
 
 func TestStatusDot(t *testing.T) {

@@ -235,6 +235,143 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 	}
 }
 
+func TestGenerateDocument_DefaultTemplateFallbackUsesRootData(t *testing.T) {
+	targetDir := t.TempDir()
+	inputPath := filepath.Join(targetDir, "README.yaml")
+	if err := os.WriteFile(inputPath, []byte("name: TestProject\ndescription: A test project\n"), defaultFilePermissions); err != nil {
+		t.Fatalf("failed to write input YAML: %v", err)
+	}
+
+	docsGenerate := schema.DocsGenerate{
+		BaseDir:  ".",
+		Input:    []any{inputPath},
+		Template: "./missing-template.gotmpl",
+		Output:   "README.md",
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: false,
+		},
+	}
+
+	err := generateDocument(&schema.AtmosConfiguration{}, targetDir, &docsGenerate, defaultTemplateRenderer{})
+	if err != nil {
+		t.Fatalf("generateDocument failed: %v", err)
+	}
+
+	outputPath := filepath.Join(targetDir, "README.md")
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read generated README: %v", err)
+	}
+	if !strings.Contains(string(data), "# TestProject") {
+		t.Errorf("Expected fallback template to render root name, got %q", string(data))
+	}
+}
+
+// TestGenerateDocument_DefaultTemplateFallback_RealRenderer exercises the default fallback
+// template through the real defaultTemplateRenderer (gomplate), not mockRenderer. It guards
+// against regressions where the fallback template references bare fields (e.g. ".name")
+// instead of going through the "config" datasource, which ProcessTmplWithDatasourcesGomplate
+// requires (root "." is bound to the outer Env wrapper, not mergedData).
+func TestGenerateDocument_DefaultTemplateFallback_RealRenderer(t *testing.T) {
+	targetDir := t.TempDir()
+
+	tmpYAML, err := os.CreateTemp("", "test-docs-input-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpYAML.Name())
+	yamlContent := "name: TestProject\ndescription: \"A test project\"\n"
+	if _, err := tmpYAML.WriteString(yamlContent); err != nil {
+		t.Fatal(err)
+	}
+	tmpYAML.Close()
+
+	atmosConfig := schema.AtmosConfiguration{
+		Docs: schema.Docs{
+			Generate: map[string]schema.DocsGenerate{
+				"readme": {
+					BaseDir:  ".",
+					Input:    []any{tmpYAML.Name()},
+					Template: "", // No template configured: use the default fallback template.
+					Output:   "TEST_README_DEFAULT.md",
+					Terraform: schema.TerraformDocsReadmeSettings{
+						Enabled: false,
+					},
+				},
+			},
+		},
+	}
+
+	docsGenerate := atmosConfig.Docs.Generate["readme"]
+	if err := generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{}); err != nil {
+		t.Fatalf("generateDocument failed: %v", err)
+	}
+
+	outputPath := filepath.Join(targetDir, "TEST_README_DEFAULT.md")
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read generated README: %v", err)
+	}
+
+	got := string(data)
+	if !strings.Contains(got, "TestProject") {
+		t.Errorf("expected output to contain merged name %q, got %q", "TestProject", got)
+	}
+	if !strings.Contains(got, "A test project") {
+		t.Errorf("expected output to contain merged description, got %q", got)
+	}
+}
+
+// TestGenerateDocument_TemplateFetchFailsFallsBackToDefault verifies that when a configured
+// template fails to download, generateDocument still succeeds by falling back to the default
+// template rendered through the real renderer, instead of crashing.
+func TestGenerateDocument_TemplateFetchFailsFallsBackToDefault(t *testing.T) {
+	targetDir := t.TempDir()
+
+	tmpYAML, err := os.CreateTemp("", "test-docs-input-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpYAML.Name())
+	yamlContent := "name: TestProject\ndescription: \"A test project\"\n"
+	if _, err := tmpYAML.WriteString(yamlContent); err != nil {
+		t.Fatal(err)
+	}
+	tmpYAML.Close()
+
+	atmosConfig := schema.AtmosConfiguration{
+		Docs: schema.Docs{
+			Generate: map[string]schema.DocsGenerate{
+				"readme": {
+					BaseDir:  ".",
+					Input:    []any{tmpYAML.Name()},
+					Template: filepath.Join(targetDir, "does-not-exist.gotmpl"),
+					Output:   "TEST_README_FALLBACK.md",
+					Terraform: schema.TerraformDocsReadmeSettings{
+						Enabled: false,
+					},
+				},
+			},
+		},
+	}
+
+	docsGenerate := atmosConfig.Docs.Generate["readme"]
+	if err := generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{}); err != nil {
+		t.Fatalf("generateDocument failed: %v", err)
+	}
+
+	outputPath := filepath.Join(targetDir, "TEST_README_FALLBACK.md")
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read generated README: %v", err)
+	}
+
+	got := string(data)
+	if !strings.Contains(got, "TestProject") {
+		t.Errorf("expected fallback output to contain merged name %q, got %q", "TestProject", got)
+	}
+}
+
 // TestRunTerraformDocs_Error tests runTerraformDocs by providing an invalid directory.
 func TestRunTerraformDocs_Error(t *testing.T) {
 	_, err := runTerraformDocs("nonexistent_directory", &schema.TerraformDocsReadmeSettings{})

@@ -16,6 +16,10 @@ var (
 	ErrExecStepInvalidField = errors.New("field is not supported on exec steps (the process is replaced)")
 	// ErrWorkflowControlStepInvalid is returned when a parallel or matrix step is misconfigured.
 	ErrWorkflowControlStepInvalid = errors.New("invalid workflow control step")
+	// ErrScriptStepFieldRequired is returned when a script step omits a required field.
+	ErrScriptStepFieldRequired = errors.New("script step requires field")
+	// ErrScriptStepInvalidField is returned when a script step sets a shell-only field.
+	ErrScriptStepInvalidField = errors.New("field is not supported on script steps")
 )
 
 // execStepView is the type-independent projection of a step used by exec validation.
@@ -29,12 +33,22 @@ type execStepView struct {
 	output      string
 }
 
+// scriptStepView is the type-independent projection of a step used by script validation.
+type scriptStepView struct {
+	name        string
+	stepType    string
+	command     string
+	script      string
+	interpreter string
+}
+
 // ValidateExecTasks validates exec steps in a task list (custom command steps).
 // Any `type: exec` step must be the final step and must not set fields that
 // are meaningless once the process is replaced (tty, interactive, retry,
 // timeout, output).
 func ValidateExecTasks(tasks Tasks) error {
 	views := make([]execStepView, 0, len(tasks))
+	scriptViews := make([]scriptStepView, 0, len(tasks))
 	for i := range tasks {
 		task := &tasks[i]
 		views = append(views, execStepView{
@@ -46,14 +60,25 @@ func ValidateExecTasks(tasks Tasks) error {
 			hasTimeout:  task.Timeout != time.Duration(0),
 			output:      task.Output,
 		})
+		scriptViews = append(scriptViews, scriptStepView{
+			name:        task.Name,
+			stepType:    task.Type,
+			command:     task.Command,
+			script:      task.Script,
+			interpreter: task.Interpreter,
+		})
 	}
-	return validateExecSteps(views)
+	if err := validateExecSteps(views); err != nil {
+		return err
+	}
+	return validateScriptSteps(scriptViews)
 }
 
 // ValidateExecWorkflowSteps validates exec steps in a workflow step list.
 // See ValidateExecTasks for the rules.
 func ValidateExecWorkflowSteps(steps []WorkflowStep) error {
 	views := make([]execStepView, 0, len(steps))
+	scriptViews := make([]scriptStepView, 0, len(steps))
 	for i := range steps {
 		step := &steps[i]
 		views = append(views, execStepView{
@@ -65,8 +90,18 @@ func ValidateExecWorkflowSteps(steps []WorkflowStep) error {
 			hasTimeout:  step.Timeout != "",
 			output:      step.Output,
 		})
+		scriptViews = append(scriptViews, scriptStepView{
+			name:        step.Name,
+			stepType:    step.Type,
+			command:     step.Command,
+			script:      step.Script,
+			interpreter: step.Interpreter,
+		})
 	}
-	return validateExecSteps(views)
+	if err := validateExecSteps(views); err != nil {
+		return err
+	}
+	return validateScriptSteps(scriptViews)
 }
 
 // containerStepType is the step type that supports background services in v1.
@@ -188,6 +223,31 @@ func execStepInvalidField(view *execStepView) string {
 
 // execStepLabel returns a human-friendly identifier for a step in error messages.
 func execStepLabel(view *execStepView, index int) string {
+	if view.name != "" {
+		return fmt.Sprintf("%q (index %d)", view.name, index)
+	}
+	return fmt.Sprintf("%d", index)
+}
+
+func validateScriptSteps(views []scriptStepView) error {
+	for i := range views {
+		view := &views[i]
+		if view.stepType != TaskTypeScript {
+			continue
+		}
+		switch {
+		case strings.TrimSpace(view.interpreter) == "":
+			return fmt.Errorf("%w: step %s missing %q", ErrScriptStepFieldRequired, scriptStepLabel(view, i), "interpreter")
+		case strings.TrimSpace(view.script) == "":
+			return fmt.Errorf("%w: step %s missing %q", ErrScriptStepFieldRequired, scriptStepLabel(view, i), "script")
+		case strings.TrimSpace(view.command) != "":
+			return fmt.Errorf("%w: step %s sets %q; use %q for type %q", ErrScriptStepInvalidField, scriptStepLabel(view, i), "command", "script", TaskTypeScript)
+		}
+	}
+	return nil
+}
+
+func scriptStepLabel(view *scriptStepView, index int) string {
 	if view.name != "" {
 		return fmt.Sprintf("%q (index %d)", view.name, index)
 	}
@@ -318,9 +378,9 @@ func validateConcurrentChild(step *WorkflowStep, index int, parent string) error
 	label := workflowStepLabel(step, index)
 	stepType := effectiveWorkflowStepType(step.Type)
 	switch stepType {
-	case TaskTypeAtmos, TaskTypeShell, "sleep":
+	case TaskTypeAtmos, TaskTypeShell, TaskTypeScript, "sleep":
 	default:
-		return fmt.Errorf("%w: %s cannot run inside concurrent step %q; allowed types are atmos, shell, and sleep", ErrWorkflowControlStepInvalid, label, parent)
+		return fmt.Errorf("%w: %s cannot run inside concurrent step %q; allowed types are atmos, shell, script, and sleep", ErrWorkflowControlStepInvalid, label, parent)
 	}
 	if step.Tty || step.Interactive {
 		return fmt.Errorf("%w: %s cannot set tty or interactive inside concurrent step %q", ErrWorkflowControlStepInvalid, label, parent)

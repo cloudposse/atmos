@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -66,6 +68,110 @@ func TestControlCommandExecutorExecuteShell(t *testing.T) {
 	assert.Equal(t, "build ok", result.Stdout)
 	assert.Equal(t, "build warning", result.Stderr)
 	assert.False(t, result.Canceled)
+}
+
+func TestControlCommandExecutorExecuteScript(t *testing.T) {
+	var gotProgram string
+	var gotArgs []string
+	var gotStdin string
+
+	executor := &ControlCommandExecutor{
+		PrepareEnv: func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error) {
+			return []string{"SCRIPT_ENV=true"}, nil
+		},
+		RunCommand: func(request *ControlCommandRequest) error {
+			gotProgram = request.Program
+			gotArgs = append([]string{}, request.Args...)
+			stdin, err := io.ReadAll(request.Streams.Stdin)
+			require.NoError(t, err)
+			gotStdin = string(stdin)
+			request.Stdout.WriteString("script ok")
+			return nil
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), &ControlChild{Step: schema.WorkflowStep{
+		Name:        "validate",
+		Type:        schema.TaskTypeScript,
+		Interpreter: "python3",
+		Script:      "print('ok')",
+	}}, ControlChildOutput{Mode: ControlOutputNone})
+
+	require.NoError(t, err)
+	assert.Equal(t, "python3", gotProgram)
+	assert.Equal(t, []string{"-"}, gotArgs)
+	assert.Equal(t, "print('ok')", gotStdin)
+	assert.Equal(t, "script ok", result.Stdout)
+}
+
+func TestControlCommandExecutorPassesWorkingDirectory(t *testing.T) {
+	basePath := t.TempDir()
+	workflowDir := "workflow"
+	stepDir := "step"
+
+	tests := []struct {
+		name        string
+		step        schema.WorkflowStep
+		wantProgram string
+		wantDir     string
+	}{
+		{
+			name: "shell inherits workflow working directory",
+			step: schema.WorkflowStep{
+				Name:    "shell",
+				Type:    schema.TaskTypeShell,
+				Command: "make test",
+			},
+			wantDir: filepath.Join(basePath, workflowDir),
+		},
+		{
+			name: "script uses step working directory",
+			step: schema.WorkflowStep{
+				Name:             "script",
+				Type:             schema.TaskTypeScript,
+				Interpreter:      "python3",
+				Script:           "print('ok')",
+				WorkingDirectory: stepDir,
+			},
+			wantProgram: "python3",
+			wantDir:     filepath.Join(basePath, stepDir),
+		},
+		{
+			name: "atmos uses step working directory",
+			step: schema.WorkflowStep{
+				Name:             "atmos",
+				Type:             schema.TaskTypeAtmos,
+				Command:          "version",
+				WorkingDirectory: stepDir,
+			},
+			wantProgram: "atmos",
+			wantDir:     filepath.Join(basePath, stepDir),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotProgram string
+			var gotDir string
+			executor := &ControlCommandExecutor{
+				WorkflowDefinition: &schema.WorkflowDefinition{WorkingDirectory: workflowDir},
+				BasePath:           basePath,
+				RunCommand: func(request *ControlCommandRequest) error {
+					gotProgram = request.Program
+					gotDir = request.Dir
+					return nil
+				},
+			}
+
+			_, err := executor.Execute(context.Background(), &ControlChild{Step: tt.step}, ControlChildOutput{Mode: ControlOutputNone})
+
+			require.NoError(t, err)
+			if tt.wantProgram != "" {
+				assert.Equal(t, tt.wantProgram, gotProgram)
+			}
+			assert.Equal(t, tt.wantDir, gotDir)
+		})
+	}
 }
 
 func TestControlShellInvocationForOS(t *testing.T) {

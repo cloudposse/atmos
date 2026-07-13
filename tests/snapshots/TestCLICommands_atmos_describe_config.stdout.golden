@@ -1,5 +1,11 @@
 {
   "base_path": "./",
+  "cast": {
+    "recording": {
+      "width": 120,
+      "height": 36
+    }
+  },
   "components": {
     "terraform": {
       "base_path": "components/terraform",
@@ -139,6 +145,9 @@
         "enabled": false
       }
     },
+    "yaml": {
+      "key_delimiter": ""
+    },
     "experimental": "warn",
     "docs": {
       "max_width": 0,
@@ -232,7 +241,10 @@
   "default": false,
   "version": {
     "check": {},
-    "constraint": {}
+    "constraint": {},
+    "defaults": {
+      "update": {}
+    }
   },
   "validate": {
     "editorconfig": {}
@@ -306,7 +318,8 @@
     },
     "comments": {},
     "templates": {},
-    "cache": {}
+    "cache": {},
+    "groups": {}
   },
   "ai": {
     "sessions": {

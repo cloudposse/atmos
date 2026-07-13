@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -126,6 +128,47 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrNoTty)
 }
 
+func TestExecuteCommandPipeline_SkipsWorkspaceGroupWhenSetupSkipped(t *testing.T) {
+	output := runLogGroupPipelineSubprocess(t, map[string]string{
+		testEnvPipelineBackendType: "http",
+		testEnvPipelineSkipInit:    "1",
+	})
+	groupLabel := logGroupTestToolLabel(t)
+
+	assert.NotContains(t, output, "::group::"+groupLabel+" workspace\n")
+	assert.NotContains(t, output, "fake terraform workspace select dev")
+	assert.Contains(t, output, "::group::"+groupLabel+" plan\n")
+	assert.Contains(t, output, "fake terraform plan")
+}
+
+func logGroupTestToolLabel(t *testing.T) string {
+	t.Helper()
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	return filepath.Base(exePath)
+}
+
+func runLogGroupPipelineSubprocess(t *testing.T, env map[string]string) string {
+	t.Helper()
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	cmd := osexec.Command(exePath)
+	cmd.Env = append(
+		os.Environ(),
+		testEnvRunLogGroupPipeline+"=1",
+		"GITHUB_ACTIONS=true",
+	)
+	for key, value := range env {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
+
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "subprocess failed with output:\n%s", string(out))
+	return string(out)
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // runWorkspaceSetup (workspace recovery path)
 // ──────────────────────────────────────────────────────────────────────────────
@@ -154,6 +197,57 @@ func TestExecuteShellCommand_PropagatesEnvToSubprocess(t *testing.T) {
 	var exitErr errUtils.ExitCodeError
 	require.True(t, errors.As(execErr, &exitErr), "exit-1 must be wrapped as ExitCodeError, got: %T (%v)", execErr, execErr)
 	assert.Equal(t, 1, exitErr.Code, "ExitCodeError.Code must be 1")
+}
+
+func TestRunWorkspaceSetup_UsesSelectOrCreate(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:         "plan",
+		TerraformWorkspace: "dev",
+		Command:            exePath,
+		ComponentEnvList:   []string{"_ATMOS_TEST_ARGS_FILE=" + argsFile},
+	}
+
+	require.NoError(t, runWorkspaceSetup(&atmosConfig, &info, t.TempDir()))
+
+	argsBytes, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Equal(t, "workspace\nselect\n-or-create\ndev", string(argsBytes))
+}
+
+func TestRunWorkspaceSetup_SuppressesTerraformWorkspaceOutput(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:         "plan",
+		TerraformWorkspace: "dev",
+		Command:            exePath,
+		ComponentEnvList: []string{
+			`_ATMOS_TEST_STDOUT=Workspace "dev" doesn't exist.` + "\n",
+			"_ATMOS_TEST_STDERR=You're now on a new, empty workspace.\n",
+		},
+	}
+
+	require.NoError(t, runWorkspaceSetup(
+		&atmosConfig,
+		&info,
+		t.TempDir(),
+		WithProcessStreams(process.Streams{
+			Stdout: &stdout,
+			Stderr: &stderr,
+		}),
+	))
+
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 // TestRunWorkspaceSetup_RecoveryPath verifies that when both "workspace select" and

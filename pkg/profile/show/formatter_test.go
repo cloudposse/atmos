@@ -1,6 +1,7 @@
 package show
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestRenderProfile(t *testing.T) {
 				"Location Type:",
 				"project",
 				"Path:",
-				"/path/to/profiles/production",
+				filepath.Clean("/path/to/profiles/production"),
 				"METADATA",
 				"Name:",
 				"Production Environment",
@@ -114,7 +115,7 @@ func TestRenderProfile(t *testing.T) {
 				"Location Type:",
 				"project-hidden",
 				"Path:",
-				"/path/to/profiles/dev",
+				filepath.Clean("/path/to/profiles/dev"),
 				"FILES",
 				"atmos.yaml",
 				"config.yaml",

@@ -93,6 +93,7 @@ const (
 	SecretsSectionName                = "secrets"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
+	VersionSectionName                = "version"
 	LocalsSectionName                 = "locals"
 	EnvSectionName                    = "env"
 	DependenciesSectionName           = "dependencies"
@@ -187,6 +188,12 @@ const (
 	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Cast recording flag.
+	CastFlagName      = "cast"
+	CastFlag          = "--cast"
+	CastFlagAutoValue = "__AUTO__"
+	CastEnvVarName    = "ATMOS_CAST"
 
 	// EKS/Helmfile flags.
 	ClusterNameFlagName = "cluster-name" // Flag name without prefix.

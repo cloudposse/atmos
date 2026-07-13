@@ -113,6 +113,30 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
 }
 
+func TestExecuteTerraformInitUsesForwardDependencyOrder(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "init",
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	// Unlike destroy, init has no destructive-ordering requirement, so it keeps
+	// the natural forward dependency order (prerequisites before dependents).
+	require.Equal(t, []string{"vpc@dev", "database@dev", "app@dev"}, executed)
+}
+
 func TestExecuteTerraformAffectedSelectionUsesGraphBackedPath(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string
@@ -559,10 +583,10 @@ func TestTerraformOutputConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.True(t, output.captureOutput())
-	require.Equal(t, terraformPlanLogOrderGrouped, output.logOrder)
+	require.Equal(t, terraformLogOrderGrouped, output.logOrder)
 
 	_, err = newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{
-		TerraformPlanLogOrder: "invalid",
+		TerraformLogOrder: "invalid",
 	}, 2)
 	require.Error(t, err)
 
@@ -573,7 +597,7 @@ func TestTerraformOutputConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.True(t, output.hideNoChanges)
-	require.Equal(t, terraformPlanLogOrderGrouped, output.logOrder)
+	require.Equal(t, terraformLogOrderGrouped, output.logOrder)
 
 	_, err = newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{
 		SubCommand:        "plan",
@@ -586,7 +610,7 @@ func TestTerraformOutputConfiguration(t *testing.T) {
 func TestTerraformOutputNodeWritersWriteGroupedLogFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	output, err := newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: tmpDir}, &schema.ConfigAndStacksInfo{
-		TerraformPlanLogOrder: terraformPlanLogOrderGrouped,
+		TerraformLogOrder: terraformLogOrderGrouped,
 	}, 2)
 	require.NoError(t, err)
 
@@ -617,7 +641,7 @@ func TestTerraformOutputNodeWritersWriteGroupedLogFiles(t *testing.T) {
 func TestTerraformOutputNodeWritersStreamMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	output, err := newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: tmpDir}, &schema.ConfigAndStacksInfo{
-		TerraformPlanLogOrder: terraformPlanLogOrderStream,
+		TerraformLogOrder: terraformLogOrderStream,
 	}, 2)
 	require.NoError(t, err)
 
@@ -648,7 +672,7 @@ func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
 		os.Stderr = oldStderr
 	}()
 
-	output := &terraformOutput{command: "plan", logOrder: terraformPlanLogOrderGrouped}
+	output := &terraformOutput{command: "plan", logOrder: terraformLogOrderGrouped}
 	output.finishNode(&dependency.Node{Component: "app", Stack: "dev"}, TerraformExecutionResult{
 		Stdout: "stdout",
 		Stderr: "stderr",
@@ -683,7 +707,7 @@ func TestTerraformOutputFinishNodeSkipsNoChangesWhenHidden(t *testing.T) {
 	}()
 
 	output := &terraformOutput{
-		logOrder:      terraformPlanLogOrderGrouped,
+		logOrder:      terraformLogOrderGrouped,
 		hideNoChanges: true,
 	}
 	output.finishNode(&dependency.Node{Component: "app", Stack: "dev"}, TerraformExecutionResult{
@@ -1249,10 +1273,10 @@ func TestExecuteTerraformConcurrentStreamLogOrderInjectsStreams(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:                   true,
-			SubCommand:            "plan",
-			MaxConcurrency:        2,
-			TerraformPlanLogOrder: terraformPlanLogOrderStream,
+			All:               true,
+			SubCommand:        "plan",
+			MaxConcurrency:    2,
+			TerraformLogOrder: terraformLogOrderStream,
 		},
 		Stacks: stacks,
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
@@ -1282,10 +1306,10 @@ func TestExecuteTerraformConcurrentGroupedLogOrderCapturesOutput(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:                   true,
-			SubCommand:            "plan",
-			MaxConcurrency:        2,
-			TerraformPlanLogOrder: terraformPlanLogOrderGrouped,
+			All:               true,
+			SubCommand:        "plan",
+			MaxConcurrency:    2,
+			TerraformLogOrder: terraformLogOrderGrouped,
 		},
 		Stacks: stacks,
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
@@ -1311,10 +1335,10 @@ func TestExecuteTerraformRejectsUnsupportedLogOrder(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:                   true,
-			SubCommand:            "plan",
-			MaxConcurrency:        2,
-			TerraformPlanLogOrder: "unknown",
+			All:               true,
+			SubCommand:        "plan",
+			MaxConcurrency:    2,
+			TerraformLogOrder: "unknown",
 		},
 		Stacks: stacks,
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
@@ -1323,7 +1347,7 @@ func TestExecuteTerraformRejectsUnsupportedLogOrder(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unsupported Terraform plan log order")
+	require.Contains(t, err.Error(), "unsupported Terraform log order")
 }
 
 func TestTerraformPlanHasNoChanges(t *testing.T) {
@@ -1348,12 +1372,12 @@ func TestTerraformHideNoChangesForcesGroupedLogOrder(t *testing.T) {
 	output, err := newTerraformOutput(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
 		SubCommand:                 "plan",
 		MaxConcurrency:             2,
-		TerraformPlanLogOrder:      terraformPlanLogOrderStream,
+		TerraformLogOrder:          terraformLogOrderStream,
 		TerraformPlanHideNoChanges: true,
 	}, 2)
 
 	require.NoError(t, err)
-	require.Equal(t, terraformPlanLogOrderGrouped, output.logOrder)
+	require.Equal(t, terraformLogOrderGrouped, output.logOrder)
 	require.True(t, output.hideNoChanges)
 	require.True(t, output.captureOutput())
 }
@@ -1767,4 +1791,45 @@ func terraformAdapterComponentWithPathNoWorkdir(group, componentPath string) map
 		cfg.ComponentPathSectionName: componentPath,
 	}
 	return component
+}
+
+// TestEffectiveTerraformMaxConcurrencySupportsDeploy guards the scheduler gate:
+// plan/apply/deploy/destroy/init must all honour --max-concurrency; unsupported
+// subcommands must be capped to 1.
+func TestEffectiveTerraformMaxConcurrencySupportsDeploy(t *testing.T) {
+	for _, sub := range []string{"plan", "apply", "deploy", "destroy", "init"} {
+		got := effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: sub, MaxConcurrency: 4})
+		require.Equal(t, 4, got, "%s should honor --max-concurrency via the scheduler gate", sub)
+	}
+	// An unsupported subcommand stays serial.
+	got := effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "import", MaxConcurrency: 4})
+	require.Equal(t, 1, got, "unsupported subcommand must cap to 1")
+}
+
+// TestTerraformOutputGroupsNonPlanSubcommands proves the scheduler's grouped-log
+// buffering engages for apply and destroy, not just plan.
+// The adapter is subcommand-agnostic; this test documents and locks that contract.
+func TestTerraformOutputGroupsNonPlanSubcommands(t *testing.T) {
+	for _, sub := range []string{"apply", "deploy", "destroy", "init"} {
+		t.Run(sub, func(t *testing.T) {
+			// maxConcurrency > 1 + grouped => buffering active.
+			out, err := newTerraformOutput(
+				&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()},
+				&schema.ConfigAndStacksInfo{SubCommand: sub, TerraformLogOrder: terraformLogOrderGrouped},
+				2,
+			)
+			require.NoError(t, err)
+			require.NotNil(t, out)
+			require.Equal(t, terraformLogOrderGrouped, out.logOrder)
+
+			// maxConcurrency <= 1 => no buffering.
+			out, err = newTerraformOutput(
+				&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()},
+				&schema.ConfigAndStacksInfo{SubCommand: sub, TerraformLogOrder: terraformLogOrderGrouped},
+				1,
+			)
+			require.NoError(t, err)
+			require.Nil(t, out)
+		})
+	}
 }

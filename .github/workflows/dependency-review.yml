@@ -39,9 +39,25 @@ jobs:
           allow-licenses: MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-2-Clause-Views, BSD-3-Clause, ISC, MPL-2.0, 0BSD, Unlicense, CC0-1.0, CC-BY-3.0, CC-BY-4.0, CC-BY-SA-3.0, Python-2.0, OFL-1.1, LicenseRef-scancode-generic-cla, LicenseRef-scancode-unknown-license-reference, LicenseRef-scancode-unicode, LicenseRef-scancode-google-patent-license-golang
 
           # Allow specific packages where GitHub cannot detect the license but we've verified it
+          # github.com/antlr4-go/antlr/v4: BSD-3-Clause (verified at https://github.com/antlr4-go/antlr/blob/master/LICENSE)
+          #   Transitive dependency of github.com/google/cel-go used for CEL `when` expressions
+          # github.com/google/cel-go: Apache-2.0 (verified at https://github.com/google/cel-go/blob/master/LICENSE)
+          #   Direct dependency used for CEL `when` expressions
+          # golang.org/x/image: BSD-3-Clause (verified at https://cs.opensource.google/go/x/image/+/v0.43.0:LICENSE)
+          #   Direct dependency used for static cast image rendering
           # modernc.org/libc: BSD-3-Clause (verified at https://gitlab.com/cznic/libc/-/blob/master/LICENSE)
           #   Transitive dependency of modernc.org/sqlite used for AI session storage
-          allow-dependencies-licenses: "pkg:golang/modernc.org/libc"
+          # github.com/opencontainers/go-digest: Apache-2.0 code; the "AND CC-BY-SA-4.0" in its
+          #   license scan comes from LICENSE.docs, which covers documentation only (see
+          #   https://github.com/opencontainers/go-digest#copyright-and-license).
+          #   Transitive dependency of github.com/updatecli/updatecli (Version Tracker).
+          # pako: "MIT AND Zlib" (verified at https://github.com/nodeca/pako/blob/master/LICENSE) -
+          #   MIT-licensed JS wrapper around zlib's permissively-licensed C sources.
+          #   Transitive dependency of @excalidraw/excalidraw (website diagram embeds).
+          # sax: BlueOak-1.0.0 (verified at https://github.com/isaacs/sax-js/blob/main/LICENSE.md) -
+          #   Blue Oak Model License, a permissive OSS license.
+          #   Transitive dependency of svgo (website SVG optimization).
+          allow-dependencies-licenses: "pkg:golang/github.com/antlr4-go/antlr/v4, pkg:golang/github.com/google/cel-go, pkg:golang/golang.org/x/image, pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest, pkg:npm/pako, pkg:npm/sax"
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate

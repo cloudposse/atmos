@@ -1,3 +1,11 @@
+---
+title: Terraform Tests
+tags: [Components]
+cast:
+  file: /casts/examples/terraform-tests/stack-discovery.cast
+  title: atmos terraform tests
+---
+
 ## Notes
 
 This example runs **Terraform tests** (`*.tftest.hcl`) against a **local AWS sandbox** — no AWS account or

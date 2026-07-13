@@ -37,6 +37,38 @@ type ShowConfig struct {
 	Count *bool `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`
 	// Progress shows progress bar pinned to bottom (Docker-build style, TTY only).
 	Progress *bool `yaml:"progress,omitempty" json:"progress,omitempty" mapstructure:"progress"`
+	// Labels shows step boundary labels and completion/failure footers.
+	Labels *bool `yaml:"labels,omitempty" json:"labels,omitempty" mapstructure:"labels"`
+}
+
+// SimulatePrompt configures the rendered prompt for cast simulation steps.
+type SimulatePrompt struct {
+	Text  string `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
+	Style string `yaml:"style,omitempty" json:"style,omitempty" mapstructure:"style"`
+}
+
+// CastDefaults configures defaults applied to child steps inside a cast step.
+type CastDefaults struct {
+	Cast     *CastRecordingDefaults `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
+	Simulate *CastSimulateDefaults  `yaml:"simulate,omitempty" json:"simulate,omitempty" mapstructure:"simulate"`
+}
+
+// CastRecordingDefaults configures defaults for the cast recording itself.
+type CastRecordingDefaults struct {
+	Rate   string `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`
+	Width  int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
+	Height int    `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`
+}
+
+// CastSimulateDefaults configures defaults for direct child type: simulate steps.
+type CastSimulateDefaults struct {
+	Mode     string          `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Cursor   *bool           `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`
+	Prompt   *SimulatePrompt `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`
+	Rate     string          `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`
+	Jitter   float64         `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`
+	Duration string          `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
+	Interval string          `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
 }
 
 // ParallelFailConfig configures failure behavior for parallel and matrix steps.
@@ -209,6 +241,8 @@ type WorkflowStep struct {
 	// Existing fields.
 	Name             string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	Command          string       `yaml:"command" json:"command" mapstructure:"command"`
+	Script           string       `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`                // Inline script body for type: script.
+	Interpreter      string       `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"` // Script interpreter for type: script.
 	Stack            string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	Type             string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
@@ -222,13 +256,14 @@ type WorkflowStep struct {
 	Tty bool `yaml:"tty,omitempty" json:"tty,omitempty" mapstructure:"tty"`
 
 	// Interactive step fields.
-	Prompt      string   `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
-	Options     []string `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`             // Options for choose/filter.
-	Default     string   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`             // Default value.
-	Placeholder string   `yaml:"placeholder,omitempty" json:"placeholder,omitempty" mapstructure:"placeholder"` // Input placeholder.
-	Password    bool     `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`          // Mask input.
-	Multiple    bool     `yaml:"multiple,omitempty" json:"multiple,omitempty" mapstructure:"multiple"`          // Allow multiple selection.
-	Limit       int      `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
+	Prompt         string          `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
+	SimulatePrompt *SimulatePrompt `yaml:"-" json:"simulate_prompt,omitempty" mapstructure:"simulate_prompt"`             // Structured prompt for cast simulation steps.
+	Options        []string        `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`             // Options for choose/filter.
+	Default        string          `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`             // Default value.
+	Placeholder    string          `yaml:"placeholder,omitempty" json:"placeholder,omitempty" mapstructure:"placeholder"` // Input placeholder.
+	Password       bool            `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`          // Mask input.
+	Multiple       bool            `yaml:"multiple,omitempty" json:"multiple,omitempty" mapstructure:"multiple"`          // Allow multiple selection.
+	Limit          int             `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
 
 	// Output/UI step fields.
 	Content   string           `yaml:"content,omitempty" json:"content,omitempty" mapstructure:"content"`       // Content for output types (supports templates).
@@ -238,11 +273,14 @@ type WorkflowStep struct {
 	Separator string           `yaml:"separator,omitempty" json:"separator,omitempty" mapstructure:"separator"` // Separator for join type (default: newline).
 
 	// File picker fields.
-	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker.
+	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source for workdir provisioning; string or source map.
+	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
 	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	CastOutput     *CastOutput           `yaml:"-" json:"cast_output,omitempty" mapstructure:"cast_output"`            // Structured output for cast artifacts.
 	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
 	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
 	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
@@ -294,6 +332,22 @@ type WorkflowStep struct {
 	Body    string            `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`          // Raw request body (supports templates); mutually exclusive with form.
 	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
+
+	// Cast step and session action fields.
+	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
+	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
+	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
+	Cursor      bool          `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`                   // Show a simulated cursor for cast simulate steps.
+	CursorSet   bool          `yaml:"-" json:"-" mapstructure:"cursor_set"`                                             // Internal marker for explicit cursor values.
+	Text        string        `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
+	Regex       string        `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
+	Key         string        `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
+	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Interval    string        `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
+	Repeat      int           `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
+	Defaults    *CastDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"`             // Cast child defaults.
 
 	// Container step fields.
 	//
@@ -355,6 +409,7 @@ type WorkflowStep struct {
 
 // UnmarshalYAML handles the keys whose meaning depends on shape or a sibling field:
 //   - `output`     : scalar mode string or a structured ParallelOutputConfig.
+//   - `prompt`     : scalar prompt string or structured SimulatePrompt for type: simulate.
 //   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
 //   - `background` : boolean async marker, or a string style color.
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
@@ -368,12 +423,17 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*step = WorkflowStep(fresh)
-	return applyStepPolymorphicNodes(nodes, step.Action, stepPolyTargets{
+	step.CursorSet = mappingHasField(value, "cursor")
+	return applyStepPolymorphicNodes(nodes, step.Type, step.Action, &stepPolyTargets{
 		output:    &step.Output,
+		prompt:    &step.Prompt,
+		simPrompt: &step.SimulatePrompt,
+		cast:      &step.CastOutput,
 		parallel:  &step.ParallelOutput,
 		async:     &step.BackgroundAsync,
 		color:     &step.Background,
 		forList:   &step.For,
+		steps:     &step.Steps,
 		container: containerActionTargets{Build: &step.Build, Run: &step.Run, Push: &step.Push, Inspect: &step.Inspect},
 	})
 }
@@ -381,19 +441,25 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 // stepPolyNodes holds the extracted YAML nodes for a step's shape-dependent keys.
 type stepPolyNodes struct {
 	output     *yaml.Node
+	prompt     *yaml.Node
 	with       *yaml.Node
 	background *yaml.Node
 	forNode    *yaml.Node
+	steps      *yaml.Node
 }
 
 // stepPolyTargets bundles the destinations a step exposes for its polymorphic keys.
 // It lets WorkflowStep and Task share one decode path (see applyStepPolymorphicNodes).
 type stepPolyTargets struct {
 	output    *string
+	prompt    *string
+	simPrompt **SimulatePrompt
+	cast      **CastOutput
 	parallel  **ParallelOutputConfig
 	async     *bool
 	color     *string
 	forList   *[]string
+	steps     *[]WorkflowStep
 	container containerActionTargets
 }
 
@@ -401,16 +467,21 @@ type stepPolyTargets struct {
 // off the mapping so the remainder decodes via the plain struct path.
 func splitStepPolymorphicNodes(value *yaml.Node) (stepPolyNodes, *yaml.Node) {
 	outputNode, sanitized := splitMappingField(value, "output")
+	promptNode, sanitized := splitMappingField(sanitized, "prompt")
 	withNode, sanitized := splitMappingField(sanitized, "with")
 	backgroundNode, sanitized := splitMappingField(sanitized, "background")
 	forNode, sanitized := splitMappingField(sanitized, "for")
-	return stepPolyNodes{output: outputNode, with: withNode, background: backgroundNode, forNode: forNode}, sanitized
+	stepsNode, sanitized := splitMappingField(sanitized, "steps")
+	return stepPolyNodes{output: outputNode, prompt: promptNode, with: withNode, background: backgroundNode, forNode: forNode, steps: stepsNode}, sanitized
 }
 
 // applyStepPolymorphicNodes decodes the extracted nodes into the step's targets.
 // The action is read from the already-decoded plain struct to select the container shape.
-func applyStepPolymorphicNodes(nodes stepPolyNodes, action string, t stepPolyTargets) error {
-	if err := decodeWorkflowStepOutput(nodes.output, t.output, t.parallel); err != nil {
+func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t *stepPolyTargets) error {
+	if err := decodeWorkflowStepOutput(nodes.output, stepType, t.output, t.cast, t.parallel); err != nil {
+		return err
+	}
+	if err := decodeStepPrompt(nodes.prompt, stepType, t.prompt, t.simPrompt); err != nil {
 		return err
 	}
 	if err := decodeStepBackground(nodes.background, t.async, t.color); err != nil {
@@ -419,7 +490,55 @@ func applyStepPolymorphicNodes(nodes stepPolyNodes, action string, t stepPolyTar
 	if err := decodeStringOrSlice(nodes.forNode, t.forList); err != nil {
 		return err
 	}
+	if err := decodeWorkflowStepList(nodes.steps, t.steps); err != nil {
+		return err
+	}
 	return decodeContainerWith(nodes.with, action, t.container)
+}
+
+func decodeWorkflowStepList(node *yaml.Node, out *[]WorkflowStep) error {
+	if node == nil {
+		return nil
+	}
+	if node.Kind != yaml.SequenceNode {
+		return node.Decode(out)
+	}
+	steps := make([]WorkflowStep, 0, len(node.Content))
+	for _, childNode := range node.Content {
+		var step WorkflowStep
+		if err := step.UnmarshalYAML(childNode); err != nil {
+			return err
+		}
+		steps = append(steps, step)
+	}
+	*out = steps
+	return nil
+}
+
+func decodeStepPrompt(node *yaml.Node, stepType string, prompt *string, simulate **SimulatePrompt) error {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	switch node.Kind {
+	case yaml.ScalarNode:
+		*prompt = node.Value
+		return nil
+	case yaml.MappingNode:
+		if stepType != TaskTypeSimulate {
+			return fmt.Errorf("%w: structured `prompt` is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
+		}
+		var cfg SimulatePrompt
+		if err := node.Decode(&cfg); err != nil {
+			return err
+		}
+		*simulate = &cfg
+		return nil
+	default:
+		return node.Decode(prompt)
+	}
 }
 
 // decodeStepBackground routes the polymorphic `background:` key: a boolean value
@@ -507,14 +626,26 @@ func normalizeContainerAction(action string) string {
 	return action
 }
 
-func decodeWorkflowStepOutput(node *yaml.Node, scalar *string, structured **ParallelOutputConfig) error {
+func decodeWorkflowStepOutput(node *yaml.Node, stepType string, scalar *string, cast **CastOutput, structured **ParallelOutputConfig) error {
 	if node == nil {
 		return nil
+	}
+	if node.Kind == yaml.AliasNode {
+		node = node.Alias
 	}
 	switch node.Kind {
 	case yaml.ScalarNode:
 		*scalar = node.Value
 	case yaml.MappingNode:
+		if stepType == TaskTypeCast {
+			var cfg CastOutput
+			if err := node.Decode(&cfg); err != nil {
+				return err
+			}
+			*scalar = cfg.Mode
+			*cast = &cfg
+			return nil
+		}
 		var cfg ParallelOutputConfig
 		if err := node.Decode(&cfg); err != nil {
 			return err
@@ -546,6 +677,24 @@ func splitMappingField(value *yaml.Node, field string) (*yaml.Node, *yaml.Node) 
 	return fieldNode, &copied
 }
 
+//nolint:unparam // field parameter kept generic; currently only "cursor" is checked but the helper is shared across task.go and workflow.go for future field checks.
+func mappingHasField(value *yaml.Node, field string) bool {
+	if value == nil || value.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		if value.Content[i].Value == field {
+			return true
+		}
+	}
+	return false
+}
+
+func mapHasKey(m map[string]any, key string) bool {
+	_, ok := m[key]
+	return ok
+}
+
 // HTTPExpect defines success criteria for an http step.
 // When unset, any 2xx response is considered a success.
 type HTTPExpect struct {
@@ -554,6 +703,18 @@ type HTTPExpect struct {
 	// Response lists regular expressions; when set, the response body must match at least one.
 	// Patterns may be written as /.../ literals (surrounding slashes are stripped) or bare regex strings.
 	Response []string `yaml:"response,omitempty" json:"response,omitempty" mapstructure:"response"`
+}
+
+// CastOutput defines output artifact paths for a cast workflow step.
+type CastOutput struct {
+	Mode  string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Cast  string `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
+	GIF   string `yaml:"gif,omitempty" json:"gif,omitempty" mapstructure:"gif"`
+	MP4   string `yaml:"mp4,omitempty" json:"mp4,omitempty" mapstructure:"mp4"`
+	HTML  string `yaml:"html,omitempty" json:"html,omitempty" mapstructure:"html"`
+	ASCII string `yaml:"ascii,omitempty" json:"ascii,omitempty" mapstructure:"ascii"`
+	PNG   string `yaml:"png,omitempty" json:"png,omitempty" mapstructure:"png"`
+	JPG   string `yaml:"jpg,omitempty" json:"jpg,omitempty" mapstructure:"jpg"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

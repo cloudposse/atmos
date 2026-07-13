@@ -22,7 +22,7 @@ atmos demo clean             # remove local renders + stop stray emulator contai
 **Always `atmos demo check <name>` first.** It renders the tape to inspectable text
 (`website/static/img/demos/<name>.ascii`) with a 90s timeout and prints the final frame — so a
 broken command or a stuck `Wait` shows up in seconds, not after a multi-minute video render. Only
-`record` once the dry-run looks right. (`make build` first — see prerequisites; the recorder puts
+`record` once the dry-run looks right. (`atmos build` first — see prerequisites; the recorder puts
 `./build/atmos` on PATH so the demos use this branch's `atmos`, not an older one.)
 
 CI runs the same entrypoint: [`.github/workflows/landing-demos.yaml`](../../.github/workflows/landing-demos.yaml).
@@ -59,7 +59,7 @@ dev), `DemoVideo` falls back to the gitignored local copies so you can preview b
 - The Kubernetes landing fixture installs `helmfile`, `helm`, and `kubectl` through Atmos toolchain
   dependencies; `emulators.tape` brings up the AWS/GCP/Azure (Floci) and k3s emulators.
 - The AWS CLI for `atmos demo publish`.
-- **A locally built atmos** (`make build`, on `PATH`): the emulator commands these tapes use
+- **A locally built atmos** (`atmos build`, on `PATH`): the emulator commands these tapes use
   are newer than the latest published release.
 
 ## How a tape is structured

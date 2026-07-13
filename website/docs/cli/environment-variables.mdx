@@ -103,6 +103,13 @@ These environment variables configure Atmos behavior and can override settings i
     Force TTY mode for terminal output. Equivalent to `--force-tty`.
   </dd>
 
+  <dt>`COLUMNS`</dt>
+  <dd>
+    Standard convention supplying the terminal width when output is not a TTY (pipes, recordings, CI).
+    Atmos lays out width-sensitive output (such as help screens) at this width.
+    Ignored when a real terminal size is available; capped by `settings.terminal.max_width` when configured.
+  </dd>
+
   <dt>`ATMOS_REDIRECT_STDERR`</dt>
   <dd>
     Redirect stderr to a file. Equivalent to `--redirect-stderr`.

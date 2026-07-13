@@ -2,15 +2,17 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
@@ -135,6 +137,21 @@ func (av *atmosValidatorExecutor) validateSchemas(schemas map[string][]string) (
 	return totalErrCount, nil
 }
 
+// displayPath returns the file path relative to the current working directory
+// when the file is inside it; user-facing output must not leak machine-specific
+// absolute paths.
+func displayPath(file string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return file
+	}
+	rel, err := filepath.Rel(cwd, file)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return file
+	}
+	return rel
+}
+
 func (av *atmosValidatorExecutor) printValidation(schema string, files []string) (uint, error) {
 	count := uint(0)
 	for _, file := range files {
@@ -144,7 +161,7 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 			return count, err
 		}
 		if len(validationErrors) == 0 {
-			u.PrintfMessageToTUI("%s Validated %s\n", theme.Styles.Checkmark, file)
+			ui.Successf("Validated %s", displayPath(file))
 			log.Debug("Schema validation passed", "file", file, "schema", schema)
 			continue
 		}

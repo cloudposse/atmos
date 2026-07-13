@@ -353,8 +353,8 @@ func TestRunsOnStatus(t *testing.T) {
 		{schema.MustCondition(WhenFailure), RunSuccess, false},
 		{schema.MustCondition(WhenAlways), RunSuccess, true},
 		{schema.MustCondition(WhenAlways), RunFailure, true},
-		{schema.MustCondition("bogus"), RunSuccess, false},
-		{schema.MustCondition("bogus"), RunFailure, false},
+		{schema.MustCondition("component == 'vpc'"), RunSuccess, false},
+		{schema.MustCondition("component == 'vpc'"), RunFailure, false},
 		{schema.MustCondition([]any{"ci", WhenSuccess}), RunSuccess, false},
 	}
 	for _, c := range cases {
@@ -373,6 +373,28 @@ func TestRunsOnStatus(t *testing.T) {
 		assert.True(t, ciAlways.RunsWhen(RunSuccess, true))
 		assert.True(t, ciAlways.RunsWhen(RunFailure, true))
 		assert.False(t, ciAlways.RunsWhen(RunFailure, false))
+	})
+
+	t.Run("cel status condition runs on failure", func(t *testing.T) {
+		failureOnly := Hook{When: schema.MustCondition("status == 'failure'")}
+		got, err := failureOnly.RunsWhenE(schema.ConditionContext{
+			Status: string(RunFailure),
+			Event:  string(AfterTerraformApply),
+			Hook:   "notify",
+		})
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("cel event condition", func(t *testing.T) {
+		onApply := Hook{When: schema.MustCondition("event == 'after.terraform.apply'")}
+		got, err := onApply.RunsWhenE(schema.ConditionContext{
+			Status: string(RunSuccess),
+			Event:  string(AfterTerraformApply),
+			Hook:   "notify",
+		})
+		require.NoError(t, err)
+		assert.True(t, got)
 	})
 }
 

@@ -21,8 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -188,10 +187,18 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 		if err == nil {
 			return tmpl
 		}
-		log.Debug("Error fetching template", "template", docsGenerate.Template, "error", err)
+		log.Warn("Error fetching template, falling back to default template", "template", docsGenerate.Template, "error", err)
 	}
 	// Return the default template if none is provided or on error.
-	return "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
+	// ProcessTmplWithDatasourcesGomplate only exposes the merged input data via the
+	// "config" datasource (root "." is bound to the outer Env wrapper), so the default
+	// template must read through (ds "config") rather than bare fields like .name.
+	// Use `index` rather than dot-field access: dot access on a map errors when the key is
+	// entirely absent (not just empty), which would defeat the `default` fallback below;
+	// `index` returns the zero value instead, letting `default` take over as intended.
+	return "# {{ index (ds \"config\") \"name\" | default \"Project\" }}\n\n" +
+		"{{ index (ds \"config\") \"description\" | default \"No description.\" }}\n\n" +
+		"{{ index (ds \"config\") \"terraform_docs\" | default \"\" }}"
 }
 
 // generateDocument merges the docs inputs, optionally runs terraform-docs, renders, and writes the document.
@@ -210,6 +217,9 @@ func generateDocument(
 	// 2) Generate terraform docs if enabled.
 	if err := applyTerraformDocs(baseDir, docsGenerate, mergedData); err != nil {
 		return err
+	}
+	if _, ok := mergedData["terraform_docs"]; !ok {
+		mergedData["terraform_docs"] = ""
 	}
 
 	// 3) Fetch the template.
@@ -230,7 +240,9 @@ func generateDocument(
 		return fmt.Errorf("%w: %s: %s", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
-	u.PrintfMessageToTUI("\n%s Generated docs\n\n", theme.Styles.Checkmark)
+	ui.Writeln("")
+	ui.Success("Generated docs")
+	ui.Writeln("")
 	log.Debug("Documentation generated", "output", outputPath)
 	return nil
 }

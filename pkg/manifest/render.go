@@ -8,7 +8,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -28,6 +32,8 @@ type RenderOptions struct {
 	Split bool
 	// Noun is the human-readable object noun used in status output (e.g. "Helm", "Kubernetes").
 	Noun string
+	// AtmosConfig controls TTY-aware syntax highlighting for stdout output.
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 // ValidateRenderOptions verifies the output flag combination is valid.
@@ -66,9 +72,16 @@ func WriteObjects(objects []*unstructured.Unstructured, options RenderOptions) e
 		if err != nil {
 			return err
 		}
-		_, err = os.Stdout.Write(data)
-		return err
+		return writeManifestStdout(data, options.AtmosConfig)
 	}
+}
+
+func writeManifestStdout(manifests []byte, atmosConfig *schema.AtmosConfiguration) error {
+	output := string(manifests)
+	if highlighted, err := u.HighlightCodeWithConfig(atmosConfig, output, "yaml"); err == nil {
+		output = highlighted
+	}
+	return data.Write(output)
 }
 
 func writeSingleFile(path string, objects []*unstructured.Unstructured, noun string) error {
@@ -82,7 +95,7 @@ func writeSingleFile(path string, objects []*unstructured.Unstructured, noun str
 	if err := os.WriteFile(path, data, filePerm); err != nil {
 		return fmt.Errorf("failed to write rendered manifests to %q: %w", path, err)
 	}
-	fmt.Fprintf(os.Stdout, "rendered %d %s object(s) to %s\n", len(objects), noun, path)
+	ui.Successf("Rendered %d %s object(s) to %s", len(objects), noun, path)
 	return nil
 }
 
@@ -102,6 +115,6 @@ func writeSplitFiles(outputDir string, objects []*unstructured.Unstructured, nou
 		}
 	}
 
-	fmt.Fprintf(os.Stdout, "rendered %d %s object(s) to %s\n", len(objects), noun, outputDir)
+	ui.Successf("Rendered %d %s object(s) to %s", len(objects), noun, outputDir)
 	return nil
 }

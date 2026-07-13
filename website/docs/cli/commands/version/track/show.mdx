@@ -1,0 +1,25 @@
+---
+title: atmos version track show
+sidebar_position: 20
+sidebar_label: show
+sidebar_class_name: command
+description: Show effective entries of a version track.
+---
+
+Show a track's entries after global defaults, track defaults, and group policies are applied.
+
+## Usage
+
+```shell
+atmos version track show [track] [flags]
+```
+
+## Examples
+
+```shell
+# Show effective entries for prod
+atmos version track show prod
+
+# Show effective entries selected by --track as JSON
+atmos version track show --track=prod --format=json
+```

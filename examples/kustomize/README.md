@@ -1,3 +1,11 @@
+---
+title: Kustomize
+tags: [Kubernetes]
+cast:
+  file: /casts/examples/kustomize/lifecycle.cast
+  title: atmos kustomize lifecycle
+---
+
 # Example: Kustomize Components
 
 Render and deploy Kustomize overlays with Atmos-native Kubernetes components against a local Kubernetes emulator (k3s).
@@ -27,11 +35,8 @@ atmos emulator down kubernetes -s dev          # stop (state persists)
 # atmos emulator reset kubernetes -s dev       # stop and delete cluster state
 ```
 
-Or run the whole round trip in one step:
-
-```shell
-atmos test
-```
+The `atmos test` custom command remains available as the CI smoke wrapper for
+this same lifecycle.
 
 ## Key Files
 

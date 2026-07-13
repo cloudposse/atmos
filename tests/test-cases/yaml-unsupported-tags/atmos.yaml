@@ -1,0 +1,8 @@
+# Test atmos.yaml with unsupported tag in config
+base_path: "."
+
+stacks:
+  # This should cause an error - !wrongtag is not supported in atmos.yaml
+  base_path: !wrongtag "stacks"
+  included_paths:
+    - "**/*"

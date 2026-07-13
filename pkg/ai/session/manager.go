@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -196,7 +197,7 @@ func (m *Manager) runCompactionIfNeeded(ctx context.Context, sessionID string, a
 	result, err := m.compactor.Compact(ctx, plan, config)
 	if err != nil {
 		m.notifyCompactStatus("failed", len(plan.MessagesToCompact), 0, err)
-		fmt.Printf("Warning: auto-compact failed: %v\n", err)
+		ui.Warningf("auto-compact failed: %v", err)
 		return activeMessages, summaries
 	}
 

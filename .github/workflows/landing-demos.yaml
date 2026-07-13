@@ -22,6 +22,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'landing-demos'
     runs-on: ubuntu-latest
     env:
+      ATMOS_BOOTSTRAP_VERSION: "1.222.0"
       TERM: xterm-256color
       COLORTERM: truecolor
       LANG: en_US.UTF-8
@@ -37,15 +38,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
 
       # Build atmos from THIS branch — the emulator commands the tapes use are not
       # in any published release yet.
       - name: Build atmos
         run: |
-          make build
+          sh scripts/build-atmos.sh default test
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       # Fonts only. Most CLI tooling comes from the Atmos toolchain: `atmos demo record`
@@ -93,7 +100,7 @@ jobs:
 
       - name: Upload diagnostics as an artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: landing-demos-diagnostics
           path: diag/
@@ -101,7 +108,7 @@ jobs:
 
       # Always make the renders downloadable, even before S3 is wired up.
       - name: Upload renders as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: landing-demos
           path: website/static/img/demos/

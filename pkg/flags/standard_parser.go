@@ -202,6 +202,7 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 			ForceColor:      GetBool(parsedConfig.Flags, "force-color"),
 			ForceTTY:        GetBool(parsedConfig.Flags, "force-tty"),
 			Mask:            GetBool(parsedConfig.Flags, "mask"),
+			Cast:            GetString(parsedConfig.Flags, "cast"),
 			Pager:           GetPagerSelector(parsedConfig.Flags, "pager"),
 			Identity:        GetIdentitySelector(parsedConfig.Flags, "identity"),
 			ProfilerEnabled: GetBool(parsedConfig.Flags, "profiler-enabled"),

@@ -51,6 +51,9 @@ func mergeShowConfig(dst, src *schema.ShowConfig) *schema.ShowConfig {
 	if src.Progress != nil {
 		dst.Progress = src.Progress
 	}
+	if src.Labels != nil {
+		dst.Labels = src.Labels
+	}
 
 	return dst
 }
@@ -88,6 +91,13 @@ func ShowProgress(cfg *schema.ShowConfig) bool {
 	defer perf.Track(nil, "step.ShowProgress")()
 
 	return cfg != nil && cfg.Progress != nil && *cfg.Progress
+}
+
+// ShowLabels returns true unless labels are explicitly disabled.
+func ShowLabels(cfg *schema.ShowConfig) bool {
+	defer perf.Track(nil, "step.ShowLabels")()
+
+	return cfg == nil || cfg.Labels == nil || *cfg.Labels
 }
 
 // BoolPtr is a helper to create a pointer to a bool value.

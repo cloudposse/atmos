@@ -8,8 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func clearDecodedYAMLCache() {
+	decodedYAMLCache.Range(func(key, _ any) bool {
+		decodedYAMLCache.Delete(key)
+		return true
+	})
+}
 
 // TestUnmarshalYAMLFromFileWithPositions_BasicParsing tests basic YAML unmarshaling behavior.
 func TestUnmarshalYAMLFromFileWithPositions_BasicParsing(t *testing.T) {
@@ -39,7 +47,7 @@ list:
 }
 
 // TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent tests that different content produces different results.
-// This indirectly validates the cache key includes content hash.
+// This indirectly validates the cache key includes a content fingerprint.
 func TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -50,7 +58,7 @@ func TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent(t *testing.T) {
 	assert.Equal(t, "value1", result1["key"])
 
 	// Second call with SAME file path but DIFFERENT content "value2"
-	// This tests the P8.1 fix: cache key should include content hash
+	// This tests the P8.1 fix: cache key should include a content fingerprint.
 	input2 := `key: value2`
 	result2, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input2, "test.yaml")
 	require.NoError(t, err)
@@ -111,6 +119,74 @@ func TestUnmarshalYAMLFromFileWithPositions_NilConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
 }
 
+func TestUnmarshalYAMLFromFileWithPositions_KeyDelimiterExpansion(t *testing.T) {
+	clearParsedYAMLCache()
+	clearDecodedYAMLCache()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+
+	input := `
+metadata.component: vpc-base
+"output.json": true
+image: repo/app:1.2.3
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "stack.yaml")
+	require.NoError(t, err)
+
+	metadata, ok := result["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-base", metadata["component"])
+	assert.Equal(t, true, result["output.json"])
+	assert.Equal(t, "repo/app:1.2.3", result["image"], "dotted values are not expanded")
+	assert.NotContains(t, result, "metadata.component")
+}
+
+func TestUnmarshalYAMLFromFile_KeyDelimiterExpansion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+
+	result, err := UnmarshalYAMLFromFile[map[string]any](atmosConfig, "settings.validation.check_cloudformation: true", "stack.yaml")
+	require.NoError(t, err)
+
+	settings, ok := result["settings"].(map[string]any)
+	require.True(t, ok)
+	validation := settings["validation"].(map[string]any)
+	assert.Equal(t, true, validation["check_cloudformation"])
+}
+
+func TestUnmarshalYAMLFromFileWithPositions_KeyDelimiterCacheIsolation(t *testing.T) {
+	clearParsedYAMLCache()
+	clearDecodedYAMLCache()
+
+	input := `metadata.component: vpc-base`
+	file := "same-stack.yaml"
+	withDelimiter := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+	withoutDelimiter := &schema.AtmosConfiguration{}
+
+	expanded, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](withDelimiter, input, file)
+	require.NoError(t, err)
+	metadata, ok := expanded["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-base", metadata["component"])
+
+	literal, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](withoutDelimiter, input, file)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-base", literal["metadata.component"])
+	assert.NotContains(t, literal, "metadata")
+}
+
 // TestGenerateParsedYAMLCacheKey_Basic tests cache key generation behavior.
 func TestGenerateParsedYAMLCacheKey_Basic(t *testing.T) {
 	// Test with valid inputs
@@ -132,6 +208,10 @@ func TestGenerateParsedYAMLCacheKey_Basic(t *testing.T) {
 	// Same file and content should produce same key
 	key4 := generateParsedYAMLCacheKey("file1.yaml", "content1")
 	assert.Equal(t, key1, key4, "Same file and content should produce same cache key")
+
+	// Same file and content with different key delimiters should produce different keys
+	key5 := generateParsedYAMLCacheKey("file1.yaml", "content1", ".")
+	assert.NotEqual(t, key1, key5, "Different key delimiters should produce different cache keys")
 }
 
 // TestGenerateParsedYAMLCacheKey_EmptyInputs tests cache key generation with empty inputs.
@@ -767,6 +847,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCEL,
 		AtmosYamlFuncGitRoot,
 		AtmosYamlFuncGitRootAlias,
 		AtmosYamlFuncGitSha,
@@ -788,6 +869,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
 		AtmosYamlFuncEmulator,
+		AtmosYamlFuncVersion,
 	}
 
 	for _, tag := range expectedTags {
@@ -798,6 +880,21 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Verify the map has exactly the expected number of tags.
 	assert.Equal(t, len(expectedTags), len(atmosYamlTagsMap),
 		"atmosYamlTagsMap should contain exactly %d tags", len(expectedTags))
+}
+
+func TestFntagPackage_ContainsAllSupportedYamlTags(t *testing.T) {
+	expectedTags := append([]string{
+		AtmosYamlFuncInclude,
+		AtmosYamlFuncIncludeRaw,
+	}, AtmosYamlTags...)
+
+	allTags := fntag.AllYAML()
+	for _, expectedTag := range expectedTags {
+		assert.True(t, fntag.IsValidYAML(expectedTag), "fntag.AllYAML() should contain tag: %s", expectedTag)
+	}
+
+	assert.Equal(t, len(expectedTags), len(allTags),
+		"fntag.AllYAML() should contain exactly %d tags", len(expectedTags))
 }
 
 // TestAtmosYamlTagsMap_O1Lookup tests that atmosYamlTagsMap provides O(1) lookup.
@@ -815,6 +912,7 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 		{AtmosYamlFuncTerraformOutput, true},
 		{AtmosYamlFuncTerraformState, true},
 		{AtmosYamlFuncEnv, true},
+		{AtmosYamlFuncCEL, true},
 		{AtmosYamlFuncGitRoot, true},
 		{AtmosYamlFuncGitRootAlias, true},
 		{AtmosYamlFuncGitSha, true},

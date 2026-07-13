@@ -49,6 +49,23 @@ func TestClassifyCosignError(t *testing.T) {
 	rekor401 := "cosign [verify-blob ...]: exit status 1\n" +
 		"Error: searching log query: [POST /api/v1/log/entries/retrieve][401] retrieveLogEntryUnauthorized"
 
+	// Verbatim (trimmed) cosign output captured from cloudposse/atmos#2700 CI:
+	// cosign fetches the --certificate URL itself (a GitHub release asset,
+	// not the Rekor tlog endpoint) and the CDN returned a transient 504.
+	certFetch504 := "cosign [verify-blob --certificate " +
+		"https://github.com/opentofu/opentofu/releases/download/v1.12.2/tofu_1.12.2_SHA256SUMS.pem ...]: exit status 1\n" +
+		"Error: loading verifier from key opts: loading cert: loading URL " +
+		"https://github.com/opentofu/opentofu/releases/download/v1.12.2/tofu_1.12.2_SHA256SUMS.pem: server returned HTTP 504"
+
+	sigFetch503 := "cosign [verify-blob --signature https://example.com/tool.sig ...]: exit status 1\n" +
+		"Error: loading signature: loading URL https://example.com/tool.sig: server returned HTTP 503"
+
+	// A non-retryable status (e.g. 404, a genuinely missing asset) via the
+	// same cosign HTTP-fetch code path must surface immediately.
+	certFetch404 := "cosign [verify-blob --certificate https://example.com/missing.pem ...]: exit status 1\n" +
+		"Error: loading verifier from key opts: loading cert: loading URL " +
+		"https://example.com/missing.pem: server returned HTTP 404"
+
 	cases := []struct {
 		name        string
 		err         error
@@ -62,6 +79,9 @@ func TestClassifyCosignError(t *testing.T) {
 		{name: "rekor 504 on tlog retrieve endpoint is retryable", err: rekorStatusErr("504"), wantWrapped: true},
 		{name: "rekor stream internal error is retryable", err: errors.New(rekorStreamInternalError), wantWrapped: true},
 		{name: "rekor 401 on tlog retrieve endpoint is NOT retryable", err: errors.New(rekor401), wantWrapped: false},
+		{name: "cosign --certificate fetch 504 is retryable", err: errors.New(certFetch504), wantWrapped: true},
+		{name: "cosign --signature fetch 503 is retryable", err: errors.New(sigFetch503), wantWrapped: true},
+		{name: "cosign --certificate fetch 404 is NOT retryable", err: errors.New(certFetch404), wantWrapped: false},
 		{name: "connection reset is retryable", err: transportErr("read tcp 10.0.0.1:443: connection reset by peer"), wantWrapped: true},
 		{name: "TLS handshake timeout is retryable", err: transportErr("net/http: TLS handshake timeout"), wantWrapped: true},
 		{name: "i/o timeout is retryable", err: transportErr("dial tcp 10.0.0.1:443: i/o timeout"), wantWrapped: true},
@@ -129,6 +149,28 @@ func TestRunCosignWithRetry_RecoversFromRekorFlake(t *testing.T) {
 		ErrSignatureFailed)
 
 	runner := &flakyRunner{retryableErr: rekorErr, failAttempts: 2}
+	req := &Request{Runner: runner}
+
+	err := runCosignWithRetry(context.Background(), req, []string{"verify-blob", "asset.tar.gz"})
+	require.NoError(t, err)
+	assert.Equal(t, 3, runner.calls, "expected 2 retried failures + 1 success")
+	assert.Equal(t, []string{"verify-blob", "asset.tar.gz"}, runner.finalCallArgs)
+}
+
+// TestRunCosignWithRetry_RecoversFromCertificateFetch504 reproduces the CI
+// failure in cloudposse/atmos#2700: cosign fetches its --certificate URL
+// directly, and a transient CDN 504 from that fetch must be retried the same
+// as any other transient toolchain download failure.
+func TestRunCosignWithRetry_RecoversFromCertificateFetch504(t *testing.T) {
+	t.Parallel()
+
+	certFetchErr := fmt.Errorf("%w: cosign [verify-blob --certificate "+
+		"https://github.com/opentofu/opentofu/releases/download/v1.12.2/tofu_1.12.2_SHA256SUMS.pem ...]: exit status 1\n"+
+		"Error: loading verifier from key opts: loading cert: loading URL "+
+		"https://github.com/opentofu/opentofu/releases/download/v1.12.2/tofu_1.12.2_SHA256SUMS.pem: server returned HTTP 504",
+		ErrSignatureFailed)
+
+	runner := &flakyRunner{retryableErr: certFetchErr, failAttempts: 2}
 	req := &Request{Runner: runner}
 
 	err := runCosignWithRetry(context.Background(), req, []string{"verify-blob", "asset.tar.gz"})

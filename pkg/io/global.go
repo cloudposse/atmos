@@ -311,6 +311,27 @@ func RegisterPattern(pattern string) error {
 	return ctx.Masker().RegisterPattern(pattern)
 }
 
+// ApplyMaskingConfig updates the global masker from an explicit config. This is used by
+// subprocess runners that already have the fully resolved Atmos config even when viper's
+// global settings were initialized earlier.
+func ApplyMaskingConfig(cfg *Config) {
+	defer perf.Track(nil, "io.ApplyMaskingConfig")()
+
+	if cfg == nil {
+		return
+	}
+
+	ctx := GetContext()
+	if ctx == nil {
+		return
+	}
+
+	masker := ctx.Masker()
+	masker.SetEnabled(!cfg.DisableMasking)
+	masker.SetReplacement(cfg.AtmosConfig.Settings.Terminal.Mask.Replacement)
+	registerCustomMaskPatterns(masker, cfg)
+}
+
 // ReconcileMasking re-reads the masking configuration (CLI flags → env → atmos.yaml → default)
 // and updates the global masker's enabled state to match. This is necessary because the global
 // masker may be created early (before CLI flags are parsed), at which point the `--mask` flag
@@ -324,7 +345,7 @@ func ReconcileMasking() {
 		return
 	}
 	cfg := buildConfig()
-	ctx.Masker().SetEnabled(!cfg.DisableMasking)
+	ApplyMaskingConfig(cfg)
 }
 
 // MaskingEnabled reports whether the global masker is currently enabled. Inspection commands

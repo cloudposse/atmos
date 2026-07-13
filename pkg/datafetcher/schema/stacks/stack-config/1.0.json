@@ -190,10 +190,14 @@
       ]
     },
     "condition": {
-      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
-      "oneOf": [
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate or CEL expression; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "anyOf": [
         {
           "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "string",
+          "description": "CEL expression. Built-in predicate keywords are evaluated as predicates before CEL."
         },
         {
           "type": "array",
@@ -2057,6 +2061,36 @@
                       },
                       "command": {
                         "type": "string"
+                      },
+                      "prompt": {
+                        "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
+                        "oneOf": [
+                          { "type": "string" },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "text": { "type": "string", "description": "Prompt text to render before simulated typed text." },
+                              "style": {
+                                "type": "string",
+                                "enum": ["command", "label", "muted", "info", "notice"],
+                                "description": "Semantic Atmos theme style for the simulated prompt."
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "mode": {
+                        "type": "string",
+                        "description": "Mode for cast and simulate steps. Simulate supports typed and prompt."
+                      },
+                      "rate": {
+                        "type": "string",
+                        "description": "Delay between simulated typed characters, e.g. 35ms. Use 0 to write immediately."
+                      },
+                      "text": {
+                        "type": "string",
+                        "description": "Text for write, wait, or simulate steps."
                       },
                       "stack": {
                         "type": "string"

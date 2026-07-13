@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/template"
 
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -118,6 +119,26 @@ func (v *Variables) EnvSlice() []string {
 		env = append(env, k+"="+v.Env[k])
 	}
 	return env
+}
+
+// EnsureBinaryInPath prepends the directory of binaryPath to the PATH variable
+// unless it is already present, matching the existing key's casing (Windows
+// uses "Path"). Command- or step-level env can override PATH entirely; calling
+// this afterwards preserves the guarantee that a bare `atmos` in steps
+// resolves to the running binary.
+func (v *Variables) EnsureBinaryInPath(binaryPath string) {
+	defer perf.Track(nil, "step.Variables.EnsureBinaryInPath")()
+
+	updated := envpkg.EnsureBinaryInPath(v.EnvSlice(), binaryPath)
+	pathValue := envpkg.GetPathFromEnvironment(updated)
+	key := "PATH"
+	for k := range v.Env {
+		if strings.EqualFold(k, "PATH") {
+			key = k
+			break
+		}
+	}
+	v.SetEnv(key, pathValue)
 }
 
 // GetValue returns a step's primary value.
@@ -251,6 +272,7 @@ func (v *Variables) templateData() map[string]any {
 	}
 	data := map[string]any{
 		"steps": steps,
+		"Env":   v.Env,
 		"env":   v.Env,
 		"Flags": v.Flags,
 		"flags": v.Flags,
@@ -307,6 +329,33 @@ func (v *Variables) Resolve(input string) (string, error) {
 	}
 
 	return v.resolveTemplate("step", input, v.templateData())
+}
+
+// ResolveWith resolves Go templates in input using the current variable data
+// with envOverlay merged on top of the persisted env for this call only. The
+// overlay does not mutate the Variables' env, so a per-step environment does
+// not leak into later steps' template context.
+func (v *Variables) ResolveWith(input string, envOverlay map[string]string) (string, error) {
+	defer perf.Track(nil, "step.Variables.ResolveWith")()
+
+	if input == "" {
+		return "", nil
+	}
+	data := v.templateData()
+	if len(envOverlay) > 0 {
+		merged := make(map[string]string, len(v.Env)+len(envOverlay))
+		for key, value := range v.Env {
+			merged[key] = value
+		}
+		for key, value := range envOverlay {
+			merged[key] = value
+		}
+		// templateData() returns a fresh map, so replacing these keys does not
+		// affect v.Env.
+		data["Env"] = merged
+		data["env"] = merged
+	}
+	return v.resolveTemplate("step", input, data)
 }
 
 // ResolveEnvMap resolves Go templates in a map of environment variables.

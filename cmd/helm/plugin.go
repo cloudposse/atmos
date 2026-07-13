@@ -167,7 +167,7 @@ func resolveHelmBinary(cmd *cobra.Command) (string, error) {
 		return "", err
 	}
 
-	tenv, err := dependenciesForHelmComponent(&atmosConfig, cfg.HelmfileComponentType, nil, nil)
+	tenv, err := dependenciesForHelmComponent(&atmosConfig, cfg.HelmComponentType, nil, nil)
 	if err != nil {
 		return "", err
 	}

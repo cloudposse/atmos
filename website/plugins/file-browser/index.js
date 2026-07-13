@@ -8,6 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const matter = require('gray-matter');
+
 // Default patterns to exclude from scanning.
 const DEFAULT_EXCLUDE_PATTERNS = [
   '**/node_modules/**',
@@ -20,6 +22,20 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '**/*.tfstate.*',
   '**/terraform.tfvars',
   '**/.envrc',
+];
+
+// Default section order for the index page. Instances can override with the
+// `tagOrder` plugin option (the gists gallery defines its own chapters).
+const DEFAULT_TAG_ORDER = [
+  'Quickstart',
+  'Stacks',
+  'Components',
+  'Kubernetes',
+  'Automation',
+  'Hooks',
+  'Emulators',
+  'AI',
+  'DX',
 ];
 
 // Curated ("featured") examples, in display order. This list is editorial — like the
@@ -44,9 +60,12 @@ const TITLES_MAP = {
   'custom-commands': 'Custom Commands',
   'emulator-aws': 'AWS Emulator',
   'emulator-k8s': 'Kubernetes Emulator',
+  'packer-docker': 'Packer + Docker',
 };
 
-// Tags mapping for examples (an example can have multiple tags).
+// Tags mapping for examples (an example can have multiple tags; the first tag
+// is the example's section on the index page). A README front matter `tags:`
+// list overrides this map, so new examples can self-categorize.
 const TAGS_MAP = {
   'quick-start-simple': ['Quickstart'],
   'quick-start-advanced': ['Quickstart'],
@@ -56,28 +75,59 @@ const TAGS_MAP = {
   'config-profiles': ['Stacks'],
   'demo-auth': ['Stacks'],
   'demo-schemas': ['Stacks'],
+  'stack-names': ['Stacks'],
+  'remote-stack-imports': ['Stacks'],
+  locals: ['Stacks'],
+  compositions: ['Stacks'],
+  'sops-secrets': ['Stacks'],
+  'onepassword-secrets': ['Stacks'],
+  'auth-stores': ['Stacks'],
   'demo-vendoring': ['Components'],
   'demo-component-versions': ['Components'],
   'source-provisioning': ['Components'],
   'demo-library': ['Components'],
+  'custom-components': ['Components'],
+  'container-component': ['Components'],
+  'native-terraform': ['Components'],
+  'terraform-tests': ['Components'],
+  caching: ['Components'],
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
   'custom-commands': ['Automation'],
   'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
-  'custom-components': ['Components'],
   'generate-files': ['Automation'],
+  'demo-ansible': ['Automation'],
+  'packer-docker': ['Automation'],
+  'background-steps': ['Automation'],
+  'parallel-steps': ['Automation'],
+  'workflow-retries': ['Automation'],
+  'container-step': ['Automation'],
+  'http-webhooks': ['Automation'],
+  'say-something': ['Automation'],
+  gitops: ['Automation'],
+  'hooks-checkov': ['Hooks'],
+  'hooks-custom-command': ['Hooks'],
+  'hooks-infracost': ['Hooks'],
+  'hooks-kics': ['Hooks'],
+  'hooks-trivy': ['Hooks'],
+  kubernetes: ['Kubernetes'],
+  helm: ['Kubernetes'],
+  kustomize: ['Kubernetes'],
+  'demo-helmfile': ['Kubernetes'],
+  'emulator-aws': ['Emulators'],
+  'emulator-k8s': ['Emulators', 'Kubernetes'],
+  'local-gitops': ['Emulators', 'Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
-  'emulator-aws': ['DX'],
-  'emulator-k8s': ['DX'],
-  'demo-helmfile': ['DX'],
-  'stack-names': ['Stacks'],
-  'demo-ansible': ['Automation'],
+  'container-sandbox': ['DX'],
+  'secrets-masking': ['DX'],
+  ai: ['DX'],
+  'ai-claude-code': ['DX'],
+  mcp: ['DX'],
+  'mcp-for-ai-coding-assistants': ['DX'],
   'mcp-with-aws': ['DX', 'Automation'],
-  'aws-ami-packer-github-actions': ['Automation'],
-  'sops-secrets': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.
@@ -170,11 +220,10 @@ const DOCS_MAP = {
     { label: 'Authentication', url: '/stacks/auth' },
     { label: 'Toolchain', url: '/cli/configuration/toolchain' },
   ],
-  'aws-ami-packer-github-actions': [
+  'packer-docker': [
+    { label: 'Packer Components', url: '/components/packer' },
     { label: 'Packer Build', url: '/cli/commands/packer/build' },
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Go Templates', url: '/templates' },
-    { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
+    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
   ],
 };
 
@@ -285,6 +334,26 @@ function generateGitHubUrl(relativePath, options) {
 }
 
 /**
+ * Parses README front matter with gray-matter so nested metadata (e.g. the
+ * `cast:` block with `file:`/`title:`) survives, without changing README bodies.
+ * @param {string} content - README content.
+ * @returns {{data: object, body: string}} Parsed metadata and markdown body.
+ */
+function parseReadmeFrontmatter(content) {
+  if (!content) {
+    return { data: {}, body: '' };
+  }
+
+  try {
+    const parsed = matter(content);
+    return { data: parsed.data || {}, body: parsed.content.trim() };
+  } catch (err) {
+    // Malformed front matter: fall back to treating the whole file as body.
+    return { data: {}, body: content };
+  }
+}
+
+/**
  * Recursively scans a directory and builds a file tree.
  * @param {string} dirPath - Absolute path to directory.
  * @param {string} relativePath - Path relative to source root.
@@ -379,28 +448,62 @@ function scanDirectory(dirPath, relativePath, options) {
  */
 function extractDescription(content) {
   if (!content) return '';
+  const { body: text } = parseReadmeFrontmatter(content);
 
-  // Remove frontmatter if present.
-  let text = content;
-  if (text.startsWith('---')) {
-    const endIndex = text.indexOf('---', 3);
-    if (endIndex !== -1) {
-      text = text.slice(endIndex + 3).trim();
-    }
-  }
-
-  // Skip headers and find first paragraph.
+  // Skip leading headers/blank lines, then collect every line of the first
+  // paragraph (a blank line or the next heading ends it) so hard-wrapped
+  // markdown source doesn't get cut mid-sentence or mid-token.
   const lines = text.split('\n');
+  const paragraph = [];
   for (const line of lines) {
     const trimmed = line.trim();
-    // Skip empty lines and headers.
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    // Return first non-empty, non-header line (truncated).
-    const description = trimmed.slice(0, 200);
-    return description.length < trimmed.length ? `${description}...` : description;
+    if (paragraph.length === 0) {
+      if (!trimmed || trimmed.startsWith('#')) continue;
+    } else if (!trimmed || trimmed.startsWith('#')) {
+      break;
+    }
+    paragraph.push(trimmed);
   }
 
-  return '';
+  return paragraph.join(' ');
+}
+
+// Target length for card descriptions, matching the length of the
+// hand-curated `description:` front matter values already in use.
+const MAX_DESCRIPTION_LENGTH = 200;
+
+/**
+ * Strips inline Markdown syntax down to plain text.
+ * @param {string} text - Markdown text.
+ * @returns {string} - Plain text.
+ */
+function stripMarkdown(text) {
+  return text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/\*([^*]*)\*/g, '$1')
+    .replace(/_([^_]*)_/g, '$1');
+}
+
+/**
+ * Reduces a description to a safe length for card display. Short
+ * descriptions are returned untouched (preserving Markdown formatting);
+ * long ones are flattened to plain text and cut at a word boundary so
+ * truncation never leaves a dangling Markdown token.
+ * @param {string} description - Raw (possibly Markdown) description.
+ * @returns {string} - Description within MAX_DESCRIPTION_LENGTH.
+ */
+function reduceDescriptionLength(description) {
+  if (!description || description.length <= MAX_DESCRIPTION_LENGTH) return description;
+
+  const plain = stripMarkdown(description);
+  if (plain.length <= MAX_DESCRIPTION_LENGTH) return plain;
+
+  const truncated = plain.slice(0, MAX_DESCRIPTION_LENGTH);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return `${(lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated).trimEnd()}…`;
 }
 
 /**
@@ -422,25 +525,49 @@ function scanExamples(sourceDir, options) {
 
     const examplePath = path.join(sourceDir, entry.name);
     const tree = scanDirectory(examplePath, entry.name, options);
+    const readmeMetadata = tree.readme ? parseReadmeFrontmatter(tree.readme.content) : { data: {} };
 
-    // Get description from README.
-    const description = tree.readme ? extractDescription(tree.readme.content) : '';
+    // Get description: prefer explicit front matter, fall back to the README's first paragraph.
+    const frontmatterDescription =
+      typeof readmeMetadata.data.description === 'string' ? readmeMetadata.data.description.trim() : '';
+    const description = reduceDescriptionLength(
+      frontmatterDescription || (tree.readme ? extractDescription(tree.readme.content) : '')
+    );
+    // Guard against a scalar `cast:` value so a malformed README can't break the build.
+    const castMeta = readmeMetadata.data.cast;
+    const cast = castMeta && typeof castMeta === 'object' ? castMeta : {};
+
+    // Tags: README front matter wins so examples can self-categorize; fall back
+    // to the hand-maintained map. The first tag is the example's index section.
+    const frontmatterTags = Array.isArray(readmeMetadata.data.tags)
+      ? readmeMetadata.data.tags.filter((tag) => typeof tag === 'string')
+      : [];
+    const tags = frontmatterTags.length > 0 ? frontmatterTags : TAGS_MAP[entry.name] || [];
 
     // Check for atmos.yaml.
     const hasAtmosYaml = tree.children.some(
       (child) => child.type === 'file' && (child.name === 'atmos.yaml' || child.name === 'atmos.yml')
     );
 
+    // Title: README front matter wins so examples name themselves; fall back
+    // to the hand-maintained map, then the directory name.
+    const frontmatterTitle =
+      typeof readmeMetadata.data.title === 'string' ? readmeMetadata.data.title.trim() : '';
+
     examples.push({
       name: entry.name,
       path: entry.name,
-      title: TITLES_MAP[entry.name] || entry.name,
+      title: frontmatterTitle || TITLES_MAP[entry.name] || entry.name,
       description,
       hasReadme: !!tree.readme,
       hasAtmosYaml,
       featured: FEATURED.includes(entry.name),
-      tags: TAGS_MAP[entry.name] || [],
+      tags,
       docs: DOCS_MAP[entry.name] || [],
+      cast: {
+        file: cast.file || '',
+        title: cast.title || '',
+      },
       root: tree,
     });
 
@@ -450,9 +577,18 @@ function scanExamples(sourceDir, options) {
   // Sort examples alphabetically.
   examples.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Collect unique tags in display order.
-  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
-  const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
+  // Collect unique tags in display order. The order is a per-instance plugin
+  // option so the examples and gists galleries can define their own chapters.
+  const tagOrder = Array.isArray(options.tagOrder) && options.tagOrder.length > 0
+    ? options.tagOrder
+    : DEFAULT_TAG_ORDER;
+  const knownTags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
+  // Any tag not in the configured order still gets a section (after the known
+  // ones, alphabetically) instead of being silently dropped from the filter bar.
+  const extraTags = [...new Set(examples.flatMap((ex) => ex.tags))]
+    .filter((tag) => !tagOrder.includes(tag))
+    .sort((a, b) => a.localeCompare(b));
+  const tags = [...knownTags, ...extraTags];
 
   // Build the curated featured list in FEATURED order (skip any that don't resolve).
   const featured = FEATURED.map((name) => examples.find((ex) => ex.name === name)).filter(Boolean);
@@ -528,6 +664,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     disclaimer = '',
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
+    tagOrder = DEFAULT_TAG_ORDER,
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -548,6 +685,7 @@ module.exports = function fileBrowserPlugin(context, options) {
         githubRepo,
         githubBranch,
         githubPath,
+        tagOrder,
       });
 
       console.log(

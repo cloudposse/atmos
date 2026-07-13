@@ -9,11 +9,11 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 ```bash
 # Run quick tests only (skip long-running tests >2s)
 go test -short ./...
-make test-short
+atmos test short
 
 # Run all tests including long-running ones (will skip if preconditions not met)
 go test ./...
-make testacc
+atmos test acc
 
 # Run with verbose output to see skips
 go test -v ./...
@@ -29,7 +29,7 @@ Run quick tests only, skipping tests that take more than 2 seconds:
 
 ```bash
 go test -short ./...
-make test-short
+atmos test short
 ```
 
 Long tests include:
@@ -40,7 +40,7 @@ Long tests include:
 To run all tests including long ones:
 ```bash
 go test ./...
-make testacc
+atmos test acc
 ```
 
 ## Heavy Integration Tests
@@ -345,9 +345,9 @@ The tests will automatically set some environment variables:
 - `HOME` is set to an empty temporary directory
 - `XDG_*` is set to an empty temporary directory
 
-### Flags
+### Snapshot Regeneration
 
-To regenerate ALL snapshots pass the `-regenerate-snapshots` flag.
+To regenerate ALL snapshots, use the Atmos development command:
 
 > ![WARNING]
 >
@@ -359,13 +359,19 @@ To regenerate ALL snapshots pass the `-regenerate-snapshots` flag.
 > git diff tests/snapshots
 > ```
 
+```shell
+atmos dev generate snapshots --all
+```
+
 To regenerate the snapshots for a specific test, just run:
 
 (replace `TestCLICommands/check_atmos_--help_in_empty-dir` with your test name)
 
 ```shell
-go test ./tests -v -run 'TestCLICommands/check_atmos_--help_in_empty-dir' -timeout 2m -regenerate-snapshots
+atmos dev generate snapshots --filter 'TestCLICommands/check_atmos_--help_in_empty-dir'
 ```
+
+The `--filter` value is passed to Go's `-run` flag as a regular expression.
 
 After generating new golden snapshots, don't forget to add them.
 

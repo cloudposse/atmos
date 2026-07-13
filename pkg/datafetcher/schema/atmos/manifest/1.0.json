@@ -52,6 +52,9 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "version": {
+      "$ref": "#/definitions/version"
     }
   },
   "additionalProperties": true,
@@ -154,10 +157,14 @@
       ]
     },
     "step_condition": {
-      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
-      "oneOf": [
+      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate or CEL expression; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "anyOf": [
         {
           "$ref": "#/definitions/step_condition_predicate"
+        },
+        {
+          "type": "string",
+          "description": "CEL expression. Built-in predicate keywords are evaluated as predicates before CEL."
         },
         {
           "type": "array",
@@ -220,10 +227,14 @@
       ]
     },
     "condition": {
-      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
-      "oneOf": [
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate or CEL expression; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "anyOf": [
         {
           "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "string",
+          "description": "CEL expression. Built-in predicate keywords are evaluated as predicates before CEL."
         },
         {
           "type": "array",
@@ -1459,6 +1470,16 @@
             },
             "templates": {
               "$ref": "#/definitions/templates"
+            },
+            "yaml": {
+              "type": "object",
+              "description": "YAML parsing settings",
+              "properties": {
+                "key_delimiter": {
+                  "type": "string",
+                  "description": "Delimiter for expanding dotted keys into nested maps (e.g., '.' or '::'). Empty or omitted disables expansion."
+                }
+              }
             }
           },
           "required": []
@@ -2009,6 +2030,41 @@
                       "command": {
                         "type": "string"
                       },
+                      "prompt": {
+                        "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
+                        "oneOf": [
+                          { "type": "string" },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "text": { "type": "string", "description": "Prompt text to render before simulated typed text." },
+                              "style": {
+                                "type": "string",
+                                "enum": ["command", "label", "muted", "info", "notice"],
+                                "description": "Semantic Atmos theme style for the simulated prompt."
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": ["steps", "session", "typed", "prompt"],
+                        "description": "Mode for cast and simulate steps. Cast supports steps and session; simulate supports typed and prompt."
+                      },
+                      "rate": {
+                        "type": "string",
+                        "description": "Delay between simulated typed characters, e.g. 35ms. Use 0 to write immediately."
+                      },
+                      "write_rate": {
+                        "type": "string",
+                        "description": "Default delay between cast session text writes, e.g. 35ms. Use 0 to write immediately."
+                      },
+                      "text": {
+                        "type": "string",
+                        "description": "Text for write, wait, or simulate steps."
+                      },
                       "stack": {
                         "type": "string"
                       },
@@ -2180,7 +2236,27 @@
                         "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
                         "additionalProperties": true
                       }
-                    }
+                    },
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "prompt": {
+                              "type": "object"
+                            }
+                          },
+                          "required": ["prompt"]
+                        },
+                        "then": {
+                          "properties": {
+                            "type": {
+                              "const": "simulate"
+                            }
+                          },
+                          "required": ["type"]
+                        }
+                      }
+                    ]
                   }
                 }
               ]
@@ -2405,6 +2481,26 @@
             "additionalProperties": true
               }
             ]
+          }
+        }
+      ]
+    },
+    "version": {
+      "title": "version",
+      "description": "Stack-level Atmos Version Tracker track assertion. Selects which version track (`atmos version track`) this stack resolves `!version` and `{{ .version.* }}` against.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "track": {
+              "type": "string",
+              "description": "The version track this stack asserts (e.g. `dev`, `prod`). Defaults to `version.track` in `atmos.yaml` when omitted."
+            }
           }
         }
       ]

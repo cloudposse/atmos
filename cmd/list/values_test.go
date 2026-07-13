@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestListValuesFlags tests that the list values command has the correct flags.
@@ -400,4 +401,44 @@ func TestListVarsCommand(t *testing.T) {
 	assert.Contains(t, varsCmd.Short, "List component vars across stacks")
 	assert.NotNil(t, varsCmd.RunE)
 	assert.NotEmpty(t, varsCmd.Example)
+}
+
+// TestValuesCmd_RunE_CoverageIntegration exercises valuesCmd.RunE end-to-end
+// against the `complete` fixture (helpers defined in
+// cmd_executor_integration_test.go), covering the full Cobra glue path —
+// checkAtmosConfig → BindFlagsToViper → listValuesWithOptions →
+// data.Writeln(output) — including the final write that unit tests calling
+// listValuesWithOptions directly never reach.
+func TestValuesCmd_RunE_CoverageIntegration(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("values", valuesParser.RegisterFlags)
+	// Other tests in this package leak an "identity" value into the shared
+	// viper.GetViper() singleton via the package-level viper.Set (e.g.
+	// instances_test.go's TestInstancesIdentityFlagLogic) without resetting
+	// it. Explicitly disabling identity resolution here (Changed=true beats
+	// any leaked viper value) keeps this test's outcome independent of
+	// package test ordering.
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+
+	require.NoError(t, valuesCmd.RunE(cmd, []string{"vpc"}),
+		"complete fixture should list vpc values cleanly through the full RunE path")
+}
+
+// TestVarsCmd_RunE_CoverageIntegration is the `list vars` analogue of
+// TestValuesCmd_RunE_CoverageIntegration, covering varsCmd.RunE's final
+// data.Writeln(output) call.
+func TestVarsCmd_RunE_CoverageIntegration(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("vars", varsParser.RegisterFlags)
+	// See the identical comment in TestValuesCmd_RunE_CoverageIntegration:
+	// guards against "identity" leaking through the shared viper.GetViper()
+	// singleton from other tests in this package.
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+
+	require.NoError(t, varsCmd.RunE(cmd, []string{"vpc"}),
+		"complete fixture should list vpc vars cleanly through the full RunE path")
 }

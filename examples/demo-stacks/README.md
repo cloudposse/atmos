@@ -1,3 +1,14 @@
+---
+title: Stack Inheritance
+tags: [Stacks]
+description: >-
+  Inherit shared component defaults from a catalog and override them
+  per environment — the pattern that eliminates copy-pasted stack config.
+cast:
+  file: /casts/examples/demo-stacks/inheritance.cast
+  title: atmos stack inheritance
+---
+
 # Example: Demo Stacks
 
 Inherit configuration across environments to eliminate duplication.
@@ -15,13 +26,17 @@ Learn more about [Stack Inheritance](https://atmos.tools/howto/inheritance).
 ```shell
 cd examples/demo-stacks
 
-# See how configuration is inherited
-atmos describe component myapp -s dev
-atmos describe component myapp -s prod
+# See how configuration is inherited (--query focuses on the vars section)
+atmos describe component myapp -s dev --query .vars
+atmos describe component myapp -s prod --query .vars
 
 # Compare the resolved configuration across environments
-atmos describe stacks --components myapp
+atmos describe stacks --components myapp --sections vars
 ```
+
+> [!TIP]
+> Drop `--query`/`--sections` to see the full resolved configuration, including
+> imports, inheritance chain, and deps.
 
 ## Key Files
 
