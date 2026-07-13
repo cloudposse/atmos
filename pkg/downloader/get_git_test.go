@@ -439,6 +439,77 @@ func writeFakeGit(t *testing.T, stdout string, code int) {
 	t.Setenv("PATH", newPath)
 }
 
+// writeFakeGitFailingOn creates a fake `git` on PATH (same mechanism as
+// writeFakeGit) that fails only when failArg appears among its arguments,
+// succeeding (exit 0) for every other invocation. Used to simulate a git
+// host rejecting `fetch <sha>` while `clone`/`init`/`checkout` still work.
+// On "init"/"clone" it creates the destination directory (the last argument)
+// so later commands that `cd` into it (checkout, remote add) don't fail on a
+// missing directory the real git would have created.
+func writeFakeGitFailingOn(t *testing.T, failArg string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	if runtime.GOOS == "windows" {
+		fname := filepath.Join(dir, "git.bat")
+		script := "@echo off\r\n" +
+			"for %%a in (%*) do if \"%%a\"==\"" + failArg + "\" exit /b 1\r\n" +
+			"if \"%1\"==\"init\" (for %%a in (%*) do set last=%%a) & mkdir \"%last%\" 2>nul\r\n" +
+			"if \"%1\"==\"clone\" (for %%a in (%*) do set last=%%a) & mkdir \"%last%\" 2>nul\r\n" +
+			"exit /b 0\r\n"
+		if err := os.WriteFile(fname, []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+	} else {
+		fname := filepath.Join(dir, "git")
+		script := "#!/bin/sh\n" +
+			"for arg in \"$@\"; do\n" +
+			"  if [ \"$arg\" = \"" + escapeSh(failArg) + "\" ]; then\n" +
+			"    exit 1\n" +
+			"  fi\n" +
+			"done\n" +
+			"case \"$1\" in\n" +
+			"  init|clone)\n" +
+			"    eval \"last=\\${$#}\"\n" +
+			"    mkdir -p \"$last\"\n" +
+			"    ;;\n" +
+			"esac\n" +
+			"exit 0\n"
+		if err := os.WriteFile(fname, []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+	}
+
+	oldPath := os.Getenv("PATH")
+	newPath := dir
+	if oldPath != "" {
+		newPath = dir + string(os.PathListSeparator) + oldPath
+	}
+	t.Setenv("PATH", newPath)
+}
+
+// TestClone_ShallowCommitFallsBackToFullCloneOnFetchFailure proves clone()
+// recovers from a cloneShallowCommit failure (e.g. a host that rejects
+// `fetch <sha>` for a non-tip commit) by retrying as a normal full clone,
+// instead of propagating the error outright.
+func TestClone_ShallowCommitFallsBackToFullCloneOnFetchFailure(t *testing.T) {
+	writeFakeGitFailingOn(t, "fetch")
+
+	g := newGetter()
+	dst := filepath.Join(t.TempDir(), "clone-dest")
+	u := mustURL(t, "https://example.com/repo.git")
+
+	params := gitOperationParams{
+		ctx:   context.Background(),
+		dst:   dst,
+		u:     u,
+		ref:   "abc1234567",
+		depth: 1,
+	}
+	err := g.clone(&params)
+	require.NoError(t, err, "expected fallback to a full clone to succeed even though the shallow fetch failed")
+}
+
 func itoa(i int) string {
 	if i == 0 {
 		return "0"

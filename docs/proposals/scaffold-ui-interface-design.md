@@ -1,5 +1,17 @@
 # Scaffold UI Interface Design
 
+> **Status: Partially realized.** The shipped `ScaffoldUI` interface
+> (`cmd/scaffold/interfaces.go`) is a narrower, pragmatic extraction of the 7
+> `*generatorUI.InitUI` methods the scaffold command actually calls — it does not
+> match the broader `Info`/`Success`/`Error`/`Write*`/`Render*`/`Print*` surface
+> designed below. Separately, the dry-run create/update status display that shipped
+> (`pkg/generator/ui/ui.go`'s per-file loop) is a much lighter realization of the
+> idea in this doc: it prints a simple `(would create)` / `(would update)` label
+> next to each file's checkmark based on whether the target file existed before
+> processing, not the full `DryRunFile`/`MergeStatus`/`FileStatus` type system or the
+> `RenderDryRunPreview` method designed here. Treat this document as the original
+> design exploration, not a description of what shipped.
+
 ## Overview
 
 The `ScaffoldUI` interface abstracts all UI operations for the scaffold command, enabling dependency injection and testability. This design separates business logic from presentation concerns.
@@ -10,8 +22,6 @@ The `ScaffoldUI` interface abstracts all UI operations for the scaffold command,
 package scaffold
 
 import (
-    "io"
-
     "github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
@@ -438,6 +448,12 @@ func (ui *ProductionUI) RenderDryRunPreview(
 
     for _, file := range files {
         var status, icon string
+        // FileStatusCreated/FileStatusUpdated are intentionally left as
+        // unhandled switch cases (falling to default) rather than matched
+        // explicitly: file.Exists is the authoritative signal for
+        // create-vs-update once Skipped/Conflict are ruled out. This ordering
+        // (explicit terminal states first, existence check last) is the same
+        // precedence the shipped two-state dry-run label uses.
         switch file.MergeStatus {
         case FileStatusSkipped:
             status = "SKIP"
@@ -649,11 +665,11 @@ package scaffold
 
 import (
     "fmt"
-    "strings"
+    "path/filepath"
 
-    atmosui "github.com/cloudposse/atmos/pkg/ui"
     "github.com/cloudposse/atmos/pkg/generator/templates"
     generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
+    atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ProductionUI implements ScaffoldUI using real UI components.
@@ -702,6 +718,9 @@ func (ui *ProductionUI) PromptForTemplate(configs map[string]templates.Configura
         return templates.Configuration{}, err
     }
 
+    // Defensive only: ui.initUI.PromptForTemplate selects selectedName from
+    // this same configs map, so the lookup below cannot structurally miss at
+    // this call site. Kept as a guard in case that invariant ever changes.
     config, ok := configs[selectedName]
     if !ok {
         return templates.Configuration{}, fmt.Errorf("template not found: %s", selectedName)

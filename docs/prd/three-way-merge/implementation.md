@@ -1,5 +1,18 @@
 # PRD: Three-Way Merge for File Updates
 
+> **Status: Shipped, with some design decisions made differently than
+> originally planned here.** Key differences from this document, called out
+> inline where they occur: (1) the text-merge library is `github.com/epiclabs-io/diff3`,
+> not `github.com/nasdf/diff3`; (2) base content is read directly from a git
+> ref (`--base-ref`, defaulting to `HEAD`, via `pkg/generator/storage.GitBaseStorage`)
+> rather than stored on disk under `.atmos/init/base/` or `.atmos/scaffold/base/`
+> (that file-snapshot store and its `metadata.yaml` were never built); (3) on the
+> default `manual` `--merge-strategy`, a conflict aborts the write entirely rather
+> than leaving a conflict-marked file on disk; (4) `--dry-run` shipped on `atmos
+> scaffold generate` (including a real merge preview with `--update`), but `atmos
+> init` has no `--dry-run` flag at all; (5) `--max-changes` was never implemented
+> as a CLI flag on either command.
+
 ## Executive Summary
 
 Implement a 3-way merge system that intelligently merges file updates while preserving user customizations. The system uses dual strategies: line-based text merging for general files and structure-aware YAML merging for configuration files. This merge capability is used by template update workflows in `atmos init --update` and `atmos scaffold generate --update`.
@@ -212,22 +225,27 @@ variable "region" {
   default = "us-east-1"
 }
 
-# Ours (user added description)
+# Ours (user added a description AND changed the default)
 variable "region" {
   description = "AWS region"
-  default = "us-east-1"
+  default = "us-east-2"
 }
 
-# Theirs (template changed default)
+# Theirs (template changed the default to a different value)
 variable "region" {
   default = "us-west-2"
 }
 
-# Result: CONFLICT (both modified)
+# Result: CONFLICT — both sides changed the same `default` line differently.
+# Note this is a genuine conflict specifically because both sides touch the
+# same line: ours' `description` addition merges in cleanly on its own (theirs
+# never touched that line), but `default` was changed by both sides to
+# different values, so it can't be resolved automatically under the default
+# `manual` --merge-strategy.
 variable "region" {
-<<<<<<< HEAD (ours)
   description = "AWS region"
-  default = "us-east-1"
+<<<<<<< HEAD (ours)
+  default = "us-east-2"
 =======
   default = "us-west-2"
 >>>>>>> template (theirs)
@@ -336,41 +354,49 @@ func (m *ThreeWayMerger) SetMaxChanges(thresholdPercent int)
 
 ### Conflict Handling
 
-When conflicts are detected:
+**Shipped behavior**: the default conflict resolution is `--merge-strategy=manual`
+— this is intentionally today's pre-existing behavior: on a genuine conflict, the
+merge **aborts without writing anything to disk** (the existing file on disk is
+untouched) and returns an error. It does not leave a partially-merged file with
+Git-style `<<<<<<<`/`=======`/`>>>>>>>` markers written out — internally, the
+diff3 merger produces those markers to *detect and count* conflicts (see
+`HasConflictMarkers` in `pkg/generator/merge/text_merger.go`), but on the default
+`manual` strategy the merge result is never written when conflicts are found (see
+`mergeFile` in `pkg/generator/engine/merge_update.go`).
 
-1. **Insert conflict markers** (Git-style):
+1. **Return clear error** with context, e.g.:
    ```
-   <<<<<<< HEAD (ours)
-   user's version
-   =======
-   template's version
-   >>>>>>> template (theirs)
-   ```
+   failed to perform 3-way merge for file: atmos.yaml
+   Merge resulted in 2 conflict(s) in file: atmos.yaml
 
-2. **Return clear error** with context:
-   ```
-   failed to merge file atmos.yaml: merge conflicts detected
-   Conflicts:
-     - Line 15-20: Both modified 'terraform.base_path'
-     - Line 45-50: Both modified 'stacks.name_pattern'
-
-   File written with conflict markers.
-   Please resolve manually or use --force to overwrite.
+   💡 Open the file and look for conflict markers: <<<<<<<, =======, >>>>>>>
+   💡 Resolve conflicts manually and re-run the command
+   💡 Or use --force to overwrite the file completely
    ```
 
-3. **Provide resolution options**:
-   - Manual: Edit file to resolve markers
-   - Use `--force`: Overwrite with template version
-   - Use `--merge-strategy=ours`: Keep user version
-   - Use `--merge-strategy=theirs`: Use template version
+2. **Resolution options**:
+   - Auto-resolve with `--merge-strategy=ours`: keep the user's value for any
+     conflicting section
+   - Auto-resolve with `--merge-strategy=theirs`: use the template's value for
+     any conflicting section
+   - Use `--force` instead of `--update`: overwrite with the template version
+     entirely (loses local customizations in that file)
+   - Manual: adjust the source files and re-run `--update`
 
 ### Base Content Storage
 
 **Requirement**: 3-way merge requires the original version (base) to make intelligent decisions.
 
-**Storage strategy**: Store base content when files are initially generated, retrieve during updates.
+**Shipped storage strategy**: read the base directly from git — there is no
+on-disk snapshot or metadata file. `pkg/generator/storage.GitBaseStorage.LoadBase`
+resolves `--base-ref` (a branch, tag, or commit; defaults to `HEAD`) via go-git
+and reads each file's blob content straight out of that commit's tree. This is
+a deliberate departure from the file-snapshot design originally sketched below
+(`.atmos/init/base/`, `.atmos/init/metadata.yaml`, `.atmos/scaffold/base/`,
+`.atmos/scaffold/metadata.yaml`) — none of that on-disk structure exists in the
+shipped code. The sketch is retained below for historical context only.
 
-**Storage location**: `.atmos/init/base/` (for init templates)
+**Original sketch (not implemented — historical)**: `.atmos/init/base/` (for init templates)
 
 ```
 .atmos/
@@ -382,7 +408,7 @@ When conflicts are detected:
         └── components/
 ```
 
-**Metadata format**:
+**Metadata format** (never implemented):
 ```yaml
 version: 1
 generated_by: atmos init
@@ -399,53 +425,64 @@ files:
     checksum: sha256:def456...
 ```
 
-**Generic workflow** (used by init, scaffold, etc.):
+**Shipped workflow** (used by both `atmos init --update` and `atmos scaffold
+generate --update`):
 
 1. **Initial generation**:
    - Generate files from template/source
-   - Store original content as base
-   - Write metadata (what was generated, when, from what source)
+   - Write files to the target directory (no separate base snapshot is stored)
 
 2. **Update operation**:
-   - Load base content (original version)
+   - Resolve `--base-ref` (defaults to `HEAD`) in the target directory's git repo
+   - Load each file's base content directly from that git ref
    - Load current content (ours - with user changes)
    - Render/fetch new version (theirs - with updates)
-   - Perform 3-way merge
-   - Update base content on success
+   - Perform 3-way merge, honoring `--merge-strategy`
 
-3. **No base found** (graceful degradation):
-   - Fall back to 2-way diff (best effort)
-   - Warn user: "No base version found, merge may lose customizations"
-   - Suggest manual review of changes
+3. **No git repository, or `--base-ref` doesn't resolve**:
+   - `--update` requires a git repository to compute a meaningful base; without
+     one, the command errors out (`ErrThreeWayMerge`) rather than silently
+     falling back to a 2-way diff (`GitBaseStorage.ValidateBaseRef` returns a
+     hint pointing at `--force` or a corrected `--base-ref`)
 
 ## Text-Based Merge Algorithm
 
 ### Implementation
 
-Use `github.com/hexops/gotextdiff` (already in dependencies) for Myers diff:
+**Shipped**: `pkg/generator/merge/text_merger.go` uses `github.com/epiclabs-io/diff3`
+directly (its `Merge` function performs the diff3 algorithm and marks conflicts),
+not a hand-rolled apply-both-diffs step built on `github.com/hexops/gotextdiff`'s
+Myers diff as originally sketched below. `gotextdiff` is present in
+`go.mod` but is not what the shipped text merger is built on; treat the pseudo-code
+below as illustrative of the diff3 algorithm's shape, not literal shipped code.
 
 ```go
 type TextMerger struct {
     thresholdPercent int
+    conflictStrategy ConflictStrategy // manual (default), ours, or theirs
 }
 
 func (m *TextMerger) Merge(base, ours, theirs string) (string, error) {
-    // 1. Compute diffs
-    baseDiff := myers.ComputeEdits(base, ours)   // What user changed
-    theirsDiff := myers.ComputeEdits(base, theirs) // What template changed
+    // 1. Run the diff3 merge (github.com/epiclabs-io/diff3 in the shipped code)
+    merged, hasConflicts := diff3Merge(base, ours, theirs)
 
-    // 2. Apply both diffs, detect conflicts
-    merged, conflicts := m.applyBothDiffs(base, baseDiff, theirsDiff)
+    // 2. Auto-resolve if a non-default --merge-strategy is set
+    if hasConflicts && m.conflictStrategy != ConflictStrategyManual {
+        merged = resolveWithStrategy(merged, m.conflictStrategy)
+        hasConflicts = false
+    }
 
-    // 3. Check threshold
-    if m.exceedsThreshold(base, ours, theirs) {
+    // 3. Check threshold (only meaningful once conflicts remain)
+    if hasConflicts && m.exceedsThreshold(base, ours, theirs) {
         return "", fmt.Errorf("too many changes detected")
     }
 
-    // 4. Handle conflicts
-    if len(conflicts) > 0 {
-        return m.insertConflictMarkers(merged, conflicts),
-               fmt.Errorf("merge conflicts detected: %d conflicts", len(conflicts))
+    // 4. On a genuine, unresolved conflict (manual strategy): report it.
+    // The caller (mergeFile in pkg/generator/engine/merge_update.go) aborts
+    // without writing anything to disk — it does not write a conflict-marked
+    // file out.
+    if hasConflicts {
+        return "", fmt.Errorf("merge conflicts detected")
     }
 
     return merged, nil
@@ -665,7 +702,15 @@ Required YAML-specific test coverage:
 
 ### Example 1: Generator Integration
 
-Update `pkg/generator/engine/templating.go` to use 3-way merge:
+**Note**: this is the original design sketch. The shipped `handleExistingFile`/
+`mergeFile` (`pkg/generator/engine/templating.go` and `merge_update.go`) differ
+in two important ways: (1) there's no `loadBaseContent`/`saveBaseContent`
+snapshot pair — the base comes from `GitBaseStorage.LoadBase` against
+`--base-ref` and nothing is persisted after the merge; (2) on a conflict, the
+shipped code does **not** write a conflict-marked file to disk — it returns an
+error and leaves the existing file untouched. The pseudo-code below reflects
+the original (unimplemented-as-written) plan; see "Conflict Handling" above for
+the shipped behavior.
 
 ```go
 func (p *Processor) handleExistingFile(file File, existingPath, targetPath string, force, update bool, ...) error {
@@ -697,7 +742,8 @@ func (p *Processor) handleExistingFile(file File, existingPath, targetPath strin
 func (p *Processor) handleMergeConflict(path, content string, mergeErr error) error {
     ui.Error("Merge conflicts detected in %s", path)
 
-    // Write file with conflict markers
+    // NOTE: this is the original plan. The shipped code does NOT write the
+    // file here — it returns the error and leaves the existing file as-is.
     if err := os.WriteFile(path, []byte(content), 0644); err != nil {
         return err
     }
@@ -716,13 +762,15 @@ func (p *Processor) handleMergeConflict(path, content string, mergeErr error) er
 ### New Flags
 
 ```bash
-# Merge strategy
+# Merge strategy — SHIPPED on both `atmos init` and `atmos scaffold generate`
 --merge-strategy=manual|ours|theirs   # Default: manual
 
-# Change threshold
+# Change threshold — NOT SHIPPED as a flag on either command; the merger has
+# an internal, hardcoded threshold (currently 50%) with no CLI knob to change it
 --max-changes=50                      # Percentage (0-100, default: 50)
 
-# Preview changes
+# Preview changes — SHIPPED on `atmos scaffold generate` only. `atmos init`
+# has no --dry-run flag at all.
 --dry-run                             # Show what would be merged
 ```
 
@@ -738,10 +786,12 @@ atmos init --update --merge-strategy=theirs
 # Keep all user changes, ignore template updates
 atmos init --update --merge-strategy=ours
 
-# Allow larger changes
+# NOT SUPPORTED TODAY: --max-changes was never implemented as a flag
 atmos init --update --max-changes=75
 
-# Preview without writing
+# NOT SUPPORTED TODAY on atmos init (no --dry-run flag exists for init).
+# The scaffold equivalent IS shipped:
+#   atmos scaffold generate --update --dry-run
 atmos init --update --dry-run
 ```
 
@@ -752,12 +802,14 @@ atmos init --update --dry-run
 **Goal**: Replace `pkg/generator/merge` with proper 3-way merge for text files.
 
 **Tasks**:
-- [ ] Add `github.com/nasdf/diff3` dependency
-- [ ] Implement `TextMerger` wrapper with conflict detection
-- [ ] Add threshold checking and configurable strategies
+- [x] Add a diff3 dependency — shipped as `github.com/epiclabs-io/diff3`, not
+      `github.com/nasdf/diff3` as originally planned here (see "Go Libraries
+      for 3-Way Merge" below)
+- [x] Implement `TextMerger` wrapper with conflict detection
+- [x] Add threshold checking and configurable strategies
 - [ ] Write 20+ test cases for text merging
 - [ ] Benchmark performance on large files
-- [ ] Update existing `merge.go` interface
+- [x] Update existing `merge.go` interface
 
 **Deliverables**:
 - `pkg/generator/merge/text_merger.go`
@@ -769,10 +821,10 @@ atmos init --update --dry-run
 **Goal**: Add structure-aware merging for YAML configuration files.
 
 **Tasks**:
-- [ ] Implement `YAMLMerger` with yaml.v3 Node API
-- [ ] Add recursive mapping/sequence/scalar merge
-- [ ] Implement comment preservation (HeadComment, LineComment, FootComment)
-- [ ] Implement anchor and alias preservation
+- [x] Implement `YAMLMerger` with yaml.v3 Node API
+- [x] Add recursive mapping/sequence/scalar merge
+- [x] Implement comment preservation (HeadComment, LineComment, FootComment)
+- [x] Implement anchor and alias preservation
 - [ ] Write 20+ test cases for YAML merging
 - [ ] Test comment/anchor round-trip
 - [ ] Add fallback to text merge for invalid YAML
@@ -783,31 +835,42 @@ atmos init --update --dry-run
 - Comment preservation tests
 - Anchor/alias tests
 
-### Phase 3: Base Storage & Integration
+### Phase 3: Base Storage & Integration (Shipped — differently than planned)
 
-**Goal**: Store base content and integrate merge into generator.
+**Goal**: Retrieve base content and integrate merge into the generator.
+
+**Status**: Shipped, but via a git-ref-based base rather than the file-snapshot
+design originally planned here. `.atmos/init/base/` and
+`.atmos/init/metadata.yaml` were never implemented — see "Base Content Storage"
+above.
 
 **Tasks**:
-- [ ] Implement base content storage in `.atmos/init/base/`
-- [ ] Add metadata file format (`.atmos/init/metadata.yaml`)
-- [ ] Update `pkg/generator/engine/templating.go` to use new merge API
-- [ ] Implement `loadBaseContent()` and `saveBaseContent()` methods
-- [ ] Implement conflict handling UI (error messages, resolution guidance)
-- [ ] Update existing tests to use 3-way merge
-- [ ] Add integration tests
+- [x] Retrieve base content — shipped as `pkg/generator/storage.GitBaseStorage`
+      reading from `--base-ref` (git), not a `.atmos/init/base/` file store
+- [ ] ~~Add metadata file format (`.atmos/init/metadata.yaml`)~~ — not
+      implemented; no metadata file exists in the shipped design
+- [x] Update `pkg/generator/engine/templating.go` to use the new merge API
+- [ ] ~~Implement `loadBaseContent()` and `saveBaseContent()` methods~~ — not
+      implemented; superseded by `GitBaseStorage.LoadBase`, and there is no
+      "save" step since nothing is snapshotted
+- [x] Implement conflict handling UI (error messages, resolution guidance)
+- [x] Update existing tests to use 3-way merge
+- [x] Add integration tests
 
 **Deliverables**:
-- Base storage implementation
+- Git-ref-based base retrieval (not file-snapshot storage)
 - Updated `handleExistingFile()` method
 - Conflict handling UI
 - Integration tests
 
-### Phase 4: CLI & Documentation
+### Phase 4: CLI & Documentation (Shipped, with one gap)
 
 **Goal**: Add user-facing flags and documentation.
 
 **Tasks**:
-- [ ] Add CLI flags (--merge-strategy, --max-changes, --dry-run)
+- [x] Add CLI flags: `--merge-strategy` (both commands), `--base-ref` (both
+      commands), `--dry-run` (scaffold only — **not implemented for `atmos
+      init`**); `--max-changes` was never implemented as a flag on either command
 - [ ] Update `atmos init` command documentation
 - [ ] Update `atmos scaffold generate` command documentation
 - [ ] Write user guide for conflict resolution
@@ -815,7 +878,7 @@ atmos init --update --dry-run
 - [ ] Update website documentation
 
 **Deliverables**:
-- CLI flags implementation
+- CLI flags implementation (see gap above)
 - User documentation
 - Examples in website/docs/
 
@@ -823,12 +886,16 @@ atmos init --update --dry-run
 
 ### Functional Requirements
 
-- [ ] **Preserves user customizations** - User changes never lost in clean merge
-- [ ] **Applies template updates** - New template features added automatically
-- [ ] **Detects conflicts** - Conflicting changes surfaced with clear context
-- [ ] **YAML comment preservation** - Comments maintained in YAML files
-- [ ] **YAML anchor preservation** - Anchors and aliases work after merge
-- [ ] **Fallback behavior** - Graceful degradation when base not found
+- [x] **Preserves user customizations** - User changes never lost in clean merge
+- [x] **Applies template updates** - New template features added automatically
+- [x] **Detects conflicts** - Conflicting changes surfaced with clear context
+- [x] **YAML comment preservation** - Comments maintained in YAML files
+- [x] **YAML anchor preservation** - Anchors and aliases work after merge
+- [ ] **Fallback behavior** - Partially met: a per-file missing base (e.g. a
+      file that's new since `--base-ref`) degrades gracefully to an empty base
+      (`GitBaseStorage.LoadBase` returns `"", false, nil`). But when there's no
+      git repository at all, `--update` hard-errors (`ErrThreeWayMerge`) rather
+      than falling back to a 2-way diff — no silent "best effort" fallback exists
 
 ### Performance Requirements
 
@@ -869,19 +936,8 @@ atmos init --update --dry-run
 
 ### Go Libraries for 3-Way Merge
 
-**Recommended for Phase 1: nasdf/diff3** (simple, academically sound):
-```go
-import "github.com/nasdf/diff3"
-
-merged := diff3.Merge(base, ours, theirs)
-```
-- Based on academic paper (formal correctness)
-- Simpler API (single function)
-- Stable v1.0.0 release
-- Pure Go, no external dependencies
-- Repository: https://github.com/nasdf/diff3
-
-**Alternative: epiclabs-io/diff3** (more features if needed):
+**Shipped: epiclabs-io/diff3** (`pkg/generator/merge/text_merger.go` imports
+this directly):
 ```go
 import "github.com/epiclabs-io/diff3"
 
@@ -892,6 +948,20 @@ result, err := diff3.Merge(baseReader, oursReader, theirsReader, detailed, "ours
 - Feature-rich API (streams, conflict detection, labels)
 - Zero open issues (responsive maintenance)
 - Repository: https://github.com/epiclabs-io/diff3
+
+**Considered, not used: nasdf/diff3** (simple, academically sound):
+```go
+import "github.com/nasdf/diff3"
+
+merged := diff3.Merge(base, ours, theirs)
+```
+- Based on academic paper (formal correctness)
+- Simpler API (single function)
+- Stable v1.0.0 release
+- Pure Go, no external dependencies
+- Repository: https://github.com/nasdf/diff3
+- **Not what shipped** — `epiclabs-io/diff3`'s richer conflict-detection API
+  won out during implementation; this entry is kept for historical comparison
 
 **For reference: git merge-file** (not recommended - requires git binary):
 ```bash
@@ -933,10 +1003,12 @@ result, err := git.MergeFile(ancestor, ours, theirs, &git.MergeFileOptions{})
 
 ### Implementation Recommendations
 
-**Phase 1 (Text Merge)**: Use `nasdf/diff3`
+**Phase 1 (Text Merge)**: Originally planned around `nasdf/diff3`; **shipped
+using `github.com/epiclabs-io/diff3` instead** (see "Go Libraries for 3-Way
+Merge" above for why).
 - Pure Go, no external dependencies
-- Academically sound algorithm
-- Simple API, easy to integrate
+- Feature-rich conflict-detection API
+- Actively maintained
 
 **Phase 2 (YAML Merge)**: Custom implementation with `gopkg.in/yaml.v3`
 - Structure-aware merging at key level

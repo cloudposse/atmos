@@ -2,8 +2,11 @@ package merge
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"reflect"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -40,7 +43,8 @@ const (
 //
 // It intelligently merges changes, preserving user customizations while incorporating template updates.
 type YAMLMerger struct {
-	thresholdPercent int // Percentage threshold (0-100) for change detection
+	thresholdPercent int              // Percentage threshold (0-100) for change detection
+	conflictStrategy ConflictStrategy // How to resolve a real ours/theirs divergence
 }
 
 // NewYAMLMerger creates a new YAML merger with the specified percentage threshold.
@@ -49,6 +53,32 @@ func NewYAMLMerger(thresholdPercent int) *YAMLMerger {
 
 	return &YAMLMerger{
 		thresholdPercent: thresholdPercent,
+	}
+}
+
+// SetConflictStrategy sets how a real ours/theirs divergence is resolved.
+// The zero value (ConflictStrategyManual) is today's existing behavior.
+func (m *YAMLMerger) SetConflictStrategy(strategy ConflictStrategy) {
+	defer perf.Track(nil, "merge.YAMLMerger.SetConflictStrategy")()
+
+	m.conflictStrategy = strategy
+}
+
+// pickConflictValue resolves a real ours/theirs divergence per the configured
+// conflict strategy. Manual (default) still records the conflict via
+// conflicts.addConflict — MergeResult.HasConflicts then aborts the write in
+// engine.Processor.mergeFile, which is today's existing "surface, don't
+// silently pick a side" behavior. Ours/theirs pick a side and deliberately do
+// not record a conflict, so the write proceeds.
+func (m *YAMLMerger) pickConflictValue(ours, theirs *yaml.Node, path string, conflicts *conflictTracker) *yaml.Node {
+	switch m.conflictStrategy {
+	case ConflictStrategyTheirs:
+		return theirs
+	case ConflictStrategyOurs:
+		return ours
+	default:
+		conflicts.addConflict(path)
+		return ours
 	}
 }
 
@@ -64,36 +94,28 @@ func NewYAMLMerger(thresholdPercent int) *YAMLMerger {
 func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.YAMLMerger.Merge")()
 
-	// Parse all three YAML documents
-	var baseNode, oursNode, theirsNode yaml.Node
-
-	if err := yaml.Unmarshal([]byte(base), &baseNode); err != nil {
-		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
-			WithCause(err).
-			WithExplanation("Failed to parse base YAML").
-			WithHint("Check YAML syntax in the base version").
-			Err()
+	// Parse all three YAML documents. A stream may contain more than one
+	// `---`-separated document; decodeAllDocuments preserves every one of
+	// them instead of silently keeping only the first (yaml.Unmarshal would
+	// discard the rest of the stream).
+	baseDocs, err := decodeAllDocuments(base, "base")
+	if err != nil {
+		return nil, err
 	}
 
-	if err := yaml.Unmarshal([]byte(ours), &oursNode); err != nil {
-		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
-			WithCause(err).
-			WithExplanation("Failed to parse user's YAML").
-			WithHint("Check YAML syntax in the current file").
-			Err()
+	oursDocs, err := decodeAllDocuments(ours, "user's")
+	if err != nil {
+		return nil, err
 	}
 
-	if err := yaml.Unmarshal([]byte(theirs), &theirsNode); err != nil {
-		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
-			WithCause(err).
-			WithExplanation("Failed to parse template YAML").
-			WithHint("Check YAML syntax in the template").
-			Err()
+	theirsDocs, err := decodeAllDocuments(theirs, "template")
+	if err != nil {
+		return nil, err
 	}
 
-	// Perform structure-aware merge
+	// Perform structure-aware merge, document by document.
 	conflicts := &conflictTracker{conflicts: make([]string, 0)}
-	mergedNode, err := m.mergeNodes(&baseNode, &oursNode, &theirsNode, "", conflicts)
+	mergedDocs, err := m.mergeDocumentStreams(baseDocs, oursDocs, theirsDocs, conflicts)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithCause(err).
@@ -113,17 +135,21 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		}
 	}
 
-	// Marshal back to YAML, preserving formatting
+	// Marshal back to YAML, preserving formatting. Encoding each document in
+	// turn on the same encoder emits the `---` document separators between
+	// them automatically, so a multi-document stream round-trips as one.
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
 
-	if err := encoder.Encode(mergedNode); err != nil {
-		return nil, errUtils.Build(errUtils.ErrEncode).
-			WithCause(err).
-			WithExplanation("Failed to encode merged YAML").
-			WithHint("This may indicate corrupted merge output").
-			Err()
+	for _, doc := range mergedDocs {
+		if err := encoder.Encode(doc); err != nil {
+			return nil, errUtils.Build(errUtils.ErrEncode).
+				WithCause(err).
+				WithExplanation("Failed to encode merged YAML").
+				WithHint("This may indicate corrupted merge output").
+				Err()
+		}
 	}
 
 	if err := encoder.Close(); err != nil {
@@ -138,6 +164,85 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		HasConflicts:  len(conflicts.conflicts) > 0,
 		ConflictCount: len(conflicts.conflicts),
 	}, nil
+}
+
+// decodeAllDocuments decodes every `---`-separated document in a YAML stream,
+// returning one *yaml.Node (Kind: DocumentNode) per document. A single-document
+// stream returns a single-element slice, so callers written for that case still
+// work unchanged when indexed at position 0.
+func decodeAllDocuments(content, label string) ([]*yaml.Node, error) {
+	dec := yaml.NewDecoder(strings.NewReader(content))
+	var docs []*yaml.Node
+	for {
+		var doc yaml.Node
+		if err := dec.Decode(&doc); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
+				WithCause(err).
+				WithExplanationf("Failed to parse %s YAML", label).
+				WithHint("Check YAML syntax").
+				Err()
+		}
+		d := doc
+		docs = append(docs, &d)
+	}
+	return docs, nil
+}
+
+// docAt returns the document at index i, or nil if the stream is shorter than i+1.
+func docAt(docs []*yaml.Node, i int) *yaml.Node {
+	if i < len(docs) {
+		return docs[i]
+	}
+	return nil
+}
+
+// mergeDocumentStreams merges base/ours/theirs document streams pairwise, by
+// document index. A document present on only one side (stream length
+// mismatch) is kept as-is; a document the template changed that the user's
+// stream no longer has is recorded as a conflict rather than silently dropped.
+//
+//nolint:revive // cyclomatic: pairwise document-presence handling requires this many branches
+func (m *YAMLMerger) mergeDocumentStreams(baseDocs, oursDocs, theirsDocs []*yaml.Node, conflicts *conflictTracker) ([]*yaml.Node, error) {
+	maxLen := len(baseDocs)
+	if len(oursDocs) > maxLen {
+		maxLen = len(oursDocs)
+	}
+	if len(theirsDocs) > maxLen {
+		maxLen = len(theirsDocs)
+	}
+
+	result := make([]*yaml.Node, 0, maxLen)
+	for i := 0; i < maxLen; i++ {
+		base, ours, theirs := docAt(baseDocs, i), docAt(oursDocs, i), docAt(theirsDocs, i)
+		docPath := fmt.Sprintf("documents[%d]", i)
+
+		switch {
+		case ours == nil && theirs == nil:
+			continue // Neither side has this document.
+		case ours == nil:
+			if base != nil && !nodesEqual(base, theirs) {
+				conflicts.addConflict(docPath) // Template changed a document the user's stream dropped.
+			}
+			result = append(result, theirs)
+			continue
+		case theirs == nil:
+			result = append(result, ours) // Template no longer has it; keep the user's document.
+			continue
+		}
+
+		if base == nil {
+			base = createEmptyNodeOfKind(ours)
+		}
+		merged, err := m.mergeNodes(base, ours, theirs, docPath, conflicts)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, merged)
+	}
+	return result, nil
 }
 
 // conflictTracker keeps track of conflicts during merge.
@@ -180,8 +285,7 @@ func (m *YAMLMerger) mergeNodes(base, ours, theirs *yaml.Node, path string, conf
 	// when ours is a MappingNode).  Record a conflict and preserve the user's
 	// version whenever kinds diverge.
 	if ours.Kind != base.Kind || theirs.Kind != base.Kind {
-		conflicts.addConflict(path)
-		return ours, nil
+		return m.pickConflictValue(ours, theirs, path, conflicts), nil
 	}
 
 	// Handle based on node type.
@@ -245,10 +349,9 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 	oursIsMapping := ours.Kind == yaml.MappingNode
 	theirsIsMapping := theirs.Kind == yaml.MappingNode
 
-	// If there's a kind mismatch, record conflict and preserve user's choice.
+	// If there's a kind mismatch, resolve per the configured conflict strategy.
 	if !baseIsMapping || !oursIsMapping || !theirsIsMapping {
-		conflicts.addConflict(path)
-		return ours, nil
+		return m.pickConflictValue(ours, theirs, path, conflicts), nil
 	}
 
 	result := &yaml.Node{
@@ -304,8 +407,8 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 		case !inBase && inTheirs:
 			// Both added the same key - merge values.
 			if oursValue.Kind != theirsValue.Kind {
-				conflicts.addConflict(keyPath)
-				result.Content = append(result.Content, keyNode, oursValue)
+				picked := m.pickConflictValue(oursValue, theirsValue, keyPath, conflicts)
+				result.Content = append(result.Content, keyNode, picked)
 				continue
 			}
 
@@ -358,21 +461,22 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 
 // mergeSequences merges sequence (array) nodes.
 func (m *YAMLMerger) mergeSequences(_, ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
-	// For sequences, if they differ, it's a conflict
-	// We prefer ours (user's version) unless they're identical
+	// For sequences, a real divergence is resolved per the configured
+	// conflict strategy (manual/ours/theirs); identical sequences need no choice.
+	picked := ours
 	if !nodesEqual(ours, theirs) {
-		conflicts.addConflict(path)
+		picked = m.pickConflictValue(ours, theirs, path, conflicts)
 	}
 
-	// Preserve user's version with comments and style
+	// Preserve the picked side's comments and style.
 	result := &yaml.Node{
 		Kind:        yaml.SequenceNode,
-		Tag:         ours.Tag,
-		Style:       ours.Style,
-		HeadComment: ours.HeadComment,
-		LineComment: ours.LineComment,
-		FootComment: ours.FootComment,
-		Content:     ours.Content,
+		Tag:         picked.Tag,
+		Style:       picked.Style,
+		HeadComment: picked.HeadComment,
+		LineComment: picked.LineComment,
+		FootComment: picked.FootComment,
+		Content:     picked.Content,
 	}
 
 	return result, nil
@@ -380,20 +484,22 @@ func (m *YAMLMerger) mergeSequences(_, ours, theirs *yaml.Node, path string, con
 
 // mergeScalars merges scalar (primitive value) nodes.
 func (m *YAMLMerger) mergeScalars(base, ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
-	// If both changed to different values, it's a conflict
+	// A real divergence (both changed to different values) is resolved per
+	// the configured conflict strategy (manual/ours/theirs).
+	picked := ours
 	if ours.Value != base.Value && theirs.Value != base.Value && ours.Value != theirs.Value {
-		conflicts.addConflict(path)
+		picked = m.pickConflictValue(ours, theirs, path, conflicts)
 	}
 
-	// Preserve user's value with their comments, tag, and style (folding, literal, etc.)
+	// Preserve the picked side's comments, tag, and style (folding, literal, etc.)
 	result := &yaml.Node{
 		Kind:        yaml.ScalarNode,
-		Tag:         ours.Tag,
-		Style:       ours.Style,
-		Value:       ours.Value,
-		HeadComment: ours.HeadComment,
-		LineComment: ours.LineComment,
-		FootComment: ours.FootComment,
+		Tag:         picked.Tag,
+		Style:       picked.Style,
+		Value:       picked.Value,
+		HeadComment: picked.HeadComment,
+		LineComment: picked.LineComment,
+		FootComment: picked.FootComment,
 	}
 
 	return result, nil
@@ -506,13 +612,19 @@ func nodesEqual(a, b *yaml.Node) bool {
 
 // calculateYAMLChangePercentage calculates change percentage for YAML conflicts.
 func (m *YAMLMerger) calculateYAMLChangePercentage(base, _, _ string, conflictCount int) int {
-	// Count total keys in base as rough measure of content size
-	var baseNode yaml.Node
-	if err := yaml.Unmarshal([]byte(base), &baseNode); err != nil {
+	// Count total keys across every document in base as a rough measure of
+	// content size — a multi-document base must sum keys from all documents,
+	// not just the first, or the denominator undercounts and change% is
+	// overstated for multi-document streams.
+	baseDocs, err := decodeAllDocuments(base, "base")
+	if err != nil {
 		return maxChangePercentage // If we can't parse, assume high change
 	}
 
-	totalKeys := countKeys(&baseNode)
+	totalKeys := 0
+	for _, doc := range baseDocs {
+		totalKeys += countKeys(doc)
+	}
 	if totalKeys == 0 {
 		totalKeys = 1 // Avoid division by zero
 	}

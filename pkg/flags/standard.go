@@ -311,14 +311,18 @@ func (p *StandardFlagParser) registerStringSliceFlag(flagSet *pflag.FlagSet, f *
 	}
 }
 
-// registerStringMapFlag registers a string map flag as a StringSlice for Cobra.
-// StringMapFlag is registered as StringSlice because Cobra doesn't have native map support.
+// registerStringMapFlag registers a string map flag as a StringArray for Cobra.
+// StringMapFlag is registered as StringArray (not StringSlice) because Cobra doesn't
+// have native map support, and StringSlice splits each occurrence's value on commas
+// before ParseStringMap ever sees it — breaking a value that legitimately contains a
+// comma, e.g. `--set tags=a,b,c` would arrive as ["tags=a", "b", "c"] instead of one
+// "tags=a,b,c" entry. StringArray takes each --flag occurrence verbatim.
 // The parsing of key=value pairs happens in ParseStringMap() helper (viper_helpers.go).
 func (p *StandardFlagParser) registerStringMapFlag(flagSet *pflag.FlagSet, f *StringMapFlag, markRequired func(string) error) {
 	defer perf.Track(nil, "flags.StandardFlagParser.registerStringMapFlag")()
 
 	// Convert default map to []string for Cobra registration.
-	// This allows Cobra to handle the flag as a repeated string slice.
+	// This allows Cobra to handle the flag as a repeated string value.
 	// Keys are sorted to ensure deterministic output for help and tests.
 	var defaultSlice []string
 	if f.Default != nil {
@@ -332,8 +336,9 @@ func (p *StandardFlagParser) registerStringMapFlag(flagSet *pflag.FlagSet, f *St
 		}
 	}
 
-	// Register as StringSlice - Cobra will accept repeated --flag key=value.
-	flagSet.StringSliceP(f.Name, f.Shorthand, defaultSlice, f.Description)
+	// Register as StringArray - Cobra will accept repeated --flag key=value,
+	// each occurrence kept verbatim (no comma-splitting).
+	flagSet.StringArrayP(f.Name, f.Shorthand, defaultSlice, f.Description)
 
 	if f.Required {
 		_ = markRequired(f.Name)

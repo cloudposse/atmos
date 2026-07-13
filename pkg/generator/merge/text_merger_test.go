@@ -1,8 +1,11 @@
 package merge
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestTextMerger_CleanMerges(t *testing.T) {
@@ -214,7 +217,7 @@ line 3`,
 			theirs: `line 1
 template modified line 2
 line 3`,
-			threshold:         70, // Increased threshold to allow this conflict
+			threshold:         150, // 133% (2 changed lines each side / 3 base lines) once insertions count too
 			wantConflicts:     true,
 			wantConflictCount: 1,
 			wantErr:           false,
@@ -254,7 +257,7 @@ line 2`,
 user version`,
 			theirs: `line 1
 template version`,
-			threshold:         100, // Very high threshold to allow 100% change
+			threshold:         250, // 200% (2 changed lines each side / 2 base lines) once insertions count too
 			wantConflicts:     true,
 			wantConflictCount: 1,
 			wantErr:           false, // Should not exceed threshold
@@ -314,6 +317,60 @@ template line 3`,
 
 			if tt.wantConflicts && !HasConflictMarkers(result.Content) {
 				t.Errorf("Expected conflict markers in result, but none found")
+			}
+		})
+	}
+}
+
+func TestTextMerger_ConflictStrategies(t *testing.T) {
+	base := "line 1\nline 2\nline 3"
+	ours := "line 1\nuser modified line 2\nline 3"
+	theirs := "line 1\ntemplate modified line 2\nline 3"
+
+	tests := []struct {
+		name          string
+		strategy      ConflictStrategy
+		wantContains  string
+		wantConflicts bool
+	}{
+		{
+			name:          "manual (default) leaves conflict markers in place",
+			strategy:      ConflictStrategyManual,
+			wantContains:  "<<<<<<<",
+			wantConflicts: true,
+		},
+		{
+			name:          "ours auto-resolves to the user's lines, no markers",
+			strategy:      ConflictStrategyOurs,
+			wantContains:  "user modified line 2",
+			wantConflicts: false,
+		},
+		{
+			name:          "theirs auto-resolves to the template's lines, no markers",
+			strategy:      ConflictStrategyTheirs,
+			wantContains:  "template modified line 2",
+			wantConflicts: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewTextMerger(250) // High threshold: strategy, not threshold, is under test.
+			merger.SetConflictStrategy(tt.strategy)
+
+			result, err := merger.Merge(base, ours, theirs)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if result.HasConflicts != tt.wantConflicts {
+				t.Errorf("HasConflicts = %v, want %v", result.HasConflicts, tt.wantConflicts)
+			}
+			if !strings.Contains(result.Content, tt.wantContains) {
+				t.Errorf("expected content to contain %q, got: %q", tt.wantContains, result.Content)
+			}
+			if tt.strategy != ConflictStrategyManual && HasConflictMarkers(result.Content) {
+				t.Errorf("expected no conflict markers for strategy %v, got: %q", tt.strategy, result.Content)
 			}
 		})
 	}
@@ -403,9 +460,15 @@ func TestTextMerger_EdgeCases(t *testing.T) {
 			}
 
 			if !tt.wantErr && err != nil {
-				// For edge cases, conflicts are acceptable
+				// For edge cases, conflicts (including a threshold-exceeded error,
+				// now that countDifferentLines correctly counts insertions as well
+				// as deletions) are an acceptable outcome, not a test failure.
 				if result != nil && result.HasConflicts {
 					t.Logf("Edge case resulted in conflicts (acceptable): %d conflicts", result.ConflictCount)
+					return
+				}
+				if errors.Is(err, errUtils.ErrMergeThresholdExceeded) {
+					t.Logf("Edge case exceeded the change threshold (acceptable): %v", err)
 					return
 				}
 				t.Errorf("Unexpected error: %v", err)
@@ -579,8 +642,12 @@ line 5`
 		{name: "threshold 0 (disabled)", threshold: 0, wantErr: false},
 		{name: "threshold 10 (very strict)", threshold: 10, wantErr: true},
 		{name: "threshold 50 (moderate)", threshold: 50, wantErr: true},
-		{name: "threshold 120 (lenient)", threshold: 120, wantErr: false},
-		{name: "threshold 200 (accept all)", threshold: 200, wantErr: false},
+		// countDifferentLines counts both insertions and deletions relative to
+		// base, so 3 fully-rewritten lines out of 5 on both sides measures as
+		// 240% (6 changed lines each side / 5 base lines), not the ~120% an
+		// old deletions-only count would have reported.
+		{name: "threshold 260 (lenient)", threshold: 260, wantErr: false},
+		{name: "threshold 300 (accept all)", threshold: 300, wantErr: false},
 	}
 
 	for _, tt := range tests {
@@ -602,6 +669,26 @@ line 5`
 				}
 			}
 		})
+	}
+}
+
+func TestCountDifferentLines_InsertionOnly(t *testing.T) {
+	// Both ours and theirs purely add new non-overlapping lines on top of base,
+	// so base is fully contained (as a subsequence) in both. A deletions-only
+	// count would report 0 for both sides even though real content was added;
+	// insertions must be counted too.
+	base := []string{"line 1", "line 2"}
+	oursAdded := []string{"line 1", "user new line", "line 2"}
+	theirsAdded := []string{"line 1", "line 2", "template new line"}
+
+	oursChanged := countDifferentLines(base, oursAdded)
+	theirsChanged := countDifferentLines(base, theirsAdded)
+
+	if oursChanged == 0 {
+		t.Error("expected non-zero changed-line count for an insertion-only diff (ours)")
+	}
+	if theirsChanged == 0 {
+		t.Error("expected non-zero changed-line count for an insertion-only diff (theirs)")
 	}
 }
 

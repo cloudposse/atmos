@@ -40,6 +40,12 @@ func validateExistingDirectory(targetPath string, force, update bool) error {
 
 	entryNames := make([]string, 0, len(entries))
 	for _, entry := range entries {
+		// A freshly `git init`'d directory has a `.git` entry but no real user
+		// content; counting it would treat an otherwise-empty target as
+		// non-empty and block generation without --force/--update.
+		if entry.Name() == ".git" {
+			continue
+		}
 		entryNames = append(entryNames, entry.Name())
 	}
 

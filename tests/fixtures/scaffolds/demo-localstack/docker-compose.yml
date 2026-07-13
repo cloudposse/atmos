@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:4.14.0
     container_name: localstack
     ports:
       - "4566:4566"
@@ -13,6 +13,8 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+      # Required so the "lambda" service (SERVICES above) can launch sibling
+      # containers to execute functions; do not remove without dropping lambda.
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:
       - localstack-network

@@ -319,7 +319,10 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 	formValues := initializeFormValues(scaffoldConfig, userValues)
 
 	// Build the form with grouped fields
-	huhForm, valueGetters := buildConfigForm(scaffoldConfig, formValues)
+	huhForm, valueGetters, err := buildConfigForm(scaffoldConfig, formValues)
+	if err != nil {
+		return err
+	}
 	if huhForm == nil {
 		return nil // No fields to prompt for.
 	}
@@ -335,7 +338,10 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 	return nil
 }
 
-// initializeFormValues merges default values with user-provided values.
+// initializeFormValues merges default values with user-provided values, in
+// the same defaults -> Spec.Values -> userValues precedence order as
+// DeepMerge, so the interactive form and the non-interactive path never
+// disagree about a preset template value declared in Spec.Values.
 func initializeFormValues(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) map[string]interface{} {
 	formValues := make(map[string]interface{})
 
@@ -345,6 +351,11 @@ func initializeFormValues(scaffoldConfig *ScaffoldConfig, userValues map[string]
 		if field.Default != nil {
 			formValues[field.Name] = field.Default
 		}
+	}
+
+	// Preset values declared in the template override field defaults.
+	for key, value := range scaffoldConfig.Spec.Values {
+		formValues[key] = value
 	}
 
 	// Override with user values
@@ -359,9 +370,9 @@ func initializeFormValues(scaffoldConfig *ScaffoldConfig, userValues map[string]
 // declared in the template.
 // Returns the form and value getters for extracting values after submission.
 // Returns a nil form when the template declares no fields.
-func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]interface{}) (*huh.Form, map[string]func() interface{}) {
+func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]interface{}) (*huh.Form, map[string]func() interface{}, error) {
 	if len(scaffoldConfig.Spec.Fields) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Should we run in accessible mode?
@@ -377,6 +388,17 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 	var groupFields []huh.Field
 	for i := range scaffoldConfig.Spec.Fields {
 		field := &scaffoldConfig.Spec.Fields[i]
+		if _, exists := valueGetters[field.Name]; exists {
+			// A silent map overwrite here would still render both prompts but
+			// drop one of their answers when extractFormValues runs, since only
+			// the last getter for this name survives.
+			return nil, nil, errUtils.Build(errUtils.ErrDuplicateScaffoldFieldName).
+				WithExplanationf("Field name `%s` is declared more than once in scaffold.yaml", field.Name).
+				WithHint("Each field's `name` must be unique so its answer isn't silently dropped").
+				WithContext("field_name", field.Name).
+				WithExitCode(2).
+				Err()
+		}
 		huhField, getter := createField(field.Name, field, formValues)
 		groupFields = append(groupFields, huhField)
 		valueGetters[field.Name] = getter
@@ -384,7 +406,7 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 
 	huhForm := huh.NewForm(huh.NewGroup(groupFields...)).WithAccessible(accessible)
 
-	return huhForm, valueGetters
+	return huhForm, valueGetters, nil
 }
 
 // runFormInteraction is the seam used to execute a huh form.
@@ -429,7 +451,11 @@ func createField(key string, field *FieldDefinition, values map[string]interface
 
 		if field.Required {
 			input = input.Validate(func(s string) error {
-				if s == "" {
+				// Match isMissingValue/MissingRequiredValues, which both trim
+				// before checking for emptiness — otherwise a whitespace-only
+				// answer passes validation here but fails required-field
+				// checks later.
+				if strings.TrimSpace(s) == "" {
 					return fmt.Errorf("%w: %s", errUtils.ErrGeneratorFieldRequired, fieldTitle(field))
 				}
 				return nil

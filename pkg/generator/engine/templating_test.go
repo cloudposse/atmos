@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
@@ -563,6 +565,105 @@ func TestProcessFile_ExistingFile_NoFlags(t *testing.T) {
 
 	if string(content) != "existing content" {
 		t.Errorf("Expected content to remain 'existing content', got '%s'", string(content))
+	}
+}
+
+// TestProcessFile_RejectsSymlinkAtDestination verifies ProcessFile refuses to
+// write through a symlink at the destination path, even with --force.
+func TestProcessFile_RejectsSymlinkAtDestination(t *testing.T) {
+	processor := NewProcessor()
+	tempDir := t.TempDir()
+
+	outsideTarget := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outsideTarget, []byte("outside content"), 0o644); err != nil {
+		t.Fatalf("failed to create symlink target: %v", err)
+	}
+
+	linkPath := filepath.Join(tempDir, "test.txt")
+	if err := os.Symlink(outsideTarget, linkPath); err != nil {
+		t.Fatalf("failed to create symlink: %v", err)
+	}
+
+	file := File{
+		Path:        "test.txt",
+		Content:     "new content",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := processor.ProcessFile(file, tempDir, true, false, nil, nil)
+	if err == nil {
+		t.Fatal("expected an error when writing through a symlink, got nil")
+	}
+	if !errors.Is(err, errUtils.ErrSymlinkWrite) {
+		t.Errorf("expected ErrSymlinkWrite, got: %v", err)
+	}
+
+	// The symlink target must be untouched.
+	content, readErr := os.ReadFile(outsideTarget)
+	if readErr != nil {
+		t.Fatalf("failed to read symlink target: %v", readErr)
+	}
+	if string(content) != "outside content" {
+		t.Errorf("expected symlink target to remain unchanged, got: %q", string(content))
+	}
+}
+
+// TestProcessFile_RejectsSymlinkedDirectoryEscape verifies ProcessFile refuses
+// to write into a directory that resolves (via a symlink) outside targetPath.
+func TestProcessFile_RejectsSymlinkedDirectoryEscape(t *testing.T) {
+	processor := NewProcessor()
+	tempDir := t.TempDir()
+	outsideDir := t.TempDir()
+
+	linkedDir := filepath.Join(tempDir, "linked")
+	if err := os.Symlink(outsideDir, linkedDir); err != nil {
+		t.Fatalf("failed to create symlinked directory: %v", err)
+	}
+
+	file := File{
+		Path:        "linked/test.txt",
+		Content:     "new content",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := processor.ProcessFile(file, tempDir, false, false, nil, nil)
+	if err == nil {
+		t.Fatal("expected an error when the write directory escapes targetPath, got nil")
+	}
+	if !errors.Is(err, errUtils.ErrPathTraversal) {
+		t.Errorf("expected ErrPathTraversal, got: %v", err)
+	}
+
+	if _, statErr := os.Stat(filepath.Join(outsideDir, "test.txt")); !os.IsNotExist(statErr) {
+		t.Error("expected no file to be written outside targetPath")
+	}
+}
+
+// TestWriteFileSecure_NonForceRejectsExistingFile verifies exclusive creation
+// (O_EXCL) fails rather than silently overwriting when the destination
+// already exists — closing the TOCTOU gap between an earlier existence
+// check and this write.
+func TestWriteFileSecure_NonForceRejectsExistingFile(t *testing.T) {
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "test.txt")
+
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatalf("failed to seed existing file: %v", err)
+	}
+
+	err := writeFileSecure(path, []byte("raced-in content"), 0o644, false)
+	if err == nil {
+		t.Fatal("expected an error writing exclusively to an existing path, got nil")
+	}
+
+	content, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("failed to read file: %v", readErr)
+	}
+	if string(content) != "original" {
+		t.Errorf("expected original content to survive a rejected exclusive write, got: %q", string(content))
 	}
 }
 

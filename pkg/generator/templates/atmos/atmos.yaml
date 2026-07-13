@@ -14,30 +14,8 @@ components:
   terraform:
     # Path to Terraform components (relative to `base_path`)
     base_path: "components/terraform"
-    # Apply auto-generated Terraform backend config
-    apply_auto_generated_backend_file: true
-    # Auto-generated backend config file name
-    backend_config_file: "backend.tf"
-    # Auto-generated backend config file template
-    backend_config_template: |
-      terraform {
-        required_version = "{{.Config.terraform_version}}"
-
-        backend "s3" {
-          region         = "{{.Config.aws_region}}"
-          bucket         = "{{.Config.project_name}}-terraform-state"
-          key            = "{{`{{ .atmos_component }}`}}/{{`{{ .atmos_stack }}`}}/terraform.tfstate"
-          dynamodb_table = "{{.Config.project_name}}-terraform-state-lock"
-          encrypt        = true
-        }
-
-        required_providers {
-          aws = {
-            source  = "hashicorp/aws"
-            version = ">= 5.0"
-          }
-        }
-      }
+    # Generate backend.tf.json from stack configuration before running Terraform commands
+    auto_generate_backend_file: true
 
   helmfile:
     # Path to Helmfile components (relative to `base_path`)
@@ -50,7 +28,7 @@ stacks:
   # Path to stack files (relative to `base_path`)
   base_path: "stacks"
   # Default stack name template
-  name_template: '{{`{{.environment}}-{{.stage}}`}}'
+  name_template: '{{`{{ .vars.environment }}-{{ .vars.stage }}`}}'
 
 # JSON Schema configuration for validation
 schemas:

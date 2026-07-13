@@ -20,10 +20,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
+	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
-	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/project/config"
@@ -117,6 +117,7 @@ If no target directory is specified, you will be prompted for one.`,
 		sourceOverride := v.GetString("scaffold-source-override")
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
+		mergeStrategy := v.GetString("merge-strategy")
 
 		// Interactive prompting requires both an interactive-capable flag
 		// value AND a real terminal on both stdin and stdout: in CI or
@@ -131,7 +132,13 @@ If no target directory is specified, you will be prompted for one.`,
 		// Validate --set flags were properly formatted
 		// Get raw flag values to check for malformed entries
 		if cmd.Flags().Changed("set") {
-			rawSetFlags, _ := cmd.Flags().GetStringSlice("set")
+			// --set is registered as StringArray (pkg/flags), not StringSlice, so
+			// values with commas aren't split; GetStringSlice would fail its type
+			// assertion here and silently no-op this whole validation loop.
+			rawSetFlags, err := cmd.Flags().GetStringArray("set")
+			if err != nil {
+				return err
+			}
 			for _, entry := range rawSetFlags {
 				if err := validateSetFlag(entry); err != nil {
 					return err
@@ -158,6 +165,7 @@ If no target directory is specified, you will be prompted for one.`,
 			sourceOverride: sourceOverride,
 			ref:            ref,
 			git:            gitEnabled,
+			mergeStrategy:  mergeStrategy,
 		})
 	},
 }
@@ -176,6 +184,7 @@ type scaffoldGenerateOptions struct {
 	sourceOverride string
 	ref            string
 	git            bool
+	mergeStrategy  string
 }
 
 // scaffoldListCmd represents the scaffold list subcommand.
@@ -225,6 +234,8 @@ func init() {
 		flags.WithStringFlag("ref", "", "", "Git ref for a template repository source (sugar for ?ref=)"),
 		flags.WithBoolFlag("git", "", false, "Initialize a git repository and create the initial commit"),
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
+		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
+		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		flags.WithEnvVars("force", "ATMOS_SCAFFOLD_FORCE"),
 		flags.WithEnvVars("update", "ATMOS_SCAFFOLD_UPDATE"),
 		flags.WithEnvVars("base-ref", "ATMOS_SCAFFOLD_BASE_REF"),
@@ -236,6 +247,7 @@ func init() {
 		flags.WithEnvVars("ref", "ATMOS_SCAFFOLD_REF"),
 		flags.WithEnvVars("git", "ATMOS_SCAFFOLD_GIT"),
 		flags.WithEnvVars("no-git", "ATMOS_SCAFFOLD_NO_GIT"),
+		flags.WithEnvVars("merge-strategy", "ATMOS_SCAFFOLD_MERGE_STRATEGY"),
 	)
 
 	// Register flags to generate subcommand.
@@ -316,6 +328,12 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 
+	conflictStrategy, err := merge.ParseConflictStrategy(opts.mergeStrategy)
+	if err != nil {
+		return err
+	}
+	scaffoldUI.SetConflictStrategy(conflictStrategy)
+
 	// Select template (interactive or by name)
 	selectedConfig, err := selectGenerateTemplate(opts, configs, scaffoldUI)
 	if err != nil {
@@ -342,6 +360,14 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 				WithExitCode(2).
 				Err()
 		}
+		// With --update, a path-only preview can't show real merge/conflict
+		// status. Drive the real generation path with dry-run enabled on the
+		// processor instead: rendering, git base load, and the 3-way merge all
+		// still run (so genuine conflicts are reported), but no file is written.
+		if opts.update {
+			scaffoldUI.SetDryRun(true)
+			return executeTemplateGeneration(&selectedConfig, absTargetDir, opts, scaffoldUI)
+		}
 		return renderDryRunPreview(&selectedConfig, absTargetDir, opts.templateValues)
 	}
 
@@ -354,7 +380,7 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 func selectGenerateTemplate(
 	opts *scaffoldGenerateOptions,
 	configs map[string]templates.Configuration,
-	scaffoldUI *generatorUI.InitUI,
+	scaffoldUI ScaffoldUI,
 ) (templates.Configuration, error) {
 	if opts.templateName == "" && !opts.interactive {
 		return templates.Configuration{}, errUtils.Build(errUtils.ErrTemplateNameRequired).
@@ -400,7 +426,7 @@ func resolveTargetDirectory(targetDir string) (string, error) {
 
 // loadScaffoldTemplates loads all available scaffold templates from embedded and atmos.yaml.
 // Returns configs, origins (map[name]source where source is "embedded" or "atmos.yaml"), UI, and error.
-func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configuration, map[string]string, *generatorUI.InitUI, error) {
+func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configuration, map[string]string, ScaffoldUI, error) {
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
@@ -502,7 +528,7 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 func selectTemplate(
 	templateName string,
 	configs map[string]templates.Configuration,
-	scaffoldUI *generatorUI.InitUI,
+	scaffoldUI ScaffoldUI,
 ) (templates.Configuration, error) {
 	if templateName == "" {
 		return selectTemplateInteractive(configs, scaffoldUI)
@@ -513,7 +539,7 @@ func selectTemplate(
 // selectTemplateInteractive prompts the user to select a template.
 func selectTemplateInteractive(
 	configs map[string]templates.Configuration,
-	scaffoldUI *generatorUI.InitUI,
+	scaffoldUI ScaffoldUI,
 ) (templates.Configuration, error) {
 	selectedName, err := scaffoldUI.PromptForTemplate("scaffold", configs)
 	if err != nil {
@@ -558,7 +584,7 @@ func executeTemplateGeneration(
 	selectedConfig *templates.Configuration,
 	targetDir string,
 	opts *scaffoldGenerateOptions,
-	scaffoldUI *generatorUI.InitUI,
+	scaffoldUI ScaffoldUI,
 ) error {
 	if targetDir == "" {
 		finalTargetDir, err := executeTemplateWithoutTargetDir(selectedConfig, opts, scaffoldUI)
@@ -611,7 +637,7 @@ func defaultBaseRef(baseRef string) string {
 }
 
 func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates.Configuration, opts *scaffoldGenerateOptions) error {
-	if opts.git {
+	if opts.git && !opts.dryRun {
 		_, err := gen.InitGitRepository(gen.InitGitOptions{
 			TargetPath:      targetDir,
 			TemplateName:    selectedConfig.Name,
@@ -746,7 +772,7 @@ func printFilePath(targetDir, renderedPath string) {
 func executeTemplateWithoutTargetDir(
 	selectedConfig *templates.Configuration,
 	opts *scaffoldGenerateOptions,
-	scaffoldUI *generatorUI.InitUI,
+	scaffoldUI ScaffoldUI,
 ) (string, error) {
 	if opts.interactive && !opts.dryRun {
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.

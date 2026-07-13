@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/generator/ui"
@@ -73,6 +74,7 @@ If no target directory is specified, you will be prompted for one.`,
 		sourceOverride := v.GetString("source-override")
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
+		mergeStrategy := v.GetString("merge-strategy")
 
 		// Interactive prompting requires both an interactive-capable flag
 		// value AND a real terminal on both stdin and stdout: in CI or
@@ -103,6 +105,7 @@ If no target directory is specified, you will be prompted for one.`,
 			sourceOverride: sourceOverride,
 			ref:            ref,
 			git:            gitEnabled,
+			mergeStrategy:  mergeStrategy,
 		})
 	},
 }
@@ -121,6 +124,8 @@ func init() {
 		flags.WithStringFlag("ref", "", "", "Git ref for a template repository source (sugar for ?ref=)"),
 		flags.WithBoolFlag("git", "", true, "Initialize a git repository and create the initial commit"),
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
+		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
+		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
 		flags.WithEnvVars("update", "ATMOS_INIT_UPDATE"),
 		flags.WithEnvVars("base-ref", "ATMOS_INIT_BASE_REF"),
@@ -130,6 +135,7 @@ func init() {
 		flags.WithEnvVars("ref", "ATMOS_INIT_REF"),
 		flags.WithEnvVars("git", "ATMOS_INIT_GIT"),
 		flags.WithEnvVars("no-git", "ATMOS_INIT_NO_GIT"),
+		flags.WithEnvVars("merge-strategy", "ATMOS_INIT_MERGE_STRATEGY"),
 	)
 
 	// Register flags on the command.
@@ -218,6 +224,7 @@ type initOptions struct {
 	sourceOverride string
 	ref            string
 	git            bool
+	mergeStrategy  string
 }
 
 // executeInit initializes a new Atmos project from a template.
@@ -231,6 +238,12 @@ func executeInit(_ context.Context, opts *initOptions) error {
 	if err != nil {
 		return err
 	}
+
+	conflictStrategy, err := merge.ParseConflictStrategy(opts.mergeStrategy)
+	if err != nil {
+		return err
+	}
+	initUI.SetConflictStrategy(conflictStrategy)
 
 	// Get available template configurations.
 	configs, err := templates.GetAvailableConfigurations()

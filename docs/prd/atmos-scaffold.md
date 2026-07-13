@@ -24,20 +24,26 @@ Infrastructure teams need to create similar resources repeatedly:
 
 ### Current State
 
-**Status**: `atmos scaffold` does not exist yet. This PRD defines the entire feature from scratch.
+**Status**: `atmos scaffold` is implemented and shipped, including Phase 1 (core
+scaffolding) and Phase 2 (`--update` with a real 3-way merge). This PRD was
+originally written before the feature existed; the sections below have been
+updated where they described the shipped feature as not existing, but this
+remains primarily a historical design document — see `cmd/scaffold/scaffold.go`
+and `pkg/generator/` for the source of truth on current behavior.
 
-**Context**: Atmos currently has `atmos init` for project initialization, but lacks a generic scaffolding system for generating individual components, configurations, and resources from templates.
+**What exists today**:
+- `atmos scaffold generate`, `atmos scaffold list`, `atmos scaffold validate`
+- Embedded, custom (`atmos.yaml` `scaffold.templates`), and catalog/remote templates
+- `--force`, `--update`, `--base-ref`, `--dry-run`, `--merge-strategy` flags
+  (see "Update Mode" below for what shipped vs. this PRD's original phasing)
+- `pkg/generator` package (shared with `atmos init`)
 
-**What exists**:
-- `atmos init` command (for project initialization only)
-- `pkg/generator` package (used by init, will be reused for scaffold)
-
-**What doesn't exist**:
-- ❌ `atmos scaffold` command or subcommands
-- ❌ Scaffold template system
-- ❌ Custom template configuration in atmos.yaml
-- ❌ Template validation
-- ❌ Scaffold-specific UI/prompts
+**Still not implemented** (see "Future Enhancements" below):
+- ❌ Remote-template caching/version pinning beyond a single `--ref`
+- ❌ `pre_generate`/`post_generate` lifecycle hooks (the `hooks:` block shown
+  later in this doc is aspirational schema, not something the generator reads)
+- ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
+  threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
 
 ## Goals
 
@@ -121,7 +127,7 @@ Configure custom templates in atmos.yaml under 'scaffold.templates'.
 
 **Result**: Clear view of available templates
 
-### Use Case 4: Update Generated Scaffold (Future)
+### Use Case 4: Update Generated Scaffold
 
 **Actor**: Developer updating component to latest template version
 
@@ -177,11 +183,12 @@ Validation Summary:
 atmos scaffold
   generate [template] [target]  # Generate code from template
     --force, -f                 # Overwrite existing files
-    --dry-run                   # Preview without writing
+    --dry-run                   # Preview without writing (with --update, drives the real merge and reports would-create/would-update/conflicts; skips only the disk write)
     --set key=value             # Set template variables
-    --update                    # Update existing scaffold (future)
-    --merge-strategy            # Conflict resolution (future)
-    --max-changes               # Change threshold (future)
+    --update                    # Update an existing target directory via a 3-way merge (requires a git base; see --base-ref)
+    --base-ref                  # Git ref to use as the 3-way merge base with --update (defaults to HEAD)
+    --merge-strategy            # Conflict resolution for --update: manual (default), ours, theirs
+    --max-changes               # Change threshold (not implemented — no CLI flag; internal default is hardcoded)
 
   list                          # List available templates
 
@@ -330,6 +337,9 @@ dependencies:
   - terraform >= 1.5.0
   - aws provider >= 5.0.0
 
+# NOTE: hooks: is aspirational schema — the generator does not currently
+# read or execute pre_generate/post_generate hooks (see "Future Enhancements"
+# below). Including this block in a scaffold.yaml today has no effect.
 hooks:
   pre_generate:
     - command: "terraform fmt"
@@ -403,18 +413,24 @@ Initial generation:
 1. Prompt user for template variables
 2. Render template files
 3. Write files to target directory
-4. Store base content in .atmos/scaffold/base/{scaffold-name}/
-5. Write metadata to .atmos/scaffold/metadata.yaml
 
 Update (atmos scaffold generate --update):
-1. Detect scaffold by analyzing existing files
-2. Load base content from .atmos/scaffold/base/
+1. Resolve --base-ref (defaults to HEAD) in the target directory's git repository
+2. Load each file's base content directly from that git ref (no on-disk base
+   storage/snapshot — GitBaseStorage.LoadBase reads the blob straight out of
+   git)
 3. Load current files (ours - with user changes)
 4. Re-render template with updated version (theirs)
-5. Perform 3-way merge (base, ours, theirs)
-6. Write merged content
-7. Update base content for future updates
+5. Perform 3-way merge (base, ours, theirs), honoring --merge-strategy
+   (manual/ours/theirs) for any genuine conflict
+6. Write merged content (skipped in --dry-run; the merge still runs so
+   conflicts are still reported)
 ```
+
+**Note**: this shipped as a git-ref-based design, not the `.atmos/scaffold/base/`
+file-snapshot approach originally sketched below in "Phase 2" — there is no
+on-disk base storage or `.atmos/scaffold/metadata.yaml` in the current
+implementation.
 
 **For 3-way merge details**, see: [docs/prd/three-way-merge/](./three-way-merge/)
 
@@ -464,44 +480,30 @@ Update (atmos scaffold generate --update):
 - Embedded templates for common use cases
 - Documentation and examples
 
-### Phase 2: Update Support (Depends on 3-Way Merge)
+### Phase 2: Update Support (Shipped)
 
-**Prerequisites**:
-- Requires completion of [three-way-merge PRD](./three-way-merge/)
-- Specifically: Phase 3 (Base Storage & Integration)
+**Status**: Implemented. The original plan below described a file-snapshot base
+store (`.atmos/scaffold/base/`, `.atmos/scaffold/metadata.yaml`) and scaffold
+auto-detection; what shipped instead is a git-ref-based base (`--base-ref`,
+defaulting to `HEAD`, resolved via `pkg/generator/storage.GitBaseStorage`) with
+no on-disk snapshot or metadata file, and no auto-detection step — the user
+supplies the same template/target-dir on `--update` as on initial generation.
 
-**Tasks**:
-1. Add `--update` flag to `generate` subcommand
-2. Implement scaffold detection (identify which template was used)
-3. Implement base content storage
-   - Store original output in `.atmos/scaffold/base/{scaffold-name}/`
-   - Write metadata to `.atmos/scaffold/metadata.yaml`
-4. Integrate 3-way merge in file handling
-5. Add conflict resolution UI
-6. Test update scenarios
+**What shipped**:
+1. `--update` (and `--base-ref`) flags on `generate`
+2. 3-way merge integrated into file handling (`pkg/generator/merge`), with
+   `--merge-strategy=manual|ours|theirs` for conflict resolution
+3. `--dry-run` combined with `--update` runs the real merge and previews
+   would-create/would-update/conflict status without writing files
+4. Path-traversal and symlink-write protection (`validateWriteTarget` in
+   `pkg/generator/engine/templating.go`), so a write can't escape the target
+   directory through a symlinked intermediate path or destination
+5. Test coverage for update scenarios
 
-**Metadata format** (`.atmos/scaffold/metadata.yaml`):
-
-```yaml
-version: 1
-scaffolds:
-  - name: vpc
-    template: custom-vpc
-    template_version: 1.0.0
-    target_dir: components/terraform/vpc
-    generated_at: 2025-01-15T10:30:00Z
-    variables:
-      component_name: vpc
-      cidr_block: 10.0.0.0/16
-      enable_nat_gateway: true
-    files:
-      - path: main.tf
-        template: main.tf.tmpl
-        checksum: sha256:abc123...
-      - path: variables.tf
-        template: variables.tf.tmpl
-        checksum: sha256:def456...
-```
+**Not shipped from the original plan**: scaffold auto-detection, a
+`.atmos/scaffold/base/`+`metadata.yaml` file store (the original plan sketched
+one; the shipped design reads bases directly from git instead — see "Update
+Flow" above), and `pre_generate`/`post_generate` hooks.
 
 ### Phase 3: Remote Templates (Future)
 
@@ -586,19 +588,28 @@ atmos scaffold generate terraform-component ./components/terraform/vpc \
 # - No files actually written
 ```
 
-### Update Mode (Future)
+### Update Mode
 
 ```bash
-# Update existing scaffold from template
+# Update existing scaffold from template (base = HEAD by default)
 cd components/terraform/vpc
 atmos scaffold generate --update
 
-# Auto-resolve conflicts (use template version)
-atmos scaffold generate --update --merge-strategy=theirs
+# Use a specific git ref as the merge base instead of HEAD
+atmos scaffold generate --update --base-ref=v1.2.0
 
-# Preview update
+# Auto-resolve conflicts (use template version, or keep your version)
+atmos scaffold generate --update --merge-strategy=theirs
+atmos scaffold generate --update --merge-strategy=ours
+
+# Preview update: runs the real merge (base load + 3-way merge + conflict
+# checks) and reports create/update/conflict status per file, but writes nothing
 atmos scaffold generate --update --dry-run
 ```
+
+**`--force` and `--update` together**: `--update` takes precedence. If both
+flags are set, existing files go through the 3-way merge path, not a raw
+overwrite (see `handleExistingFile` in `pkg/generator/engine/templating.go`).
 
 ## Relationship with atmos init
 
@@ -609,7 +620,7 @@ pkg/generator/          # Generic scaffolding infrastructure
 ├── setup/              # Context creation
 ├── templates/          # Template registry
 ├── engine/             # Template processing and file operations
-├── merge/              # 3-way merge (Phase 2)
+├── merge/              # 3-way merge (shipped)
 └── ui/                 # Interactive prompts
 
 atmos scaffold          # Generic scaffolding (this PRD)
@@ -629,7 +640,7 @@ atmos init              # Specialized for project initialization
 | `pkg/generator/engine` | Template rendering, file processing | Project file generation |
 | `pkg/generator/templates` | Template registry | Init-specific embedded templates |
 | `pkg/generator/ui` | Interactive prompts | Project setup flow |
-| `pkg/generator/merge` | 3-way merge (Phase 2) | Project update mode |
+| `pkg/generator/merge` | 3-way merge (shipped) | Project update mode |
 
 **Key differences**:
 
@@ -640,7 +651,7 @@ atmos init              # Specialized for project initialization
 | **Target** | Any directory | Project root |
 | **Frequency** | Many times per project | Once per project |
 | **Configuration** | `atmos.yaml` (scaffold section) | N/A |
-| **Implementation Status** | New (this PRD) | Exists, will be enhanced |
+| **Implementation Status** | Shipped | Shipped |
 
 ## Error Handling
 
@@ -654,6 +665,12 @@ atmos init              # Specialized for project initialization
 | `merge conflicts detected` | Both user and template modified same content | Resolve conflicts manually or use `--merge-strategy` |
 | `failed to parse scaffold YAML` | Invalid scaffold.yaml syntax | Use `atmos scaffold validate` to check syntax |
 | `prompt 'name' missing required field 'type'` | Invalid prompt configuration | Fix prompt definition in scaffold.yaml |
+| `resolved path escapes target directory` | A template path (or a symlink in the target directory) would write outside the target directory | Check for symlinks redirecting outside the target; this is a hard-stop safety guard, not a flag to bypass |
+
+**Path confinement**: every file write is confined under the resolved target
+directory. `validateWriteTarget` (`pkg/generator/engine/templating.go`) resolves
+symlinks in the write path and rejects both writes that escape the target
+directory and writes through a symlink at the destination itself.
 
 ## Success Criteria
 
@@ -666,7 +683,7 @@ atmos init              # Specialized for project initialization
 - [ ] **Force overwrite** - `--force` flag overwrites existing files
 - [ ] **List command** - Shows all available templates
 - [ ] **Validate command** - Detects invalid scaffold.yaml files
-- [ ] **Update mode** - `--update` flag performs 3-way merge (Phase 2)
+- [x] **Update mode** - `--update` flag performs 3-way merge (shipped)
 - [ ] **Remote templates** - Git sources supported (Phase 3)
 
 ### User Experience Requirements
@@ -713,7 +730,7 @@ test_scaffold_dry_run.sh                   # --dry-run flag
 test_scaffold_list.sh                      # List templates
 test_scaffold_validate.sh                  # Validate templates
 test_scaffold_custom_template.sh           # Custom from atmos.yaml
-test_scaffold_update.sh                    # Update mode (Phase 2)
+test_scaffold_update.sh                    # Update mode (shipped)
 ```
 
 ### Manual Testing Checklist
@@ -726,7 +743,7 @@ test_scaffold_update.sh                    # Update mode (Phase 2)
 - [ ] Run with `--set` flags → variables correctly substituted
 - [ ] Run with `--force` → overwrites existing files
 - [ ] Run with `--dry-run` → shows preview without writing
-- [ ] Run with `--update` → merges changes intelligently (Phase 2)
+- [ ] Run with `--update` → merges changes intelligently (shipped; verify manually)
 
 ## Documentation Requirements
 
@@ -742,7 +759,7 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 5. **Custom Templates** - How to configure in atmos.yaml
 6. **Template Structure** - scaffold.yaml format
 7. **Template Syntax** - Go templates, Gomplate, Sprig
-8. **Updating Scaffolds** - Using `--update` flag (Phase 2)
+8. **Updating Scaffolds** - Using `--update` flag (shipped)
 9. **Remote Templates** - Git sources (Phase 3)
 10. **Troubleshooting** - Common errors and solutions
 

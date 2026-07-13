@@ -19,6 +19,7 @@ import (
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
+	"github.com/cloudposse/atmos/pkg/generator/merge"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -60,7 +61,21 @@ const (
 	newlineStr           = "\n"
 	fileStatusFormat     = "  %s %s %s\n"
 	failedWriteBlankLine = "Failed to write blank line"
+
+	// Dry-run per-file status labels: the single authoritative signal
+	// distinguishing a genuinely new file from an existing one that would be
+	// merged. A real conflict is reported via the error branch instead (see
+	// executeWithSetup), not one of these two labels.
+	dryRunCreateStatus = "(would create)"
+	dryRunUpdateStatus = "(would update)"
 )
+
+// fileExistsAt reports whether a file (not directory) already exists at
+// targetPath/relativePath.
+func fileExistsAt(targetPath, relativePath string) bool {
+	info, err := os.Stat(filepath.Join(targetPath, relativePath))
+	return err == nil && !info.IsDir()
+}
 
 // truncateString truncates a string to the specified length and adds "..." if truncated.
 func truncateString(s string, maxLen int) string {
@@ -86,6 +101,20 @@ func resolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfi
 		return delimiters
 	}
 	return []string{"{{", "}}"}
+}
+
+// delimitersAsScaffoldConfig wraps activeDelimiters in the
+// map[string]interface{} shape extractDelimiters understands (see
+// tryExtractFromMapConfig in pkg/generator/engine/templating.go), so
+// ProcessFile — which has no direct delimiters parameter and instead derives
+// them from scaffoldConfig — honors them for templates with no
+// *config.ScaffoldConfig of their own. Without this, custom delimiters are
+// resolved but never actually reach rendering, always falling back to the
+// default {{ / }} delimiters.
+func delimitersAsScaffoldConfig(activeDelimiters []string) map[string]interface{} {
+	return map[string]interface{}{
+		"delimiters": []interface{}{activeDelimiters[0], activeDelimiters[1]},
+	}
 }
 
 // calculateMaxColumnWidths finds maximum content widths for table columns from rows.
@@ -252,6 +281,19 @@ func (ui *InitUI) SetThreshold(thresholdPercent int) {
 	ui.processor.SetMaxChanges(thresholdPercent)
 }
 
+// SetDryRun toggles dry-run mode: rendering and 3-way merge still run (so
+// real conflicts are reported), but no files are written to disk.
+func (ui *InitUI) SetDryRun(dryRun bool) {
+	ui.processor.SetDryRun(dryRun)
+}
+
+// SetConflictStrategy sets how a real ours/theirs divergence is resolved
+// during a 3-way merge (manual/ours/theirs). The zero value
+// (merge.ConflictStrategyManual) is today's existing behavior.
+func (ui *InitUI) SetConflictStrategy(strategy merge.ConflictStrategy) {
+	ui.processor.SetConflictStrategy(strategy)
+}
+
 // GetTerminalWidth returns the current terminal width with a fallback.
 func (ui *InitUI) GetTerminalWidth() int {
 	width := ui.term.Width(terminal.Stdout)
@@ -401,20 +443,13 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
 		if err != nil {
 			return "", err
 		}
-		// If the form was already run to derive the target path, merge the
-		// pre-collected values into cmdTemplateValues and use --use-defaults so
-		// executeWithSetup skips showing the form again.
 		if preCollectedValues != nil {
-			merged := make(map[string]interface{}, len(preCollectedValues)+len(cmdTemplateValues))
-			for k, v := range preCollectedValues {
-				merged[k] = v
+			cmdTemplateValues, useDefaults, err = ui.resolvePreCollectedValues(
+				embedsConfig, targetPath, update, useDefaults, preCollectedValues, cmdTemplateValues,
+			)
+			if err != nil {
+				return targetPath, err
 			}
-			// Caller-supplied flags take highest priority and overwrite.
-			for k, v := range cmdTemplateValues {
-				merged[k] = v
-			}
-			cmdTemplateValues = merged
-			useDefaults = true
 		}
 	}
 
@@ -425,6 +460,50 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
 		return targetPath, err
 	}
 	return targetPath, nil
+}
+
+// resolvePreCollectedValues reconciles preCollectedValues (gathered by
+// promptForTargetPath's temp-dir setup form run before the user picked a
+// target) with cmdTemplateValues, now that the real targetPath is known.
+// Returns the resolved cmdTemplateValues and useDefaults for the caller to use.
+func (ui *InitUI) resolvePreCollectedValues(
+	embedsConfig *tmpl.Configuration,
+	targetPath string,
+	update, useDefaults bool,
+	preCollectedValues, cmdTemplateValues map[string]interface{},
+) (map[string]interface{}, bool, error) {
+	if update {
+		// The setup form above ran against a throwaway temp directory (needed
+		// to suggest a target directory name before the user picked one), so
+		// it never saw config.LoadUserValues for the real target. Re-run setup
+		// against the real targetPath instead of reusing those temp-dir-
+		// collected values, so any config already saved at this target takes
+		// precedence over fresh scaffold defaults, and (unlike the fresh-
+		// generation branch below) useDefaults is left as the caller
+		// requested rather than forced to true, so the user still gets a
+		// chance to review/correct it.
+		scaffoldConfig, cfgErr := ui.loadScaffoldConfigFromEmbeds(embedsConfig)
+		if cfgErr != nil {
+			return nil, useDefaults, cfgErr
+		}
+		mergedValues, _, setupErr := ui.RunSetupForm(scaffoldConfig, targetPath, useDefaults, cmdTemplateValues)
+		if setupErr != nil {
+			return nil, useDefaults, fmt.Errorf("failed to run setup form against target: %w", setupErr)
+		}
+		return mergedValues, useDefaults, nil
+	}
+
+	// Fresh generation: merge the pre-collected values into cmdTemplateValues
+	// and use --use-defaults so executeWithSetup skips showing the form again.
+	merged := make(map[string]interface{}, len(preCollectedValues)+len(cmdTemplateValues))
+	for k, v := range preCollectedValues {
+		merged[k] = v
+	}
+	// Caller-supplied flags take highest priority and overwrite.
+	for k, v := range cmdTemplateValues {
+		merged[k] = v
+	}
+	return merged, true, nil
 }
 
 // ConfirmUpdateInstead prompts whether to update an existing, non-empty target
@@ -538,6 +617,7 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Resolve delimiters, falling back to defaults when none are provided.
 	activeDelimiters := resolveDelimiters(delimiters, nil)
+	delimitersConfig := delimitersAsScaffoldConfig(activeDelimiters)
 
 	// For now, use the existing processFile method but this should be refactored
 	// to use the templating processor properly
@@ -559,7 +639,7 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 			Permissions: file.Permissions,
 		}
 
-		err := ui.processor.ProcessFile(templatingFile, targetPath, force, update, nil, cmdTemplateValues)
+		err := ui.processor.ProcessFile(templatingFile, targetPath, force, update, delimitersConfig, cmdTemplateValues)
 
 		// Display result using proper UI output
 		if err != nil {
@@ -604,7 +684,7 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 
 	// Only render README if all files were successful.
 	if embedsConfig.README != "" {
-		if err := ui.renderREADME(embedsConfig.README, targetPath, activeDelimiters); err != nil {
+		if err := ui.renderREADME(embedsConfig.README, targetPath, activeDelimiters, cmdTemplateValues); err != nil {
 			return err
 		}
 	}
@@ -725,6 +805,10 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Process each file with rich configuration
 	var successCount, errorCount int
 	var failedFiles []string
+	// Resolve once, with the same precedence ProcessFile's own extractDelimiters
+	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
+	// check and the actual file-body rendering below never disagree.
+	activeDelimiters := resolveDelimiters(delimiters, scaffoldConfig)
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
@@ -738,19 +822,8 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			continue
 		}
 
-		// Use the delimiters passed in, or get from scaffold config as fallback
-		if len(delimiters) == 0 {
-			delimiters = []string{"{{", "}}"}
-			if scaffoldConfig != nil {
-				// scaffoldConfig is of type *config.ScaffoldConfig, access Delimiters via Spec
-				if len(scaffoldConfig.Spec.Delimiters) == 2 {
-					delimiters = scaffoldConfig.Spec.Delimiters
-				}
-			}
-		}
-
 		// Process the file path as a template first to check if it should be skipped
-		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(file.Path, targetPath, scaffoldConfig, mergedValues, delimiters)
+		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(file.Path, targetPath, scaffoldConfig, mergedValues, activeDelimiters)
 		if pathErr != nil {
 			// If path processing fails, use original path
 			renderedPath = file.Path
@@ -766,6 +839,12 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			continue
 		}
 
+		// In dry-run mode, whether the file already exists is the single
+		// authoritative signal for "would create" vs "would update": capture
+		// it before ProcessFile runs (ProcessFile itself performs no write in
+		// dry-run mode, so the file's existence is unaffected either way).
+		existedBefore := ui.processor.DryRun && fileExistsAt(targetPath, renderedPath)
+
 		// Use the templating processor to handle file processing
 		// Convert tmpl.File to engine.File
 		templatingFile := engine.File{
@@ -777,29 +856,39 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		err := ui.processor.ProcessFile(templatingFile, targetPath, force, update, scaffoldConfig, mergedValues)
 
 		// Display result using proper UI output
-		if err != nil {
-			// Check if this is a FileSkippedError
-			skipErr := &engine.FileSkippedError{}
-			if errors.As(err, &skipErr) {
-				// File was intentionally skipped
-				ui.writeOutput(fileStatusFormat,
-					ui.grayStyle.Render(bulletSymbol),
-					skipErr.Path,
-					ui.grayStyle.Render(skippedText))
-			} else {
-				// Actual error occurred
-				errorCount++
-				failedFiles = append(failedFiles, file.Path)
-				ui.writeOutput(fileStatusFormat,
-					ui.errorStyle.Render(ui.xMark),
-					renderedPath,
-					ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
-			}
-		} else {
+		var skipErr *engine.FileSkippedError
+		switch {
+		case err == nil:
 			successCount++
-			ui.writeOutput("  %s %s\n",
-				ui.successStyle.Render(ui.checkmark),
-				renderedPath)
+			if ui.processor.DryRun {
+				// The single authoritative signal for this status label is
+				// existedBefore, captured above -- not a separate boolean.
+				status := dryRunCreateStatus
+				if existedBefore {
+					status = dryRunUpdateStatus
+				}
+				ui.writeOutput(fileStatusFormat,
+					ui.successStyle.Render(ui.checkmark),
+					renderedPath,
+					ui.grayStyle.Render(status))
+			} else {
+				ui.writeOutput("  %s %s\n",
+					ui.successStyle.Render(ui.checkmark),
+					renderedPath)
+			}
+		case errors.As(err, &skipErr):
+			// File was intentionally skipped
+			ui.writeOutput(fileStatusFormat,
+				ui.grayStyle.Render(bulletSymbol),
+				skipErr.Path,
+				ui.grayStyle.Render(skippedText))
+		default:
+			errorCount++
+			failedFiles = append(failedFiles, file.Path)
+			ui.writeOutput(fileStatusFormat,
+				ui.errorStyle.Render(ui.xMark),
+				renderedPath,
+				ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
 		}
 	}
 
@@ -863,12 +952,15 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 // renderREADME renders the README content as markdown.
 // The provided delimiters control template rendering so callers that supply
 // custom delimiters (e.g. via ExecuteWithDelimiters) are honoured correctly.
-func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimiters []string) error {
+// Values are the collected/generated template values (e.g. cmdTemplateValues);
+// without them, any `.Config.xxx` reference in the README silently resolves
+// to nothing.
+func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimiters []string, values map[string]interface{}) error {
 	// Resolve delimiters, falling back to defaults.
 	activeDelimiters := resolveDelimiters(delimiters, nil)
 
-	// Process README template with the active delimiters.
-	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, nil, activeDelimiters)
+	// Process README template with the active delimiters and values.
+	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, values, activeDelimiters)
 	if err != nil {
 		return fmt.Errorf("failed to process README template: %w", err)
 	}

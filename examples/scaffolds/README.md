@@ -40,6 +40,7 @@ atmos terraform apply kms -s dev -auto-approve
 atmos terraform apply audit-trail -s dev -auto-approve
 atmos terraform apply baseline -s dev -auto-approve
 atmos terraform apply monitoring -s dev -auto-approve
+atmos terraform apply iam-baseline -s dev -auto-approve
 atmos terraform output monitoring -s dev
 atmos emulator down aws -s dev
 ```

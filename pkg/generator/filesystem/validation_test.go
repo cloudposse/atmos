@@ -114,3 +114,19 @@ func TestValidateTargetDirectory(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateTargetDirectory_GitOnlyDirectoryIsTreatedAsEmpty verifies a
+// freshly `git init`'d target directory (which has only a `.git` entry, no
+// real user content) is treated as empty, not as "already contains files".
+func TestValidateTargetDirectory_GitOnlyDirectoryIsTreatedAsEmpty(t *testing.T) {
+	tempDir := t.TempDir()
+	targetPath := filepath.Join(tempDir, "target")
+
+	if err := os.MkdirAll(filepath.Join(targetPath, ".git"), 0o755); err != nil {
+		t.Fatalf("failed to create .git directory: %v", err)
+	}
+
+	if err := ValidateTargetDirectory(targetPath, false, false); err != nil {
+		t.Errorf("expected a .git-only directory to be treated as empty, got: %v", err)
+	}
+}

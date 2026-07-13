@@ -39,9 +39,9 @@ Contains:
 - [Copier](https://github.com/copier-org/copier) - Modern templating with updates (Python)
 
 **Go Libraries:**
-- [nasdf/diff3](https://github.com/nasdf/diff3) - Pure Go diff3 (recommended for text)
-- [epiclabs-io/diff3](https://github.com/epiclabs-io/diff3) - Alternative with customization
-- [git2go](https://github.com/libgit2/git2go) - libgit2 bindings (advanced)
+- [epiclabs-io/diff3](https://github.com/epiclabs-io/diff3) - **Shipped**: used directly by `pkg/generator/merge/text_merger.go`
+- [nasdf/diff3](https://github.com/nasdf/diff3) - Considered during research, not what shipped
+- [git2go](https://github.com/libgit2/git2go) - libgit2 bindings (advanced, not used)
 
 **Academic:**
 - [Diff3 Paper](https://www.cis.upenn.edu/~bcpierce/papers/diff3-short.pdf) - Formal investigation (UPenn 2007)
@@ -59,7 +59,8 @@ A 3-way merge system for **template updates** in `atmos scaffold` and `atmos ini
 **Dual-strategy approach**:
 
 1. **Text-based merge** - For general files (.tf, .md, .sh, etc.)
-   - Uses `nasdf/diff3` library
+   - Uses `epiclabs-io/diff3` (shipped; `nasdf/diff3` was considered during
+     research but isn't what shipped — see research.md)
    - Line-by-line merge with conflict detection
 
 2. **YAML-aware merge** - For config files (.yaml, .yml)
@@ -115,18 +116,35 @@ For each section:
 
 - [x] Research completed
 - [x] PRD written
-- [ ] Text merge implementation (`nasdf/diff3`)
-- [ ] YAML merge implementation (custom with `yaml.v3`)
-- [ ] Base content storage (`.atmos/init/base/`)
-- [ ] Generator integration
-- [ ] CLI flags (`--merge-strategy`, `--max-changes`)
-- [ ] Documentation and tests
+- [x] Text merge implementation (shipped with `epiclabs-io/diff3`, not the
+      originally planned `nasdf/diff3`)
+- [x] YAML merge implementation (custom with `yaml.v3`)
+- [x] Base content retrieval — shipped as git-ref-based (`--base-ref`, via
+      `pkg/generator/storage.GitBaseStorage`), **not** the originally planned
+      `.atmos/init/base/` on-disk snapshot (that file store was never built)
+- [x] Generator integration
+- [x] CLI flag `--merge-strategy` (both `atmos init` and `atmos scaffold
+      generate`); `--max-changes` was **not** implemented as a flag (the
+      merger's conflict-percentage threshold is an internal hardcoded default)
+- [x] `--dry-run` combined with `--update` on `atmos scaffold generate` (runs
+      the real merge and previews create/update/conflict status without
+      writing); **`atmos init` still has no `--dry-run` flag at all** — a real,
+      open gap, not a "future" line item
+- [ ] Documentation and tests (this document set is being reconciled with the
+      shipped implementation; `pkg/generator/merge/*_test.go` has test coverage)
 
 ## Key Decisions
 
-### Recommendation: nasdf/diff3 for Text
+### Shipped: epiclabs-io/diff3 for Text
 
-**Why:**
+`pkg/generator/merge/text_merger.go` imports `github.com/epiclabs-io/diff3`
+directly. This research originally recommended `nasdf/diff3` (below); the
+richer conflict-detection API of `epiclabs-io/diff3` (structured conflict
+info, customizable labels) is what shipped instead.
+
+**Originally recommended: nasdf/diff3** (not what shipped)
+
+**Why it was considered:**
 - ✅ Pure Go (no CGO, no external binaries)
 - ✅ Based on academic paper (formally correct)
 - ✅ Simple API
@@ -144,11 +162,17 @@ For each section:
 
 **Uses:** `gopkg.in/yaml.v3` (already in dependencies)
 
-### Storage: .atmos/init/base/
+### Storage: git-ref-based, not file-snapshot (shipped differently than planned)
 
-Store original template content for future comparisons.
+The original plan was to store original template content on disk for future
+comparisons (`.atmos/init/base/`, shown below) — **this was never built**.
+What shipped instead reads the base directly from git: `--base-ref` (defaulting
+to `HEAD`) is resolved via `pkg/generator/storage.GitBaseStorage.LoadBase`,
+which reads each file's blob content straight out of that git ref. There is no
+on-disk base snapshot and no `.atmos/init/metadata.yaml` / `.atmos/scaffold/metadata.yaml`
+in the shipped code.
 
-**Format:**
+**Original plan (not implemented, retained for historical context):**
 ```
 .atmos/
 └── init/

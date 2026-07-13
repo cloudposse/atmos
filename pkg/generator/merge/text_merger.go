@@ -10,9 +10,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// newlineSeparator splits/joins line-based content throughout this file.
+const newlineSeparator = "\n"
+
 // TextMerger handles 3-way merging of text files using the diff3 algorithm.
 type TextMerger struct {
-	thresholdPercent int // Percentage threshold (0-100) for change detection.
+	thresholdPercent int              // Percentage threshold (0-100) for change detection.
+	conflictStrategy ConflictStrategy // How to resolve a real ours/theirs divergence.
 }
 
 // NewTextMerger creates a new text merger with the specified percentage threshold.
@@ -22,6 +26,17 @@ func NewTextMerger(thresholdPercent int) *TextMerger {
 	return &TextMerger{
 		thresholdPercent: thresholdPercent,
 	}
+}
+
+// SetConflictStrategy sets how a real ours/theirs divergence is resolved. The
+// zero value (ConflictStrategyManual) is today's existing behavior: diff3's
+// inline <<<<<<< / ======= / >>>>>>> conflict markers are left in place for
+// the caller to resolve by hand. Ours/theirs instead auto-resolve every
+// conflict block to the chosen side, so the flag isn't YAML-only.
+func (m *TextMerger) SetConflictStrategy(strategy ConflictStrategy) {
+	defer perf.Track(nil, "merge.TextMerger.SetConflictStrategy")()
+
+	m.conflictStrategy = strategy
 }
 
 // MergeResult contains the result of a merge operation.
@@ -73,6 +88,7 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	// Check for conflicts - diff3 provides this info directly.
 	hasConflicts := mergeResult.Conflicts
 	conflictCount := strings.Count(mergedContent, "<<<<<<<")
+	mergedContent, hasConflicts, conflictCount = m.applyConflictStrategy(mergedContent, hasConflicts, conflictCount)
 
 	// If there are conflicts, check if they exceed threshold.
 	if hasConflicts && m.thresholdPercent > 0 {
@@ -94,13 +110,25 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	}, nil
 }
 
+// applyConflictStrategy auto-resolves every conflict block to the chosen
+// side when the strategy is ours/theirs, mirroring
+// YAMLMerger.pickConflictValue: no conflict is recorded (so the threshold
+// gate in Merge is skipped too) and the write proceeds. Manual (default)
+// leaves content/hasConflicts/conflictCount untouched.
+func (m *TextMerger) applyConflictStrategy(content string, hasConflicts bool, conflictCount int) (string, bool, int) {
+	if hasConflicts && m.conflictStrategy != ConflictStrategyManual {
+		return resolveTextConflicts(content, m.conflictStrategy), false, 0
+	}
+	return content, hasConflicts, conflictCount
+}
+
 // calculateChangePercentage calculates the percentage of content that has changed.
 // This compares how much base, ours, and theirs differ from each other, relative to base size.
 func (m *TextMerger) calculateChangePercentage(base, ours, theirs string) int {
 	// Calculate how many lines changed in ours vs base.
-	baseLines := strings.Split(base, "\n")
-	oursLines := strings.Split(ours, "\n")
-	theirsLines := strings.Split(theirs, "\n")
+	baseLines := strings.Split(base, newlineSeparator)
+	oursLines := strings.Split(ours, newlineSeparator)
+	theirsLines := strings.Split(theirs, newlineSeparator)
 
 	// Count lines that differ from base.
 	oursChanged := countDifferentLines(baseLines, oursLines)
@@ -118,14 +146,17 @@ func (m *TextMerger) calculateChangePercentage(base, ours, theirs string) int {
 	return int(float64(totalChanged) / float64(baseSize) * 100.0)
 }
 
-// countDifferentLines counts how many lines from base are absent in changed
+// countDifferentLines counts how many lines differ between base and changed
 // using an LCS-based approach.  Positional (index-by-index) comparison is
 // intentionally avoided: a single insertion near the top shifts every
 // downstream line and inflates the count far beyond the real edit size.  LCS
-// finds the longest common subsequence and reports only the lines that were
-// deleted from base (i.e., len(base) - lcsLength).  Insertions in changed
-// are not counted here to avoid double-counting when oursChanged and
-// theirsChanged are summed in calculateChangePercentage.
+// finds the longest common subsequence; lines present in base but not in the
+// LCS were deleted, and lines present in changed but not in the LCS were
+// inserted.  Both must be counted here: oursChanged and theirsChanged in
+// calculateChangePercentage are independent comparisons against base, so an
+// insertion-only diff on both sides (base fully contained as a subsequence of
+// each) would otherwise report 0 changed lines on both sides even though real
+// content was added.
 func countDifferentLines(base, changed []string) int {
 	m := len(base)
 	n := len(changed)
@@ -152,9 +183,53 @@ func countDifferentLines(base, changed []string) int {
 	}
 
 	lcsLen := dp[m][n]
-	// Count only the lines deleted from base; insertions are already implicitly
-	// covered by theirsChanged when the two sides are summed.
-	return m - lcsLen
+	// Lines deleted from base, plus lines inserted in changed.
+	return (m - lcsLen) + (n - lcsLen)
+}
+
+// resolveTextConflicts rewrites diff3 conflict blocks (<<<<<<< Ours /
+// ======= / >>>>>>> Theirs) to keep only the chosen side's content, dropping
+// the markers and the other side entirely. Uses the same conflict-block
+// line-scanning idiom a 3-way text merger conflict resolver would, but with a
+// deterministic pick instead of keeping both sides.
+func resolveTextConflicts(content string, strategy ConflictStrategy) string {
+	lines := strings.Split(content, newlineSeparator)
+	var resolved []string
+	var oursLines, theirsLines []string
+	var inConflict, inTheirsSide bool
+
+	for _, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "<<<<<<<"):
+			inConflict = true
+			inTheirsSide = false
+			oursLines = nil
+			theirsLines = nil
+			continue
+		case strings.HasPrefix(line, "======="):
+			inTheirsSide = true
+			continue
+		case strings.HasPrefix(line, ">>>>>>>"):
+			inConflict = false
+			if strategy == ConflictStrategyTheirs {
+				resolved = append(resolved, theirsLines...)
+			} else {
+				resolved = append(resolved, oursLines...)
+			}
+			continue
+		}
+
+		switch {
+		case !inConflict:
+			resolved = append(resolved, line)
+		case inTheirsSide:
+			theirsLines = append(theirsLines, line)
+		default:
+			oursLines = append(oursLines, line)
+		}
+	}
+
+	return strings.Join(resolved, newlineSeparator)
 }
 
 // HasConflictMarkers checks if the content contains diff3 conflict markers.

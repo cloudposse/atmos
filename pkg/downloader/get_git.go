@@ -555,7 +555,17 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	// scaffold catalog, pinned to the build commit) stay as fast as any other shallow
 	// clone instead of silently falling back to a full clone of the whole history.
 	if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
-		return g.cloneShallowCommit(params)
+		if err := g.cloneShallowCommit(params); err != nil {
+			// Some git hosts reject `fetch <sha>` for a commit not at a ref tip
+			// (e.g. `uploadpack.allowReachableSHA1InWant` isn't enabled). Fall
+			// back to a normal full clone instead of failing outright, mirroring
+			// the cleanup/retry behavior of the other failure paths here.
+			log.Trace("Shallow commit fetch failed, falling back to full clone", "error", err, "ref", ref)
+			fallbackParams := *params
+			fallbackParams.depth = 0
+			return g.clone(&fallbackParams)
+		}
+		return nil
 	}
 
 	args := append(cloneFlagArgs(ref, depth), gitArgSeparator, u.String(), dst)

@@ -45,8 +45,12 @@ func Load[S any](kind string, data []byte) (*Manifest[S], error) {
 	// into a zero value (unknown YAML fields are ignored by yaml.Unmarshal).
 	def, ok := GetDefinition(kind)
 	if ok && def.SpecType() != nil {
-		var zero S
-		callerType := reflect.TypeOf(zero)
+		// reflect.TypeOf(zero) would return nil when S is itself an interface
+		// type (a nil interface value carries no concrete type), silently
+		// skipping this whole mismatch check. Reflecting on *S instead is
+		// never nil regardless of what S is, so .Elem() always yields S's
+		// own type.
+		callerType := reflect.TypeOf((*S)(nil)).Elem()
 		// Unwrap pointer if the caller used *T.
 		if callerType != nil && callerType.Kind() == reflect.Ptr {
 			callerType = callerType.Elem()

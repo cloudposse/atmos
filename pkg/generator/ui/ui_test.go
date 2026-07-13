@@ -112,3 +112,68 @@ func TestProcessFile_ExistingFile_NoFlags(t *testing.T) {
 		t.Errorf("Expected error about existing file, got: %v", err)
 	}
 }
+
+// TestFileExistsAt verifies the dry-run create/update status helper: the
+// single authoritative signal executeWithSetup uses to label a file
+// "(would create)" vs "(would update)" in dry-run preview output.
+func TestFileExistsAt(t *testing.T) {
+	tempDir := t.TempDir()
+
+	if fileExistsAt(tempDir, "missing.txt") {
+		t.Error("expected fileExistsAt to report false for a file that doesn't exist")
+	}
+
+	if err := os.WriteFile(filepath.Join(tempDir, "present.txt"), []byte("content"), 0o644); err != nil {
+		t.Fatalf("failed to seed file: %v", err)
+	}
+	if !fileExistsAt(tempDir, "present.txt") {
+		t.Error("expected fileExistsAt to report true for an existing file")
+	}
+
+	if err := os.MkdirAll(filepath.Join(tempDir, "adir"), 0o755); err != nil {
+		t.Fatalf("failed to seed directory: %v", err)
+	}
+	if fileExistsAt(tempDir, "adir") {
+		t.Error("expected fileExistsAt to report false for a directory (only files count)")
+	}
+}
+
+// TestExecuteWithCommandValues_CustomDelimitersReachFileContent verifies that
+// custom delimiters resolved in executeWithCommandValues actually reach file
+// rendering (previously nil was passed as scaffoldConfig, so ProcessFile
+// always fell back to the default "{{"/"}}" delimiters and left custom-
+// delimited templates unrendered).
+func TestExecuteWithCommandValues_CustomDelimitersReachFileContent(t *testing.T) {
+	ui := createTestUI(t)
+	tempDir := t.TempDir()
+
+	embedsConfig := &templates.Configuration{
+		Name: "test-template",
+		Files: []templates.File{
+			{
+				Path:        "greeting.txt",
+				Content:     "Hello, [[ .Config.name ]]!",
+				IsTemplate:  true,
+				Permissions: 0o644,
+			},
+		},
+	}
+
+	err := ui.executeWithCommandValues(embedsConfig, tempDir, false, false,
+		map[string]interface{}{"name": "widget"}, []string{"[[", "]]"})
+	if err != nil {
+		t.Fatalf("executeWithCommandValues failed: %v", err)
+	}
+
+	content, readErr := os.ReadFile(filepath.Join(tempDir, "greeting.txt"))
+	if readErr != nil {
+		t.Fatalf("failed to read generated file: %v", readErr)
+	}
+
+	if !strings.Contains(string(content), "Hello, widget!") {
+		t.Errorf("expected custom-delimited template to render, got: %q", string(content))
+	}
+	if strings.Contains(string(content), "[[") {
+		t.Errorf("expected no unresolved custom delimiters in output, got: %q", string(content))
+	}
+}

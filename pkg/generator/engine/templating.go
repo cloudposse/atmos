@@ -13,10 +13,12 @@ import (
 	"github.com/hairyhenderson/gomplate/v3/data"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Default threshold and permission constants.
@@ -60,6 +62,7 @@ type Processor struct {
 	merger     *merge.ThreeWayMerger
 	gitStorage *storage.GitBaseStorage
 	targetPath string // Target directory for file generation
+	DryRun     bool   // When true, compute rendering/merge but skip writing to disk
 }
 
 // NewProcessor creates a new template processor with default settings.
@@ -213,13 +216,91 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 		return err
 	}
 
+	// Confine the write within targetPath and reject writing through a symlink.
+	// This one call covers the new-file, force-overwrite, and merge-update
+	// write paths below, since they all write to this same fullPath.
+	if err := validateWriteTarget(fullPath, targetPath); err != nil {
+		return err
+	}
+
 	// Handle existing file
 	if fileExists(fullPath) {
 		return p.handleExistingFile(file, fullPath, targetPath, force, update, scaffoldConfig, userValues, delimiters)
 	}
 
 	// Process and write new file
-	return p.writeNewFile(file, fullPath, targetPath, scaffoldConfig, userValues, delimiters)
+	return p.writeNewFile(file, fullPath, targetPath, false, scaffoldConfig, userValues, delimiters)
+}
+
+// validateWriteTarget confirms fullPath's containing directory resolves under
+// targetPath and that fullPath itself isn't currently a symlink, so a write
+// can't be redirected outside the target directory (e.g. via a symlinked
+// intermediate directory) or through a symlink at the destination.
+func validateWriteTarget(fullPath, targetPath string) error {
+	realBase, err := u.ResolveAndCleanBasePath(targetPath)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithCause(err).
+			WithExplanationf("Failed to resolve target directory: `%s`", targetPath).
+			WithExitCode(2).
+			Err()
+	}
+
+	realDir, err := filepath.EvalSymlinks(filepath.Dir(fullPath))
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithCause(err).
+			WithExplanationf("Failed to resolve write directory: `%s`", filepath.Dir(fullPath)).
+			WithExitCode(2).
+			Err()
+	}
+
+	if realDir != realBase && !strings.HasPrefix(realDir, realBase+string(filepath.Separator)) {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Resolved path escapes target directory: `%s`", fullPath).
+			WithHint("Check for symlinks that redirect outside the target directory").
+			WithContext("full_path", fullPath).
+			WithContext("target_path", targetPath).
+			WithExitCode(2).
+			Err()
+	}
+
+	if info, err := os.Lstat(fullPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return errUtils.Build(errUtils.ErrSymlinkWrite).
+			WithExplanationf("Refusing to write through a symlink: `%s`", fullPath).
+			WithHint("Remove the symlink before generating this file").
+			WithContext("full_path", fullPath).
+			WithExitCode(2).
+			Err()
+	}
+
+	return nil
+}
+
+// writeFileSecure writes content to fullPath, closing the TOCTOU gap between
+// an earlier existence check and the write. For non-overwrite writes it uses
+// exclusive creation (O_EXCL), which atomically fails if something raced in
+// since the caller checked the file didn't exist. For overwrites, it uses the
+// existing atomic-visibility WriteFileAtomic helper instead, since the target
+// may be open elsewhere; os.Rename (which WriteFileAtomic uses under the
+// hood) replaces a symlink dirent rather than following it, which is also a
+// secondary symlink-safety win over a plain O_TRUNC open.
+func writeFileSecure(fullPath string, content []byte, perm os.FileMode, overwrite bool) (err error) {
+	if overwrite {
+		return filesystem.NewOSFileSystem().WriteFileAtomic(fullPath, content, perm)
+	}
+
+	f, openErr := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if openErr != nil {
+		return openErr
+	}
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	_, err = f.Write(content)
+	return err
 }
 
 // extractDelimiters extracts template delimiters from scaffold config or returns defaults.
@@ -437,22 +518,32 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 	}
 
 	// force flag is set, overwrite by calling writeNewFile
-	return p.writeNewFile(file, fullPath, targetPath, scaffoldConfig, userValues, delimiters)
+	return p.writeNewFile(file, fullPath, targetPath, true, scaffoldConfig, userValues, delimiters)
 }
 
-// writeNewFile processes the file content and writes it to disk.
+// writeNewFile processes the file content and writes it to disk. Force
+// distinguishes a genuinely-new-file write (exclusive creation, closing the
+// TOCTOU gap between ProcessFile's earlier existence check and this write)
+// from a force-overwrite of an existing file (atomic-visibility replace).
 //
 //nolint:revive // argument-limit: file writing requires full context for template processing
-func (p *Processor) writeNewFile(file File, fullPath, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
+func (p *Processor) writeNewFile(file File, fullPath, targetPath string, force bool, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
 	// Process content as template if needed
 	content, err := p.processFileContent(file, targetPath, scaffoldConfig, userValues, delimiters)
 	if err != nil {
 		return err
 	}
 
+	// Dry-run: rendering above already ran (and would have surfaced template
+	// errors), but skip the actual write to disk.
+	if p.DryRun {
+		return nil
+	}
+
 	// Write file
-	if err := os.WriteFile(fullPath, []byte(content), file.Permissions); err != nil {
+	if err := writeFileSecure(fullPath, []byte(content), file.Permissions, force); err != nil {
 		return errUtils.Build(errUtils.ErrFileWrite).
+			WithCause(err).
 			WithExplanationf("Failed to write file: `%s`", fullPath).
 			WithHint("Check directory permissions").
 			WithHint("Verify sufficient disk space").

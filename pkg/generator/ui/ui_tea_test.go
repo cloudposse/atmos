@@ -517,7 +517,7 @@ func TestInitUI_RenderREADME(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ui.renderREADME(tt.readmeContent, tt.targetPath, nil)
+			err := ui.renderREADME(tt.readmeContent, tt.targetPath, nil, nil)
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got nil")
 			}

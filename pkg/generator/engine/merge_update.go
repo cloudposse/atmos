@@ -27,6 +27,27 @@ func (p *Processor) SetMaxChanges(thresholdPercent int) {
 	p.merger = merge.NewThreeWayMerger(thresholdPercent)
 }
 
+// SetConflictStrategy sets how a real ours/theirs divergence is resolved
+// during a 3-way merge. Note: SetMaxChanges replaces p.merger wholesale, so
+// call SetConflictStrategy after SetMaxChanges if both are used, or the
+// strategy set here would be discarded.
+func (p *Processor) SetConflictStrategy(strategy merge.ConflictStrategy) {
+	defer perf.Track(nil, "engine.Processor.SetConflictStrategy")()
+
+	p.merger.SetConflictStrategy(strategy)
+}
+
+// SetDryRun toggles dry-run mode. When enabled, ProcessFile still renders
+// templates, loads the git merge base, performs the 3-way merge, and runs
+// conflict/threshold checks — every step that can fail — but skips the final
+// write to disk, so a dry-run preview reports real conflicts instead of only
+// listing file paths.
+func (p *Processor) SetDryRun(dryRun bool) {
+	defer perf.Track(nil, "engine.Processor.SetDryRun")()
+
+	p.DryRun = dryRun
+}
+
 // SetupGitStorage initializes git-based storage for 3-way merges.
 // The targetPath is used to find the git repository and resolve relative file paths.
 // The baseRef specifies which git reference to use as the base for merges (e.g., "main", "v1.0.0").
@@ -37,9 +58,9 @@ func (p *Processor) SetMaxChanges(thresholdPercent int) {
 func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 	defer perf.Track(nil, "engine.Processor.SetupGitStorage")()
 
-	p.targetPath = targetPath
-
-	// Open git repository at target path
+	// Validate everything into locals first; only mutate p.targetPath/p.gitStorage
+	// once every validation step has succeeded. A failed call must leave the
+	// Processor's existing state untouched rather than half-updated.
 	repo, err := git.PlainOpenWithOptions(targetPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
 		EnableDotGitCommonDir: true,
@@ -59,10 +80,10 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 	}
 
 	// Create git storage with base ref
-	p.gitStorage = storage.NewGitBaseStorage(repo, baseRef)
+	gitStorage := storage.NewGitBaseStorage(repo, baseRef)
 
 	// Validate that base ref exists
-	if err := p.gitStorage.ValidateBaseRef(); err != nil {
+	if err := gitStorage.ValidateBaseRef(); err != nil {
 		return errUtils.Build(errUtils.ErrInvalidBaseRef).
 			WithExplanationf("Invalid git base reference: `%s`", baseRef).
 			WithHint("Ensure the git reference exists (branch, tag, or commit hash)").
@@ -73,6 +94,9 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 			WithExitCode(2).
 			Err()
 	}
+
+	p.targetPath = targetPath
+	p.gitStorage = gitStorage
 
 	return nil
 }
@@ -160,9 +184,18 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 			Err()
 	}
 
-	// Write merged content
-	if err := os.WriteFile(existingPath, []byte(result.Content), file.Permissions); err != nil {
+	// Dry-run: the merge above already ran (and would have surfaced conflicts
+	// or threshold errors), but skip the actual write to disk.
+	if p.DryRun {
+		return nil
+	}
+
+	// Write merged content atomically: the target may be open elsewhere, and
+	// os.Rename (which WriteFileAtomic uses) replaces a symlink dirent rather
+	// than following it.
+	if err := writeFileSecure(existingPath, []byte(result.Content), file.Permissions, true); err != nil {
 		return errUtils.Build(errUtils.ErrFileWrite).
+			WithCause(err).
 			WithExplanationf("Failed to write merged file: `%s`", existingPath).
 			WithHint("Check directory permissions").
 			WithHint("Verify sufficient disk space").

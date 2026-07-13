@@ -114,6 +114,12 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "false",
 		},
+		{
+			name:         "merge-strategy flag",
+			flagName:     "merge-strategy",
+			shorthand:    "",
+			defaultValue: "manual",
+		},
 	}
 
 	for _, tt := range tests {

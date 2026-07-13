@@ -341,7 +341,6 @@ func TestBasicTemplate_Render(t *testing.T) {
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
 
 # Atmos auto-generated backend configs and varfiles
 backend.tf.json

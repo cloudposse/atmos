@@ -1,5 +1,18 @@
 # Scaffold Command Testability Refactoring
 
+> **Status: Partially implemented.** A `ScaffoldUI` interface (`cmd/scaffold/interfaces.go`)
+> was extracted covering the 7 `*generatorUI.InitUI` methods actually used by the
+> scaffold command, with a generated mock (`cmd/scaffold/mock_interfaces.go` via
+> `mockgen`) and unit tests (`cmd/scaffold/scaffold_mock_test.go`) covering the
+> confirm-then-retry-as-update flow. This realizes the core idea of Phase 1/2 below
+> for the UI dependency specifically. It does **not** implement the broader
+> `TemplateLoader`/`TemplateExecutor` split, the standalone `ScaffoldGenerator` type,
+> or the `DryRunFile` rendering interface described in the phases below —
+> template-loading dependencies (`templates.GetAvailableConfigurations`,
+> `source.Hydrate`, `setup.NewGeneratorContext`) remain untouched, direct calls in
+> `cmd/scaffold/scaffold.go`. Treat the plan below as the original, broader proposal;
+> only the UI-interface slice of it has shipped so far.
+
 ## Problem Statement
 
 The scaffold command (`cmd/scaffold/scaffold.go`) currently has **50.11% test coverage** with 225 missed lines. The primary blocker is that business logic is tightly coupled with UI rendering, making unit testing impossible without significant refactoring.
@@ -84,11 +97,9 @@ Create `cmd/scaffold/ui_impl.go`:
 package scaffold
 
 import (
-	"fmt"
-
-	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
+	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ProductionUI implements ScaffoldUI using the real UI components.
@@ -146,10 +157,12 @@ Create `cmd/scaffold/generator.go`:
 package scaffold
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 
-	"github.com/cloudposse/atmos/pkg/generator/templates"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
 // ScaffoldGenerator contains the business logic for scaffold operations.
@@ -375,6 +388,8 @@ Create `cmd/scaffold/generator_test.go`:
 package scaffold
 
 import (
+	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

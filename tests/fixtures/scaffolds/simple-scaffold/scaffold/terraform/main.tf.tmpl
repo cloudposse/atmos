@@ -17,8 +17,15 @@ terraform {
 # - Must be 3-63 characters
 # - Lowercase letters, numbers, hyphens only
 # - No consecutive hyphens, no leading/trailing hyphens
+#
+# NOTE: regexReplaceAll's signature is (regex, s, repl) -- piping the string
+# to transform (`s | regexReplaceAll pattern repl`) binds the piped value to
+# the *last* parameter (repl), not `s`, so it silently operates on the small
+# literal replacement string instead of the real data. Call it directly with
+# the string to transform as the explicit middle argument instead.
+{{ $project := regexReplaceAll `-+` (regexReplaceAll `[^a-z0-9-]` (.Config.project_name | lower) `-`) `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 31 }}{{ $environment := regexReplaceAll `-+` (regexReplaceAll `[^a-z0-9-]` (.Config.environment | lower) `-`) `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 31 }}{{ $bucket := printf "%s-%s" $project $environment }}{{ $bucket = regexReplaceAll `-+` (regexReplaceAll `^-+` $bucket ``) `-` }}{{ $bucket = regexReplaceAll `-$` $bucket `` }}
 resource "aws_s3_bucket" "main" {
-  bucket = "{{ printf \"%s-%s\" (.Config.project_name | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 31) (.Config.environment | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 31) | regexReplaceAll `^-+` `` | regexReplaceAll `-+` `-` | regexReplaceAll `-$` `` }}"
+  bucket = "{{ $bucket }}"
 
   tags = {
     Name        = var.project_name

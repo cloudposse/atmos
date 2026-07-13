@@ -79,6 +79,15 @@ func TestStringMapFlag_Integration(t *testing.T) {
 				"equation": "a=b=c",
 			},
 		},
+		{
+			// Regression test: StringSlice would split this into
+			// ["tags=a", "b", "c"], losing the comma-separated value entirely.
+			name: "comma in value is preserved",
+			args: []string{"--set", "tags=a,b,c"},
+			expected: map[string]string{
+				"tags": "a,b,c",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -132,7 +141,7 @@ func TestStringMapFlag_Integration(t *testing.T) {
 
 // TestStringMapFlag_RegisterFlags verifies proper Cobra registration.
 func TestStringMapFlag_RegisterFlags(t *testing.T) {
-	t.Run("registers as StringSlice", func(t *testing.T) {
+	t.Run("registers as StringArray", func(t *testing.T) {
 		parser := NewStandardParser(
 			WithStringMapFlag("set", "s", map[string]string{}, "Set values"),
 		)
@@ -146,6 +155,9 @@ func TestStringMapFlag_RegisterFlags(t *testing.T) {
 		assert.Equal(t, "set", flag.Name)
 		assert.Equal(t, "s", flag.Shorthand)
 		assert.Equal(t, "Set values", flag.Usage)
+		// StringArray (not StringSlice): each --set occurrence is kept verbatim,
+		// so a value containing a comma isn't split apart.
+		assert.Equal(t, "stringArray", flag.Value.Type())
 	})
 
 	t.Run("registers with defaults", func(t *testing.T) {

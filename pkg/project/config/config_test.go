@@ -298,6 +298,53 @@ func TestDeepMerge_TemplateValuesOverrideDefaults(t *testing.T) {
 	assert.Equal(t, "eu-west-1", merged["region"])
 }
 
+// TestInitializeFormValues_TemplateValuesOverrideDefaults mirrors
+// TestDeepMerge_TemplateValuesOverrideDefaults but for the interactive-form
+// path: initializeFormValues must apply the same defaults -> Spec.Values ->
+// userValues precedence as DeepMerge, so a template's preset Spec.Values
+// aren't silently skipped when the form is shown.
+func TestInitializeFormValues_TemplateValuesOverrideDefaults(t *testing.T) {
+	projectConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "project_name", Default: "default-project"},
+				{Name: "region", Default: "us-east-1"},
+			},
+			Values: map[string]any{
+				"region": "eu-west-1", // Template preset beats the field default.
+			},
+		},
+	}
+
+	formValues := initializeFormValues(projectConfig, map[string]interface{}{
+		"project_name": "user-project", // User value beats everything.
+	})
+
+	assert.Equal(t, "user-project", formValues["project_name"])
+	assert.Equal(t, "eu-west-1", formValues["region"])
+}
+
+// TestBuildConfigForm_DuplicateFieldNameReturnsError verifies a duplicate
+// field name is rejected with a clear error instead of silently dropping one
+// prompt's answer (the second field's getter would otherwise overwrite the
+// first's in valueGetters).
+func TestBuildConfigForm_DuplicateFieldNameReturnsError(t *testing.T) {
+	projectConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "project_name", Type: "input"},
+				{Name: "project_name", Type: "input"},
+			},
+		},
+	}
+
+	form, getters, err := buildConfigForm(projectConfig, map[string]interface{}{})
+
+	assert.Nil(t, form)
+	assert.Nil(t, getters)
+	assert.ErrorIs(t, err, errUtils.ErrDuplicateScaffoldFieldName)
+}
+
 func TestCreateField(t *testing.T) {
 	values := make(map[string]interface{})
 

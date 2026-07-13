@@ -1,5 +1,14 @@
 # Research: 3-Way Merge Implementation Options
 
+> **Status: Historical research.** This document's "PRIMARY RECOMMENDATION" for
+> text merging (`nasdf/diff3`) is **not** what shipped — the implementation uses
+> `github.com/epiclabs-io/diff3` instead (see "Go Library Evaluation" below for
+> where this is called out inline). Likewise, the "lessons learned" sections
+> recommending `.atmos/init/metadata.yaml`-style base storage and a non-git
+> requirement do not match the shipped design, which reads bases directly from
+> git (`--base-ref`) and requires a git repository for `--update`. Treat this as
+> the research that informed the PRD, not a description of shipped behavior.
+
 This document provides in-depth research on existing 3-way merge implementations, with focus on Cruft (our primary inspiration) and evaluation of Go ecosystem options.
 
 ## Table of Contents
@@ -316,12 +325,18 @@ diff a/config.py b/config.py
 
 **Apply to Atmos**:
 
-1. **Store base reference** → `.atmos/init/metadata.yaml` with template commit/version
+1. **Store base reference** → planned as `.atmos/init/metadata.yaml` with
+   template commit/version; **not what shipped** — the shipped design reads
+   the base directly from a git ref (`--base-ref`, via
+   `pkg/generator/storage.GitBaseStorage`) instead of storing a reference file
 2. **Store template variables** → Allow regeneration of original template
 3. **Regeneration approach** → Generate template at old and new versions, diff them
 4. **Two-stage conflict handling** → Try smart merge, show conflicts if fails
 5. **Clear error messages** → Improve on Cruft's cryptic errors
-6. **Support non-git workflows** → Don't require git (unlike Cruft)
+6. ~~**Support non-git workflows** → Don't require git (unlike Cruft)~~ — **not
+   what shipped**: `--update` requires a git repository (same limitation as
+   Cruft) and hard-errors via `ErrThreeWayMerge` without one; there is no
+   non-git fallback
 
 ---
 
@@ -428,8 +443,12 @@ def update(
 **Apply to Atmos**:
 
 1. **Inline conflicts** → Use Git-style markers, not .rej files
-2. **No git requirement** → Works in any directory structure
-3. **Migrations support** → Future: pre/post update hooks
+2. ~~**No git requirement** → Works in any directory structure~~ — **not what
+   shipped**: Atmos went the other direction from this lesson. `--update`
+   requires a git repository (base content is read via `--base-ref` against a
+   real git ref) and hard-errors without one; there is no non-git fallback
+3. **Migrations support** → Future: pre/post update hooks (still not
+   implemented — see `docs/prd/atmos-init.md` "Current State")
 4. **Clear conflict markers** → `<<<<<<< before` and `>>>>>>> after` labels
 
 ---
@@ -561,7 +580,13 @@ git config merge.conflictStyle diff3
 | **nasdf/diff3** | 23 | 1 | 2024-02-04 | MIT | ✅ Recent | ⭐ **ALTERNATIVE** |
 | **charlesvdv/go-three-way-merge** | 3 | 1 | 2018-05-23 (6+ years) | MIT | ❌ Abandoned | ❌ Avoid |
 
-### Option 1: nasdf/diff3 (PRIMARY RECOMMENDATION)
+### Option 1: nasdf/diff3 (considered, not what shipped)
+
+> **Note**: despite the "PRIMARY RECOMMENDATION" framing below (this research
+> predates the final decision), the shipped implementation
+> (`pkg/generator/merge/text_merger.go`) uses `epiclabs-io/diff3` — see Option 2.
+> This section is retained for the comparison; treat the "Recommendation" column
+> in the table above as authoritative over this section's original heading.
 
 **Repository**: https://github.com/nasdf/diff3
 **Language**: Pure Go (no CGO)
@@ -636,7 +661,10 @@ func Merge(o, a, b string) string {
 
 ---
 
-### Option 2: epiclabs-io/diff3
+### Option 2: epiclabs-io/diff3 (SHIPPED)
+
+**Status**: This is what shipped. `pkg/generator/merge/text_merger.go` imports
+`github.com/epiclabs-io/diff3` directly and calls its `Merge` function.
 
 **Repository**: https://github.com/epiclabs-io/diff3
 **Language**: Pure Go
@@ -1052,16 +1080,21 @@ key: value  # LineComment
 
 #### Phase 1: Text Files (Week 1-2)
 
-**Use: nasdf/diff3**
+**Planned: nasdf/diff3 — Shipped instead: epiclabs-io/diff3**
 
-**Reasoning**:
+**Note**: this research recommended `nasdf/diff3` at the time; the shipped
+implementation (`pkg/generator/merge/text_merger.go`) uses `epiclabs-io/diff3`
+instead, for its richer conflict-detection API (structured conflict info and
+labels, rather than a string containing raw `<<<<<<<` markers to grep for).
+
+**Original reasoning** (for `nasdf/diff3`):
 1. ✅ Pure Go - no external dependencies
 2. ✅ Simple API - easy to integrate
 3. ✅ Academic foundation - formally correct
 4. ✅ MIT licensed - no restrictions
 5. ✅ Already available - no new dependencies
 
-**Implementation**:
+**Original planned implementation** (not what shipped):
 ```go
 import "github.com/nasdf/diff3"
 
@@ -1070,6 +1103,14 @@ func MergeText(base, ours, theirs string) (string, bool, error) {
     hasConflicts := strings.Contains(result, "<<<<<<<")
     return result, hasConflicts, nil
 }
+```
+
+**What shipped instead** (`pkg/generator/merge/text_merger.go`):
+```go
+import "github.com/epiclabs-io/diff3"
+
+// diff3.Merge returns a structured result (conflict count, whether conflicts
+// exist) rather than requiring a string.Contains("<<<<<<<") check.
 ```
 
 **Enhancements**:
@@ -1124,20 +1165,22 @@ func MergeYAML(base, ours, theirs string) (string, []Conflict, error) {
 
 ## Final Recommendation
 
-### Recommended Stack
+### Recommended Stack (as originally planned; see note on shipped library below)
 
 ```go
 pkg/generator/merge/
 ├── merge.go            # Auto-detection and routing
-├── text_merger.go      # Uses nasdf/diff3
-├── yaml_merger.go      # Custom yaml.v3 implementation
+├── text_merger.go      # Planned: nasdf/diff3 — SHIPPED: epiclabs-io/diff3
+├── yaml_merger.go      # Custom yaml.v3 implementation (as planned)
 └── conflicts.go        # Conflict types and handling
 ```
 
 ### Implementation Plan
 
 **Week 1-2: Text Merge**
-1. Add `github.com/nasdf/diff3` dependency
+1. Add a diff3 dependency — planned as `github.com/nasdf/diff3`; **shipped as
+   `github.com/epiclabs-io/diff3`** instead (see Option 2 above and the
+   "Recommended Approach" section)
 2. Implement `TextMerger` wrapper
 3. Add conflict detection and parsing
 4. Write comprehensive tests
@@ -1197,12 +1240,12 @@ pkg/generator/merge/
 
 ### Go Libraries
 
-**nasdf/diff3**:
-- Repository: https://github.com/nasdf/diff3
+**epiclabs-io/diff3** (shipped — used by `pkg/generator/merge/text_merger.go`):
+- Repository: https://github.com/epiclabs-io/diff3
 - License: MIT
 
-**epiclabs-io/diff3**:
-- Repository: https://github.com/epiclabs-io/diff3
+**nasdf/diff3** (considered, not what shipped):
+- Repository: https://github.com/nasdf/diff3
 - License: MIT
 
 **git2go**:

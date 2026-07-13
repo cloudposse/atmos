@@ -325,6 +325,51 @@ c: 300
 	}
 }
 
+func TestYAMLMerger_ConflictStrategies(t *testing.T) {
+	base := "config:\n  version: 1\n"
+	ours := "config:\n  version: 2\n"
+	theirs := "config:\n  version: 3\n"
+
+	tests := []struct {
+		name          string
+		strategy      ConflictStrategy
+		wantValue     string
+		wantConflicts bool
+	}{
+		{
+			name:          "manual (default) records a conflict and keeps ours",
+			strategy:      ConflictStrategyManual,
+			wantValue:     "version: 2",
+			wantConflicts: true,
+		},
+		{
+			name:          "ours auto-resolves to the user's value, no conflict",
+			strategy:      ConflictStrategyOurs,
+			wantValue:     "version: 2",
+			wantConflicts: false,
+		},
+		{
+			name:          "theirs auto-resolves to the template's value, no conflict",
+			strategy:      ConflictStrategyTheirs,
+			wantValue:     "version: 3",
+			wantConflicts: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(100)
+			merger.SetConflictStrategy(tt.strategy)
+
+			result, err := merger.Merge(base, ours, theirs)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantConflicts, result.HasConflicts)
+			assert.Contains(t, result.Content, tt.wantValue)
+		})
+	}
+}
+
 func TestYAMLMerger_CommentPreservation(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -686,13 +731,32 @@ func TestYAMLMerger_ParseErrors(t *testing.T) {
 	}
 }
 
+func TestYAMLMerger_MultiDocumentStream(t *testing.T) {
+	base := "doc: one\n---\ndoc: two\n"
+	ours := "doc: one\nuser: true\n---\ndoc: two\n"
+	theirs := "doc: one\n---\ndoc: two\ntemplate: true\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	docs := strings.Split(result.Content, "---")
+	require.Len(t, docs, 2, "both documents in the stream must survive the merge")
+	assert.Contains(t, docs[0], "doc: one")
+	assert.Contains(t, docs[0], "user: true")
+	assert.Contains(t, docs[1], "doc: two")
+	assert.Contains(t, docs[1], "template: true")
+}
+
 func TestYAMLMerger_EmptyDocumentConcurrentAdditions(t *testing.T) {
 	result, err := NewYAMLMerger(100).Merge("", "user: true\n", "template: true\n")
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	// Both independent additions must survive: the user's key and the
+	// template's key are different, so this is not a real conflict.
 	assert.Contains(t, result.Content, "user: true")
-	assert.NotContains(t, result.Content, "template: true")
+	assert.Contains(t, result.Content, "template: true")
 }
 
 func TestYAMLMerger_KindDivergencePreservesOursAndRecordsConflict(t *testing.T) {

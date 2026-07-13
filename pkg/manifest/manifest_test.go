@@ -289,6 +289,21 @@ func TestLoadRejectsInvalidManifest(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrManifestValidation)
 }
 
+// TestLoad_RejectsInterfaceTypedSpecMismatch covers reflect.TypeOf(zero)'s
+// nil-for-interface-type gap: with S = any (an interface type), the zero
+// value is a nil interface, and reflect.TypeOf on a nil interface returns
+// nil — so the spec-type mismatch check would be silently skipped rather
+// than catching a real mismatch against the registered testSpec type.
+func TestLoad_RejectsInterfaceTypedSpecMismatch(t *testing.T) {
+	registerTestKind(t)
+
+	data := []byte("apiVersion: atmos/v1\nkind: AtmosTestConfig\nmetadata:\n  name: x\n")
+
+	_, err := Load[any](testKind, data)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrManifestKindMismatch)
+}
+
 func TestSchemaJSONExportable(t *testing.T) {
 	registerTestKind(t)
 

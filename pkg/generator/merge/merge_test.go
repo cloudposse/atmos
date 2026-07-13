@@ -261,6 +261,39 @@ Line 5 modified by template
 	}
 }
 
+func TestParseConflictStrategy(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    ConflictStrategy
+		wantErr bool
+	}{
+		{name: "empty defaults to manual", input: "", want: ConflictStrategyManual},
+		{name: "manual", input: "manual", want: ConflictStrategyManual},
+		{name: "ours", input: "ours", want: ConflictStrategyOurs},
+		{name: "theirs", input: "theirs", want: ConflictStrategyTheirs},
+		{name: "invalid value", input: "bogus", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseConflictStrategy(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestThreeWayMerger_RealWorldScenarios(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -428,8 +461,8 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 			base:              "original line\n",
 			ours:              "user version\n",
 			theirs:            "template version\n",
-			threshold:         100,
-			wantErr:           false, // High threshold allows conflict
+			threshold:         250, // 200% (both sides fully replace the one real line) once insertions count too
+			wantErr:           false,
 			wantConflicts:     true,
 			wantConflictCount: 1,
 		},

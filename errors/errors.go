@@ -1132,6 +1132,7 @@ var (
 	ErrNoCommonAncestor              = errors.New("no common ancestor found")
 	ErrUnknownMergeStrategy          = errors.New("unknown merge strategy")
 	ErrGeneratorFieldRequired        = errors.New("field is required")
+	ErrDuplicateScaffoldFieldName    = errors.New("duplicate scaffold field name")
 	ErrScaffoldConfigMissing         = errors.New("scaffold configuration not found")
 	ErrInitializationPartialFailure  = errors.New("initialization partially failed")
 	ErrInitTemplateNotFound          = errors.New("init template not found")
@@ -1141,6 +1142,7 @@ var (
 	ErrScaffoldCatalogLoad           = errors.New("failed to load scaffold catalog")
 	ErrTemplateConfigNameRequired    = errors.New("template config with metadata.name is required to write a project record")
 	ErrPathTraversal                 = errors.New("path traversal not allowed")
+	ErrSymlinkWrite                  = errors.New("refusing to write through a symlink")
 	ErrMetadataLoad                  = errors.New("failed to load init metadata")
 	ErrMetadataSave                  = errors.New("failed to save init metadata")
 

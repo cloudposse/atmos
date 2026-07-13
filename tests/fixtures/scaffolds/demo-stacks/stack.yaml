@@ -12,7 +12,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: "infrastructure/vpc"
+        component: "vpc"
       settings:
         spacelift:
           workspace_enabled: true

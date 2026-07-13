@@ -22,21 +22,28 @@ Setting up a new Atmos project involves creating:
 
 ### Current State
 
-**Status**: `atmos init` does not exist yet. This PRD defines the entire feature from scratch.
+**Status**: `atmos init` is implemented and shipped, including Phase 1 (core init
+command) and Phase 2 (`--update` with a real 3-way merge). This PRD was originally
+written before the feature existed; the sections below have been updated where
+they described the shipped feature as not existing, but this remains primarily a
+historical design document — see `cmd/init/init.go` and `pkg/generator/` for the
+source of truth on current behavior.
 
-**Context**: Atmos lacks a built-in way to initialize projects from templates. Users currently must manually create directory structures, configuration files, and follow documentation to set up projects correctly.
+**What exists today**:
+- `atmos init` command with embedded templates (`simple`, `atmos`)
+- Interactive and non-interactive (`--interactive=false`) project setup
+- `--force`, `--update`, `--base-ref`, `--merge-strategy` flags
+- `pkg/generator` package (shared with `atmos scaffold`)
 
-**What exists**:
-- `pkg/generator` package (will be built as part of scaffold/init implementation)
-- Documentation for manual Atmos setup
-- Example configurations in documentation
-
-**What doesn't exist**:
-- ❌ `atmos init` command
-- ❌ Init templates (embedded or custom)
-- ❌ Interactive project setup
-- ❌ Template-based project generation
-- ❌ Update mode for existing projects
+**Still not implemented** (a real, open gap — not just historical planning):
+- ❌ **`--dry-run` on `atmos init`.** Unlike `atmos scaffold generate`, `atmos
+  init` has no `--dry-run` flag at all today (confirmed by `grep` over
+  `cmd/init/init.go`). Any example below showing `atmos init --update --dry-run`
+  describes a still-unimplemented combination.
+- ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
+  threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
+- ❌ Custom template sources (Git URLs), template versioning/compatibility checks
+- ❌ `pre_update`/`post_update` migration hooks
 
 ## Goals
 
@@ -147,11 +154,12 @@ $ atmos init simple ./test-project --force
 atmos init [template] [target]
   --force, -f              Overwrite existing files
   --interactive, -i        Interactive mode (default: true)
-  --update                 Update existing project from template
+  --update                 Update an existing project via a 3-way merge (requires a git base; see --base-ref)
+  --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD)
   --set key=value          Set template variables
-  --merge-strategy         Conflict resolution strategy (manual|ours|theirs)
-  --max-changes            Maximum change threshold percentage (default: 50)
-  --dry-run                Preview changes without writing files
+  --merge-strategy         Conflict resolution strategy for --update (manual|ours|theirs; default: manual)
+  --max-changes            Maximum change threshold percentage (NOT IMPLEMENTED as a flag — internal default is hardcoded)
+  --dry-run                NOT IMPLEMENTED — atmos init has no --dry-run flag today (unlike atmos scaffold generate)
 ```
 
 ### Implementation Components
@@ -229,25 +237,34 @@ components:
 
 ### Update Flow (with 3-Way Merge)
 
-**Key concept**: Store base content for intelligent updates
+**Key concept**: The merge base is read directly from git — there is no
+on-disk base snapshot or metadata file.
 
 ```
 Initial generation:
 1. Render template files
 2. Write files to target directory
-3. Store base content in .atmos/init/base/
-4. Write metadata to .atmos/init/metadata.yaml
 
 Update (atmos init --update):
-1. Load base content from .atmos/init/base/
-2. Load current files (ours - with user changes)
-3. Render new template version (theirs)
-4. Perform 3-way merge (base, ours, theirs)
-5. Write merged content
-6. Update base content for future updates
+1. Resolve --base-ref (defaults to HEAD) in the target directory's git repository
+2. Load each file's base content directly from that git ref
+   (pkg/generator/storage.GitBaseStorage.LoadBase reads the blob straight out
+   of git — no `.atmos/init/base/` snapshot is written or read)
+3. Load current files (ours - with user changes)
+4. Render new template version (theirs)
+5. Perform 3-way merge (base, ours, theirs), honoring --merge-strategy
+   (manual/ours/theirs) for any genuine conflict
+6. Write merged content (skipped in a hypothetical --dry-run; note `atmos init`
+   has no --dry-run flag today, unlike `atmos scaffold generate --update --dry-run`)
 ```
 
-**Metadata format** (`.atmos/init/metadata.yaml`):
+**Note**: this shipped as a git-ref-based design, not the `.atmos/init/base/` +
+`.atmos/init/metadata.yaml` file-snapshot approach originally sketched in this
+PRD — there is no on-disk base storage or metadata file in the current
+implementation. The `metadata.yaml` format below is retained for historical
+context only; it does not exist in the shipped code.
+
+**Historical metadata format** (never implemented — `.atmos/init/metadata.yaml`):
 
 ```yaml
 version: 1
@@ -282,9 +299,11 @@ For each template file:
 │
 ├─ 3. Check if file exists
 │   ├─ No → Create new file
-│   └─ Yes → Handle based on flags:
-│       ├─ --force → Overwrite
+│   └─ Yes → Handle based on flags (--update takes precedence over --force
+│       when both are set — see handleExistingFile in
+│       pkg/generator/engine/templating.go):
 │       ├─ --update → 3-way merge (see merge PRD)
+│       ├─ --force (and not --update) → Overwrite
 │       └─ neither → Error (file exists)
 │
 ├─ 4. Render file content (if IsTemplate=true)
@@ -333,20 +352,26 @@ For each template file:
 
 **Note**: This phase builds on scaffold, so scaffold must be implemented first.
 
-### Phase 2: Update Support (Depends on 3-Way Merge)
+### Phase 2: Update Support (Shipped)
 
-**Prerequisites**:
-- Requires completion of [three-way-merge PRD](./three-way-merge/)
-- Specifically: Phase 3 (Base Storage & Integration)
+**Status**: Implemented. The original plan below described a file-snapshot base
+store (`.atmos/init/base/`, `.atmos/init/metadata.yaml`); what shipped instead
+is a git-ref-based base (`--base-ref`, defaulting to `HEAD`, resolved via
+`pkg/generator/storage.GitBaseStorage`) with no on-disk snapshot or metadata
+file.
 
-**Tasks**:
-1. Add `--update` flag to command
-2. Implement base content storage
-   - Store original template output in `.atmos/init/base/`
-   - Write metadata to `.atmos/init/metadata.yaml`
-3. Integrate 3-way merge in file handling
-4. Add conflict handling UI
-5. Test update scenarios
+**What shipped**:
+1. `--update` (and `--base-ref`) flags on the command
+2. 3-way merge integrated into file handling (`pkg/generator/merge`), with
+   `--merge-strategy=manual|ours|theirs` for conflict resolution
+3. Path-traversal and symlink-write protection (`validateWriteTarget` in
+   `pkg/generator/engine/templating.go`)
+4. Test coverage for update scenarios
+
+**Not shipped from the original plan**: the `.atmos/init/base/` +
+`metadata.yaml` file store (kept above for historical context only — the
+shipped design reads bases directly from git instead), and `--dry-run` support
+for `atmos init` (still absent; see "Current State" above).
 
 **Integration with `pkg/generator/engine/templating.go`**:
 
@@ -371,7 +396,9 @@ For each template file:
 - Template versioning and compatibility checks
 - Pre/post generation hooks
 - Template validation
-- Diff preview mode (`--dry-run`)
+- Diff preview mode (`--dry-run`) — this is the same gap noted in "Current
+  State" above: `atmos scaffold generate` got `--dry-run` (including a real
+  dry-run merge preview with `--update`), but `atmos init` has not
 
 ## CLI Usage Examples
 
@@ -403,12 +430,15 @@ atmos init simple ./my-project --force
 # - CI/CD environments
 ```
 
-### Update Mode (Future)
+### Update Mode
 
 ```bash
-# Update existing project from template
+# Update existing project from template (base = HEAD by default)
 cd my-project
 atmos init --update
+
+# Use a specific git ref as the merge base instead of HEAD
+atmos init --update --base-ref=v1.2.0
 
 # Auto-resolve conflicts (use template version)
 atmos init --update --merge-strategy=theirs
@@ -416,9 +446,13 @@ atmos init --update --merge-strategy=theirs
 # Auto-resolve conflicts (keep user version)
 atmos init --update --merge-strategy=ours
 
-# Preview changes without writing
-atmos init --update --dry-run
+# NOT SUPPORTED TODAY: atmos init has no --dry-run flag (unlike
+# `atmos scaffold generate --update --dry-run`, which does support this).
 ```
+
+**`--force` and `--update` together**: `--update` takes precedence. If both
+flags are set, existing files go through the 3-way merge path, not a raw
+overwrite (see `handleExistingFile` in `pkg/generator/engine/templating.go`).
 
 ### Non-Interactive Automation
 
@@ -445,33 +479,41 @@ atmos init simple ./output \
 | `target directory is required in non-interactive mode` | Missing target with `--interactive=false` | Provide target directory as argument |
 | `file exists` | File exists, no `--force` or `--update` | Use `--force` to overwrite or `--update` to merge |
 | `merge conflicts detected` | Both user and template modified same content | Resolve conflicts manually or use `--merge-strategy` |
-| `too many changes detected` | Merge exceeds threshold | Use `--max-changes=75` to allow more changes |
+| `too many changes detected` | Merge exceeds the internal conflict-percentage threshold | No CLI flag to raise the threshold today (`--max-changes` is not implemented) — resolve conflicts or use `--merge-strategy=ours`/`theirs` |
+| `resolved path escapes target directory` | A template path (or a symlink in the target directory) would write outside the target directory | Check for symlinks redirecting outside the target; this is a hard-stop safety guard, not a flag to bypass |
+
+**Path confinement**: every file write is confined under the resolved target
+directory. `validateWriteTarget` (`pkg/generator/engine/templating.go`) resolves
+symlinks in the write path and rejects both writes that escape the target
+directory and writes through a symlink at the destination itself.
 
 ## Success Criteria
 
 ### Functional Requirements
 
-- [ ] **Template selection** - Interactive and non-interactive modes work
-- [ ] **Variable substitution** - `--set` flags correctly passed to templates
-- [ ] **File creation** - All template files created with correct permissions
-- [ ] **Force overwrite** - `--force` flag overwrites existing files
-- [ ] **Update mode** - `--update` flag performs 3-way merge (Phase 2)
-- [ ] **Conflict detection** - Merge conflicts clearly communicated
-- [ ] **Base storage** - Original content stored for future updates (Phase 2)
+- [x] **Template selection** - Interactive and non-interactive modes work
+- [x] **Variable substitution** - `--set` flags correctly passed to templates
+- [x] **File creation** - All template files created with correct permissions
+- [x] **Force overwrite** - `--force` flag overwrites existing files
+- [x] **Update mode** - `--update` flag performs 3-way merge (shipped)
+- [x] **Conflict detection** - Merge conflicts clearly communicated
+- [x] **Base retrieval** - Base content read from git via `--base-ref` (shipped;
+      not the file-snapshot store originally planned here)
 
 ### User Experience Requirements
 
 - [ ] **Fast setup** - Complete initialization in <30 seconds
 - [ ] **Clear prompts** - Interactive mode is intuitive
 - [ ] **Helpful errors** - Error messages include actionable solutions
-- [ ] **Preview mode** - `--dry-run` shows what would be created (Phase 3)
+- [ ] **Preview mode** - `--dry-run` shows what would be created (still not
+      implemented for `atmos init`; see "Current State" above)
 
 ### Quality Requirements
 
 - [ ] **Test coverage >80%** - Comprehensive unit and integration tests
 - [ ] **Cross-platform** - Works on Linux, macOS, Windows
 - [ ] **Documented** - Website documentation with examples
-- [ ] **No data loss** - User customizations preserved during updates (Phase 2)
+- [x] **No data loss** - User customizations preserved during updates (shipped)
 
 ## Integration Points
 
@@ -537,8 +579,8 @@ test_init_simple_interactive.sh       # Interactive flow
 test_init_simple_noninteractive.sh    # Automation
 test_init_with_variables.sh           # Variable substitution
 test_init_force_overwrite.sh          # --force flag
-test_init_update_merge.sh             # --update flag (Phase 2)
-test_init_update_conflicts.sh         # Conflict handling (Phase 2)
+test_init_update_merge.sh             # --update flag (shipped)
+test_init_update_conflicts.sh         # Conflict handling (shipped)
 ```
 
 ### Manual Testing Checklist
@@ -548,8 +590,8 @@ test_init_update_conflicts.sh         # Conflict handling (Phase 2)
 - [ ] Run with `--interactive=false` → requires template and target
 - [ ] Run with `--set` flags → variables correctly substituted
 - [ ] Run with `--force` → overwrites existing files
-- [ ] Run with `--update` → merges changes intelligently (Phase 2)
-- [ ] Trigger merge conflicts → shows clear error and resolution options (Phase 2)
+- [ ] Run with `--update` → merges changes intelligently (shipped; verify manually)
+- [ ] Trigger merge conflicts → shows clear error and resolution options (shipped; verify manually)
 
 ## Documentation Requirements
 
@@ -563,7 +605,7 @@ Location: `website/docs/cli/commands/init.mdx`
 3. **Flags** - Description of all flags
 4. **Examples** - Common use cases with outputs
 5. **Templates** - Available templates and structure
-6. **Updating Projects** - Using `--update` flag (Phase 2)
+6. **Updating Projects** - Using `--update` flag (shipped)
 7. **Troubleshooting** - Common errors and solutions
 
 ### Inline Documentation

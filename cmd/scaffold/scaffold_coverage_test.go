@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
@@ -446,12 +447,19 @@ func TestSelectTemplateErrors(t *testing.T) {
 		"template2": {Name: "template2", TemplateID: "id2"},
 	}
 
-	// Test selecting non-existent template
+	// Test selecting non-existent template. selectTemplateByName never
+	// touches scaffoldUI, so a nil ScaffoldUI is safe here.
 	_, err := selectTemplate("nonexistent", configs, nil)
 	assert.Error(t, err)
 
-	// Test selecting with empty name (would trigger interactive mode, but UI is nil)
-	_, err = selectTemplate("", configs, nil)
+	// Test selecting with empty name: this triggers selectTemplateInteractive,
+	// which calls scaffoldUI.PromptForTemplate -- simulate a prompt failure
+	// (e.g. no TTY available) via a mock rather than a nil receiver.
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().PromptForTemplate("scaffold", gomock.Any()).Return("", assert.AnError)
+
+	_, err = selectTemplate("", configs, mockUI)
 	assert.Error(t, err)
 }
 

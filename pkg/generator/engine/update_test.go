@@ -284,6 +284,10 @@ func TestProcessorSetupGitStorageInvalidBaseRef(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
+	// A failed SetupGitStorage call must not leave the Processor's state
+	// half-mutated: targetPath/gitStorage should remain at their zero values.
+	assert.Empty(t, processor.targetPath)
+	assert.Nil(t, processor.gitStorage)
 }
 
 func TestProcessorMergeFileReadError(t *testing.T) {
