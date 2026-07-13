@@ -5,19 +5,19 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Cloud resources carry tags so you can act on them by what they are — cost center, environment, team — not just by name. Kubernetes objects carry labels for the same reason: a Service doesn't select pods by name, it selects "whichever pods look like this." Atmos manages the same kind of thing at scale — components, stacks, accounts, identities — and needed the same capability.
+A component's name and its place in your stack hierarchy tell you how it's organized, not what it is. `vpc` in `stacks/orgs/acme/prod/network.yaml` doesn't say it's tier-1, or that platform owns it, or that it's in scope for SOX — and a real component is usually several of those things simultaneously, none of which fit into a single folder structure. Your AWS accounts and auth identities have the same problem: `prod-admin` doesn't tell you it's the production one, or the elevated one, until you already know that.
 
-Tags and labels bring that pattern to Atmos: a simple list of tags for basic categorization, a set of key-value labels for richer metadata, and `--tags`/`--labels` filtering wherever Atmos already supports bulk selection. The same standard extends to auth identities and providers too, so picking `production` accounts works the same way as picking `production` components.
+Tags and labels let you say that directly, so you can select and act on infrastructure by what it is — production, tier-1, platform-owned — instead of by what it happens to be called.
 
 <!--truncate-->
 
 ## The Problem
 
-Without a way to describe what a piece of infrastructure *is*, working at scale falls back to memorizing names or writing ad-hoc queries:
+Infrastructure gets organized once, by folder and by name, but you need to operate on it along dimensions that structure doesn't capture:
 
-- **"Just the production components" meant writing a query, every time.** There was no way to say what a component *is* — production, tier-1, owned-by-platform — so selecting by meaning meant a YQ expression like `.settings.tier == "network"`, rewritten and copy-pasted wherever you needed it.
-- **The same gap existed one level up, in auth.** Picking the right identity out of dozens of providers and permission sets meant remembering an exact name, not describing what you wanted — "the production admin one."
-- **Every part of Atmos that manages many things needed this independently.** Components across every type (Terraform, Kubernetes, Helm, containers) and auth identities/providers alike had no shared way to describe or select by meaning.
+- **One hierarchy can't express every way you want to group things.** A component's path tells you its org, account, and region; it doesn't tell you it's tier-1, or SOX-scoped, or owned by platform — and it's usually several of those at once.
+- **That meaning ends up living outside the system instead of on the resource.** A `--query` expression like `.settings.tier == "network"` encodes "tier-1" for one command; a hand-maintained `--components` list encodes it for another. Neither travels with the component, and both go stale the moment something changes.
+- **The same gap shows up wherever Atmos manages many things.** Components across every type (Terraform, Kubernetes, Helm, containers), plus auth identities and providers, all needed a way to carry their own meaning instead of relying on someone remembering it.
 
 ## The Fix
 
