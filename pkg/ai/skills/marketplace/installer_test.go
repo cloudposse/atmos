@@ -1815,6 +1815,55 @@ func TestInstallThenUninstall_RemovesCanonicalAndClientCopies(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "distributed client copy should be removed")
 }
 
+func TestUninstallAll_RemovesEveryInstalledSkill(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".claude"), 0o755))
+
+	skillDir := createTestSkillDir(t)
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+	ctx := context.Background()
+	require.NoError(t, installer.Install(ctx, "github.com/test/test-skill", InstallOptions{SkipConfirm: true, BasePath: basePath}))
+	require.NoError(t, installer.Install(ctx, "atmos-terraform", InstallOptions{SkipConfirm: true, BasePath: basePath}))
+
+	require.Len(t, installer.List(), 2)
+	clientCopyPath := filepath.Join(basePath, ".claude", "skills", "test-skill")
+	require.FileExists(t, filepath.Join(clientCopyPath, "SKILL.md"))
+
+	clients := DetectClients(basePath)
+	require.NoError(t, installer.UninstallAll(true, basePath, clients))
+
+	assert.Empty(t, installer.List())
+	_, err = os.Stat(clientCopyPath)
+	assert.True(t, os.IsNotExist(err), "distributed client copy should be removed")
+}
+
+func TestUninstallAll_NoneInstalled_NoError(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	require.NoError(t, installer.UninstallAll(true, "", nil))
+	assert.Empty(t, installer.List())
+}
+
 func TestUninstall_NoClients_SkipsClientCleanup(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)

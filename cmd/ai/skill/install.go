@@ -28,15 +28,13 @@ var installUsageMarkdown string
 
 // installCmd represents the 'atmos ai skill install' command.
 var installCmd = &cobra.Command{
-	Use:     "install <source>",
+	Use:     "install [source]",
 	Short:   "Install bundled or GitHub-hosted AI skills",
 	Long:    installLongMarkdown,
 	Example: installUsageMarkdown,
-	Args:    cobra.ExactArgs(1),
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.aiSkillInstallCmd")()
-
-		source := args[0]
 
 		// Bind parsed flags to Viper for precedence handling.
 		v := viper.GetViper()
@@ -80,8 +78,15 @@ var installCmd = &cobra.Command{
 			AllClients:  v.GetBool("all-clients"),
 		}
 
+		// With no <source> given, install every bundled skill instead of just
+		// one, mirroring `atmos mcp install` acting on every configured
+		// server when no server names are given.
+		if len(args) == 0 {
+			return installer.InstallAllBundled(&opts)
+		}
+
 		ctx := context.Background()
-		if err := installer.Install(ctx, source, opts); err != nil {
+		if err := installer.Install(ctx, args[0], opts); err != nil {
 			return err
 		}
 

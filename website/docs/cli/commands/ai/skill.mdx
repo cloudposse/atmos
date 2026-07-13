@@ -55,13 +55,13 @@ atmos ai skill <subcommand> [flags]
 
 Install a skill by its bundled name (offline) or from a GitHub repository.
 
-The official Atmos skills are embedded in the binary, so installing one by its bare name (for example `atmos-terraform`) works fully offline — no network or Git clone required. Run `atmos ai skill list` to see every available skill. You can also install any skill from a GitHub repository.
+The official Atmos skills are embedded in the binary, so installing one by its bare name (for example `atmos-terraform`) works fully offline — no network or Git clone required. Run `atmos ai skill list` to see every available skill. You can also install any skill from a GitHub repository. Omit `<source>` entirely to install every bundled skill at once.
 
 By default, the skill is also auto-distributed into any detected AI client's project-local skill directory (`.github/skills/` for VS Code/Copilot, `.claude/skills/` for Claude Code, `.gemini/skills/` for Gemini), so it works with zero extra flags. Use `--client`/`--all-clients` to control which clients receive a copy, or `--path` to take full manual control of the install location (this skips auto-distribution).
 
 **Usage:**
 ```shell
-atmos ai skill install <source> [flags]
+atmos ai skill install [source] [flags]
 ```
 
 **Flags:**
@@ -87,6 +87,9 @@ atmos ai skill install <source> [flags]
 ```shell
 # Install an official skill by name (offline)
 atmos ai skill install atmos-terraform
+
+# Install every bundled skill at once (offline)
+atmos ai skill install
 
 # Install a skill from GitHub
 atmos ai skill install github.com/user/skill-name
@@ -143,11 +146,11 @@ atmos ai skill list --detailed
 
 ### `atmos ai skill uninstall`
 
-Remove an installed skill. Any copies auto-distributed to AI clients during install are removed as well.
+Remove an installed skill. Any copies auto-distributed to AI clients during install are removed as well. Omit `<name>` entirely to uninstall every installed skill at once.
 
 **Usage:**
 ```shell
-atmos ai skill uninstall <name> [flags]
+atmos ai skill uninstall [name] [flags]
 ```
 
 **Flags:**
@@ -167,6 +170,9 @@ atmos ai skill uninstall <name> [flags]
 ```shell
 # Uninstall a skill
 atmos ai skill uninstall skill-name
+
+# Uninstall every installed skill at once
+atmos ai skill uninstall
 
 # Uninstall without confirmation
 atmos ai skill uninstall skill-name --force

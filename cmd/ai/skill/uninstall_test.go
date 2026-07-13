@@ -20,7 +20,7 @@ import (
 )
 
 func TestUninstallCmd_BasicProperties(t *testing.T) {
-	assert.Equal(t, "uninstall <name>", uninstallCmd.Use)
+	assert.Equal(t, "uninstall [name]", uninstallCmd.Use)
 	assert.Equal(t, "Remove an installed skill", uninstallCmd.Short)
 	assert.NotEmpty(t, uninstallCmd.Long)
 	assert.NotNil(t, uninstallCmd.RunE)
@@ -75,29 +75,28 @@ func TestUninstallCmd_ReferencesListCommand(t *testing.T) {
 	assert.Contains(t, uninstallCmd.Long, "atmos ai skill list")
 }
 
-func TestUninstallCmd_ArgsValidation_ExactArgs(t *testing.T) {
-	// Test ExactArgs(1) validation.
-	t.Run("rejects zero arguments", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(uninstallCmd, []string{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "accepts 1 arg(s)")
+func TestUninstallCmd_ArgsValidation_MaximumNArgs(t *testing.T) {
+	// Test MaximumNArgs(1) validation: an omitted <name> means "uninstall
+	// everything", so zero args must be accepted, but more than one is still
+	// rejected.
+	t.Run("accepts zero arguments (uninstall all)", func(t *testing.T) {
+		err := cobra.MaximumNArgs(1)(uninstallCmd, []string{})
+		assert.NoError(t, err)
 	})
 
 	t.Run("accepts exactly one argument", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(uninstallCmd, []string{"my-skill"})
+		err := cobra.MaximumNArgs(1)(uninstallCmd, []string{"my-skill"})
 		assert.NoError(t, err)
 	})
 
 	t.Run("rejects two arguments", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(uninstallCmd, []string{"arg1", "arg2"})
+		err := cobra.MaximumNArgs(1)(uninstallCmd, []string{"arg1", "arg2"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "accepts 1 arg(s)")
 	})
 
 	t.Run("rejects multiple arguments", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(uninstallCmd, []string{"arg1", "arg2", "arg3"})
+		err := cobra.MaximumNArgs(1)(uninstallCmd, []string{"arg1", "arg2", "arg3"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "accepts 1 arg(s)")
 	})
 }
 
@@ -326,7 +325,7 @@ func TestUninstallCmd_RunENotNil(t *testing.T) {
 }
 
 func TestUninstallCmd_UseFieldCorrect(t *testing.T) {
-	assert.Equal(t, "uninstall <name>", uninstallCmd.Use)
+	assert.Equal(t, "uninstall [name]", uninstallCmd.Use)
 }
 
 func TestUninstallCmd_ShortDescription(t *testing.T) {
@@ -489,16 +488,16 @@ func TestUninstallCmd_ErrorMessages(t *testing.T) {
 }
 
 func TestUninstallCmd_Args(t *testing.T) {
-	// Test the Args validator directly.
-	t.Run("validates that Args is ExactArgs(1)", func(t *testing.T) {
-		// ExactArgs(1) should pass for exactly 1 argument.
+	// Test the Args validator directly: MaximumNArgs(1), since an omitted
+	// <name> means "uninstall every installed skill".
+	t.Run("accepts exactly one argument", func(t *testing.T) {
 		err := uninstallCmd.Args(uninstallCmd, []string{"single-arg"})
 		assert.NoError(t, err)
 	})
 
-	t.Run("rejects empty args", func(t *testing.T) {
+	t.Run("accepts empty args (uninstall all)", func(t *testing.T) {
 		err := uninstallCmd.Args(uninstallCmd, []string{})
-		assert.Error(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("rejects multiple args", func(t *testing.T) {
@@ -752,6 +751,56 @@ func TestUninstallCmd_RunE_InstallerInitFailure(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to initialize installer")
 	})
+}
+
+// TestUninstallCmd_RunE_NoArgsUninstallsEverything covers the CLI wiring for
+// "atmos ai skill uninstall" with no <name>: it must reach UninstallAll
+// rather than erroring on a missing argument.
+func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
+	resetInstallFlags := func() {
+		if flag := installCmd.Flags().Lookup("force"); flag != nil {
+			_ = flag.Value.Set("false")
+		}
+		if flag := installCmd.Flags().Lookup("yes"); flag != nil {
+			_ = flag.Value.Set("false")
+		}
+	}
+	resetUninstallFlags := func() {
+		if flag := uninstallCmd.Flags().Lookup("force"); flag != nil {
+			_ = flag.Value.Set("false")
+		}
+	}
+	resetInstallFlags()
+	resetUninstallFlags()
+	t.Cleanup(func() {
+		resetInstallFlags()
+		resetUninstallFlags()
+	})
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	setupSkillCommandUI(t)
+
+	// Install a couple of bundled skills (offline, fast) to have something to
+	// uninstall.
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.RunE(installCmd, []string{"atmos-terraform"}))
+	require.NoError(t, installCmd.RunE(installCmd, []string{"atmos-git"}))
+	require.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+
+	err := uninstallCmd.RunE(uninstallCmd, []string{})
+	require.NoError(t, err)
+	assert.Contains(t, uiOutput.String(), "skills uninstalled successfully")
+
+	_, statErr := os.Stat(filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform"))
+	assert.True(t, os.IsNotExist(statErr), "skill directory should be removed")
 }
 
 func TestUninstallCmd_RunE_ForceFlagVariations(t *testing.T) {

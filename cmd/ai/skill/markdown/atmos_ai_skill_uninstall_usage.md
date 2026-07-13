@@ -4,6 +4,12 @@
 $ atmos ai skill uninstall terraform-optimizer
 ```
 
+- Uninstall every installed skill at once
+
+```
+$ atmos ai skill uninstall
+```
+
 - Force uninstall without confirmation
 
 ```

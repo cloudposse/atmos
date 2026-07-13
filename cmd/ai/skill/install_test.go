@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +16,7 @@ import (
 )
 
 func TestInstallCmd_BasicProperties(t *testing.T) {
-	assert.Equal(t, "install <source>", installCmd.Use)
+	assert.Equal(t, "install [source]", installCmd.Use)
 	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
 	assert.NotEmpty(t, installCmd.Long)
 	assert.NotNil(t, installCmd.RunE)
@@ -74,26 +73,59 @@ func TestInstallCmd_LongDescription(t *testing.T) {
 }
 
 func TestInstallCmd_ArgsValidation(t *testing.T) {
-	// The command expects exactly 1 argument.
+	// The command accepts at most 1 argument; an omitted <source> means
+	// "install every bundled skill".
 	assert.NotNil(t, installCmd.Args)
 
-	// Test ExactArgs(1) validation.
-	t.Run("rejects zero arguments", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(installCmd, []string{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "accepts 1 arg(s)")
+	t.Run("accepts zero arguments (install all bundled)", func(t *testing.T) {
+		err := installCmd.Args(installCmd, []string{})
+		assert.NoError(t, err)
 	})
 
 	t.Run("accepts exactly one argument", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(installCmd, []string{"github.com/user/repo"})
+		err := installCmd.Args(installCmd, []string{"github.com/user/repo"})
 		assert.NoError(t, err)
 	})
 
 	t.Run("rejects two arguments", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(installCmd, []string{"arg1", "arg2"})
+		err := installCmd.Args(installCmd, []string{"arg1", "arg2"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "accepts 1 arg(s)")
 	})
+}
+
+// TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill covers the CLI wiring
+// for "atmos ai skill install" with no <source>: it must reach
+// InstallAllBundled rather than erroring on a missing argument.
+func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+
+	err := installCmd.RunE(installCmd, []string{})
+	require.NoError(t, err)
+	assert.Contains(t, uiOutput.String(), "Discovered")
+	assert.Contains(t, uiOutput.String(), "skills installed successfully")
+
+	// A representative skill actually landed on disk under the fake HOME.
+	assert.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
 }
 
 func TestInstallCmd_Examples(t *testing.T) {
@@ -487,7 +519,7 @@ func TestInstallCmd_RunENotNil(t *testing.T) {
 }
 
 func TestInstallCmd_UseFieldCorrect(t *testing.T) {
-	assert.Equal(t, "install <source>", installCmd.Use)
+	assert.Equal(t, "install [source]", installCmd.Use)
 }
 
 func TestInstallCmd_ShortDescription(t *testing.T) {

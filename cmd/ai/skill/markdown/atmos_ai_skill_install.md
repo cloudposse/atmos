@@ -6,6 +6,9 @@ clone. Run `atmos ai skill list` to see every available skill. You can also
 install from any GitHub repository: single-skill repos (with SKILL.md at root)
 and multi-skill packages (with skills/*/SKILL.md pattern) are both supported.
 
+With no `<source>` given, every bundled skill is installed at once (a single
+confirmation, not one per skill).
+
 Skills will be validated and installed to ~/.atmos/skills/. You can then use
 them in the AI TUI by switching with Ctrl+A.
 
@@ -20,7 +23,7 @@ Skills follow the Agent Skills open standard (https://agentskills.io)
 and use the SKILL.md format with YAML frontmatter.
 
 The `<source>` argument can be a bundled Atmos skill name or a GitHub repository
-source.
+source. Omit it to install every bundled skill.
 
 Source formats:
   - `atmos-terraform` - Bundled skill by name (offline)

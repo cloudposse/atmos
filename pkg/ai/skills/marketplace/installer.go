@@ -267,6 +267,94 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 	return printInstallSuccess(available.DisplayName, available.Version, installPath)
 }
 
+// InstallAllBundled installs every skill in the embedded catalog. It mirrors
+// `atmos mcp install` with no server names given: omitting <source> entirely
+// means "act on the whole built-in set" rather than requiring a separate
+// --all flag. Like installMultiSkillPackage, it shows a single upfront
+// confirmation instead of one per skill, and skips (rather than erroring on)
+// a skill that's already installed unless --force is set, so one already-
+// installed skill doesn't abort the whole batch.
+func (i *Installer) InstallAllBundled(opts *InstallOptions) error {
+	defer perf.Track(nil, "marketplace.Installer.InstallAllBundled")()
+
+	catalog, err := Catalog()
+	if err != nil {
+		return fmt.Errorf("failed to load skill catalog: %w", err)
+	}
+	if len(catalog) == 0 {
+		return ErrNoValidSkillsFound
+	}
+
+	names := make([]string, 0, len(catalog))
+	for _, available := range catalog {
+		names = append(names, available.Name)
+	}
+	ui.Infof("Discovered %d bundled skills: %s", len(catalog), strings.Join(names, ", "))
+
+	if !opts.SkipConfirm {
+		if err := confirmMultiSkillInstall(len(catalog)); err != nil {
+			return err
+		}
+	}
+
+	installed := 0
+	for idx := range catalog {
+		if i.installOneBundledSkill(&catalog[idx], opts) {
+			installed++
+		}
+	}
+
+	ui.Successf("%d skills installed successfully", installed)
+	ui.Infof("Usage: Switch skills in the TUI with Ctrl+A")
+	return nil
+}
+
+// installOneBundledSkill installs a single bundled skill as part of an
+// InstallAllBundled batch. It skips the single-skill security confirmation
+// prompt (bundled skills are Atmos's own, already-reviewed content, and the
+// batch already got one upfront confirmation) and returns false with a
+// logged warning on a per-skill issue instead of returning an error, so the
+// rest of the batch keeps going.
+func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *InstallOptions) bool {
+	installName := available.Name
+	if opts.CustomName != "" {
+		installName = opts.CustomName
+	}
+
+	if !opts.Force {
+		if _, err := i.localRegistry.Get(installName); err == nil {
+			ui.Warningf("Skipping %s (already installed, use --force to reinstall)", installName)
+			return false
+		}
+	}
+
+	metadata, err := readBundledMetadata(available.Name)
+	if err != nil {
+		log.Warnf("Skipping %s: %v", available.Name, err)
+		return false
+	}
+
+	installPath, err := i.materializeBundledSkill(available.Name, installName, opts.Path, opts.Force)
+	if err != nil {
+		log.Warnf("Failed to install %s: %v", available.Name, err)
+		return false
+	}
+
+	if err := i.registerBundledSkill(available, installName, installPath); err != nil {
+		log.Warnf("Failed to register %s: %v", available.Name, err)
+		return false
+	}
+
+	// An explicit --path takes full manual control and skips auto-distribution
+	// to avoid surprise double-writes.
+	if opts.Path == "" {
+		i.distributeToClients(opts.BasePath, installPath, installName, opts)
+	}
+
+	ui.Successf("Installed %s (%s)", available.DisplayName, metadata.GetVersion())
+	return true
+}
+
 // materializeBundledSkill copies a bundled skill's files from the embedded FS
 // to its install path, handling --force replacement, and returns the install
 // path.
@@ -569,6 +657,51 @@ func (i *Installer) Uninstall(name string, force bool, basePath string, clients 
 	removeClientCopies(basePath, name, clients)
 
 	ui.Successf("Skill %q uninstalled successfully", skill.DisplayName)
+	return nil
+}
+
+// UninstallAll removes every installed skill. It mirrors `atmos mcp
+// uninstall` with no server names given: omitting <name> entirely means "act
+// on everything installed" rather than requiring a separate --all flag. A
+// per-skill failure is logged and skipped so the rest of the batch keeps
+// going, matching InstallAllBundled's lenient behavior.
+func (i *Installer) UninstallAll(force bool, basePath string, clients []string) error {
+	defer perf.Track(nil, "marketplace.Installer.UninstallAll")()
+
+	installed := i.localRegistry.List()
+	if len(installed) == 0 {
+		ui.Info("No skills installed.")
+		return nil
+	}
+
+	names := make([]string, 0, len(installed))
+	for _, skill := range installed {
+		names = append(names, skill.Name)
+	}
+	ui.Infof("Installed skills: %s", strings.Join(names, ", "))
+
+	if !force {
+		title := fmt.Sprintf("Uninstall all %d skills?", len(installed))
+		if err := requireConfirmation(title, ErrUninstallationCancelled); err != nil {
+			return err
+		}
+	}
+
+	removed := 0
+	for _, skill := range installed {
+		if err := os.RemoveAll(skill.Path); err != nil {
+			log.Warnf("Failed to remove skill directory for %s: %v", skill.Name, err)
+			continue
+		}
+		if err := i.localRegistry.Remove(skill.Name); err != nil {
+			log.Warnf("Failed to remove %s from registry: %v", skill.Name, err)
+			continue
+		}
+		removeClientCopies(basePath, skill.Name, clients)
+		removed++
+	}
+
+	ui.Successf("%d skills uninstalled successfully", removed)
 	return nil
 }
 

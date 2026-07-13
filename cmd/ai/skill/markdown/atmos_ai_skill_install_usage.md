@@ -4,7 +4,13 @@
 $ atmos ai skill install atmos-terraform
 ```
 
-- Install all Atmos agent skills
+- Install every bundled skill at once (offline, no network)
+
+```
+$ atmos ai skill install
+```
+
+- Install all Atmos agent skills from the GitHub repository instead of the embedded catalog
 
 ```
 $ atmos ai skill install cloudposse/atmos
