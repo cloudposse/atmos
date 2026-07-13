@@ -65,6 +65,12 @@ jobs:
         # never hand-maintained or committed, only generated here from the embedded schema
         # (pkg/datafetcher/schema/atmos/manifest/1.0.json), the single source of truth. The
         # 1.0 path always floats to the schema shipped by the atmos version at HEAD.
+        # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
+        # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
+        # system libudev headers this runner doesn't have. atmos itself always builds with
+        # CGO disabled (see .goreleaser.yml, scripts/build-atmos.sh); match that here too.
+        env:
+          CGO_ENABLED: "0"
         run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
       - name: Publish pinned atmos-manifest schema snapshot
@@ -75,6 +81,7 @@ jobs:
         if: ${{ github.event_name == 'release' }}
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          CGO_ENABLED: "0"
         run: |
           version="${RELEASE_TAG#v}"
           go run . stack schema "website/static/schemas/atmos/atmos-manifest/${version}/atmos-manifest.json"
