@@ -113,6 +113,30 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
 }
 
+func TestExecuteTerraformInitUsesForwardDependencyOrder(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "init",
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	// Unlike destroy, init has no destructive-ordering requirement, so it keeps
+	// the natural forward dependency order (prerequisites before dependents).
+	require.Equal(t, []string{"vpc@dev", "database@dev", "app@dev"}, executed)
+}
+
 func TestExecuteTerraformAffectedSelectionUsesGraphBackedPath(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string
@@ -1770,10 +1794,10 @@ func terraformAdapterComponentWithPathNoWorkdir(group, componentPath string) map
 }
 
 // TestEffectiveTerraformMaxConcurrencySupportsDeploy guards the scheduler gate:
-// plan/apply/deploy/destroy must all honour --max-concurrency; unsupported
+// plan/apply/deploy/destroy/init must all honour --max-concurrency; unsupported
 // subcommands must be capped to 1.
 func TestEffectiveTerraformMaxConcurrencySupportsDeploy(t *testing.T) {
-	for _, sub := range []string{"plan", "apply", "deploy", "destroy"} {
+	for _, sub := range []string{"plan", "apply", "deploy", "destroy", "init"} {
 		got := effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: sub, MaxConcurrency: 4})
 		require.Equal(t, 4, got, "%s should honor --max-concurrency via the scheduler gate", sub)
 	}
@@ -1786,7 +1810,7 @@ func TestEffectiveTerraformMaxConcurrencySupportsDeploy(t *testing.T) {
 // buffering engages for apply and destroy, not just plan.
 // The adapter is subcommand-agnostic; this test documents and locks that contract.
 func TestTerraformOutputGroupsNonPlanSubcommands(t *testing.T) {
-	for _, sub := range []string{"apply", "deploy", "destroy"} {
+	for _, sub := range []string{"apply", "deploy", "destroy", "init"} {
 		t.Run(sub, func(t *testing.T) {
 			// maxConcurrency > 1 + grouped => buffering active.
 			out, err := newTerraformOutput(

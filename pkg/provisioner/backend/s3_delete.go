@@ -59,7 +59,7 @@ func DeleteS3Backend(
 		return err
 	}
 
-	ui.Success(fmt.Sprintf("✓ Backend deleted: bucket '%s' and all contents removed", config.bucket))
+	ui.Successf("Backend deleted: bucket '%s' and all contents removed", config.bucket)
 	return nil
 }
 
