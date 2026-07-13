@@ -179,10 +179,24 @@ func moveEntrypointFileForOS(src, dst, goos string) error {
 // the tree, so a bundled binary keeps its runtime siblings alongside it (matching
 // the way the aqua CLI installs onedir packages).
 func (i *Installer) installOnedir(stagingDir, binaryPath string, eps []entrypoint) error {
+	return i.installOnedirForOS(stagingDir, binaryPath, eps, runtime.GOOS)
+}
+
+// installOnedirForOS is the OS-parameterized implementation of installOnedir,
+// so Windows archive entrypoint resolution is testable on every platform.
+func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entrypoint, goos string) error {
 	defer perf.Track(nil, "installer.installOnedir")()
 
 	versionDir := filepath.Dir(binaryPath)
 	treeDir := filepath.Join(versionDir, onedirTreeName)
+
+	// Validate every entrypoint BEFORE replacing an existing tree. A failed
+	// reinstall must leave the known-good package and root entrypoint links
+	// intact rather than turning a missing secondary file into a broken install.
+	resolvedEntrypoints, err := resolveOnedirEntrypoints(stagingDir, eps, goos)
+	if err != nil {
+		return err
+	}
 
 	// Move the whole extracted tree into place (a same-filesystem rename when the
 	// staging dir is a sibling; a recursive copy otherwise).
@@ -194,20 +208,55 @@ func (i *Installer) installOnedir(stagingDir, binaryPath string, eps []entrypoin
 	}
 
 	// Expose each entrypoint as a symlink into the preserved tree.
-	for idx, ep := range eps {
+	for idx, ep := range resolvedEntrypoints {
 		dst := filepath.Join(versionDir, ep.name)
 		if idx == 0 {
 			dst = binaryPath // The first file is the primary binary.
 		}
 		target := filepath.Join(treeDir, ep.src)
-		if _, err := os.Lstat(target); err != nil {
-			return fmt.Errorf("%w: entrypoint not found in archive: %s", ErrToolNotFound, ep.src)
-		}
 		if err := linkEntrypoint(target, dst); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// resolveOnedirEntrypoints verifies that every configured entrypoint exists in
+// the staged archive tree. Windows registries commonly omit the `.exe` suffix
+// in files[].src, so resolve the matching archive file before the tree moves.
+func resolveOnedirEntrypoints(stagingDir string, eps []entrypoint, goos string) ([]entrypoint, error) {
+	resolved := make([]entrypoint, len(eps))
+	for idx, ep := range eps {
+		src, err := resolveOnedirEntrypointSourceForOS(stagingDir, ep.src, goos)
+		if err != nil {
+			return nil, err
+		}
+		resolved[idx] = entrypoint{name: ep.name, src: src}
+	}
+	return resolved, nil
+}
+
+// resolveOnedirEntrypointSourceForOS returns the archive-relative source path
+// for an onedir entrypoint. On Windows, try `.exe` when the registry's source
+// path omits it, matching the flat installation path's existing behavior.
+func resolveOnedirEntrypointSourceForOS(stagingDir, src, goos string) (string, error) {
+	path := filepath.Join(stagingDir, src)
+	if _, err := os.Lstat(path); err == nil {
+		return src, nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("%w: failed to stat entrypoint in archive: %s: %w", ErrFileOperation, src, err)
+	}
+
+	if goos == "windows" {
+		srcWithExe := src + windowsExeExt
+		if _, err := os.Lstat(filepath.Join(stagingDir, srcWithExe)); err == nil {
+			return srcWithExe, nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("%w: failed to stat entrypoint in archive: %s: %w", ErrFileOperation, srcWithExe, err)
+		}
+	}
+
+	return "", fmt.Errorf("%w: entrypoint not found in archive: %s", ErrToolNotFound, src)
 }
 
 // linkEntrypoint creates a relative symlink at linkPath pointing to target so the

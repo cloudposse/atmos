@@ -291,6 +291,84 @@ func TestExtractFilesFromDir_Onedir_PreservesRuntimeSiblings(t *testing.T) {
 	assert.FileExists(t, filepath.Join(filepath.Dir(resolved), "libpython3.so"))
 }
 
+// TestInstallOnedirForOS_UsesWindowsExeEntrypoint verifies that Windows Aqua
+// registry sources can omit `.exe` while the archive contains it. This mirrors
+// nodejs/node's `files[].src` behavior.
+func TestInstallOnedirForOS_UsesWindowsExeEntrypoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test creates a symlink without Windows privilege requirements")
+	}
+
+	tmp := t.TempDir()
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "node/bin/node.exe", "NODE")
+	writeFileUnder(t, staging, "node/lib/runtime.dll", "RUNTIME")
+
+	versionDir := filepath.Join(tmp, "version")
+	binaryPath := filepath.Join(versionDir, "node.exe")
+	eps := []entrypoint{{name: "node", src: "node/bin/node"}}
+
+	require.NoError(t, (&Installer{}).installOnedirForOS(staging, binaryPath, eps, "windows"))
+
+	info, err := os.Lstat(binaryPath)
+	require.NoError(t, err)
+	assert.NotZero(t, info.Mode()&os.ModeSymlink)
+	got, err := os.ReadFile(binaryPath)
+	require.NoError(t, err)
+	assert.Equal(t, "NODE", string(got))
+}
+
+func TestResolveOnedirEntrypointSourceForOS(t *testing.T) {
+	t.Run("returns the Windows exe variant", func(t *testing.T) {
+		staging := t.TempDir()
+		writeFileUnder(t, staging, "node.exe", "NODE")
+
+		src, err := resolveOnedirEntrypointSourceForOS(staging, "node", "windows")
+		require.NoError(t, err)
+		assert.Equal(t, "node.exe", src)
+	})
+
+	t.Run("fails when neither Windows variant exists", func(t *testing.T) {
+		_, err := resolveOnedirEntrypointSourceForOS(t.TempDir(), "node", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+	})
+}
+
+// TestInstallOnedir_FailedReinstallPreservesExistingTree verifies that an
+// incomplete replacement does not delete a known-good onedir installation.
+func TestInstallOnedir_FailedReinstallPreservesExistingTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink entrypoints require privilege on Windows")
+	}
+
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+	writeFileUnder(t, treeDir, "old/tool", "KNOWN-GOOD")
+	require.NoError(t, os.Symlink(filepath.Join(onedirTreeName, "old", "tool"), filepath.Join(versionDir, "tool")))
+
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "REPLACEMENT")
+	writeFileUnder(t, staging, "new/runtime.so", "RUNTIME")
+	// `new/missing-helper` is intentionally absent.
+	eps := []entrypoint{
+		{name: "tool", src: "new/tool"},
+		{name: "helper", src: "new/missing-helper"},
+	}
+
+	err := (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrToolNotFound)
+
+	// The old tree and root entrypoint must still be usable after a failed
+	// reinstall; replacing .pkg before this validation caused dangling links.
+	got, err := os.ReadFile(filepath.Join(versionDir, "tool"))
+	require.NoError(t, err)
+	assert.Equal(t, "KNOWN-GOOD", string(got))
+	assert.FileExists(t, filepath.Join(treeDir, "old", "tool"))
+}
+
 // TestExtractTarGz_Onedir_RecreatesSymlinkEntrypoint reproduces the #2744 shape:
 // a tar.gz whose npm entrypoint is an in-archive symlink into a sibling lib tree.
 // The fix must recreate the symlink (not drop it) and expose a working entrypoint.
