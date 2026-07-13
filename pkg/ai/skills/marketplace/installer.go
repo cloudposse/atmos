@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // Installer manages skill installation.
@@ -324,26 +325,33 @@ func tallyBatchOutcomes(outcomes []batchInstallOutcome) (installed, updated, ski
 	return installed, updated, skipped
 }
 
-// printBatchInstallSummary prints the final tally for a batch install,
-// distinguishing new installs from --force updates and already-installed
-// skips, plus the canonical directory they landed in.
-func printBatchInstallSummary(installed, updated, skipped int, skillsDir string) {
+// formatBatchInstallSummary renders the final tally for a batch install as
+// the spinner's completion message, distinguishing new installs from --force
+// updates, where distributionDesc is the comma-joined "`client` (dir)"
+// fragment from resolveDistributionClientsForBatch. When non-empty it's
+// woven into this same message rather than left to the spinner's
+// in-progress line, because ExecWithSpinnerDynamic only prints the progress
+// message while a TTY is animating it -- in non-TTY output (CI, piped,
+// tests) only this completion message is ever shown, so it must carry the
+// "where did my skills go for my client" answer itself, and skillsDir
+// (Atmos's own canonical store) is reported instead only when
+// distributionDesc is empty (no client got a copy, e.g. --path was used or
+// no clients were resolved) -- it's the only location that matters then.
+func formatBatchInstallSummary(installed, updated int, skillsDir, distributionDesc string) string {
 	total := installed + updated
+	suffix := " in " + redactHomePath(skillsDir)
+	if distributionDesc != "" {
+		suffix = " → " + distributionDesc
+	}
 	switch {
 	case total == 0:
-		ui.Successf("0 skills installed")
+		return "0 skills installed"
 	case updated == 0:
-		ui.Successf("%d skills installed successfully", installed)
+		return fmt.Sprintf("%d skills installed successfully%s", installed, suffix)
 	case installed == 0:
-		ui.Successf("%d skills updated successfully", updated)
+		return fmt.Sprintf("%d skills updated successfully%s", updated, suffix)
 	default:
-		ui.Successf("%d skills installed successfully (%d new, %d updated)", total, installed, updated)
-	}
-	if skipped > 0 {
-		ui.Infof("%d already installed (use `--force` to reinstall)", skipped)
-	}
-	if total > 0 {
-		ui.Infof("Location: %s", redactHomePath(skillsDir))
+		return fmt.Sprintf("%d skills installed successfully%s (%d new, %d updated)", total, suffix, installed, updated)
 	}
 }
 
@@ -377,20 +385,13 @@ func (i *Installer) InstallAllBundled(opts *InstallOptions) error {
 		}
 	}
 
-	clients := i.resolveAndAnnounceDistributionClients(opts.BasePath, opts)
-
-	outcomes := make([]batchInstallOutcome, len(catalog))
-	for idx := range catalog {
-		outcomes[idx] = i.installOneBundledSkill(&catalog[idx], opts, clients)
-	}
-	installed, updated, skipped := tallyBatchOutcomes(outcomes)
-
-	skillsDir, err := ResolveSkillsDir(opts.Path)
-	if err != nil {
-		skillsDir = opts.Path
-	}
-	printBatchInstallSummary(installed, updated, skipped, skillsDir)
-	return nil
+	return i.runBatchInstallWithSpinner(opts.BasePath, opts, func(clients []string) []batchInstallOutcome {
+		outcomes := make([]batchInstallOutcome, len(catalog))
+		for idx := range catalog {
+			outcomes[idx] = i.installOneBundledSkill(&catalog[idx], opts, clients)
+		}
+		return outcomes
+	})
 }
 
 // installOneBundledSkill installs a single bundled skill as part of an
@@ -411,7 +412,9 @@ func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *Inst
 	_, getErr := i.localRegistry.Get(installName)
 	wasInstalled := getErr == nil
 	if wasInstalled && !opts.Force {
-		ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", installName)
+		// Silent: the batch summary's aggregate "N already installed" line
+		// already covers this, and printing per-skill here would interleave
+		// with the progress spinner wrapping the batch loop.
 		return outcomeSkipped
 	}
 
@@ -570,7 +573,7 @@ func (i *Installer) prepareOverwrite(skillName, installPath string, force bool) 
 		return false, false
 	}
 	if !force {
-		ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", skillName)
+		// Silent: see the matching comment in installOneBundledSkill.
 		return true, true
 	}
 	if err := os.RemoveAll(installPath); err != nil {
@@ -657,20 +660,13 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		}
 	}
 
-	clients := i.resolveAndAnnounceDistributionClients(opts.BasePath, &opts)
-
-	outcomes := make([]batchInstallOutcome, len(discovered))
-	for idx, skill := range discovered {
-		outcomes[idx] = i.installOneSkillFromPackage(skill, sourceInfo, &opts, clients)
-	}
-	installed, updated, skipped := tallyBatchOutcomes(outcomes)
-
-	skillsDir, err := ResolveSkillsDir(opts.Path)
-	if err != nil {
-		skillsDir = opts.Path
-	}
-	printBatchInstallSummary(installed, updated, skipped, skillsDir)
-	return nil
+	return i.runBatchInstallWithSpinner(opts.BasePath, &opts, func(clients []string) []batchInstallOutcome {
+		outcomes := make([]batchInstallOutcome, len(discovered))
+		for idx, skill := range discovered {
+			outcomes[idx] = i.installOneSkillFromPackage(skill, sourceInfo, &opts, clients)
+		}
+		return outcomes
+	})
 }
 
 // copyFS copies the entire tree of srcFS into the dst directory on disk. It is
@@ -741,7 +737,7 @@ func copyEntry(srcPath, dstPath string, isDir bool) error {
 // pass a nil/empty clients slice to skip client cleanup. Scope is the
 // distribution scope ("project" or "user") the client copies were installed
 // under.
-func (i *Installer) Uninstall(name string, force bool, basePath string, clients []string, scope string) error {
+func (i *Installer) Uninstall(name string, force bool, basePath string, clients []string, scopes []string) error {
 	defer perf.Track(nil, "marketplace.Installer.Uninstall")()
 
 	// 1. Get skill from registry.
@@ -769,20 +765,36 @@ func (i *Installer) Uninstall(name string, force bool, basePath string, clients 
 	}
 
 	// 5. Best-effort cleanup of any distributed client copies.
-	removeClientCopies(basePath, name, clients, scope)
+	skipped := removeClientCopies(basePath, name, clients, scopes)
 
 	ui.Successf("Skill %q uninstalled successfully", skill.DisplayName)
+	reportSkippedSymlinks(skipped)
 	return nil
+}
+
+// reportSkippedSymlinks prints a single aggregate note for client-distributed
+// copies left in place because they're symbolic links (see
+// removeClientCopies), instead of one warning line per skill.
+func reportSkippedSymlinks(count int) {
+	if count == 0 {
+		return
+	}
+	noun := "copy"
+	if count > 1 {
+		noun = "copies"
+	}
+	ui.Infof("%d client-distributed %s left in place (symbolic link, use `--path` to manage a plain directory instead)", count, noun)
 }
 
 // UninstallAll removes every installed skill. It mirrors `atmos mcp
 // uninstall` with no server names given: omitting <name> entirely means "act
 // on everything installed" rather than requiring a separate --all flag. A
 // per-skill failure is logged and skipped so the rest of the batch keeps
-// going, matching InstallAllBundled's lenient behavior; scope is the
-// distribution scope ("project" or "user") the client copies were installed
-// under.
-func (i *Installer) UninstallAll(force bool, basePath string, clients []string, scope string) error {
+// going, matching InstallAllBundled's lenient behavior; scopes are the
+// distribution scope(s) ("project" and/or "user") to check for client
+// copies -- see resolveUninstallScopes for why this is a slice rather than a
+// single guessed value.
+func (i *Installer) UninstallAll(force bool, basePath string, clients []string, scopes []string) error {
 	defer perf.Track(nil, "marketplace.Installer.UninstallAll")()
 
 	installed := i.localRegistry.List()
@@ -805,6 +817,7 @@ func (i *Installer) UninstallAll(force bool, basePath string, clients []string, 
 	}
 
 	removed := 0
+	skippedSymlinks := 0
 	for _, skill := range installed {
 		if err := os.RemoveAll(skill.Path); err != nil {
 			log.Warnf("Failed to remove skill directory for %s: %v", skill.Name, err)
@@ -814,11 +827,12 @@ func (i *Installer) UninstallAll(force bool, basePath string, clients []string, 
 			log.Warnf("Failed to remove %s from registry: %v", skill.Name, err)
 			continue
 		}
-		removeClientCopies(basePath, skill.Name, clients, scope)
+		skippedSymlinks += removeClientCopies(basePath, skill.Name, clients, scopes)
 		removed++
 	}
 
 	ui.Successf("%d skills uninstalled successfully", removed)
+	reportSkippedSymlinks(skippedSymlinks)
 	return nil
 }
 
@@ -980,21 +994,85 @@ func (i *Installer) resolveDistributionClients(basePath string, opts *InstallOpt
 	return DetectClients(basePath, homeDir, opts.Scope)
 }
 
-// resolveAndAnnounceDistributionClients resolves the batch distribution
-// client list once (see resolveDistributionClients) and, if any were
-// resolved, announces them with a single "Distributing to" line -- shared by
-// InstallAllBundled and installMultiSkillPackage so neither prints one line
-// per skill. Returns nil without announcing anything when opts.Path is set,
-// since an explicit --path skips auto-distribution entirely.
-func (i *Installer) resolveAndAnnounceDistributionClients(basePath string, opts *InstallOptions) []string {
+// resolveDistributionClientsForBatch resolves the batch distribution client
+// list once (see resolveDistributionClients) and, if any were resolved,
+// builds a "Distributing to" progress message describing each client's
+// actual target directory -- shared by InstallAllBundled and
+// installMultiSkillPackage, which both feed it to
+// spinner.ExecWithSpinnerDynamic as the in-progress message so neither prints
+// one line per skill. Showing the real per-client directory here (rather
+// than just the client name) avoids it ever being confused with skillsDir,
+// Atmos's own canonical store reported separately by
+// formatBatchInstallSummary. Returns a nil client list and empty message
+// when opts.Path is set, since an explicit --path skips auto-distribution
+// entirely.
+func (i *Installer) resolveDistributionClientsForBatch(basePath string, opts *InstallOptions) (clients []string, description string) {
 	if opts.Path != "" {
-		return nil
+		return nil, ""
 	}
-	clients := i.resolveDistributionClients(basePath, opts)
-	if len(clients) > 0 {
-		ui.Infof("Distributing to: %s", BacktickJoin(clients))
+	clients = i.resolveDistributionClients(basePath, opts)
+	if len(clients) == 0 {
+		return clients, ""
 	}
-	return clients
+
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		log.Warnf("Failed to resolve home directory for client distribution: %v", err)
+	}
+
+	described := make([]string, len(clients))
+	for idx, client := range clients {
+		dir := clientSkillDir(basePath, homeDir, opts.Scope, client)
+		if dir == "" {
+			described[idx] = BacktickJoin([]string{client})
+			continue
+		}
+		described[idx] = fmt.Sprintf("`%s` (%s)", client, redactHomePath(dir))
+	}
+	return clients, strings.Join(described, ", ")
+}
+
+// runBatchInstallWithSpinner resolves the batch's distribution clients, then
+// runs installFn (the per-skill install loop, shared by InstallAllBundled and
+// installMultiSkillPackage) inside a progress spinner that shows where
+// skills are being distributed to and finalizes to the tally once done, in
+// place of two separate static lines. The distribution description is woven
+// into both the in-progress and completion messages (see
+// formatBatchInstallSummary for why it can't rely on the progress message
+// alone), and installFn must not print anything itself (see
+// installOneBundledSkill/installOneSkillFromPackage's silent skip handling)
+// since concurrent writes to the terminal while the spinner owns it would
+// corrupt the animation; the aggregate "N already installed" line below is
+// printed only after the spinner has released the terminal.
+func (i *Installer) runBatchInstallWithSpinner(
+	basePath string,
+	opts *InstallOptions,
+	installFn func(clients []string) []batchInstallOutcome,
+) error {
+	clients, description := i.resolveDistributionClientsForBatch(basePath, opts)
+	progressMsg := "Installing skills"
+	if description != "" {
+		progressMsg = "Distributing to: " + description
+	}
+
+	var skipped int
+	err := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
+		var installed, updated int
+		installed, updated, skipped = tallyBatchOutcomes(installFn(clients))
+
+		skillsDir, dirErr := ResolveSkillsDir(opts.Path)
+		if dirErr != nil {
+			skillsDir = opts.Path
+		}
+		return formatBatchInstallSummary(installed, updated, skillsDir, description), nil
+	})
+	if err != nil {
+		return err
+	}
+	if skipped > 0 {
+		ui.Infof("%d already installed (use `--force` to reinstall)", skipped)
+	}
+	return nil
 }
 
 // distributionResult names one client a skill was successfully distributed
@@ -1049,29 +1127,42 @@ func (i *Installer) distributeToClients(basePath, installPath, skillName string,
 }
 
 // removeClientCopies best-effort removes any per-client distributed copies of
-// a skill. This is a stateless recompute -- the registry never tracks which
-// clients a skill was distributed to, so removing a client copy that was
-// never created (or was already removed) simply no-ops.
-func removeClientCopies(basePath, skillName string, clients []string, scope string) {
+// a skill, at every scope in scopes, and returns how many existing targets
+// were left in place because they're symbolic links. This is a stateless
+// recompute -- the registry never tracks which clients (or which scope) a
+// skill was distributed to, so removing a client copy that was never
+// created (or was already removed, or lives at a scope not in scopes)
+// simply no-ops. Checking every scope means this may legitimately encounter
+// symlinks that have nothing to do with the current uninstall session (e.g.
+// this very repo's own bundled-skill symlinks for contributor
+// auto-discovery, present at project scope regardless of where anything was
+// actually distributed) -- returning a count instead of warning per skill
+// lets the caller report one aggregate line rather than one alarming
+// "refusing to delete" line per skill, most of which are for an unrelated
+// scope the user never touched.
+func removeClientCopies(basePath, skillName string, clients []string, scopes []string) (skippedSymlinks int) {
 	homeDir, err := homedir.Dir()
 	if err != nil {
 		log.Warnf("Failed to resolve home directory for client cleanup: %v", err)
 	}
 
-	for _, client := range clients {
-		dir := clientSkillDir(basePath, homeDir, scope, client)
-		if dir == "" {
-			continue
-		}
-		target := filepath.Join(dir, skillName)
-		if isSymlink(target) {
-			ui.Warningf("Skipping cleanup of `%s`: `%s` is a symbolic link (%s)", client, target, errUtils.ErrRefuseDeleteSymbolicLink)
-			continue
-		}
-		if err := os.RemoveAll(target); err != nil {
-			log.Warnf("Failed to remove distributed skill %q from %s (%s): %v", skillName, client, target, err)
+	for _, scope := range scopes {
+		for _, client := range clients {
+			dir := clientSkillDir(basePath, homeDir, scope, client)
+			if dir == "" {
+				continue
+			}
+			target := filepath.Join(dir, skillName)
+			if isSymlink(target) {
+				skippedSymlinks++
+				continue
+			}
+			if err := os.RemoveAll(target); err != nil {
+				log.Warnf("Failed to remove distributed skill %q from %s (%s): %v", skillName, client, target, err)
+			}
 		}
 	}
+	return skippedSymlinks
 }
 
 // redactHomePath replaces the home directory portion of a path with ~ for display.

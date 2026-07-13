@@ -371,7 +371,7 @@ func TestUninstall_SkillNotFound(t *testing.T) {
 	installer, err := NewInstaller("1.0.0")
 	require.NoError(t, err)
 
-	err = installer.Uninstall("nonexistent", true, "", nil, "")
+	err = installer.Uninstall("nonexistent", true, "", nil, nil)
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrSkillNotFound))
@@ -401,7 +401,7 @@ func TestUninstall_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Uninstall with force.
-	err = installer.Uninstall("uninstall-test-skill", true, "", nil, "")
+	err = installer.Uninstall("uninstall-test-skill", true, "", nil, nil)
 
 	assert.NoError(t, err)
 	// Verify skill was removed from registry.
@@ -1853,7 +1853,7 @@ func TestInstallThenUninstall_RemovesCanonicalAndClientCopies(t *testing.T) {
 	// Mirror what the CLI does: recompute the client list (stateless -- no
 	// registry tracking of prior distribution) and pass it to Uninstall.
 	clients := DetectClients(basePath, "", ScopeProject)
-	err = installer.Uninstall("test-skill", true, basePath, clients, ScopeProject)
+	err = installer.Uninstall("test-skill", true, basePath, clients, []string{ScopeProject})
 	require.NoError(t, err)
 
 	_, err = os.Stat(skill.Path)
@@ -1890,7 +1890,7 @@ func TestUninstallAll_RemovesEveryInstalledSkill(t *testing.T) {
 	require.FileExists(t, filepath.Join(clientCopyPath, "SKILL.md"))
 
 	clients := DetectClients(basePath, "", ScopeProject)
-	require.NoError(t, installer.UninstallAll(true, basePath, clients, ScopeProject))
+	require.NoError(t, installer.UninstallAll(true, basePath, clients, []string{ScopeProject}))
 
 	assert.Empty(t, installer.List())
 	_, err = os.Stat(clientCopyPath)
@@ -1907,7 +1907,7 @@ func TestUninstallAll_NoneInstalled_NoError(t *testing.T) {
 	installer, err := NewInstaller("1.0.0")
 	require.NoError(t, err)
 
-	require.NoError(t, installer.UninstallAll(true, "", nil, ""))
+	require.NoError(t, installer.UninstallAll(true, "", nil, nil))
 	assert.Empty(t, installer.List())
 }
 
@@ -1929,7 +1929,7 @@ func TestUninstall_NoClients_SkipsClientCleanup(t *testing.T) {
 	}
 	require.NoError(t, installer.localRegistry.Add(skill))
 
-	err = installer.Uninstall("no-client-cleanup-skill", true, "", nil, "")
+	err = installer.Uninstall("no-client-cleanup-skill", true, "", nil, nil)
 	require.NoError(t, err)
 
 	_, err = os.Stat(skillPath)
@@ -1956,7 +1956,7 @@ func TestRemoveClientCopies_SkipsPreExistingSymlink(t *testing.T) {
 	vscodeSkillsDir := filepath.Join(basePath, ".github", "skills", "dist-skill")
 	require.NoError(t, os.MkdirAll(vscodeSkillsDir, 0o755))
 
-	removeClientCopies(basePath, "dist-skill", []string{ClientClaudeCode, ClientVSCode}, ScopeProject)
+	removeClientCopies(basePath, "dist-skill", []string{ClientClaudeCode, ClientVSCode}, []string{ScopeProject})
 
 	assert.True(t, isSymlink(symlinkPath), "symlink must survive removeClientCopies untouched")
 	resolved, err := os.Readlink(symlinkPath)
@@ -2048,7 +2048,7 @@ func TestUninstall_UserScope_RemovesHomeDirClientCopy(t *testing.T) {
 	_, err = os.Stat(homeCopyPath)
 	require.NoError(t, err, "expected user-scope claude-code copy under the home dir")
 
-	require.NoError(t, installer.Uninstall("test-skill", true, basePath, []string{ClientClaudeCode}, ScopeUser))
+	require.NoError(t, installer.Uninstall("test-skill", true, basePath, []string{ClientClaudeCode}, []string{ScopeUser}))
 
 	_, err = os.Stat(homeCopyPath)
 	assert.True(t, os.IsNotExist(err), "user-scope client copy should be removed")

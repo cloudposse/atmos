@@ -77,6 +77,66 @@ func resolveSkillScope(cmd *cobra.Command, v *viper.Viper, skipPrompt bool) (str
 	return promptForSkillScope(title)
 }
 
+// resolveUninstallScopes resolves which distribution scope(s) `atmos ai
+// skill uninstall` should clean up client copies from. An explicit
+// --scope/--global always wins and is used alone -- the user asked for
+// exactly that scope. Otherwise (skipPrompt, no TTY, or CI) there is no
+// reliable signal for which scope the skill was actually distributed to, and
+// guessing a single one wrong for a destructive cleanup is unsafe: it can
+// leave orphaned copies at the real scope, or -- worse -- a coincidental
+// signal directory at the guessed scope (e.g. this repo's own project-level
+// .claude/) can make cleanup target unrelated real files. So both project
+// and user scope are checked; removeClientCopies no-ops for whichever scope
+// nothing was actually distributed to. When running interactively (no
+// force, real TTY, not CI), the existing single-choice scope picker still
+// applies, since the user can just tell us which one they meant.
+func resolveUninstallScopes(cmd *cobra.Command, v *viper.Viper, skipPrompt bool) ([]string, error) {
+	if scope, ok := explicitSkillScope(cmd, v); ok {
+		return []string{scope}, nil
+	}
+	if skipPrompt || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+		return []string{marketplace.ScopeProject, marketplace.ScopeUser}, nil
+	}
+	scope, err := promptForSkillScope("Uninstall scope?")
+	if err != nil {
+		return nil, err
+	}
+	return []string{scope}, nil
+}
+
+// resolveUninstallClients resolves which AI clients `atmos ai skill
+// uninstall` should clean up distributed skill copies from, across every
+// scope in scopes (see resolveUninstallScopes) -- an explicit
+// --client/--all-clients flag still always wins, same as resolveSkillClients.
+func resolveUninstallClients(basePath string, v *viper.Viper, skipPrompt bool, scopes []string) ([]string, error) {
+	clients := v.GetStringSlice("client")
+	if len(clients) > 0 {
+		return clients, nil
+	}
+	if v.GetBool("all-clients") {
+		return append([]string(nil), marketplace.SupportedClients...), nil
+	}
+
+	seen := make(map[string]bool)
+	var detected []string
+	for _, scope := range scopes {
+		for _, client := range marketplace.DetectClients(basePath, "", scope) {
+			if !seen[client] {
+				seen[client] = true
+				detected = append(detected, client)
+			}
+		}
+	}
+
+	if skipPrompt || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+		if len(detected) > 0 {
+			ui.Infof("Auto-detected AI clients: %s", marketplace.BacktickJoin(detected))
+		}
+		return detected, nil
+	}
+	return promptForSkillClients(detected, "Remove skill from which clients?")
+}
+
 // explicitSkillScope returns the scope requested via an explicitly-set
 // --scope or --global flag, and whether either was actually set (as opposed
 // to just holding its zero-value default).

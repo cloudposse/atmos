@@ -131,19 +131,66 @@ func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
 	homedir.Reset()
 	t.Cleanup(homedir.Reset)
 
+	// Project-scope client detection stats basePath (== os.Getwd()) for
+	// .claude/.vscode/.gemini signal directories. Without isolating CWD to an
+	// empty temp dir, this test would read whatever real project happens to
+	// be checked out (and, worse, distributeToClients would create real
+	// signal directories on disk under the actual source tree).
+	t.Chdir(t.TempDir())
+
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
 
 	err := installCmd.RunE(installCmd, []string{})
 	require.NoError(t, err)
 	assert.Contains(t, uiOutput.String(), "Discovered")
-	assert.Contains(t, uiOutput.String(), "skills installed successfully")
-	assert.Contains(t, uiOutput.String(), "Location:", "batch install should say where the skills landed")
+	assert.Contains(t, uiOutput.String(), "skills installed successfully in",
+		"batch install should say where the skills landed, combined with the count on one line")
+	assert.Contains(t, uiOutput.String(), filepath.Join("~", ".atmos", "skills"))
 	assert.NotContains(t, uiOutput.String(), "atmos ai chat",
 		"a plain CLI install is never run from inside atmos ai chat, so this hint must never print")
 
 	// A representative skill actually landed on disk under the fake HOME.
 	assert.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+}
+
+// TestInstallCmd_RunE_DistributingToShowsRealClientDirectory guards against
+// the exact bug reported live, where "Distributing to: claude-code" appeared
+// right above a "successfully in ~/.atmos/skills" line and read as if that
+// were claude-code's own directory, when claude-code actually reads skills
+// from ~/.claude/skills. The completion line (this test runs
+// non-interactively, so the spinner's in-progress-only text never renders --
+// only its completion message does) must show each client's real target
+// directory so the two are never confused.
+func TestInstallCmd_RunE_DistributingToShowsRealClientDirectory(t *testing.T) {
+	resetFlags := func() {
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+		_ = installCmd.Flags().Set("client", "")
+		_ = installCmd.Flags().Set("scope", "project")
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.Flags().Set("client", "claude-code"))
+	require.NoError(t, installCmd.Flags().Set("scope", "user"))
+
+	err := installCmd.RunE(installCmd, []string{})
+	require.NoError(t, err)
+
+	assert.Contains(t, uiOutput.String(), "claude-code")
+	assert.Contains(t, uiOutput.String(), filepath.Join("~", ".claude", "skills"),
+		"the distribution line must show claude-code's actual skill directory, not Atmos's own ~/.atmos/skills store")
 }
 
 // TestInstallCmd_RunE_AlreadyInstalledOmitsHintAndLocation covers the exact
@@ -165,6 +212,7 @@ func TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled(t *te
 	t.Setenv("USERPROFILE", tempHome)
 	homedir.Reset()
 	t.Cleanup(homedir.Reset)
+	t.Chdir(t.TempDir()) // isolate project-scope client detection; see the sibling test above.
 
 	setupSkillCommandUI(t)
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
@@ -174,7 +222,8 @@ func TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled(t *te
 	require.NoError(t, installCmd.RunE(installCmd, []string{}))
 
 	assert.Contains(t, uiOutput.String(), "0 skills installed")
-	assert.NotContains(t, uiOutput.String(), "Location:", "nothing was installed, so there's no location to report")
+	assert.NotContains(t, uiOutput.String(), filepath.Join(".atmos", "skills"),
+		"nothing was installed, so there's no location to report")
 	assert.NotContains(t, uiOutput.String(), "atmos ai chat")
 }
 

@@ -1146,3 +1146,86 @@ func TestUninstallCmd_StandardParserServer(t *testing.T) {
 		assert.True(t, v.GetBool("global"), "global should be true from ATMOS_AI_SKILL_GLOBAL env var")
 	})
 }
+
+// TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent
+// guards against the exact bug reported live: installing to user scope, then
+// running `uninstall --force` (no explicit --scope) from a project directory
+// that happens to have its own project-level client signal (e.g. this repo's
+// own .claude/) silently defaulted scope to "project" and skipped the real
+// (user-scope) distributed copy entirely -- and, worse, could target
+// unrelated real files sitting at the wrong-but-real project path. Uninstall
+// must check both scopes so the actual distributed copy always gets cleaned
+// up regardless of which scope's signal happens to be detectable from CWD.
+func TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent(t *testing.T) {
+	// clearFlag resets a flag's value to its default AND clears pflag's own
+	// Changed bit -- plain Flags().Set() would leave Changed true, which
+	// explicitSkillScope/resolveUninstallScopes read to mean "the user
+	// explicitly asked for this scope", defeating the very auto-detect
+	// fallback this test exercises.
+	clearFlag := func(cmd *cobra.Command, name string) {
+		flag := cmd.Flags().Lookup(name)
+		require.NotNil(t, flag)
+		_ = flag.Value.Set(flag.DefValue)
+		flag.Changed = false
+	}
+	// clearStringSliceFlag resets a --client-style repeatable flag. Unlike
+	// clearFlag, it must not replay flag.DefValue ("[]") through Set(): pflag's
+	// stringSliceValue APPENDS on every Set() call after the first, so once
+	// Changed has ever been true, Set("[]") leaves a literal "[]" element
+	// instead of an empty slice.
+	clearStringSliceFlag := func(cmd *cobra.Command, name string) {
+		flag := cmd.Flags().Lookup(name)
+		require.NotNil(t, flag)
+		_ = flag.Value.Set("")
+		flag.Changed = false
+	}
+	resetInstallFlags := func() {
+		clearFlag(installCmd, "yes")
+		clearStringSliceFlag(installCmd, "client")
+		clearFlag(installCmd, "scope")
+	}
+	resetInstallFlags()
+	t.Cleanup(resetInstallFlags)
+
+	resetUninstallFlags := func() {
+		clearFlag(uninstallCmd, "force")
+		clearStringSliceFlag(uninstallCmd, "client")
+		clearFlag(uninstallCmd, "scope")
+	}
+	resetUninstallFlags()
+	t.Cleanup(resetUninstallFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	// A project directory with its own unrelated .claude signal -- mimicking
+	// this exact repo, where running uninstall from inside it would
+	// otherwise silently "detect" claude-code at project scope even though
+	// the skill was actually distributed to user scope.
+	projectDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, ".claude"), 0o755))
+	t.Chdir(projectDir)
+
+	setupSkillCommandUI(t)
+
+	// Install one bundled skill to claude-code at USER scope.
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.Flags().Set("client", "claude-code"))
+	require.NoError(t, installCmd.Flags().Set("scope", "user"))
+	require.NoError(t, installCmd.RunE(installCmd, []string{}))
+
+	userDistPath := filepath.Join(tempHome, ".claude", "skills", "atmos-terraform")
+	require.DirExists(t, userDistPath,
+		"sanity check: the skill must have actually landed in the user-scope claude-code directory")
+
+	// Uninstall everything with --force and no explicit --scope/--client --
+	// the exact command from the bug report.
+	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+	require.NoError(t, uninstallCmd.RunE(uninstallCmd, []string{}))
+
+	assert.NoDirExists(t, userDistPath,
+		"the real user-scope distributed copy must be cleaned up even though CWD's own project-scope .claude/ signal exists")
+}

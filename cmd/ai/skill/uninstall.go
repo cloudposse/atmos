@@ -55,12 +55,12 @@ var uninstallCmd = &cobra.Command{
 			basePath = "."
 		}
 
-		scope, err := resolveSkillScope(cmd, v, force)
+		scopes, err := resolveUninstallScopes(cmd, v, force)
 		if err != nil {
 			return err
 		}
 
-		clients, err := resolveSkillClients(basePath, v, force, "Remove skill from which clients?", scope)
+		clients, err := resolveUninstallClients(basePath, v, force, scopes)
 		if err != nil {
 			return err
 		}
@@ -69,10 +69,10 @@ var uninstallCmd = &cobra.Command{
 		// just one, mirroring `atmos mcp uninstall` acting on every
 		// configured server when no server names are given.
 		if len(args) == 0 {
-			return installer.UninstallAll(force, basePath, clients, scope)
+			return installer.UninstallAll(force, basePath, clients, scopes)
 		}
 
-		if err := installer.Uninstall(args[0], force, basePath, clients, scope); err != nil {
+		if err := installer.Uninstall(args[0], force, basePath, clients, scopes); err != nil {
 			return err
 		}
 
