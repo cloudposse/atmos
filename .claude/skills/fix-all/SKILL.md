@@ -36,10 +36,11 @@ Hard prohibitions for every run:
 - Never touch `.github/workflows/**`, `Makefile`, `go.mod`, `go.sum`, or anything secret-shaped.
 - Never `gh pr merge`. Merge is human-gated, full stop.
 - Never `gh pr edit --base` (retargeting the PR's base branch), `--add-reviewer`/`--remove-reviewer`,
-  or `--milestone`. The only autonomous `gh pr edit` usage in this skill is rewriting
-  `--title`/`--body`/`--body-file` to keep the PR description in sync with the patch's actual scope
-  (step 8), plus applying the semver label via `--add-label`/`--remove-label` per the `pull-request`
-  skill's decision tree (label edits and `gh pr close` are allowed — see `.claude/settings.json`).
+  or `--milestone`. Autonomous `gh pr edit` usage in this skill is: rewriting `--title`/`--body`/
+  `--body-file` to keep the PR description in sync with the patch's actual scope (step 8), and
+  applying the semver label via `--add-label`/`--remove-label` per the `pull-request` skill's
+  decision tree (step 2 when CI's required-labels check is failing, step 8 as a second net for
+  drift that check doesn't catch). `gh pr close` is also allowed — see `.claude/settings.json`.
 - Never bypass commit signing (`--no-gpg-sign`, `-c commit.gpgsign=false`).
 - Never `git add -A` / `git add .` / `git add --all`. Add only the specific files touched.
 - Never `git reset --hard` or `git clean`.
@@ -146,6 +147,21 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      something in this patch's diff. If you can't confidently make that connection, or it looks
      pre-existing, flaky, or platform-specific, treat it exactly like a pre-existing test failure
      (`say` trigger 4) — report only, never guess.
+   - Name is `PR Semver Labels`-shaped (the required-labels CI gate, `mheap/github-action-
+     required-labels`): fix it directly, don't just report it. Apply the `pull-request` skill's
+     label decision tree — don't re-derive the decision tree here — against the full patch
+     (`git log origin/main..HEAD --oneline`, `git diff origin/main...HEAD --stat`), then reconcile
+     `gh pr view <number> --json labels`:
+     - No semver label present: `gh pr edit <number> --add-label <label>`.
+     - Wrong semver label present: `gh pr edit <number> --remove-label <old> --add-label <new>` in
+       one call (atomic — see the `pull-request` skill's relabel gotcha; two separate calls can
+       leave both attached and fail CI a different way).
+     If the decision tree lands on `minor`/`major`, apply that label regardless of whether the blog
+     post/roadmap update exist yet — that's the correct signal either way. A missing blog post or
+     roadmap update fails a *different* CI check (`Check for changelog and roadmap updates`), which
+     falls through to the "any other check" bullet below and gets reported via `say` trigger 2 —
+     writing release-announcement content and curating the roadmap is real judgment work, out of
+     scope for this step's mechanical relabeling.
    - Any other check (docs build, markdown links, licensing, CodeQL, Hadolint, etc.): never
      attempt a fix — always report and invoke `say` trigger 2.
    Same git-hygiene wrapper as step 4 for any commits made here.
@@ -241,12 +257,16 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      the body to a temp file and pass `--body-file` (never inline `--body` with backticks — see
      that skill's documented escaping gotcha), then:
      `gh pr edit <number> --title "..." --body-file <tmpfile>`.
-     This is the **only** autonomous `gh pr edit` usage in this skill — pass just `--title` and
-     `--body-file`, never `--base`, `--add-reviewer`, `--milestone`, or a label flag (all denied in
-     `.claude/settings.json`). Labels stay human-owned via the `pull-request` skill's decision
-     tree; don't touch them here even if scope growth means the semver label looks wrong now — note
-     that mismatch in the step-9 summary instead, as something for the human to reconsider.
-   - Already accurate: no-op, don't call `gh pr edit` just to touch it.
+     Pass only `--title`/`--body-file` here — never `--base`, `--add-reviewer`, or `--milestone`
+     (still hard-prohibited, see above).
+   - While here, re-run the `pull-request` skill's label decision tree against the full patch. If
+     scope growth means the current label no longer matches (e.g. the PR started `no-release` and
+     grew into a user-visible feature), reconcile it the same way step 2 does:
+     `gh pr edit <number> --remove-label <old> --add-label <new>` (atomic). This is a second net for
+     drift that never tripped CI's required-labels check in step 2 — that check only requires *some*
+     valid semver label, not the *correct* one, so a stale-but-technically-valid label can survive
+     undetected until this step.
+   - Already accurate (title, body, and label): no-op, don't call `gh pr edit` just to touch it.
 
    With the five conditions holding and the description reconciled, invoke `say` trigger 7
    (`"PR <number> is ready for final review."`) and make sure the step-9 summary carries a matching
@@ -272,8 +292,9 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
   coverage-gap check and fix (step 7, and reused directly by step 2 for CI-sourced Acceptance
   Tests failures).
 - **[`say` skill](../say/SKILL.md)** — invoked on every human-attention exit path above.
-- **[`pull-request` skill](../pull-request/SKILL.md)** — the human-attended PR workflow (labels,
-  blog posts, signing setup).
+- **[`pull-request` skill](../pull-request/SKILL.md)** — owns the label decision tree this skill
+  applies autonomously (steps 2 and 8), plus the still human-attended parts of the PR workflow
+  (blog posts, signing setup).
 - `atmos fix sync` / `atmos fix ci` / `atmos fix threads` / `atmos fix comments` / `atmos fix
   --all` (`.atmos.d/fix.yaml`) — the custom commands this skill's steps run. `atmos fix --all`
   runs steps 1, 2, 3, 6, 7 in one shot (everything except the agent-delegated CodeRabbit-thread
