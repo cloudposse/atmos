@@ -140,6 +140,12 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		if err := p.setupBrowserAutomation(); err != nil {
 			return nil, err
 		}
+		// Pre-seed the Playwright driver from official registries: the download
+		// built into playwright-go/saml2aws points at a retired CDN and 404s.
+		// Best-effort — an already-installed driver keeps working offline.
+		if err := ensurePlaywrightDriver(); err != nil {
+			log.Warn("Could not pre-seed the Playwright driver; browser authentication may fail to download it", "error", err)
+		}
 	}
 
 	// Configure logrus to forward to Atmos logger instead of stdout.

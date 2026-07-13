@@ -1,0 +1,335 @@
+commands:
+  - name: casts generate examples
+    description: Regenerate every example-sourced cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: emulator-aws-lifecycle
+        command: atmos casts generate examples emulator-aws lifecycle
+      - type: shell
+        name: quick-start-simple-list-and-plan
+        command: atmos casts generate examples quick-start-simple list-and-plan
+      - type: shell
+        name: quick-start-advanced-list-instances
+        command: atmos casts generate examples quick-start-advanced list-instances
+      - type: shell
+        name: sops-secrets-secret-lifecycle
+        command: atmos casts generate examples sops-secrets secret-lifecycle
+      - type: shell
+        name: onepassword-secrets-connect-mock
+        command: atmos casts generate examples onepassword-secrets connect-mock
+      - type: shell
+        name: toolchain-demo-convert
+        command: atmos casts generate examples toolchain demo-convert
+      - type: shell
+        name: custom-commands-hello-greet
+        command: atmos casts generate examples custom-commands hello-greet
+      - type: shell
+        name: custom-components-script-command
+        command: atmos casts generate examples custom-components script-command
+      - type: shell
+        name: demo-component-versions-vendor-versions
+        command: atmos casts generate examples demo-component-versions vendor-versions
+      - type: shell
+        name: caching-registry-cache
+        command: atmos casts generate examples caching registry-cache
+      - type: shell
+        name: demo-stacks-inheritance
+        command: atmos casts generate examples demo-stacks inheritance
+      - type: shell
+        name: stack-names-explicit-names
+        command: atmos casts generate examples stack-names explicit-names
+      - type: shell
+        name: demo-schemas-validate
+        command: atmos casts generate examples demo-schemas validate
+      - type: shell
+        name: demo-context-name-template
+        command: atmos casts generate examples demo-context name-template
+      - type: shell
+        name: demo-auth-auth-list
+        command: atmos casts generate examples demo-auth auth-list
+      - type: shell
+        name: auth-stores-identity-backed-stores
+        command: atmos casts generate examples auth-stores identity-backed-stores
+      - type: shell
+        name: compositions-validate
+        command: atmos casts generate examples compositions validate
+      - type: shell
+        name: demo-env-masked-token
+        command: atmos casts generate examples demo-env masked-token
+      - type: shell
+        name: locals-structured-values
+        command: atmos casts generate examples locals structured-values
+      - type: shell
+        name: generate-files-component-files
+        command: atmos casts generate examples generate-files component-files
+      - type: shell
+        name: demo-workflows-deploy
+        command: atmos casts generate examples demo-workflows deploy
+      - type: shell
+        name: parallel-steps-control-steps
+        command: atmos casts generate examples parallel-steps control-steps
+      - type: shell
+        name: workflow-retries-retry-failure
+        command: atmos casts generate examples workflow-retries retry-failure
+      - type: shell
+        name: http-webhooks-local-endpoints
+        command: atmos casts generate examples http-webhooks local-endpoints
+      - type: shell
+        name: say-something-pipeline
+        command: atmos casts generate examples say-something pipeline
+      - type: shell
+        name: demo-ansible-playbook
+        command: atmos casts generate examples demo-ansible playbook
+      - type: shell
+        name: demo-atlantis-repo-config
+        command: atmos casts generate examples demo-atlantis repo-config
+      - type: shell
+        name: interactive-workflows-table-and-build
+        command: atmos casts generate examples interactive-workflows table-and-build
+      - type: shell
+        name: secrets-masking-masked-plan
+        command: atmos casts generate examples secrets-masking masked-plan
+      - type: shell
+        name: remote-stack-imports-remote-vars
+        command: atmos casts generate examples remote-stack-imports remote-vars
+      - type: shell
+        name: demo-library-modules
+        command: atmos casts generate examples demo-library modules
+      - type: shell
+        name: source-provisioning-sources
+        command: atmos casts generate examples source-provisioning sources
+      - type: shell
+        name: config-profiles-list-and-show
+        command: atmos casts generate examples config-profiles list-and-show
+      - type: shell
+        name: terraform-tests-stack-discovery
+        command: atmos casts generate examples terraform-tests stack-discovery
+      - type: shell
+        name: hooks-custom-command-hook-config
+        command: atmos casts generate examples hooks-custom-command hook-config
+      - type: shell
+        name: hooks-checkov-security-scan
+        command: atmos casts generate examples hooks-checkov security-scan
+      - type: shell
+        name: hooks-infracost-cost-summary
+        command: atmos casts generate examples hooks-infracost cost-summary
+      - type: shell
+        name: hooks-kics-security-scan
+        command: atmos casts generate examples hooks-kics security-scan
+      - type: shell
+        name: hooks-trivy-security-scan
+        command: atmos casts generate examples hooks-trivy security-scan
+      - type: shell
+        name: background-steps-service
+        command: atmos casts generate examples background-steps service
+      - type: shell
+        name: container-step-build-run
+        command: atmos casts generate examples container-step build-run
+      - type: shell
+        name: container-sandbox-sandbox
+        command: atmos casts generate examples container-sandbox sandbox
+      - type: shell
+        name: container-component-lifecycle
+        command: atmos casts generate examples container-component lifecycle
+      - type: shell
+        name: devcontainer-config
+        command: atmos casts generate examples devcontainer config
+      - type: shell
+        name: devcontainer-build-build-config
+        command: atmos casts generate examples devcontainer-build build-config
+      - type: shell
+        name: gitops-reconcile
+        command: atmos casts generate examples gitops reconcile
+      - type: shell
+        name: helm-lifecycle
+        command: atmos casts generate examples helm lifecycle
+      - type: shell
+        name: kubernetes-lifecycle
+        command: atmos casts generate examples kubernetes lifecycle
+      - type: shell
+        name: kustomize-lifecycle
+        command: atmos casts generate examples kustomize lifecycle
+      - type: shell
+        name: demo-helmfile-lifecycle
+        command: atmos casts generate examples demo-helmfile lifecycle
+      - type: shell
+        name: emulator-k8s-lifecycle
+        command: atmos casts generate examples emulator-k8s lifecycle
+      - type: shell
+        name: local-gitops-lifecycle
+        command: atmos casts generate examples local-gitops lifecycle
+      - type: shell
+        name: version-tracker-tracks-and-vars
+        command: atmos casts generate examples version-tracker tracks-and-vars
+  - name: casts validate examples
+    description: Validate every example-sourced cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: script
+        name: terminal-modes
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import assert_no_dumb_term_recordings
+          assert_no_dumb_term_recordings()
+      - type: shell
+        name: emulator-aws-lifecycle
+        command: atmos casts validate examples emulator-aws lifecycle
+      - type: shell
+        name: quick-start-simple-list-and-plan
+        command: atmos casts validate examples quick-start-simple list-and-plan
+      - type: shell
+        name: quick-start-advanced-list-instances
+        command: atmos casts validate examples quick-start-advanced list-instances
+      - type: shell
+        name: sops-secrets-secret-lifecycle
+        command: atmos casts validate examples sops-secrets secret-lifecycle
+      - type: shell
+        name: onepassword-secrets-connect-mock
+        command: atmos casts validate examples onepassword-secrets connect-mock
+      - type: shell
+        name: toolchain-demo-convert
+        command: atmos casts validate examples toolchain demo-convert
+      - type: shell
+        name: custom-commands-hello-greet
+        command: atmos casts validate examples custom-commands hello-greet
+      - type: shell
+        name: custom-components-script-command
+        command: atmos casts validate examples custom-components script-command
+      - type: shell
+        name: demo-component-versions-vendor-versions
+        command: atmos casts validate examples demo-component-versions vendor-versions
+      - type: shell
+        name: caching-registry-cache
+        command: atmos casts validate examples caching registry-cache
+      - type: shell
+        name: demo-stacks-inheritance
+        command: atmos casts validate examples demo-stacks inheritance
+      - type: shell
+        name: stack-names-explicit-names
+        command: atmos casts validate examples stack-names explicit-names
+      - type: shell
+        name: demo-schemas-validate
+        command: atmos casts validate examples demo-schemas validate
+      - type: shell
+        name: demo-context-name-template
+        command: atmos casts validate examples demo-context name-template
+      - type: shell
+        name: demo-auth-auth-list
+        command: atmos casts validate examples demo-auth auth-list
+      - type: shell
+        name: auth-stores-identity-backed-stores
+        command: atmos casts validate examples auth-stores identity-backed-stores
+      - type: shell
+        name: compositions-validate
+        command: atmos casts validate examples compositions validate
+      - type: shell
+        name: demo-env-masked-token
+        command: atmos casts validate examples demo-env masked-token
+      - type: shell
+        name: locals-structured-values
+        command: atmos casts validate examples locals structured-values
+      - type: shell
+        name: generate-files-component-files
+        command: atmos casts validate examples generate-files component-files
+      - type: shell
+        name: demo-workflows-deploy
+        command: atmos casts validate examples demo-workflows deploy
+      - type: shell
+        name: parallel-steps-control-steps
+        command: atmos casts validate examples parallel-steps control-steps
+      - type: shell
+        name: workflow-retries-retry-failure
+        command: atmos casts validate examples workflow-retries retry-failure
+      - type: shell
+        name: http-webhooks-local-endpoints
+        command: atmos casts validate examples http-webhooks local-endpoints
+      - type: shell
+        name: say-something-pipeline
+        command: atmos casts validate examples say-something pipeline
+      - type: shell
+        name: demo-ansible-playbook
+        command: atmos casts validate examples demo-ansible playbook
+      - type: shell
+        name: demo-atlantis-repo-config
+        command: atmos casts validate examples demo-atlantis repo-config
+      - type: shell
+        name: interactive-workflows-table-and-build
+        command: atmos casts validate examples interactive-workflows table-and-build
+      - type: shell
+        name: secrets-masking-masked-plan
+        command: atmos casts validate examples secrets-masking masked-plan
+      - type: shell
+        name: remote-stack-imports-remote-vars
+        command: atmos casts validate examples remote-stack-imports remote-vars
+      - type: shell
+        name: demo-library-modules
+        command: atmos casts validate examples demo-library modules
+      - type: shell
+        name: source-provisioning-sources
+        command: atmos casts validate examples source-provisioning sources
+      - type: shell
+        name: config-profiles-list-and-show
+        command: atmos casts validate examples config-profiles list-and-show
+      - type: shell
+        name: terraform-tests-stack-discovery
+        command: atmos casts validate examples terraform-tests stack-discovery
+      - type: shell
+        name: hooks-custom-command-hook-config
+        command: atmos casts validate examples hooks-custom-command hook-config
+      - type: shell
+        name: hooks-checkov-security-scan
+        command: atmos casts validate examples hooks-checkov security-scan
+      - type: shell
+        name: hooks-infracost-cost-summary
+        command: atmos casts validate examples hooks-infracost cost-summary
+      - type: shell
+        name: hooks-kics-security-scan
+        command: atmos casts validate examples hooks-kics security-scan
+      - type: shell
+        name: hooks-trivy-security-scan
+        command: atmos casts validate examples hooks-trivy security-scan
+      - type: shell
+        name: background-steps-service
+        command: atmos casts validate examples background-steps service
+      - type: shell
+        name: container-step-build-run
+        command: atmos casts validate examples container-step build-run
+      - type: shell
+        name: container-sandbox-sandbox
+        command: atmos casts validate examples container-sandbox sandbox
+      - type: shell
+        name: container-component-lifecycle
+        command: atmos casts validate examples container-component lifecycle
+      - type: shell
+        name: devcontainer-config
+        command: atmos casts validate examples devcontainer config
+      - type: shell
+        name: devcontainer-build-build-config
+        command: atmos casts validate examples devcontainer-build build-config
+      - type: shell
+        name: gitops-reconcile
+        command: atmos casts validate examples gitops reconcile
+      - type: shell
+        name: helm-lifecycle
+        command: atmos casts validate examples helm lifecycle
+      - type: shell
+        name: kubernetes-lifecycle
+        command: atmos casts validate examples kubernetes lifecycle
+      - type: shell
+        name: kustomize-lifecycle
+        command: atmos casts validate examples kustomize lifecycle
+      - type: shell
+        name: demo-helmfile-lifecycle
+        command: atmos casts validate examples demo-helmfile lifecycle
+      - type: shell
+        name: emulator-k8s-lifecycle
+        command: atmos casts validate examples emulator-k8s lifecycle
+      - type: shell
+        name: local-gitops-lifecycle
+        command: atmos casts validate examples local-gitops lifecycle
+      - type: shell
+        name: version-tracker-tracks-and-vars
+        command: atmos casts validate examples version-tracker tracks-and-vars

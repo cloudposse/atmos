@@ -6,11 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const baseConfigMap = `apiVersion: v1
@@ -66,6 +68,28 @@ data:
 	// The raw base64 secret values must never appear in the diff output.
 	assert.NotContains(t, out, "b2xkcGFzcw==")
 	assert.NotContains(t, out, "bmV3cGFzcw==")
+}
+
+func TestColorizeUnifiedDiffAddsANSIDiffColors(t *testing.T) {
+	ui.SetColorProfile(termenv.ANSI)
+	t.Cleanup(func() { ui.SetColorProfile(termenv.Ascii) })
+
+	diffText := "--- a/demo.yaml\n+++ b/demo.yaml\n@@ -1 +1 @@\n-old\n+new\n"
+	out := colorizeUnifiedDiff(diffText)
+
+	assert.Contains(t, out, "\x1b[")
+	assert.Contains(t, out, "-old")
+	assert.Contains(t, out, "+new")
+}
+
+func TestColorizeUnifiedDiffNoColorLeavesPlainText(t *testing.T) {
+	ui.SetColorProfile(termenv.Ascii)
+
+	diffText := "--- a/demo.yaml\n+++ b/demo.yaml\n@@ -1 +1 @@\n-old\n+new\n"
+	out := colorizeUnifiedDiff(diffText)
+
+	assert.Equal(t, diffText, out)
+	assert.NotContains(t, out, "\x1b[")
 }
 
 func TestJoinManifests_SortedWithSeparators(t *testing.T) {

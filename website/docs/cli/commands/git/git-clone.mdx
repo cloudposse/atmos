@@ -5,14 +5,14 @@ sidebar_class_name: command
 id: clone
 description: Clone or reconcile a managed Git repository, an ad hoc URI, or the current CI repository.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Clone a named repository configured under [`git.repositories`](/cli/configuration/git), the single configured repository when only one exists, an ad hoc URI, or — in CI — the current repository as a replacement for `actions/checkout`. Clone is a *reconcile* operation: if the destination already exists, Atmos fetches and fast-forwards instead of failing, so restored CI caches and re-runs are always safe.
 </Intro>
 
-<Screengrab title="atmos git clone --help" slug="atmos-git-clone--help" />
+<CastPlayer title="atmos git clone --help" src="/casts/screengrabs/atmos-git-clone--help.cast" static chrome />
 
 ## Usage
 
@@ -92,6 +92,21 @@ When invoked with no argument in CI, `atmos git clone` infers the repository and
 
 Outside CI, no-arg clone reconciles the single configured repository when exactly one repository exists under `git.repositories`. If zero or multiple repositories are configured, pass a repository name, URI, or `--all`.
 
+### Fork-PR safety gate
+
+Because `atmos git clone` replaces `actions/checkout`, it inherits the same ["pwn request"](https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/) risk: cloning untrusted fork code in a job that holds the base repository's secrets. Mirroring `actions/checkout` v7, Atmos **refuses by default** to clone fork content under the elevated `pull_request_target` and `workflow_run` events.
+
+The gate engages only on the dangerous combination — an elevated event **and** a fork-targeting clone:
+
+- an explicit `--branch` / ref override that is a pull-request ref (e.g. `refs/pull/<N>/merge` or `refs/pull/<N>/head`), or
+- an ad hoc clone URI whose `owner/repo` differs from the base `GITHUB_REPOSITORY`.
+
+The safe no-arg checkout (base repository at its base ref) is never gated, and non-elevated events (`pull_request`, `push`, `merge_group`) are unaffected.
+
+**Recommended:** use a `pull_request` workflow (which withholds fork secrets) for clone-and-plan of fork contributions; reserve `pull_request_target` / `workflow_run` for trusted, secret-free steps.
+
+To bypass the gate deliberately, set the intentionally named `--allow-unsafe-fork` flag, `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION=true`, or `ci.allow_unsafe_fork_execution: true` in `atmos.yaml`.
+
 :::warning Fetch depth and `atmos describe affected`
 
 Affected detection requires merge-base history. If [`atmos describe affected`](/cli/commands/describe/affected) runs against the clone, use `--depth=0` (full history) or a depth large enough to include the merge base — the same guidance that applies to `fetch-depth` with `actions/checkout`.
@@ -168,6 +183,12 @@ Affected detection requires merge-base history. If [`atmos describe affected`](/
     <dd>
         Initialize submodules after clone. Off by default.
         Environment variable: `ATMOS_GIT_SUBMODULES`
+    </dd>
+
+    <dt>`--allow-unsafe-fork` <em>(optional)</em></dt>
+    <dd>
+        Opt out of the [fork-PR safety gate](#fork-pr-safety-gate) and allow cloning untrusted fork content in `pull_request_target` / `workflow_run` events. **Unsafe** — only set this when a fork-facing workflow has a documented reason to bypass the gate. Off by default.
+        Environment variable: `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION`
     </dd>
 
     <dt>`--identity` <em>(optional)</em></dt>

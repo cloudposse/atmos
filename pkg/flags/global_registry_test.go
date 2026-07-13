@@ -97,6 +97,22 @@ func TestParseIdentityFlag_NormalizesDisabledValues(t *testing.T) {
 	}
 }
 
+// TestParseIdentityFlag_FlagNotRegistered verifies that when a command (and its
+// parents) doesn't have the identity flag registered at all, parseIdentityFlag
+// returns a selector that reports not-provided rather than panicking or falling
+// back to Viper.
+func TestParseIdentityFlag_FlagNotRegistered(t *testing.T) {
+	v := viper.New()
+	v.Set(identityFlagName, "should-be-ignored")
+
+	cmd := &cobra.Command{Use: "test"}
+
+	selector := parseIdentityFlag(cmd, v)
+
+	assert.Equal(t, "", selector.Value())
+	assert.False(t, selector.IsProvided())
+}
+
 func TestParseIdentityFlag_NotProvided(t *testing.T) {
 	// Reset Viper state.
 	v := viper.New()
@@ -460,6 +476,39 @@ func TestParsePagerFlag_FallbackToEnv(t *testing.T) {
 	assert.True(t, result.IsEnabled(), "Should be enabled")
 }
 
+// TestParseCastFlag covers all three branches of parseCastFlag:
+// flag not registered, flag explicitly changed, and fallback to Viper.
+func TestParseCastFlag(t *testing.T) {
+	t.Run("flag not registered returns empty string", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		assert.Equal(t, "", parseCastFlag(cmd, v))
+	})
+
+	t.Run("flag explicitly changed returns flag value", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String(cfg.CastFlagName, "", "Cast recording")
+		require.NoError(t, cmd.Flags().Set(cfg.CastFlagName, "demo.cast"))
+		v := viper.New()
+		assert.Equal(t, "demo.cast", parseCastFlag(cmd, v))
+	})
+
+	t.Run("falls back to viper when not changed", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String(cfg.CastFlagName, "", "Cast recording")
+		v := viper.New()
+		v.Set(cfg.CastFlagName, "from-env.cast")
+		assert.Equal(t, "from-env.cast", parseCastFlag(cmd, v))
+	})
+
+	t.Run("returns empty when neither changed nor set in viper", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String(cfg.CastFlagName, "", "Cast recording")
+		v := viper.New()
+		assert.Equal(t, "", parseCastFlag(cmd, v))
+	})
+}
+
 // TestParseGlobalFlags_AIFlag tests that the --ai flag is correctly parsed.
 func TestParseGlobalFlags_AIFlag(t *testing.T) {
 	t.Run("defaults to false", func(t *testing.T) {
@@ -652,6 +701,11 @@ func TestGlobalFlagsRegistry_ContainsNoOptDefValFlags(t *testing.T) {
 	pagerFlag := registry.Get("pager")
 	assert.NotNil(t, pagerFlag, "pager flag should be registered")
 	assert.Equal(t, "true", pagerFlag.GetNoOptDefVal(), "pager should have NoOptDefVal set")
+
+	castFlag := registry.Get(cfg.CastFlagName)
+	assert.NotNil(t, castFlag, "cast flag should be registered")
+	assert.Equal(t, cfg.CastFlagAutoValue, castFlag.GetNoOptDefVal(), "cast should have NoOptDefVal set")
+	assert.False(t, castFlag.GetNoOptDefValConsumesNextArg(), "cast must not consume the next positional arg")
 }
 
 func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
@@ -686,6 +740,16 @@ func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
 			name:     "identity with equals syntax unchanged",
 			input:    []string{"auth", "login", "--identity=prod-admin"},
 			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "cast bare flag does not consume command",
+			input:    []string{"--cast", "terraform", "plan"},
+			expected: []string{"--cast", "terraform", "plan"},
+		},
+		{
+			name:     "cast with equals syntax unchanged",
+			input:    []string{"--cast=demo.cast", "terraform", "plan"},
+			expected: []string{"--cast=demo.cast", "terraform", "plan"},
 		},
 		{
 			name:     "identity at end unchanged",

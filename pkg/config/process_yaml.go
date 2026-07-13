@@ -3,13 +3,18 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
+	legacyyaml "gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -298,27 +303,17 @@ func processSequenceElement(child *yaml.Node, v *viper.Viper, elementPath string
 	}
 }
 
-// hasCustomTag reports whether the YAML tag starts with any Atmos custom function prefix (env, exec, include, repo-root, cwd, random).
+// hasCustomTag reports whether the YAML tag is a non-standard explicit YAML tag.
 func hasCustomTag(tag string) bool {
-	return strings.HasPrefix(tag, u.AtmosYamlFuncEnv) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncExec) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncInclude) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitRoot) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitRootAlias) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitSha) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitBranch) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitRef) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitRepository) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitOwner) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitName) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitHost) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncGitUrl) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncCwd) ||
-		strings.HasPrefix(tag, u.AtmosYamlFuncRandom)
+	return strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!")
 }
 
-// containsCustomTags reports whether the node or any of its descendants contains a custom Atmos YAML function tag.
-// A custom tag is an Atmos function tag such as !env, !exec, !include, !repo-root, or !random; the function returns true if any node in the subtree has one of these tags.
+func isStandardYAMLTag(tag string) bool {
+	return strings.HasPrefix(tag, "!!")
+}
+
+// containsCustomTags reports whether the node or any of its descendants contains
+// a non-standard explicit YAML tag.
 func containsCustomTags(node *yaml.Node) bool {
 	if node == nil {
 		return false
@@ -436,52 +431,62 @@ func processRandomTag(strFunc, nodeValue string) (any, error) {
 }
 
 // processScalarNodeValue evaluates a YAML scalar node's custom Atmos tag and returns the resolved value.
-// It supports the !env, !exec, !include, !repo-root, !cwd, and !random tags; failures during evaluation return an error wrapped with ErrExecuteYamlFunctions, and unknown/unsupported tags are decoded and returned as their YAML value.
+// It supports the atmos.yaml YAML tags registered in pkg/function/tag; failures
+// during evaluation return an error wrapped with ErrExecuteYamlFunctions, and
+// unknown/unsupported custom tags return ErrUnsupportedYamlTag.
 func processScalarNodeValue(node *yaml.Node) (any, error) {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 
-	switch {
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
-		return processEnvTag(strFunc, node.Value)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
-		return processExecTag(strFunc, node.Value)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
-		return processIncludeTag(node.Tag, node.Value, strFunc)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRootAlias):
-		return processGitRootTag(strFunc, node.Value)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitSha), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRef):
-		return processGitShaTag(strFunc, node.Value)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
-		return processGitBranchTag(strFunc, node.Value)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRepository):
-		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagRepository)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitOwner):
-		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagOwner)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitName):
-		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagName)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitHost):
-		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagHost)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitUrl):
-		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagURL)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
-		return processCwdTag(strFunc, node.Value)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
-		return processRandomTag(strFunc, node.Value)
-	default:
+	if isStandardYAMLTag(node.Tag) {
 		var val any
 		if err := node.Decode(&val); err != nil {
 			return nil, err
 		}
 		return val, nil
 	}
+
+	switch node.Tag {
+	case u.AtmosYamlFuncUnset:
+		return nil, nil
+	case u.AtmosYamlFuncEnv:
+		return processEnvTag(strFunc, node.Value)
+	case u.AtmosYamlFuncExec:
+		return processExecTag(strFunc, node.Value)
+	case u.AtmosYamlFuncInclude, u.AtmosYamlFuncIncludeRaw:
+		return processIncludeTag(node.Tag, node.Value, strFunc)
+	case u.AtmosYamlFuncGitRoot, u.AtmosYamlFuncGitRootAlias:
+		return processGitRootTag(strFunc, node.Value)
+	case u.AtmosYamlFuncGitSha, u.AtmosYamlFuncGitRef:
+		return processGitShaTag(strFunc, node.Value)
+	case u.AtmosYamlFuncGitBranch:
+		return processGitBranchTag(strFunc, node.Value)
+	case u.AtmosYamlFuncGitRepository:
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagRepository)
+	case u.AtmosYamlFuncGitOwner:
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagOwner)
+	case u.AtmosYamlFuncGitName:
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagName)
+	case u.AtmosYamlFuncGitHost:
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagHost)
+	case u.AtmosYamlFuncGitUrl:
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagURL)
+	case u.AtmosYamlFuncCwd:
+		return processCwdTag(strFunc, node.Value)
+	case u.AtmosYamlFuncRandom:
+		return processRandomTag(strFunc, node.Value)
+	default:
+		return nil, unsupportedAtmosYamlTagError(node.Tag, "")
+	}
 }
 
 // decodeNodeWithYamlFunctions decodes a YAML node into plain Go values while
 // evaluating Atmos YAML functions on scalar nodes. It is used by config paths
 // that must read raw YAML directly instead of Viper's normalized settings.
-//
-//nolint:gocognit,revive // YAML AST decoding is necessarily branch-heavy by node kind.
 func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
+	return decodeNodeWithYamlFunctionsForFile(node, "")
+}
+
+func decodeNodeWithYamlFunctionsForFile(node *yaml.Node, sourceFile string) (any, error) {
 	if node == nil {
 		return nil, nil
 	}
@@ -491,58 +496,121 @@ func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
 		if len(node.Content) == 0 {
 			return nil, nil
 		}
-		return decodeNodeWithYamlFunctions(node.Content[0])
+		return decodeNodeWithYamlFunctionsForFile(node.Content[0], sourceFile)
 	case yaml.MappingNode:
-		result := make(map[string]interface{}, len(node.Content)/2)
-		for i := 0; i < len(node.Content); i += 2 {
-			keyNode := node.Content[i]
-			valueNode := node.Content[i+1]
-			value, err := decodeNodeWithYamlFunctions(valueNode)
-			if err != nil {
-				return nil, err
-			}
-			result[keyNode.Value] = value
-		}
-		return result, nil
+		return decodeMappingNodeWithYamlFunctions(node, sourceFile)
 	case yaml.SequenceNode:
-		result := make([]interface{}, 0, len(node.Content))
-		for _, child := range node.Content {
-			value, err := decodeNodeWithYamlFunctions(child)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, value)
-		}
-		return result, nil
+		return decodeSequenceNodeWithYamlFunctions(node, sourceFile)
 	case yaml.ScalarNode:
-		if hasCustomTag(node.Tag) {
-			return processScalarNodeValue(node)
-		}
-		var value any
-		if err := node.Decode(&value); err != nil {
-			return nil, err
-		}
-		return value, nil
+		return decodeScalarNodeWithYamlFunctions(node, sourceFile)
 	default:
-		var value any
-		if err := node.Decode(&value); err != nil {
-			return nil, err
-		}
-		return value, nil
+		return decodePlainYamlNode(node)
 	}
 }
 
+func decodeMappingNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+	result := make(map[string]interface{}, len(node.Content)/2)
+	for i := 0; i < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+		value, err := decodeNodeWithYamlFunctionsForFile(valueNode, sourceFile)
+		if err != nil {
+			return nil, err
+		}
+		result[keyNode.Value] = value
+	}
+	return result, nil
+}
+
+func decodeSequenceNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+	result := make([]interface{}, 0, len(node.Content))
+	for _, child := range node.Content {
+		value, err := decodeNodeWithYamlFunctionsForFile(child, sourceFile)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, value)
+	}
+	return result, nil
+}
+
+func decodeScalarNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+	if hasCustomTag(node.Tag) {
+		return processScalarNodeValueForFile(node, sourceFile)
+	}
+	return decodePlainYamlNode(node)
+}
+
+func decodePlainYamlNode(node *yaml.Node) (any, error) {
+	var value any
+	if err := node.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	if sourceFile == "" || !isIncludeTag(node.Tag) {
+		return processScalarNodeValue(node)
+	}
+
+	return processIncludeNodeValueForFile(node, sourceFile)
+}
+
+func isIncludeTag(tag string) bool {
+	return tag == u.AtmosYamlFuncInclude || tag == u.AtmosYamlFuncIncludeRaw
+}
+
+func processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	resolved := legacyyaml.Node{
+		Kind:  legacyyaml.ScalarNode,
+		Tag:   node.Tag,
+		Value: node.Value,
+	}
+	basePath := includeBasePathForSourceFile(sourceFile)
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:         basePath,
+		BasePathAbsolute: basePath,
+	}
+	var err error
+	if node.Tag == u.AtmosYamlFuncIncludeRaw {
+		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, node.Value, sourceFile)
+	} else {
+		err = u.ProcessIncludeTag(atmosConfig, &resolved, node.Value, sourceFile)
+	}
+	if err != nil {
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+	}
+	var value any
+	if err := resolved.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func includeBasePathForSourceFile(sourceFile string) string {
+	dir := filepath.Dir(sourceFile)
+	if base := filepath.Base(dir); base == ".atmos.d" || base == "atmos.d" {
+		return filepath.Dir(dir)
+	}
+	return dir
+}
+
 // processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.
-// It dispatches handling for !env, !exec, !include, !repo-root, !cwd, and !random tags to their respective handlers.
-// If the node has no tag or the tag is not one of the recognized Atmos functions, the function is a no-op.
+// It dispatches handling for atmos.yaml-supported YAML tags to their respective handlers.
+// If the node has no tag or a native YAML tag, the function is a no-op.
 // It returns any error produced by the invoked handler.
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node.Tag == "" {
 		return nil
 	}
 
-	switch {
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncUnset):
+	if isStandardYAMLTag(node.Tag) {
+		return nil
+	}
+
+	switch node.Tag {
+	case u.AtmosYamlFuncUnset:
 		// The !unset tag is handled in processMappingNode by skipping the key.
 		// If we reach here, it means !unset was used in a context where it can't
 		// prevent the key from being added (e.g., scalar value context).
@@ -550,34 +618,45 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		log.Debug("Unsetting configuration key", "path", currentPath)
 		node.Tag = "" // Avoid re-processing.
 		return nil
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
+	case u.AtmosYamlFuncEnv:
 		return handleEnv(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
+	case u.AtmosYamlFuncExec:
 		return handleExec(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
+	case u.AtmosYamlFuncInclude, u.AtmosYamlFuncIncludeRaw:
 		return handleInclude(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRootAlias):
+	case u.AtmosYamlFuncGitRoot, u.AtmosYamlFuncGitRootAlias:
 		return handleGitRoot(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitSha), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRef):
+	case u.AtmosYamlFuncGitSha, u.AtmosYamlFuncGitRef:
 		return handleGitSha(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
+	case u.AtmosYamlFuncGitBranch:
 		return handleGitBranch(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRepository):
+	case u.AtmosYamlFuncGitRepository:
 		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagRepository)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitOwner):
+	case u.AtmosYamlFuncGitOwner:
 		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagOwner)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitName):
+	case u.AtmosYamlFuncGitName:
 		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagName)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitHost):
+	case u.AtmosYamlFuncGitHost:
 		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagHost)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitUrl):
+	case u.AtmosYamlFuncGitUrl:
 		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagURL)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
+	case u.AtmosYamlFuncCwd:
 		return handleCwd(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
+	case u.AtmosYamlFuncRandom:
 		return handleRandom(node, v, currentPath)
+	default:
+		return unsupportedAtmosYamlTagError(node.Tag, currentPath)
 	}
-	return nil
+}
+
+func unsupportedAtmosYamlTagError(tag, currentPath string) error {
+	supportedTags := strings.Join(fntag.AtmosConfigYAML(), ", ")
+	if currentPath == "" {
+		return fmt.Errorf("%w: '%s'. Supported tags for atmos.yaml are: %s",
+			errUtils.ErrUnsupportedYamlTag, tag, supportedTags)
+	}
+	return fmt.Errorf("%w: '%s' at path '%s'. Supported tags for atmos.yaml are: %s",
+		errUtils.ErrUnsupportedYamlTag, tag, currentPath, supportedTags)
 }
 
 // handleEnv processes a YAML node with an !env tag and sets the value in Viper, returns an error if the processing fails, warns if the value is empty.
@@ -631,6 +710,9 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		if ok {
 			// Set the value in Viper.
 			v.Set(currentPath, data)
+			if err := node.Encode(data); err != nil {
+				return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+			}
 		} else {
 			log.Warn(
 				"Invalid value returned from the YAML function",
@@ -640,8 +722,8 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		}
 	} else {
 		log.Debug(emptyValueWarning, functionKey, strFunc)
+		node.Tag = "" // Avoid re-processing
 	}
-	node.Tag = "" // Avoid re-processing
 	return nil
 }
 

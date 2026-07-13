@@ -254,6 +254,10 @@ func emulatorNetworkName(stack string) string {
 	return "atmos-emulator-" + sanitizeNetworkToken(stack)
 }
 
+func emulatorNetworkAlias(stack, name string) string {
+	return sanitizeNetworkToken(stack + "-" + name)
+}
+
 // sanitizeNetworkToken reduces a stack name to characters valid in a docker/podman
 // network name ([a-zA-Z0-9_.-]); any other rune becomes '-'.
 func sanitizeNetworkToken(s string) string {
@@ -280,6 +284,15 @@ func sanitizeNetworkToken(s string) string {
 func (m *Manager) attachSharedNetwork(ctx context.Context, runtime container.Runtime, namedConfig *container.NamedConfig, stack, name string) {
 	defer perf.Track(nil, "emulator.Manager.attachSharedNetwork")()
 
+	alias := emulatorNetworkAlias(stack, name)
+	if network := currentContainerNetwork(ctx, runtime); network != "" {
+		namedConfig.Networks = append(namedConfig.Networks, container.NetworkAttachment{
+			Name:    network,
+			Aliases: []string{alias},
+		})
+		return
+	}
+
 	ensurer, ok := runtime.(container.NetworkEnsurer)
 	if !ok {
 		return
@@ -290,7 +303,10 @@ func (m *Manager) attachSharedNetwork(ctx context.Context, runtime container.Run
 			"network", network, "error", err)
 		return
 	}
-	namedConfig.RunArgs = append(namedConfig.RunArgs, "--network", network, "--network-alias", name)
+	namedConfig.Networks = append(namedConfig.Networks, container.NetworkAttachment{
+		Name:    network,
+		Aliases: []string{alias},
+	})
 }
 
 // resolveRootlessRun applies the driver's rootless override under a rootless
@@ -316,7 +332,7 @@ func (m *Manager) resolveRootlessRun(spec *Spec, command []string, rootless bool
 // mergeEnv layers the component/profile env over the driver defaults so an explicit
 // value wins, while driver-required vars (e.g. K3S_TOKEN) remain present.
 func mergeEnv(defaults, overrides map[string]string) map[string]string {
-	merged := make(map[string]string, len(defaults)+len(overrides))
+	merged := make(map[string]string, len(defaults))
 	for k, v := range defaults {
 		merged[k] = v
 	}
@@ -415,10 +431,32 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 		return Endpoint{}, fmt.Errorf("%w: %s/emulator/%s (start it with `atmos emulator up %s -s %s`)",
 			errUtils.ErrEmulatorNotRunning, stack, name, name, stack)
 	}
+	if inspected, inspectErr := runtime.Inspect(ctx, info.ID); inspectErr == nil && inspected != nil {
+		info = mergeContainerInfo(info, inspected)
+	} else if inspectErr != nil {
+		log.Debug("emulator inspect unavailable; endpoint will use list metadata", "component", name, "error", inspectErr)
+	}
 	target, err := spec.Target()
 	if err != nil {
 		return Endpoint{}, err
 	}
+	if network := currentContainerNetwork(ctx, runtime); network != "" {
+		ports, ok := containerPorts(spec)
+		if ok {
+			return Endpoint{
+				Target:     target,
+				Host:       emulatorNetworkAlias(stack, name),
+				Ports:      ports,
+				NetworkIPs: info.NetworkIPs,
+				Region:     spec.Region,
+				Project:    spec.Project,
+				Services:   spec.Services,
+			}, nil
+		}
+		log.Debug("emulator current container network detected but container ports are unavailable; falling back to published host ports",
+			"network", network, "component", name)
+	}
+
 	ports := make(map[int]int, len(info.Ports))
 	for _, binding := range info.Ports {
 		if binding.HostPort != 0 {
@@ -426,13 +464,79 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 		}
 	}
 	return Endpoint{
-		Target:   target,
-		Host:     "localhost",
-		Ports:    ports,
-		Region:   spec.Region,
-		Project:  spec.Project,
-		Services: spec.Services,
+		Target:     target,
+		Host:       reachableHostForPublishedPorts(),
+		Ports:      ports,
+		NetworkIPs: info.NetworkIPs,
+		Region:     spec.Region,
+		Project:    spec.Project,
+		Services:   spec.Services,
 	}, nil
+}
+
+func mergeContainerInfo(base, overlay *container.Info) *container.Info {
+	if base == nil {
+		return overlay
+	}
+	if overlay == nil {
+		return base
+	}
+	merged := *base
+	mergeContainerInfoScalars(&merged, overlay)
+	mergeContainerInfoCollections(&merged, overlay)
+	return &merged
+}
+
+func mergeContainerInfoScalars(merged, overlay *container.Info) {
+	if overlay.ID != "" {
+		merged.ID = overlay.ID
+	}
+	if overlay.Name != "" {
+		merged.Name = overlay.Name
+	}
+	if overlay.Image != "" {
+		merged.Image = overlay.Image
+	}
+	if overlay.Status != "" {
+		merged.Status = overlay.Status
+	}
+	if overlay.Health != "" {
+		merged.Health = overlay.Health
+	}
+	if !overlay.Created.IsZero() {
+		merged.Created = overlay.Created
+	}
+}
+
+func mergeContainerInfoCollections(merged, overlay *container.Info) {
+	if len(overlay.Ports) > 0 {
+		merged.Ports = overlay.Ports
+	}
+	if len(overlay.Networks) > 0 {
+		merged.Networks = overlay.Networks
+	}
+	if len(overlay.NetworkIPs) > 0 {
+		merged.NetworkIPs = overlay.NetworkIPs
+	}
+	if len(overlay.Labels) > 0 {
+		merged.Labels = overlay.Labels
+	}
+}
+
+func containerPorts(spec *Spec) (map[int]int, bool) {
+	defer perf.Track(nil, "emulator.containerPorts")()
+
+	specPorts, err := spec.ContainerPorts()
+	if err != nil || len(specPorts) == 0 {
+		return nil, false
+	}
+	ports := make(map[int]int, len(specPorts))
+	for _, binding := range specPorts {
+		if binding.Container != 0 {
+			ports[binding.Container] = binding.Container
+		}
+	}
+	return ports, len(ports) > 0
 }
 
 // Down stops and removes the emulator's container.
@@ -535,11 +639,12 @@ func (m *Manager) Exec(ctx context.Context, stack, name string, command []string
 
 // Status is one row of `atmos emulator ps` / `atmos emulator list`.
 type Status struct {
-	Name   string
-	Stack  string
-	Image  string
-	Status string
-	ID     string
+	Name      string
+	Stack     string
+	Image     string
+	Status    string
+	Container string
+	ID        string
 }
 
 // Ps lists emulator containers (by canonical labels). When stack is non-empty it
@@ -566,11 +671,12 @@ func (m *Manager) Ps(ctx context.Context, stack string) ([]Status, error) {
 			continue
 		}
 		statuses = append(statuses, Status{
-			Name:   infos[i].Labels[container.LabelComponent],
-			Stack:  instanceStack,
-			Image:  infos[i].Image,
-			Status: infos[i].Status,
-			ID:     infos[i].ID,
+			Name:      infos[i].Labels[container.LabelComponent],
+			Stack:     instanceStack,
+			Image:     infos[i].Image,
+			Status:    infos[i].Status,
+			Container: infos[i].Name,
+			ID:        infos[i].ID,
 		})
 	}
 	return statuses, nil

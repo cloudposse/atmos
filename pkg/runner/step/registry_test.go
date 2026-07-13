@@ -14,7 +14,7 @@ func TestRegistryGet(t *testing.T) {
 	// Test Get for existing handlers.
 	existingHandlers := []string{
 		"shell", "atmos", "input", "confirm", "choose", "filter",
-		"file", "write", "toast", "alert", "title", "clear",
+		"file", "write", "toast", "hint", "alert", "title", "clear",
 		"linebreak", "markdown", "spin", "table", "pager",
 		"format", "join", "style", "log", "env", "exit",
 		"stage", "sleep", "say",
@@ -75,6 +75,7 @@ func TestRegistryListByCategory(t *testing.T) {
 	assert.True(t, categoryHas(CategoryOutput, "spin"))
 	assert.True(t, categoryHas(CategoryOutput, "table"))
 	assert.True(t, categoryHas(CategoryUI, "toast"))
+	assert.True(t, categoryHas(CategoryUI, "hint"))
 	assert.True(t, categoryHas(CategoryUI, "title"))
 	assert.True(t, categoryHas(CategoryCommand, "shell"))
 	assert.True(t, categoryHas(CategoryCommand, "atmos"))

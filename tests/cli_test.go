@@ -35,9 +35,11 @@ import (
 
 	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -435,13 +437,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
-	// 5b. Join hint paths that may be split across lines due to terminal width wrapping.
+	// 5b. Join diagnostic paths that may be split across lines due to terminal width wrapping.
 	// This ensures consistent snapshots across platforms with different terminal widths.
 	// Example:
 	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
 	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
-	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
-	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex := regexp.MustCompile(`((?:💡\s*)?[^:\n]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = diagnosticPathRegex.ReplaceAllString(result, "$1 $2")
 
 	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
 	// Example:
@@ -517,6 +519,14 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	terraformCommandEnvLogRegex := regexp.MustCompile(`(?m)^.*Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=[^\n]*\n?`)
 	result = terraformCommandEnvLogRegex.ReplaceAllString(result, "")
 
+	// 16. Drop environment-dependent GitHub authentication debug logs.
+	// These lines depend on whether gh is installed/authenticated in the runner and do not affect
+	// the command behavior under test.
+	githubCLITokenLookupLogRegex := regexp.MustCompile(`(?m)^.*GitHub CLI token lookup failed \(CLI may not be installed or authenticated\)[^\n]*\n?`)
+	result = githubCLITokenLookupLogRegex.ReplaceAllString(result, "")
+	anonymousGitHubAccessLogRegex := regexp.MustCompile(`(?m)^.*No GitHub token resolved; using anonymous \(unauthenticated\) GitHub access \(subject to rate limits\)[^\n]*\n?`)
+	result = anonymousGitHubAccessLogRegex.ReplaceAllString(result, "")
+
 	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
 	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
@@ -553,12 +563,12 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
 	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
 
-	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
-	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// E.g., "Stacks directory not found:\n/absolute/path" vs "Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
-	hintPathRegex2 := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
-	result = hintPathRegex2.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex2 := regexp.MustCompile(`(?m)((?:💡\s*)?[A-Z][^\n]{0,200}?:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = diagnosticPathRegex2.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
@@ -699,7 +709,7 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func validateAtmosBinary(repoRoot string) (string, string) {
 	binaryPath, err := exec.LookPath("atmos")
 	if err != nil {
-		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'atmos build' to build the binary.", os.Getenv("PATH"))
 	}
 
 	rel, err := filepath.Rel(repoRoot, binaryPath)
@@ -1099,7 +1109,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
+		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
 	}
 
 	// Standardize the terraform binary on OpenTofu for the whole suite so the
@@ -1662,6 +1672,131 @@ func normalizeLineEndings(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
+func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
+	normalized := normalizeLineEndings(input)
+	normalized = unwrapMarkdownProseLines(normalized)
+	if ignoreTrailingWhitespace {
+		return stripTrailingWhitespace(normalized)
+	}
+	return normalized
+}
+
+func unwrapMarkdownProseLines(input string) string {
+	lines := strings.Split(input, "\n")
+	if len(lines) < 2 {
+		return input
+	}
+
+	var result []string
+	inFence := false
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(atmosansi.Strip(line))
+		if strings.HasPrefix(trimmed, "```") {
+			inFence = !inFence
+			result = append(result, line)
+			continue
+		}
+
+		for !inFence && i+1 < len(lines) && shouldUnwrapMarkdownProseLine(line, lines[i+1]) {
+			line = strings.TrimRight(line, " \t") + " " + strings.TrimLeft(lines[i+1], " \t")
+			i++
+		}
+
+		result = append(result, line)
+	}
+
+	return strings.Join(result, "\n")
+}
+
+func shouldUnwrapMarkdownProseLine(line, next string) bool {
+	plain := atmosansi.Strip(line)
+	nextPlain := atmosansi.Strip(next)
+	trimmed := strings.TrimSpace(plain)
+	nextTrimmed := strings.TrimSpace(nextPlain)
+	if trimmed == "" || nextTrimmed == "" {
+		return false
+	}
+	if strings.HasPrefix(plain, " ") || strings.HasPrefix(plain, "\t") ||
+		strings.HasPrefix(nextPlain, " ") || strings.HasPrefix(nextPlain, "\t") {
+		return false
+	}
+	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
+		return false
+	}
+	if looksLikeDataLine(trimmed) {
+		return false
+	}
+	if len([]rune(trimmed)) < 50 && !strings.HasPrefix(trimmed, "**Error:**") && !strings.HasPrefix(trimmed, "💡") {
+		return false
+	}
+	return true
+}
+
+// snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
+// at the start of a rendered log line. These must never be merged into
+// adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+
+// snapshotToastIconPrefixes lists the canonical single-line toast icons from
+// pkg/ui/theme/icons.go. A line starting with one of these icons is always an
+// independent ui.Success/Info/Warning/Error/Experimental call, never a
+// word-wrapped continuation of the previous line's markdown paragraph, so it
+// must never be merged during snapshot normalization. Sourced directly from
+// the theme package so new icons don't silently reopen this bug.
+var snapshotToastIconPrefixes = []string{
+	theme.IconCheckmark,
+	theme.IconXMark,
+	theme.IconWarning,
+	theme.IconInfo,
+	theme.IconExperimental,
+}
+
+func isSnapshotStructuralLine(line string) bool {
+	switch {
+	case strings.HasPrefix(line, "#"):
+		return true
+	case strings.HasPrefix(line, "- "):
+		return true
+	case strings.HasPrefix(line, "* "):
+		return true
+	// "• " is the glamour-rendered bullet glyph that markdown source "- "/"* "
+	// becomes after rendering; treat it the same as the raw markdown prefixes above.
+	case strings.HasPrefix(line, "• "):
+		return true
+	case strings.HasPrefix(line, "```"):
+		return true
+	case strings.HasPrefix(line, "│"):
+		return true
+	case strings.HasPrefix(line, "╷") || strings.HasPrefix(line, "╵"):
+		return true
+	// charm-log level prefixes must never be merged into adjacent markdown prose.
+	case snapshotLogLevelPrefixRe.MatchString(line):
+		return true
+	default:
+		for _, icon := range snapshotToastIconPrefixes {
+			if strings.HasPrefix(line, icon) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func looksLikeDataLine(line string) bool {
+	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "]") {
+		return true
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_.-]+:\s`).MatchString(line) && !strings.HasPrefix(line, "**Error:**") {
+		return true
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_.-]+\s*=`).MatchString(line) {
+		return true
+	}
+	return false
+}
+
 // Generate a unified diff using gotextdiff.
 func generateUnifiedDiff(actual, expected string) string {
 	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
@@ -1738,15 +1873,11 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
-	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		outputToSave := combinedOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			outputToSave = stripTrailingWhitespace(combinedOutput)
-		}
+	combinedOutput = normalizeSnapshotOutput(combinedOutput, tc.Expect.IgnoreTrailingWhitespace)
 
+	if regenerate {
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, outputToSave)
+		updateSnapshot(ttyPath, combinedOutput)
 		return true
 	}
 
@@ -1757,13 +1888,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	}
 
 	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
-	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredActual = stripTrailingWhitespace(filteredActual)
-		filteredExpected = stripTrailingWhitespace(filteredExpected)
-	}
+	filteredExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, ttyPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredExpected != filteredActual {
 		var diff string
@@ -1821,8 +1946,8 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Normalize line endings in actual output for cross-platform consistency.
 	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
-	stdoutOutput = normalizeLineEndings(stdoutOutput)
-	stderrOutput = normalizeLineEndings(stderrOutput)
+	stdoutOutput = normalizeSnapshotOutput(stdoutOutput, tc.Expect.IgnoreTrailingWhitespace)
+	stderrOutput = normalizeSnapshotOutput(stderrOutput, tc.Expect.IgnoreTrailingWhitespace)
 
 	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
@@ -1834,18 +1959,10 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		stdoutToSave := stdoutOutput
-		stderrToSave := stderrOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
-			stderrToSave = stripTrailingWhitespace(stderrOutput)
-		}
-
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutToSave)
+		updateSnapshot(stdoutPath, stdoutOutput)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrToSave)
+		updateSnapshot(stderrPath, stderrOutput)
 		return true
 	}
 
@@ -1857,13 +1974,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
-	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStdoutActual = stripTrailingWhitespace(filteredStdoutActual)
-		filteredStdoutExpected = stripTrailingWhitespace(filteredStdoutExpected)
-	}
+	filteredStdoutExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stdoutPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
@@ -1884,13 +1995,7 @@ Run the following command to create it:
 $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
-	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStderrActual = stripTrailingWhitespace(filteredStderrActual)
-		filteredStderrExpected = stripTrailingWhitespace(filteredStderrExpected)
-	}
+	filteredStderrExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stderrPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string

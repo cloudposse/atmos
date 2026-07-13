@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -54,6 +55,7 @@ type EphemeralConfig struct {
 	CleanupPolicy     string
 	TTY               bool
 	Interactive       bool
+	Stdin             io.Reader
 	Host              bool // grant access to the host container runtime (Docker-out-of-Docker)
 }
 
@@ -226,13 +228,15 @@ func execEphemeralCommand(ctx context.Context, runtime Runtime, containerID stri
 		User:         config.User,
 		WorkingDir:   config.WorkspaceFolder,
 		Env:          config.Env,
-		AttachStdin:  config.Interactive,
+		AttachStdin:  config.Interactive || config.Stdin != nil,
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty:          config.TTY,
 	}
 
-	if config.Interactive {
+	if config.Stdin != nil {
+		opts.Stdin = config.Stdin
+	} else if config.Interactive {
 		opts.Stdin = os.Stdin
 	}
 

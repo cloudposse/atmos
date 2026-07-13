@@ -53,7 +53,20 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	}
 
 	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(*config)
+	detectedWidth := detectFormatterTerminalWidth()
+	width := config.Settings.Terminal.MaxWidth
+	if width == detectedWidth {
+		width = 0
+	}
+	//nolint:staticcheck // Deprecated docs max-width remains supported as a compatibility fallback.
+	if width <= 0 {
+		width = config.Settings.Docs.MaxWidth
+	}
+	if width <= 0 {
+		width = DefaultMarkdownWidth
+	}
+
+	render, err = markdown.NewRenderer(*config, markdown.WithWidth(uint(width)))
 	if err != nil {
 		log.Error("failed to initialize Markdown renderer", "error", err)
 	}
@@ -121,9 +134,9 @@ func appendErrorDetails(out *strings.Builder, err error) {
 	if len(details) == 0 {
 		return
 	}
-	fmt.Fprintf(out, "\nExplanation:\n")
+	fmt.Fprintln(out)
 	for _, d := range details {
-		fmt.Fprintf(out, "  • %s\n", d)
+		fmt.Fprintf(out, "%s\n", d)
 	}
 }
 
@@ -147,9 +160,9 @@ func appendErrorHints(out *strings.Builder, err error) {
 	if len(userHints) == 0 {
 		return
 	}
-	fmt.Fprintf(out, "\nHints:\n")
+	fmt.Fprintln(out)
 	for _, h := range userHints {
-		fmt.Fprintf(out, "  • %s\n", h)
+		fmt.Fprintf(out, "💡 %s\n", h)
 	}
 }
 
@@ -237,9 +250,9 @@ func printFormattedError(err error, title string, suggestion string) {
 
 			// Check if suggestion contains markdown sections (backward compatibility).
 			// Old code passed suggestions like "\n## Explanation\n..." which should be
-			// added as explanations, not hints, to avoid rendering empty hint sections.
+			// added as explanations, not hints.
 			if strings.Contains(suggestion, "\n##") || strings.HasPrefix(trimmed, "##") {
-				// Strip the "## Explanation" header if present since formatter adds it.
+				// Strip the legacy "## Explanation" header if present.
 				cleaned := strings.TrimLeft(suggestion, "\n")
 				cleaned = strings.TrimPrefix(cleaned, "## Explanation\n")
 				cleaned = strings.TrimPrefix(cleaned, "## Explanation")
@@ -247,8 +260,8 @@ func printFormattedError(err error, title string, suggestion string) {
 				builder = builder.WithExplanation(cleaned)
 			} else {
 				// Only add as hint if it's not empty after trimming.
-				// This prevents rendering empty "## Hints" sections for suggestions
-				// that are just whitespace or newlines.
+				// This prevents rendering empty hint lines for suggestions that are
+				// just whitespace or newlines.
 				if trimmed != "" {
 					builder = builder.WithHint(trimmed)
 				}
@@ -271,11 +284,9 @@ func printFormattedError(err error, title string, suggestion string) {
 
 	// Color mode is now determined by terminal settings (--no-color, --force-color, etc.)
 	// and does not need to be configured here.
-	config := FormatterConfig{
-		Verbose:       verbose,
-		MaxLineLength: DefaultMaxLineLength,
-		Title:         title, // Use provided title if any.
-	}
+	config := DefaultFormatterConfig()
+	config.Verbose = verbose
+	config.Title = title // Use provided title if any.
 	formatted := Format(err, config)
 
 	// Write directly to os.Stderr instead of using ui.MarkdownMessage() to avoid
@@ -290,7 +301,7 @@ func printFormattedError(err error, title string, suggestion string) {
 	//
 	// The formatted output is already rendered markdown, so writing to stderr is correct.
 	// Note: Error output is not masked to avoid import cycles with pkg/io.
-	_, printErr := os.Stderr.WriteString(formatted + "\n")
+	_, printErr := os.Stderr.WriteString(strings.TrimRight(formatted, "\n") + "\n")
 	if printErr != nil {
 		log.Error(printErr)
 		log.Error(err)

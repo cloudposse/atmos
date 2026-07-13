@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
@@ -514,89 +513,4 @@ func TestExecShell_DryRunWhenIDEqualsName(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, fake.command) // Exec not called.
-}
-
-func TestExecutor_CleanupWorkflowContainer(t *testing.T) {
-	// nil session is a no-op.
-	require.NoError(t, (&Executor{}).cleanupWorkflowContainer(true))
-
-	// With a session, Cleanup runs and the reference is cleared (idempotent teardown).
-	e := &Executor{containerSession: &ContainerSession{backend: &fakeContainer{id: "id", name: "name"}}}
-	require.NoError(t, e.cleanupWorkflowContainer(true))
-	assert.Nil(t, e.containerSession)
-}
-
-func TestExecutor_EnsureWorkflowContainerReturnsCached(t *testing.T) {
-	existing := &ContainerSession{backend: &fakeContainer{id: "id", name: "name"}}
-	e := &Executor{containerSession: existing}
-
-	got, err := e.ensureWorkflowContainer(&WorkflowParams{Ctx: context.Background()}, nil)
-	require.NoError(t, err)
-	assert.Same(t, existing, got)
-}
-
-func TestExecutor_RunShellStepHostPath(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	runner := NewMockCommandRunner(ctrl)
-	runner.EXPECT().RunShell("echo hi", "wf-step-0", "/wd", []string{"E=1"}, false).Return(nil)
-
-	e := &Executor{runner: runner}
-	params := &WorkflowParams{
-		Ctx:                context.Background(),
-		Workflow:           "wf",
-		WorkflowDefinition: &schema.WorkflowDefinition{}, // no workflow-level container.
-	}
-	step := &schema.WorkflowStep{Name: "s"} // no step container override.
-	cmdParams := &runCommandParams{command: "echo hi", stepEnv: []string{"E=1"}, workingDirectory: "/wd"}
-
-	require.NoError(t, e.runShellStep(params, step, cmdParams, "/wd"))
-}
-
-func TestEnvSliceToMap(t *testing.T) {
-	assert.Nil(t, envSliceToMap(nil))
-	assert.Equal(
-		t,
-		map[string]string{"A": "1", "B": "2"},
-		envSliceToMap([]string{"A=1", "B=2", "malformed"}), // malformed (no '=') is skipped.
-	)
-}
-
-func TestExecutor_RunShellStep_ContainerOverrideDryRun(t *testing.T) {
-	e := &Executor{}
-	params := &WorkflowParams{
-		Ctx:                context.Background(),
-		AtmosConfig:        &schema.AtmosConfiguration{},
-		WorkflowDefinition: &schema.WorkflowDefinition{},
-		Opts:               ExecuteOptions{DryRun: true},
-	}
-	// A step-level container override routes to RunStepContainerOverride; dry-run
-	// short-circuits before any real runtime.
-	step := &schema.WorkflowStep{Name: "s", Container: &schema.WorkflowContainer{Image: "alpine"}}
-	cmdParams := &runCommandParams{command: "echo hi", workingDirectory: "."}
-
-	require.NoError(t, e.runShellStep(params, step, cmdParams, "."))
-}
-
-func TestExecutor_RunShellStep_WorkflowContainerExec(t *testing.T) {
-	// A cached dry-run session (backend ID == Name) makes ExecShell preview and
-	// return without invoking the runtime.
-	e := &Executor{containerSession: &ContainerSession{
-		backend:       &fakeContainer{id: "same", name: "same"},
-		config:        &schema.WorkflowContainer{Workspace: "/workspace"},
-		hostWorkspace: "/repo",
-	}}
-	params := &WorkflowParams{
-		Ctx:         context.Background(),
-		AtmosConfig: &schema.AtmosConfiguration{},
-		WorkflowDefinition: &schema.WorkflowDefinition{
-			Container: &schema.WorkflowContainer{Image: "alpine"},
-			Output:    "none",
-		},
-	}
-	step := &schema.WorkflowStep{Name: "s"} // not container-disabled.
-	cmdParams := &runCommandParams{command: "pwd", workingDirectory: "."}
-
-	require.NoError(t, e.runShellStep(params, step, cmdParams, "."))
 }

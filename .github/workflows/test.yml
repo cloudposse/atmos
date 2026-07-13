@@ -31,10 +31,16 @@ permissions:
   pull-requests: read
 
 env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
+  # Use pipe fallback so transient proxy.golang.org errors (5xx, HTTP/2 stream
+  # resets) during `go mod download` fall back to direct module fetches. The
+  # default comma-separated GOPROXY list only falls through on "not found"
+  # responses, not network errors. See .github/workflows/native-ci.yml.
+  GOPROXY: "https://proxy.golang.org|direct"
 
 jobs:
   # ensure the code builds...
@@ -45,8 +51,9 @@ jobs:
     # and on top of that the post-job Go cache save (tar + zstd of
     # GOMODCACHE/GOCACHE) takes several minutes. A cold cache after dependency
     # changes plus that save pushes the job past a tight limit and the run gets
-    # cancelled. Give the slowest target enough headroom for build + cache save.
-    timeout-minutes: 30
+    # cancelled mid-save (see #2713's windows build being killed at 30m10s).
+    # Give the slowest target real headroom for build + cache save.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -67,7 +74,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
         if: matrix.target == 'linux'
 
-      - name: Build
+      - name: Announce build target
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
 
@@ -90,20 +97,37 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
+      - name: Set up Atmos
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          make deps
+          # go mod download hits the network (proxy.golang.org, falling back to
+          # a direct github.com clone for modules it doesn't index) and has no
+          # built-in retry. A transient DNS resolution failure on the hosted
+          # runner otherwise fails this whole build matrix leg and cascades into
+          # skipped downstream jobs (e.g. k3s-required's "Check k3s matrix
+          # result" gate). `atmos build deps` (.atmos.d/build.yaml) wraps it
+          # with a retry policy instead of hand-rolling a shell loop here.
+          atmos build deps
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          make build-${{ matrix.target }}
+          atmos build binary --target=${{ matrix.target }} --version=test
 
       - name: Version
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          make version-${{ matrix.target }}
+          atmos build version --target=${{ matrix.target }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -121,15 +145,12 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    timeout-minutes: 60
+    timeout-minutes: 75
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
-        if: matrix.flavor.target == 'linux'
-
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -166,7 +187,7 @@ jobs:
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@3286471d6cc6756d056a0b199fea5e0becdbc189 # main
+        uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           version: ${{ env.PACKER_VERSION }}
@@ -225,7 +246,7 @@ jobs:
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make deps
+          atmos build deps
 
       - name: Terraform registry cache acceptance test
         timeout-minutes: 25
@@ -243,8 +264,10 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
+      # TestTerraformRegistryCache runs once above on every active OS. Skip it
+      # here so Linux coverage does not execute the same trust/cache test twice.
       - name: Acceptance tests with coverage
-        timeout-minutes: 45
+        timeout-minutes: 60
         if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -254,10 +277,17 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: make testacc-cover
+        run: TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
 
       - name: Acceptance tests
-        timeout-minutes: 45
+        # windows-latest is the slowest target for this suite too (see the
+        # Build job's timeout comment above): it has repeatedly run right up
+        # against a 45-minute cap and then gotten force-cancelled by the step
+        # timeout before finishing, failing the job with no real test failure
+        # in the logs. Give it the same headroom as Linux's coverage-enabled
+        # run (60m); macOS finishes this step in ~35m today so the extra
+        # headroom is a no-op for it.
+        timeout-minutes: 60
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -267,21 +297,52 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: make testacc
+        run: atmos test acceptance
+
+      - name: Upload coverage report artifact
+        if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-coverage-linux
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  coverage:
+    name: Upload acceptance coverage to Codecov
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download linux coverage report artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: acceptance-coverage-linux
+          path: ${{ github.workspace }}
 
       - name: Upload coverage report to Codecov
-        if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
+        timeout-minutes: 10
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
           files: coverage.out
+          disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key
           # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
           # No public key") make verification exit 1, which would hard-fail this
           # job even when every test passed. Don't let a coverage-upload/infra
-          # flake fail a green test run — the 80% coverage gate is still enforced
+          # flake fail a green test run — the 85% coverage gate is still enforced
           # by Codecov's own PR status check, independent of this step's exit code.
           fail_ci_if_error: false
           flags: unittests
@@ -316,7 +377,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -328,7 +389,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -468,6 +529,8 @@ jobs:
     runs-on: ${{ matrix.flavor.os }}
     env:
       ATMOS_LOGS_LEVEL: Debug
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -478,7 +541,7 @@ jobs:
           - demo-helmfile
           - helm
 
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -490,17 +553,23 @@ jobs:
       # kubernetes`), which runs the privileged k3s container itself on the runner's
       # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
-      - name: Start Docker-compatible runtime on macOS
-        if: matrix.flavor.target == 'macos'
-        run: |
-          if brew tap | grep -qx 'aws/tap'; then
-            brew untap aws/tap
-          fi
-          brew install colima docker qemu
-          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
-          docker version
-
+      # Download the build artifact before starting Colima. Colima's VM bring-up
+      # attaches new virtual network interfaces on the macOS host, which can
+      # transiently disrupt host DNS resolution right as it happens; this is the
+      # only step in the job that needs public DNS from the host, so keep it away
+      # from that window. actions/download-artifact also doesn't retry network
+      # errors like ENOTFOUND (only retries HTTP 5xx/429), so add a manual retry
+      # as defense-in-depth, mirroring the retry loop used below for `atmos test`.
       - name: Download build artifacts
+        id: download_artifacts_1
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: build-artifacts-${{ matrix.flavor.artifact }}
+          path: /usr/local/bin
+
+      - name: Download build artifacts (retry)
+        if: steps.download_artifacts_1.outcome == 'failure'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-${{ matrix.flavor.artifact }}
@@ -509,29 +578,10 @@ jobs:
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
 
-      - name: Install the Cloud Posse package repository
-        if: matrix.flavor.target == 'linux'
-        run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
-
-      - name: Install kubectl and helmfile on Linux
-        if: matrix.flavor.target == 'linux'
-        run: sudo apt-get -y install kubectl helmfile
-
-      - name: Install kubectl and helmfile on macOS
+      - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        run: |
-          if brew tap | grep -qx 'aws/tap'; then
-            brew untap aws/tap
-          fi
-          brew install kubectl helmfile
-
-      - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff
+        timeout-minutes: 45
+        uses: ./.github/actions/setup-colima
 
       - name: Write a default AWS profile to the AWS config file
         run: |
@@ -541,7 +591,65 @@ jobs:
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
-          atmos test
+          run_with_timeout() {
+            python3 - "$@" <<'PY'
+          import os
+          import signal
+          import subprocess
+          import sys
+
+          timeout = int(sys.argv[1])
+          cmd = sys.argv[2:]
+          proc = subprocess.Popen(cmd, start_new_session=True)
+          try:
+              raise SystemExit(proc.wait(timeout=timeout))
+          except subprocess.TimeoutExpired:
+              print(f"{' '.join(cmd)} timed out after {timeout}s", file=sys.stderr)
+              os.killpg(proc.pid, signal.SIGTERM)
+              try:
+                  proc.wait(timeout=10)
+              except subprocess.TimeoutExpired:
+                  os.killpg(proc.pid, signal.SIGKILL)
+                  proc.wait()
+              raise SystemExit(124)
+          PY
+          }
+
+          cleanup_k3s() {
+            atmos emulator down kubernetes -s dev || true
+            docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
+          }
+
+          # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
+          # Bound each attempt so the matrix can retry instead of consuming the
+          # whole job timeout and cancelling the required aggregate check.
+          attempt_timeout=1500
+          if [ "${{ matrix.flavor.target }}" = "macos" ]; then
+            attempt_timeout=900
+          fi
+
+          trap cleanup_k3s EXIT
+          for attempt in 1 2; do
+            run_with_timeout "${attempt_timeout}" atmos test && exit 0
+            status=$?
+            echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            cleanup_k3s
+            [ "${attempt}" -lt 2 ] && sleep 15
+          done
+          exit "${status}"
+
+  k3s-required:
+    name: "[k3s] demo-helmfile"
+    needs: k3s
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Check k3s matrix result
+        run: |
+          if [ "${{ needs.k3s.result }}" != "success" ]; then
+            echo "k3s matrix result was '${{ needs.k3s.result }}'"
+            exit 1
+          fi
 
   # Exercise the Kubernetes native component against a real kube-apiserver+etcd
   # control plane (started by controller-runtime envtest): server-side apply,
@@ -583,7 +691,7 @@ jobs:
           GOCACHE: ${{ runner.temp }}/go-build
           GOTMPDIR: ${{ runner.temp }}/go-tmp
           TMPDIR: ${{ runner.temp }}/tmp
-          # Atmos builds with CGO disabled (see Makefile). Match that here so the
+          # Atmos builds with CGO disabled. Match that here so the
           # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
           # are not compiled — they are unused and libudev is absent on runners.
           CGO_ENABLED: "0"
@@ -811,6 +919,7 @@ jobs:
           - custom-components
           - sops-secrets
           - onepassword-secrets
+          - packer-docker
           # quick-start-advanced and native-terraform are intentionally NOT validated here:
           #   - quick-start-advanced: its `stacks/workflows/*.yaml` manifests use newer workflow
           #     step types (`type: stage`/`spin`, `title:`) that the atmos-manifest JSON Schema
@@ -893,6 +1002,11 @@ jobs:
           atmos workflow push-local-registry -f container-step
           atmos workflow workspace -f container-step
           atmos workflow env -f container-step
+          grep -q "## .*atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q "## .*localhost:5000/atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q '| Digest | `sha256:' "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Layers (" "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Raw JSON</summary>" "$GITHUB_STEP_SUMMARY"
 
       - name: Verify a failing container step propagates a non-zero exit code
         working-directory: examples/container-step

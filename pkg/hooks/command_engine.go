@@ -53,6 +53,12 @@ const executableBits os.FileMode = 0o111
 // every log line so log search by `kind=trivy` etc. works consistently.
 const logKeyKind = "kind"
 
+// shouldPropagateHookLogGroupSentinel is a test seam for subprocess environment
+// construction.
+//
+//nolint:gochecknoglobals // test seam for CI log grouping.
+var shouldPropagateHookLogGroupSentinel = ci.ShouldPropagateLogGroupSentinel
+
 // init registers the generic `command` kind so users can invoke arbitrary
 // toolchain-resolved binaries without writing Go.
 func init() {
@@ -97,6 +103,9 @@ func (e *CommandEngine) Run(ctx *ExecContext) (*Output, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	endLogGroup := startHookLogGroup(ctx)
+	defer endLogGroup()
 
 	runErr := runSubprocess(prep)
 	updateExecCtx(ctx, outputFile, tmpDir, runErr)
@@ -186,10 +195,15 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 			Err()
 	}
 
+	env := mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv)
+	if shouldPropagateHookLogGroupSentinel(ctx.AtmosConfig, ci.DimensionPhase) {
+		env = append(env, ci.LogGroupSentinelEnv())
+	}
+
 	return &subprocessPrep{
 		binary: resolved,
 		args:   args,
-		env:    mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv),
+		env:    env,
 	}, nil
 }
 
@@ -270,6 +284,44 @@ func renderTerminal(ctx *ExecContext, out *Output) {
 		ui.Writeln("")
 		ui.MarkdownMessage(string(out.Artifact.Body))
 	}
+}
+
+func startHookLogGroup(ctx *ExecContext) func() {
+	if !ciEnabled(ctx) {
+		return func() {}
+	}
+	return ci.StartLogGroup(hookLogGroupTitle(ctx))
+}
+
+func hookLogGroupTitle(ctx *ExecContext) string {
+	if ctx == nil {
+		return "hook"
+	}
+
+	label := strings.TrimSpace(ctx.HookName)
+	kind := ""
+	command := ""
+	if ctx.Hook != nil {
+		kind = strings.TrimSpace(ctx.Hook.Kind)
+		command = strings.TrimSpace(ctx.Hook.Command)
+	}
+	if label == "" {
+		label = kind
+	}
+	if label == "" {
+		label = command
+	}
+	if label == "" {
+		label = "hook"
+	}
+
+	if kind != "" && kind != label {
+		label = fmt.Sprintf("%s (%s)", label, kind)
+	}
+	if ctx.Event != "" {
+		return fmt.Sprintf("hook %s - %s", label, ctx.Event)
+	}
+	return fmt.Sprintf("hook %s", label)
 }
 
 // BuildAtmosEnv exposes the ATMOS_* env-var map builder to engines outside the

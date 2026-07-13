@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 )
 
@@ -195,6 +198,11 @@ parent:
 			},
 			wantErr: false,
 		},
+		{
+			name:    "process !include directive with missing file returns error",
+			yamlStr: "key: !include /this/path/does/not/exist-atmos-test.yaml",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -303,17 +311,17 @@ func TestHasCustomTag(t *testing.T) {
 		{
 			name:     "unknown custom tag",
 			tag:      "!unknown",
-			expected: false,
+			expected: true,
 		},
 		{
-			name:     "store tag (not in hasCustomTag list)",
+			name:     "store tag unsupported in atmos.yaml",
 			tag:      "!store",
-			expected: false,
+			expected: true,
 		},
 		{
-			name:     "template tag (not in hasCustomTag list)",
+			name:     "template tag unsupported in atmos.yaml",
 			tag:      "!template",
-			expected: false,
+			expected: true,
 		},
 	}
 
@@ -325,6 +333,59 @@ func TestHasCustomTag(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStandardYAMLTagsAreNotCustomTags(t *testing.T) {
+	for _, tag := range []string{"!!str", "!!int", "!!bool", "!!seq", "!!map"} {
+		t.Run(tag, func(t *testing.T) {
+			assert.False(t, hasCustomTag(tag))
+			assert.True(t, isStandardYAMLTag(tag))
+		})
+	}
+}
+
+func TestProcessScalarNodeValueRejectsTagTypos(t *testing.T) {
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!envv",
+		Value: "HOME",
+	}
+
+	result, err := processScalarNodeValue(node)
+
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "!envv")
+	assert.Contains(t, err.Error(), "!env")
+	assert.NotContains(t, err.Error(), "!store")
+}
+
+func TestProcessScalarNodeRejectsTagTypos(t *testing.T) {
+	v := viper.New()
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!includee",
+		Value: "file.yaml",
+	}
+
+	err := processScalarNode(node, v, "config.path")
+
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+	assert.Contains(t, err.Error(), "!includee")
+	assert.Contains(t, err.Error(), "config.path")
+	assert.Contains(t, err.Error(), "!include.raw")
+}
+
+func TestUnsupportedAtmosYamlTagErrorUsesCentralAtmosConfigCatalog(t *testing.T) {
+	err := unsupportedAtmosYamlTagError("!store", "settings.value")
+
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+	for _, tag := range fntag.AtmosConfigYAML() {
+		assert.Contains(t, err.Error(), tag)
+	}
+	assert.NotContains(t, err.Error(), "!store,")
+	assert.False(t, fntag.IsAtmosConfigYAML("!store"))
+	assert.True(t, fntag.IsAtmosConfigYAML("!include.raw"))
 }
 
 func TestContainsCustomTags(t *testing.T) {
@@ -545,7 +606,7 @@ func TestProcessScalarNodeValue(t *testing.T) {
 			},
 		},
 		{
-			name: "unknown tag returns decoded value",
+			name: "standard string tag returns decoded value",
 			setup: func(t *testing.T) *yaml.Node {
 				return &yaml.Node{
 					Kind:  yaml.ScalarNode,
@@ -576,6 +637,34 @@ func TestProcessScalarNodeValue(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "standard bool tag returns decoded value",
+			setup: func(t *testing.T) *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!!bool",
+					Value: "true",
+				}
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result any) {
+				assert.Equal(t, true, result)
+			},
+		},
+		{
+			name: "unsupported custom tag returns error",
+			setup: func(t *testing.T) *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!unknown",
+					Value: "value",
+				}
+			},
+			wantErr: true,
+			checkFunc: func(t *testing.T, result any) {
+				assert.Nil(t, result)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -587,8 +676,11 @@ func TestProcessScalarNodeValue(t *testing.T) {
 				t.Errorf("processScalarNodeValue() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+			if tt.wantErr {
+				assert.True(t, errors.Is(err, errUtils.ErrUnsupportedYamlTag) || errors.Is(err, ErrExecuteYamlFunctions))
+			}
 
-			if !tt.wantErr && tt.checkFunc != nil {
+			if tt.checkFunc != nil {
 				tt.checkFunc(t, result)
 			}
 		})
@@ -1119,6 +1211,65 @@ func TestProcessSequenceElement(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "value", resultMap["key"])
 	})
+}
+
+// TestDecodeNodeWithYamlFunctionsForFile_IncludeTag verifies that decoding a
+// scalar node tagged !include with a non-empty sourceFile resolves the include
+// relative to that source file (processIncludeNodeValueForFile), exercising
+// the AtmosYamlFuncInclude branch and successful resolved.Decode path.
+func TestDecodeNodeWithYamlFunctionsForFile_IncludeTag(t *testing.T) {
+	dir := t.TempDir()
+	includedPath := filepath.Join(dir, "included.yaml")
+	require.NoError(t, os.WriteFile(includedPath, []byte("included_key: included_value"), 0o644))
+
+	sourceFile := filepath.Join(dir, "atmos.yaml")
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("key: !include included.yaml"), &node))
+
+	got, err := decodeNodeWithYamlFunctionsForFile(&node, sourceFile)
+	require.NoError(t, err)
+
+	gotMap, ok := got.(map[string]interface{})
+	require.True(t, ok)
+	inner, ok := gotMap["key"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "included_value", inner["included_key"])
+}
+
+// TestDecodeNodeWithYamlFunctionsForFile_IncludeRawTag verifies the
+// !include.raw branch of processIncludeNodeValueForFile with a non-empty
+// sourceFile, reading the raw file contents as a string.
+func TestDecodeNodeWithYamlFunctionsForFile_IncludeRawTag(t *testing.T) {
+	dir := t.TempDir()
+	includedPath := filepath.Join(dir, "raw.txt")
+	require.NoError(t, os.WriteFile(includedPath, []byte("raw file contents"), 0o644))
+
+	sourceFile := filepath.Join(dir, "atmos.yaml")
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("key: !include.raw raw.txt"), &node))
+
+	got, err := decodeNodeWithYamlFunctionsForFile(&node, sourceFile)
+	require.NoError(t, err)
+
+	gotMap, ok := got.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "raw file contents", gotMap["key"])
+}
+
+// TestDecodeNodeWithYamlFunctionsForFile_IncludeTagMissingFile verifies that
+// an !include referencing a nonexistent file returns an error through
+// processIncludeNodeValueForFile's error-wrapping branch.
+func TestDecodeNodeWithYamlFunctionsForFile_IncludeTagMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	sourceFile := filepath.Join(dir, "atmos.yaml")
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("key: !include does-not-exist.yaml"), &node))
+
+	_, err := decodeNodeWithYamlFunctionsForFile(&node, sourceFile)
+	assert.Error(t, err)
 }
 
 func TestDecodeNodeWithYamlFunctions(t *testing.T) {

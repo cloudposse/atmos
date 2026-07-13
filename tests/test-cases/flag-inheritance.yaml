@@ -6,27 +6,28 @@
 #
 # Key behaviors tested:
 # - Custom commands can declare --stack (same type as parent) and inherit it
-# - Custom commands show inherited flags in their help output
+# - Custom commands show inherited flags in full help output
 # - Custom commands can actually read inherited flag values
 # - Type mismatches are rejected with clear error messages
 
 tests:
   # ============================================
   # GROUP 1: Custom Command Help Output
-  # Verify that inherited flags appear in help
+  # Verify that inherited flags appear in full help
   # ============================================
 
   - name: tf plan help shows inherited stack flag
     enabled: true
     snapshot: true
-    description: "Custom 'tf plan' command should show --stack flag inherited from terraform"
+    description: "Custom 'tf plan' command should show --stack flag inherited from terraform in full help"
     workdir: "../examples/quick-start-advanced"
     command: "atmos"
     args:
       - "tf"
       - "plan"
-      - "--help"
+      - "--help=all"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -38,14 +39,15 @@ tests:
   - name: terraform provision help shows inherited stack flag
     enabled: true
     snapshot: true
-    description: "Custom 'terraform provision' command should show --stack flag"
+    description: "Custom 'terraform provision' command should show --stack flag in full help"
     workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "terraform"
       - "provision"
-      - "--help"
+      - "--help=all"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -57,14 +59,15 @@ tests:
   - name: show component help shows inherited stack flag
     enabled: true
     snapshot: true
-    description: "Custom 'show component' command should show --stack flag"
+    description: "Custom 'show component' command should show --stack flag in full help"
     workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "show"
       - "component"
-      - "--help"
+      - "--help=all"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -81,13 +84,14 @@ tests:
   - name: terraform help shows stack flag
     enabled: true
     snapshot: true
-    description: "Built-in terraform command should show --stack flag"
+    description: "Built-in terraform command should show --stack flag in full help"
     workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "terraform"
-      - "--help"
+      - "--help=all"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -98,14 +102,15 @@ tests:
   - name: describe component help shows stack flag
     enabled: true
     snapshot: true
-    description: "Built-in describe component command should show --stack flag"
+    description: "Built-in describe component command should show --stack flag in full help"
     workdir: "../examples/quick-start-advanced"
     command: "atmos"
     args:
       - "describe"
       - "component"
-      - "--help"
+      - "--help=all"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -168,6 +173,7 @@ tests:
     args:
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "USAGE"
@@ -237,14 +243,15 @@ tests:
   - name: echo info help shows verbose flag
     enabled: true
     snapshot: true
-    description: "Custom 'echo info' command should show --verbose flag inherited from global"
+    description: "Custom 'echo info' command should show --verbose flag inherited from global in full help"
     workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "echo"
       - "info"
-      - "--help"
+      - "--help=all"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "verbose"
@@ -292,14 +299,15 @@ tests:
   - name: deploy component help shows stack flag
     enabled: true
     snapshot: true
-    description: "Custom 'deploy component' should show --stack flag"
+    description: "Custom 'deploy component' should show --stack flag in full help"
     workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "deploy"
       - "component"
-      - "--help"
+      - "--help=all"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"

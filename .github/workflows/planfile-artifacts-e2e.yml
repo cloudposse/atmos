@@ -43,6 +43,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
   # Pin the SHA so the plan upload and the apply download derive the identical
   # planfile key across both jobs.
   ATMOS_CI_SHA: ${{ github.sha }}
@@ -64,9 +65,15 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Build atmos
         run: |
-          make build
+          sh scripts/build-atmos.sh default test
           echo "$PWD/build" >> "$GITHUB_PATH"
 
       # Surface the runner's ACTIONS_* credentials to every later run step.
@@ -95,9 +102,15 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Build atmos
         run: |
-          make build
+          sh scripts/build-atmos.sh default test
           echo "$PWD/build" >> "$GITHUB_PATH"
 
       - name: Expose GitHub Actions runtime credentials

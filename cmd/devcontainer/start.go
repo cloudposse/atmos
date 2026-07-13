@@ -2,7 +2,6 @@ package devcontainer
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -12,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var startParser *flags.StandardParser
+var startParser *flags.StandardFlagParser
 
 // StartOptions contains parsed flags for the start command.
 type StartOptions struct {
@@ -31,7 +30,6 @@ it will be started. Use --instance to manage multiple instances of the same devc
 
 Use --identity to launch the container with Atmos-managed credentials.`,
 	Example:           markdown.DevcontainerStartUsageMarkdown,
-	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.start.RunE")()
@@ -44,16 +42,11 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 				Err()
 		}
 
-		// Parse flags using new options pattern.
-		v := viper.GetViper()
-		if err := startParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
-		opts, err := parseStartOptions(cmd, v, args)
+		parsed, err := startParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
+		opts := parseStartOptions(parsed)
 
 		// Handle identity selection if __SELECT__ sentinel value is used.
 		// This happens when user passes --identity without a value.
@@ -84,7 +77,7 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 		}
 
 		mgr := devcontainer.NewManager()
-		name := args[0]
+		name := parsed.PositionalArgs[0]
 		if err := mgr.Start(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
 			return err
 		}
@@ -100,15 +93,13 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 
 // parseStartOptions parses command flags into StartOptions.
 //
-// ParseStartOptions builds a StartOptions value by reading the relevant flag values from v.
-// The args parameter is unused and kept for consistency with other parse* functions.
-// It returns the populated StartOptions and a nil error.
-func parseStartOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*StartOptions, error) {
+// ParseStartOptions reads parsed flags into a StartOptions value.
+func parseStartOptions(parsed *flags.ParsedConfig) *StartOptions {
 	return &StartOptions{
-		Instance: v.GetString("instance"),
-		Attach:   v.GetBool("attach"),
-		Identity: v.GetString("identity"),
-	}, nil
+		Instance: flags.GetString(parsed.Flags, "instance"),
+		Attach:   flags.GetBool(parsed.Flags, "attach"),
+		Identity: flags.GetString(parsed.Flags, "identity"),
+	}
 }
 
 // init initializes the start subcommand by creating its flag parser (instance, attach, identity),
@@ -116,13 +107,16 @@ func parseStartOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*Star
 // start command to the devcontainer command tree.
 func init() {
 	// Create parser with start-specific flags using functional options.
-	startParser = flags.NewStandardParser(
+	var usage string
+	startParser, usage = newDevcontainerParser(
+		true,
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
 		flags.WithBoolFlag("attach", "", false, "Attach to the container after starting"),
 		flags.WithIdentityFlag(),
 		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
 		flags.WithEnvVars("attach", "ATMOS_DEVCONTAINER_ATTACH"),
 	)
+	startCmd.Use = "start " + usage
 
 	initCommandWithFlags(startCmd, startParser)
 	devcontainerCmd.AddCommand(startCmd)

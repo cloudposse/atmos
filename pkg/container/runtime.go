@@ -85,16 +85,24 @@ type BakeConfig struct {
 
 // ImageInfo contains metadata about a local container image.
 type ImageInfo struct {
-	ID           string
-	RepoTags     []string
-	RepoDigests  []string
-	Size         int64
-	Created      string
-	Architecture string
-	Os           string
-	Author       string
-	Labels       map[string]string
-	Layers       int
+	ID             string
+	RepoTags       []string
+	RepoDigests    []string
+	Size           int64
+	Created        string
+	Architecture   string
+	Os             string
+	Author         string
+	Labels         map[string]string
+	Env            []string
+	Cmd            []string
+	Entrypoint     []string
+	ExposedPorts   []string
+	StopSignal     string
+	StorageDriver  string
+	LayerDigests   []string
+	Layers         int
+	RawInspectJSON string
 }
 
 // PushResult contains metadata returned by a container image push.
@@ -112,6 +120,7 @@ type CreateConfig struct {
 	WorkspaceFolder string
 	Mounts          []Mount
 	Ports           []PortBinding
+	Networks        []NetworkAttachment
 	Env             map[string]string
 	User            string
 	Labels          map[string]string
@@ -164,16 +173,25 @@ type PortBinding struct {
 	Protocol      string // tcp, udp
 }
 
+// NetworkAttachment describes a container network membership created at
+// container-create time, including DNS aliases scoped to that network.
+type NetworkAttachment struct {
+	Name    string
+	Aliases []string
+}
+
 // Info represents container state information.
 type Info struct {
-	ID      string
-	Name    string
-	Image   string
-	Status  string // running, stopped, exited, etc.
-	Health  string // healthy, unhealthy, starting, or "" when no healthcheck.
-	Created time.Time
-	Ports   []PortBinding
-	Labels  map[string]string
+	ID         string
+	Name       string
+	Image      string
+	Status     string // running, stopped, exited, etc.
+	Health     string // healthy, unhealthy, starting, or "" when no healthcheck.
+	Created    time.Time
+	Ports      []PortBinding
+	Networks   []string
+	NetworkIPs map[string]string
+	Labels     map[string]string
 }
 
 // ExecOptions represents options for executing commands in containers.

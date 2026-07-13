@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -257,8 +258,64 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	if raw, ok := containerJSON["Ports"]; ok {
 		info.Ports = parsePodmanPorts(raw)
 	}
+	if networks := parsePodmanNetworks(containerJSON["Networks"]); len(networks) > 0 {
+		info.Networks = networks
+	}
+	if networkIPs := parsePodmanNetworkIPs(containerJSON["Networks"]); len(networkIPs) > 0 {
+		info.NetworkIPs = networkIPs
+	}
 
 	return info
+}
+
+func parsePodmanNetworkIPs(raw interface{}) map[string]string {
+	networks, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	result := make(map[string]string, len(networks))
+	for name, networkRaw := range networks {
+		network, ok := networkRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ip := getString(network, "IPAddress"); ip != "" {
+			result[name] = ip
+			continue
+		}
+		if ip := getString(network, "ip_address"); ip != "" {
+			result[name] = ip
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func parsePodmanNetworks(raw interface{}) []string {
+	switch v := raw.(type) {
+	case []interface{}:
+		networks := make([]string, 0, len(v))
+		for _, item := range v {
+			if name, ok := item.(string); ok && name != "" {
+				networks = append(networks, name)
+			}
+		}
+		sort.Strings(networks)
+		return networks
+	case map[string]interface{}:
+		networks := make([]string, 0, len(v))
+		for name := range v {
+			if name != "" {
+				networks = append(networks, name)
+			}
+		}
+		sort.Strings(networks)
+		return networks
+	default:
+		return nil
+	}
 }
 
 // parsePodmanPorts extracts published port bindings from a podman `ps --format json`

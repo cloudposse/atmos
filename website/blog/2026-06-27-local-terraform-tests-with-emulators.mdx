@@ -6,6 +6,8 @@ tags: [feature, dx]
 date: 2026-06-27
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Terraform's native testing framework (`*.tftest.hcl`) is great — until you hit a `run` block with
 `command = apply`. Those blocks create **real** infrastructure, so running them means a cloud account,
 credentials, and spend. Atmos now lets you point `terraform test` at a **local emulator**, so the same
@@ -46,6 +48,12 @@ atmos terraform test app -s fixtures
 That's it. The component hook starts the emulator, applies the fixture VPC, the `apply` run blocks create
 the app resources against that VPC, and everything is torn down — no AWS account, no credentials, no
 `providers.tf`.
+
+Here's that stack discovery and test run end to end:
+
+<CastPlayer src="/casts/examples/terraform-tests/stack-discovery.cast" title="atmos terraform tests" chrome controls scrubber />
+
+[View the full example](/examples/terraform-tests)
 
 ## Lifecycle Hooks Bring Fixtures Up and Down
 

@@ -51,6 +51,9 @@
     },
     "generate": {
       "$ref": "#/definitions/generate"
+    },
+    "version": {
+      "$ref": "#/definitions/version"
     }
   },
   "additionalProperties": true,
@@ -153,10 +156,14 @@
       ]
     },
     "step_condition": {
-      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
-      "oneOf": [
+      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate or CEL expression; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "anyOf": [
         {
           "$ref": "#/definitions/step_condition_predicate"
+        },
+        {
+          "type": "string",
+          "description": "CEL expression. Built-in predicate keywords are evaluated as predicates before CEL."
         },
         {
           "type": "array",
@@ -219,10 +226,14 @@
       ]
     },
     "condition": {
-      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
-      "oneOf": [
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate or CEL expression; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "anyOf": [
         {
           "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "string",
+          "description": "CEL expression. Built-in predicate keywords are evaluated as predicates before CEL."
         },
         {
           "type": "array",
@@ -1690,6 +1701,33 @@
                   }
                 }
               ]
+            },
+            "working_directory": {
+              "type": "string",
+              "description": "Working directory for the workflow."
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Environment variables applied to every step in the workflow."
+            },
+            "container": {
+              "$ref": "#/definitions/workflow_container"
+            },
+            "output": {
+              "type": "string",
+              "description": "Default output mode for steps in this workflow."
+            },
+            "viewport": {
+              "$ref": "#/definitions/workflow_viewport"
+            },
+            "show": {
+              "$ref": "#/definitions/workflow_show"
             }
           },
           "required": [
@@ -1698,17 +1736,211 @@
         }
       ]
     },
+    "workflow_viewport": {
+      "title": "workflow_viewport",
+      "description": "Viewport settings controlling the scrollback window for workflow step output.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "height": {
+              "type": "integer",
+              "description": "Viewport height in lines."
+            },
+            "width": {
+              "type": "integer",
+              "description": "Viewport width in columns."
+            }
+          }
+        }
+      ]
+    },
+    "workflow_show": {
+      "title": "workflow_show",
+      "description": "Automatic display settings for workflows. Each flag is tri-state: omitted inherits, true enables, false disables.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "header": {
+              "type": "boolean",
+              "description": "Auto-display the workflow description as a styled header before the first step."
+            },
+            "flags": {
+              "type": "boolean",
+              "description": "Display workflow-level flag values under the header (e.g. \"stack: dev\")."
+            },
+            "command": {
+              "type": "boolean",
+              "description": "Show each step command before execution (with a $ prefix)."
+            },
+            "count": {
+              "type": "boolean",
+              "description": "Show the step count prefix (e.g. \"[1/3]\")."
+            },
+            "progress": {
+              "type": "boolean",
+              "description": "Show a progress bar pinned to the bottom (Docker-build style, TTY only)."
+            },
+            "labels": {
+              "type": "boolean",
+              "description": "Show step boundary labels and completion/failure footers."
+            }
+          }
+        }
+      ]
+    },
+    "workflow_container": {
+      "title": "workflow_container",
+      "description": "Container execution settings for a workflow or step. Set to `false` to run on the host instead of a container.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "image": {
+              "type": "string",
+              "description": "Container image to run steps in."
+            },
+            "shell": {
+              "type": "string",
+              "description": "Shell used to execute commands inside the container."
+            },
+            "provider": {
+              "type": "string",
+              "description": "Container provider: docker, podman, or empty for auto-detect."
+            },
+            "runtime_auto_start": {
+              "type": "boolean",
+              "description": "Automatically start the container runtime when needed."
+            },
+            "pull": {
+              "type": "string",
+              "description": "Image pull policy: always, missing, or never."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "Path the repository is mounted to inside the container."
+            },
+            "workspace_read_only": {
+              "type": "boolean",
+              "description": "Mount the workspace read-only."
+            },
+            "cleanup": {
+              "type": "string",
+              "description": "Cleanup policy for the container after the workflow completes."
+            },
+            "user": {
+              "type": "string",
+              "description": "User to run as inside the container."
+            },
+            "run_args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra arguments passed to the container run command."
+            },
+            "mounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "description": "Additional volume mounts for the container."
+            },
+            "ports": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "description": "Port mappings for the container."
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Environment variables set inside the container."
+            }
+          }
+        }
+      ]
+    },
     "workflow_step": {
       "title": "workflow_step",
       "description": "Workflow step",
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "name": {
           "type": "string"
         },
         "command": {
           "type": "string"
+        },
+        "prompt": {
+          "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "Prompt text to render before simulated typed text."
+                },
+                "style": {
+                  "type": "string",
+                  "enum": [
+                    "command",
+                    "label",
+                    "muted",
+                    "info",
+                    "notice"
+                  ],
+                  "description": "Semantic Atmos theme style for the simulated prompt."
+                }
+              }
+            }
+          ]
+        },
+        "mode": {
+          "type": "string",
+          "description": "Mode for cast and simulate steps. Simulate supports typed and prompt."
+        },
+        "rate": {
+          "type": "string",
+          "description": "Delay between simulated typed characters, e.g. 35ms. Use 0 to write immediately."
+        },
+        "write_rate": {
+          "type": "string",
+          "description": "Default delay between cast session text writes, e.g. 35ms. Use 0 to write immediately."
+        },
+        "text": {
+          "type": "string",
+          "description": "Text for write, wait, or simulate steps."
         },
         "stack": {
           "type": "string"
@@ -1791,7 +2023,8 @@
                   "enum": [
                     "grouped",
                     "prefixed",
-                    "none"
+                    "none",
+                    "raw"
                   ]
                 },
                 "order": {
@@ -1806,6 +2039,34 @@
                 },
                 "prefix": {
                   "type": "string"
+                },
+                "cast": {
+                  "type": "string",
+                  "description": "Path to write the asciicast recording (cast steps)."
+                },
+                "gif": {
+                  "type": "string",
+                  "description": "Path to render an animated GIF from the cast recording (requires agg)."
+                },
+                "mp4": {
+                  "type": "string",
+                  "description": "Path to render an MP4 from the cast recording (requires agg and ffmpeg)."
+                },
+                "html": {
+                  "type": "string",
+                  "description": "Path to render a static HTML fragment of the final terminal content (native)."
+                },
+                "ascii": {
+                  "type": "string",
+                  "description": "Path to render the final terminal content as plain text with no ANSI codes (native)."
+                },
+                "png": {
+                  "type": "string",
+                  "description": "Path to render a static PNG image of the final terminal content (native)."
+                },
+                "jpg": {
+                  "type": "string",
+                  "description": "Path to render a static JPEG image of the final terminal content (native)."
                 }
               }
             }
@@ -1835,8 +2096,417 @@
               }
             }
           ]
+        },
+        "script": {
+          "type": "string",
+          "description": "Inline script body for the script step type."
+        },
+        "interpreter": {
+          "type": "string",
+          "description": "Script interpreter for the script step type (e.g. bash, python3)."
+        },
+        "interactive": {
+          "type": "boolean",
+          "description": "Attach host stdin to the step and let it handle Ctrl-C (like docker -i)."
+        },
+        "tty": {
+          "type": "boolean",
+          "description": "Allocate a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions."
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Options presented by the choose/filter step types."
+        },
+        "default": {
+          "type": "string",
+          "description": "Default value for the input/choose interactive step types."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text for the input step type."
+        },
+        "password": {
+          "type": "boolean",
+          "description": "Mask typed input for the input step type."
+        },
+        "multiple": {
+          "type": "boolean",
+          "description": "Allow selecting multiple options in the choose step type."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of selections for the choose step type."
+        },
+        "content": {
+          "type": "string",
+          "description": "Content for output step types (supports templates)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title for spin and pager step types."
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "description": "Row objects for the table step type."
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Column headers for the table step type."
+        },
+        "separator": {
+          "type": "string",
+          "description": "Separator for the join step type (default: newline)."
+        },
+        "path": {
+          "type": "string",
+          "description": "Starting path for the file picker step type, or target path for the workdir step type."
+        },
+        "source": {
+          "description": "Source for workdir provisioning; a string or a source map.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": true
+            }
+          ]
+        },
+        "reset": {
+          "type": "boolean",
+          "description": "Reset the target path before provisioning (workdir step type)."
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "File extension filter for the file picker step type."
+        },
+        "height": {
+          "type": "integer",
+          "description": "Editor height in lines for the write step type."
+        },
+        "viewport": {
+          "$ref": "#/definitions/workflow_viewport"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of blank lines emitted by the linebreak step type."
+        },
+        "foreground": {
+          "type": "string",
+          "description": "Foreground color for the style step type."
+        },
+        "background": {
+          "description": "Style background color (string) for the style step type, or a boolean async marker (`background: true`) for container step types.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "border": {
+          "type": "string",
+          "description": "Border style for the style step type: none, hidden, normal, rounded, thick, or double."
+        },
+        "border_foreground": {
+          "type": "string",
+          "description": "Border foreground color for the style step type."
+        },
+        "border_background": {
+          "type": "string",
+          "description": "Border background color for the style step type."
+        },
+        "padding": {
+          "type": "string",
+          "description": "Padding for the style step type: \"1\", \"1 2\", or \"1 2 1 2\" (top, right, bottom, left)."
+        },
+        "margin": {
+          "type": "string",
+          "description": "Margin for the style step type: \"1\", \"1 2\", or \"1 2 1 2\" (top, right, bottom, left)."
+        },
+        "width": {
+          "type": "integer",
+          "description": "Fixed width for the style step type."
+        },
+        "align": {
+          "type": "string",
+          "description": "Text alignment for the style step type: left, center, or right."
+        },
+        "bold": {
+          "type": "boolean",
+          "description": "Render text bold (style step type)."
+        },
+        "italic": {
+          "type": "boolean",
+          "description": "Render text italic (style step type)."
+        },
+        "underline": {
+          "type": "boolean",
+          "description": "Underline text (style step type)."
+        },
+        "strikethrough": {
+          "type": "boolean",
+          "description": "Render text with strikethrough (style step type)."
+        },
+        "faint": {
+          "type": "boolean",
+          "description": "Render text faint/dim (style step type)."
+        },
+        "markdown": {
+          "type": "boolean",
+          "description": "Render content as markdown (output and style step types)."
+        },
+        "level": {
+          "type": "string",
+          "description": "Log level for the log step type (e.g. trace, debug, info, warn, error)."
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Structured log fields (key-value pairs) for the log step type."
+        },
+        "voice": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Ordered voice candidates for the say step type; the first installed on the host wins (CSS font-family style)."
+        },
+        "print": {
+          "type": "string",
+          "description": "Print policy for the say step type: fallback (default), always, or never."
+        },
+        "vars": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Variables to set for the env step type."
+        },
+        "code": {
+          "type": "integer",
+          "description": "Exit code for the exit step type."
+        },
+        "url": {
+          "type": "string",
+          "description": "Request URL for the http step type (supports templates)."
+        },
+        "method": {
+          "type": "string",
+          "description": "HTTP method for the http step type: GET (default), POST, PUT, PATCH, DELETE, HEAD, or OPTIONS."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Request headers for the http step type (supports templates)."
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Query-string parameters for the http step type (supports templates)."
+        },
+        "body": {
+          "type": "string",
+          "description": "Raw request body for the http step type (supports templates); mutually exclusive with form."
+        },
+        "form": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Form/JSON body parameters for the http step type; mutually exclusive with body."
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Success criteria for the http step type; defaults to any 2xx response.",
+          "properties": {
+            "status": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Acceptable HTTP status codes."
+            },
+            "response": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Regex patterns; the response body must match at least one."
+            }
+          }
+        },
+        "shell": {
+          "type": "string",
+          "description": "Shell for cast session mode."
+        },
+        "key_interval": {
+          "type": "string",
+          "description": "Default delay between repeated keys in cast session mode, e.g. 35ms."
+        },
+        "jitter": {
+          "type": "number",
+          "description": "Deterministic typing delay variance for simulated typed cast steps."
+        },
+        "cursor": {
+          "type": "boolean",
+          "description": "Show a simulated cursor for cast simulate steps."
+        },
+        "regex": {
+          "type": "string",
+          "description": "Regex for cast wait actions."
+        },
+        "key": {
+          "type": "string",
+          "description": "Key name for cast key actions."
+        },
+        "duration": {
+          "type": "string",
+          "description": "Duration for cast pause/wait actions, e.g. 500ms."
+        },
+        "interval": {
+          "type": "string",
+          "description": "Per-key repeat delay override for cast key actions."
+        },
+        "repeat": {
+          "type": "integer",
+          "description": "Key repeat count for cast key actions."
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Default settings applied to child steps inside a cast step."
+        },
+        "action": {
+          "type": "string",
+          "description": "Container verb for the container step type: build, push, run, or inspect."
+        },
+        "with": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Container action parameters (GitHub-Actions uses/with style), decoded according to `action`."
+        },
+        "runtime_auto_start": {
+          "type": "boolean",
+          "description": "Automatically start the container runtime for this step."
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Inline per-step container runtime block (e.g. runtime.host for Docker-out-of-Docker)."
+        },
+        "provider": {
+          "type": "string",
+          "description": "Container provider: docker, podman, or empty for auto-detect."
+        },
+        "container": {
+          "$ref": "#/definitions/workflow_container"
+        },
+        "component": {
+          "type": "string",
+          "description": "Emulator component name to operate on (emulator step type)."
+        },
+        "ephemeral": {
+          "type": "boolean",
+          "description": "Run the emulator without persistence for this step (emulator step type)."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob(s) of JUnit XML files to summarize or annotate (junit step type)."
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Executables that must be found on PATH for the require step type (supports templates)."
+        },
+        "dirs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Directories that must exist for the require step type (supports templates)."
+        },
+        "hint": {
+          "type": "string",
+          "description": "Extra remediation note appended to a require step failure (supports templates)."
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Named outputs derived from the step result."
+        },
+        "show": {
+          "$ref": "#/definitions/workflow_show"
+        },
+        "for": {
+          "description": "Target background step name(s) a wait/cancel action applies to; a scalar or a sequence.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "prompt": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "prompt"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "simulate"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          }
+        }
+      ]
     },
     "providers": {
       "title": "providers",
@@ -2374,6 +3044,26 @@
           "additionalProperties": {
             "type": "string",
             "description": "Tool version (e.g., '1.9.8', '0.32.7', 'latest')"
+          }
+        }
+      ]
+    },
+    "version": {
+      "title": "version",
+      "description": "Stack-level Atmos Version Tracker track assertion. Selects which version track (`atmos version track`) this stack resolves `!version` and `{{ .version.* }}` against.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "track": {
+              "type": "string",
+              "description": "The version track this stack asserts (e.g. `dev`, `prod`). Defaults to `version.track` in `atmos.yaml` when omitted."
+            }
           }
         }
       ]

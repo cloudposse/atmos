@@ -1,7 +1,9 @@
 package cache
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +15,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // useCacheRoot points the cache subcommands at root for the duration of the test.
@@ -29,6 +33,7 @@ func initDataWriter(t *testing.T) {
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
 }
 
 // seedCacheObject writes a cached object plus its metadata sidecar under root.
@@ -48,6 +53,37 @@ func seedCacheObject(t *testing.T, root, key string, size int, kind string) {
 	b, err := json.MarshalIndent(sc, "", "  ")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(objPath+".metadata.json", b, 0o644))
+}
+
+func tfcacheSummaryForTest(root string) tfcache.Summary {
+	return tfcache.Summary{
+		Root:        root,
+		ObjectCount: 2,
+		Providers:   1,
+		Modules:     1,
+		TotalSize:   4096,
+		Largest:     &tfcache.Entry{Key: "providers/registry.terraform.io/hashicorp/aws/index.json", Size: 2048},
+	}
+}
+
+func captureCacheStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stderr
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = writer
+	t.Cleanup(func() { os.Stderr = old })
+
+	fn()
+
+	require.NoError(t, writer.Close())
+	os.Stderr = old
+
+	var buffer bytes.Buffer
+	_, err = io.Copy(&buffer, reader)
+	require.NoError(t, err)
+	return buffer.String()
 }
 
 func TestListCmd(t *testing.T) {
@@ -84,6 +120,19 @@ func TestStatsCmd(t *testing.T) {
 			require.NoError(t, cacheCmd.Execute())
 		})
 	}
+}
+
+func TestPrintStatsUsesFormattedTable(t *testing.T) {
+	initDataWriter(t)
+	output := captureCacheStderr(t, func() {
+		printStats(tfcacheSummaryForTest(t.TempDir()))
+	})
+
+	assert.Contains(t, output, "METRIC")
+	assert.Contains(t, output, "VALUE")
+	assert.Contains(t, output, "Registry cache root")
+	assert.Contains(t, output, "Objects")
+	assert.NotContains(t, output, "Registry cache root:")
 }
 
 func TestPruneCmd(t *testing.T) {

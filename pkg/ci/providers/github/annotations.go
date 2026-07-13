@@ -1,33 +1,25 @@
 package github
 
 import (
-	"fmt"
-	"io"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
-
-// annotationsOut is where Annotate writes GitHub workflow commands. It defaults
-// to os.Stdout — workflow commands are parsed by the runner from the step's log
-// stream — and is overridable in tests. Package-level rather than a field so the
-// lazily-constructed Provider needs no extra wiring.
-//
-//nolint:gochecknoglobals // test seam for stdout-bound workflow commands.
-var annotationsOut io.Writer = os.Stdout
 
 // Annotate implements provider.Annotator by emitting one GitHub Actions
 // workflow annotation command per finding. GitHub renders these inline on the
 // pull request diff (and in the run's annotations list) — the "non-CodeQL" path
-// that needs no GitHub Advanced Security.
+// that needs no GitHub Advanced Security. Workflow commands are written to
+// stdout (the data channel) because the runner parses them from the step log
+// stream.
 func (p *Provider) Annotate(annotations []provider.Annotation) error {
 	defer perf.Track(nil, "github.Provider.Annotate")()
 
 	for i := range annotations {
-		if _, err := fmt.Fprintln(annotationsOut, formatAnnotation(&annotations[i])); err != nil {
+		if err := data.Writeln(formatAnnotation(&annotations[i])); err != nil {
 			return err
 		}
 	}

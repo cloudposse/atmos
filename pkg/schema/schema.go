@@ -70,6 +70,7 @@ type ConfigMetadata struct {
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
+	Cast                          *CastConfig        `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
 	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
@@ -138,6 +139,29 @@ type AtmosConfiguration struct {
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
+}
+
+// CastConfig configures Atmos cast recording behavior.
+type CastConfig struct {
+	Recording *CastRecordingConfig `yaml:"recording,omitempty" json:"recording,omitempty" mapstructure:"recording"`
+}
+
+// CastRecordingConfig configures automatic cast recording options.
+type CastRecordingConfig struct {
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+	Input    bool   `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
+	Width    int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
+	Height   int    `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`
+}
+
+// GetCastRecordingConfig returns cast recording settings or zero values when
+// cast recording is not configured.
+func (m *AtmosConfiguration) GetCastRecordingConfig() CastRecordingConfig {
+	if m == nil || m.Cast == nil || m.Cast.Recording == nil {
+		return CastRecordingConfig{}
+	}
+	return *m.Cast.Recording
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -406,9 +430,20 @@ type SyntaxHighlighting struct {
 	Wrap        bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
 }
 
+// AtmosYAMLSettings controls YAML parsing behavior for stack files.
+type AtmosYAMLSettings struct {
+	// KeyDelimiter enables nested key expansion in stack YAML files.
+	// When set (e.g., "."), unquoted keys containing the delimiter are expanded
+	// into nested map structures (e.g., "a.b: v" becomes "a: {b: v}").
+	// Quoted keys are preserved as literal keys.
+	// Empty string (default) disables expansion, preserving current behavior.
+	KeyDelimiter string `yaml:"key_delimiter" json:"key_delimiter" mapstructure:"key_delimiter"`
+}
+
 type AtmosSettings struct {
-	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	ListMergeStrategy string            `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal          `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	YAML              AtmosYAMLSettings `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
 	// Experimental controls how experimental features are handled.
 	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
 	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
@@ -801,6 +836,33 @@ type CIConfig struct {
 	Comments    CICommentsConfig    `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
 	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	Groups      CIGroupsConfig      `yaml:"groups,omitempty" json:"groups,omitempty" mapstructure:"groups"`
+	// AllowUnsafeForkExecution opts out of the fork-checkout safety gate that
+	// refuses to clone untrusted fork content under pull_request_target and
+	// workflow_run events. Leave false unless a fork-facing workflow has a
+	// documented reason to bypass it. See
+	// docs/prd/native-ci/framework/fork-pr-trust-gate.md.
+	AllowUnsafeForkExecution bool `yaml:"allow_unsafe_fork_execution,omitempty" json:"allow_unsafe_fork_execution,omitempty" mapstructure:"allow_unsafe_fork_execution"`
+}
+
+// CIGroupsConfig configures collapsible CI log groups. On GitHub Actions this
+// emits the `::group::<name>` / `::endgroup::` workflow commands that fold a
+// region of the run log into a named, expandable section.
+//
+// Mode selects the grouping granularity (mutually exclusive — CI providers do
+// not support nested groups):
+//
+//   - "auto" (default when omitted): the finest granularity that applies to
+//     each command — one group per workflow/custom-command step, and one group
+//     per phase (init/plan/apply) of a terraform/helmfile/packer invocation.
+//   - "invocation": one group around each whole top-level `atmos <command>`
+//     run; finer step/phase grouping is suppressed.
+//   - "off": no grouping.
+//
+// Effective only when the global ci.enabled is true and a grouping-capable CI
+// provider is detected.
+type CIGroupsConfig struct {
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 }
 
 // CICacheConfig configures the CI build cache, which restores a well-known
@@ -808,6 +870,11 @@ type CIConfig struct {
 // cache root) at Atmos startup and saves it at exit, using the active CI
 // provider's cache store (e.g. the GitHub Actions cache). All operations are
 // no-ops when no cache-capable CI provider is detected (i.e. outside CI).
+//
+// A fixed set of Atmos's own auth session-cache subdirectories (AWS SSO
+// tokens, Azure device-code tokens, AWS webflow refresh tokens, provisioned
+// identity metadata) is always excluded from the cache, regardless of Paths.
+// See docs/prd/native-ci/framework/ci-cache.md#default-excluded-auth-paths.
 type CICacheConfig struct {
 	// Enabled is the master switch for the CI cache (env: ATMOS_CI_CACHE_ENABLED).
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
@@ -1507,7 +1574,7 @@ type ConfigAndStacksInfo struct {
 	FailFast                   bool
 	KeepGoing                  bool
 	DisablePluginCache         bool
-	TerraformPlanLogOrder      string
+	TerraformLogOrder          string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
 	TerraformPlanSummaryFile   string
@@ -1788,6 +1855,18 @@ type AtmosVendorSource struct {
 	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
 	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
 	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Constraints   *VendorConstraints `yaml:"constraints,omitempty" json:"constraints,omitempty" mapstructure:"constraints"`
+}
+
+// VendorConstraints controls which upstream versions `atmos vendor update` may
+// select for a vendored source.
+type VendorConstraints struct {
+	// Version is a semver constraint (Masterminds/semver syntax, e.g. "^1.0.0", "~1.2.3", ">=1 <2").
+	Version string `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+	// ExcludedVersions lists versions to skip; supports exact values and wildcard patterns (e.g. "1.5.*").
+	ExcludedVersions []string `yaml:"excluded_versions,omitempty" json:"excluded_versions,omitempty" mapstructure:"excluded_versions"`
+	// NoPrereleases, when true, excludes pre-release versions (alpha, beta, rc, …).
+	NoPrereleases bool `yaml:"no_prereleases,omitempty" json:"no_prereleases,omitempty" mapstructure:"no_prereleases"`
 }
 
 type AtmosVendorSpec struct {

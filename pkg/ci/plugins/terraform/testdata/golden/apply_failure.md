@@ -1,8 +1,13 @@
 
 ## Apply Failed for `broken` in `dev`
 
-<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a>
-[![failed](https://shields.io/badge/APPLY-FAILED-ff0000?style=for-the-badge)](#user-content-result-dev-broken)
+<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg?v=">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
+</picture></a>
+
+[![failed](https://shields.io/badge/APPLY-FAILED-ff0000?style=for-the-badge)](#result-dev-broken)
 <details><summary><a id="result-dev-broken" />:warning: Error summary</summary>
 
 <br/>

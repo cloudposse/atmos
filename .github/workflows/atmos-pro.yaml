@@ -1,6 +1,8 @@
 ---
 name: atmos.ci
 on: pull_request
+env:
+  GOFUMPT_VERSION: v0.9.1
 permissions:
   contents: read
   id-token: write
@@ -25,7 +27,7 @@ jobs:
       id-token: write
     timeout-minutes: 15
     steps:
-      - uses: runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
@@ -34,6 +36,10 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go mod tidy
+      - name: Install Go tools
+        run: |
+          go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install toolchain dependencies
         env:

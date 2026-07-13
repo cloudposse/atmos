@@ -7,6 +7,9 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
+    platforms:
+      - darwin_arm64
+      - linux_amd64
 
 stacks:
   base_path: "stacks"

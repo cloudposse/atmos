@@ -1,0 +1,2 @@
+{"version":3,"term":{"cols":90,"rows":36,"type":"xterm-256color"},"timestamp":1783120407,"command":"profile list","env":{"COLORTERM":"truecolor","SHELL":"/bin/zsh"}}
+[0.009731584,"o","\u001b[38;2;236;201;75mNo profiles configured.\u001b[0m\n"]

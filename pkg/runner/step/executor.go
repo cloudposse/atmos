@@ -12,8 +12,9 @@ import (
 // StepExecutor runs workflow steps using the step registry.
 // This provides a simplified interface for executing steps with variable passing.
 type StepExecutor struct {
-	vars     *Variables
-	workflow *schema.WorkflowDefinition
+	vars        *Variables
+	workflow    *schema.WorkflowDefinition
+	atmosConfig *schema.AtmosConfiguration
 }
 
 // NewStepExecutor creates a new step executor.
@@ -39,6 +40,15 @@ func (e *StepExecutor) SetWorkflow(workflow *schema.WorkflowDefinition) {
 	defer perf.Track(nil, "step.StepExecutor.SetWorkflow")()
 
 	e.workflow = workflow
+}
+
+// SetAtmosConfig sets the active Atmos configuration for handlers that need
+// process-level settings.
+func (e *StepExecutor) SetAtmosConfig(config *schema.AtmosConfiguration) {
+	defer perf.Track(nil, "step.StepExecutor.SetAtmosConfig")()
+
+	e.atmosConfig = config
+	e.vars.SetAtmosConfig(config)
 }
 
 // Variables returns the executor's variable store.

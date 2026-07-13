@@ -1,20 +1,19 @@
+---
+title: Native Helm
+tags: [Kubernetes]
+cast:
+  file: /casts/examples/helm/lifecycle.cast
+  title: atmos native helm lifecycle
+---
+
 # Native Helm Component Example
 
 A minimal, credential-free example of a native Helm component. The chart lives in
 `components/helm/demo` and is configured by `stacks/deploy/dev.yaml`.
 
-## Test
+## Try It
 
-`atmos test` is the CI-backed smoke test for this example. It validates the
-stacks, renders the local demo chart, starts a local K3s emulator, diffs and
-deploys the release into it, verifies the Deployment and Service, uninstalls the
-release, and tears the emulator down.
-
-```shell
-atmos test
-```
-
-The command runs the same local chart workflow documented below:
+Run the local chart workflow end to end:
 
 ```shell
 atmos validate stacks
@@ -27,6 +26,9 @@ atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
 atmos helm delete demo -s dev --identity local-k3s
 atmos emulator down kubernetes -s dev
 ```
+
+The `atmos test` custom command remains available as the CI smoke wrapper for
+this same lifecycle.
 
 ## Render (no cluster, no credentials)
 
@@ -62,7 +64,7 @@ atmos helm diff demo -s dev --against=target
 # Install/upgrade the release on the current kubecontext.
 atmos helm apply demo -s dev
 
-# Or deploy directly to the local K3s emulator used by `atmos test`.
+# Or deploy directly to the local K3s emulator used by the CI smoke test.
 atmos emulator up kubernetes -s dev
 atmos helm apply demo -s dev --identity local-k3s
 ```

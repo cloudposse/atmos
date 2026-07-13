@@ -26,7 +26,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
+	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 )
 
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
@@ -34,11 +36,12 @@ var importsConfigLock = &sync.Mutex{}
 
 // extractLocalsResult holds the results of parsing raw YAML and extracting locals.
 type extractLocalsResult struct {
-	locals    map[string]any // Resolved locals.
-	settings  map[string]any // Settings section (for template context).
-	vars      map[string]any // Vars section (for template context).
-	env       map[string]any // Env section (for template context).
-	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
+	locals       map[string]any // Resolved locals.
+	settings     map[string]any // Settings section (for template context).
+	vars         map[string]any // Vars section (for template context).
+	env          map[string]any // Env section (for template context).
+	versionTrack string         // Stack-asserted version track.
+	hasLocals    bool           // Whether any locals section exists in the file (including empty locals).
 }
 
 // localsExtractionCache memoizes extractLocalsFromRawYAML results keyed by a
@@ -89,7 +92,8 @@ func cloneExtractLocalsResult(src *extractLocalsResult) *extractLocalsResult {
 		return nil
 	}
 	dst := &extractLocalsResult{
-		hasLocals: src.hasLocals,
+		hasLocals:    src.hasLocals,
+		versionTrack: src.versionTrack,
 	}
 	if src.locals != nil {
 		if cloned, err := m.DeepCopyMap(src.locals); err == nil {
@@ -301,6 +305,11 @@ func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extr
 	if env, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
 		result.env = env
 	}
+	if versionSection, ok := rawConfig["version"].(map[string]any); ok {
+		if track, ok := versionSection["track"].(string); ok {
+			result.versionTrack = track
+		}
+	}
 
 	return result
 }
@@ -317,6 +326,8 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	if len(section) == 0 {
 		return section, nil
 	}
+
+	section = processStructuredTemplateRefs(section, context).(map[string]any)
 
 	// Convert section to YAML for template processing.
 	yamlStr, err := u.ConvertToYAML(section)
@@ -345,6 +356,34 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	}
 
 	return result, nil
+}
+
+func processStructuredTemplateRefs(value any, context map[string]any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for k, v := range typed {
+			result[k] = processStructuredTemplateRefs(v, context)
+		}
+		return result
+	case []any:
+		result := make([]any, len(typed))
+		for i, v := range typed {
+			result[i] = processStructuredTemplateRefs(v, context)
+		}
+		return result
+	case string:
+		ref, ok, err := atmostmpl.ExtractPlainFieldRef(typed)
+		if err != nil || !ok {
+			return typed
+		}
+		if resolved, found := atmostmpl.LookupFieldPath(context, ref.Path); found {
+			return resolved
+		}
+		return typed
+	default:
+		return value
+	}
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
@@ -414,7 +453,7 @@ func extractAndAddLocalsToContext(
 	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
 	// which should still enable template context.
 	if !extractResult.hasLocals {
-		return context, nil
+		return manager.AddTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
 	}
 
 	// context is never nil here: the clone above always allocates a fresh map
@@ -424,6 +463,11 @@ func extractAndAddLocalsToContext(
 	// Add resolved locals to the template context first.
 	// This allows settings/vars/env templates to reference locals.
 	context[cfg.LocalsSectionName] = extractResult.locals
+	var versionContextErr error
+	context, versionContextErr = manager.AddTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
+	if versionContextErr != nil {
+		return context, versionContextErr
+	}
 	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
 
 	// Process templates in settings, vars, env sections using the resolved locals.
@@ -947,8 +991,20 @@ func processYAMLConfigFileWithContextInternal(
 	// Other .tmpl files are processed only when context is provided (backward compatibility).
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
+		stackManifestTemplateInput := stackYamlConfig
+		if len(context) > 0 {
+			var rawStackConfig map[string]any
+			if err := yaml.Unmarshal([]byte(stackYamlConfig), &rawStackConfig); err == nil {
+				if processedStructured, ok := processStructuredTemplateRefs(rawStackConfig, context).(map[string]any); ok {
+					if renderedStructured, err := u.ConvertToYAML(processedStructured); err == nil {
+						stackManifestTemplateInput = renderedStructured
+					}
+				}
+			}
+		}
+
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackManifestTemplateInput, context, ignoreMissingTemplateValues)
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
@@ -958,7 +1014,7 @@ func processYAMLConfigFileWithContextInternal(
 			if !originalContextProvided {
 				log.Debug("Template processing deferred for file with file-extracted context only",
 					"file", relativeFilePath, "error", tmplErr)
-				stackManifestTemplatesProcessed = stackYamlConfig
+				stackManifestTemplatesProcessed = stackManifestTemplateInput
 			} else {
 				if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 					stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)

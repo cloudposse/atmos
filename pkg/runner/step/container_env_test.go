@@ -1,9 +1,13 @@
 package step
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/container"
 )
@@ -68,5 +72,43 @@ func TestApplyRuntimeEnvNoOpWhenUnsupported(t *testing.T) {
 	// Must not panic or attempt to set env on a runtime that can't accept it.
 	assert.NotPanics(t, func() {
 		applyRuntimeEnv(&runtimeWithoutEnvSetter{}, vars)
+	})
+}
+
+func TestVariablesEnsureBinaryInPath(t *testing.T) {
+	binary := filepath.Join(string(filepath.Separator), "repo", "build", "atmos")
+	binDir := filepath.Dir(binary)
+
+	t.Run("prepends binary dir after PATH override", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetEnv("PATH", filepath.Join(string(filepath.Separator), "usr", "bin"))
+
+		vars.EnsureBinaryInPath(binary)
+
+		path := vars.Env["PATH"]
+		require.True(t, strings.HasPrefix(path, binDir+string(os.PathListSeparator)),
+			"binary dir should be first in PATH, got %q", path)
+		require.Contains(t, path, filepath.Join(string(filepath.Separator), "usr", "bin"))
+	})
+
+	t.Run("no duplicate when already present", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetEnv("PATH", binDir)
+
+		vars.EnsureBinaryInPath(binary)
+
+		require.Equal(t, 1, strings.Count(vars.Env["PATH"], binDir))
+	})
+
+	t.Run("matches existing key casing", func(t *testing.T) {
+		vars := NewVariables()
+		delete(vars.Env, "PATH")
+		vars.SetEnv("Path", filepath.Join(string(filepath.Separator), "usr", "bin"))
+
+		vars.EnsureBinaryInPath(binary)
+
+		_, hasUpper := vars.Env["PATH"]
+		require.False(t, hasUpper, "must update the existing Path key, not add PATH")
+		require.True(t, strings.HasPrefix(vars.Env["Path"], binDir+string(os.PathListSeparator)))
 	})
 }

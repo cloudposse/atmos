@@ -145,6 +145,7 @@ func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	); err != nil {
 		return fmt.Errorf("%w: build %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}
+	inspectAndWriteImageSummary(ctx, runtime, &r.atmosConfig, firstNonEmpty(buildConfig.Tags), "")
 	return nil
 }
 
@@ -174,13 +175,23 @@ func ExecutePush(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	for _, ref := range refs {
+		var pushed *ctr.PushResult
 		if err := spinner.ExecWithSpinner(
 			fmt.Sprintf("Pushing %s", ref),
 			fmt.Sprintf("%s pushed", ref),
-			func() error { _, pushErr := runtime.Push(ctx, ref); return pushErr },
+			func() error {
+				var pushErr error
+				pushed, pushErr = runtime.Push(ctx, ref)
+				return pushErr
+			},
 		); err != nil {
 			return fmt.Errorf("%w: push %q: %w", errUtils.ErrComponentExecutionFailed, ref, err)
 		}
+		digest := ""
+		if pushed != nil {
+			digest = pushed.Digest
+		}
+		inspectAndWriteImageSummary(ctx, runtime, &r.atmosConfig, ref, digest)
 	}
 	return nil
 }

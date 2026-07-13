@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,8 +20,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -40,6 +41,7 @@ var (
 	runAllHooks                      = func(hookSet *hooks.Hooks, event hooks.HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 		return hookSet.RunAll(event, atmosConfig, info, nil, nil)
 	}
+	runKubernetesCIHooks    = hooks.RunCIHooks
 	runKubernetesCIHookFunc = runKubernetesCIHook
 	newKubernetesSDKClient  = newSDKClient
 )
@@ -112,27 +114,27 @@ func runWithHooks(
 	}
 	before, after := eventsForCommand(info.SubCommand, operation)
 	if err := runAllHooks(hookSet, before, atmosConfig, info); err != nil {
-		runKubernetesCIHookFunc(after, atmosConfig, info, nil, err)
+		runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, nil, err)
 		return err
 	}
 
 	objects, err := loadManifestObjects(source, info)
 	if err != nil {
-		runKubernetesCIHookFunc(after, atmosConfig, info, nil, err)
+		runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, nil, err)
 		return err
 	}
 
 	result, err := runOperation(ctx, atmosConfig, info, operation, objects)
 	if err != nil {
-		runKubernetesCIHookFunc(after, atmosConfig, info, result, err)
+		runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, result, err)
 		return err
 	}
 
 	if err := runAllHooks(hookSet, after, atmosConfig, info); err != nil {
-		runKubernetesCIHookFunc(after, atmosConfig, info, result, err)
+		runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, result, err)
 		return err
 	}
-	runKubernetesCIHookFunc(after, atmosConfig, info, result, nil)
+	runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, result, nil)
 	return nil
 }
 
@@ -234,7 +236,9 @@ func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) ([]objectResult, error) {
 	switch operation {
 	case OperationRender:
-		err := renderObjects(objects, resolveRenderOptions(ctx.Flags, info.ComponentSection))
+		options := resolveRenderOptions(ctx.Flags, info.ComponentSection)
+		options.AtmosConfig = atmosConfig
+		err := renderObjects(objects, options)
 		if err == nil {
 			return objectsToResults("rendered", objects), nil
 		}
@@ -366,17 +370,24 @@ func runDiff(objects []*unstructured.Unstructured) ([]objectResult, error) {
 
 func printResults(results []objectResult) {
 	for _, result := range results {
-		if result.Namespace == "" {
-			_ = data.Writef("%s %s %s\n", result.Action, result.Resource, result.Name)
-		} else {
-			_ = data.Writef("%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
-		}
+		line := fmt.Sprintf("%s %s", result.Action, objectResultRef(&result))
 		// For plan/diff, print the unified diff body beneath the action line.
-		// Empty for apply/delete/no-change/Secret objects.
+		// Empty for apply/delete/no-change/Secret objects. Lines with diffs
+		// remain data output so the diff body stays pipeable.
 		if result.Diff != "" {
+			_ = data.Writef("%s\n", line)
 			_ = data.Writef("%s\n", result.Diff)
+			continue
 		}
+		ui.Success(line)
 	}
+}
+
+func objectResultRef(result *objectResult) string {
+	if result.Namespace == "" {
+		return fmt.Sprintf("%s %s", result.Resource, result.Name)
+	}
+	return fmt.Sprintf("%s %s/%s", result.Resource, result.Namespace, result.Name)
 }
 
 func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
@@ -456,6 +467,7 @@ func objectsToResults(action string, objects []*unstructured.Unstructured) []obj
 
 func runKubernetesCIHook(
 	event hooks.HookEvent,
+	flags map[string]any,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	result *schema.KubernetesCIResult,
@@ -468,15 +480,32 @@ func runKubernetesCIHook(
 	if commandErr != nil {
 		result.Error = commandErr.Error()
 	}
-	if err := hooks.RunCIHooks(&hooks.RunCIHooksOptions{
+	if err := runKubernetesCIHooks(&hooks.RunCIHooksOptions{
 		Event:        event,
 		AtmosConfig:  atmosConfig,
 		Info:         info,
-		ForceCIMode:  viper.GetBool("ci"),
+		ForceCIMode:  kubernetesCIModeEnabled(flags),
 		CommandError: commandErr,
 		ExitCode:     result.ExitCode,
 		Aggregate:    result,
 	}); err != nil {
 		log.Warn("Kubernetes CI summary skipped", "event", event, "error", err)
 	}
+}
+
+// kubernetesCIModeEnabled reports whether CI mode is forced for the operation:
+// either via the --ci flag (threaded through ExecutionContext.Flags) or the
+// standard CI environment variables. Mirrors helmCIModeEnabled.
+func kubernetesCIModeEnabled(flags map[string]any) bool {
+	if value, ok := flags["ci"].(bool); ok && value {
+		return true
+	}
+	return ciEnvEnabled("ATMOS_CI") || ciEnvEnabled("CI")
+}
+
+// ciEnvEnabled reports whether a CI environment variable is set to a truthy value.
+func ciEnvEnabled(key string) bool {
+	//nolint:forbidigo // Standard CI env vars (ATMOS_CI/CI), read directly for CI auto-detection.
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return value != "" && value != "false" && value != "0" && value != "no"
 }

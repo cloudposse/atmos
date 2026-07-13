@@ -1984,8 +1984,17 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 			archiveFilename: []byte("rest tar content"),
 		})
 
-		// Blob server for the REST redirect target.
-		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Blob server for the REST redirect target. GitHub/Azure signed blob
+		// URLs reject an extra GitHub Authorization header, so this catches
+		// regressions where the authenticated API client is reused for the blob.
+		var blobAuthHeader string
+		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			blobAuthHeader = r.Header.Get("Authorization")
+			if blobAuthHeader != "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`<Error><Code>InvalidAuthenticationInfo</Code></Error>`))
+				return
+			}
 			_, _ = w.Write(zipData)
 		}))
 		defer blob.Close()
@@ -2013,7 +2022,12 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 		}
 
 		store := &Store{
-			httpClient: api.Client(),
+			httpClient: &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					r.Header.Set("Authorization", "Bearer test-token")
+					return http.DefaultTransport.RoundTrip(r)
+				}),
+			},
 			baseURL:    api.URL,
 			prefix:     "planfile",
 			owner:      "testowner",
@@ -2030,6 +2044,7 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
 		assert.Equal(t, "rest tar content", string(content))
+		assert.Empty(t, blobAuthHeader)
 	})
 
 	t.Run("invalid runtime token returns download error", func(t *testing.T) {
@@ -2149,6 +2164,7 @@ func TestStore_FetchBlob(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
 		assert.Contains(t, err.Error(), "status 403")
+		assert.Contains(t, err.Error(), "access denied")
 	})
 
 	t.Run("transport error returns download error", func(t *testing.T) {
@@ -2289,5 +2305,43 @@ func TestRuntimeUploader_PostRuntimeJSON_Errors(t *testing.T) {
 		err := u.postRuntimeJSON(context.Background(), "ListArtifacts", map[string]string{}, &struct{}{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "call")
+	})
+}
+
+func TestDownloadArtifactContent_ErrorPaths(t *testing.T) {
+	t.Run("unparsable redirect Location surfaces as download error", func(t *testing.T) {
+		// The REST endpoint redirects to a signed blob URL; an unparsable Location
+		// header fails inside downloadArtifactURL (the client parses Location before
+		// CheckRedirect runs) and must surface as a download error.
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", "://not-a-url")
+			w.WriteHeader(http.StatusFound)
+		}))
+		defer api.Close()
+
+		store := &Store{httpClient: api.Client(), baseURL: api.URL, owner: "o", repo: "r"}
+		_, err := store.downloadArtifactContent(context.Background(), 42)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+	})
+
+	t.Run("truncated blob body fails the read", func(t *testing.T) {
+		// The blob server advertises more bytes than it sends, so reading the body
+		// fails mid-stream and must surface as a download error.
+		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Length", "100")
+			_, _ = w.Write([]byte("short"))
+		}))
+		defer blob.Close()
+
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, blob.URL, http.StatusFound)
+		}))
+		defer api.Close()
+
+		store := &Store{httpClient: api.Client(), baseURL: api.URL, owner: "o", repo: "r"}
+		_, err := store.downloadArtifactContent(context.Background(), 42)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
 	})
 }

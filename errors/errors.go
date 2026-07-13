@@ -3,6 +3,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -46,6 +48,17 @@ var (
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
 	ErrMarkdownRender                        = errors.New("failed to render markdown content")
+	ErrCastOutputExists                      = errors.New("cast output already exists")
+	ErrEmptyCastFile                         = errors.New("empty cast file")
+	ErrUnsupportedCastOutputExtension        = errors.New("unsupported cast output extension")
+	ErrRenderOutputExists                    = errors.New("render output already exists")
+	ErrMissingAgg                            = errors.New("missing required tool `agg`; install asciinema agg and retry")
+	ErrMissingFFmpeg                         = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
+	ErrMissingRenderOutput                   = errors.New("specify an output path with --output")
+	ErrUnknownSessionAction                  = errors.New("unknown cast session action type")
+	ErrWaitTimeout                           = errors.New("timed out waiting for cast output")
+	ErrUnsupportedCastKey                    = errors.New("unsupported cast key")
+	ErrMissingExecCommand                    = errors.New("exec recording requires a command")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
@@ -57,6 +70,23 @@ var (
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
+	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
+	ErrCastStepRequiresSteps                 = errors.New("cast step requires nested steps")
+	ErrCastSessionRequiresActions            = errors.New("cast session step requires session actions")
+	ErrInvalidCastMode                       = errors.New("cast step has invalid mode")
+	ErrWriteActionRequiresText               = errors.New("write action requires text")
+	ErrKeyActionRequiresKey                  = errors.New("key action requires key")
+	ErrPauseActionRequiresDuration           = errors.New("pause action requires duration")
+	ErrWaitActionRequiresTextOrRegex         = errors.New("wait action requires exactly one of text or regex")
+	ErrUnsupportedSessionAction              = errors.New("unsupported session action type")
+	ErrInvalidSimulateMode                   = errors.New("simulate step has invalid mode")
+	ErrSimulateTypedRequiresText             = errors.New("simulate typed step requires text")
+	ErrInvalidSimulateJitter                 = errors.New("simulate typed step jitter must be between 0 and 1")
+	ErrUnsupportedPromptStyle                = errors.New("unsupported simulate prompt style")
+	ErrWorkdirPathRequired                   = errors.New("workdir path is required")
+	ErrWorkdirSourceRequired                 = errors.New("workdir source is required")
+	ErrWorkdirSourceKeyInvalid               = errors.New("workdir source map keys must be strings")
+	ErrUnsafeVendorTarget                    = errors.New("unsafe vendor target directory")
 	ErrInvalidConfig                         = errors.New("invalid configuration")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
@@ -82,6 +112,25 @@ var (
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
+	// Version Tracker errors.
+	ErrVersionTrackNotFound          = errors.New("version track not found")
+	ErrVersionNotFound               = errors.New("version not found")
+	ErrVersionNotLocked              = errors.New("version not locked")
+	ErrVersionTrackNotVerified       = errors.New("version track is not verified")
+	ErrDesiredVersionRequired        = errors.New("desired version is required")
+	ErrVersionEntryExists            = errors.New("version entry already exists")
+	ErrVersionEntryNotFound          = errors.New("version entry not found")
+	ErrInvalidVersionCooldown        = errors.New("invalid cooldown")
+	ErrVersionRenderFileRequired     = errors.New("--file is required")
+	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
+	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
+	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
+	ErrUnsupportedVersionField       = errors.New("unsupported --show value (supported: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked)")
+	ErrVersionFilesDrift             = errors.New("version-managed files are out of date; run `atmos version track apply`")
+	ErrUnknownVersionFileManager     = errors.New("unknown file manager")
+	ErrDuplicateVersionFileManager   = errors.New("duplicate file manager registration")
+	ErrVersionMarkerBadMatch         = errors.New("marker match expression must compile and contain one capture group")
+
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")
@@ -94,6 +143,7 @@ var (
 	ErrAuthConsole            = errors.New("auth console operation failed")
 	ErrProviderNotSupported   = errors.New("provider does not support this operation")
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
+	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 
@@ -116,6 +166,9 @@ var (
 	// ErrStoredPlanfileMissing is returned when a deploy expected a stored planfile to verify against but none was found.
 	ErrStoredPlanfileMissing = errors.New("plan verification failed: no stored planfile was found to verify against")
 
+	// ErrPlanfileStorageNotConfigured is returned when planfile verification is explicitly requested (`--verify-plan`) but no planfile storage is configured.
+	ErrPlanfileStorageNotConfigured = errors.New("planfile verification was requested but planfile storage is not configured")
+
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
@@ -123,6 +176,7 @@ var (
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
+	ErrUnsupportedYamlTag               = errors.New("unsupported YAML tag")
 	ErrAwsDescribeOrganization          = errors.New("failed to describe AWS organization")
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
@@ -224,6 +278,7 @@ var (
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
 	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
+	ErrUnsafeForkCheckout          = errors.New("refusing to clone untrusted fork content in an elevated CI event")
 	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
@@ -377,6 +432,7 @@ var (
 	ErrMerge                         = errors.New("merge error")
 	ErrMergeNilDst                   = errors.New("merge destination must not be nil")
 	ErrMergeTypeMismatch             = errors.New("cannot override two slices with different type")
+	ErrMergeKeyCollision             = errors.New("distinct map keys collide after normalization")
 	ErrEncode                        = errors.New("encoding error")
 	ErrDecode                        = errors.New("decoding error")
 
@@ -828,6 +884,7 @@ var (
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
 	ErrAwsUserKeyringReadFailed     = errors.New("failed to read AWS user credentials from keyring")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrPlaywrightDriverSeed         = errors.New("failed to pre-seed the Playwright driver")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
@@ -1165,6 +1222,7 @@ var (
 	ErrAIToolBlocked                = errors.New("tool is blocked")
 	ErrAIToolsDisabled              = errors.New("tools are disabled")
 	ErrAINoPrompter                 = errors.New("no prompter available")
+	ErrAIPermissionPromptFailed     = errors.New("permission prompt failed")
 	ErrAISessionsNotEnabled         = errors.New("sessions are not enabled in configuration")
 	ErrAIInvalidDurationFormat      = errors.New("invalid duration format")
 	ErrAIUnsupportedDurationUnit    = errors.New("unsupported duration unit")
@@ -1326,6 +1384,36 @@ var (
 	// ErrInvalidSettingsDependsOn indicates a `settings.depends_on` value does not
 	// resolve to a known component in a known stack.
 	ErrInvalidSettingsDependsOn = errors.New("invalid 'settings.depends_on' dependency")
+)
+
+// Vendor update/diff errors.
+var (
+	// ErrGitLsRemoteFailed indicates listing refs from a remote Git repository failed.
+	ErrGitLsRemoteFailed = errors.New("failed to list refs from remote Git repository")
+	// ErrNoVersionsAvailable indicates no versions were found for a source.
+	ErrNoVersionsAvailable = errors.New("no versions available")
+	// ErrNoVersionsMatchConstraints indicates no available version satisfies the configured constraints.
+	ErrNoVersionsMatchConstraints = errors.New("no versions match the configured constraints")
+	// ErrInvalidSemverConstraint indicates a constraints.version value is not a valid semver constraint.
+	ErrInvalidSemverConstraint = errors.New("invalid semver constraint")
+	// ErrVendorSourceNotFound indicates a requested component/source was not found in the vendor manifest.
+	ErrVendorSourceNotFound = errors.New("vendor source not found")
+	// ErrVendorSourceNotGit indicates a vendor source is not a Git repository (unsupported for update/diff).
+	ErrVendorSourceNotGit = errors.New("vendor source is not a Git repository")
+	// ErrVendorDiffFailed indicates the vendor diff operation failed.
+	ErrVendorDiffFailed = errors.New("failed to produce vendor diff")
+	// ErrVendorUpdateFailed indicates the vendor update operation failed.
+	ErrVendorUpdateFailed = errors.New("failed to update vendor manifest")
+	// ErrReadVendorFile indicates a vendor manifest file could not be read.
+	ErrReadVendorFile = errors.New("failed to read vendor manifest")
+	// ErrParseVendorFile indicates a vendor manifest file could not be parsed.
+	ErrParseVendorFile = errors.New("failed to parse vendor manifest")
+	// ErrInvalidGitRef indicates a Git ref (tag, branch, or commit) could not be resolved.
+	ErrInvalidGitRef = errors.New("invalid Git ref")
+	// ErrComponentManifestNotFound indicates no component.yaml/component.yml exists in a component's directory.
+	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
+	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
+	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

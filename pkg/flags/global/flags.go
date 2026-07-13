@@ -47,6 +47,7 @@ type Flags struct {
 
 	// Output configuration.
 	Pager PagerSelector
+	Cast  string // Record command output as an asciinema cast (--cast).
 
 	// Authentication.
 	Identity IdentitySelector
@@ -98,6 +99,7 @@ func NewFlags() Flags {
 		Mask:         true,       // Enabled by default for security.
 		Interactive:  true,       // Enabled by default for better UX.
 		Profile:      []string{}, // No profiles active by default.
+		Cast:         "",
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",
 		ProfileType:  "cpu",

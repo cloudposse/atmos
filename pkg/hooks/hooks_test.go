@@ -657,6 +657,90 @@ func TestRunAll(t *testing.T) {
 	}
 }
 
+func TestRunAll_GroupsEachExecutedHook(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+	cfg.Stores["store1"] = NewMockStore()
+	cfg.Stores["store2"] = NewMockStore()
+	cfg.Stores["store3"] = NewMockStore()
+
+	h := Hooks{
+		config: cfg,
+		info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+		items: map[string]Hook{
+			"first": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "store",
+				Name:    "store1",
+				Outputs: map[string]string{"key": "value1"},
+			},
+			"second": {
+				Events:  []string{"after.terraform.plan"},
+				Kind:    "store",
+				Name:    "store2",
+				Outputs: map[string]string{"key": "value2"},
+			},
+			"wrong-event": {
+				Events:  []string{"before-terraform-plan"},
+				Kind:    "store",
+				Name:    "store3",
+				Outputs: map[string]string{"key": "value3"},
+			},
+		},
+	}
+
+	type groupCall struct {
+		dim  ci.Dimension
+		name string
+	}
+	var calls []groupCall
+	prev := runHookLogGroup
+	runHookLogGroup = func(_ *schema.AtmosConfiguration, dim ci.Dimension, name string, fn func() error) error {
+		calls = append(calls, groupCall{dim: dim, name: name})
+		return fn()
+	}
+	t.Cleanup(func() { runHookLogGroup = prev })
+
+	err := h.RunAll(AfterTerraformPlan, h.config, h.info, nil, nil)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []groupCall{
+		{dim: ci.DimensionPhase, name: "hook first (after.terraform.plan)"},
+		{dim: ci.DimensionPhase, name: "hook second (after.terraform.plan)"},
+	}, calls)
+}
+
+func TestRunAll_GroupedHookErrorsPropagate(t *testing.T) {
+	mockStore := NewMockStore()
+	mockStore.SetSetError(errors.New("store error"))
+	cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+	cfg.Stores["test-store"] = mockStore
+	h := Hooks{
+		config: cfg,
+		info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+		items: map[string]Hook{
+			"failing": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "store",
+				Name:    "test-store",
+				Outputs: map[string]string{"key": "value"},
+			},
+		},
+	}
+
+	var calls []string
+	prev := runHookLogGroup
+	runHookLogGroup = func(_ *schema.AtmosConfiguration, dim ci.Dimension, name string, fn func() error) error {
+		require.Equal(t, ci.DimensionPhase, dim)
+		calls = append(calls, name)
+		return fn()
+	}
+	t.Cleanup(func() { runHookLogGroup = prev })
+
+	err := h.RunAll(AfterTerraformPlan, h.config, h.info, nil, nil)
+	require.Error(t, err)
+	assert.Equal(t, []string{"hook failing (after.terraform.plan)"}, calls)
+}
+
 // TestRunAll_EventFiltering verifies that RunAll only executes hooks whose Events list
 // includes the current event. This is the guard that prevents after-terraform-apply hooks
 // from firing during before-terraform-apply (and vice-versa).

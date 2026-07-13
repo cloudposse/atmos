@@ -8,7 +8,9 @@ import (
 	"strings"
 	"text/template"
 
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -28,6 +30,7 @@ type Variables struct {
 	Env map[string]string
 	// Flags contains workflow command-line flags exposed to step templates.
 	Flags            map[string]string
+	AtmosConfig      *schema.AtmosConfiguration
 	templateRoots    map[string]any
 	templateRenderer TemplateRenderer
 	templatePasses   int
@@ -118,6 +121,26 @@ func (v *Variables) EnvSlice() []string {
 	return env
 }
 
+// EnsureBinaryInPath prepends the directory of binaryPath to the PATH variable
+// unless it is already present, matching the existing key's casing (Windows
+// uses "Path"). Command- or step-level env can override PATH entirely; calling
+// this afterwards preserves the guarantee that a bare `atmos` in steps
+// resolves to the running binary.
+func (v *Variables) EnsureBinaryInPath(binaryPath string) {
+	defer perf.Track(nil, "step.Variables.EnsureBinaryInPath")()
+
+	updated := envpkg.EnsureBinaryInPath(v.EnvSlice(), binaryPath)
+	pathValue := envpkg.GetPathFromEnvironment(updated)
+	key := "PATH"
+	for k := range v.Env {
+		if strings.EqualFold(k, "PATH") {
+			key = k
+			break
+		}
+	}
+	v.SetEnv(key, pathValue)
+}
+
 // GetValue returns a step's primary value.
 func (v *Variables) GetValue(stepName string) (string, bool) {
 	defer perf.Track(nil, "step.Variables.GetValue")()
@@ -153,6 +176,14 @@ func (v *Variables) SetFlag(key, value string) {
 		v.Flags = make(map[string]string)
 	}
 	v.Flags[key] = value
+}
+
+// SetAtmosConfig stores the active Atmos configuration for step handlers that
+// need to respect process-level settings such as native CI summary controls.
+func (v *Variables) SetAtmosConfig(config *schema.AtmosConfiguration) {
+	defer perf.Track(nil, "step.Variables.SetAtmosConfig")()
+
+	v.AtmosConfig = config
 }
 
 // SetTemplateData sets extra root values exposed during template resolution.
@@ -241,6 +272,7 @@ func (v *Variables) templateData() map[string]any {
 	}
 	data := map[string]any{
 		"steps": steps,
+		"Env":   v.Env,
 		"env":   v.Env,
 		"Flags": v.Flags,
 		"flags": v.Flags,
@@ -297,6 +329,33 @@ func (v *Variables) Resolve(input string) (string, error) {
 	}
 
 	return v.resolveTemplate("step", input, v.templateData())
+}
+
+// ResolveWith resolves Go templates in input using the current variable data
+// with envOverlay merged on top of the persisted env for this call only. The
+// overlay does not mutate the Variables' env, so a per-step environment does
+// not leak into later steps' template context.
+func (v *Variables) ResolveWith(input string, envOverlay map[string]string) (string, error) {
+	defer perf.Track(nil, "step.Variables.ResolveWith")()
+
+	if input == "" {
+		return "", nil
+	}
+	data := v.templateData()
+	if len(envOverlay) > 0 {
+		merged := make(map[string]string, len(v.Env)+len(envOverlay))
+		for key, value := range v.Env {
+			merged[key] = value
+		}
+		for key, value := range envOverlay {
+			merged[key] = value
+		}
+		// templateData() returns a fresh map, so replacing these keys does not
+		// affect v.Env.
+		data["Env"] = merged
+		data["env"] = merged
+	}
+	return v.resolveTemplate("step", input, data)
 }
 
 // ResolveEnvMap resolves Go templates in a map of environment variables.
