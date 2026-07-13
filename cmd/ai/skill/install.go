@@ -63,7 +63,7 @@ var installCmd = &cobra.Command{
 		scope := v.GetString(scopeFlag)
 		var clients []string
 		if path == "" {
-			scope, err = resolveSkillScope(cmd, v)
+			scope, err = resolveSkillScope(cmd, v, skipConfirm)
 			if err != nil {
 				return err
 			}

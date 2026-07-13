@@ -55,7 +55,7 @@ var uninstallCmd = &cobra.Command{
 			basePath = "."
 		}
 
-		scope, err := resolveSkillScope(cmd, v)
+		scope, err := resolveSkillScope(cmd, v, force)
 		if err != nil {
 			return err
 		}

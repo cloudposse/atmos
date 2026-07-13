@@ -3,7 +3,6 @@ package skill
 import (
 	"errors"
 	"sort"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -43,7 +42,7 @@ func resolveSkillClients(basePath string, v *viper.Viper, skipPrompt bool, title
 	detected := marketplace.DetectClients(basePath, "", scope)
 	if skipPrompt || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
 		if len(detected) > 0 {
-			ui.Infof("Auto-detected AI clients: %s", strings.Join(detected, ", "))
+			ui.Infof("Auto-detected AI clients: %s", marketplace.BacktickJoin(detected))
 		}
 		return detected, nil
 	}
@@ -55,18 +54,19 @@ func resolveSkillClients(basePath string, v *viper.Viper, skipPrompt bool, title
 
 // resolveSkillScope resolves the install/uninstall distribution scope
 // (project versus user). An explicit --scope or --global flag always wins;
-// otherwise, in non-interactive contexts (--yes/--force, no TTY, or CI), it
-// silently falls back to the flag's default value ("project"). Only when
-// running interactively with none of those explicitly set does it prompt the
-// user to choose. Mirrors cmd/mcp/client.resolveInstallScope; --force is
-// checked here in addition to --yes because the uninstall command has no
-// separate --yes flag and already treats --force as "skip all prompts" for
-// resolveSkillClients above, so scope resolution stays consistent with that.
-func resolveSkillScope(cmd *cobra.Command, v *viper.Viper) (string, error) {
+// otherwise, when skipPrompt is set or there's no real TTY/CI, it silently
+// falls back to the flag's default value ("project"). Only when running
+// interactively with none of those true does it prompt the user to choose.
+// Mirrors cmd/mcp/client.resolveInstallScope; skipPrompt mirrors the same
+// argument on resolveSkillClients: install.go passes its --yes value
+// (--force there just means "reinstall", not "skip prompts"), uninstall.go
+// passes its --force value (its only skip-prompt flag, since it has no
+// separate --yes).
+func resolveSkillScope(cmd *cobra.Command, v *viper.Viper, skipPrompt bool) (string, error) {
 	if scope, ok := explicitSkillScope(cmd, v); ok {
 		return scope, nil
 	}
-	if v.GetBool("yes") || v.GetBool("force") || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+	if skipPrompt || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
 		return v.GetString(scopeFlag), nil
 	}
 

@@ -110,7 +110,9 @@ func TestResolveSkillScope_ExplicitScopeWins(t *testing.T) {
 	v := viper.New()
 	v.Set("scope", marketplace.ScopeUser)
 
-	scope, err := resolveSkillScope(cmd, v)
+	// skipPrompt is false here, but the explicit --scope flag must still win
+	// without ever driving the interactive picker.
+	scope, err := resolveSkillScope(cmd, v, false)
 	require.NoError(t, err)
 	assert.Equal(t, marketplace.ScopeUser, scope)
 }
@@ -122,7 +124,7 @@ func TestResolveSkillScope_ExplicitGlobalSelectsUserScope(t *testing.T) {
 	v.Set("scope", marketplace.ScopeProject)
 	v.Set("global", true)
 
-	scope, err := resolveSkillScope(cmd, v)
+	scope, err := resolveSkillScope(cmd, v, false)
 	require.NoError(t, err)
 	assert.Equal(t, marketplace.ScopeUser, scope)
 }
@@ -134,46 +136,59 @@ func TestResolveSkillScope_ExplicitGlobalFalseKeepsConfiguredScope(t *testing.T)
 	v.Set("scope", marketplace.ScopeProject)
 	v.Set("global", false)
 
-	scope, err := resolveSkillScope(cmd, v)
+	scope, err := resolveSkillScope(cmd, v, false)
 	require.NoError(t, err)
 	assert.Equal(t, marketplace.ScopeProject, scope)
 }
 
-func TestResolveSkillScope_YesSkipsPromptAndDefaultsToConfiguredScope(t *testing.T) {
+// TestResolveSkillScope_SkipPromptDefaultsToConfiguredScope covers the caller
+// contract directly: resolveSkillScope no longer reads "yes"/"force" from
+// viper itself -- each caller decides what "skip the prompt" means for its
+// own flags (install.go passes its --yes value; uninstall.go passes --force,
+// since it has no separate --yes). Passing skipPrompt=true here stands in
+// for either caller.
+func TestResolveSkillScope_SkipPromptDefaultsToConfiguredScope(t *testing.T) {
 	cmd := newSkillInstallTestCmd(t)
 	v := viper.New()
 	v.Set("scope", marketplace.ScopeProject)
-	v.Set("yes", true)
 
-	scope, err := resolveSkillScope(cmd, v)
+	scope, err := resolveSkillScope(cmd, v, true)
 	require.NoError(t, err)
 	assert.Equal(t, marketplace.ScopeProject, scope)
 }
 
-func TestResolveSkillScope_ForceSkipsPromptAndDefaultsToConfiguredScope(t *testing.T) {
-	// uninstall.go has no separate --yes flag, so --force must also skip the
-	// scope prompt (matching resolveSkillClients's existing use of --force as
-	// its skip-prompt signal for uninstall).
-	cmd := newSkillUninstallTestCmd(t)
+// TestResolveSkillScope_InstallForceAloneIsNotASkipSignal is the regression
+// test for the bug where `atmos ai skill install --force` (with no --yes)
+// silently skipped the scope prompt: resolveSkillScope must not special-case
+// "force" internally -- it only ever sees skipPrompt, which install.go's
+// RunE must derive from --yes alone, never from --force ("--force" there
+// means "reinstall", not "skip prompts"). Passing skipPrompt=false here
+// (mirroring what install.go now does when --force is set but --yes is not)
+// must NOT hit the "flag was explicitly set" short-circuit.
+func TestResolveSkillScope_InstallForceAloneIsNotASkipSignal(t *testing.T) {
+	cmd := newSkillInstallTestCmd(t)
 	v := viper.New()
-	v.Set("scope", marketplace.ScopeUser)
-	v.Set("force", true)
+	v.Set("scope", marketplace.ScopeProject)
+	v.Set("force", true) // Present in viper, but resolveSkillScope must never read it.
 
-	scope, err := resolveSkillScope(cmd, v)
+	// skipPrompt=false: since neither --scope nor --global was Changed(), and
+	// skipPrompt is false, only the non-TTY fallback (unavoidable in this
+	// test process) causes a return here -- not "force".
+	scope, err := resolveSkillScope(cmd, v, false)
 	require.NoError(t, err)
-	assert.Equal(t, marketplace.ScopeUser, scope)
+	assert.Equal(t, marketplace.ScopeProject, scope)
 }
 
 func TestResolveSkillScope_NonTTYDefaultsToConfiguredScope(t *testing.T) {
 	// The test environment has no real TTY attached to stdin, so
 	// term.IsTTYSupportForStdin() is false and the non-interactive branch is
-	// taken even without --yes/--force -- mirroring
+	// taken even with skipPrompt=false -- mirroring
 	// cmd/mcp/client.TestResolveInstallScope's equivalent case.
 	cmd := newSkillUninstallTestCmd(t)
 	v := viper.New()
 	v.Set("scope", marketplace.ScopeUser)
 
-	scope, err := resolveSkillScope(cmd, v)
+	scope, err := resolveSkillScope(cmd, v, false)
 	require.NoError(t, err)
 	assert.Equal(t, marketplace.ScopeUser, scope)
 }

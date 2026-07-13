@@ -204,7 +204,10 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 	// An explicit --path takes full manual control and skips auto-distribution
 	// to avoid surprise double-writes.
 	if opts.Path == "" {
-		i.distributeToClients(opts.BasePath, installPath, metadata.Name, &opts)
+		clients := i.resolveDistributionClients(opts.BasePath, &opts)
+		for _, r := range i.distributeToClients(opts.BasePath, installPath, metadata.Name, clients, opts.Scope) {
+			ui.Infof("Also installed for `%s`: %s", r.Client, r.Target)
+		}
 	}
 
 	return printInstallSuccess(metadata.GetDisplayName(), metadata.GetVersion(), installPath)
@@ -216,7 +219,7 @@ func printInstallSuccess(displayName, version, installPath string) error {
 	ui.Successf("Skill %q installed successfully", displayName)
 	ui.Infof("Version: %s", version)
 	ui.Infof("Location: %s", redactHomePath(installPath))
-	ui.Infof("Usage: Switch to this skill in the TUI with Ctrl+A")
+	ui.Infof("Usage: Run `atmos ai chat` and switch to this skill with Ctrl+A")
 	return nil
 }
 
@@ -263,7 +266,10 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 	// An explicit --path takes full manual control and skips auto-distribution
 	// to avoid surprise double-writes.
 	if opts.Path == "" {
-		i.distributeToClients(opts.BasePath, installPath, installName, &opts)
+		clients := i.resolveDistributionClients(opts.BasePath, &opts)
+		for _, r := range i.distributeToClients(opts.BasePath, installPath, installName, clients, opts.Scope) {
+			ui.Infof("Also installed for `%s`: %s", r.Client, r.Target)
+		}
 	}
 
 	return printInstallSuccess(available.DisplayName, available.Version, installPath)
@@ -276,6 +282,17 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 func printItemColumns(header string, items []string) {
 	ui.Infof("%s", header)
 	ui.Write(ui.FormatColumns(items, ui.TerminalWidth()) + "\n")
+}
+
+// BacktickJoin renders items as a comma-separated, markdown-code-formatted
+// list (e.g. `claude-code`, `vscode`) for toast messages, so client/skill
+// names read as code rather than plain prose.
+func BacktickJoin(items []string) string {
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = "`" + item + "`"
+	}
+	return strings.Join(quoted, ", ")
 }
 
 // InstallAllBundled installs every skill in the embedded catalog. It mirrors
@@ -308,15 +325,19 @@ func (i *Installer) InstallAllBundled(opts *InstallOptions) error {
 		}
 	}
 
+	clients := i.resolveAndAnnounceDistributionClients(opts.BasePath, opts)
+
 	installed := 0
 	for idx := range catalog {
-		if i.installOneBundledSkill(&catalog[idx], opts) {
+		if i.installOneBundledSkill(&catalog[idx], opts, clients) {
 			installed++
 		}
 	}
 
 	ui.Successf("%d skills installed successfully", installed)
-	ui.Infof("Usage: Switch skills in the TUI with Ctrl+A")
+	if installed > 0 {
+		ui.Infof("Usage: Run `atmos ai chat` and switch skills with Ctrl+A")
+	}
 	return nil
 }
 
@@ -325,8 +346,11 @@ func (i *Installer) InstallAllBundled(opts *InstallOptions) error {
 // prompt (bundled skills are Atmos's own, already-reviewed content, and the
 // batch already got one upfront confirmation) and returns false with a
 // logged warning on a per-skill issue instead of returning an error, so the
-// rest of the batch keeps going.
-func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *InstallOptions) bool {
+// rest of the batch keeps going; clients is the batch's pre-resolved
+// distribution list (empty when opts.Path is set); success is intentionally
+// silent per skill -- the batch-level summary and "Distributing to" line
+// already cover it, so only failures are worth a line.
+func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *InstallOptions, clients []string) bool {
 	installName := available.Name
 	if opts.CustomName != "" {
 		installName = opts.CustomName
@@ -334,13 +358,12 @@ func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *Inst
 
 	if !opts.Force {
 		if _, err := i.localRegistry.Get(installName); err == nil {
-			ui.Warningf("Skipping %s (already installed, use --force to reinstall)", installName)
+			ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", installName)
 			return false
 		}
 	}
 
-	metadata, err := readBundledMetadata(available.Name)
-	if err != nil {
+	if _, err := readBundledMetadata(available.Name); err != nil {
 		log.Warnf("Skipping %s: %v", available.Name, err)
 		return false
 	}
@@ -356,13 +379,10 @@ func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *Inst
 		return false
 	}
 
-	// An explicit --path takes full manual control and skips auto-distribution
-	// to avoid surprise double-writes.
-	if opts.Path == "" {
-		i.distributeToClients(opts.BasePath, installPath, installName, opts)
+	if len(clients) > 0 {
+		i.distributeToClients(opts.BasePath, installPath, installName, clients, opts.Scope)
 	}
 
-	ui.Successf("Installed %s (%s)", available.DisplayName, metadata.GetVersion())
 	return true
 }
 
@@ -483,9 +503,12 @@ func confirmMultiSkillInstall(count int) error {
 	return requireConfirmation(fmt.Sprintf("Install all %d skills?", count), ErrInstallationCancelled)
 }
 
-// installOneSkillFromPackage installs a single skill from a multi-skill package.
-// Returns true if the skill was successfully installed.
-func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts InstallOptions) bool {
+// installOneSkillFromPackage installs a single skill from a multi-skill
+// package. Returns true if the skill was successfully installed; clients is
+// the batch's pre-resolved distribution list (empty when opts.Path is set);
+// success is intentionally silent per skill -- the batch-level summary and
+// "Distributing to" line already cover it, so only failures are worth a line.
+func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts *InstallOptions, clients []string) bool {
 	skillName := skill.metadata.Name
 	skillsDir, err := ResolveSkillsDir(opts.Path)
 	if err != nil {
@@ -505,7 +528,7 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		}
 		_ = i.localRegistry.Remove(skillName)
 	} else if _, err := i.localRegistry.Get(skillName); err == nil {
-		ui.Warningf("Skipping %s (already installed, use --force to reinstall)", skillName)
+		ui.Warningf("Skipping `%s` (already installed, use `--force` to reinstall)", skillName)
 		return false
 	}
 
@@ -536,13 +559,10 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		return false
 	}
 
-	// An explicit --path takes full manual control and skips auto-distribution
-	// to avoid surprise double-writes.
-	if opts.Path == "" {
-		i.distributeToClients(opts.BasePath, installPath, skillName, &opts)
+	if len(clients) > 0 {
+		i.distributeToClients(opts.BasePath, installPath, skillName, clients, opts.Scope)
 	}
 
-	ui.Successf("Installed %s", skillName)
 	return true
 }
 
@@ -562,15 +582,19 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		}
 	}
 
+	clients := i.resolveAndAnnounceDistributionClients(opts.BasePath, &opts)
+
 	installed := 0
 	for _, skill := range discovered {
-		if i.installOneSkillFromPackage(skill, sourceInfo, opts) {
+		if i.installOneSkillFromPackage(skill, sourceInfo, &opts, clients) {
 			installed++
 		}
 	}
 
 	ui.Successf("%d skills installed successfully", installed)
-	ui.Infof("Usage: Switch skills in the TUI with Ctrl+A")
+	if installed > 0 {
+		ui.Infof("Usage: Run `atmos ai chat` and switch skills with Ctrl+A")
+	}
 	return nil
 }
 
@@ -861,14 +885,62 @@ func (i *Installer) getInstallPath(source *SourceInfo, pathOverride string) (str
 	return filepath.Join(skillsDir, source.FullPath), nil
 }
 
-// distributeToClients copies an installed skill into each resolved client's
-// well-known skill directory (e.g. .github/skills/<name> for VS Code), so
-// clients like VS Code/Copilot pick it up with zero extra flags. Callers only
-// invoke this when opts.Path is unset -- an explicit --path takes full manual
-// control and skips auto-distribution to avoid surprise double-writes. A
-// distribution failure is a warning, not a hard error: the canonical install
-// already succeeded and remains the source of truth.
-func (i *Installer) distributeToClients(basePath, installPath, skillName string, opts *InstallOptions) {
+// resolveDistributionClients resolves which AI clients a skill should be
+// distributed to: an explicit opts.Clients/opts.AllClients always wins;
+// otherwise it auto-detects based on basePath/opts.Scope. Callers that
+// install many skills in one batch (e.g. InstallAllBundled) should call this
+// once up front rather than once per skill -- the result is the same every
+// time for a given basePath/opts.
+func (i *Installer) resolveDistributionClients(basePath string, opts *InstallOptions) []string {
+	if opts.AllClients {
+		return SupportedClients
+	}
+	if len(opts.Clients) > 0 {
+		return opts.Clients
+	}
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		log.Warnf("Failed to resolve home directory for client distribution: %v", err)
+	}
+	return DetectClients(basePath, homeDir, opts.Scope)
+}
+
+// resolveAndAnnounceDistributionClients resolves the batch distribution
+// client list once (see resolveDistributionClients) and, if any were
+// resolved, announces them with a single "Distributing to" line -- shared by
+// InstallAllBundled and installMultiSkillPackage so neither prints one line
+// per skill. Returns nil without announcing anything when opts.Path is set,
+// since an explicit --path skips auto-distribution entirely.
+func (i *Installer) resolveAndAnnounceDistributionClients(basePath string, opts *InstallOptions) []string {
+	if opts.Path != "" {
+		return nil
+	}
+	clients := i.resolveDistributionClients(basePath, opts)
+	if len(clients) > 0 {
+		ui.Infof("Distributing to: %s", BacktickJoin(clients))
+	}
+	return clients
+}
+
+// distributionResult names one client a skill was successfully distributed
+// to and the path it landed at.
+type distributionResult struct {
+	Client string
+	Target string
+}
+
+// distributeToClients copies an installed skill into each of the given
+// clients' well-known skill directory (e.g. .github/skills/<name> for VS
+// Code), so clients like VS Code/Copilot pick it up with zero extra flags.
+// Callers only invoke this when opts.Path is unset -- an explicit --path
+// takes full manual control and skips auto-distribution to avoid surprise
+// double-writes. A distribution failure is a warning, not a hard error: the
+// canonical install already succeeded and remains the source of truth.
+// Returns the clients actually distributed to (skipping a client with no
+// resolved directory or a pre-existing symlink); it never prints a
+// per-client success line itself -- that's left to the caller, so a batch
+// installer can announce the client list once instead of once per skill.
+func (i *Installer) distributeToClients(basePath, installPath, skillName string, clients []string, scope string) []distributionResult {
 	defer perf.Track(nil, "marketplace.Installer.distributeToClients")()
 
 	homeDir, err := homedir.Dir()
@@ -876,22 +948,15 @@ func (i *Installer) distributeToClients(basePath, installPath, skillName string,
 		log.Warnf("Failed to resolve home directory for client distribution: %v", err)
 	}
 
-	clients := opts.Clients
-	if opts.AllClients {
-		clients = SupportedClients
-	}
-	if len(clients) == 0 {
-		clients = DetectClients(basePath, homeDir, opts.Scope)
-	}
-
+	var results []distributionResult
 	for _, client := range clients {
-		dir := clientSkillDir(basePath, homeDir, opts.Scope, client)
+		dir := clientSkillDir(basePath, homeDir, scope, client)
 		if dir == "" {
 			continue
 		}
 		target := filepath.Join(dir, skillName)
 		if isSymlink(target) {
-			ui.Warningf("Skipping %s: %s is a symbolic link (%s) -- use --path to install to a plain directory instead",
+			ui.Warningf("Skipping `%s`: `%s` is a symbolic link (%s) -- use `--path` to install to a plain directory instead",
 				client, target, errUtils.ErrRefuseWriteThroughSymlink)
 			continue
 		}
@@ -903,8 +968,9 @@ func (i *Installer) distributeToClients(basePath, installPath, skillName string,
 			log.Warnf("Failed to distribute skill %q to %s (%s): %v", skillName, client, target, err)
 			continue
 		}
-		ui.Infof("Also installed for %s: %s", client, target)
+		results = append(results, distributionResult{Client: client, Target: target})
 	}
+	return results
 }
 
 // removeClientCopies best-effort removes any per-client distributed copies of
@@ -924,7 +990,7 @@ func removeClientCopies(basePath, skillName string, clients []string, scope stri
 		}
 		target := filepath.Join(dir, skillName)
 		if isSymlink(target) {
-			ui.Warningf("Skipping cleanup of %s: %s is a symbolic link (%s)", client, target, errUtils.ErrRefuseDeleteSymbolicLink)
+			ui.Warningf("Skipping cleanup of `%s`: `%s` is a symbolic link (%s)", client, target, errUtils.ErrRefuseDeleteSymbolicLink)
 			continue
 		}
 		if err := os.RemoveAll(target); err != nil {

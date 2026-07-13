@@ -1733,9 +1733,8 @@ func TestDistributeToClients_ExplicitClients(t *testing.T) {
 	installPath := distributionSourceDir(t)
 	basePath := t.TempDir()
 
-	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{
-		Clients: []string{ClientClaudeCode, ClientVSCode},
-	})
+	opts := &InstallOptions{Clients: []string{ClientClaudeCode, ClientVSCode}}
+	installer.distributeToClients(basePath, installPath, "dist-skill", opts.Clients, opts.Scope)
 
 	_, err := os.Stat(filepath.Join(basePath, ".claude", "skills", "dist-skill", skillFileName))
 	assert.NoError(t, err)
@@ -1750,7 +1749,8 @@ func TestDistributeToClients_AllClients(t *testing.T) {
 	installPath := distributionSourceDir(t)
 	basePath := t.TempDir()
 
-	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{AllClients: true})
+	opts := &InstallOptions{AllClients: true}
+	installer.distributeToClients(basePath, installPath, "dist-skill", SupportedClients, opts.Scope)
 
 	for _, client := range SupportedClients {
 		_, err := os.Stat(filepath.Join(clientSkillDir(basePath, "", ScopeProject, client), "dist-skill", skillFileName))
@@ -1764,7 +1764,9 @@ func TestDistributeToClients_AutoDetect(t *testing.T) {
 	basePath := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".vscode"), 0o755))
 
-	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{})
+	opts := &InstallOptions{}
+	clients := installer.resolveDistributionClients(basePath, opts)
+	installer.distributeToClients(basePath, installPath, "dist-skill", clients, opts.Scope)
 
 	_, err := os.Stat(filepath.Join(basePath, ".github", "skills", "dist-skill", skillFileName))
 	assert.NoError(t, err)
@@ -1795,9 +1797,8 @@ func TestDistributeToClients_SkipsPreExistingSymlink(t *testing.T) {
 		t.Skipf("Skipping symlink test: %v", err)
 	}
 
-	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{
-		Clients: []string{ClientClaudeCode, ClientVSCode},
-	})
+	opts := &InstallOptions{Clients: []string{ClientClaudeCode, ClientVSCode}}
+	installer.distributeToClients(basePath, installPath, "dist-skill", opts.Clients, opts.Scope)
 
 	// The symlink itself is untouched (still a symlink, still pointing at the same target).
 	assert.True(t, isSymlink(symlinkPath), "symlink must remain a symlink, not be replaced")
@@ -2002,10 +2003,8 @@ func TestDistributeToClients_UserScope(t *testing.T) {
 	installPath := distributionSourceDir(t)
 	basePath := t.TempDir()
 
-	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{
-		Scope:   ScopeUser,
-		Clients: []string{ClientClaudeCode, ClientVSCode},
-	})
+	opts := &InstallOptions{Scope: ScopeUser, Clients: []string{ClientClaudeCode, ClientVSCode}}
+	installer.distributeToClients(basePath, installPath, "dist-skill", opts.Clients, opts.Scope)
 
 	_, err := os.Stat(filepath.Join(tempHome, ".claude", "skills", "dist-skill", skillFileName))
 	assert.NoError(t, err, "expected user-scope claude-code distribution under the home dir")
