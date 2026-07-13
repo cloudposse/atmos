@@ -178,8 +178,6 @@ need AWS credentials; `aws-docs` is commonly no-auth):
 | aws-security   | Well-Architected security assessment   |
 | aws-api        | Direct AWS CLI (read-only by default)  |
 
-See `examples/mcp-for-ai-coding-assistants/atmos.yaml` for a working full configuration.
-
 ## Atmos Pro MCP Server (HTTP transport)
 
 The Atmos Pro MCP server is **HTTP transport** (not stdio), runs at
@@ -294,17 +292,16 @@ Gemini's Trusted Folders feature blocks MCP servers in untrusted directories. Af
 the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
 correctly but no tools available in Gemini.
 
-## Related Examples
+## Related Patterns
 
-- `examples/mcp-for-ai-coding-assistants/` -- canonical full setup: Atmos MCP server + AWS
-  server suite + Atmos Pro, exported to Claude Code / Codex / Gemini, AWS credentials via
-  Atmos Auth.
-- `examples/mcp/` -- external MCP server config when Atmos itself drives the AI loop
+- **Full external-CLI setup**: Atmos MCP server + AWS server suite + Atmos Pro, exported to
+  Claude Code / Codex / Gemini, with AWS credentials injected via Atmos Auth.
+- **Atmos-driven AI loop**: external MCP server config when Atmos itself drives the AI loop
   (`atmos ai ask`) instead of an external CLI.
-- `examples/ai-claude-code/` -- use a Claude Pro/Max subscription as Atmos's AI provider (no
-  Anthropic API key). Atmos hosts the conversation; Claude Code provides the model.
-- `examples/ai/` -- multi-provider Atmos AI setup (Anthropic API, OpenAI API, Ollama). No
-  external CLI; chat with infrastructure from `atmos ai ask`.
+- **Claude Pro/Max as the AI provider**: use an existing Claude Pro/Max subscription instead of
+  an Anthropic API key. Atmos hosts the conversation; Claude Code provides the model.
+- **Multi-provider setup**: Anthropic API, OpenAI API, and Ollama configured side by side, no
+  external CLI -- chat with infrastructure directly from `atmos ai ask`.
 
 ## Guardrails
 

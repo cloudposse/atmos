@@ -86,9 +86,9 @@ Important shared fields:
 
 ## Step Types
 
-Use the docs at `website/docs/workflows/workflows/workflow/steps/type.mdx` and
-the type-specific files under `website/docs/workflows/workflows/workflow/steps/type/`
-as the canonical reference. Current step families include:
+Use [atmos.tools/workflows/steps/type](https://atmos.tools/workflows/steps/type) and its
+type-specific subpages (e.g. `atmos.tools/workflows/steps/type/shell`) as the canonical
+reference. Current step families include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
   `http`/`webhook`, `require`.
@@ -99,9 +99,6 @@ as the canonical reference. Current step families include:
   `join`, `style`, `log`, `alert`, `say`, `title`, `clear`, `linebreak`,
   `stage`.
 - Workspace and recording: `workdir`, `cast`.
-
-If code and docs disagree, inspect the registered step handlers under
-`pkg/runner/step/` and schema constants in `pkg/schema/task.go`.
 
 ## Environment
 
@@ -161,7 +158,7 @@ steps:
     script: |
       from pathlib import Path
 
-      text = Path("website/static/casts/examples/sops-secrets.cast").read_text()
+      text = Path("path/to/your.cast").read_text()
       if "All proofs passed" not in text:
           raise SystemExit("cast validation failed")
 ```

@@ -13,17 +13,18 @@ metadata:
 Atmos uses JSON Schema (Draft 2020-12) to validate stack manifests, provide IDE auto-completion, and
 catch configuration errors early. The schema system has three layers:
 
-1. **Website manifest schema** -- Published at `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`,
-   served at `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`, and registered with SchemaStore
-   as `https://json.schemastore.org/atmos-manifest.json`. This is the public-facing schema for IDE integration.
+1. **Website manifest schema** -- Served at
+   `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`, and registered with
+   SchemaStore as `https://json.schemastore.org/atmos-manifest.json`. This is the public-facing
+   schema for IDE integration.
 
-2. **Embedded schemas** -- Located under `pkg/datafetcher/schema/`, compiled into the Atmos binary via Go `embed`.
-   These are the schemas Atmos uses at runtime for validation. There are multiple embedded schemas:
-   - `pkg/datafetcher/schema/atmos/manifest/1.0.json` -- Minimal manifest schema (fallback).
-   - `pkg/datafetcher/schema/stacks/stack-config/1.0.json` -- Stack configuration validation schema. This is
-     the primary schema used by `atmos validate stacks`.
-   - `pkg/datafetcher/schema/config/global/1.0.json` -- Global Atmos configuration schema.
-   - `pkg/datafetcher/schema/vendor/package/1.0.json` -- Vendor package manifest schema.
+2. **Embedded schemas** -- Compiled into the Atmos binary via Go `embed`. These are the schemas
+   Atmos uses at runtime for validation. There are multiple embedded schemas:
+   - Minimal manifest schema (fallback).
+   - Stack configuration validation schema -- this is the primary schema used by
+     `atmos validate stacks`.
+   - Global Atmos configuration schema.
+   - Vendor package manifest schema.
 
 3. **User-provided schema** -- Users can override the embedded schema by specifying a path or URL in `atmos.yaml`
    under `schemas.atmos.manifest`, or via `--schemas-atmos-manifest` flag or `ATMOS_SCHEMAS_ATMOS_MANIFEST` env var.
@@ -32,9 +33,7 @@ catch configuration errors early. The schema system has three layers:
 
 ### Website Schema (Public)
 
-**Path:** `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`
-
-This is deployed to `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` and is the
+Deployed to `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` -- the
 canonical public schema. It uses the SchemaStore `$id`:
 
 ```json
@@ -47,25 +46,15 @@ canonical public schema. It uses the SchemaStore `$id`:
 
 ### Embedded Schemas (Runtime)
 
-**Path:** `pkg/datafetcher/schema/`
+Compiled into the Atmos binary at build time and resolved internally via `atmos://` URIs. There
+are four embedded schemas:
 
-The `pkg/datafetcher/atmos_fetcher.go` uses `//go:embed schema/*` to embed all schema files into the binary.
-The `atmosFetcher.FetchData()` method resolves `atmos://` URIs to embedded schema files by stripping the prefix
-and appending `.json`.
-
-Directory structure:
-
-```text
-pkg/datafetcher/schema/
-  atmos/manifest/1.0.json          -- Minimal manifest schema
-  stacks/stack-config/1.0.json     -- Full stack config validation schema
-  config/global/1.0.json           -- Global atmos.yaml config schema
-  vendor/package/1.0.json          -- Vendor manifest schema
-```
+- A minimal manifest schema
+- A full stack config validation schema
+- A global `atmos.yaml` config schema
+- A vendor manifest schema
 
 ### Vendor Package Schema
-
-**Path:** `pkg/datafetcher/schema/vendor/package/1.0.json`
 
 Validates `vendor.yaml` files with `apiVersion`, `kind`, `metadata`, and `spec` sections:
 
@@ -191,19 +180,18 @@ rely on `atmos validate stacks` or IDE auto-completion.
 For feature work, always update the **website schema** and **stack-config schema** first.
 Then update the other two when the new keys or structure apply to their domains.
 
-| File | Purpose |
+| Schema | Purpose |
 |------|---------|
-| `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` | Public schema (website, SchemaStore, IDE) |
-| `pkg/datafetcher/schema/stacks/stack-config/1.0.json` | Primary embedded schema for `validate stacks` |
-| `pkg/datafetcher/schema/atmos/manifest/1.0.json` | Minimal embedded manifest schema |
-| `pkg/datafetcher/schema/config/global/1.0.json` | Global config validation schema |
+| Website schema (`https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`) | Public schema (website, SchemaStore, IDE) |
+| Stack-config schema (embedded) | Primary embedded schema for `validate stacks` |
+| Atmos manifest schema (embedded) | Minimal embedded manifest schema |
+| Global config schema (embedded) | Global config validation schema |
 
 The **website schema** and the **stack-config schema** are the most complete and feature-rich.
-Update **atmos/manifest** and **config/global** when adding top-level or structural changes that
-affect their respective domains.
+Update the **atmos manifest** and **global config** schemas when adding top-level or structural
+changes that affect their respective domains.
 
-For vendor manifest changes, update:
-- `pkg/datafetcher/schema/vendor/package/1.0.json`
+For vendor manifest changes, update the embedded vendor package schema.
 
 ### Step-by-Step: Adding a New Top-Level Property
 
@@ -393,34 +381,34 @@ Common patterns used in Atmos schemas:
 
 The four manifest schema files are mostly identical but have some differences:
 
-- **Website schema** (`website/static/`) -- The most complete. Includes `locals`, `dependencies`,
-  `generate`, `provision`, `source`, `auth`, and `component_auth` definitions. Has `source_retry`,
+- **Website schema** -- The most complete. Includes `locals`, `dependencies`, `generate`,
+  `provision`, `source`, `auth`, and `component_auth` definitions. Has `source_retry`,
   `auth_providers`, `auth_identities`, `auth_identity`, `auth_identity_via`, `auth_session`,
   and `auth_console` definitions.
 
-- **Stack-config schema** (`pkg/datafetcher/schema/stacks/`) -- Has `name` as a top-level property
-  (with description: "Logical name for this stack"). Has `locals` definition. May include
-  additional definitions like `name` in the `metadata` section. Missing some newer definitions
-  that are in the website schema (e.g., `generate`, `provision`, `source`, `auth`).
+- **Stack-config schema (embedded)** -- Has `name` as a top-level property (with description:
+  "Logical name for this stack"). Has `locals` definition. May include additional definitions
+  like `name` in the `metadata` section. Missing some newer definitions that are in the website
+  schema (e.g., `generate`, `provision`, `source`, `auth`).
 
-- **Atmos manifest schema** (`pkg/datafetcher/schema/atmos/`) -- Minimal. Does not have `locals`,
-  `dependencies`, `generate`, `provision`, `source`, or `auth` definitions.
+- **Atmos manifest schema (embedded)** -- Minimal. Does not have `locals`, `dependencies`,
+  `generate`, `provision`, `source`, or `auth` definitions.
 
-- **Global config schema** (`pkg/datafetcher/schema/config/`) -- Similar to atmos manifest, used
-  for global config validation.
+- **Global config schema (embedded)** -- Similar to atmos manifest, used for global config
+  validation.
 
 When adding new features, the minimum required updates are the **website schema** and the
-**stack-config schema**. Also update **atmos/manifest** when manifest-level validation is affected,
-and **config/global** when global config validation is affected.
+**stack-config schema**. Also update the **atmos manifest schema** when manifest-level validation
+is affected, and the **global config schema** when global config validation is affected.
 
 ### Checklist for Schema Updates
 
 When adding a new Atmos feature with configuration keys:
 
-- [ ] Add the definition to `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`
-- [ ] Add the definition to `pkg/datafetcher/schema/stacks/stack-config/1.0.json`
-- [ ] Add the definition to `pkg/datafetcher/schema/atmos/manifest/1.0.json` (if applicable)
-- [ ] Add the definition to `pkg/datafetcher/schema/config/global/1.0.json` (if applicable)
+- [ ] Add the definition to the website schema
+- [ ] Add the definition to the embedded stack-config schema
+- [ ] Add the definition to the embedded atmos manifest schema (if applicable)
+- [ ] Add the definition to the embedded global config schema (if applicable)
 - [ ] Add property references in top-level `properties` or component manifest `properties`
 - [ ] Include the `!include` pattern in `oneOf` for all new object definitions
 - [ ] Add `description` fields for IDE auto-completion hover text
@@ -474,9 +462,7 @@ Key definitions in the `definitions` section:
 ## Reference Files
 
 - [Schema structure reference](references/schema-structure.md) -- Detailed schema structure and definitions
-- Website schema: `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`
-- Embedded schemas: `pkg/datafetcher/schema/`
-- Schema embedding: `pkg/datafetcher/atmos_fetcher.go`
-- Schema configuration docs: `website/docs/cli/configuration/schemas.mdx`
-- Validate stacks docs: `website/docs/cli/commands/validate/validate-stacks.mdx`
-- Validate schema docs: `website/docs/cli/commands/validate/validate-schema.mdx`
+- Website schema: `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`
+- Schema configuration docs: [atmos.tools/cli/configuration/schemas](https://atmos.tools/cli/configuration/schemas)
+- Validate stacks docs: [atmos.tools/cli/commands/validate/stacks](https://atmos.tools/cli/commands/validate/stacks)
+- Validate schema docs: [atmos.tools/cli/commands/validate/schema](https://atmos.tools/cli/commands/validate/schema)
