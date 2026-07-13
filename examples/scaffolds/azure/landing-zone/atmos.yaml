@@ -27,6 +27,20 @@ auth:
       kind: azure/emulator
       emulator: azure
       default: true
+    # Real Azure instead of the local emulator: run `az login` once,
+    # uncomment this identity and the provider below it, and run with
+    # `--identity azure` -- or move `default: true` here once configured.
+    # https://atmos.tools/cli/commands/auth
+    # azure:
+    #   kind: azure/subscription
+    #   via:
+    #     provider: azure-cli
+    #   principal:
+    #     subscription_id: "00000000-0000-0000-0000-000000000000"
+    #     location: "[[ .Config.location ]]"
+  # providers:
+  #   azure-cli:
+  #     kind: azure/cli
 
 logs:
   file: "/dev/stderr"

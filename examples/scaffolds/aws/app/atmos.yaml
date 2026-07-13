@@ -27,6 +27,17 @@ auth:
       kind: aws/emulator
       emulator: aws
       default: true
+    # Real AWS instead of the local emulator: uncomment, fill in credentials
+    # (or swap for aws/permission-set with an SSO provider), and run with
+    # `--identity aws` -- or move `default: true` here once configured. Never
+    # commit real access keys; use !env or a shared credentials profile.
+    # https://atmos.tools/cli/commands/auth
+    # aws:
+    #   kind: aws/user
+    #   credentials:
+    #     access_key_id: !env AWS_ACCESS_KEY_ID
+    #     secret_access_key: !env AWS_SECRET_ACCESS_KEY
+    #     region: "[[ .Config.region ]]"
 
 ci:
   enabled: true

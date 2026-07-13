@@ -27,6 +27,21 @@ auth:
       kind: gcp/emulator
       emulator: gcp
       default: true
+    # Real GCP instead of the local emulator: run `gcloud auth
+    # application-default login` once, uncomment this identity and the
+    # provider below it, and run with `--identity gcp` -- or move
+    # `default: true` here once configured.
+    # https://atmos.tools/cli/commands/auth
+    # gcp:
+    #   kind: gcp/project
+    #   via:
+    #     provider: gcp-adc
+    #   principal:
+    #     project_id: "[[ .Config.gcp_project ]]"
+    #     region: "[[ .Config.region ]]"
+  # providers:
+  #   gcp-adc:
+  #     kind: gcp/adc
 
 logs:
   file: "/dev/stderr"
