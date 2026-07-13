@@ -20,7 +20,7 @@ To work with one environment:
 
 ```shell
 atmos emulator up azure -s dev
-atmos terraform apply --all -s dev -i false
+atmos terraform apply --all -s dev -auto-approve
 atmos terraform output network -s dev
 atmos emulator down azure -s dev
 ```

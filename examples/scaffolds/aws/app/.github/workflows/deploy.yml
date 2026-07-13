@@ -38,4 +38,4 @@ jobs:
       - name: Validate
         run: atmos validate stacks
       - name: Deploy
-        run: atmos terraform deploy app -s "${{ github.event.inputs.stage || 'dev' }}" -i false
+        run: atmos terraform deploy app -s "${{ github.event.inputs.stage || 'dev' }}"

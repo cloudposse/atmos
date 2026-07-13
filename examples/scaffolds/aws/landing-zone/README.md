@@ -19,7 +19,7 @@ To work with one environment interactively:
 
 ```shell
 atmos emulator up aws -s dev
-atmos terraform apply --all -s dev -i false
+atmos terraform apply --all -s dev -auto-approve
 atmos terraform output monitoring -s dev
 atmos emulator down aws -s dev
 ```

@@ -43,6 +43,14 @@ func TestScaffoldTemplatesRenderValidateAndAvoidNamePattern(t *testing.T) {
 				"XDG_CACHE_HOME":        filepath.Join(t.TempDir(), ".cache"),
 			}, 2*time.Minute, "validate", "stacks")
 			assertTreeDoesNotContain(t, target, "name_pattern")
+			// `-i` is the shorthand for `--identity` on `atmos terraform`
+			// commands, not `--interactive` -- `-i false` silently disables
+			// identity/emulator binding (selects a nonexistent "false"
+			// identity) rather than skipping the apply-approval prompt,
+			// which is `-auto-approve`. A scaffold's own generated `atmos
+			// test` command using `-i false` would break emulator auth for
+			// every user who runs it, with no error pointing at the cause.
+			assertTreeDoesNotContain(t, target, "-i false")
 		})
 	}
 }

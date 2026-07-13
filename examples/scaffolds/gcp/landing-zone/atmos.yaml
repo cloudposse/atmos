@@ -38,14 +38,14 @@ commands:
     steps:
       - atmos validate stacks
       - atmos emulator up gcp -s dev
-      - atmos terraform apply --all -s dev -i false
-      - atmos terraform destroy --all -s dev -i false
+      - atmos terraform apply --all -s dev -auto-approve
+      - atmos terraform destroy --all -s dev -auto-approve
       - atmos emulator down gcp -s dev
       - atmos emulator up gcp -s staging
-      - atmos terraform apply --all -s staging -i false
-      - atmos terraform destroy --all -s staging -i false
+      - atmos terraform apply --all -s staging -auto-approve
+      - atmos terraform destroy --all -s staging -auto-approve
       - atmos emulator down gcp -s staging
       - atmos emulator up gcp -s prod
-      - atmos terraform apply --all -s prod -i false
-      - atmos terraform destroy --all -s prod -i false
+      - atmos terraform apply --all -s prod -auto-approve
+      - atmos terraform destroy --all -s prod -auto-approve
       - atmos emulator down gcp -s prod

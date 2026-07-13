@@ -19,7 +19,7 @@ To work with one environment:
 
 ```shell
 atmos emulator up gcp -s dev
-atmos terraform apply --all -s dev -i false
+atmos terraform apply --all -s dev -auto-approve
 atmos terraform output foundation -s dev
 atmos emulator down gcp -s dev
 ```

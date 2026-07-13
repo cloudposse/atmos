@@ -18,7 +18,7 @@ To work with one environment:
 
 ```shell
 atmos emulator up aws -s dev
-atmos terraform apply app -s dev -i false
+atmos terraform apply app -s dev -auto-approve
 atmos terraform output app -s dev
 atmos emulator down aws -s dev
 ```

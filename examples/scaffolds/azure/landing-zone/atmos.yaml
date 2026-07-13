@@ -38,14 +38,14 @@ commands:
     steps:
       - atmos validate stacks
       - atmos emulator up azure -s dev
-      - atmos terraform apply --all -s dev -i false
-      - atmos terraform destroy --all -s dev -i false
+      - atmos terraform apply --all -s dev -auto-approve
+      - atmos terraform destroy --all -s dev -auto-approve
       - atmos emulator down azure -s dev
       - atmos emulator up azure -s staging
-      - atmos terraform apply --all -s staging -i false
-      - atmos terraform destroy --all -s staging -i false
+      - atmos terraform apply --all -s staging -auto-approve
+      - atmos terraform destroy --all -s staging -auto-approve
       - atmos emulator down azure -s staging
       - atmos emulator up azure -s prod
-      - atmos terraform apply --all -s prod -i false
-      - atmos terraform destroy --all -s prod -i false
+      - atmos terraform apply --all -s prod -auto-approve
+      - atmos terraform destroy --all -s prod -auto-approve
       - atmos emulator down azure -s prod

@@ -46,16 +46,16 @@ commands:
       - atmos validate stacks
       # dev
       - atmos emulator up aws -s dev
-      - atmos terraform apply --all -s dev -i false
-      - atmos terraform destroy --all -s dev -i false
+      - atmos terraform apply --all -s dev -auto-approve
+      - atmos terraform destroy --all -s dev -auto-approve
       - atmos emulator down aws -s dev
       # staging
       - atmos emulator up aws -s staging
-      - atmos terraform apply --all -s staging -i false
-      - atmos terraform destroy --all -s staging -i false
+      - atmos terraform apply --all -s staging -auto-approve
+      - atmos terraform destroy --all -s staging -auto-approve
       - atmos emulator down aws -s staging
       # prod
       - atmos emulator up aws -s prod
-      - atmos terraform apply --all -s prod -i false
-      - atmos terraform destroy --all -s prod -i false
+      - atmos terraform apply --all -s prod -auto-approve
+      - atmos terraform destroy --all -s prod -auto-approve
       - atmos emulator down aws -s prod
