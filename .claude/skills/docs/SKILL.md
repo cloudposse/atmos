@@ -71,28 +71,10 @@ Example:
 
 ## Changelog Posts
 
-Changelog posts live in `website/blog/` as dated `.mdx` files. Follow the template and tag/author rules in
-`CLAUDE.md` and the `pull-request` skill. In addition:
-
-- **LEAD WITH THE PROBLEM, not the feature.** People relate to problems; they don't relate to features. The
-  intro (the text above `<!--truncate-->`, which is what shows in the feed) MUST open on the pain the reader
-  already feels — the broken/tedious/confusing thing they live with today — and only then name the change as
-  the relief. Do NOT open with "Atmos now supports X" or "A new `--flag` does Y"; that is feature-first and
-  reads like a spec, not an announcement.
-  - Wrong (feature-first): "Atmos hooks can now run any workflow step type."
-  - Right (problem-first): "You want a hook to post to Slack after an apply, so you hand-roll a `curl` in a
-    `kind: command` shell step — again — because hooks couldn't reach the step types you already use."
-  - Structure the body to match: a `## The Problem` (or equivalent pain-framing) section first, then `## The
-    Fix` / how it works, then how to use it. Avoid leading the whole post with `## What Changed`.
-- **NEVER start a sentence, paragraph, heading body, list item, or the post intro with a backtick** (inline code
-  span) or a code fence. Lead with prose, then introduce the code. Markdown that opens on a backtick reads
-  awkwardly, breaks scannability, and can render poorly in feed/preview contexts.
-  - Wrong: `` `atmos describe affected` now compares every section. ``
-  - Right: ``The `atmos describe affected` command now compares every section.``
-  - Wrong (list/intro): `` `vars`, `env`, `settings` are evaluated. ``
-  - Right: ``The evaluated sections are `vars`, `env`, and `settings`.``
-- Put a real code block (fenced, language-tagged) on its own lines when showing commands or config — not inline at
-  the start of a sentence.
+Changelog posts live in `website/blog/` as dated `.mdx` files. Use the **`changelog` skill**
+(`.claude/skills/changelog/SKILL.md`) for the template, frontmatter, tag/author rules, and style requirements
+(problem-first framing, no backtick-opening prose, optional cast embeds, no Go-internals leakage) — don't
+restate them here.
 
 ## Release Docs
 

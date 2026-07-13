@@ -314,40 +314,14 @@ All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use keba
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
-- PRs labeled `minor`/`major` MUST include blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
-- Use `.mdx` with YAML front matter, `<!--truncate-->` after intro
-- **MUST read `website/blog/tags.yml`** - Only use tags defined there, never invent new tags
-- **MUST read `website/blog/authors.yml`** - Use existing author or add new entry for committer
-
-**Blog Template (LEAD WITH THE PROBLEM, not the feature — people relate to problems, not features):**
-```markdown
----
-slug: descriptive-slug
-title: "Clear Title"
-authors: [username]
-tags: [feature]
----
-Open on the PAIN the reader already feels — the broken/tedious/confusing thing they live with
-today — then name the change as the relief. The intro (above the truncate) is the announcement;
-do NOT open it with "Atmos now supports X" or "A new flag does Y" (that is feature-first and reads
-like a spec).
-<!--truncate-->
-## The Problem / The Fix / How to Use It / Get Involved
-```
-Structure the body problem-first: frame the pain, THEN the fix, THEN how to use it. Do not lead with
-`## What Changed`.
-
-**Valid Tags (from `website/blog/tags.yml`):**
-- User-facing: `feature`, `enhancement`, `bugfix`, `dx`, `breaking-change`, `security`, `documentation`, `deprecation`
-- Internal: `core` (for contributor-only changes with zero user impact)
+- PRs labeled `minor`/`major` MUST include a blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
+- See the `changelog` skill (`.claude/skills/changelog/SKILL.md`) for the MDX template, frontmatter,
+  `tags.yml`/`authors.yml` rules, and style requirements (problem-first framing, no backtick-opening prose,
+  optional cast embeds, no Go-internals leakage)
 
 **Roadmap Updates (CI Enforced):**
 - PRs labeled `minor`/`major` MUST also update `website/src/data/roadmap.js`
-- For new features: Add milestone to relevant initiative with `status: 'shipped'`
-- Link to changelog: Add `changelog: 'your-blog-slug'` to the milestone
-- Link to PR: Add `pr: <pr-number>` to the milestone
-- Update initiative `progress` percentage: `(shipped milestones / total milestones) * 100`
-- See `.claude/agents/roadmap.md` for detailed update instructions
+- See the `roadmap` skill (`.claude/skills/roadmap/SKILL.md`) for detailed update instructions
 
 Use `no-release` label for docs-only changes.
 
