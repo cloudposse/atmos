@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -46,6 +47,7 @@ var installCmd = &cobra.Command{
 		// Get flags from Viper (supports CLI > ENV > config > defaults).
 		force := v.GetBool("force")
 		skipConfirm := v.GetBool("yes")
+		path := v.GetString("path")
 
 		// Create installer.
 		installer, err := marketplace.NewInstaller(version.Version)
@@ -53,10 +55,29 @@ var installCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize installer: %w", err)
 		}
 
+		basePath, err := os.Getwd()
+		if err != nil {
+			basePath = "."
+		}
+
+		// An explicit --path takes full manual control, so skip resolving
+		// (and possibly prompting for) clients to auto-distribute to.
+		var clients []string
+		if path == "" {
+			clients, err = resolveSkillClients(basePath, v, skipConfirm, "Install skill into which clients?")
+			if err != nil {
+				return err
+			}
+		}
+
 		// Install skill.
 		opts := marketplace.InstallOptions{
 			Force:       force,
 			SkipConfirm: skipConfirm,
+			Path:        path,
+			BasePath:    basePath,
+			Clients:     clients,
+			AllClients:  v.GetBool("all-clients"),
 		}
 
 		ctx := context.Background()
@@ -75,6 +96,12 @@ func init() {
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
 		flags.WithEnvVars("yes", "ATMOS_AI_SKILL_YES"),
+		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: ~/.atmos/skills). Relative paths resolve against CWD, e.g. --path .github/skills for VS Code/Copilot auto-discovery."),
+		flags.WithEnvVars("path", "ATMOS_AI_SKILL_PATH"),
+		flags.WithStringSliceFlag("client", "c", nil, "AI client to distribute the skill to (repeatable): claude-code, vscode, gemini"),
+		flags.WithEnvVars("client", "ATMOS_AI_SKILL_CLIENT"),
+		flags.WithBoolFlag("all-clients", "", false, "Distribute the skill to all supported AI clients"),
+		flags.WithEnvVars("all-clients", "ATMOS_AI_SKILL_ALL_CLIENTS"),
 	)
 
 	// Register flags on the command.

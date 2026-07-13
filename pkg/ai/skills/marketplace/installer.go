@@ -30,9 +30,13 @@ type Installer struct {
 
 // InstallOptions configures the installation process.
 type InstallOptions struct {
-	Force       bool   // Reinstall if already installed.
-	SkipConfirm bool   // Skip security confirmation prompt.
-	CustomName  string // Install with custom name (--as).
+	Force       bool     // Reinstall if already installed.
+	SkipConfirm bool     // Skip security confirmation prompt.
+	CustomName  string   // Install with custom name (--as).
+	Path        string   // Override install base directory (--path); relative paths resolve against CWD.
+	BasePath    string   // Project base path used for client-signal detection and distribution (default: CWD).
+	Clients     []string // Explicit AI clients to distribute to (--client); empty means auto-detect.
+	AllClients  bool     // Distribute to every supported client (--all-clients).
 }
 
 // NewInstaller creates a new skill installer.
@@ -182,7 +186,10 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 		}
 	}
 
-	installPath := i.getInstallPath(sourceInfo)
+	installPath, err := i.getInstallPath(sourceInfo, opts.Path)
+	if err != nil {
+		return err
+	}
 
 	if err := i.moveSkillToInstallPath(tempDir, installPath, opts.Force); err != nil {
 		return err
@@ -190,6 +197,12 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 
 	if err := i.registerSkill(metadata, sourceInfo, installPath, opts.Force); err != nil {
 		return err
+	}
+
+	// An explicit --path takes full manual control and skips auto-distribution
+	// to avoid surprise double-writes.
+	if opts.Path == "" {
+		i.distributeToClients(opts.BasePath, installPath, metadata.Name, &opts)
 	}
 
 	return printInstallSuccess(metadata.GetDisplayName(), metadata.GetVersion(), installPath)
@@ -236,7 +249,7 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 		}
 	}
 
-	installPath, err := i.materializeBundledSkill(available.Name, installName, opts.Force)
+	installPath, err := i.materializeBundledSkill(available.Name, installName, opts.Path, opts.Force)
 	if err != nil {
 		return err
 	}
@@ -245,20 +258,31 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 		return err
 	}
 
+	// An explicit --path takes full manual control and skips auto-distribution
+	// to avoid surprise double-writes.
+	if opts.Path == "" {
+		i.distributeToClients(opts.BasePath, installPath, installName, &opts)
+	}
+
 	return printInstallSuccess(available.DisplayName, available.Version, installPath)
 }
 
 // materializeBundledSkill copies a bundled skill's files from the embedded FS
 // to its install path, handling --force replacement, and returns the install
-// path. The sourceName arg is the embedded directory name, and installName is
-// the on-disk name (may differ when --as is set).
-func (i *Installer) materializeBundledSkill(sourceName, installName string, force bool) (string, error) {
+// path.
+//
+// The sourceName argument is the embedded directory name, and installName is
+// the on-disk name, which may differ from sourceName when --as is set.
+// PathOverride honors --path / ATMOS_AI_SKILL_PATH. Bundled skills already
+// install flat (skillsDir/installName, no owner/repo nesting), so no extra
+// flattening is needed here.
+func (i *Installer) materializeBundledSkill(sourceName, installName, pathOverride string, force bool) (string, error) {
 	skillFS, err := bundledSkillFS(sourceName)
 	if err != nil {
 		return "", err
 	}
 
-	skillsDir, err := GetSkillsDir()
+	skillsDir, err := ResolveSkillsDir(pathOverride)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve skills directory: %w", err)
 	}
@@ -361,8 +385,17 @@ func confirmMultiSkillInstall(count int) error {
 // Returns true if the skill was successfully installed.
 func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts InstallOptions) bool {
 	skillName := skill.metadata.Name
-	skillsDir, _ := GetSkillsDir()
+	skillsDir, err := ResolveSkillsDir(opts.Path)
+	if err != nil {
+		log.Warnf("Failed to resolve install directory for %s: %v", skillName, err)
+		return false
+	}
+	// An explicit --path flattens the layout to <path>/<skillName>, dropping
+	// the default owner/repo nesting VS Code/Copilot don't expect.
 	installPath := filepath.Join(skillsDir, sourceInfo.Owner, sourceInfo.Repo, skillName)
+	if opts.Path != "" {
+		installPath = filepath.Join(skillsDir, skillName)
+	}
 
 	if opts.Force {
 		if err := os.RemoveAll(installPath); err != nil {
@@ -399,6 +432,12 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 	if err := i.localRegistry.Add(installedSkill); err != nil {
 		log.Warnf("Failed to register skill %s: %v", skillName, err)
 		return false
+	}
+
+	// An explicit --path takes full manual control and skips auto-distribution
+	// to avoid surprise double-writes.
+	if opts.Path == "" {
+		i.distributeToClients(opts.BasePath, installPath, skillName, &opts)
 	}
 
 	ui.Successf("Installed %s", skillName)
@@ -495,7 +534,11 @@ func copyEntry(srcPath, dstPath string, isDir bool) error {
 }
 
 // Uninstall removes an installed skill.
-func (i *Installer) Uninstall(name string, force bool) error {
+//
+// The basePath and clients arguments drive best-effort cleanup of any
+// per-client copies distributed by a prior install (see distributeToClients).
+// Pass a nil/empty clients slice to skip client cleanup.
+func (i *Installer) Uninstall(name string, force bool, basePath string, clients []string) error {
 	defer perf.Track(nil, "marketplace.Installer.Uninstall")()
 
 	// 1. Get skill from registry.
@@ -521,6 +564,9 @@ func (i *Installer) Uninstall(name string, force bool) error {
 	if err := i.localRegistry.Remove(name); err != nil {
 		return err
 	}
+
+	// 5. Best-effort cleanup of any distributed client copies.
+	removeClientCopies(basePath, name, clients)
 
 	ui.Successf("Skill %q uninstalled successfully", skill.DisplayName)
 	return nil
@@ -649,10 +695,72 @@ func readSkillPrompt(skillMDPath string) (string, error) {
 	return strings.TrimSpace(strings.Join(lines, "\n")), scanner.Err()
 }
 
-// getInstallPath returns the installation path for a skill.
-func (i *Installer) getInstallPath(source *SourceInfo) string {
-	skillsDir, _ := GetSkillsDir()
-	return filepath.Join(skillsDir, source.FullPath)
+// getInstallPath returns the installation path for a skill. When pathOverride
+// is set (--path / ATMOS_AI_SKILL_PATH), the layout is flattened to
+// <override>/<skillName>, dropping the default owner/repo nesting, since
+// VS Code/Copilot need a flat layout.
+func (i *Installer) getInstallPath(source *SourceInfo, pathOverride string) (string, error) {
+	skillsDir, err := ResolveSkillsDir(pathOverride)
+	if err != nil {
+		return "", err
+	}
+	if pathOverride != "" {
+		return filepath.Join(skillsDir, source.Name), nil
+	}
+	return filepath.Join(skillsDir, source.FullPath), nil
+}
+
+// distributeToClients copies an installed skill into each resolved client's
+// well-known skill directory (e.g. .github/skills/<name> for VS Code), so
+// clients like VS Code/Copilot pick it up with zero extra flags. Callers only
+// invoke this when opts.Path is unset -- an explicit --path takes full manual
+// control and skips auto-distribution to avoid surprise double-writes. A
+// distribution failure is a warning, not a hard error: the canonical install
+// already succeeded and remains the source of truth.
+func (i *Installer) distributeToClients(basePath, installPath, skillName string, opts *InstallOptions) {
+	defer perf.Track(nil, "marketplace.Installer.distributeToClients")()
+
+	clients := opts.Clients
+	if opts.AllClients {
+		clients = SupportedClients
+	}
+	if len(clients) == 0 {
+		clients = DetectClients(basePath)
+	}
+
+	for _, client := range clients {
+		dir := clientSkillDir(basePath, client)
+		if dir == "" {
+			continue
+		}
+		target := filepath.Join(dir, skillName)
+		if err := os.MkdirAll(target, dirPermissions); err != nil {
+			log.Warnf("Failed to create client skill directory for %s (%s): %v", client, target, err)
+			continue
+		}
+		if err := copyDir(installPath, target); err != nil {
+			log.Warnf("Failed to distribute skill %q to %s (%s): %v", skillName, client, target, err)
+			continue
+		}
+		ui.Infof("Also installed for %s: %s", client, target)
+	}
+}
+
+// removeClientCopies best-effort removes any per-client distributed copies of
+// a skill. This is a stateless recompute -- the registry never tracks which
+// clients a skill was distributed to, so removing a client copy that was
+// never created (or was already removed) simply no-ops.
+func removeClientCopies(basePath, skillName string, clients []string) {
+	for _, client := range clients {
+		dir := clientSkillDir(basePath, client)
+		if dir == "" {
+			continue
+		}
+		target := filepath.Join(dir, skillName)
+		if err := os.RemoveAll(target); err != nil {
+			log.Warnf("Failed to remove distributed skill %q from %s (%s): %v", skillName, client, target, err)
+		}
+	}
 }
 
 // redactHomePath replaces the home directory portion of a path with ~ for display.

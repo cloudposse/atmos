@@ -370,7 +370,7 @@ func TestUninstall_SkillNotFound(t *testing.T) {
 	installer, err := NewInstaller("1.0.0")
 	require.NoError(t, err)
 
-	err = installer.Uninstall("nonexistent", true)
+	err = installer.Uninstall("nonexistent", true, "", nil)
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrSkillNotFound))
@@ -400,7 +400,7 @@ func TestUninstall_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Uninstall with force.
-	err = installer.Uninstall("uninstall-test-skill", true)
+	err = installer.Uninstall("uninstall-test-skill", true, "", nil)
 
 	assert.NoError(t, err)
 	// Verify skill was removed from registry.
@@ -654,12 +654,33 @@ func TestGetInstallPath(t *testing.T) {
 		FullPath: "github.com/user/repo",
 	}
 
-	result := installer.getInstallPath(source)
+	result, err := installer.getInstallPath(source, "")
 
+	require.NoError(t, err)
 	assert.Contains(t, result, ".atmos")
 	assert.Contains(t, result, "skills")
 	// Use filepath.ToSlash to normalize for cross-platform comparison.
 	assert.Contains(t, filepath.ToSlash(result), "github.com/user/repo")
+}
+
+func TestGetInstallPath_WithOverride(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	installer := &Installer{}
+
+	source := &SourceInfo{
+		FullPath: "github.com/user/repo",
+		Name:     "repo",
+	}
+
+	overrideDir := filepath.Join(tempDir, "custom-skills")
+	result, err := installer.getInstallPath(source, overrideDir)
+
+	require.NoError(t, err)
+	// Flattened: <override>/<skillName>, not <override>/github.com/user/repo.
+	assert.Equal(t, filepath.Join(overrideDir, "repo"), result)
 }
 
 func TestRedactHomePath_WithHomePrefix(t *testing.T) {
@@ -1568,4 +1589,253 @@ metadata:
 func TestRedactHomePath_FallbackOnError(t *testing.T) {
 	result := redactHomePath("/some/random/path")
 	assert.Equal(t, "/some/random/path", result)
+}
+
+func TestInstall_PathOverride_FlattensLayout(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, Path: overridePath}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+	// Flattened: <override>/<skillName>, not <override>/github.com/test/test-skill.
+	assert.Equal(t, filepath.Join(overridePath, "test-skill"), skill.Path)
+
+	_, err = os.Stat(filepath.Join(overridePath, "test-skill", skillFileName))
+	assert.NoError(t, err)
+}
+
+func TestInstall_NoPathOverride_KeepsOwnerRepoNesting(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.ToSlash(filepath.Join(tempDir, ".atmos", "skills", "github.com", "test", "test-skill")), filepath.ToSlash(skill.Path))
+}
+
+func TestInstall_PathOverride_SkipsAutoDistribution(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".vscode"), 0o755))
+
+	ctx := context.Background()
+	opts := InstallOptions{
+		SkipConfirm: true,
+		Path:        filepath.Join(t.TempDir(), "custom-skills"),
+		BasePath:    basePath,
+	}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(basePath, ".github", "skills", "test-skill"))
+	assert.True(t, os.IsNotExist(err), "explicit --path must skip auto-distribution")
+}
+
+func TestInstallOneSkillFromPackage_PathOverride_Flattens(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	packageDir := createMultiSkillPackageDir(t, 1)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			copyTo := filepath.Join(t.TempDir(), "pkg-copy")
+			require.NoError(t, os.MkdirAll(copyTo, 0o755))
+			require.NoError(t, copyDirRecursive(packageDir, copyTo))
+			return copyTo, nil
+		},
+	}
+
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, Path: overridePath}
+
+	err = installer.Install(ctx, "github.com/cloudposse/atmos", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill-1")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(overridePath, "test-skill-1"), skill.Path)
+}
+
+// distributionSourceDir creates a minimal installed-skill directory (as if it
+// were already moved to its canonical install path) for distributeToClients tests.
+func distributionSourceDir(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, skillFileName), []byte("---\nname: dist-skill\n---\n\nBody.\n"), 0o644)
+	require.NoError(t, err)
+	return dir
+}
+
+func TestDistributeToClients_ExplicitClients(t *testing.T) {
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+
+	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{
+		Clients: []string{ClientClaudeCode, ClientVSCode},
+	})
+
+	_, err := os.Stat(filepath.Join(basePath, ".claude", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(basePath, ".github", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(basePath, ".gemini", "skills", "dist-skill", skillFileName))
+	assert.True(t, os.IsNotExist(err), "gemini was not requested, must not be distributed")
+}
+
+func TestDistributeToClients_AllClients(t *testing.T) {
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+
+	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{AllClients: true})
+
+	for _, client := range SupportedClients {
+		_, err := os.Stat(filepath.Join(clientSkillDir(basePath, client), "dist-skill", skillFileName))
+		assert.NoError(t, err, "expected distribution for client %s", client)
+	}
+}
+
+func TestDistributeToClients_AutoDetect(t *testing.T) {
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".vscode"), 0o755))
+
+	installer.distributeToClients(basePath, installPath, "dist-skill", &InstallOptions{})
+
+	_, err := os.Stat(filepath.Join(basePath, ".github", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(basePath, ".claude", "skills", "dist-skill", skillFileName))
+	assert.True(t, os.IsNotExist(err), "claude-code was not detected, must not be distributed")
+}
+
+func TestInstallThenUninstall_RemovesCanonicalAndClientCopies(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".claude"), 0o755))
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, BasePath: basePath}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+
+	clientCopyPath := filepath.Join(basePath, ".claude", "skills", "test-skill")
+	_, err = os.Stat(clientCopyPath)
+	require.NoError(t, err, "expected auto-distributed claude-code copy")
+
+	// Mirror what the CLI does: recompute the client list (stateless -- no
+	// registry tracking of prior distribution) and pass it to Uninstall.
+	clients := DetectClients(basePath)
+	err = installer.Uninstall("test-skill", true, basePath, clients)
+	require.NoError(t, err)
+
+	_, err = os.Stat(skill.Path)
+	assert.True(t, os.IsNotExist(err), "canonical install path should be removed")
+	_, err = os.Stat(clientCopyPath)
+	assert.True(t, os.IsNotExist(err), "distributed client copy should be removed")
+}
+
+func TestUninstall_NoClients_SkipsClientCleanup(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillPath := filepath.Join(tempDir, ".atmos", "skills", "no-client-cleanup-skill")
+	require.NoError(t, os.MkdirAll(skillPath, 0o755))
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	skill := &InstalledSkill{
+		Name:    "no-client-cleanup-skill",
+		Path:    skillPath,
+		Enabled: true,
+	}
+	require.NoError(t, installer.localRegistry.Add(skill))
+
+	err = installer.Uninstall("no-client-cleanup-skill", true, "", nil)
+	require.NoError(t, err)
+
+	_, err = os.Stat(skillPath)
+	assert.True(t, os.IsNotExist(err))
 }

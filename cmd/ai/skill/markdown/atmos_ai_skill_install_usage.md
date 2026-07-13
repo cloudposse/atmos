@@ -33,3 +33,21 @@ $ atmos ai skill install cloudposse/atmos --force
 ```
 $ atmos ai skill install cloudposse/atmos --yes
 ```
+
+- Install to a custom directory (e.g. for VS Code/Copilot, skips auto-distribution)
+
+```
+$ atmos ai skill install atmos-terraform --path .github/skills
+```
+
+- Distribute the skill to a specific AI client
+
+```
+$ atmos ai skill install atmos-terraform --client vscode
+```
+
+- Distribute the skill to every supported AI client
+
+```
+$ atmos ai skill install atmos-terraform --all-clients
+```

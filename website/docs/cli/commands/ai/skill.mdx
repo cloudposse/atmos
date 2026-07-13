@@ -57,6 +57,8 @@ Install a skill by its bundled name (offline) or from a GitHub repository.
 
 The official Atmos skills are embedded in the binary, so installing one by its bare name (for example `atmos-terraform`) works fully offline — no network or Git clone required. Run `atmos ai skill list` to see every available skill. You can also install any skill from a GitHub repository.
 
+By default, the skill is also auto-distributed into any detected AI client's project-local skill directory (`.github/skills/` for VS Code/Copilot, `.claude/skills/` for Claude Code, `.gemini/skills/` for Gemini), so it works with zero extra flags. Use `--client`/`--all-clients` to control which clients receive a copy, or `--path` to take full manual control of the install location (this skips auto-distribution).
+
 **Usage:**
 ```shell
 atmos ai skill install <source> [flags]
@@ -70,6 +72,15 @@ atmos ai skill install <source> [flags]
 
   <dt>`-y, --yes`</dt>
   <dd>Skip the confirmation prompt.</dd>
+
+  <dt>`--path`</dt>
+  <dd>Override the skill install directory (default: `~/.atmos/skills`). Relative paths resolve against the current working directory, e.g. `--path .github/skills` for VS Code/Copilot auto-discovery. Setting `--path` skips auto-distribution to AI clients.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>AI client to distribute the skill to (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Distribute the skill to every supported AI client.</dd>
 </dl>
 
 **Examples:**
@@ -88,6 +99,15 @@ atmos ai skill install github.com/user/skill-name --force
 
 # Install without confirmation
 atmos ai skill install github.com/user/skill-name --yes
+
+# Install to a custom directory (skips auto-distribution)
+atmos ai skill install atmos-terraform --path .github/skills
+
+# Distribute to a specific AI client
+atmos ai skill install atmos-terraform --client vscode
+
+# Distribute to every supported AI client
+atmos ai skill install atmos-terraform --all-clients
 ```
 
 ### `atmos ai skill list`
@@ -123,7 +143,7 @@ atmos ai skill list --detailed
 
 ### `atmos ai skill uninstall`
 
-Remove an installed skill.
+Remove an installed skill. Any copies auto-distributed to AI clients during install are removed as well.
 
 **Usage:**
 ```shell
@@ -135,6 +155,12 @@ atmos ai skill uninstall <name> [flags]
 <dl>
   <dt>`-f, --force`</dt>
   <dd>Skip the confirmation prompt.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>AI client to remove the skill from (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Remove the skill from every supported AI client.</dd>
 </dl>
 
 **Examples:**
@@ -144,6 +170,12 @@ atmos ai skill uninstall skill-name
 
 # Uninstall without confirmation
 atmos ai skill uninstall skill-name --force
+
+# Remove the skill from a specific AI client only
+atmos ai skill uninstall skill-name --client vscode
+
+# Remove the skill from every supported AI client
+atmos ai skill uninstall skill-name --all-clients
 ```
 
 ## Related Commands

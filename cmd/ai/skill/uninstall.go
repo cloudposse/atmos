@@ -3,6 +3,7 @@ package skill
 import (
 	_ "embed"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -51,8 +52,18 @@ var uninstallCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize installer: %w", err)
 		}
 
+		basePath, err := os.Getwd()
+		if err != nil {
+			basePath = "."
+		}
+
+		clients, err := resolveSkillClients(basePath, v, force, "Remove skill from which clients?")
+		if err != nil {
+			return err
+		}
+
 		// Uninstall skill.
-		if err := installer.Uninstall(name, force); err != nil {
+		if err := installer.Uninstall(name, force, basePath, clients); err != nil {
 			return err
 		}
 
@@ -65,6 +76,10 @@ func init() {
 	uninstallParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
+		flags.WithStringSliceFlag("client", "c", nil, "AI client to remove the skill from (repeatable): claude-code, vscode, gemini"),
+		flags.WithEnvVars("client", "ATMOS_AI_SKILL_CLIENT"),
+		flags.WithBoolFlag("all-clients", "", false, "Remove the skill from all supported AI clients"),
+		flags.WithEnvVars("all-clients", "ATMOS_AI_SKILL_ALL_CLIENTS"),
 	)
 
 	// Register flags on the command.

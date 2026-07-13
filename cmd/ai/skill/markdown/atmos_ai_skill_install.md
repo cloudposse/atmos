@@ -9,6 +9,13 @@ and multi-skill packages (with skills/*/SKILL.md pattern) are both supported.
 Skills will be validated and installed to ~/.atmos/skills/. You can then use
 them in the AI TUI by switching with Ctrl+A.
 
+By default, the skill is also auto-distributed into any detected AI client's
+project-local skill directory (e.g. .github/skills/ for VS Code/Copilot,
+.claude/skills/ for Claude Code, .gemini/skills/ for Gemini) so it's usable
+with zero extra flags. Use --client/--all-clients to control which clients
+receive a copy, or --path to take full manual control of the install
+location instead (this skips auto-distribution).
+
 Skills follow the Agent Skills open standard (https://agentskills.io)
 and use the SKILL.md format with YAML frontmatter.
 
@@ -28,3 +35,12 @@ Security:
   - Tool access is explicitly declared in skill metadata
   - You will be prompted to confirm installation before proceeding
   - Use --yes to skip confirmation (for automation)
+
+Flags:
+  - --path overrides the install directory (default: ~/.atmos/skills); relative
+    paths resolve against the current working directory
+  - --client (repeatable) distributes the skill to specific AI clients:
+    claude-code, vscode, gemini
+  - --all-clients distributes the skill to every supported AI client
+  - When no --client/--all-clients is given, detected clients are used
+    automatically (interactively you'll be prompted to confirm)

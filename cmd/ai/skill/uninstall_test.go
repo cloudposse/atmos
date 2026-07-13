@@ -34,6 +34,20 @@ func TestUninstallCmd_Flags(t *testing.T) {
 		assert.Equal(t, "false", flag.DefValue)
 		assert.Equal(t, "f", flag.Shorthand)
 	})
+
+	t.Run("has client flag with shorthand", func(t *testing.T) {
+		flag := uninstallCmd.Flags().Lookup("client")
+		require.NotNil(t, flag, "client flag should be registered")
+		assert.Equal(t, "stringSlice", flag.Value.Type())
+		assert.Equal(t, "c", flag.Shorthand)
+	})
+
+	t.Run("has all-clients flag", func(t *testing.T) {
+		flag := uninstallCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag, "all-clients flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+	})
 }
 
 func TestUninstallCmd_LongDescription(t *testing.T) {
@@ -126,6 +140,20 @@ func TestUninstallCmd_FlagUsage(t *testing.T) {
 		require.NotNil(t, flag)
 		assert.NotEmpty(t, flag.Usage)
 		assert.Contains(t, flag.Usage, "confirmation")
+	})
+
+	t.Run("client flag has usage description", func(t *testing.T) {
+		flag := uninstallCmd.Flags().Lookup("client")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI client")
+	})
+
+	t.Run("all-clients flag has usage description", func(t *testing.T) {
+		flag := uninstallCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI clients")
 	})
 }
 
@@ -976,5 +1004,25 @@ func TestUninstallCmd_StandardParserServer(t *testing.T) {
 		flag := uninstallCmd.Flags().Lookup("force")
 		require.NotNil(t, flag)
 		assert.Equal(t, "f", flag.Shorthand)
+	})
+
+	t.Run("env var binding for client flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_CLIENT", "vscode")
+
+		v := viper.New()
+		err := uninstallParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"vscode"}, v.GetStringSlice("client"))
+	})
+
+	t.Run("env var binding for all-clients flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_ALL_CLIENTS", "true")
+
+		v := viper.New()
+		err := uninstallParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("all-clients"), "all-clients should be true from ATMOS_AI_SKILL_ALL_CLIENTS env var")
 	})
 }

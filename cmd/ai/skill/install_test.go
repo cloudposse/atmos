@@ -38,6 +38,27 @@ func TestInstallCmd_Flags(t *testing.T) {
 		assert.Equal(t, "false", flag.DefValue)
 		assert.Equal(t, "y", flag.Shorthand)
 	})
+
+	t.Run("has path flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag, "path flag should be registered")
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("has client flag with shorthand", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("client")
+		require.NotNil(t, flag, "client flag should be registered")
+		assert.Equal(t, "stringSlice", flag.Value.Type())
+		assert.Equal(t, "c", flag.Shorthand)
+	})
+
+	t.Run("has all-clients flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag, "all-clients flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+	})
 }
 
 func TestInstallCmd_LongDescription(t *testing.T) {
@@ -164,6 +185,27 @@ func TestInstallCmd_FlagUsage(t *testing.T) {
 		require.NotNil(t, flag)
 		assert.NotEmpty(t, flag.Usage)
 		assert.Contains(t, flag.Usage, "confirmation")
+	})
+
+	t.Run("path flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "install directory")
+	})
+
+	t.Run("client flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("client")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI client")
+	})
+
+	t.Run("all-clients flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI clients")
 	})
 }
 
@@ -822,5 +864,57 @@ func TestInstallCmd_ViperPrecedence(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.False(t, v.GetBool("force"), "CLI flag should override env var")
+	})
+
+	t.Run("path flag defaults to empty via Viper", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag)
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("env var binding for path flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_PATH", "/tmp/custom-skills")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "/tmp/custom-skills", v.GetString("path"), "path should come from ATMOS_AI_SKILL_PATH env var")
+	})
+
+	t.Run("CLI path flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_PATH", "/tmp/env-skills")
+
+		oldVal := installCmd.Flags().Lookup("path").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("path", oldVal)
+		})
+		require.NoError(t, installCmd.Flags().Set("path", "/tmp/cli-skills"))
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "/tmp/cli-skills", v.GetString("path"), "CLI flag should override env var")
+	})
+
+	t.Run("env var binding for client flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_CLIENT", "vscode")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"vscode"}, v.GetStringSlice("client"))
+	})
+
+	t.Run("env var binding for all-clients flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_ALL_CLIENTS", "true")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("all-clients"), "all-clients should be true from ATMOS_AI_SKILL_ALL_CLIENTS env var")
 	})
 }
