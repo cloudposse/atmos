@@ -59,7 +59,7 @@ hooks:
   <dd>Glob(s); matching files are dropped, evaluated before `include`.</dd>
 
   <dt>`mtime`</dt>
-  <dd>`filesystem` (default), `epoch`, or `git`. Controls the modification-time metadata stamped into each archive entry, pinning it (and permission bits) so identical content produces byte-identical output regardless of when or where it's built. See [Reproducible archives](#reproducible-archives). Supports Go templates.</dd>
+  <dd>`filesystem` (default), `epoch`, or `git`. Controls the modification-time metadata stamped into each archive entry. `filesystem` preserves the source's real mtime and permission bits (not deterministic). `epoch`/`git` also normalize permission bits, producing byte-identical output for identical content regardless of when or where it's built. See [Reproducible archives](#reproducible-archives). Supports Go templates.</dd>
 </dl>
 
 ## Update vs. replace
@@ -72,7 +72,7 @@ For the common "always rebuild this archive fresh before every plan/apply" use c
 
 By default, archived entries carry the source files' real modification time and permission bits. That means the same source content can produce a *different* archive — different bytes, different checksum — depending on when it was checked out and which machine built it: a fresh `git clone` sets every file's mtime to "now," and umask differences across environments change which permission bits land on disk. If anything downstream keys off the archive's hash (a Lambda deployment that only redeploys when the zip's checksum changes, a cache, a build-provenance check), a rebuild from identical source can look like a change when nothing actually changed.
 
-Set `mtime` to make the archive's bytes depend only on file *content*, not on when or where it was built. The name describes the mechanism, not an outcome: `mtime` is the modification-time metadata stamped into each *archive entry* — not the source files on disk, and not the archive file's own OS-level mtime.
+Set `mtime: epoch` or `mtime: git` to make the archive's bytes depend only on file *content*, not on when or where it was built. The name describes the mechanism, not an outcome: `mtime` is the modification-time metadata stamped into each *archive entry* — not the source files on disk, and not the archive file's own OS-level mtime.
 
 ```yaml
 steps:

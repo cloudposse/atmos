@@ -36,18 +36,24 @@ an equivalent shell-based `kind: command` hook — which works, but:
   (mirroring the original Terragrunt script's own variable, which predates and doesn't
   reference `archive_file` at all) instead of referencing the data source's attribute,
   so there was no dependency edge forcing the data source to run first. This isn't a
-  one-off mistake specific to this migration — it's a known, still-open class of bug:
+  one-off mistake specific to this migration — it's a documented class of bug:
   [hashicorp/terraform#30042](https://github.com/hashicorp/terraform/issues/30042)
-  documents the exact failure (`filebase64sha256(data.archive_file.default.output_path)`
-  racing the data source's own `Read()`, with "reference `output_base64sha256`
-  directly instead" as the standing workaround);
+  tracked the exact failure (`filebase64sha256(data.archive_file.default.output_path)`
+  racing the data source's own `Read()`); it was closed once the reporter switched to
+  referencing `output_base64sha256` directly — the same fix this migration's module
+  hadn't made.
   [hashicorp/terraform-provider-archive#218](https://github.com/hashicorp/terraform-provider-archive/issues/218)
-  covers the data source's odd plan-time lifecycle (it writes the archive to disk
-  during `plan`, not `apply`, and isn't cleaned up on `destroy`); and
+  documented the data source's odd plan-time lifecycle (it writes the archive to disk
+  during `plan`, not `apply`, and isn't cleaned up on `destroy`), later closed
+  alongside `archive_file`'s un-deprecation.
   [hashicorp/terraform-provider-archive#34](https://github.com/hashicorp/terraform-provider-archive/issues/34)
-  covers `archive_file` producing different bytes on different OSes for identical
-  source, the same non-reproducibility problem this PRD's own archive step has to
-  solve (see [Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization)).
+  documented `archive_file` producing different bytes on different OSes for identical
+  source — the same non-reproducibility problem this PRD's own archive step has to
+  solve (see [Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization))
+  — also closed, though a later comment on the same thread describes the underlying
+  non-determinism persisting for other users packaging compiled binaries. All three
+  are closed issues, not open bugs; they're cited here as documented evidence of the
+  failure mode, not as a claim that Terraform currently mishandles this.
   A `before.terraform.*` hook remains the only reliable place to run packaging logic
   before Terraform starts, but that hook's *body* shouldn't have to be a hand-rolled
   shell script.

@@ -274,7 +274,11 @@ jobs:
         run: TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
 
       - name: Acceptance tests
-        timeout-minutes: 45
+        # Windows runs of this step have been observed between 37m43s and
+        # 45m06s (the latter timed out at the old 45m budget) — 7-8 minutes
+        # of CI-to-CI variance on a budget with almost no headroom. 60m
+        # matches the Linux coverage step's budget and gives real slack.
+        timeout-minutes: 60
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

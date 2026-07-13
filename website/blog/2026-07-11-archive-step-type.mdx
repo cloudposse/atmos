@@ -63,9 +63,10 @@ correctly. It broke here because the migrated module computed the zip path
 independently in a `locals` block, mirroring the original Terragrunt script's own
 variable, instead of referencing the data source's attribute — so there was no
 dependency edge forcing `archive_file` to run first. That's not a one-off: it's a
-[known, still-open class of bug](https://github.com/hashicorp/terraform/issues/30042),
-with "reference the data source's output attribute directly instead" as the standing
-workaround. A `before.terraform.*` hook sidesteps the whole class of problem
+[documented class of bug](https://github.com/hashicorp/terraform/issues/30042),
+closed once the reporter switched to referencing the output attribute directly — the
+same fix this migration's module hadn't made. A `before.terraform.*` hook sidesteps
+the whole class of problem
 structurally — it runs and completes before Terraform's graph is even evaluated, so
 there's no reference to get wrong.
 
@@ -126,7 +127,7 @@ need a breaking change to add them later.
 A native step type fixes the shelling-out problems, but not the reproducibility one
 by itself — by default, entries still carry the source files' real mtime and
 permission bits (same as omitting the field, or setting it to `filesystem`
-explicitly). Set `mtime` to fix that too:
+explicitly). Set `mtime: epoch` or `mtime: git` to fix that too:
 
 ```yaml
 steps:
