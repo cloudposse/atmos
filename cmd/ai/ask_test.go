@@ -2,6 +2,9 @@
 package ai
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +16,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestAskCommand_BasicProperties(t *testing.T) {
@@ -2355,4 +2360,90 @@ func TestAskCommand_StandardParserServer(t *testing.T) {
 		assert.False(t, v.GetBool("no-tools"), "no-tools should default to false")
 		assert.False(t, v.GetBool("no-auto-context"), "no-auto-context should default to false")
 	})
+}
+
+// TestAskCommand_FullExecutionSuccess exercises the entire RunE happy path,
+// including the final `data.Markdownf` render of the formatted response
+// (the branch that only runs once exec.Execute() reports success). Other
+// tests in this file deliberately point at an unreachable Ollama endpoint to
+// exercise error branches; this one uses a real httptest.Server that speaks
+// the OpenAI-compatible chat-completions API (mirrors the pattern in
+// cmd/ai/exec_test.go's TestExecCommand_FullExecutionPath) so the client
+// receives a genuine successful response.
+func TestAskCommand_FullExecutionSuccess(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "llama3.3:70b",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "This is the AI response.",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     10,
+				"completion_tokens": 20,
+				"total_tokens":      30,
+			},
+		})
+	}))
+	defer mockServer.Close()
+
+	tempDir := t.TempDir()
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	stackContent := "vars:\n  stage: dev\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(stackContent), 0o600))
+
+	configContent := `base_path: "./"` +
+		"\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"` +
+		"\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"` + `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: false
+  providers:
+    ollama:
+      base_url: "` + mockServer.URL + `"
+      model: "llama3.3:70b"
+      max_tokens: 4096
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(configContent), 0o600))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Chdir(tempDir)
+
+	// Wire the markdown renderer used by data.Markdownf, mirroring root.go's
+	// PersistentPreRun. TestMain only calls ui.InitFormatter, not
+	// data.SetMarkdownRenderer, so RunE's final data.Markdownf call would
+	// otherwise fail with ErrUIFormatterNotInitialized.
+	data.SetMarkdownRenderer(ui.Format)
+
+	testCmd := &cobra.Command{
+		Use:  "ask",
+		Args: cobra.MinimumNArgs(1),
+	}
+	testCmd.Flags().StringSlice("include", nil, "Include patterns")
+	testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+	testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+	testCmd.Flags().Bool("no-tools", true, "Disable tool execution")
+
+	err := askCmd.RunE(testCmd, []string{"What is in my stacks?"})
+	require.NoError(t, err, "RunE should succeed and render the Markdown response")
 }

@@ -7,13 +7,13 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
-	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var settingsParser *flags.StandardParser
@@ -72,8 +72,7 @@ var settingsCmd = &cobra.Command{
 			return err
 		}
 
-		utils.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 

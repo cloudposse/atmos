@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
@@ -1381,7 +1382,7 @@ func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	u.PrintMessage("")
+	_ = data.Writeln("")
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
@@ -1390,20 +1391,22 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 
-	u.PrintfMarkdownToTUI("\n")
-
+	var configSection string
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config.
-		u.PrintfMarkdownToTUI(missingConfigDefaultMarkdown, stacksDir)
+		configSection = fmt.Sprintf(missingConfigDefaultMarkdown, stacksDir)
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components.
-		u.PrintfMarkdownToTUI(missingConfigFoundMarkdown, stacksDir)
+		configSection = fmt.Sprintf(missingConfigFoundMarkdown, stacksDir)
 	}
 
-	u.PrintfMarkdownToTUI("\n")
-
-	// Use markdown formatting for consistent output to stderr.
-	u.PrintfMarkdownToTUI("%s", gettingStartedMarkdown)
+	// Render as a single markdown document (not one call per section): the
+	// renderer pads every call with its own leading/trailing blank line, so
+	// multiple calls in sequence compound into extra blank lines between
+	// sections. gettingStartedMarkdown is concatenated as plain text, not
+	// interpolated as a format string, since it may itself contain literal
+	// '%' characters.
+	ui.MarkdownMessage("\n" + configSection + "\n" + gettingStartedMarkdown)
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
