@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -464,7 +465,7 @@ func TestMultipleYamlFunctionsAuthPropagation(t *testing.T) {
 // needing a real terraform/tofu binary, so both CaptureOutput branches can be
 // asserted directly.
 func TestExecuteTerraformQueryComponent(t *testing.T) {
-	t.Chdir("../../examples/demo-stacks")
+	t.Chdir(filepath.Join("..", "..", "examples", "demo-stacks"))
 
 	tests := []struct {
 		name          string

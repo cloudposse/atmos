@@ -796,11 +796,12 @@ type ComponentNodeHooks interface {
 	// specifically means on_failure: fail.
 	Before(ctx context.Context, info *ConfigAndStacksInfo) error
 
-	// After runs after-event hooks following one component's execution (or
-	// following a Before failure/executor error). A non-nil return (again,
-	// only possible for on_failure: fail) must be treated as this
-	// component's execution failing, matching single-component Terraform
-	// behavior where an after-hook failure fails the command.
+	// After runs after-event hooks following one component's execution,
+	// including an executor error. It is not called when Before aborts
+	// execution. A non-nil return (again, only possible for on_failure: fail)
+	// must be treated as this component's execution failing, matching
+	// single-component Terraform behavior where an after-hook failure fails
+	// the command.
 	After(ctx context.Context, info *ConfigAndStacksInfo, output string, execErr error) error
 }
 

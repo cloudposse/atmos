@@ -2,6 +2,7 @@ package helmfile
 
 import (
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -168,7 +169,7 @@ func newHelmfileRunTestCmd() *cobra.Command {
 // unit test), since the underlying error is non-nil here.
 func TestHelmfileRun_NodeHooksFallbackOnEarlyFailure(t *testing.T) {
 	skipIfHelmfileNotInstalled(t)
-	t.Chdir("../../tests/fixtures/scenarios/complete")
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
 
 	err := helmfileRun(newHelmfileRunTestCmd(), "diff", []string{"echo-server", "-s", "tenant1-ue2-dev"})
 	require.Error(t, err, "diff should fail: the fixture's helm auth profile does not exist locally")

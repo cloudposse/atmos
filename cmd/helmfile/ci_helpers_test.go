@@ -2,6 +2,7 @@ package helmfile
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -118,7 +119,7 @@ func TestHelmfileNodeHooksAfter_NoCI(t *testing.T) {
 func TestHelmfileNodeHooksAfter_ExecErr(t *testing.T) {
 	t.Setenv("ATMOS_CI", "")
 	t.Setenv("CI", "")
-	t.Chdir("../../examples/demo-stacks")
+	t.Chdir(filepath.Join("..", "..", "examples", "demo-stacks"))
 
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "myapp", Stack: "dev"}
 	nodeHooks := &helmfileNodeHooks{
@@ -142,7 +143,7 @@ func TestHelmfileNodeHooksAfter_ExecErr(t *testing.T) {
 // demo-stacks fixture so cfg.InitCliConfig succeeds and runUserHooks is
 // actually reached (rather than the config-init-failure branch).
 func TestHelmfileNodeHooksBefore(t *testing.T) {
-	t.Chdir("../../examples/demo-stacks")
+	t.Chdir(filepath.Join("..", "..", "examples", "demo-stacks"))
 
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "myapp", Stack: "dev"}
 	nodeHooks := &helmfileNodeHooks{
