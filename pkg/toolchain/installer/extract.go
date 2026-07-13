@@ -101,9 +101,9 @@ func (i *Installer) extractByExtension(assetPath, binaryPath string, tool *regis
 func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) error {
 	log.Debug("Extracting ZIP archive", filenameKey, filepath.Base(zipPath))
 
-	tempDir, err := os.MkdirTemp("", "installer-extract-")
+	tempDir, err := newStagingDir(binaryPath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create temp dir: %w", ErrFileOperation, err)
+		return err
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -182,90 +182,52 @@ func installExtractedBinary(src, dst string) error {
 	return nil
 }
 
-// extractFilesFromDir extracts files from the extracted archive using the Files config.
-// The binaryPath parameter specifies the destination for the primary binary.
+// extractFilesFromDir installs the configured entrypoints from an extracted
+// archive tree. The binaryPath parameter specifies the destination for the
+// primary binary.
 //
 // File placement convention:
-//   - The FIRST file in tool.Files is treated as the primary binary and is installed
-//     to binaryPath. This matches the Aqua registry convention where the first file
-//     entry represents the main executable.
-//   - ADDITIONAL files (index > 0) are placed in the same directory as the primary
-//     binary, using their configured Name as the filename.
+//   - The FIRST file in tool.Files is treated as the primary binary. It is
+//     installed to binaryPath (flat mode) or symlinked to it (onedir mode). This
+//     matches the Aqua registry convention where the first entry is the main
+//     executable.
+//   - ADDITIONAL files (index > 0) are exposed in the same directory using their
+//     configured Name.
 //
-// Template variables in file.Src (e.g., {{.OS}}-{{.Arch}}/helm) are expanded using
-// the same template data as asset URLs.
+// Layout is chosen by the onedir gate (shouldPreserveTree):
+//   - Single-binary tools keep the legacy FLAT layout (the entrypoints are moved
+//     directly into the version dir).
+//   - Multi-file ("onedir") bundles such as aws-cli and nodejs/node keep the
+//     COMPLETE archive tree under <versionDir>/.pkg and expose the entrypoints as
+//     symlinks into it, so bundled binaries keep their runtime siblings (shared
+//     libraries, node_modules, ...) alongside them.
 //
-// This convention allows tools with multiple binaries (e.g., a main CLI plus helpers)
-// to be installed correctly while maintaining a consistent installation path.
+// Template variables in file.Src (e.g., {{.OS}}-{{.Arch}}/helm) are expanded
+// using the same template data as asset URLs.
 func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool) error {
 	if len(tool.Files) == 0 {
 		return fmt.Errorf("%w: no files configured for extraction", ErrFileOperation)
 	}
 
-	destDir := filepath.Dir(binaryPath)
-	if err := os.MkdirAll(destDir, defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("%w: failed to create destination directory: %w", ErrFileOperation, err)
+	eps, err := i.resolveEntrypoints(tool)
+	if err != nil {
+		return err
 	}
 
-	// Extract all configured files.
-	for idx, file := range tool.Files {
-		srcPath := file.Src
-		if srcPath == "" {
-			srcPath = file.Name // Default src to name if not specified.
-		}
-
-		// Expand template variables in srcPath (e.g., {{.OS}}-{{.Arch}}/helm).
-		expandedSrcPath, err := i.expandFileSrcTemplate(srcPath, tool)
-		if err != nil {
-			return fmt.Errorf("%w: failed to expand file src template: %w", ErrFileOperation, err)
-		}
-
-		src := filepath.Join(tempDir, expandedSrcPath)
-		var dst string
-		if idx == 0 {
-			// First file is the primary binary - use the specified binaryPath.
-			dst = binaryPath
-		} else {
-			// Additional files go into the same directory with their specified name.
-			dst = filepath.Join(destDir, file.Name)
-		}
-
-		log.Debug("Extracting file from archive",
-			"src", expandedSrcPath,
-			"dst", dst,
-			"isPrimary", idx == 0)
-
-		// Check if source file exists.
-		// On Windows, archives may contain binaries with .exe extension even when the
-		// registry definition doesn't specify it. Try both with and without .exe.
-		if _, err := os.Stat(src); os.IsNotExist(err) {
-			if runtime.GOOS != "windows" {
-				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
-			}
-			// Try with .exe extension (common for Windows binaries in archives).
-			srcWithExe := src + windowsExeExt
-			if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
-				if !os.IsNotExist(exeErr) {
-					return fmt.Errorf("%w: failed to stat file in archive: %s: %w", ErrFileOperation, srcWithExe, exeErr)
-				}
-				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
-			}
-			src = srcWithExe
-			// Also update dst to include .exe if it doesn't already.
-			dst = EnsureWindowsExeExtension(dst)
-		}
-
-		if err := MoveFile(src, dst); err != nil {
-			return fmt.Errorf("%w: failed to extract file %s: %w", ErrFileOperation, file.Name, err)
-		}
-
-		// Make the file executable.
-		if err := os.Chmod(dst, defaultMkdirPermissions); err != nil {
-			return fmt.Errorf("%w: failed to make file executable: %w", ErrFileOperation, err)
-		}
+	preserve, err := shouldPreserveTree(tempDir, eps)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	if preserve {
+		log.Debug("Installing multi-file (onedir) package: preserving archive tree",
+			"binary", filepath.Base(binaryPath), "entrypoints", len(eps))
+		return i.installOnedir(tempDir, binaryPath, eps)
+	}
+
+	log.Debug("Installing single-binary package (flat layout)",
+		"binary", filepath.Base(binaryPath), "entrypoints", len(eps))
+	return i.installFlat(tempDir, binaryPath, eps)
 }
 
 // expandFileSrcTemplate expands template variables in a file source path.
@@ -341,11 +303,32 @@ func extractZipFile(f *zip.File, dest string, maxSize int64) error {
 		return os.MkdirAll(fpath, os.ModePerm)
 	}
 
+	// A zip symlink entry stores its target path as the entry's content.
+	if f.Mode()&os.ModeSymlink != 0 {
+		return extractZipSymlink(f, fpath, dest, maxSize)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
 		return err
 	}
 
 	return copyFileContents(f, fpath, maxSize)
+}
+
+// extractZipSymlink materializes a symlink stored in a zip archive, where the
+// link target is the entry's file content.
+func extractZipSymlink(f *zip.File, linkPath, dest string, maxSize int64) error {
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	buf, err := io.ReadAll(io.LimitReader(rc, maxSize))
+	if err != nil {
+		return fmt.Errorf("%w: failed to read symlink target for %s: %w", ErrFileOperation, f.Name, err)
+	}
+	return extractSymlink(linkPath, string(buf), dest)
 }
 
 func validatePath(name, dest string) (string, error) {
@@ -445,6 +428,12 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
 		return extractDir(targetPath, header)
 	case tar.TypeReg:
 		return extractFile(tr, targetPath, header)
+	case tar.TypeSymlink:
+		// Preserve symlink entrypoints (e.g. nodejs npm/npx/corepack) instead of
+		// dropping them, so onedir packages install completely.
+		return extractSymlink(targetPath, header.Linkname, dest)
+	case tar.TypeLink:
+		return extractHardLink(targetPath, header.Linkname, dest)
 	default:
 		ui.Warningf("Skipping unknown type: %s", header.Name)
 		return nil
@@ -491,9 +480,9 @@ func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
 func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool) error {
 	log.Debug("Extracting tar.gz archive", filenameKey, filepath.Base(tarPath))
 
-	tempDir, err := os.MkdirTemp("", "installer-extract-")
+	tempDir, err := newStagingDir(binaryPath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create temp dir: %w", ErrFileOperation, err)
+		return err
 	}
 	defer os.RemoveAll(tempDir)
 

@@ -328,10 +328,18 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	}
 	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, logFieldVersion, version, "url", assetURL)
 
-	assetPath, effectiveAssetURL, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
+	assetPath, effectiveAssetURL, effectiveVersion, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrHTTPRequest, err)
 	}
+	// Render files[].src and archive paths using the version that actually
+	// downloaded. Some tools (e.g. nodejs) publish under a "v"-prefixed path, so a
+	// bare "24.18.0" pin resolves to "v24.18.0" via the download fallback; the
+	// extracted archive's top-level directory carries the same prefix. The version
+	// DIRECTORY on disk still uses the originally requested `version` for
+	// .tool-versions / lookup consistency.
+	tool.Version = effectiveVersion
+
 	verificationResult, err := i.verifyDownloadedAsset(tool, version, effectiveAssetURL, assetPath)
 	if err != nil {
 		_ = os.Remove(assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
@@ -668,6 +676,10 @@ func (i *Installer) ParseToolSpec(tool string) (string, string, error) {
 func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version string) (string, error) {
 	// Create version-specific directory
 	versionDir := filepath.Join(i.binDir, tool.RepoOwner, tool.RepoName, version)
+	// Track whether the version dir pre-existed so a failed install of a fresh
+	// version cleans up after itself (no orphaned partial install that would fool
+	// FindBinaryPath), without clobbering a previously installed good copy.
+	preExisting := dirExists(versionDir)
 	if err := os.MkdirAll(versionDir, defaultMkdirPermissions); err != nil {
 		return "", fmt.Errorf("%w: failed to create version directory: %w", ErrFileOperation, err)
 	}
@@ -682,6 +694,11 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 
 	// For now, just copy the file (simplified extraction)
 	if err := i.simpleExtract(assetPath, binaryPath, tool); err != nil {
+		if !preExisting {
+			// Remove the partial install so a subsequent run does not treat the
+			// orphaned binary as "installed".
+			_ = os.RemoveAll(versionDir) // #nosec G703 -- versionDir is the installer-created version directory.
+		}
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
 	}
 
@@ -750,18 +767,14 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 		return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
 	}
 
-	// Get the directory containing the binary
+	// Get the version directory containing the binary.
 	binaryDir := filepath.Dir(binaryPath)
 
-	// Remove the binary file
-	if err := os.Remove(binaryPath); err != nil {
-		return fmt.Errorf("%w: failed to remove binary %s: %w", ErrFileOperation, binaryPath, err)
-	}
-
-	// Try to remove the directory if it's empty
-	if err := os.Remove(binaryDir); err != nil {
-		// It's okay if the directory is not empty or can't be removed
-		log.Debug("Could not remove directory (may not be empty)", "dir", binaryDir, "error", err)
+	// Remove the entire version directory. A onedir (multi-file) package keeps a
+	// preserved archive tree (.pkg) and entrypoint symlinks alongside the primary
+	// binary, so removing just the binary file would orphan the rest.
+	if err := os.RemoveAll(binaryDir); err != nil {
+		return fmt.Errorf("%w: failed to remove %s: %w", ErrFileOperation, binaryDir, err)
 	}
 
 	// Try to remove parent directories if they're empty

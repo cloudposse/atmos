@@ -965,7 +965,8 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 		}
 
 		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
-		assert.Error(t, err)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
 	})
 }
 
@@ -1094,20 +1095,66 @@ func TestExtractEntry(t *testing.T) {
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
-	t.Run("skips unknown type with warning", func(t *testing.T) {
+	t.Run("recreates symlink entry", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires privilege on Windows; onedir Windows support is tracked separately")
+		}
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
 
 		header := &tar.Header{
-			Name:     "symlink",
-			Typeflag: tar.TypeSymlink, // Symlink is an unknown/unhandled type.
+			Name:     "bin/npm",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../lib/npm-cli.js", // Relative target within the tree.
 			Mode:     0o755,
 		}
 
-		// Should not return error for unknown types (just skip them).
+		require.NoError(t, extractEntry(nil, header, destDir))
+
+		// The entry must be an actual symlink preserving the recorded target.
+		linkPath := filepath.Join(destDir, "bin", "npm")
+		info, err := os.Lstat(linkPath)
+		require.NoError(t, err)
+		require.NotZero(t, info.Mode()&os.ModeSymlink, "entry must be a symlink")
+		target, err := os.Readlink(linkPath)
+		require.NoError(t, err)
+		assert.Equal(t, "../lib/npm-cli.js", target)
+	})
+
+	t.Run("rejects symlink escaping the destination", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+		header := &tar.Header{
+			Name:     "evil",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../../../../etc/passwd",
+			Mode:     0o755,
+		}
+
+		err := extractEntry(nil, header, destDir)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("skips truly unknown type with warning", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+		header := &tar.Header{
+			Name:     "fifo",
+			Typeflag: tar.TypeFifo, // Genuinely unhandled type.
+			Mode:     0o755,
+		}
+
+		// Should not return an error for unknown types (just skip them).
 		err := extractEntry(nil, header, destDir)
 		assert.NoError(t, err)
+		_, statErr := os.Lstat(filepath.Join(destDir, "fifo"))
+		assert.True(t, os.IsNotExist(statErr), "unknown type must not be materialized")
 	})
 }
 
