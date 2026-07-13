@@ -92,6 +92,17 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			shorthand: "",
 		},
 		{
+			name:         "update flag",
+			flagName:     "update",
+			shorthand:    "",
+			defaultValue: "false",
+		},
+		{
+			name:      "base-ref flag",
+			flagName:  "base-ref",
+			shorthand: "",
+		},
+		{
 			name:         "git flag",
 			flagName:     "git",
 			shorthand:    "",

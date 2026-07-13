@@ -2,6 +2,7 @@ package initcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -64,6 +65,8 @@ If no target directory is specified, you will be prompted for one.`,
 
 		// Get flag values with proper precedence: flag > env > config > default.
 		force := v.GetBool("force")
+		update := v.GetBool("update")
+		baseRef := v.GetString("base-ref")
 		sourceOverride := v.GetString("source-override")
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
@@ -91,6 +94,8 @@ If no target directory is specified, you will be prompted for one.`,
 			targetDir:      target,
 			interactive:    interactive,
 			force:          force,
+			update:         update,
+			baseRef:        baseRef,
 			templateVars:   templateValues,
 			sourceOverride: sourceOverride,
 			ref:            ref,
@@ -105,6 +110,8 @@ func init() {
 	// Create StandardParser for init command flags with ATMOS_INIT_* env vars.
 	initParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
+		flags.WithBoolFlag("update", "", false, "Update an existing target directory via a 3-way merge instead of failing"),
+		flags.WithStringFlag("base-ref", "", "", "Git ref in the target directory to use as the 3-way merge base (used with --update; defaults to HEAD)"),
 		flags.WithBoolFlag("interactive", "i", true, "Interactive mode for template selection and configuration (disabled automatically without a terminal)"),
 		flags.WithStringSliceFlag("set", "", []string{}, "Set template values (can be used multiple times: --set key=value)"),
 		flags.WithStringFlag("source-override", "", "", "Resolve catalog templates from this local base directory instead of their remote source (mainly for testing)"),
@@ -112,6 +119,8 @@ func init() {
 		flags.WithBoolFlag("git", "", true, "Initialize a git repository and create the initial commit"),
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
+		flags.WithEnvVars("update", "ATMOS_INIT_UPDATE"),
+		flags.WithEnvVars("base-ref", "ATMOS_INIT_BASE_REF"),
 		flags.WithEnvVars("interactive", "ATMOS_INIT_INTERACTIVE"),
 		flags.WithEnvVars("set", "ATMOS_INIT_SET"),
 		flags.WithEnvVars("source-override", "ATMOS_INIT_SOURCE_OVERRIDE", "ATMOS_SCAFFOLD_SOURCE_OVERRIDE"),
@@ -200,6 +209,8 @@ type initOptions struct {
 	targetDir      string
 	interactive    bool
 	force          bool
+	update         bool
+	baseRef        string
 	templateVars   map[string]interface{}
 	sourceOverride string
 	ref            string
@@ -329,9 +340,40 @@ func runInitExecution(initUI *ui.InitUI, selectedConfig *templates.Configuration
 		if !opts.interactive {
 			return "", fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
 		}
-		return initUI.ExecuteWithInteractiveFlowResult(selectedConfig, "", opts.force, false, !opts.interactive, opts.templateVars)
+		targetDir, err := initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
+		if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
+			if confirmed, cErr := initUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
+				return initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
+			}
+		}
+		return targetDir, err
 	}
 
 	// Target directory provided, use normal Execute.
-	return opts.targetDir, initUI.Execute(selectedConfig, opts.targetDir, opts.force, false, !opts.interactive, opts.templateVars)
+	err := initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
+	if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
+		if confirmed, cErr := initUI.ConfirmUpdateInstead(opts.targetDir); cErr == nil && confirmed {
+			return opts.targetDir, initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
+		}
+	}
+	return opts.targetDir, err
+}
+
+// shouldOfferUpdate decides whether to offer a 3-way-merge update instead of
+// failing outright on a non-empty target directory: only when the failure is
+// exactly that, the caller isn't already using --force/--update, and a real
+// terminal is available to prompt on. Returns the base ref to retry with
+// (the caller's --base-ref, defaulting to HEAD) alongside the decision.
+func shouldOfferUpdate(err error, opts *initOptions) (bool, string) {
+	if err == nil || opts.force || opts.update || !opts.interactive {
+		return false, ""
+	}
+	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
+		return false, ""
+	}
+	baseRef := opts.baseRef
+	if baseRef == "" {
+		baseRef = "HEAD"
+	}
+	return true, baseRef
 }

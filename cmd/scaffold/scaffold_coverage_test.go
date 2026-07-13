@@ -2,7 +2,9 @@ package scaffold
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -510,6 +512,96 @@ func TestExecuteTemplateGeneration_WithTargetDir(t *testing.T) {
 		require.NoError(t, err)
 		assert.DirExists(t, filepath.Join(dir, ".git"))
 	})
+}
+
+func TestShouldOfferScaffoldUpdate(t *testing.T) {
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	otherErr := errUtils.Build(errUtils.ErrInitialization).Err()
+
+	tests := []struct {
+		name        string
+		err         error
+		opts        *scaffoldGenerateOptions
+		wantOffer   bool
+		wantBaseRef string
+	}{
+		{"nil error", nil, &scaffoldGenerateOptions{interactive: true}, false, ""},
+		{"force already set", notEmptyErr, &scaffoldGenerateOptions{interactive: true, force: true}, false, ""},
+		{"update already set", notEmptyErr, &scaffoldGenerateOptions{interactive: true, update: true}, false, ""},
+		{"not interactive", notEmptyErr, &scaffoldGenerateOptions{interactive: false}, false, ""},
+		{"dry run", notEmptyErr, &scaffoldGenerateOptions{interactive: true, dryRun: true}, false, ""},
+		{"different error", otherErr, &scaffoldGenerateOptions{interactive: true}, false, ""},
+		{"offers with default HEAD base ref", notEmptyErr, &scaffoldGenerateOptions{interactive: true}, true, "HEAD"},
+		{"offers with caller base ref", notEmptyErr, &scaffoldGenerateOptions{interactive: true, baseRef: "v1.2.3"}, true, "v1.2.3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			offer, baseRef := shouldOfferScaffoldUpdate(tt.err, tt.opts)
+			assert.Equal(t, tt.wantOffer, offer)
+			assert.Equal(t, tt.wantBaseRef, baseRef)
+		})
+	}
+}
+
+// TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory covers the
+// real bug --update fixes: re-running scaffold generation against an
+// already-generated, git-initialized directory with update+base-ref=HEAD
+// regenerates the template while preserving the user's own edits via a
+// 3-way merge, instead of failing with "target directory is not empty".
+func TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory(t *testing.T) {
+	configs, _, scaffoldUI, err := loadScaffoldTemplates("")
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	dir := t.TempDir()
+	opts := &scaffoldGenerateOptions{
+		useDefaults:    true,
+		templateValues: map[string]interface{}{"project_name": "demo"},
+	}
+	require.NoError(t, executeTemplateGeneration(&cfg, dir, opts, scaffoldUI))
+
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "init"))
+	// Disable commit signing: dev machines with a GPG/1Password signing agent
+	// configured globally can hang or fail here otherwise.
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "commit.gpgsign", "false"))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.email", "test@example.com"))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.name", "Test"))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "add", "."))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "commit", "-m", "initial"))
+
+	readmePath := filepath.Join(dir, "README.md")
+	original, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(readmePath, append(original, []byte("\nuser note\n")...), 0o600))
+
+	updateOpts := &scaffoldGenerateOptions{
+		useDefaults:    true,
+		update:         true,
+		baseRef:        "HEAD",
+		templateValues: map[string]interface{}{"project_name": "demo"},
+	}
+	err = executeTemplateGeneration(&cfg, dir, updateOpts, scaffoldUI)
+
+	require.NoError(t, err)
+	merged, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(merged), "user note", "the user's manual edit must survive the 3-way merge")
+}
+
+// scaffoldRunGitCommand runs git in dir for test setup, skipping the test if git is unavailable.
+func scaffoldRunGitCommand(t *testing.T, dir string, args ...string) error {
+	t.Helper()
+	if _, lookErr := exec.LookPath("git"); lookErr != nil {
+		t.Skip("git binary not found on PATH")
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %v failed: %w: %s", args, err, string(out))
+	}
+	return nil
 }
 
 func TestSelectGenerateTemplate_ConfigHit(t *testing.T) {

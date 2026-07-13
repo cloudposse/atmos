@@ -2,7 +2,9 @@ package initcmd
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
@@ -71,6 +74,18 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 		{
 			name:         "ref flag",
 			flagName:     "ref",
+			shorthand:    "",
+			defaultValue: "",
+		},
+		{
+			name:         "update flag",
+			flagName:     "update",
+			shorthand:    "",
+			defaultValue: "false",
+		},
+		{
+			name:         "base-ref flag",
+			flagName:     "base-ref",
 			shorthand:    "",
 			defaultValue: "",
 		},
@@ -500,6 +515,130 @@ func TestRunInitExecution_WithTargetDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, dir, finalDir)
 	assert.FileExists(t, filepath.Join(dir, "README.md"))
+}
+
+func TestShouldOfferUpdate(t *testing.T) {
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	otherErr := errUtils.Build(errUtils.ErrInitialization).Err()
+
+	tests := []struct {
+		name        string
+		err         error
+		opts        *initOptions
+		wantOffer   bool
+		wantBaseRef string
+	}{
+		{"nil error", nil, &initOptions{interactive: true}, false, ""},
+		{"force already set", notEmptyErr, &initOptions{interactive: true, force: true}, false, ""},
+		{"update already set", notEmptyErr, &initOptions{interactive: true, update: true}, false, ""},
+		{"not interactive", notEmptyErr, &initOptions{interactive: false}, false, ""},
+		{"different error", otherErr, &initOptions{interactive: true}, false, ""},
+		{"offers with default HEAD base ref", notEmptyErr, &initOptions{interactive: true}, true, "HEAD"},
+		{"offers with caller base ref", notEmptyErr, &initOptions{interactive: true, baseRef: "v1.2.3"}, true, "v1.2.3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			offer, baseRef := shouldOfferUpdate(tt.err, tt.opts)
+			assert.Equal(t, tt.wantOffer, offer)
+			assert.Equal(t, tt.wantBaseRef, baseRef)
+		})
+	}
+}
+
+// TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError covers
+// that a non-empty target directory fails outright (no update offered, no
+// interactive prompt attempted) when not running interactively — matches
+// shouldOfferUpdate's "not interactive" case above, exercised through the
+// real runInitExecution entry point.
+func TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError(t *testing.T) {
+	initUI, err := createInitUI()
+	require.NoError(t, err)
+
+	configs, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("hi"), 0o600))
+
+	opts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+
+	_, err = runInitExecution(initUI, &cfg, opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTargetDirectoryNotEmpty)
+}
+
+// TestRunInitExecution_UpdateFlag_MergesExistingDirectory covers the real
+// bug this flag fixes: re-running init against an already-generated,
+// git-initialized directory with --update --base-ref=HEAD regenerates the
+// template while preserving the user's own edits via a 3-way merge, instead
+// of failing with "target directory is not empty".
+func TestRunInitExecution_UpdateFlag_MergesExistingDirectory(t *testing.T) {
+	initUI, err := createInitUI()
+	require.NoError(t, err)
+
+	configs, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	dir := t.TempDir()
+	opts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+	_, err = runInitExecution(initUI, &cfg, opts)
+	require.NoError(t, err)
+
+	require.NoError(t, runGitCommand(t, dir, "init"))
+	// Disable commit signing: dev machines with a GPG/1Password signing agent
+	// configured globally can hang or fail here otherwise.
+	require.NoError(t, runGitCommand(t, dir, "config", "commit.gpgsign", "false"))
+	require.NoError(t, runGitCommand(t, dir, "config", "user.email", "test@example.com"))
+	require.NoError(t, runGitCommand(t, dir, "config", "user.name", "Test"))
+	require.NoError(t, runGitCommand(t, dir, "add", "."))
+	require.NoError(t, runGitCommand(t, dir, "commit", "-m", "initial"))
+
+	readmePath := filepath.Join(dir, "README.md")
+	original, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(readmePath, append(original, []byte("\nuser note\n")...), 0o600))
+
+	updateOpts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		update:       true,
+		baseRef:      "HEAD",
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+	finalDir, err := runInitExecution(initUI, &cfg, updateOpts)
+
+	require.NoError(t, err)
+	assert.Equal(t, dir, finalDir)
+	merged, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(merged), "user note", "the user's manual edit must survive the 3-way merge")
+}
+
+// runGitCommand runs git in dir for test setup, skipping the test if git is unavailable.
+func runGitCommand(t *testing.T, dir string, args ...string) error {
+	t.Helper()
+	if _, lookErr := exec.LookPath("git"); lookErr != nil {
+		t.Skip("git binary not found on PATH")
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %v failed: %w: %s", args, err, string(out))
+	}
+	return nil
 }
 
 func TestSelectTemplate_TemplateSourceBranch(t *testing.T) {

@@ -108,6 +108,8 @@ If no target directory is specified, you will be prompted for one.`,
 
 		// Get flag values with proper precedence: flag > env > config > default
 		force := v.GetBool("force")
+		update := v.GetBool("update")
+		baseRef := v.GetString("base-ref")
 		dryRun := v.GetBool("dry-run")
 		sourceOverride := v.GetString("scaffold-source-override")
 		ref := v.GetString("ref")
@@ -144,6 +146,8 @@ If no target directory is specified, you will be prompted for one.`,
 			templateName:   template,
 			targetDir:      target,
 			force:          force,
+			update:         update,
+			baseRef:        baseRef,
 			dryRun:         dryRun,
 			interactive:    interactive,
 			useDefaults:    useDefaults,
@@ -160,6 +164,8 @@ type scaffoldGenerateOptions struct {
 	templateName   string
 	targetDir      string
 	force          bool
+	update         bool
+	baseRef        string
 	dryRun         bool
 	interactive    bool
 	useDefaults    bool
@@ -206,6 +212,8 @@ func init() {
 	// Create StandardParser for generate subcommand flags.
 	scaffoldGenerateParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
+		flags.WithBoolFlag("update", "", false, "Update an existing target directory via a 3-way merge instead of failing"),
+		flags.WithStringFlag("base-ref", "", "", "Git ref in the target directory to use as the 3-way merge base (used with --update; defaults to HEAD)"),
 		flags.WithBoolFlag("dry-run", "", false, "Preview changes without writing files"),
 		flags.WithBoolFlag("interactive", "i", true, "Prompt for field values (disabled automatically without a terminal)"),
 		flags.WithBoolFlag("defaults", "", false, "Use field defaults and --set values without prompting"),
@@ -215,6 +223,8 @@ func init() {
 		flags.WithBoolFlag("git", "", false, "Initialize a git repository and create the initial commit"),
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithEnvVars("force", "ATMOS_SCAFFOLD_FORCE"),
+		flags.WithEnvVars("update", "ATMOS_SCAFFOLD_UPDATE"),
+		flags.WithEnvVars("base-ref", "ATMOS_SCAFFOLD_BASE_REF"),
 		flags.WithEnvVars("dry-run", "ATMOS_SCAFFOLD_DRY_RUN"),
 		flags.WithEnvVars("interactive", "ATMOS_SCAFFOLD_INTERACTIVE"),
 		flags.WithEnvVars("defaults", "ATMOS_SCAFFOLD_DEFAULTS"),
@@ -547,8 +557,6 @@ func executeTemplateGeneration(
 	opts *scaffoldGenerateOptions,
 	scaffoldUI *generatorUI.InitUI,
 ) error {
-	update := false // Update mode (3-way merge) is not yet exposed on the CLI.
-
 	if targetDir == "" {
 		finalTargetDir, err := executeTemplateWithoutTargetDir(selectedConfig, opts, scaffoldUI)
 		if err != nil {
@@ -558,10 +566,36 @@ func executeTemplateGeneration(
 	}
 
 	// Target directory provided, use normal Execute.
-	if err := scaffoldUI.Execute(selectedConfig, targetDir, opts.force, update, opts.useDefaults, opts.templateValues); err != nil {
+	err := scaffoldUI.ExecuteWithBaseRef(selectedConfig, targetDir, opts.force, opts.update, opts.useDefaults, opts.baseRef, opts.templateValues)
+	if offer, retryBaseRef := shouldOfferScaffoldUpdate(err, opts); offer {
+		if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
+			err = scaffoldUI.ExecuteWithBaseRef(selectedConfig, targetDir, opts.force, true, opts.useDefaults, retryBaseRef, opts.templateValues)
+		}
+	}
+	if err != nil {
 		return err
 	}
 	return maybeInitGeneratedGitRepository(targetDir, selectedConfig, opts)
+}
+
+// shouldOfferScaffoldUpdate mirrors cmd/init's shouldOfferUpdate: offer a
+// 3-way-merge update instead of failing outright on a non-empty target
+// directory, only when not already using --force/--update, not in dry-run,
+// and a real terminal is available to prompt on. Returns the base ref to
+// retry with (the caller's --base-ref, defaulting to HEAD) alongside the
+// decision.
+func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions) (bool, string) {
+	if err == nil || opts.force || opts.update || !opts.interactive || opts.dryRun {
+		return false, ""
+	}
+	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
+		return false, ""
+	}
+	baseRef := opts.baseRef
+	if baseRef == "" {
+		baseRef = "HEAD"
+	}
+	return true, baseRef
 }
 
 func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates.Configuration, opts *scaffoldGenerateOptions) error {
@@ -702,11 +736,15 @@ func executeTemplateWithoutTargetDir(
 	opts *scaffoldGenerateOptions,
 	scaffoldUI *generatorUI.InitUI,
 ) (string, error) {
-	const update = false // Update mode (3-way merge) is not yet exposed on the CLI.
-
 	if opts.interactive && !opts.dryRun {
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
-		return scaffoldUI.ExecuteWithInteractiveFlowResult(selectedConfig, "", opts.force, update, opts.useDefaults, opts.templateValues)
+		targetDir, err := scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, opts.useDefaults, opts.baseRef, opts.templateValues)
+		if offer, retryBaseRef := shouldOfferScaffoldUpdate(err, opts); offer {
+			if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
+				return scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, true, opts.useDefaults, retryBaseRef, opts.templateValues)
+			}
+		}
+		return targetDir, err
 	}
 
 	// Without a terminal (or in dry-run mode) the target cannot be prompted for.
