@@ -390,7 +390,9 @@ func renderMarkdownSections(sections markdownSections, config FormatterConfig, u
 		}
 	}
 
-	return strings.TrimRight(out.String(), " \t\n") + newline, true
+	// Leading blank line separates the error block from whatever was printed
+	// before it (e.g. output from the command that failed).
+	return newline + strings.TrimRight(out.String(), " \t\n") + newline, true
 }
 
 func resolveFormatterWidth(config FormatterConfig) int {
