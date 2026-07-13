@@ -72,7 +72,8 @@ Resolved versions land in a committed `versions.lock.yaml`, so local runs and CI
 atmos version track update
 ```
 
-In an interactive terminal this renders as a styled table; piped or as `--format=csv` it looks like:
+In an interactive terminal this renders as a styled table. Use `--format=csv` or
+`--format=tsv` for delimited output; piped table output remains a table:
 
 ```shell
 Track,Name,From,To,Updated,Reason

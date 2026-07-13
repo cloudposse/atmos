@@ -168,11 +168,6 @@ func isStructuredFormat(cmd *cobra.Command) bool {
 // `version track list` and `secret list`. An empty rows slice prints
 // emptyMessage instead of an empty table.
 func writeRows(cmd *cobra.Command, columns []column.Config, rows []map[string]any, emptyMessage string) error {
-	if len(rows) == 0 {
-		ui.Info(emptyMessage)
-		return nil
-	}
-
 	formatStr, _ := cmd.Flags().GetString(formatFlagName)
 	formatStr = strings.ToLower(formatStr)
 	switch formatStr {
@@ -180,6 +175,11 @@ func writeRows(cmd *cobra.Command, columns []column.Config, rows []map[string]an
 		// Valid: table (default) or a delimited row export.
 	default:
 		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, formatStr)
+	}
+
+	if len(rows) == 0 {
+		ui.Info(emptyMessage)
+		return nil
 	}
 
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())

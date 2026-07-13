@@ -544,6 +544,21 @@ func TestTrackUpdateLockStatusDiffDefaultToTable(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("format=toml is rejected even with zero matched rows", func(t *testing.T) {
+		for _, tc := range commands {
+			setTrackConfigForTest(t, tableDemoConfig(t))
+			setupTrackOutput(t)
+
+			// "no-such-group" matches nothing in tableDemoConfig's "tools"
+			// group, so writeRows sees an empty rows slice; format validation
+			// must still run and reject "toml" instead of silently printing
+			// the empty-track message.
+			if err := runTrackCommand(t, tc.new(), "--group", "no-such-group", "--format", "toml"); !errors.Is(err, ErrUnsupportedFormat) {
+				t.Fatalf("%s --group=no-such-group --format=toml error = %v, want %v", tc.name, err, ErrUnsupportedFormat)
+			}
+		}
+	})
 }
 
 func TestWriteFormattedFallbacksAndErrors(t *testing.T) {
