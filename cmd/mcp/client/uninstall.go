@@ -39,8 +39,8 @@ func init() {
 		flags.WithStringFlag(installScopeFlag, "", mcpinstall.ScopeProject, "Uninstall scope: project or user"),
 		flags.WithEnvVars(installScopeFlag, "ATMOS_MCP_SCOPE"),
 		flags.WithValidValues(installScopeFlag, mcpinstall.ScopeProject, mcpinstall.ScopeUser),
-		flags.WithBoolFlag("global", "g", false, "Alias for --scope user"),
-		flags.WithEnvVars("global", "ATMOS_MCP_GLOBAL"),
+		flags.WithBoolFlag(globalFlag, "g", false, "Alias for --scope user"),
+		flags.WithEnvVars(globalFlag, "ATMOS_MCP_GLOBAL"),
 		flags.WithBoolFlag(yesFlag, "y", false, "Skip confirmation prompts"),
 		flags.WithEnvVars(yesFlag, "ATMOS_YES"),
 		flags.WithBoolFlag(dryRunFlag, "", false, "Show what would be removed without writing files"),
@@ -74,7 +74,10 @@ func executeMCPUninstall(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	scope := resolveInstallScope(cmd, v)
+	scope, err := resolveInstallScope(cmd, v)
+	if err != nil {
+		return err
+	}
 	clients, err := resolveInstallClients(&atmosConfig, scope, v)
 	if err != nil {
 		return err

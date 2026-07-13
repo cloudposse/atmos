@@ -26,13 +26,28 @@ func TestInstallCmd_Registration(t *testing.T) {
 }
 
 func TestResolveInstallScope(t *testing.T) {
-	t.Run("global alias selects user scope", func(t *testing.T) {
+	t.Run("explicit global flag selects user scope", func(t *testing.T) {
 		cmd := newMCPInstallTestCmd(t)
+		require.NoError(t, cmd.Flags().Set("global", "true"))
 		v := viper.New()
 		v.Set("scope", mcpinstall.ScopeProject)
 		v.Set("global", true)
 
-		assert.Equal(t, mcpinstall.ScopeUser, resolveInstallScope(cmd, v))
+		scope, err := resolveInstallScope(cmd, v)
+		require.NoError(t, err)
+		assert.Equal(t, mcpinstall.ScopeUser, scope)
+	})
+
+	t.Run("explicit global flag set to false keeps configured scope", func(t *testing.T) {
+		cmd := newMCPInstallTestCmd(t)
+		require.NoError(t, cmd.Flags().Set("global", "false"))
+		v := viper.New()
+		v.Set("scope", mcpinstall.ScopeProject)
+		v.Set("global", false)
+
+		scope, err := resolveInstallScope(cmd, v)
+		require.NoError(t, err)
+		assert.Equal(t, mcpinstall.ScopeProject, scope)
 	})
 
 	t.Run("explicit scope beats global from env", func(t *testing.T) {
@@ -42,7 +57,36 @@ func TestResolveInstallScope(t *testing.T) {
 		v.Set("scope", mcpinstall.ScopeProject)
 		v.Set("global", true)
 
-		assert.Equal(t, mcpinstall.ScopeProject, resolveInstallScope(cmd, v))
+		scope, err := resolveInstallScope(cmd, v)
+		require.NoError(t, err)
+		assert.Equal(t, mcpinstall.ScopeProject, scope)
+	})
+
+	t.Run("neither flag set and yes skips prompt, defaults to configured scope", func(t *testing.T) {
+		cmd := newMCPInstallTestCmd(t)
+		v := viper.New()
+		v.Set("scope", mcpinstall.ScopeProject)
+		v.Set(yesFlag, true)
+
+		scope, err := resolveInstallScope(cmd, v)
+		require.NoError(t, err)
+		assert.Equal(t, mcpinstall.ScopeProject, scope)
+	})
+
+	t.Run("neither flag set and no yes still doesn't hang in a non-TTY test environment", func(t *testing.T) {
+		// This test environment has no real TTY attached to stdin, so
+		// term.IsTTYSupportForStdin() is false and the non-interactive
+		// branch is taken even without --yes. If that assumption ever
+		// stops holding here, this test would hang waiting on the
+		// interactive form -- in which case it should set yesFlag
+		// explicitly like the case above.
+		cmd := newMCPInstallTestCmd(t)
+		v := viper.New()
+		v.Set("scope", mcpinstall.ScopeUser)
+
+		scope, err := resolveInstallScope(cmd, v)
+		require.NoError(t, err)
+		assert.Equal(t, mcpinstall.ScopeUser, scope)
 	})
 }
 

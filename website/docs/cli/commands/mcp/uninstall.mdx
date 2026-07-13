@@ -37,7 +37,7 @@ atmos mcp uninstall [server-name...] [flags]
   <dt>`--all-clients`</dt>
   <dd>Uninstall from all supported MCP clients instead of just detected or explicitly selected ones.</dd>
   <dt>`--scope`</dt>
-  <dd>Uninstall scope: `project` (default) or `user`.</dd>
+  <dd>Uninstall scope: `project` (default) or `user`. When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--yes`, no TTY, or CI) fall back to `project`.</dd>
   <dt>`--global`, `-g`</dt>
   <dd>Alias for `--scope user`.</dd>
   <dt>`--yes`, `-y`</dt>

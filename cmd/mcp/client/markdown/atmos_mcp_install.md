@@ -4,6 +4,10 @@ The command reads `mcp.servers` and writes the appropriate client config across
 15 supported AI clients (see `--client` below). Both local stdio servers and
 remote HTTP servers are supported.
 
+When neither `--scope` nor `--global` is given and the command is running in an
+interactive terminal, Atmos prompts you to choose project or user scope; `--yes`,
+a non-TTY session, or CI skips the prompt and defaults to `project`.
+
 **Examples:**
 ```bash
 # Install all configured MCP servers into detected project clients.

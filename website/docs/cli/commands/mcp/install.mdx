@@ -37,7 +37,7 @@ atmos mcp install [server-name...] [flags]
   <dt>`--all-clients`</dt>
   <dd>Install into all supported MCP clients instead of just detected or explicitly selected ones.</dd>
   <dt>`--scope`</dt>
-  <dd>Install scope: `project` (writes into the current project, default) or `user` (writes into the client's user-level/global config).</dd>
+  <dd>Install scope: `project` (writes into the current project, default) or `user` (writes into the client's user-level/global config). When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--yes`, no TTY, or CI) fall back to `project`.</dd>
   <dt>`--global`, `-g`</dt>
   <dd>Alias for `--scope user`.</dd>
   <dt>`--yes`, `-y`</dt>

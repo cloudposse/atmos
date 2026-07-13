@@ -4,6 +4,10 @@ The command reads `mcp.servers` (or the server names given on the command line) 
 removes matching entries from each targeted client's config. It's the mirror image
 of `atmos mcp install` — it only touches client config files, never `atmos.yaml`.
 
+When neither `--scope` nor `--global` is given and the command is running in an
+interactive terminal, Atmos prompts you to choose project or user scope; `--yes`,
+a non-TTY session, or CI skips the prompt and defaults to `project`.
+
 **Examples:**
 ```bash
 # Remove all configured servers from detected project clients.

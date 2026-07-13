@@ -41,6 +41,7 @@ var installParser *flags.StandardParser
 
 const (
 	installScopeFlag = "scope"
+	globalFlag       = "global"
 	dryRunFlag       = "dry-run"
 	yesFlag          = "yes"
 )
@@ -56,8 +57,8 @@ func init() {
 		flags.WithStringFlag(installScopeFlag, "", mcpinstall.ScopeProject, "Install scope: project or user"),
 		flags.WithEnvVars(installScopeFlag, "ATMOS_MCP_SCOPE"),
 		flags.WithValidValues(installScopeFlag, mcpinstall.ScopeProject, mcpinstall.ScopeUser),
-		flags.WithBoolFlag("global", "g", false, "Alias for --scope user"),
-		flags.WithEnvVars("global", "ATMOS_MCP_GLOBAL"),
+		flags.WithBoolFlag(globalFlag, "g", false, "Alias for --scope user"),
+		flags.WithEnvVars(globalFlag, "ATMOS_MCP_GLOBAL"),
 		flags.WithBoolFlag(yesFlag, "y", false, "Skip confirmation prompts"),
 		flags.WithEnvVars(yesFlag, "ATMOS_YES"),
 		flags.WithBoolFlag(dryRunFlag, "", false, "Show what would be installed without writing files"),
@@ -97,7 +98,10 @@ func executeMCPInstall(cmd *cobra.Command, args []string) error {
 		return handleNoServersToInstall(cmd, &atmosConfig, args, v.GetBool(yesFlag))
 	}
 
-	scope := resolveInstallScope(cmd, v)
+	scope, err := resolveInstallScope(cmd, v)
+	if err != nil {
+		return err
+	}
 	clients, err := resolveInstallClients(&atmosConfig, scope, v)
 	if err != nil {
 		return err
@@ -161,14 +165,56 @@ func selectServers(configured map[string]schema.MCPServerConfig, names []string)
 	return selected, nil
 }
 
-func resolveInstallScope(cmd *cobra.Command, v *viper.Viper) string {
+// resolveInstallScope resolves the install/uninstall scope (project versus
+// user). An explicit --scope or --global flag always wins; otherwise, in
+// non-interactive contexts (--yes, no TTY, or CI), it silently falls back
+// to the flag's default value ("project"). Only when running interactively
+// with neither flag explicitly set does it prompt the user to choose.
+func resolveInstallScope(cmd *cobra.Command, v *viper.Viper) (string, error) {
 	if cmd != nil && cmd.Flags().Changed(installScopeFlag) {
-		return v.GetString(installScopeFlag)
+		return v.GetString(installScopeFlag), nil
 	}
-	if v.GetBool("global") {
-		return mcpinstall.ScopeUser
+	if cmd != nil && cmd.Flags().Changed(globalFlag) {
+		if v.GetBool(globalFlag) {
+			return mcpinstall.ScopeUser, nil
+		}
+		return v.GetString(installScopeFlag), nil
 	}
-	return v.GetString(installScopeFlag)
+	if v.GetBool(yesFlag) || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+		return v.GetString(installScopeFlag), nil
+	}
+	return promptForScope()
+}
+
+// promptForScope shows an interactive single-choice picker for install/
+// uninstall scope, mirroring promptForMCPClients's form setup and cancel
+// handling but as a single-select rather than a multi-select.
+func promptForScope() (string, error) {
+	scope := mcpinstall.ScopeProject
+	options := []huh.Option[string]{
+		huh.NewOption("project (this repo only)", mcpinstall.ScopeProject),
+		huh.NewOption("user (all your projects)", mcpinstall.ScopeUser),
+	}
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "cancel"),
+	)
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Install scope?").
+				Options(options...).
+				Value(&scope),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
+		return "", err
+	}
+	return scope, nil
 }
 
 // resolveInstallClients resolves which clients to install into. An explicit
