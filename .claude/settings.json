@@ -1,0 +1,86 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git grep:*)",
+      "Bash(git blame:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git merge --ff-only:*)",
+      "Bash(git merge --no-commit --no-ff origin/main:*)",
+      "Bash(git merge --abort:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push origin HEAD:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr update-branch:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh api graphql:*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(date:*)",
+      "Bash(python3 -c:*)",
+      "Bash(atmos fix:*)",
+      "Bash(./custom-gcl:*)",
+      "Bash(say:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git add -A:*)",
+      "Bash(git add --all:*)",
+      "Bash(git add .:*)",
+      "Bash(git commit --no-gpg-sign:*)",
+      "Bash(git commit -c commit.gpgsign=false:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr close:*)",
+      "Bash(gh pr edit* --base*)",
+      "Bash(gh pr edit* --add-reviewer*)",
+      "Bash(gh pr edit* --remove-reviewer*)",
+      "Bash(gh pr edit* --milestone*)",
+      "Bash(gh pr edit* --add-label*)",
+      "Bash(gh pr edit* --remove-label*)",
+      "Bash(gh workflow:*)",
+      "Bash(gh secret:*)",
+      "Bash(gh api graphql*mutation*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* -X PATCH*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* -X POST*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* -X PUT*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* -X DELETE*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* --method PATCH*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* --method POST*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* --method PUT*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/* --method DELETE*)",
+      "Edit(.github/workflows/**)",
+      "Write(.github/workflows/**)",
+      "Edit(Makefile)",
+      "Write(Makefile)",
+      "Edit(go.mod)",
+      "Write(go.mod)",
+      "Edit(go.sum)",
+      "Write(go.sum)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/security-remediate-trigger.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

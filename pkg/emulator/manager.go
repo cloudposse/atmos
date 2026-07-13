@@ -332,7 +332,7 @@ func (m *Manager) resolveRootlessRun(spec *Spec, command []string, rootless bool
 // mergeEnv layers the component/profile env over the driver defaults so an explicit
 // value wins, while driver-required vars (e.g. K3S_TOKEN) remain present.
 func mergeEnv(defaults, overrides map[string]string) map[string]string {
-	merged := make(map[string]string, len(defaults)+len(overrides))
+	merged := make(map[string]string, len(defaults))
 	for k, v := range defaults {
 		merged[k] = v
 	}

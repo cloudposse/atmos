@@ -10,7 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 var cleanParser *flags.StandardParser
@@ -118,7 +117,7 @@ func cleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	ui.Writef("%s All workdirs cleaned\n", theme.Styles.Checkmark.String())
+	ui.Success("All workdirs cleaned")
 	return nil
 }
 
@@ -129,7 +128,7 @@ func cleanSpecificWorkdir(atmosConfig *schema.AtmosConfiguration, component, sta
 		return err
 	}
 
-	ui.Writef("%s Workdir cleaned for %s in %s\n", theme.Styles.Checkmark.String(), component, stack)
+	ui.Successf("Workdir cleaned for %s in %s", component, stack)
 	return nil
 }
 

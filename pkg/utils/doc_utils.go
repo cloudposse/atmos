@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/spf13/viper"
@@ -19,8 +20,7 @@ func DisplayDocs(componentDocs string, usePager bool) error {
 	defer perf.Track(nil, "utils.DisplayDocs")()
 
 	if !usePager {
-		fmt.Fprintln(ioLayer.MaskWriter(os.Stdout), componentDocs)
-		return nil
+		return data.Writeln(componentDocs)
 	}
 
 	// Try to get pager from Viper configuration first, then fall back to environment variable.
