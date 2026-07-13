@@ -27,3 +27,9 @@ $ atmos ai skill uninstall terraform-optimizer --client vscode
 ```
 $ atmos ai skill uninstall terraform-optimizer --all-clients
 ```
+
+- Remove a skill that was installed with --scope user
+
+```
+$ atmos ai skill uninstall terraform-optimizer --scope user
+```

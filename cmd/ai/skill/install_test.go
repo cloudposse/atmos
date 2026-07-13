@@ -58,6 +58,21 @@ func TestInstallCmd_Flags(t *testing.T) {
 		assert.Equal(t, "bool", flag.Value.Type())
 		assert.Equal(t, "false", flag.DefValue)
 	})
+
+	t.Run("has scope flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag, "scope flag should be registered")
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "project", flag.DefValue)
+	})
+
+	t.Run("has global flag with shorthand", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("global")
+		require.NotNil(t, flag, "global flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+		assert.Equal(t, "g", flag.Shorthand)
+	})
 }
 
 func TestInstallCmd_LongDescription(t *testing.T) {
@@ -238,6 +253,20 @@ func TestInstallCmd_FlagUsage(t *testing.T) {
 		require.NotNil(t, flag)
 		assert.NotEmpty(t, flag.Usage)
 		assert.Contains(t, flag.Usage, "AI clients")
+	})
+
+	t.Run("scope flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "Distribution scope")
+	})
+
+	t.Run("global flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("global")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "--scope user")
 	})
 }
 
@@ -948,5 +977,47 @@ func TestInstallCmd_ViperPrecedence(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, v.GetBool("all-clients"), "all-clients should be true from ATMOS_AI_SKILL_ALL_CLIENTS env var")
+	})
+
+	t.Run("scope flag defaults to project via Viper", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag)
+		assert.Equal(t, "project", flag.DefValue)
+	})
+
+	t.Run("env var binding for scope flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_SCOPE", "user")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "user", v.GetString("scope"), "scope should come from ATMOS_AI_SKILL_SCOPE env var")
+	})
+
+	t.Run("CLI scope flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_SCOPE", "user")
+
+		oldVal := installCmd.Flags().Lookup("scope").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("scope", oldVal)
+		})
+		require.NoError(t, installCmd.Flags().Set("scope", "project"))
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "project", v.GetString("scope"), "CLI flag should override env var")
+	})
+
+	t.Run("env var binding for global flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_GLOBAL", "true")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("global"), "global should be true from ATMOS_AI_SKILL_GLOBAL env var")
 	})
 }

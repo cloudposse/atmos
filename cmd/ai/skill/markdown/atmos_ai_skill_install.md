@@ -19,6 +19,19 @@ with zero extra flags. Use --client/--all-clients to control which clients
 receive a copy, or --path to take full manual control of the install
 location instead (this skips auto-distribution).
 
+Use --scope user (or --global) to distribute into each client's personal,
+user-level skill directory instead (e.g. ~/.claude/skills/, ~/.copilot/skills/
+for VS Code/Copilot, ~/.gemini/skills/), so the skill is available across
+every project rather than just this one. When neither --scope nor --global is
+given and the command is running in an interactive terminal, Atmos prompts
+you to choose project or user scope; --yes, a non-TTY session, or CI skips the
+prompt and defaults to project.
+
+If a client's target directory already exists as a symbolic link (e.g. this
+repo's own .claude/skills/<name> entries, which intentionally point into
+agent-skills/skills/<name> for contributor auto-discovery), that client is
+skipped with a warning rather than writing through the symlink.
+
 Skills follow the Agent Skills open standard (https://agentskills.io)
 and use the SKILL.md format with YAML frontmatter.
 
@@ -47,3 +60,7 @@ Flags:
   - --all-clients distributes the skill to every supported AI client
   - When no --client/--all-clients is given, detected clients are used
     automatically (interactively you'll be prompted to confirm)
+  - --scope selects the distribution scope: project (default) or user
+  - --global is an alias for --scope user
+  - When neither --scope nor --global is given interactively, you'll be
+    prompted to choose; --yes, a non-TTY session, or CI defaults to project

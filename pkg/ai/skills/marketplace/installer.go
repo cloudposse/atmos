@@ -13,6 +13,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -35,6 +36,7 @@ type InstallOptions struct {
 	CustomName  string   // Install with custom name (--as).
 	Path        string   // Override install base directory (--path); relative paths resolve against CWD.
 	BasePath    string   // Project base path used for client-signal detection and distribution (default: CWD).
+	Scope       string   // Distribution scope: "project" or "user" (--scope/--global); always populated by the CLI layer, "project" is the flag default and is never left empty.
 	Clients     []string // Explicit AI clients to distribute to (--client); empty means auto-detect.
 	AllClients  bool     // Distribute to every supported client (--all-clients).
 }
@@ -408,6 +410,9 @@ func (i *Installer) prepareInstallPath(installPath, installName string, force bo
 	defer perf.Track(nil, "marketplace.Installer.prepareInstallPath")()
 
 	if force {
+		if isSymlink(installPath) {
+			return fmt.Errorf("%w: %s", errUtils.ErrRefuseDeleteSymbolicLink, installPath)
+		}
 		if err := os.RemoveAll(installPath); err != nil {
 			return fmt.Errorf("failed to remove existing installation: %w", err)
 		}
@@ -633,9 +638,11 @@ func copyEntry(srcPath, dstPath string, isDir bool) error {
 // Uninstall removes an installed skill.
 //
 // The basePath and clients arguments drive best-effort cleanup of any
-// per-client copies distributed by a prior install (see distributeToClients).
-// Pass a nil/empty clients slice to skip client cleanup.
-func (i *Installer) Uninstall(name string, force bool, basePath string, clients []string) error {
+// per-client copies distributed by a prior install (see distributeToClients);
+// pass a nil/empty clients slice to skip client cleanup. Scope is the
+// distribution scope ("project" or "user") the client copies were installed
+// under.
+func (i *Installer) Uninstall(name string, force bool, basePath string, clients []string, scope string) error {
 	defer perf.Track(nil, "marketplace.Installer.Uninstall")()
 
 	// 1. Get skill from registry.
@@ -663,7 +670,7 @@ func (i *Installer) Uninstall(name string, force bool, basePath string, clients 
 	}
 
 	// 5. Best-effort cleanup of any distributed client copies.
-	removeClientCopies(basePath, name, clients)
+	removeClientCopies(basePath, name, clients, scope)
 
 	ui.Successf("Skill %q uninstalled successfully", skill.DisplayName)
 	return nil
@@ -673,8 +680,10 @@ func (i *Installer) Uninstall(name string, force bool, basePath string, clients 
 // uninstall` with no server names given: omitting <name> entirely means "act
 // on everything installed" rather than requiring a separate --all flag. A
 // per-skill failure is logged and skipped so the rest of the batch keeps
-// going, matching InstallAllBundled's lenient behavior.
-func (i *Installer) UninstallAll(force bool, basePath string, clients []string) error {
+// going, matching InstallAllBundled's lenient behavior; scope is the
+// distribution scope ("project" or "user") the client copies were installed
+// under.
+func (i *Installer) UninstallAll(force bool, basePath string, clients []string, scope string) error {
 	defer perf.Track(nil, "marketplace.Installer.UninstallAll")()
 
 	installed := i.localRegistry.List()
@@ -706,7 +715,7 @@ func (i *Installer) UninstallAll(force bool, basePath string, clients []string) 
 			log.Warnf("Failed to remove %s from registry: %v", skill.Name, err)
 			continue
 		}
-		removeClientCopies(basePath, skill.Name, clients)
+		removeClientCopies(basePath, skill.Name, clients, scope)
 		removed++
 	}
 
@@ -862,20 +871,30 @@ func (i *Installer) getInstallPath(source *SourceInfo, pathOverride string) (str
 func (i *Installer) distributeToClients(basePath, installPath, skillName string, opts *InstallOptions) {
 	defer perf.Track(nil, "marketplace.Installer.distributeToClients")()
 
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		log.Warnf("Failed to resolve home directory for client distribution: %v", err)
+	}
+
 	clients := opts.Clients
 	if opts.AllClients {
 		clients = SupportedClients
 	}
 	if len(clients) == 0 {
-		clients = DetectClients(basePath)
+		clients = DetectClients(basePath, homeDir, opts.Scope)
 	}
 
 	for _, client := range clients {
-		dir := clientSkillDir(basePath, client)
+		dir := clientSkillDir(basePath, homeDir, opts.Scope, client)
 		if dir == "" {
 			continue
 		}
 		target := filepath.Join(dir, skillName)
+		if isSymlink(target) {
+			ui.Warningf("Skipping %s: %s is a symbolic link (%s) -- use --path to install to a plain directory instead",
+				client, target, errUtils.ErrRefuseWriteThroughSymlink)
+			continue
+		}
 		if err := os.MkdirAll(target, dirPermissions); err != nil {
 			log.Warnf("Failed to create client skill directory for %s (%s): %v", client, target, err)
 			continue
@@ -892,13 +911,22 @@ func (i *Installer) distributeToClients(basePath, installPath, skillName string,
 // a skill. This is a stateless recompute -- the registry never tracks which
 // clients a skill was distributed to, so removing a client copy that was
 // never created (or was already removed) simply no-ops.
-func removeClientCopies(basePath, skillName string, clients []string) {
+func removeClientCopies(basePath, skillName string, clients []string, scope string) {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		log.Warnf("Failed to resolve home directory for client cleanup: %v", err)
+	}
+
 	for _, client := range clients {
-		dir := clientSkillDir(basePath, client)
+		dir := clientSkillDir(basePath, homeDir, scope, client)
 		if dir == "" {
 			continue
 		}
 		target := filepath.Join(dir, skillName)
+		if isSymlink(target) {
+			ui.Warningf("Skipping cleanup of %s: %s is a symbolic link (%s)", client, target, errUtils.ErrRefuseDeleteSymbolicLink)
+			continue
+		}
 		if err := os.RemoveAll(target); err != nil {
 			log.Warnf("Failed to remove distributed skill %q from %s (%s): %v", skillName, client, target, err)
 		}

@@ -59,10 +59,15 @@ var installCmd = &cobra.Command{
 		}
 
 		// An explicit --path takes full manual control, so skip resolving
-		// (and possibly prompting for) clients to auto-distribute to.
+		// (and possibly prompting for) scope and clients to auto-distribute to.
+		scope := v.GetString(scopeFlag)
 		var clients []string
 		if path == "" {
-			clients, err = resolveSkillClients(basePath, v, skipConfirm, "Install skill into which clients?")
+			scope, err = resolveSkillScope(cmd, v)
+			if err != nil {
+				return err
+			}
+			clients, err = resolveSkillClients(basePath, v, skipConfirm, "Install skill into which clients?", scope)
 			if err != nil {
 				return err
 			}
@@ -74,6 +79,7 @@ var installCmd = &cobra.Command{
 			SkipConfirm: skipConfirm,
 			Path:        path,
 			BasePath:    basePath,
+			Scope:       scope,
 			Clients:     clients,
 			AllClients:  v.GetBool("all-clients"),
 		}
@@ -107,6 +113,11 @@ func init() {
 		flags.WithEnvVars("client", "ATMOS_AI_SKILL_CLIENT"),
 		flags.WithBoolFlag("all-clients", "", false, "Distribute the skill to all supported AI clients"),
 		flags.WithEnvVars("all-clients", "ATMOS_AI_SKILL_ALL_CLIENTS"),
+		flags.WithStringFlag(scopeFlag, "", marketplace.ScopeProject, "Distribution scope: project or user"),
+		flags.WithEnvVars(scopeFlag, "ATMOS_AI_SKILL_SCOPE"),
+		flags.WithValidValues(scopeFlag, marketplace.ScopeProject, marketplace.ScopeUser),
+		flags.WithBoolFlag("global", "g", false, "Alias for --scope user"),
+		flags.WithEnvVars("global", "ATMOS_AI_SKILL_GLOBAL"),
 	)
 
 	// Register flags on the command.

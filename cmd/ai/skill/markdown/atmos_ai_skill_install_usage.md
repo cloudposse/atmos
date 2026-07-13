@@ -57,3 +57,15 @@ $ atmos ai skill install atmos-terraform --client vscode
 ```
 $ atmos ai skill install atmos-terraform --all-clients
 ```
+
+- Distribute into each client's personal, user-level skill directory instead of the project
+
+```
+$ atmos ai skill install atmos-terraform --scope user
+```
+
+- Alias for --scope user
+
+```
+$ atmos ai skill install atmos-terraform --global
+```

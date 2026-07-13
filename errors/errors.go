@@ -89,6 +89,7 @@ var (
 	ErrUnsafeVendorTarget                    = errors.New("unsafe vendor target directory")
 	ErrInvalidConfig                         = errors.New("invalid configuration")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
+	ErrRefuseWriteThroughSymlink             = errors.New("refusing to write through symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
