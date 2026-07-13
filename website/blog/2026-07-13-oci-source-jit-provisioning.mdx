@@ -5,14 +5,14 @@ authors: [zack-is-cool]
 tags: [feature, bugfix]
 ---
 
-A component with an `oci://` source and `provision.workdir.enabled: true` failed the moment Terraform touched it — `atmos terraform plan` auto-provisions the source via the `before.terraform.init` hook and immediately died with go-getter's `download not supported for scheme 'oci'`, even though `atmos vendor pull` handled the exact same source without complaint. On top of that, registries distributing modules in OpenTofu's native OCI module-package format couldn't be pulled by either path at all.
+A component with an `oci://` source and `provision.workdir.enabled: true` failed the moment Terraform touched it. `atmos terraform plan` auto-provisions the source via the `before.terraform.init` hook and failed with go-getter's `download not supported for scheme 'oci'`, even though `atmos vendor pull` handled the exact same source fine. Registries distributing modules in OpenTofu's native OCI module-package format couldn't be pulled by either path at all.
 
 <!--truncate-->
 
 ## The Problem
 
-- JIT auto-provisioning and `atmos vendor pull` had two separate, non-overlapping implementations of "download a source" — only the vendor-pull one understood `oci://`.
-- Registries publishing modules via OpenTofu's native "install modules from OCI registries" format ship their content as a ZIP-archive layer, not the tar+gzip layer Atmos expected, so pulling one failed with `archive/tar: invalid tar header` regardless of which path you used.
+- JIT auto-provisioning and `atmos vendor pull` had two separate, non-overlapping implementations of "download a source." Only the vendor-pull one understood `oci://`.
+- Registries publishing modules via OpenTofu's native "install modules from OCI registries" format ship their content as a ZIP-archive layer, not the tar+gzip layer Atmos expected. Pulling one failed with `archive/tar: invalid tar header` regardless of which path you used.
 - OCI pulls also had no timeout, so a slow or unresponsive registry could hang a command indefinitely.
 
 ## The Fix
@@ -35,6 +35,8 @@ components:
 ```
 
 `atmos terraform plan my-component -s <stack>` now auto-provisions the source before running, the same way it already does for git and HTTP sources.
+
+Authentication works the same way it already does for `atmos vendor pull`: your existing registry credentials are picked up automatically, with an anonymous fallback if none are configured.
 
 ## Get Involved
 
