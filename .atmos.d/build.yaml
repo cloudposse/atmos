@@ -39,12 +39,17 @@ commands:
         content: 'Run `atmos dev shell` so `atmos` resolves to `./build/atmos`.'
     commands:
       - name: deps
-        description: Download Go module dependencies
+        description: Download Go module dependencies, retrying on transient network failures
         env:
           - key: GOTOOLCHAIN
             value: auto
         steps:
-          - cd "$(git rev-parse --show-toplevel)" && go mod download
+          - command: cd "$(git rev-parse --show-toplevel)" && go mod download
+            type: shell
+            retry:
+              max_attempts: 3
+              initial_delay: 10s
+              backoff_strategy: constant
 
       - name: binary
         description: Build the Atmos binary
