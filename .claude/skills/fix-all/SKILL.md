@@ -34,12 +34,12 @@ Hard prohibitions for every run:
 - Never `git push --force` / `--force-with-lease` (see `pull-request` skill for the one legitimate
   human-attended exception to `--force-with-lease` — this is not that).
 - Never touch `.github/workflows/**`, `Makefile`, `go.mod`, `go.sum`, or anything secret-shaped.
-- Never `gh pr merge` or `gh pr close`. Merge is human-gated, full stop.
+- Never `gh pr merge`. Merge is human-gated, full stop.
 - Never `gh pr edit --base` (retargeting the PR's base branch), `--add-reviewer`/`--remove-reviewer`,
-  `--milestone`, or `--add-label`/`--remove-label`. The only autonomous `gh pr edit` usage in this
-  skill is rewriting `--title`/`--body`/`--body-file` to keep the PR description in sync with the
-  patch's actual scope (step 8) — labels and reviewers stay human-owned via the `pull-request`
-  skill's decision tree.
+  or `--milestone`. The only autonomous `gh pr edit` usage in this skill is rewriting
+  `--title`/`--body`/`--body-file` to keep the PR description in sync with the patch's actual scope
+  (step 8), plus applying the semver label via `--add-label`/`--remove-label` per the `pull-request`
+  skill's decision tree (label edits and `gh pr close` are allowed — see `.claude/settings.json`).
 - Never bypass commit signing (`--no-gpg-sign`, `-c commit.gpgsign=false`).
 - Never `git add -A` / `git add .` / `git add --all`. Add only the specific files touched.
 - Never `git reset --hard` or `git clean`.
@@ -63,12 +63,12 @@ necessarily broad prefix matches (`git add:*`, `git commit:*`, `git push origin 
 `gh api graphql:*`, `gh api repos/cloudposse/atmos/pulls/*`, `gh pr edit:*`) because legitimate
 commands vary in their trailing arguments. Broad prefixes can also match a prohibited variant
 (`git add -A`, `git commit --no-gpg-sign`, a GraphQL mutation, a non-GET call against the `pulls`
-endpoint, `gh pr edit --base`/`--add-reviewer`/`--remove-reviewer`/`--milestone`/`--add-label`/
-`--remove-label`) unless
-an explicit `deny` entry blocks that specific variant first — `deny` always wins over `allow`, but
-only for patterns someone remembered to add. Treat the prohibitions above as the source of truth
-and the deny list as an incomplete, best-effort mirror of them. When you add a new hard
-prohibition here, add the matching `deny` pattern(s) in `.claude/settings.json` in the same change.
+endpoint, `gh pr edit --base`/`--add-reviewer`/`--remove-reviewer`/`--milestone`, `gh pr merge`)
+unless an explicit `deny` entry blocks that specific variant first — `deny` always wins over
+`allow`, but only for patterns someone remembered to add. Treat the prohibitions above as the
+source of truth and the deny list as an incomplete, best-effort mirror of them. When you add a new
+hard prohibition here, add the matching `deny` pattern(s) in `.claude/settings.json` in the same
+change.
 
 ## Audible notifications
 
