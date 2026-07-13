@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
@@ -69,13 +70,20 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// resolveDelimiters determines the delimiters to use, falling back to scaffold config or defaults.
+// resolveDelimiters determines the delimiters to use. A scaffold config's own
+// declared delimiters always win: callers (Execute/ExecuteWithBaseRef) pass a
+// generic "{{"/"}}"  default through regardless of what the scaffold actually
+// declares, so treating that default as an explicit override would silently
+// ignore scaffold.yaml's spec.delimiters (e.g. "[[" / "]]") -- this is exactly
+// what engine.extractDelimiters already does for per-file rendering via
+// ProcessFile, which resolveDelimiters must match so the README summary
+// renders with the same delimiters as every other generated file.
 func resolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfig) []string {
-	if len(delimiters) > 0 {
-		return delimiters
-	}
 	if scaffoldConfig != nil && len(scaffoldConfig.Spec.Delimiters) == 2 {
 		return scaffoldConfig.Spec.Delimiters
+	}
+	if len(delimiters) > 0 {
+		return delimiters
 	}
 	return []string{"{{", "}}"}
 }
@@ -410,11 +418,31 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
 		}
 	}
 
-	// Now execute with the determined target path.
+	// Now execute with the determined target path. targetPath is returned even on
+	// error so callers can retry against the same directory (e.g. offering an
+	// update instead of a fresh generation when it already contains files).
 	if err := ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues); err != nil {
-		return "", err
+		return targetPath, err
 	}
 	return targetPath, nil
+}
+
+// ConfirmUpdateInstead prompts whether to update an existing, non-empty target
+// directory via a 3-way merge instead of failing outright. Callers should only
+// invoke this after confirming a real TTY is available for prompting.
+func (ui *InitUI) ConfirmUpdateInstead(targetPath string) (bool, error) {
+	var confirmed bool
+	prompt := uiutils.NewAtmosConfirm().
+		Title(fmt.Sprintf("Directory `%s` already contains files. Update it instead (3-way merge)?", targetPath)).
+		Affirmative("Yes, update").
+		Negative("No, cancel").
+		Value(&confirmed).
+		WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := prompt.Run(); err != nil {
+		return false, fmt.Errorf("confirmation prompt failed: %w", err)
+	}
+	return confirmed, nil
 }
 
 // promptForTargetPath handles interactive target path prompting with scaffold config support.
