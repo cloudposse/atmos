@@ -3,7 +3,6 @@ package templates
 import (
 	_ "embed"
 	"path/filepath"
-	"regexp"
 
 	"gopkg.in/yaml.v3"
 
@@ -11,13 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
-
-// fullGitSHAPattern matches a full 40-character git commit SHA. GitHub only
-// allows fetching an arbitrary (non-branch/tag-tip) commit by its full SHA,
-// and a shallow clone -- the default go-getter applies to git sources --
-// rejects a ref that isn't a branch or tag outright, so a full-SHA ref must
-// also disable the shallow clone.
-var fullGitSHAPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // defaultCatalogRef returns the ref to pin unqualified catalog sources to:
 // the exact commit this binary was built from (see scripts/build-atmos.sh and
@@ -74,22 +66,16 @@ func LoadCatalog() ([]CatalogEntry, error) {
 // is non-empty it points at a local base directory (override/<cloud>/<tier>)
 // instead of the remote Source — used by CI to resolve templates from the
 // working tree rather than the network. Otherwise the remote Source is pinned
-// to defaultCatalogRef(); a full-SHA ref also disables the shallow clone go-getter
-// would otherwise apply, since git rejects a shallow clone pinned to an
-// arbitrary (non-branch/tag) commit.
+// to defaultCatalogRef(). A full-commit-SHA ref fetches shallowly just like a
+// branch ref would (see pkg/downloader's CustomGitGetter.cloneShallowCommit);
+// no special-casing is needed here.
 func (e *CatalogEntry) ResolvedSource(override string) string {
 	defer perf.Track(nil, "templates.CatalogEntry.ResolvedSource")()
 
 	if override != "" {
 		return filepath.Join(override, e.Cloud, e.Tier)
 	}
-
-	ref := defaultCatalogRef()
-	src := e.Source + "?ref=" + ref
-	if fullGitSHAPattern.MatchString(ref) {
-		src += "&depth=0"
-	}
-	return src
+	return e.Source + "?ref=" + defaultCatalogRef()
 }
 
 // CatalogStubs returns lightweight Configuration entries (without Files) for the

@@ -5,6 +5,7 @@
 package source
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
@@ -94,7 +96,16 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 
 	normalized := vendor.NormalizeURI(src)
-	if fetchErr := downloader.NewGoGetterDownloader(atmosConfig).Fetch(normalized, tempDir, downloader.ClientModeDir, timeout); fetchErr != nil {
+	// Keep the spinner message short: the full go-getter URL (subdir + ref)
+	// can be long enough to wrap across terminal rows, which breaks
+	// bubbletea's in-place redraw and makes the spinner scroll a new line
+	// per tick instead of overwriting.
+	progressMsg := fmt.Sprintf("Fetching scaffold template `%s`", name)
+	completedMsg := fmt.Sprintf("Fetched scaffold template `%s`", name)
+	fetchErr := spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		return downloader.NewGoGetterDownloader(atmosConfig).Fetch(normalized, tempDir, downloader.ClientModeDir, timeout)
+	})
+	if fetchErr != nil {
 		cleanup()
 		return nil, noop, errUtils.Build(errUtils.ErrScaffoldFetchSource).
 			WithCause(fetchErr).

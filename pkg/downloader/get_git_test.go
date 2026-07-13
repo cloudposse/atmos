@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -704,7 +705,12 @@ func TestClone(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name:      "clone with commit ID and depth",
+			// A commit-ID-shaped ref with depth>0 now routes to
+			// cloneShallowCommit (git init/remote add/fetch/checkout) instead
+			// of `git clone --branch --depth`, which git rejects for a SHA.
+			// The fake git below fails unconditionally, so this still errors,
+			// just from cloneShallowCommit's first command instead.
+			name:      "commit ID with depth routes through cloneShallowCommit",
 			ref:       "abc1234567",
 			depth:     1,
 			exitCode:  128,
@@ -731,14 +737,95 @@ func TestClone(t *testing.T) {
 			err := g.clone(&params)
 			if tt.wantError {
 				require.Error(t, err)
-				if tt.depth > 0 && tt.ref == "abc1234567" {
-					require.Contains(t, err.Error(), "depth")
-				}
 			} else {
 				require.NoError(t, err)
 			}
 		})
 	}
+}
+
+// TestCloneShallowCommit_Success proves the real fix: a shallow clone
+// pinned to a commit SHA that is NOT a branch/tag tip (an ordinary "git
+// clone --branch <sha> --depth N" would reject that outright) succeeds via
+// cloneShallowCommit, using a real local git repository rather than a fake
+// git binary.
+func TestCloneShallowCommit_Success(t *testing.T) {
+	requireRealGit(t)
+
+	repoDir := initCloneTestGitRepo(t, map[string]string{"file.txt": "v1"})
+	// A second commit so the first commit is a non-tip, non-HEAD SHA -- the
+	// exact shape that breaks `git clone --branch --depth`.
+	nonTipSHA := runCloneTestGit(t, repoDir, "rev-parse", "HEAD")
+	writeAndCommit(t, repoDir, "file.txt", "v2")
+
+	g := newGetter()
+	dst := filepath.Join(t.TempDir(), "clone-dest")
+	u := mustURL(t, cloneTestGitFileURI(repoDir))
+
+	params := gitOperationParams{
+		ctx:   context.Background(),
+		dst:   dst,
+		u:     u,
+		ref:   nonTipSHA,
+		depth: 1,
+	}
+	err := g.clone(&params)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dst, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "v1", string(content), "must check out the pinned commit, not the branch tip")
+}
+
+// requireRealGit skips the test when the git binary is unavailable, and
+// (unlike writeFakeGit) leaves PATH untouched so the real git binary runs.
+func requireRealGit(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not found on PATH")
+	}
+}
+
+func initCloneTestGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runCloneTestGit(t, repoDir, "init")
+	runCloneTestGit(t, repoDir, "checkout", "-b", "main")
+	runCloneTestGit(t, repoDir, "config", "commit.gpgsign", "false")
+	runCloneTestGit(t, repoDir, "config", "user.email", "test@example.com")
+	runCloneTestGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		writeAndCommit(t, repoDir, name, content)
+	}
+	return repoDir
+}
+
+func writeAndCommit(t *testing.T, repoDir, name, content string) {
+	t.Helper()
+	path := filepath.Join(repoDir, filepath.FromSlash(name))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	runCloneTestGit(t, repoDir, "add", ".")
+	runCloneTestGit(t, repoDir, "commit", "-m", "commit "+name+"="+content)
+}
+
+func runCloneTestGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+	return strings.TrimSpace(string(out))
+}
+
+func cloneTestGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
 // Test update method.

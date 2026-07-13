@@ -79,10 +79,9 @@ func TestCatalogEntry_ResolvedSource(t *testing.T) {
 
 // TestCatalogEntry_ResolvedSource_PinnedToBuildCommit verifies that once a
 // binary is built with a commit SHA (via ldflags, see scripts/build-atmos.sh
-// and .goreleaser*.yml), catalog sources pin to that exact commit and disable
-// the shallow clone go-getter otherwise applies -- git rejects a shallow
-// clone (`--depth`) combined with a ref that isn't a branch or tag, which a
-// full commit SHA never is.
+// and .goreleaser*.yml), catalog sources pin to that exact commit. Fetching
+// it shallowly is pkg/downloader.CustomGitGetter.cloneShallowCommit's job,
+// not this package's -- ResolvedSource does not need to special-case it.
 func TestCatalogEntry_ResolvedSource_PinnedToBuildCommit(t *testing.T) {
 	const sha = "0cf62afa883b1546f07f2eaf2d6f1690353d31b7"
 	original := version.Commit
@@ -95,7 +94,7 @@ func TestCatalogEntry_ResolvedSource_PinnedToBuildCommit(t *testing.T) {
 		Source: "github.com/cloudposse/atmos.git//examples/scaffolds/aws/app",
 	}
 
-	assert.Equal(t, e.Source+"?ref="+sha+"&depth=0", e.ResolvedSource(""))
+	assert.Equal(t, e.Source+"?ref="+sha, e.ResolvedSource(""))
 }
 
 func TestCatalogStubs(t *testing.T) {

@@ -548,18 +548,22 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ref := params.ref
 	depth := params.depth
 
+	// `git clone --branch --depth` rejects a commit SHA outright (it only accepts a
+	// branch or tag name for a shallow clone). Use a shallow `git fetch <sha>` instead
+	// -- git supports fetching a specific reachable commit that way, and GitHub/GitLab/
+	// Bitbucket all allow it for public repos -- so SHA-pinned sources (e.g. the
+	// scaffold catalog, pinned to the build commit) stay as fast as any other shallow
+	// clone instead of silently falling back to a full clone of the whole history.
+	if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
+		return g.cloneShallowCommit(params)
+	}
+
 	args := append(cloneFlagArgs(ref, depth), gitArgSeparator, u.String(), dst)
 
 	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	setupGitEnv(cmd, sshKeyFile)
 	err := g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
-		// A shallow clone of a specific ref requires a named ref (branch or tag) rather than a
-		// commit SHA; flag that case with a clearer hint. We can't recognize it precisely without
-		// hard-coding git's human-readable output, so this is a heuristic.
-		if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
-			return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
-		}
 		return err
 	}
 
@@ -572,6 +576,53 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 			}
 			return err
 		}
+	}
+	return nil
+}
+
+// cloneShallowCommit fetches a single commit SHA into dst without a full clone:
+// `git init` + `git remote add` + `git fetch --depth <n> <sha>` + `git checkout
+// FETCH_HEAD`. Used instead of `clone` when the ref looks like a commit SHA, since
+// `git clone --branch --depth` does not accept one.
+func (g *CustomGitGetter) cloneShallowCommit(params *gitOperationParams) error {
+	ctx := params.ctx
+	dst := params.dst
+	sshKeyFile := params.sshKeyFile
+	u := params.u
+	ref := params.ref
+	depth := params.depth
+
+	cleanup := func() {
+		if removeErr := os.RemoveAll(dst); removeErr != nil {
+			log.Trace("Failed to remove git repository during cleanup", "error", removeErr, "dir", dst)
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, gitCommand, "init", dst)
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		return err
+	}
+
+	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
+	cmd = exec.CommandContext(ctx, gitCommand, "remote", "add", originRemote, gitArgSeparator, u.String())
+	cmd.Dir = dst
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		cleanup()
+		return err
+	}
+
+	// #nosec G204 -- ref is from query parameters and we use "--" separator to prevent command injection.
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, "--depth", strconv.Itoa(depth), gitArgSeparator, ref)
+	cmd.Dir = dst
+	setupGitEnv(cmd, sshKeyFile)
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		cleanup()
+		return err
+	}
+
+	if err := g.checkout(ctx, dst, "FETCH_HEAD"); err != nil {
+		cleanup()
+		return err
 	}
 	return nil
 }
