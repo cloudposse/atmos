@@ -346,6 +346,30 @@ func TestVendorSourceOCI_Success(t *testing.T) {
 	assert.Contains(t, string(content), "OCI_MARKER")
 }
 
+// TestVendorSourceOCI_OpenTofuModulePackage_Success is a regression test for
+// pulling a component from an OCI registry that distributes modules in
+// OpenTofu's native "install modules from OCI registries" format (artifactType
+// application/vnd.opentofu.modulepkg, a ZIP-archive layer with media type
+// "archive/zip" -- see https://opentofu.org). Atmos's OCI puller previously
+// assumed every layer was a tar+gzip stream and failed with "archive/tar:
+// invalid tar header" against real registries publishing this format (e.g.
+// registry.defenseunicorns.com's terraform-aws-uds-vpc module).
+func TestVendorSourceOCI_OpenTofuModulePackage_Success(t *testing.T) {
+	imageRef := ocitest.NewZipRegistry(t, "test/tofu-module:v1", map[string]string{
+		"main.tf": "# OPENTOFU_MODULEPKG_MARKER\n",
+	})
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{
+		Uri: "oci://" + imageRef,
+	}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "OPENTOFU_MODULEPKG_MARKER")
+}
+
 func TestVendorSourceOCI_DownloadFailure(t *testing.T) {
 	// Port 1 is a privileged port nothing is listening on in test environments;
 	// the connection is refused immediately (deterministic, no timeout wait).

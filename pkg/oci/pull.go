@@ -31,6 +31,18 @@ const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components.
 )
 
+// opentofuModulePkgArtifactType is the OCI artifactType OpenTofu's native
+// "install modules from OCI registries" feature uses to distribute a module
+// (see https://opentofu.org). Its single layer is a ZIP archive
+// (zipLayerMediaType), not a tar+gzip stream.
+const opentofuModulePkgArtifactType = "application/vnd.opentofu.modulepkg"
+
+// zipLayerMediaType is the OCI layer media type OpenTofu's module-package
+// format declares for its ZIP-archive layer. Any other layer media type is
+// extracted as a tar stream (extractTarball), preserving existing behavior
+// for Atmos's own artifacts and generic OCI images.
+const zipLayerMediaType = "archive/zip"
+
 var defaultFileSystem = filesystem.NewOSFileSystem()
 
 // remoteGet is the package-level indirection over remote.Get used by pullImage.
@@ -214,9 +226,14 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	}
 	defer uncompressed.Close()
 
-	if err := extractTarball(uncompressed, destDir); err != nil {
+	extract := extractTarball
+	if mediaType, mtErr := layer.MediaType(); mtErr == nil && mediaType == zipLayerMediaType {
+		extract = extractZip
+	}
+
+	if err := extract(uncompressed, destDir); err != nil {
 		log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", err)
-		return errors.Join(errUtils.ErrTarballExtraction, err)
+		return errors.Join(errUtils.ErrLayerExtraction, err)
 	}
 
 	return nil
@@ -229,9 +246,11 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 		log.Error("Failed to parse OCI manifest", "image", imageName, "error", err)
 		return
 	}
-	if manifest.ArtifactType != targetArtifactType {
-		// log that don't match the target artifact type
-		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", manifest.ArtifactType)
+	switch manifest.ArtifactType {
+	case targetArtifactType, opentofuModulePkgArtifactType:
+		// Recognized and supported artifact type; nothing to warn about.
+	default:
+		log.Warn("OCI image does not match a recognized artifact type", "image", imageName, "artifactType", manifest.ArtifactType)
 	}
 }
 

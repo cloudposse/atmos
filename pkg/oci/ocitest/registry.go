@@ -4,6 +4,7 @@ package ocitest
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"io"
 	"net/http/httptest"
@@ -12,9 +13,11 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/stretchr/testify/require"
 
@@ -35,15 +38,40 @@ func NewRegistry(t *testing.T, repoTag string, files map[string]string) string {
 
 	t.Helper()
 
-	srv := httptest.NewServer(registry.New())
-	t.Cleanup(srv.Close)
-	host := strings.TrimPrefix(srv.URL, "http://")
-
 	tarBytes := buildTar(t, files)
 	layer, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(tarBytes)), nil
 	})
 	require.NoError(t, err)
+
+	return pushImage(t, repoTag, layer)
+}
+
+// NewZipRegistry starts an in-process OCI registry serving a single image
+// whose sole layer is a ZIP archive with media type "archive/zip" -- the
+// format OpenTofu's native "install modules from OCI registries" feature uses
+// (see https://opentofu.org, artifactType application/vnd.opentofu.modulepkg).
+// Unlike NewRegistry's layer, this one is not gzip-wrapped: the blob is the
+// raw zip bytes, matching what real OpenTofu module-package registries serve.
+func NewZipRegistry(t *testing.T, repoTag string, files map[string]string) string {
+	defer perf.Track(nil, "ocitest.NewZipRegistry")()
+
+	t.Helper()
+
+	zipBytes := buildZip(t, files)
+	layer := static.NewLayer(zipBytes, "archive/zip")
+
+	return pushImage(t, repoTag, layer)
+}
+
+// pushImage starts an in-process OCI registry and writes a single-layer image
+// to it, returning the bare image reference "127.0.0.1:PORT/repoTag".
+func pushImage(t *testing.T, repoTag string, layer v1.Layer) string {
+	t.Helper()
+
+	srv := httptest.NewServer(registry.New())
+	t.Cleanup(srv.Close)
+	host := strings.TrimPrefix(srv.URL, "http://")
 
 	img, err := mutate.AppendLayers(empty.Image, layer)
 	require.NoError(t, err)
@@ -72,5 +100,21 @@ func buildTar(t *testing.T, files map[string]string) []byte {
 		require.NoError(t, err)
 	}
 	require.NoError(t, tw.Close())
+	return buf.Bytes()
+}
+
+// buildZip writes files into an in-memory zip archive.
+func buildZip(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for path, content := range files {
+		w, err := zw.Create(path)
+		require.NoError(t, err)
+		_, err = w.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
 	return buf.Bytes()
 }

@@ -1,11 +1,14 @@
 package oci
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -26,10 +29,12 @@ import (
 
 // MockLayer implements v1.Layer for testing.
 type MockLayer struct {
-	digestVal       v1.Hash
-	sizeVal         int64
-	uncompressedErr error
-	compressedErr   error
+	digestVal        v1.Hash
+	sizeVal          int64
+	uncompressedErr  error
+	compressedErr    error
+	mediaTypeVal     types.MediaType
+	uncompressedData []byte
 }
 
 func (m *MockLayer) Digest() (v1.Hash, error) {
@@ -48,7 +53,7 @@ func (m *MockLayer) Uncompressed() (io.ReadCloser, error) {
 	if m.uncompressedErr != nil {
 		return nil, m.uncompressedErr
 	}
-	return nil, nil
+	return io.NopCloser(bytes.NewReader(m.uncompressedData)), nil
 }
 
 func (m *MockLayer) Size() (int64, error) {
@@ -56,6 +61,9 @@ func (m *MockLayer) Size() (int64, error) {
 }
 
 func (m *MockLayer) MediaType() (types.MediaType, error) {
+	if m.mediaTypeVal != "" {
+		return m.mediaTypeVal, nil
+	}
 	return types.DockerLayer, nil
 }
 
@@ -84,6 +92,30 @@ func TestProcessLayer_DecompressionError(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrLayerDecompression), "Expected ErrLayerDecompression, got: %v", err)
 	assert.Contains(t, err.Error(), "layer decompression")
+}
+
+// TestProcessLayer_ZipMediaType tests that a layer declaring the OpenTofu
+// module-package media type ("archive/zip") is extracted as a zip archive
+// instead of a tar stream. Regression test for
+// https://github.com/cloudposse/atmos/issues/2716 following up: OpenTofu's
+// native OCI module-package format failed with "archive/tar: invalid tar
+// header" because processLayer always assumed a tar+gzip layer.
+func TestProcessLayer_ZipMediaType(t *testing.T) {
+	dest := t.TempDir()
+	zipBuf := writeTestZip(t, map[string]string{"main.tf": "# from zip layer\n"})
+
+	mockLayer := &MockLayer{
+		digestVal:        v1.Hash{Algorithm: "sha256", Hex: "zip123"},
+		mediaTypeVal:     zipLayerMediaType,
+		uncompressedData: zipBuf.Bytes(),
+	}
+
+	err := processLayer(mockLayer, 0, dest)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dest, "main.tf"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "from zip layer")
 }
 
 // TestProcessOciImageWithFS_TempDirCreationFailure tests error handling when temp directory creation fails.
