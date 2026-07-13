@@ -267,6 +267,15 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 	return printInstallSuccess(available.DisplayName, available.Version, installPath)
 }
 
+// printItemColumns writes a short header line followed by items laid out in
+// evenly spaced columns sized to the terminal width, instead of a single
+// comma-separated line that wraps unpredictably (and can break mid-word)
+// once there are more than a handful of entries.
+func printItemColumns(header string, items []string) {
+	ui.Infof("%s", header)
+	ui.Write(ui.FormatColumns(items, ui.TerminalWidth()) + "\n")
+}
+
 // InstallAllBundled installs every skill in the embedded catalog. It mirrors
 // `atmos mcp install` with no server names given: omitting <source> entirely
 // means "act on the whole built-in set" rather than requiring a separate
@@ -289,7 +298,7 @@ func (i *Installer) InstallAllBundled(opts *InstallOptions) error {
 	for _, available := range catalog {
 		names = append(names, available.Name)
 	}
-	ui.Infof("Discovered %d bundled skills: %s", len(catalog), strings.Join(names, ", "))
+	printItemColumns(fmt.Sprintf("Discovered %d bundled skills:", len(catalog)), names)
 
 	if !opts.SkipConfirm {
 		if err := confirmMultiSkillInstall(len(catalog)); err != nil {
@@ -540,7 +549,7 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 	}
 
 	// Show discovery summary.
-	ui.Infof("Discovered %d skills in package: %s", len(discovered), strings.Join(skillNames, ", "))
+	printItemColumns(fmt.Sprintf("Discovered %d skills in package:", len(discovered)), skillNames)
 
 	if !opts.SkipConfirm {
 		if err := confirmMultiSkillInstall(len(discovered)); err != nil {
@@ -678,7 +687,7 @@ func (i *Installer) UninstallAll(force bool, basePath string, clients []string) 
 	for _, skill := range installed {
 		names = append(names, skill.Name)
 	}
-	ui.Infof("Installed skills: %s", strings.Join(names, ", "))
+	printItemColumns("Installed skills:", names)
 
 	if !force {
 		title := fmt.Sprintf("Uninstall all %d skills?", len(installed))
