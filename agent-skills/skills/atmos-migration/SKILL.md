@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration"
+description: "Migrating to Atmos from existing IaC and authentication tooling: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration — plus migrating AWS/GCP/Azure CLI configs, Leapp, Granted, and saml2aws into atmos auth"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -8,6 +8,13 @@ references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/from-aws-config.md
+  - references/from-gcp-config.md
+  - references/from-azure-config.md
+  - references/from-leapp.md
+  - references/from-granted.md
+  - references/from-aws2saml.md
+  - references/from-okta-cli.md
 ---
 
 # Migrating to Atmos
@@ -77,6 +84,28 @@ different reference:
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
 possible. Without it, a team is forced into a big-bang cutover. Cover it any time the user has
 existing Terraform state they need to read from new Atmos components.
+
+## Migrating Authentication
+
+Authentication is an orthogonal migration axis from IaC -- a user may migrate their Terraform code,
+their auth setup, both, or neither in a given session. Don't conflate the two. Identify which
+credential tooling the user has today and route to the matching reference:
+
+| User has...                                            | Use reference                                    |
+|------------------------------------------------------------|----------------------------------------------------|
+| `~/.aws/config`/`~/.aws/credentials` profiles               | [from-aws-config.md](references/from-aws-config.md) |
+| `gcloud` CLI config, ADC, or service-account keys            | [from-gcp-config.md](references/from-gcp-config.md) |
+| `az` CLI config, service principals, or Managed Identity     | [from-azure-config.md](references/from-azure-config.md) |
+| Leapp (desktop credential manager)                           | [from-leapp.md](references/from-leapp.md)           |
+| Granted (the `assume` CLI)                                   | [from-granted.md](references/from-granted.md)       |
+| saml2aws                                                      | [from-aws2saml.md](references/from-aws2saml.md)     |
+| okta-aws-cli                                                   | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
+
+All are pure config-translation guides -- there is no `atmos auth import`/`migrate` command.
+None of them require touching the user's IaC migration path; they can run before, after, or
+independently of one. `from-okta-cli.md` is the one exception to "full mapping exists": it
+covers a supported path (classic SAML Okta AWS app) and an explicitly unsupported one (OIDC
+Device Authorization Grant) -- read it fully before promising a user anything.
 
 ## The Minimum-Viable Migration
 
@@ -158,7 +187,10 @@ those questions to the right skill:
 - **Abstract components, inheritance, catalog patterns** → [atmos-components](../atmos-components/SKILL.md)
 - **Deep merging, imports, overrides** → [atmos-stacks](../atmos-stacks/SKILL.md)
 - **Vendoring third-party components** → [atmos-vendoring](../atmos-vendoring/SKILL.md)
-- **Authentication / provider credentials** → [atmos-auth](../atmos-auth/SKILL.md)
+- **Authentication / provider credentials** → migrating an existing AWS/GCP/Azure CLI config,
+  Leapp, Granted, or saml2aws setup? Start with the matching reference in
+  [Migrating Authentication](#migrating-authentication) above. For authoring new auth config
+  beyond a migration, go straight to [atmos-auth](../atmos-auth/SKILL.md)
 - **Validation policies (OPA, JSON Schema)** → [atmos-validation](../atmos-validation/SKILL.md)
 - **CI/CD with affected-detection** → [atmos-ci](../atmos-ci/SKILL.md)
 - **Cross-component data sharing via stores** → [atmos-stores](../atmos-stores/SKILL.md)
@@ -186,3 +218,19 @@ Things to push back on if a user (or another agent) proposes them during migrati
   workspaces to stacks without losing state
 - [References/remote-state-bridge.md](references/remote-state-bridge.md) -- the dummy-component
   and abstract-component patterns for reading state from un-migrated or external Terraform
+- [References/from-aws-config.md](references/from-aws-config.md) -- mapping `~/.aws/config`
+  profiles (SSO, static keys, role chaining, MFA) to `atmos auth`
+- [References/from-gcp-config.md](references/from-gcp-config.md) -- mapping `gcloud` CLI auth
+  (ADC, Workload Identity Federation, service-account impersonation) to `atmos auth`
+- [References/from-azure-config.md](references/from-azure-config.md) -- mapping `az` CLI auth
+  (device code, CLI reuse, OIDC) to `atmos auth`, and the known gaps (client-secret service
+  principals, Managed Identity)
+- [References/from-leapp.md](references/from-leapp.md) -- condensed agent-facing companion to the
+  [Leapp migration tutorial](https://atmos.tools/tutorials/migrating-from-leapp)
+- [References/from-granted.md](references/from-granted.md) -- command-equivalence table for
+  Granted (`assume` CLI) users, built on top of from-aws-config.md's SSO schema
+- [References/from-aws2saml.md](references/from-aws2saml.md) -- mapping saml2aws config to
+  `aws/saml`, the provider it directly inspired
+- [References/from-okta-cli.md](references/from-okta-cli.md) -- okta-aws-cli migration: supported
+  for classic SAML Okta AWS apps, explicitly unsupported for OIDC Device Authorization Grant apps
+  (tracked in `docs/prd/okta-auth-identity.md`, roadmap: Native Okta Authentication)
