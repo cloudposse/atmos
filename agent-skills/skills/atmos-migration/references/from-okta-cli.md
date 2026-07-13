@@ -2,35 +2,54 @@
 
 This reference is the agent's decision guide for users coming from
 [okta-aws-cli](https://github.com/okta/okta-aws-cli), Okta's official tool for generating
-temporary AWS credentials. Unlike the other `from-*` guides, **this one is partial support, not a
-full mapping** -- Atmos supports one of okta-aws-cli's two integration modes today and explicitly
-does not support the other yet. Get this distinction right before proposing any migration; getting
-it wrong sends the user down a path that will not work.
+temporary AWS credentials. **Correction to an earlier version of this guide:** okta-aws-cli does
+not target a separate "OIDC AWS app" distinct from a "classic SAML app" -- verified against the
+upstream README, there is only one Okta AWS Federation Application type, and it is SAML-based.
+Both `okta-aws-cli web` and Atmos's `aws/saml` provider ultimately authorize AWS access the same
+way: `AssumeRoleWithSAML` against that one app. The real fork is **how the human authenticates to
+Okta**, not which AWS-side app type is configured. Get this distinction right; the app-type framing
+this guide used before would have sent users down a dead end diagnosing the wrong thing.
 
 For the full auth configuration schema, see the [atmos-auth](../../atmos-auth/SKILL.md) skill and
 its [providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md)
 reference.
 
-## Identifying the User's Shape (this determines whether migration is even possible today)
+## What okta-aws-cli Actually Does (verified against the upstream README)
 
-`okta-aws-cli` works against one of two different Okta AWS app integration types. The user's Okta
-admin console tells you which one they have -- check the AWS app's **Sign On** tab:
+`okta-aws-cli` has three commands, not one:
 
-| Okta AWS app type                                                    | okta-aws-cli mode                     | Atmos support today |
-|--------------------------------------------------------------------------|------------------------------------------|------------------------|
-| Classic **SAML 2.0** app                                                  | SAML-based credential retrieval           | **Supported** -- see [SAML (Supported Today)](#saml-supported-today--awssaml--driver-okta) |
-| Newer **AWS Account Federation** app (OIDC)                               | OAuth 2.0 Device Authorization Grant      | **Not supported yet** -- see [OIDC Device Authorization Grant (Not Yet Supported)](#oidc-device-authorization-grant-not-yet-supported) |
-| Okta tokens used for Azure/GCP federation, direct Okta API calls, or third-party OIDC services | N/A (not AWS-specific)         | **Not supported yet** -- same gap, see below |
+| Command  | Mechanism                                                                 |
+|----------|----------------------------------------------------------------------------|
+| `web`    | Human-oriented. OIDC device-authorization/browser flow authenticates the human to Okta; the CLI never prompts for a password directly. Requires **Okta Identity Engine (OIE) -- does not work with Classic orgs.** Result is exchanged via `AssumeRoleWithSAML` against Okta's AWS Federation Application (SAML-based). |
+| `m2m`    | Machine-to-machine. Headless, private-key JWT client-assertion auth -- no human, no browser, no password. |
+| `direct` | Human or headless, using Okta's newer Direct Authentication (out-of-band MFA) grant. |
 
-Don't guess -- ask the user (or have them check) which app type they're on before proposing a
-migration path. If they're not sure, "was I ever prompted for a device code and a URL to visit in
-a browser on another device?" is the OIDC device-flow tell; the SAML app just redirects straight
-through a normal browser SSO flow.
+Atmos's `aws/saml` + `driver: Okta` provider (built on the vendored `saml2aws` library) is a
+**different client-side authentication method against the same kind of SAML AWS Federation App**:
+it calls Okta's classic `/api/v1/authn` API directly with username/password plus an MFA challenge
+(Push, TOTP, SMS, WebAuthn, YubiKey, Duo -- all confirmed in `pkg/provider/okta/okta.go` in the
+vendored `saml2aws` module), then exchanges the resulting session for the same SAML assertion
+`okta-aws-cli web` would get.
 
-## SAML (Supported Today) → `aws/saml` + `driver: Okta`
+## Identifying the User's Shape
 
-**Before:** `okta-aws-cli` (or the org's classic Okta SAML AWS app, or bare `saml2aws --provider
-Okta`) against a SAML 2.0 AWS app in Okta.
+| User has...                                                              | Maps to |
+|--------------------------------------------------------------------------|---------|
+| Uses `okta-aws-cli web`, and their org allows direct password+MFA API login (true for Classic orgs; true for many OIE orgs unless locked down) | [Full Replacement](#full-replacement--awssaml--driver-okta) -- just try it |
+| Uses `okta-aws-cli web`, and the org enforces browser-only/phishing-resistant login (blocks direct `/api/v1/authn` password auth) | [Not Yet Supported: OIDC Device-Flow Login](#not-yet-supported-oidc-device-flow-login) |
+| Uses `okta-aws-cli m2m` (headless, private-key JWT)                      | [Not Yet Supported: m2m / Direct Authentication](#not-yet-supported-m2m--direct-authentication) |
+| Uses `okta-aws-cli direct` (Direct Authentication / out-of-band MFA)     | [Not Yet Supported: m2m / Direct Authentication](#not-yet-supported-m2m--direct-authentication) |
+| Wants an Okta token for Azure/GCP federation or direct Okta API calls (not AWS) | [Non-AWS Okta Token Use](#non-aws-okta-token-use-also-not-yet-supported) |
+
+There's no reliable way to tell from the outside whether an org blocks direct password API auth --
+**the practical test is to just try `atmos auth login` with `driver: Okta`** and see if it
+succeeds. If it does, migrate. If Okta rejects the direct API auth attempt (commonly surfaced as
+an Okta policy/factor error rather than a generic auth failure), that's the signal the org has
+locked this down and the OIDC device-flow gap applies.
+
+## Full Replacement → `aws/saml` + `driver: Okta`
+
+**Before:** `okta-aws-cli web --oidc-client-id ... --aws-acct-fed-app-id ... --org-domain ...`
 
 **After (`atmos.yaml`):**
 ```yaml
@@ -51,61 +70,86 @@ auth:
         assume_role: arn:aws:iam::123456789012:role/AdminRole
 ```
 
-This drives Okta's `/api/v1/authn` API directly (verified in `pkg/auth/providers/aws/saml.go`,
-backed by the vendored `saml2aws` Okta provider) -- it's an API/HTTP flow, not browser automation,
-and needs no Playwright drivers the way the generic `Browser` driver does. It supports the full
-range of Okta MFA factors: Push (Okta Verify), TOTP (Google Authenticator or Okta Verify), SMS,
-Symantec VIP, FIDO WebAuthn, YubiKey hardware tokens, and Duo. This is a full replacement for
-`okta-aws-cli` in SAML mode -- `atmos auth login/exec/shell/console` drives the same Okta
-authentication the CLI would, then stores the resulting AWS credentials via Atmos's keyring
-instead of a separate credential cache.
+## Command Equivalence
 
-## OIDC Device Authorization Grant (Not Yet Supported)
+| okta-aws-cli command                                                      | `atmos auth` equivalent |
+|---------------------------------------------------------------------------|--------------------------|
+| `okta-aws-cli web --oidc-client-id ... --aws-acct-fed-app-id ... --org-domain ...` | `atmos auth login -i <identity>` -- **only if** the org allows direct password+MFA API auth, see [Identifying the User's Shape](#identifying-the-users-shape) |
+| `okta-aws-cli web --write-aws-credentials --profile <name>`               | Not needed -- Atmos never writes to `~/.aws/credentials`; use `atmos auth exec -i <identity> -- <cmd>` or `eval $(atmos auth env -i <identity>)` instead |
+| `okta-aws-cli list-profiles`                                               | `atmos auth list` |
+| `okta-aws-cli m2m` / `okta-aws-cli direct`                                  | **Not supported yet** -- see [Not Yet Supported: m2m / Direct Authentication](#not-yet-supported-m2m--direct-authentication) |
 
-**Before:** `okta-aws-cli` in its default/primary mode -- OAuth 2.0 Device Authorization Grant
-against Okta's newer "AWS Account Federation" OIDC app, producing a device code and a
-`https://.../activate` URL the user visits to approve the login.
+Get the SAML SSO URL from the same Okta AWS Federation Application's Sign On tab that
+`--aws-acct-fed-app-id` points at -- it's the same app either way. This drives Okta's
+`/api/v1/authn` API directly -- an API/HTTP flow, not browser automation, needing no Playwright
+drivers -- and supports the full range of Okta MFA factors: Push (Okta Verify), TOTP (Google
+Authenticator or Okta Verify), SMS, Symantec VIP, FIDO WebAuthn, YubiKey hardware tokens, and Duo.
+`atmos auth login/exec/shell/console` replaces `okta-aws-cli web`, and Atmos never needs to write
+into `~/.aws/config`/`~/.aws/credentials` to make a session usable -- see
+[from-aws-config.md's "Shells, exec, and Your Default AWS Config File"](from-aws-config.md#shells-exec-and-your-default-aws-config-file)
+for exactly how `atmos auth shell`/`exec`/`env` work instead.
 
-**After: there is no Atmos equivalent today.** Do not fabricate a mapping -- `aws/saml` +
-`driver: Okta` is SAML-based under the hood and cannot talk to an OIDC AWS Account Federation app.
-This is a confirmed, explicitly tracked gap:
+**Note:** `okta-aws-cli` itself requires Okta Identity Engine -- it does not work at all with
+Classic orgs. If the user is migrating away from `okta-aws-cli`, their org is necessarily on OIE.
+Whether the SAML path above works depends on whether that specific OIE org still permits direct
+password+MFA API authentication (see the shape table above), not on the org being OIE vs Classic.
 
-- `docs/prd/okta-auth-identity.md` lists the current state's limitations verbatim: *"SAML-only:
-  Only supports SAML assertions for AWS, not OAuth/OIDC tokens... No device authorization flow:
-  Cannot use modern OAuth Device Authorization Grant."*
+## Not Yet Supported: OIDC Device-Flow Login
+
+**Before:** `okta-aws-cli web`, in an org that has locked down direct password API auth and
+requires the OIDC device-authorization/browser flow specifically (increasingly common under strict
+phishing-resistant-auth policies).
+
+**After: there is no Atmos equivalent today.** Do not fabricate a mapping -- if `atmos auth login`
+with `driver: Okta` fails because the org blocks direct API auth, there's no workaround via
+`aws/saml`. This is a confirmed, explicitly tracked gap:
+
+- `docs/prd/okta-auth-identity.md` lists the current limitation verbatim: *"No device
+  authorization flow: Cannot use modern OAuth Device Authorization Grant."*
 - The roadmap tracks the fix as **"Native Okta Authentication (Device Code Flow)"**
   (`website/src/data/roadmap.js`, status: planned, quarter: Q1 2026, PRD: `okta-auth-identity`) --
   a dedicated `okta/*` identity provider using Device Authorization Grant, intended to federate
   into AWS, Azure, and GCP plus direct Okta API access.
 
-Give the user honest options, not a workaround dressed up as a solution:
+Give the user honest options:
 
-1. **If their org can reconfigure the Okta AWS app as classic SAML instead of OIDC federation**,
-   migrate via the SAML path above.
-2. **Otherwise, keep using `okta-aws-cli` standalone** alongside Atmos until the native `okta/*`
-   provider ships -- there's no harm in running both tools during the gap.
-3. **Point them at the roadmap item** if they want to track when this lands.
+1. **Keep using `okta-aws-cli web` standalone** alongside Atmos until the native `okta/*` provider
+   ships -- no harm running both during the gap.
+2. **Point them at the roadmap item** if they want to track when this lands.
+3. Do not suggest asking their org to weaken its auth policy just to unblock this migration --
+   that trades a real security control for CLI convenience.
+
+## Not Yet Supported: m2m / Direct Authentication
+
+`okta-aws-cli m2m` (headless private-key JWT client assertion) and `okta-aws-cli direct` (Direct
+Authentication / out-of-band MFA) are architecturally distinct from both the `web` command and
+from Atmos's `aws/saml` provider -- neither is a "different driver setting," they're different
+Okta grant types entirely. There is no Atmos equivalent for either today. Same gap and roadmap
+pointer as above; don't propose `aws/saml` as a substitute for these, it doesn't apply.
 
 ## Non-AWS Okta Token Use (Also Not Yet Supported)
 
 Users who want an Okta access token for Azure federated workload identity, GCP workload identity
 federation, direct Okta API calls (user info, groups), or third-party OIDC services hit the same
 gap -- Atmos's only Okta integration point today is the AWS-specific SAML `driver: Okta`. There is
-no general-purpose Okta identity provider yet. This is the same `okta-auth-identity` PRD/roadmap
-item as above; don't propose a workaround using `aws/saml` for non-AWS targets, it doesn't apply.
+no general-purpose Okta identity provider yet. Same `okta-auth-identity` PRD/roadmap item as above.
 
 ## Common Gotchas
 
-- **`driver: Okta` is SAML, not OIDC** -- despite needing no browser/Playwright drivers (it's an
-  API/HTTP flow), it produces a SAML assertion for `AssumeRoleWithSAML`, not an OIDC token for
-  `AssumeRoleWithWebIdentity`. Don't conflate "no browser needed" with "OIDC support."
-  `aws/assume-role`'s `principal.assume_role` still expects a role ARN either way, but the
-  underlying trust relationship on the AWS side must be configured for SAML federation, not OIDC.
-- **Confirm the Okta AWS app type before promising a migration path.** This is the single most
-  common way to send a user down a dead end -- always check the Sign On tab first.
+- **There is one Okta AWS Federation Application type, not two.** Don't ask users to check for a
+  "SAML app vs. OIDC app" -- that distinction doesn't exist on the Okta side. The fork is entirely
+  about which Okta-side auth policy applies to `/api/v1/authn` for their org.
+- **`driver: Okta` is SAML under the hood** -- it produces a SAML assertion for
+  `AssumeRoleWithSAML`, same as `okta-aws-cli web` ultimately does, just reached via a different
+  client-side login method (direct password+MFA vs. OIDC device/browser flow).
+- **The only real way to know if the SAML path works for a given org is to try it.** Org auth
+  policies (FastPass enforcement, phishing-resistant-only rules) aren't visible from outside Okta
+  admin settings, and even those don't map cleanly to "will `/api/v1/authn` accept a password."
+- **`m2m` and `direct` are not the same gap as `web`'s device-flow requirement** -- don't conflate
+  all three okta-aws-cli commands into one bucket when explaining what's missing.
 - **The MFA factor list is often the deciding factor** for whether a user trusts dropping their
-  CLI. If they ask "does this support my hardware key/Duo/push," the answer is yes -- list the
-  specific factors above rather than a vague "yes, MFA is supported."
+  CLI for the SAML path. If they ask "does this support my hardware key/Duo/push," the answer is
+  yes -- list the specific factors above rather than a vague "yes, MFA is supported."
 
 ## Related Skills
 

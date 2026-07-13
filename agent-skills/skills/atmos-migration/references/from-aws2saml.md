@@ -22,14 +22,18 @@ translation.
 
 ## SAML Provider → `aws/saml`
 
-**Before (`~/.saml2aws`):**
+**Before (`~/.saml2aws`, verified against the upstream README's example config):**
 ```ini
 [default]
-app_id = https://company.okta.com/app/amazon_aws/abc123/sso/saml
-url = https://company.okta.com/app/amazon_aws/abc123/sso/saml
-provider = Okta
-region = us-east-1
-session_duration = 3600
+url                  = https://company.okta.com/app/amazon_aws/abc123/sso/saml
+username             = user@company.com
+provider             = Okta
+mfa                  = Auto
+aws_urn              = urn:amazon:webservices
+aws_session_duration = 3600
+aws_profile          = admin
+role_arn             = arn:aws:iam::123456789012:role/AdminRole
+region               = us-east-1
 ```
 
 **After (`atmos.yaml`):**
@@ -92,11 +96,17 @@ and mark the most-used one `default: true`.
 | `saml2aws script --profile x`               | `atmos auth env -i x`                |
 | `saml2aws console --profile x`              | `atmos auth console -i x`            |
 
+Unlike `saml2aws login`, which writes credentials into `~/.aws/credentials` under a named profile
+by default, Atmos never touches that file -- `atmos auth env` exports `AWS_CONFIG_FILE`/
+`AWS_SHARED_CREDENTIALS_FILE` pointing at Atmos-managed files instead. See
+[from-aws-config.md's "Shells, exec, and Your Default AWS Config File"](from-aws-config.md#shells-exec-and-your-default-aws-config-file)
+for the full explanation.
+
 ## Common Gotchas
 
 - **Each `~/.saml2aws` named profile becomes a separate `providers.<name>` + `identities.<name>`
   pair.** Don't collapse multiple profiles into one provider unless they genuinely share the same
-  IdP `app_id`/`url`.
+  IdP `url`.
 - **MFA prompted by the IdP during the browser flow is handled automatically**, the same as native
   saml2aws -- there's no separate Atmos MFA field for SAML logins.
 - **If Playwright/browser automation fails post-migration** (download errors, version mismatches),

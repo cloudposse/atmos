@@ -15,6 +15,32 @@ the [atmos-auth](../../atmos-auth/SKILL.md) skill and its
 | `gcloud config set project` / `gcloud config configurations`           | [Project/Region Defaults](#projectregion-defaults--gcpproject) |
 | A downloaded service-account JSON key file (`GOOGLE_APPLICATION_CREDENTIALS=key.json`) | [No Direct Equivalent: Static Key Files](#no-direct-equivalent-static-service-account-key-files) |
 
+## Command Equivalence
+
+| Old gcloud CLI workflow                                                | `atmos auth` equivalent |
+|----------------------------------------------------------------------------|----------------------------|
+| `gcloud auth login` / `gcloud auth application-default login`              | `atmos auth login -i x` |
+| `gcloud config set project` / `gcloud config configurations activate x`    | No manual step -- the identity's `principal.project_id` selects this automatically |
+| `gcloud auth print-access-token`                                           | `atmos auth whoami -i x` |
+| Running `gcloud ...` / `terraform ...` under a specific config             | `atmos auth exec -i x -- gcloud ...` or `atmos auth shell -i x` |
+| Manual `export GOOGLE_APPLICATION_CREDENTIALS=...` scripts                 | `eval $(atmos auth env -i x)` |
+
+## Shells, `exec`, and Your Default gcloud Config
+
+**By default, Atmos does not read or write your system's default gcloud config**
+(`~/.config/gcloud/`). Same two recommended patterns as everywhere else in Atmos Auth:
+
+- **`atmos auth shell -i <identity>`** -- subshell with that identity's credentials active.
+- **`atmos auth exec -i <identity> -- <command>`** -- one-off command with credentials injected.
+
+If the user wants `gcloud`/`terraform`/other tools to "just work" in their normal shell without a
+subshell wrapper, `eval $(atmos auth env -i <identity>)` redirects the standard GCP SDK env vars
+(`GOOGLE_APPLICATION_CREDENTIALS`, `CLOUDSDK_CONFIG`, `GOOGLE_CLOUD_PROJECT`) to Atmos-managed
+files -- confirmed in `pkg/auth/cloud/gcp/env.go`. The user's actual
+`~/.config/gcloud/application_default_credentials.json` and gcloud named configurations are never
+touched; Atmos just points the current shell at its own managed credential files instead. Safe to
+add to `.bashrc`/`.zshrc` -- doesn't trigger a login prompt by itself.
+
 ## Application Default Credentials → `gcp/adc`
 
 **Before:**

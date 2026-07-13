@@ -68,6 +68,20 @@ auth:
           name: "core-identity"
 ```
 
+## Command Equivalence
+
+| Leapp action                                            | `atmos auth` equivalent |
+|---------------------------------------------------------|--------------------------|
+| Quick-launch a session in the Leapp app                 | `atmos auth login -i <identity>` |
+| Leapp's "Open Terminal" for a session                   | `atmos auth shell -i <identity>` |
+| Leapp's "Generate Credentials" / copy-to-clipboard       | `eval $(atmos auth env -i <identity>)` |
+
+Unlike Leapp, Atmos does not need to write into `~/.aws/config`/`~/.aws/credentials` to make a
+session usable -- see
+[from-aws-config.md's "Shells, exec, and Your Default AWS Config File"](from-aws-config.md#shells-exec-and-your-default-aws-config-file)
+for exactly how `atmos auth shell`/`exec`/`env` interact with (or rather, don't touch) the user's
+default AWS CLI config.
+
 ## Common Gotchas
 
 - **Provider name mismatch** ("Provider not found" error) -- `via.provider` must exactly match a

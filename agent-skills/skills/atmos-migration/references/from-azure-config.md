@@ -16,6 +16,40 @@ auth configuration schema, see the [atmos-auth](../../atmos-auth/SKILL.md) skill
 | `az login --identity` (VM/AKS Managed Identity)                        | [No Direct Equivalent: Managed Identity](#no-direct-equivalent-managed-identity) |
 | `az cloud set --name AzureUSGovernment` / `AzureChinaCloud`            | [Sovereign Clouds](#sovereign-clouds-govchina) |
 
+## Command Equivalence
+
+| Old az CLI workflow                                                     | `atmos auth` equivalent |
+|----------------------------------------------------------------------------|----------------------------|
+| `az login` (+ device code / service principal)                             | `atmos auth login -i x` |
+| `az account set --subscription <id>`                                       | No manual step -- the identity's `principal.subscription_id` selects this automatically |
+| `az account show`                                                          | `atmos auth whoami -i x` |
+| Running `az ...` / `terraform ...` under a specific login                  | `atmos auth exec -i x -- az ...` or `atmos auth shell -i x` |
+| Manually exporting `ARM_*`/`AZURE_*` env vars                              | `eval $(atmos auth env -i x)` |
+
+## Shells, `exec`, and Your Default az Config
+
+Same two recommended patterns as everywhere else in Atmos Auth -- **`atmos auth shell -i
+<identity>`** for a subshell, or **`atmos auth exec -i <identity> -- <command>`** for a one-off
+command -- and `eval $(atmos auth env -i <identity>)` if the user wants their normal shell to
+"just work" without a wrapper (redirects `AZURE_SUBSCRIPTION_ID`/`AZURE_TENANT_ID`/
+`ARM_SUBSCRIPTION_ID`/`ARM_TENANT_ID`/etc. to the active identity).
+
+**Azure is the one cloud where this isn't a clean "never touches your default files" story --
+be upfront about that rather than overclaiming isolation:**
+
+- Atmos keeps its own per-identity token cache under `~/.azure/atmos/<realm>/msal_token_cache.json`
+  (confirmed in `pkg/auth/providers/azure/device_code.go` and `pkg/auth/cloud/azure/msal_cache.go`).
+- It **also** writes to the shared `~/.azure/msal_token_cache.json` -- the same path bare `az`
+  reads -- specifically so a plain `az` command picks up the Atmos-authenticated session without
+  the user needing `atmos auth exec`/`shell` at all. This is a deliberate compatibility choice,
+  not an oversight.
+- `AZURE_CONFIG_DIR` is honored if the user wants to redirect az CLI's config location entirely
+  (via `atmos auth env`), for full isolation from their existing `~/.azure/` state.
+
+Tell users switching from az CLI that Atmos's Azure login is opportunistically compatible with
+their existing `az` commands out of the box, unlike AWS/GCP where Atmos deliberately avoids the
+default file locations.
+
 ## Interactive User Login → `azure/cli` or `azure/device-code`
 
 **Before:**
