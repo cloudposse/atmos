@@ -41,6 +41,15 @@ const onedirTreeName = ".pkg"
 // distinguish a onedir install from a flat one.
 const onedirManifestName = ".atmos-onedir.json"
 
+// onedirBackupSuffix names the transient backup of an existing preserved tree
+// used to make a reinstall atomic (rename aside, then restore on failure).
+const onedirBackupSuffix = ".bak"
+
+// moveTreeFunc relocates the extracted tree into place during a onedir install.
+// It is a package variable solely so tests can force a move failure and exercise
+// the reinstall rollback path deterministically; production always uses moveTree.
+var moveTreeFunc = moveTree
+
 // onedirManifest records, for a onedir install, where each entrypoint really
 // lives inside the version directory.
 type onedirManifest struct {
@@ -281,13 +290,27 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 		return err
 	}
 
-	// Move the whole extracted tree into place (a same-filesystem rename when the
-	// staging dir is a sibling; a recursive copy otherwise).
-	if err := os.RemoveAll(treeDir); err != nil {
-		return fmt.Errorf("%w: failed to clear existing tree dir %s: %w", ErrFileOperation, treeDir, err)
+	// Atomically replace any existing tree. Rename the current tree aside first
+	// (rather than deleting it outright) so that if the move fails partway
+	// (disk full, interrupted cross-device copy, ...) the known-good install can
+	// be restored instead of being left with no tree and a stale manifest.
+	backupDir := treeDir + onedirBackupSuffix
+	_ = os.RemoveAll(backupDir) // Clear any residue from an interrupted prior run.
+	hadExisting := dirExists(treeDir)
+	if hadExisting {
+		if err := os.Rename(treeDir, backupDir); err != nil {
+			return fmt.Errorf("%w: failed to back up existing tree dir %s: %w", ErrFileOperation, treeDir, err)
+		}
 	}
-	if err := moveTree(stagingDir, treeDir); err != nil {
+	if err := moveTreeFunc(stagingDir, treeDir); err != nil {
+		if hadExisting {
+			_ = os.RemoveAll(treeDir)         // Discard the partial move.
+			_ = os.Rename(backupDir, treeDir) // Restore the known-good tree.
+		}
 		return err
+	}
+	if hadExisting {
+		_ = os.RemoveAll(backupDir)
 	}
 
 	// Record each entrypoint's real path relative to the version dir. This is
@@ -349,22 +372,51 @@ func extractSymlink(linkPath, linkname, dest string) error {
 }
 
 // extractSymlinkForOS is the OS-parameterized implementation of extractSymlink,
-// so the Windows fallback (skip-with-warning) is testable on any platform.
-func extractSymlinkForOS(linkPath, linkname, dest, goos string) error {
-	// Validate the archive-supplied target and re-derive a safe one BEFORE any
-	// filesystem mutation (a rejected target is always fatal, even on Windows —
-	// it may be a path-traversal attempt).
-	safeTarget, err := safeSymlinkTarget(linkPath, linkname, dest)
-	if err != nil {
-		return err
+// so the Windows fallback (skip-with-warning) is testable on any platform. It is
+// the single symlink-creation sink for archive/tree reproduction.
+//
+// Security (CodeQL go/zipslip — "arbitrary file write via archive symlinks"):
+// both archive-controlled inputs are sanitized inline, right before os.Symlink,
+// with a filepath.Clean + strings.HasPrefix containment check:
+//   - the symlink's LOCATION (linkPath, from the entry name) must stay within root, and
+//   - the symlink's TARGET, resolved relative to the link's own directory, must
+//     stay within root (absolute targets are rejected outright).
+//
+// os.Symlink receives only the cleaned, validated location and a target
+// RE-DERIVED from the validated path — never the raw archive strings — so a
+// malicious header cannot place a link outside root or point one outside root
+// (which a later entry could then be written through).
+func extractSymlinkForOS(linkPath, linkname, root, goos string) error {
+	cleanRoot := filepath.Clean(root)
+
+	// (1) The symlink's own location must stay within root.
+	cleanLinkPath := filepath.Clean(linkPath)
+	if cleanLinkPath != cleanRoot && !strings.HasPrefix(cleanLinkPath, cleanRoot+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: symlink path escapes root: %s", ErrFileOperation, linkPath)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(linkPath), defaultMkdirPermissions); err != nil {
+	// (2) The target must be relative and stay within root once resolved.
+	if linkname == "" || filepath.IsAbs(linkname) {
+		return fmt.Errorf("%w: illegal symlink target: %s -> %q", ErrFileOperation, linkPath, linkname)
+	}
+	linkDir := filepath.Dir(cleanLinkPath)
+	resolvedTarget := filepath.Clean(filepath.Join(linkDir, linkname))
+	if resolvedTarget != cleanRoot && !strings.HasPrefix(resolvedTarget, cleanRoot+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: symlink target escapes root: %s -> %q", ErrFileOperation, linkPath, linkname)
+	}
+
+	// Re-derive a relative (relocatable) target from the validated path.
+	safeTarget, err := filepath.Rel(linkDir, resolvedTarget)
+	if err != nil {
+		return fmt.Errorf("%w: failed to compute symlink target for %s: %w", ErrFileOperation, linkPath, err)
+	}
+
+	if err := os.MkdirAll(linkDir, defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
 	}
-	_ = os.Remove(linkPath)
+	_ = os.Remove(cleanLinkPath)
 
-	if err := os.Symlink(safeTarget, linkPath); err != nil {
+	if err := os.Symlink(safeTarget, cleanLinkPath); err != nil {
 		if goos == "windows" {
 			// Windows onedir support is tracked separately; preserve the legacy
 			// behavior of skipping links rather than failing the whole extract.
@@ -374,40 +426,6 @@ func extractSymlinkForOS(linkPath, linkname, dest, goos string) error {
 		return fmt.Errorf("%w: failed to create symlink %s: %w", ErrFileOperation, linkPath, err)
 	}
 	return nil
-}
-
-// safeSymlinkTarget validates that a symlink placed at linkPath and pointing at
-// linkname cannot resolve outside root, and returns a sanitized, relocatable
-// (relative) target to hand to os.Symlink.
-//
-// Security (CodeQL go/zipslip — "arbitrary file write via archive symlinks"):
-// the raw, archive-supplied linkname is NEVER passed to os.Symlink. We reject
-// absolute targets outright, resolve the target relative to the link's own
-// directory, and require the cleaned result to stay within root using the
-// canonical filepath.Rel + ".." check. Only a target re-derived from that
-// validated path is returned, so a malicious archive header cannot create a
-// link that escapes the extraction root (which a later entry could then be
-// written through).
-func safeSymlinkTarget(linkPath, linkname, root string) (string, error) {
-	if linkname == "" || filepath.IsAbs(linkname) {
-		return "", fmt.Errorf("%w: illegal symlink target: %s -> %q", ErrFileOperation, linkPath, linkname)
-	}
-
-	linkDir := filepath.Dir(linkPath)
-	resolved := filepath.Clean(filepath.Join(linkDir, linkname))
-
-	rel, err := filepath.Rel(filepath.Clean(root), resolved)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("%w: symlink target escapes extraction root: %s -> %q", ErrFileOperation, linkPath, linkname)
-	}
-
-	// Re-derive the (relative) target from the validated, cleaned path rather
-	// than reusing the raw archive string.
-	safeTarget, err := filepath.Rel(linkDir, resolved)
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to compute symlink target for %s: %w", ErrFileOperation, linkPath, err)
-	}
-	return safeTarget, nil
 }
 
 // extractHardLink materializes a tar hard-link entry. The target is relative to
@@ -475,14 +493,9 @@ func copyTree(src, dst string) error {
 			if linkErr != nil {
 				return linkErr
 			}
-			// Validate + re-derive the target so the copy cannot introduce a
-			// link escaping dst (same guard as archive extraction).
-			safeTarget, targetErr := safeSymlinkTarget(target, link, dst)
-			if targetErr != nil {
-				return targetErr
-			}
-			_ = os.Remove(target)
-			return os.Symlink(safeTarget, target)
+			// Reproduce the link through the single validated symlink sink so a
+			// copied tree cannot introduce a link escaping dst.
+			return extractSymlinkForOS(target, link, dst, runtime.GOOS)
 		default:
 			return copyRegularFile(path, target, info.Mode().Perm())
 		}

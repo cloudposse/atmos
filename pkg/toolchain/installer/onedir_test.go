@@ -435,50 +435,66 @@ func TestExtractSymlink(t *testing.T) {
 	})
 }
 
-// TestSafeSymlinkTarget covers the archive-symlink sanitizer directly (the guard
-// CodeQL flags as "arbitrary file write via archive symlinks"). It must reject
-// absolute and escaping targets and re-derive a clean relative target for valid
-// ones — the raw archive string is never trusted verbatim.
-func TestSafeSymlinkTarget(t *testing.T) {
-	root := filepath.FromSlash("/pkg")
-	link := filepath.Join(root, "node", "bin", "npm")
-
-	t.Run("valid relative target within root is re-derived", func(t *testing.T) {
-		got, err := safeSymlinkTarget(link, "../lib/npm-cli.js", root)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.FromSlash("../lib/npm-cli.js"), got)
-	})
-
-	t.Run("cleans a redundant but in-root target", func(t *testing.T) {
-		got, err := safeSymlinkTarget(link, "./sub/../other", root)
-		require.NoError(t, err)
-		assert.Equal(t, "other", got)
-	})
-
+// TestExtractSymlinkForOS_Validation covers the single symlink-creation sink's
+// containment guards (what CodeQL flags as "arbitrary file write via archive
+// symlinks"). The rejection cases return before any filesystem mutation, so
+// they run on every platform (no symlink privilege needed); the success cases
+// assert the re-derived relative target and are Unix-only.
+func TestExtractSymlinkForOS_Validation(t *testing.T) {
 	t.Run("rejects an empty target", func(t *testing.T) {
-		_, err := safeSymlinkTarget(link, "", root)
+		root := t.TempDir()
+		err := extractSymlinkForOS(filepath.Join(root, "link"), "", root, runtime.GOOS)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
 	t.Run("rejects an absolute target", func(t *testing.T) {
-		_, err := safeSymlinkTarget(link, filepath.FromSlash("/etc/passwd"), root)
+		root := t.TempDir()
+		err := extractSymlinkForOS(filepath.Join(root, "link"), filepath.FromSlash("/etc/passwd"), root, runtime.GOOS)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
 	t.Run("rejects a target escaping root", func(t *testing.T) {
-		_, err := safeSymlinkTarget(link, "../../../../etc/passwd", root)
+		root := t.TempDir()
+		err := extractSymlinkForOS(filepath.Join(root, "node", "bin", "npm"), "../../../../etc/passwd", root, runtime.GOOS)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
-	t.Run("rejects a target resolving to exactly the parent of root", func(t *testing.T) {
-		// linkPath one level under root, target climbing to root's parent.
-		shallow := filepath.Join(root, "x")
-		_, err := safeSymlinkTarget(shallow, "../../evil", root)
+	t.Run("rejects a link path outside root", func(t *testing.T) {
+		root := t.TempDir()
+		// The symlink's own location is outside root (sibling of root).
+		outside := filepath.Join(filepath.Dir(root), "outside-link")
+		err := extractSymlinkForOS(outside, "x", root, runtime.GOOS)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
+		_, statErr := os.Lstat(outside)
+		assert.True(t, os.IsNotExist(statErr), "no link may be created outside root")
+	})
+
+	t.Run("creates a re-derived relative link for a valid target", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires privilege on Windows")
+		}
+		root := t.TempDir()
+		link := filepath.Join(root, "node", "bin", "npm")
+		require.NoError(t, extractSymlinkForOS(link, "../lib/npm-cli.js", root, runtime.GOOS))
+		got, err := os.Readlink(link)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.FromSlash("../lib/npm-cli.js"), got)
+	})
+
+	t.Run("cleans a redundant in-root target", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires privilege on Windows")
+		}
+		root := t.TempDir()
+		link := filepath.Join(root, "node", "bin", "npm")
+		require.NoError(t, extractSymlinkForOS(link, "./sub/../other", root, runtime.GOOS))
+		got, err := os.Readlink(link)
+		require.NoError(t, err)
+		assert.Equal(t, "other", got)
 	})
 }
 
@@ -652,6 +668,78 @@ func TestInstallOnedir_FailedReinstallPreservesExistingTree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "KNOWN-GOOD", string(got))
 	assert.FileExists(t, filepath.Join(treeDir, "old", "tool"))
+}
+
+// TestInstallOnedir_MoveFailureRestoresExistingTree verifies the atomic-reinstall
+// rollback: if the tree move fails AFTER validation (disk full, interrupted
+// cross-device copy, ...), the previously-installed tree is restored rather than
+// left destroyed. The failure is injected via moveTreeFunc so the rollback path
+// is exercised deterministically on every platform.
+func TestInstallOnedir_MoveFailureRestoresExistingTree(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+	writeFileUnder(t, treeDir, "old/tool", "KNOWN-GOOD")
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "old", "tool")},
+		Primary:     "tool",
+	}))
+
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "REPLACEMENT")
+	eps := []entrypoint{{name: "tool", src: "new/tool"}} // valid: passes entrypoint validation.
+
+	// Force the move to fail after the existing tree has been renamed aside.
+	orig := moveTreeFunc
+	t.Cleanup(func() { moveTreeFunc = orig })
+	moveTreeFunc = func(src, dst string) error { return assert.AnError }
+
+	err := (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps)
+	require.Error(t, err)
+
+	// The known-good tree must be restored and no backup residue left behind.
+	got, err := os.ReadFile(filepath.Join(treeDir, "old", "tool"))
+	require.NoError(t, err)
+	assert.Equal(t, "KNOWN-GOOD", string(got))
+	_, statErr := os.Stat(treeDir + onedirBackupSuffix)
+	assert.True(t, os.IsNotExist(statErr), "backup must not be left behind after rollback")
+
+	// The pre-existing manifest is untouched and still resolves.
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+	assert.Equal(t, "tool", manifest.Primary)
+}
+
+// TestInstallOnedir_ReinstallReplacesTreeAndClearsBackup verifies the happy-path
+// reinstall over an existing tree: the new tree is installed, the old one is
+// gone, and no backup directory residue remains.
+func TestInstallOnedir_ReinstallReplacesTreeAndClearsBackup(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+	writeFileUnder(t, treeDir, "old/tool", "OLD")
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "old", "tool")},
+		Primary:     "tool",
+	}))
+
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "NEW")
+	eps := []entrypoint{{name: "tool", src: "new/tool"}}
+
+	require.NoError(t, (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps))
+
+	// New tree in place, old content gone, no backup residue.
+	assert.NoFileExists(t, filepath.Join(treeDir, "old", "tool"))
+	assert.FileExists(t, filepath.Join(treeDir, "new", "tool"))
+	_, statErr := os.Stat(treeDir + onedirBackupSuffix)
+	assert.True(t, os.IsNotExist(statErr), "backup must be cleared after a successful reinstall")
+
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+	got, err := os.ReadFile(filepath.Join(versionDir, manifest.Entrypoints["tool"]))
+	require.NoError(t, err)
+	assert.Equal(t, "NEW", string(got))
 }
 
 // TestExtractTarGz_Onedir_RecreatesSymlinkEntrypoint reproduces the #2744 shape:
