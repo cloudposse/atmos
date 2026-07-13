@@ -11,4 +11,6 @@ Core CI infrastructure: interfaces, detection, storage, hooks, and configuration
 | [artifact-storage.md](./artifact-storage.md) | Generic `artifact.Store` interface, backends, registry, metadata |
 | [hooks-integration.md](./hooks-integration.md) | CI hook commands, lifecycle integration |
 | [configuration.md](./configuration.md) | Full `atmos.yaml` schema for planfiles and CI sections |
+| [ci-log-groups.md](./ci-log-groups.md) | Collapsible CI log groups by step, phase, or invocation |
+| [fork-pr-trust-gate.md](./fork-pr-trust-gate.md) | Fork-PR safety gate for `atmos git clone` (actions/checkout v7 hardening parity) |
 | [implementation-status.md](./implementation-status.md) | Phases, files to create/modify, sentinel errors, status table, changelog |

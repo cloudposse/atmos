@@ -483,7 +483,7 @@ func addIdentityMetadata(node *tree.Tree, identity *schema.Identity) {
 		node.Child(principalNode)
 	}
 
-	// Add credentials if present (redact sensitive values).
+	// Add credentials if present (mask sensitive values).
 	if len(identity.Credentials) > 0 {
 		node.Child("Credentials: [redacted]")
 	}

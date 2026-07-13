@@ -69,6 +69,43 @@ This is useful when you want to import files that are co-located with the curren
 
 Atmos supports importing stack configurations from remote sources using [go-getter](https://github.com/hashicorp/go-getter) URL schemes. This enables sharing configurations across repositories, teams, or organizations.
 
+:::warning Remote imports bring configuration, not component code
+
+A remote import pulls **stack configuration** (the YAML manifests) — it does **not** pull the **component source code** (the Terraform/OpenTofu/Helmfile root modules) those manifests reference.
+
+If a remote catalog defines a component, e.g.:
+
+```yaml
+# Imported remotely from the hub repo
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc   # references components/terraform/vpc — the CODE, not in this import
+      vars:
+        cidr_block: 10.0.0.0/16
+```
+
+then the configuration resolves and commands like `atmos describe`, `atmos list`, and `atmos validate` work — but `atmos terraform plan/apply vpc` **fails with "component not found"** unless the `components/terraform/vpc` directory actually exists in the consuming repository. The remote import does not materialize it.
+
+To pull the component code from the same (or another) remote repo, give the component a [`source`](/cli/commands/terraform/source) so Atmos vendors the root module just-in-time at plan/apply time:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      source:
+        uri: github.com/my-org/hub//components/terraform/vpc?ref=v1.2.3
+      vars:
+        cidr_block: 10.0.0.0/16
+```
+
+Alternatively, [vendor](/cli/commands/vendor/pull) the component into the repo ahead of time with `atmos vendor pull`. In short: **remote imports + remote components are two separate mechanisms** — importing the config does not bring the code; you must provision the source (or vendor it) explicitly.
+
+:::
+
 ### Supported Schemes
 
 <dl>
@@ -157,6 +194,36 @@ The supported values are:
 - `remote` - resolve nested imports from the remote source's stack base path
 
 `nested_imports: remote` is supported for Git/go-getter sources where Atmos can infer the remote stack base path from the import path. Plain string imports and map imports without `nested_imports` use `local`.
+
+### Caching Remote Imports
+
+When stacks import a catalog from a remote Git repository, Atmos clones each unique source repository **at most once per invocation** and resolves every subdirectory import from that single shared clone. This happens automatically, with no configuration, and a single run always sees one consistent snapshot of each source. Shallow clones (`depth=1`) are used by default.
+
+By default the clone is refreshed once per invocation, so mutable refs (e.g. `?ref=main`) always stay current. To reuse the clone **across invocations** — for example, with a warm CI cache — set a `ttl`:
+
+```yaml
+import:
+  - path: "git::https://github.com/acme/infrastructure.git//stacks/catalog/vpc?ref=main"
+    ttl: 5m
+```
+
+Set a default for every import in `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+imports:
+  ttl: 5m
+```
+
+Cached sources live under the XDG cache directory (`~/.cache/atmos/stack-imports/`, honoring `XDG_CACHE_HOME`). In CI, cache that directory between runs so a fresh clone within the `ttl` window is skipped:
+
+```yaml title=".github/workflows/atmos.yaml"
+- uses: actions/cache@v4
+  with:
+    path: ~/.cache/atmos/stack-imports
+    key: atmos-stack-imports-${{ runner.os }}
+```
+
+`ttl` accepts durations like `0s` (always re-fetch), `5m`, `1h`, `7d`, or keywords like `daily`. Pin to an immutable `?ref=<tag>` (or commit SHA) with a longer `ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the catalog stays fresh.
 
 ### Best Practices for Remote Imports
 
@@ -283,6 +350,9 @@ The `import` section supports the following fields:
 
   <dt>`nested_imports` - (string)</dt>
   <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. Defaults to `local`.</dd>
+
+  <dt>`ttl` - (string)</dt>
+  <dd>Cache duration for the cloned source repository of a remote (Git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache), skipping the re-clone. Within a single invocation a source repo is always cloned at most once regardless of `ttl`. When unset, the source is re-cloned once per invocation. Accepts durations like `0s`, `5m`, `1h`, `7d`, or keywords like `daily`. Set a default for all imports with the top-level `imports.ttl` setting in `atmos.yaml`. See [Caching Remote Imports](#caching-remote-imports).</dd>
 
 </dl>
 
@@ -509,6 +579,66 @@ vars:
 Templated imports are powerful but make configurations harder to read and debug. Prefer plain imports and [inheritance](/howto/inheritance) when possible. Reserve templates for cases where the duplication would be excessive — such as generating many similar components from a single definition.
 :::
 
+## Referencing Earlier Imports in Import Paths
+
+Import **paths** are rendered as `Go` templates, and the template data includes the
+`settings`, `vars`, and `env` defined by **imports listed earlier in the same manifest**
+(and any explicit `context` on the import). This lets a later import reference a value
+that an earlier import established — for both local paths and the `?ref=` of a
+[remote import](#remote-imports).
+
+A common use case is keeping `dev` and `prod` in one repository while pinning everything
+`prod` consumes to an immutable Git ref, driven by a **single** variable defined once per
+stage:
+
+```yaml title="stacks/deploy/prod/_defaults.yaml"
+settings:
+  context:
+    # Define the pinned version once for the whole prod tree (a tag in prod, a branch in dev).
+    deployment_repo_version: "v1.2.3"
+```
+
+```yaml title="stacks/catalog_prod/customer.yaml"
+import:
+  # The Git ref is pinned from the variable defined in the imported `_defaults` above.
+  - "github.com/my-org/my-repo//stacks/catalog/customer?ref={{ .settings.context.deployment_repo_version }}"
+
+components:
+  terraform:
+    customer/base:
+      source:
+        uri: github.com/my-org/my-repo//components/terraform/customer
+        # The same variable also pins the component source version.
+        version: "{{ .settings.context.deployment_repo_version }}"
+```
+
+```yaml title="stacks/deploy/prod/bastille/customers/_defaults.yaml"
+import:
+  - ../_defaults        # establishes settings.context.deployment_repo_version
+  - catalog_prod/customer  # uses it in the templated `?ref=`
+```
+
+Because imports are evaluated **in order**, the value must be defined by an import that
+appears **before** the import that references it.
+
+<dl>
+  <dt>Requires templating enabled</dt>
+  <dd>Import-path templating only runs when [`templates.settings.enabled`](/cli/configuration/templates) is `true`. When disabled, `{{ ... }}` in an import path is left literal.</dd>
+
+  <dt>`skip_templates_processing`</dt>
+  <dd>Leaves `{{ ... }}` in the path literal (the import is not rendered).</dd>
+
+  <dt>Missing values</dt>
+  <dd>If a referenced value is not defined by an earlier import (or the import's `context`), Atmos fails with an error. Set `ignore_missing_template_values: true` on the import (or [`templates.settings.ignore_missing_template_values`](/cli/configuration/templates) globally) to leave unresolved values as-is instead.</dd>
+</dl>
+
+:::note Import paths vs. file content
+Only the import **path** sees values from earlier imports. The **content** of an imported
+file is still templated with its own `context` (and component-level values are resolved
+later, when the component is processed), so patterns like `version: "{{ .settings.context.deployment_repo_version }}"`
+above continue to resolve at component time.
+:::
+
 ## Conditional Variables in Templates
 
 Use [Sprig functions](http://masterminds.github.io/sprig/) like `hasKey` to conditionally include variables based on the provided `context`:
@@ -551,5 +681,5 @@ Imports with context let you parameterize entire configuration files and generat
 
 ## Related
 
-- [Configure CLI](/quick-start/advanced/configure-cli)
+- [Configure the Project](/quick-start/advanced/configure-project)
 - [Create Atmos Stacks](/quick-start/advanced/create-atmos-stacks)

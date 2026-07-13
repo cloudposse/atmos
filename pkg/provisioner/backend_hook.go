@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -37,6 +38,7 @@ func autoProvisionBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	_ *TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "provisioner.autoProvisionBackend")()
 
@@ -65,7 +67,9 @@ func autoProvisionBackend(
 	// Check if backend already exists.
 	exists, err := backend.BackendExists(ctx, atmosConfig, backendType, backendConfig, authContext)
 	if err != nil {
-		// Log error but don't fail - let terraform init surface the real error.
+		// Don't fail here - let terraform init surface the authoritative error - but
+		// log so the cause isn't invisible if auto-provisioning silently no-ops.
+		log.Debug("Backend existence check failed; deferring to terraform init", "error", err, "backend_type", backendType)
 		return nil
 	}
 	if exists {

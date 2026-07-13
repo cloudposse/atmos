@@ -11,4 +11,4 @@ components:
     station:
       vars:
         location: Stockholm
-        lang: se
+        lang: sv

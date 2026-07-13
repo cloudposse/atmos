@@ -40,6 +40,16 @@ type ExecContext struct {
 	Cmd *cobra.Command
 	// Args are the command-line args passed to Cmd.
 	Args []string
+	// HookName is the key used for this hook in the component's hooks map.
+	// It is separate from Hook.Name, which is a store-kind field.
+	HookName string
+
+	// Outcome is the lifecycle operation result this hook fires around
+	// (success/failure, exit code, error). Set by RunAll. Distinct from the
+	// ExitCode/CommandError fields below, which a command engine sets for its
+	// own subprocess. Engines expose this to their work (e.g. the step bridge
+	// sets ATMOS_HOOK_STATUS and injects `.status` into the template context).
+	Outcome Outcome
 
 	// ToolchainPATH is the PATH fragment containing directories for any
 	// dependencies.tools that were auto-installed for this component's
@@ -58,6 +68,18 @@ type ExecContext struct {
 	ExitCode int
 	// CommandError is the subprocess error, if any.
 	CommandError error
+}
+
+// Outcome carries the result of the lifecycle operation a hook fires around
+// (e.g. terraform apply). RunAll builds it from the command error and exposes
+// it to engines so hooks can report what happened.
+type Outcome struct {
+	// Status is the operation outcome: success or failure.
+	Status RunStatus
+	// Err is the operation error on failure; nil on success.
+	Err error
+	// ExitCode is the operation exit code (0 on success).
+	ExitCode int
 }
 
 // Output is what one hook invocation produces. Engines that don't emit
@@ -110,6 +132,32 @@ type Summary struct {
 	// Body is the single markdown rendering used in every surface that
 	// renders markdown: terminal, Pro run page, PR comments, step summaries.
 	Body string
+	// Findings is the optional structured, line-anchored findings behind the
+	// summary (populated by SARIF-producing kinds). The engine maps these to
+	// CI annotations; left nil by kinds that produce no findings (e.g. cost).
+	Findings []Finding
+	// SARIF is the optional raw SARIF document the kind produced (passed
+	// through verbatim for upload to a CI security store). Left nil by
+	// non-SARIF kinds. Kept separate from Findings so a clean (zero-finding)
+	// SARIF can still be uploaded to mark previously-open alerts as fixed.
+	SARIF []byte
+}
+
+// Finding is one normalized, line-anchored result behind a Summary. It is a
+// provider-neutral, SARIF-agnostic shape (the SARIF parser maps into it) so
+// the engine can translate it to CI annotations without pkg/hooks depending on
+// the sarif subpackage (which would be an import cycle).
+type Finding struct {
+	// Path is the file the finding refers to, relative to the scanned root.
+	Path string
+	// Line is the 1-based line number; 0 when unknown (anchor at file level).
+	Line int
+	// Severity is the normalized bucket: critical | high | medium | low | info.
+	Severity string
+	// RuleID is the tool's rule identifier (e.g. "CKV_AWS_21").
+	RuleID string
+	// Message is the human-readable finding description.
+	Message string
 }
 
 // ResultHandler parses the kind's structured output and produces a Summary.

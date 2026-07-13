@@ -2,14 +2,23 @@ package exec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/emulator"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 )
+
+// UnsetMarker is a special type to mark values that should be deleted from the configuration.
+type UnsetMarker struct {
+	IsUnset bool
+}
 
 func ProcessCustomYamlTags(
 	atmosConfig *schema.AtmosConfiguration,
@@ -95,14 +104,40 @@ func processNodesWithContext(
 		case map[string]any:
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
-				newNestedMap[k] = recurse(val)
+				// Check if the value is a string with !unset tag and it's not skipped.
+				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+					// Skip adding this key to the map - effectively deleting it.
+					continue
+				}
+				processed := recurse(val)
+				// Check if the processed value is the unset marker.
+				if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+					// Skip adding this key to the map - effectively deleting it.
+					continue
+				}
+				newNestedMap[k] = processed
 			}
 			return newNestedMap
 
 		case []any:
-			newSlice := make([]any, len(v))
-			for i, val := range v {
-				newSlice[i] = recurse(val)
+			// Pre-allocate a non-nil slice so an empty input list (or a list whose items are
+			// all removed by !unset) stays an empty list rather than collapsing to nil. A nil
+			// slice marshals to JSON `null` in generated tfvars, which breaks consumers such as
+			// Terraform's concat() that reject null where a list is expected.
+			newSlice := make([]any, 0, len(v))
+			for _, val := range v {
+				// Check if the value is a string with !unset tag and it's not skipped.
+				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+					// Skip adding this item to the slice - effectively deleting it.
+					continue
+				}
+				processed := recurse(val)
+				// Check if the processed value is the unset marker.
+				if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+					// Skip adding this item to the slice - effectively deleting it.
+					continue
+				}
+				newSlice = append(newSlice, processed)
 			}
 			return newSlice
 
@@ -112,7 +147,18 @@ func processNodesWithContext(
 	}
 
 	for k, v := range data {
-		newMap[k] = recurse(v)
+		// Check if the value is a string with !unset tag and it's not skipped.
+		if strVal, ok := v.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+			// Skip adding this key to the map - effectively deleting it.
+			continue
+		}
+		processed := recurse(v)
+		// Check if the processed value is the unset marker.
+		if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+			// Skip adding this key to the map - effectively deleting it.
+			continue
+		}
+		newMap[k] = processed
 	}
 
 	if firstErr != nil {
@@ -132,9 +178,22 @@ func processCustomTags(
 	return processCustomTagsWithContext(atmosConfig, input, currentStack, skip, nil, stackInfo)
 }
 
-// matchesPrefix checks if input has the given prefix and the function is not skipped.
+// matchesTag reports whether input starts with prefix as a complete YAML tag.
+func matchesTag(input, prefix string) bool {
+	if !strings.HasPrefix(input, prefix) {
+		return false
+	}
+	rest := strings.TrimPrefix(input, prefix)
+	return rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n'
+}
+
+// matchesPrefix checks if input has the given tag prefix and the function is not skipped.
 func matchesPrefix(input, prefix string, skip []string) bool {
-	return strings.HasPrefix(input, prefix) && !skipFunc(skip, prefix)
+	return matchesTag(input, prefix) && !skipFunc(skip, prefix)
+}
+
+func exactTagSkipped(input, tag string, skip []string) bool {
+	return input == tag && skipFunc(skip, tag)
 }
 
 // processContextAwareTags processes tags that support cycle detection.
@@ -167,11 +226,22 @@ func processSimpleTags(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
+	// Handle !unset tag - return marker to indicate value should be deleted.
+	if matchesPrefix(input, u.AtmosYamlFuncUnset, skip) {
+		return UnsetMarker{IsUnset: true}, true, nil
+	}
 	if matchesPrefix(input, u.AtmosYamlFuncTemplate, skip) {
 		return processTagTemplate(input), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
 		res, err := u.ProcessTagExec(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncSecret, skip) {
+		res, err := secrets.Resolve(atmosConfig, input, currentStack, stackInfo)
 		if err != nil {
 			return nil, true, err
 		}
@@ -211,21 +281,90 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitRepository, skip) {
+		res, err := atmosGit.ProcessTagRepository(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitOwner, skip) {
+		res, err := atmosGit.ProcessTagOwner(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitName, skip) {
+		res, err := atmosGit.ProcessTagName(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitHost, skip) {
+		res, err := atmosGit.ProcessTagHost(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitUrl, skip) {
+		res, err := atmosGit.ProcessTagURL(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsAccountID, skip) {
+		return input, true, nil
+	}
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
 		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityArn, skip) {
+		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
 		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
 	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityUserID, skip) {
+		return input, true, nil
+	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
 		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsRegion, skip) {
+		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
 		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
 	}
 	if input == u.AtmosYamlFuncAwsOrganizationID && !skipFunc(skip, u.AtmosYamlFuncAwsOrganizationID) {
 		return processTagAwsOrganizationID(atmosConfig, input, stackInfo), true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncEmulator, skip) {
+		args, err := getStringAfterTag(input, u.AtmosYamlFuncEmulator)
+		if err != nil {
+			return nil, true, err
+		}
+		res, err := emulator.ResolveYAMLFunc(atmosConfig, args, currentStack, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncVersion, skip) {
+		name, err := getStringAfterTag(input, u.AtmosYamlFuncVersion)
+		if err != nil {
+			return nil, true, err
+		}
+		res, err := manager.ResolveYAMLFunc(atmosConfig, name, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
 	}
 	return nil, false, nil
 }
@@ -254,7 +393,7 @@ func processCustomTagsWithContext(
 
 func skipFunc(skip []string, f string) bool {
 	t := strings.TrimPrefix(f, "!")
-	c := u.SliceContainsString(skip, t)
+	c := slices.Contains(skip, t)
 	return c
 }
 

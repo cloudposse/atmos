@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fatih/color"
-
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
@@ -21,13 +18,6 @@ var OsExit = os.Exit
 // PrintMessage prints the message to the console with automatic secret masking.
 func PrintMessage(message string) {
 	fmt.Fprintln(ioLayer.MaskWriter(os.Stdout), message)
-}
-
-// PrintMessageInColor prints the message to the console using the provided color with automatic secret masking.
-func PrintMessageInColor(message string, messageColor *color.Color) {
-	if _, err := messageColor.Fprint(ioLayer.MaskWriter(os.Stdout), message); err != nil {
-		log.Trace("Failed to print colored message to stdout", "error", err)
-	}
 }
 
 // PrintfMessageToTUI prints the message to the stderr with automatic secret masking.

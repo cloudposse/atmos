@@ -1,0 +1,48 @@
+---
+slug: describe-affected-all-sections
+title: "atmos describe affected now detects providers, generate, backend changes, and more"
+authors:
+  - osterman
+tags:
+  - bugfix
+  - enhancement
+date: 2026-06-05T00:00:00.000Z
+---
+
+The `atmos describe affected` command now compares **every** provisioned component section between refs — including `providers`, `required_providers` (provider versions), `generate`, `backend`, `auth`, and `command`. Previously, changes to these sections were silently missed.
+
+<!--truncate-->
+
+## What Changed
+
+The `atmos describe affected` command works by deep-merging the stack configuration on both refs and comparing each component's resulting sections. The comparison ran against a hand-maintained list of section names — and that list had drifted out of sync with what Atmos actually merges into a component. As a result, a change that only touched, say, a component's `providers` or `hooks` block was **not** reported as affected, so CI pipelines built on `describe affected` could skip a component that genuinely changed.
+
+The comparison now covers the full set of provisioned sections:
+
+The evaluated sections are now `vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `generate`, `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`, `source`, and `provision`.
+
+Scalar sections such as `backend_type`, `required_version`, and `command` are now compared too (previously only map-valued sections were).
+
+## Why This Matters
+
+If you use `describe affected` to drive plan/apply in CI, you were exposed to false negatives: bump a provider version in `required_providers` or change a `backend` setting, and the affected component might not show up. Those changes are now detected and reported with a precise reason (`stack.providers`, `stack.required_providers`, `stack.backend`, …).
+
+A few sections are intentionally **not** evaluated because they can't change what gets provisioned: `locals` (folds into rendered `vars`/`env`), `overrides` (folds into the merged sections), `inheritance` (a derived chain), and `retry` and `hooks` (execution-time behavior — `hooks` defines commands that run before/after an operation, such as policy or cost checks, not the infrastructure itself). If you do want hook changes to count as affected, opt in via `describe.affected.sections` (see below) and they report as `stack.hooks`.
+
+## How to Use It
+
+Nothing to configure — the broader detection is on by default. If you need to customize the evaluated set (for example, to track a custom section or to narrow the list), use the new `describe.affected.sections` setting:
+
+```yaml title="atmos.yaml"
+describe:
+  affected:
+    # Replaces the built-in defaults. `metadata` and `settings` are always evaluated.
+    sections:
+      - vars
+      - env
+      - providers
+      - hooks
+      - my_custom_section
+```
+
+See the [Evaluated sections](/cli/commands/describe/affected#evaluated-sections) documentation for the full list and the [`describe.affected.sections`](/cli/configuration/describe) configuration reference.

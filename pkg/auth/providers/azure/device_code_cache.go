@@ -10,13 +10,17 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cachepaths"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
-	deviceCodeTokenCacheSubdir    = "azure-device-code"
+	// This aliases cachepaths.AzureDeviceCodeSubdir, the single source of
+	// truth also used by pkg/ci/cache to exclude this directory from CI
+	// cache archives.
+	deviceCodeTokenCacheSubdir    = cachepaths.AzureDeviceCodeSubdir
 	deviceCodeTokenCacheFilename  = "token.json"
 	deviceCodeTokenCacheDirPerms  = 0o700
 	deviceCodeTokenCacheFilePerms = 0o600

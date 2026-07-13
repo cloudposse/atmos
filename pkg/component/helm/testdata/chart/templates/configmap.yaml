@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+data:
+  replicas: "{{ .Values.replicaCount }}"
+  image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

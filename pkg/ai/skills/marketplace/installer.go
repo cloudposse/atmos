@@ -3,7 +3,9 @@ package marketplace
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +15,9 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai/skills"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Installer manages skill installation.
@@ -54,6 +58,14 @@ func NewInstaller(atmosVersion string) (*Installer, error) {
 func (i *Installer) Install(ctx context.Context, source string, opts InstallOptions) error {
 	defer perf.Track(nil, "marketplace.Installer.Install")()
 
+	// Offline fast path: an official skill referenced by bare name (e.g.
+	// "atmos-terraform") installs from the embedded catalog with no network or
+	// Git clone. Any source with slashes/dots (a real URL) falls through to the
+	// Git flow below.
+	if available, ok := LookupBundledSkill(source); ok {
+		return i.installBundledSkill(&available, opts)
+	}
+
 	// 1. Parse source.
 	sourceInfo, err := ParseSource(source)
 	if err != nil {
@@ -68,7 +80,7 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 	}
 
 	// 3. Download to temporary directory.
-	fmt.Printf("Downloading skills from %s...\n", sourceInfo.URL)
+	ui.Infof("Downloading skills from %s...", sourceInfo.URL)
 	tempDir, err := i.downloader.Download(ctx, sourceInfo)
 	if err != nil {
 		return fmt.Errorf("failed to download skill: %w", err)
@@ -180,11 +192,136 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 		return err
 	}
 
-	// Success.
-	fmt.Printf("\n✓ Skill %q installed successfully\n", metadata.GetDisplayName())
-	fmt.Printf("  Version: %s\n", metadata.GetVersion())
-	fmt.Printf("  Location: %s\n", redactHomePath(installPath))
-	fmt.Printf("\nUsage: Switch to this skill in the TUI with Ctrl+A\n")
+	return printInstallSuccess(metadata.GetDisplayName(), metadata.GetVersion(), installPath)
+}
+
+// printInstallSuccess prints the standard post-install confirmation, shared by
+// the single-skill and bundled-skill install paths.
+func printInstallSuccess(displayName, version, installPath string) error {
+	ui.Successf("Skill %q installed successfully", displayName)
+	ui.Infof("Version: %s", version)
+	ui.Infof("Location: %s", redactHomePath(installPath))
+	ui.Infof("Usage: Switch to this skill in the TUI with Ctrl+A")
+	return nil
+}
+
+// installBundledSkill installs an official skill from the embedded catalog,
+// fully offline. It mirrors installSingleSkill but sources files from the
+// embedded FS instead of a Git clone.
+func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallOptions) error {
+	defer perf.Track(nil, "marketplace.Installer.installBundledSkill")()
+
+	// Resolve the install name: honor --as when set, otherwise use the
+	// canonical embedded-directory name so list/install/Source stay consistent.
+	installName := available.Name
+	if opts.CustomName != "" {
+		installName = opts.CustomName
+	}
+
+	if !opts.Force {
+		if _, err := i.localRegistry.Get(installName); err == nil {
+			return fmt.Errorf("%w: use --force to reinstall", ErrSkillAlreadyInstalled)
+		}
+	}
+
+	metadata, err := readBundledMetadata(available.Name)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidMetadata, err)
+	}
+
+	// Security check (interactive prompt).
+	if !opts.SkipConfirm {
+		if err := i.confirmInstallation(metadata); err != nil {
+			return err // User cancelled.
+		}
+	}
+
+	installPath, err := i.materializeBundledSkill(available.Name, installName, opts.Force)
+	if err != nil {
+		return err
+	}
+
+	if err := i.registerBundledSkill(available, installName, installPath); err != nil {
+		return err
+	}
+
+	return printInstallSuccess(available.DisplayName, available.Version, installPath)
+}
+
+// materializeBundledSkill copies a bundled skill's files from the embedded FS
+// to its install path, handling --force replacement, and returns the install
+// path. The sourceName arg is the embedded directory name, and installName is
+// the on-disk name (may differ when --as is set).
+func (i *Installer) materializeBundledSkill(sourceName, installName string, force bool) (string, error) {
+	skillFS, err := bundledSkillFS(sourceName)
+	if err != nil {
+		return "", err
+	}
+
+	skillsDir, err := GetSkillsDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve skills directory: %w", err)
+	}
+	installPath := filepath.Join(skillsDir, installName)
+
+	if err := i.prepareInstallPath(installPath, installName, force); err != nil {
+		return "", err
+	}
+
+	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
+		return "", fmt.Errorf("failed to create install directory: %w", err)
+	}
+
+	if err := copyFS(skillFS, installPath); err != nil {
+		return "", fmt.Errorf("failed to install bundled skill: %w", err)
+	}
+
+	return installPath, nil
+}
+
+// prepareInstallPath clears or validates the install directory before a bundled
+// skill is materialized. With --force a failed removal is a hard error, since
+// copying into a partially-removed directory risks a corrupted install. Without
+// --force an existing directory is rejected to avoid merging into stale content.
+func (i *Installer) prepareInstallPath(installPath, installName string, force bool) error {
+	defer perf.Track(nil, "marketplace.Installer.prepareInstallPath")()
+
+	if force {
+		if err := os.RemoveAll(installPath); err != nil {
+			return fmt.Errorf("failed to remove existing installation: %w", err)
+		}
+		_ = i.localRegistry.Remove(installName) // Ignore error if not exists.
+		return nil
+	}
+
+	_, statErr := os.Stat(installPath)
+	if statErr == nil {
+		return fmt.Errorf("%w: use --force to reinstall", ErrSkillAlreadyInstalled)
+	}
+	if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("failed to check install directory: %w", statErr)
+	}
+	return nil
+}
+
+// registerBundledSkill records an installed bundled skill in the local registry.
+// The installName is the name under which the skill is registered (it may differ
+// from available.Name when the skill was installed with --as).
+func (i *Installer) registerBundledSkill(available *AvailableSkill, installName, installPath string) error {
+	installedSkill := &InstalledSkill{
+		Name:        installName,
+		DisplayName: available.DisplayName,
+		Source:      available.Source,
+		Version:     available.Version,
+		InstalledAt: time.Now(),
+		UpdatedAt:   time.Now(),
+		Path:        installPath,
+		IsBuiltIn:   false,
+		Enabled:     true,
+	}
+	if err := i.localRegistry.Add(installedSkill); err != nil {
+		return fmt.Errorf("failed to register skill: %w", err)
+	}
 
 	return nil
 }
@@ -217,13 +354,7 @@ func discoverSkillsFromPaths(skillMDPaths []string) ([]discoveredSkill, []string
 
 // confirmMultiSkillInstall prompts the user for multi-skill install confirmation.
 func confirmMultiSkillInstall(count int) error {
-	fmt.Printf("\nInstall all %d skills? [y/N] ", count)
-	var response string
-	_, _ = fmt.Scanln(&response)
-	if strings.ToLower(strings.TrimSpace(response)) != "y" {
-		return ErrInstallationCancelled
-	}
-	return nil
+	return requireConfirmation(fmt.Sprintf("Install all %d skills?", count), ErrInstallationCancelled)
 }
 
 // installOneSkillFromPackage installs a single skill from a multi-skill package.
@@ -239,7 +370,7 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		}
 		_ = i.localRegistry.Remove(skillName)
 	} else if _, err := i.localRegistry.Get(skillName); err == nil {
-		fmt.Printf("  Skipping %s (already installed, use --force to reinstall)\n", skillName)
+		ui.Warningf("Skipping %s (already installed, use --force to reinstall)", skillName)
 		return false
 	}
 
@@ -270,7 +401,7 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		return false
 	}
 
-	fmt.Printf("  Installing %s... done\n", skillName)
+	ui.Successf("Installed %s", skillName)
 	return true
 }
 
@@ -282,16 +413,13 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 	}
 
 	// Show discovery summary.
-	fmt.Printf("Discovered %d skills in package:\n", len(discovered))
-	fmt.Printf("  %s\n", strings.Join(skillNames, ", "))
+	ui.Infof("Discovered %d skills in package: %s", len(discovered), strings.Join(skillNames, ", "))
 
 	if !opts.SkipConfirm {
 		if err := confirmMultiSkillInstall(len(discovered)); err != nil {
 			return err
 		}
 	}
-
-	fmt.Println()
 
 	installed := 0
 	for _, skill := range discovered {
@@ -300,10 +428,35 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		}
 	}
 
-	fmt.Printf("\n%d skills installed successfully.\n", installed)
-	fmt.Printf("\nUsage: Switch skills in the TUI with Ctrl+A\n")
-
+	ui.Successf("%d skills installed successfully", installed)
+	ui.Infof("Usage: Switch skills in the TUI with Ctrl+A")
 	return nil
+}
+
+// copyFS copies the entire tree of srcFS into the dst directory on disk. It is
+// the fs.FS analogue of copyDir, letting bundled (embedded) skills install
+// through the same write logic as Git-cloned ones. Embedded paths are always
+// forward-slash separated, so they are translated to OS paths under dst.
+func copyFS(srcFS fs.FS, dst string) error {
+	return fs.WalkDir(srcFS, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(dst, filepath.FromSlash(p))
+		if d.IsDir() {
+			return os.MkdirAll(target, dirPermissions)
+		}
+
+		data, err := fs.ReadFile(srcFS, p)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), dirPermissions); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, filePermissions)
+	})
 }
 
 // copyDir copies the contents of a source directory to a destination directory.
@@ -353,12 +506,9 @@ func (i *Installer) Uninstall(name string, force bool) error {
 
 	// 2. Confirm uninstallation (unless force).
 	if !force {
-		fmt.Printf("Uninstall skill %q (version %s)? [y/N] ", skill.DisplayName, skill.Version)
-		var response string
-		_, _ = fmt.Scanln(&response)
-
-		if strings.ToLower(strings.TrimSpace(response)) != "y" {
-			return ErrUninstallationCancelled
+		title := fmt.Sprintf("Uninstall skill %q (version %s)?", skill.DisplayName, skill.Version)
+		if err := requireConfirmation(title, ErrUninstallationCancelled); err != nil {
+			return err
 		}
 	}
 
@@ -372,7 +522,7 @@ func (i *Installer) Uninstall(name string, force bool) error {
 		return err
 	}
 
-	fmt.Printf("✓ Skill %q uninstalled successfully\n", skill.DisplayName)
+	ui.Successf("Skill %q uninstalled successfully", skill.DisplayName)
 	return nil
 }
 
@@ -532,41 +682,43 @@ func hasDestructiveTools(allowedTools []string) bool {
 }
 
 // printToolAccessWarnings prints tool access information and warnings for destructive tools.
-func printToolAccessWarnings(metadata *SkillMetadata) {
+func printToolAccessWarnings(metadata *SkillMetadata) error {
 	if len(metadata.AllowedTools) == 0 {
-		return
+		return nil
 	}
 
-	fmt.Printf("\nTool Access:\n")
-	fmt.Printf("  Allowed: %s\n", strings.Join(metadata.AllowedTools, ", "))
+	ui.Infof("Tool access allowed: %s", strings.Join(metadata.AllowedTools, ", "))
 
 	if !hasDestructiveTools(metadata.AllowedTools) {
-		return
+		return nil
 	}
 
-	fmt.Printf("\n⚠️  WARNING: This skill requests access to destructive operations.\n")
-	fmt.Printf("   Review the skill source before using:\n")
-	fmt.Printf("   %s\n", metadata.GetRepository())
+	ui.Warningf("This skill requests access to destructive operations. Review the skill source before using: %s", metadata.GetRepository())
+	return nil
 }
 
 // confirmInstallation prompts user to confirm skill installation.
 func (i *Installer) confirmInstallation(metadata *SkillMetadata) error {
 	// Display skill info.
-	fmt.Printf("\nSkill: %s\n", metadata.GetDisplayName())
-	fmt.Printf("Author: %s\n", metadata.GetAuthor())
-	fmt.Printf("Version: %s\n", metadata.GetVersion())
-	fmt.Printf("Repository: %s\n", metadata.GetRepository())
+	ui.Infof("Skill: %s", metadata.GetDisplayName())
+	ui.Infof("Author: %s", metadata.GetAuthor())
+	ui.Infof("Version: %s", metadata.GetVersion())
+	ui.Infof("Repository: %s", metadata.GetRepository())
 
-	printToolAccessWarnings(metadata)
-
-	// Prompt for confirmation.
-	fmt.Printf("\nDo you want to install this skill? [y/N] ")
-	var response string
-	_, _ = fmt.Scanln(&response)
-
-	if strings.ToLower(strings.TrimSpace(response)) != "y" {
-		return ErrInstallationCancelled
+	if err := printToolAccessWarnings(metadata); err != nil {
+		return err
 	}
 
+	return requireConfirmation("Install this skill?", ErrInstallationCancelled)
+}
+
+func requireConfirmation(title string, cancelErr error) error {
+	confirmed, err := flags.PromptForConfirmation(title, false)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		return cancelErr
+	}
 	return nil
 }

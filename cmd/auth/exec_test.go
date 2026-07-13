@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -69,43 +68,6 @@ func TestGetSeparatedArgsForExec(t *testing.T) {
 	}
 }
 
-func TestExecuteCommandWithEnv_Validation(t *testing.T) {
-	tests := []struct {
-		name          string
-		args          []string
-		envList       []string
-		expectedError error
-	}{
-		{
-			name:          "empty args returns error",
-			args:          []string{},
-			envList:       nil,
-			expectedError: errUtils.ErrNoCommandSpecified,
-		},
-		{
-			name:          "nil args returns error",
-			args:          nil,
-			envList:       nil,
-			expectedError: errUtils.ErrNoCommandSpecified,
-		},
-		{
-			name:          "command not found",
-			args:          []string{"nonexistent-command-that-does-not-exist-12345"},
-			envList:       nil,
-			expectedError: errUtils.ErrCommandNotFound,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := executeCommandWithEnv(tt.args, tt.envList)
-
-			assert.Error(t, err)
-			assert.ErrorIs(t, err, tt.expectedError)
-		})
-	}
-}
-
 func TestAuthExecCommand_Structure(t *testing.T) {
 	assert.Equal(t, "exec -- <command> [args...]", authExecCmd.Use)
 	assert.NotEmpty(t, authExecCmd.Short)
@@ -142,30 +104,6 @@ func TestResolveIdentityNameForExec_ViperFallback(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "viper-identity", result)
-}
-
-func TestExecuteCommandWithEnv_WithValidCommand(t *testing.T) {
-	// Cross-platform: spawn the test binary itself with the exit-OK env flag
-	// (handled by TestMain). This avoids dependence on PATH-resolved binaries
-	// like `go` / `true` which aren't available on every CI runner.
-	exe, err := os.Executable()
-	require.NoError(t, err)
-
-	err = executeCommandWithEnv([]string{exe}, []string{"_ATMOS_AUTH_TEST_EXIT_OK=1"})
-	assert.NoError(t, err)
-}
-
-func TestExecuteCommandWithEnv_NonZeroExit(t *testing.T) {
-	// Cross-platform exit-1 subprocess: test binary + flag, expect ExitCodeError.
-	exe, err := os.Executable()
-	require.NoError(t, err)
-
-	err = executeCommandWithEnv([]string{exe}, []string{"_ATMOS_AUTH_TEST_EXIT_ONE=1"})
-	require.Error(t, err)
-	var exitErr errUtils.ExitCodeError
-	require.ErrorAs(t, err, &exitErr,
-		"non-zero subprocess exit must surface as errUtils.ExitCodeError so the root can propagate the code")
-	assert.Equal(t, 1, exitErr.Code)
 }
 
 // TestExecuteAuthExecCommand_SmokeNoConfig exercises the exec orchestrator

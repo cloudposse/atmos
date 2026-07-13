@@ -489,16 +489,6 @@ func GetInfoStyle() lipgloss.Style {
 	return styles.Info
 }
 
-// GetNoticeStyle returns the notice style from the current theme.
-// Notice style is used for neutral informational messages, typically in empty states.
-func GetNoticeStyle() lipgloss.Style {
-	styles := GetCurrentStyles()
-	if styles == nil {
-		return lipgloss.NewStyle()
-	}
-	return styles.Notice
-}
-
 // GetDebugStyle returns the debug style from the current theme.
 func GetDebugStyle() lipgloss.Style {
 	styles := GetCurrentStyles()
@@ -530,6 +520,21 @@ func GetPrimaryColor() string {
 		return "#00A3E0" // Default blue
 	}
 	return scheme.Primary
+}
+
+// GetSpinnerColor returns the spinner/loading-indicator color from the current theme.
+func GetSpinnerColor() string {
+	// Use cached color scheme if available
+	if lastColorScheme != nil {
+		return lastColorScheme.Spinner
+	}
+
+	// Fall back to loading from theme
+	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
+	if err != nil || scheme == nil {
+		return "#00FFFF" // Default cyan
+	}
+	return scheme.Spinner
 }
 
 // GetSuccessColor returns the success color from the current theme.

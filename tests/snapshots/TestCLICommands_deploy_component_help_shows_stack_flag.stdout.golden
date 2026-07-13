@@ -5,9 +5,9 @@ Deploy a component to a stack
 
 USAGE
 
-                                      
-    $ atmos deploy component [flags]  
-                                      
+
+    $ atmos deploy component [flags]
+
 
 FLAGS
 
@@ -26,6 +26,10 @@ GLOBAL FLAGS
       --ai                                   Enable AI-powered analysis of command output
 
       --base-path string                     Base path for Atmos project
+
+      --cast string                          Record command output as an asciinema cast (--cast for generated path, --
+                                             cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg
+                                             extension for explicit output)
 
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)
@@ -86,9 +90,6 @@ GLOBAL FLAGS
 
       --skill strings                        Specify skills for AI analysis context (comma-separated or repeated flag,
                                              requires --ai)
-
-      --skip-hooks string                    Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to
-                                             skip all, or --skip-hooks=name1,name2 to skip specific hooks by name
 
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

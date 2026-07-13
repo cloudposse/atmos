@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,63 @@ func TestSetAuthContextResolver_MixedStores(t *testing.T) {
 	assert.Equal(t, "", noIdentityStore.identityName) // No identity set.
 }
 
+func TestSetAuthContextResolverWithDefaultIdentity_DefaultsOnlyEmptyStores(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	registry := make(StoreRegistry)
+	explicitGSM := &GSMStore{
+		identityName: "gcp-prod",
+		projectID:    "my-project",
+	}
+	defaultGSM := &GSMStore{
+		projectID: "my-project",
+	}
+	defaultSSM := &SSMStore{
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+	}
+	explicitASM := &SecretsManagerStore{
+		identityName:   "aws-secrets",
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+	}
+	defaultASM := &SecretsManagerStore{
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+	}
+	defaultAzure := &AzureKeyVaultStore{
+		vaultURL:       "https://vault.example.com",
+		stackDelimiter: stringPtr("-"),
+	}
+	registry["explicit-gsm"] = explicitGSM
+	registry["default-gsm"] = defaultGSM
+	registry["default-ssm"] = defaultSSM
+	registry["explicit-asm"] = explicitASM
+	registry["default-asm"] = defaultASM
+	registry["default-azure"] = defaultAzure
+
+	resolver := NewMockAuthContextResolver(ctrl)
+	registry.SetAuthContextResolverWithDefaultIdentity(resolver, "terraform-ci")
+
+	assert.NotNil(t, explicitGSM.authResolver)
+	assert.Equal(t, "gcp-prod", explicitGSM.identityName)
+
+	assert.NotNil(t, defaultGSM.authResolver)
+	assert.Equal(t, "terraform-ci", defaultGSM.identityName)
+
+	assert.NotNil(t, defaultSSM.authResolver)
+	assert.Equal(t, "terraform-ci", defaultSSM.identityName)
+
+	assert.NotNil(t, explicitASM.authResolver)
+	assert.Equal(t, "aws-secrets", explicitASM.identityName)
+
+	assert.NotNil(t, defaultASM.authResolver)
+	assert.Equal(t, "terraform-ci", defaultASM.identityName)
+
+	assert.NotNil(t, defaultAzure.authResolver)
+	assert.Equal(t, "terraform-ci", defaultAzure.identityName)
+}
+
 func TestSetAuthContext_DoesNotOverrideExistingIdentity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -64,6 +122,47 @@ func TestSetAuthContext_DoesNotOverrideExistingIdentity(t *testing.T) {
 	// Calling with a non-empty identity should override.
 	store.SetAuthContext(resolver, "new-identity")
 	assert.Equal(t, "new-identity", store.identityName)
+}
+
+func TestSetAuthContext_IdentityOverrideClearsDefaultClients(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	resolver := NewMockAuthContextResolver(ctrl)
+
+	ssmStore := &SSMStore{
+		client:       new(MockSSMClient),
+		identityName: "",
+	}
+	ssmStore.SetAuthContext(resolver, "terraform-ci")
+	assert.Equal(t, "terraform-ci", ssmStore.identityName)
+	assert.Nil(t, ssmStore.client)
+	assert.Nil(t, ssmStore.awsConfig)
+
+	azureStore := &AzureKeyVaultStore{
+		client:       &mockClient{},
+		identityName: "",
+	}
+	azureStore.SetAuthContext(resolver, "terraform-ci")
+	assert.Equal(t, "terraform-ci", azureStore.identityName)
+	assert.Nil(t, azureStore.client)
+
+	mockGSMClient := new(MockGSMClient)
+	mockGSMClient.On("Close").Return(nil).Once()
+	gsmStore := &GSMStore{
+		client:       mockGSMClient,
+		identityName: "",
+	}
+	gsmStore.SetAuthContext(resolver, "terraform-ci")
+	assert.Equal(t, "terraform-ci", gsmStore.identityName)
+	assert.Nil(t, gsmStore.client)
+	mockGSMClient.AssertExpectations(t)
+
+	asmStore := &SecretsManagerStore{
+		client:       newFakeSecretsManager(),
+		identityName: "",
+	}
+	asmStore.SetAuthContext(resolver, "terraform-ci")
+	assert.Equal(t, "terraform-ci", asmStore.identityName)
+	assert.Nil(t, asmStore.client)
 }
 
 func TestSSMStore_LazyInit_WithIdentity(t *testing.T) {
@@ -427,6 +526,47 @@ func TestGSMStore_LazyInit_WithResolver(t *testing.T) {
 	_ = store.ensureClient()
 }
 
+func TestGSMStore_IdentityAuthOptions_AccessTokenOverridesCredentialsFile(t *testing.T) {
+	expiry := time.Now().Add(time.Hour).UTC()
+	store := &GSMStore{
+		credentials:           stringPtr("/store/credentials.json"),
+		projectID:             "my-project",
+		endpoint:              "localhost:4568",
+		endpointInsecure:      true,
+		withoutAuthentication: true,
+	}
+
+	opts := store.identityAuthOptions(&GCPAuthConfig{
+		CredentialsFile: "/atmos/application_default_credentials.json",
+		AccessToken:     "ya29.identity-token",
+		TokenExpiry:     expiry,
+	})
+
+	assert.Empty(t, opts.Credentials)
+	assert.Equal(t, "ya29.identity-token", opts.AccessToken)
+	assert.Equal(t, expiry, opts.TokenExpiry)
+	assert.Equal(t, "localhost:4568", opts.Endpoint)
+	assert.True(t, opts.EndpointInsecure)
+	assert.True(t, opts.WithoutAuthentication)
+}
+
+func TestGSMStore_IdentityAuthOptions_CredentialsFallbacks(t *testing.T) {
+	store := &GSMStore{
+		credentials: stringPtr("/store/credentials.json"),
+		projectID:   "my-project",
+	}
+
+	opts := store.identityAuthOptions(&GCPAuthConfig{
+		CredentialsFile: "/atmos/application_default_credentials.json",
+	})
+	assert.Equal(t, "/atmos/application_default_credentials.json", opts.Credentials)
+	assert.Empty(t, opts.AccessToken)
+
+	opts = store.identityAuthOptions(&GCPAuthConfig{})
+	assert.Equal(t, "/store/credentials.json", opts.Credentials)
+	assert.Empty(t, opts.AccessToken)
+}
+
 // --- SetAuthContextResolver with all cloud store types ---
 
 func TestSetAuthContextResolver_AllCloudStoreTypes(t *testing.T) {
@@ -462,27 +602,19 @@ func TestSetAuthContextResolver_AllCloudStoreTypes(t *testing.T) {
 	assert.NotNil(t, gsmStore.authResolver)
 }
 
-// --- Eager init (no identity): constructor initializes client immediately ---
+// --- Lazy init (no identity): constructor defers client creation until first use ---
 
-func TestNewSSMStore_WithoutIdentity_EagerInit(t *testing.T) {
-	// Constructor with empty identity triggers initDefaultClient.
-	// AWS config.LoadDefaultConfig + ssm.NewFromConfig succeed without real credentials.
+func TestNewSSMStore_WithoutIdentity_LazyInit(t *testing.T) {
 	store, err := NewSSMStore(SSMStoreOptions{
 		Region: "us-east-1",
 		Prefix: stringPtr("/test"),
 	}, "")
-	// In test environment, AWS config loading typically succeeds.
-	if err != nil {
-		// Error path covers initDefaultClient error branch.
-		assert.Nil(t, store)
-		return
-	}
+	require.NoError(t, err)
 
 	ssmStore := store.(*SSMStore)
-	assert.NotNil(t, ssmStore.client)
-	assert.NotNil(t, ssmStore.awsConfig)
+	assert.Nil(t, ssmStore.client, "client should be nil — initialization is deferred to ensureClient()")
+	assert.Nil(t, ssmStore.awsConfig)
 	assert.Empty(t, ssmStore.identityName)
-	assert.Equal(t, "us-east-1", ssmStore.awsConfig.Region)
 }
 
 func TestNewAzureKeyVaultStore_WithoutIdentity_EagerInit(t *testing.T) {

@@ -1,5 +1,8 @@
-# Use a base image with platform specification
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim
+# Use a base image with platform specification.
+# trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
+# Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
+# frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
+FROM --platform=$BUILDPLATFORM debian:trixie-slim
 
 # Define the arguments for Atmos version and platforms
 ARG TARGETPLATFORM
@@ -15,8 +18,8 @@ SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 RUN set -ex; \
     # Update the package list
     apt-get update; \
-    # Install curl and git
-    apt-get -y install  --no-install-recommends curl git ca-certificates; \
+    # Install runtime dependencies required by Atmos-managed tools.
+    apt-get -y install  --no-install-recommends curl git ca-certificates python3; \
     # Install the Cloud Posse Debian repository
     curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash -x; \
     # Install OpenTofu

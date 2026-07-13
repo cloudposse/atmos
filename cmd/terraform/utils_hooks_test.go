@@ -15,26 +15,37 @@ package terraform
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 )
 
 // Compile-time sentinel: tests below depend on these schema.ConfigAndStacksInfo
 // fields by name. If any field is renamed upstream, this declaration fails
 // to compile so the rename surfaces before the tests would silently drift.
 var _ = schema.ConfigAndStacksInfo{
-	Stack:            "",
-	Component:        "",
-	ComponentFromArg: "",
-	ComponentType:    "",
+	Stack:                        "",
+	Component:                    "",
+	ComponentFromArg:             "",
+	ComponentType:                "",
+	TerraformPlanCIResultHandler: nil,
+	PerComponentHook:             nil,
 }
 
 // newHookTestCmd constructs a cobra.Command with all the flags
@@ -52,6 +63,43 @@ func newHookTestCmd() *cobra.Command {
 	cmd.Flags().Bool("ci", false, "ci flag")
 	cmd.Flags().Bool("verify-plan", false, "verify-plan flag")
 	return cmd
+}
+
+func withoutCIDetection(t *testing.T) {
+	t.Helper()
+
+	restoreRegistry := ci.SwapRegistryForTest()
+	t.Cleanup(restoreRegistry)
+
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("CI", "")
+	t.Setenv("ATMOS_CI", "")
+}
+
+func withGitHubActionsDetection(t *testing.T) {
+	t.Helper()
+
+	restoreRegistry := ci.SwapRegistryForTest()
+	t.Cleanup(restoreRegistry)
+	ci.Register(githubCI.NewProvider())
+
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("CI", "")
+	t.Setenv("ATMOS_CI", "")
+}
+
+func resetViperCI(t *testing.T) {
+	t.Helper()
+
+	previous := viper.Get("ci")
+	t.Cleanup(func() {
+		if previous == nil {
+			viper.Set("ci", false)
+			return
+		}
+		viper.Set("ci", previous)
+	})
+	viper.Set("ci", false)
 }
 
 // TestRunHooksOnError_PreservesCommandError verifies the failure-path
@@ -450,10 +498,14 @@ func TestRunCIHooksForApplyComponent_ExitCodeForwarding(t *testing.T) {
 // drop per-component CI summary entries for one of plan/apply/deploy — which
 // is exactly the bug CodeRabbit caught on an earlier revision of this PR.
 func TestWirePerComponentHook(t *testing.T) {
+	withoutCIDetection(t)
+
 	t.Run("plan/deploy/apply install a non-nil hook", func(t *testing.T) {
 		for _, sub := range []string{"plan", "deploy", "apply"} {
 			t.Run(sub, func(t *testing.T) {
-				info := &schema.ConfigAndStacksInfo{}
+				info := &schema.ConfigAndStacksInfo{
+					TerraformPlanCIResultHandler: nil,
+				}
 				wirePerComponentHook(info, sub, newHookTestCmd())
 				assert.NotNil(t, info.PerComponentHook,
 					"%q subcommand must install a per-component hook", sub)
@@ -461,10 +513,43 @@ func TestWirePerComponentHook(t *testing.T) {
 		}
 	})
 
+	t.Run("plan/apply/destroy CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+		for _, sub := range []string{"plan", "apply", "destroy"} {
+			t.Run(sub, func(t *testing.T) {
+				info := &schema.ConfigAndStacksInfo{
+					TerraformPlanCIResultHandler: nil,
+				}
+				wirePerComponentHook(info, sub, cmd)
+
+				assert.Nil(t, info.PerComponentHook)
+				assert.NotNil(t, info.TerraformPlanCIResultHandler)
+			})
+		}
+	})
+
+	t.Run("plan/apply/destroy native CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
+		withGitHubActionsDetection(t)
+
+		for _, sub := range []string{"plan", "apply", "destroy"} {
+			t.Run(sub, func(t *testing.T) {
+				info := &schema.ConfigAndStacksInfo{
+					TerraformPlanCIResultHandler: nil,
+				}
+				wirePerComponentHook(info, sub, newHookTestCmd())
+
+				assert.Nil(t, info.PerComponentHook)
+				assert.NotNil(t, info.TerraformPlanCIResultHandler)
+			})
+		}
+	})
+
 	t.Run("unknown subcommand leaves the hook unset", func(t *testing.T) {
-		// `destroy`, `init`, etc. are valid terraform subcommands but they do
+		// `init`, `validate`, etc. are valid terraform subcommands but they do
 		// not have a per-component CI hook today. The helper must be a no-op
-		// for anything outside the {plan, deploy, apply} set so other
+		// for anything outside the {plan, deploy, apply} non-CI set so other
 		// subcommands don't accidentally start firing hooks.
 		for _, sub := range []string{"destroy", "init", "validate", ""} {
 			t.Run(sub, func(t *testing.T) {
@@ -517,6 +602,94 @@ func TestWirePerComponentHook(t *testing.T) {
 		assert.NotEqual(t, hookPointer(plan), hookPointer(apply), "plan and apply must call different CI hook functions")
 		assert.NotEqual(t, hookPointer(plan), hookPointer(deploy), "plan and deploy must call different CI hook functions")
 		assert.NotEqual(t, hookPointer(apply), hookPointer(deploy), "apply and deploy must call different CI hook functions")
+	})
+}
+
+func TestTerraformCIModeEnabledSources(t *testing.T) {
+	t.Run("nil command and no CI detection is false", func(t *testing.T) {
+		withoutCIDetection(t)
+		resetViperCI(t)
+
+		assert.False(t, terraformCIModeEnabled(nil))
+	})
+
+	t.Run("cobra flag wins", func(t *testing.T) {
+		withoutCIDetection(t)
+		resetViperCI(t)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+		assert.True(t, terraformCIModeEnabled(cmd))
+	})
+
+	t.Run("viper ci enables mode", func(t *testing.T) {
+		withoutCIDetection(t)
+		resetViperCI(t)
+		viper.Set("ci", true)
+
+		assert.True(t, terraformCIModeEnabled(newHookTestCmd()))
+	})
+
+	t.Run("native GitHub Actions detection enables mode", func(t *testing.T) {
+		withGitHubActionsDetection(t)
+		resetViperCI(t)
+
+		assert.True(t, terraformCIModeEnabled(newHookTestCmd()))
+	})
+}
+
+func TestTerraformPlanCIResultHandler(t *testing.T) {
+	t.Run("nil and incomplete handlers are no-ops", func(t *testing.T) {
+		var nilHandler *terraformPlanCIResultHandler
+		require.NoError(t, nilHandler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+		require.NoError(t, (&terraformPlanCIResultHandler{}).HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+		require.NoError(t, (&terraformPlanCIResultHandler{cmd: newHookTestCmd()}).HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+		require.NoError(t, (&terraformPlanCIResultHandler{info: &schema.ConfigAndStacksInfo{}}).HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+	})
+
+	t.Run("runs aggregate CI hook wrapper", func(t *testing.T) {
+		t.Chdir("../../examples/demo-stacks")
+		resetViperCI(t)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+		info := &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			Component:        "myapp",
+			ComponentFromArg: "myapp",
+			ComponentType:    "terraform",
+		}
+
+		handler := &terraformPlanCIResultHandler{
+			cmd:     cmd,
+			info:    info,
+			command: "apply",
+		}
+
+		err := handler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
+			{
+				NodeID:    "myapp-dev",
+				Stack:     "dev",
+				Component: "myapp",
+				Status:    "succeeded",
+				Processed: true,
+				Output:    "Apply complete! Resources: 0 added, 0 changed, 0 destroyed.",
+			},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("returns config init errors", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: yaml: content:\n  - this is: [broken\n"), 0o644))
+		handler := &terraformPlanCIResultHandler{
+			cmd:  newHookTestCmd(),
+			info: &schema.ConfigAndStacksInfo{},
+		}
+
+		err := handler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInitializeCLIConfig)
 	})
 }
 
@@ -593,6 +766,80 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	assert.NotNil(t, gotCtx, "auth context must survive through runHooksWithOutput")
 	assert.Equal(t, "test-profile", gotCtx.AWS.Profile)
 	assert.Equal(t, "mock-auth-manager", gotMgr)
+}
+
+// TestInjectHookStoreAuthResolver_InheritsDefaultIdentity verifies that the after-apply hook path
+// now wires the resolver AND lets identity-less stores inherit the run's auto-detected identity
+// (matching the main terraform path), so hook store writes work under Atmos auth. Auto-detection
+// runs only when no explicit identity is present; an explicit/disabled identity is not overridden by
+// the chain.
+//
+// Note: the per-store identity argument to SetAuthContext is computed by the store registry via
+// defaultIdentityForStore, which only applies the default to the concrete SSM/ASM/AKV/GSM store types
+// (a MockIdentityAwareStore receives ""). This test therefore asserts the seam behavior — chain
+// auto-detection (GetChain), info.Identity population, and resolver wiring. That identity-less
+// concrete stores actually receive the default is covered by pkg/store
+// TestSetAuthContextResolverWithDefaultIdentity_DefaultsOnlyEmptyStores, and end to end by the Floci
+// E2E TestAWSStoreHooks_InheritedIdentity_FlociE2E.
+func TestInjectHookStoreAuthResolver_InheritsDefaultIdentity(t *testing.T) {
+	tests := []struct {
+		name             string
+		identity         string
+		chain            []string // nil => GetChain must NOT be called.
+		expectedIdentity string   // info.Identity after the call.
+	}{
+		{
+			name:             "no explicit identity auto-detects the chain leaf",
+			identity:         "",
+			chain:            []string{"permission-set", "core-identity/devops"},
+			expectedIdentity: "core-identity/devops",
+		},
+		{
+			name:             "explicit command identity is preserved (chain not consulted)",
+			identity:         "cli-admin",
+			chain:            nil,
+			expectedIdentity: "cli-admin",
+		},
+		{
+			name:             "disabled identity is not overridden by the chain",
+			identity:         cfg.IdentityFlagDisabledValue,
+			chain:            nil,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			authManager := authtypes.NewMockAuthManager(ctrl)
+			if tc.chain != nil {
+				authManager.EXPECT().GetChain().Return(tc.chain)
+			}
+			mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
+
+			// The resolver must always be wired into the store (regardless of identity).
+			mockStore.EXPECT().
+				SetAuthContext(gomock.Not(nil), gomock.Any()).
+				Do(func(resolver storepkg.AuthContextResolver, _ string) {
+					assert.NotNil(t, resolver)
+				})
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Stores: storepkg.StoreRegistry{
+					"store": mockStore,
+				},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Identity:    tc.identity,
+				AuthManager: authManager,
+			}
+
+			injectHookStoreAuthResolver(atmosConfig, info)
+
+			assert.Equal(t, tc.expectedIdentity, info.Identity,
+				"hook should auto-detect the active identity when none is explicitly set")
+		})
+	}
 }
 
 // TestInteractiveStackSelection_PromptError verifies that when the

@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -83,6 +84,9 @@ func TestNewGitHubSTSIntegration_InvalidGitConfigMode(t *testing.T) {
 }
 
 // stsServer returns an httptest server that serves POST /api/v1/sts with the given response.
+// The 200 body is wrapped in the canonical Atmos Pro envelope ({success, status, data})
+// exactly as the real server sends it — the prior raw {tokens,excluded} shape masked the
+// envelope-unwrap bug, so the fixture must match reality.
 func stsServer(t *testing.T, status int, resp stsResponse) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +95,11 @@ func stsServer(t *testing.T, status int, resp stsResponse) *httptest.Server {
 		assert.Equal(t, "Bearer session-jwt", r.Header.Get("Authorization"))
 		w.WriteHeader(status)
 		if status == http.StatusOK {
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"status":  status,
+				"data":    resp,
+			})
 		}
 	}))
 }
@@ -189,6 +197,33 @@ func TestGitHubSTSExecute_EmptyTokensIsSuccess(t *testing.T) {
 	env, err := integ.Environment()
 	require.NoError(t, err)
 	assert.Empty(t, env, "no tokens means no GIT_CONFIG_* output")
+}
+
+// TestGitHubSTSMint_DecodesCanonicalEnvelope is the regression guard for the
+// envelope-unwrap bug. It bypasses the stsServer helper and serves the EXACT wire shape
+// the Atmos Pro server sends (tokens nested under "data"), then asserts mint/persist sees
+// 1 token — not 0. The bug decoded this flat into stsResponse and dropped every token.
+func TestGitHubSTSMint_DecodesCanonicalEnvelope(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("ATMOS_XDG_DATA_HOME", xdg)
+
+	const payload = `{"success":true,"status":200,"data":{"tokens":[{"host":"github.com","owner":"o","token":"t","expiresAt":"2030-01-01T00:00:00Z","repositories":["o/r"],"permissions":{"contents":"read"}}],"excluded":[]}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer srv.Close()
+
+	integ := newIntegration(t, "realmA", nil, &schema.IntegrationVia{Provider: "atmos-pro"})
+	require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
+
+	// The bug persisted 0 tokens; assert the envelope was unwrapped to 1.
+	state, err := integ.readState()
+	require.NoError(t, err)
+	require.Len(t, state.Tokens, 1)
+	assert.Equal(t, "o", state.Tokens[0].Owner)
+	assert.Equal(t, "t", state.Tokens[0].Token)
+	assert.Equal(t, []string{"o/r"}, state.Tokens[0].Repositories)
 }
 
 func TestGitHubSTSExecute_StatusErrors(t *testing.T) {
@@ -306,10 +341,17 @@ func TestGitHubSTSTokenEnv_EnvMode(t *testing.T) {
 		absent   []string          // env keys that must NOT be present
 	}{
 		{
-			name:     "empty token_env keeps token off env",
+			name:     "empty token_env defaults to ATMOS_PRO_GITHUB_TOKEN for single owner",
 			tokenEnv: "",
 			tokens:   singleToken,
+			want:     map[string]string{"ATMOS_PRO_GITHUB_TOKEN": "ghs_acme"},
 			absent:   []string{"GH_TOKEN"},
+		},
+		{
+			name:     "empty token_env default skips bare var for multiple owners (insteadOf still covers them)",
+			tokenEnv: "",
+			tokens:   multiToken,
+			absent:   []string{"ATMOS_PRO_GITHUB_TOKEN", "GH_TOKEN"},
 		},
 		{
 			name:     "literal name with single token exports it",
@@ -324,10 +366,22 @@ func TestGitHubSTSTokenEnv_EnvMode(t *testing.T) {
 			absent:   []string{"GH_TOKEN"},
 		},
 		{
-			name:     "owner placeholder expands per owner and sanitizes",
-			tokenEnv: "GH_TOKEN_{owner}",
+			name:     "owner template expands per owner and sanitizes",
+			tokenEnv: "GH_TOKEN_{{ .owner }}",
 			tokens:   multiToken,
 			want:     map[string]string{"GH_TOKEN_ACME": "ghs_acme", "GH_TOKEN_CLOUD_POSSE": "ghs_cp"},
+		},
+		{
+			name:     "host template variable is available and sanitized",
+			tokenEnv: "TOKEN_{{ .host }}_{{ .owner }}",
+			tokens:   singleToken,
+			want:     map[string]string{"TOKEN_GITHUB_COM_ACME": "ghs_acme"},
+		},
+		{
+			name:     "invalid template is skipped gracefully",
+			tokenEnv: "GH_{{ .nonexistent }}",
+			tokens:   singleToken,
+			absent:   []string{"GH_", "GH"},
 		},
 	}
 
@@ -367,7 +421,7 @@ func TestGitHubSTSTokenEnv_FileMode(t *testing.T) {
 	})
 	defer srv.Close()
 
-	// File mode keeps tokens off env by default, but token_env is an explicit opt-in override.
+	// File mode emits include.path; an explicit token_env layers the raw token var on top.
 	integ := newIntegration(t, "realmA",
 		&schema.IntegrationSpec{GitConfigMode: GitConfigModeFile, TokenEnv: "GH_TOKEN"},
 		&schema.IntegrationVia{Provider: "atmos-pro"})
@@ -379,6 +433,30 @@ func TestGitHubSTSTokenEnv_FileMode(t *testing.T) {
 	// include.path is still emitted, and the token var is layered on top.
 	assert.Equal(t, "include.path", env["GIT_CONFIG_KEY_0"])
 	assert.Equal(t, "ghs_acme", env["GH_TOKEN"])
+}
+
+// TestGitHubSTSTokenEnv_FileMode_DefaultBridge verifies that in file mode the default token_env
+// still bridges the single-owner token via ATMOS_PRO_GITHUB_TOKEN (the in-process git detector
+// cannot see file-mode include.path, so it relies on this env var).
+func TestGitHubSTSTokenEnv_FileMode_DefaultBridge(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("ATMOS_XDG_DATA_HOME", xdg)
+
+	srv := stsServer(t, http.StatusOK, stsResponse{
+		Tokens: []stsToken{{Host: "github.com", Owner: "acme", Token: "ghs_acme", ExpiresAt: "2030-01-01T00:00:00Z"}},
+	})
+	defer srv.Close()
+
+	integ := newIntegration(t, "realmA",
+		&schema.IntegrationSpec{GitConfigMode: GitConfigModeFile},
+		&schema.IntegrationVia{Provider: "atmos-pro"})
+	require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
+
+	env, err := integ.Environment()
+	require.NoError(t, err)
+
+	assert.Equal(t, "include.path", env["GIT_CONFIG_KEY_0"])
+	assert.Equal(t, "ghs_acme", env["ATMOS_PRO_GITHUB_TOKEN"])
 }
 
 func TestSanitizeEnvName(t *testing.T) {

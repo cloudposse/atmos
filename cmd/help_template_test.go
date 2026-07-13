@@ -6,242 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
-
-func TestIsTruthy(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected bool
-	}{
-		{
-			name:     "Empty string returns false",
-			input:    "",
-			expected: false,
-		},
-		{
-			name:     "Lowercase true",
-			input:    "true",
-			expected: true,
-		},
-		{
-			name:     "Uppercase TRUE",
-			input:    "TRUE",
-			expected: true,
-		},
-		{
-			name:     "Mixed case True",
-			input:    "True",
-			expected: true,
-		},
-		{
-			name:     "String 1",
-			input:    "1",
-			expected: true,
-		},
-		{
-			name:     "String 2",
-			input:    "2",
-			expected: true,
-		},
-		{
-			name:     "String 3",
-			input:    "3",
-			expected: true,
-		},
-		{
-			name:     "Lowercase yes",
-			input:    "yes",
-			expected: true,
-		},
-		{
-			name:     "Uppercase YES",
-			input:    "YES",
-			expected: true,
-		},
-		{
-			name:     "Lowercase on",
-			input:    "on",
-			expected: true,
-		},
-		{
-			name:     "Lowercase always",
-			input:    "always",
-			expected: true,
-		},
-		{
-			name:     "String 0 is not truthy",
-			input:    "0",
-			expected: false,
-		},
-		{
-			name:     "String false is not truthy",
-			input:    "false",
-			expected: false,
-		},
-		{
-			name:     "Random string is not truthy",
-			input:    "random",
-			expected: false,
-		},
-		{
-			name:     "Whitespace trimmed - true with spaces",
-			input:    "  true  ",
-			expected: true,
-		},
-		{
-			name:     "Whitespace trimmed - 1 with spaces",
-			input:    "  1  ",
-			expected: true,
-		},
-		{
-			name:     "Only whitespace returns false",
-			input:    "   ",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isTruthy(tt.input)
-			if result != tt.expected {
-				t.Errorf("isTruthy(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsFalsy(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected bool
-	}{
-		{
-			name:     "Empty string returns false",
-			input:    "",
-			expected: false,
-		},
-		{
-			name:     "Lowercase false",
-			input:    "false",
-			expected: true,
-		},
-		{
-			name:     "Uppercase FALSE",
-			input:    "FALSE",
-			expected: true,
-		},
-		{
-			name:     "Mixed case False",
-			input:    "False",
-			expected: true,
-		},
-		{
-			name:     "String 0",
-			input:    "0",
-			expected: true,
-		},
-		{
-			name:     "Lowercase no",
-			input:    "no",
-			expected: true,
-		},
-		{
-			name:     "Uppercase NO",
-			input:    "NO",
-			expected: true,
-		},
-		{
-			name:     "Lowercase off",
-			input:    "off",
-			expected: true,
-		},
-		{
-			name:     "Uppercase OFF",
-			input:    "OFF",
-			expected: true,
-		},
-		{
-			name:     "String 1 is not falsy",
-			input:    "1",
-			expected: false,
-		},
-		{
-			name:     "String true is not falsy",
-			input:    "true",
-			expected: false,
-		},
-		{
-			name:     "Random string is not falsy",
-			input:    "random",
-			expected: false,
-		},
-		{
-			name:     "Whitespace trimmed - false with spaces",
-			input:    "  false  ",
-			expected: true,
-		},
-		{
-			name:     "Whitespace trimmed - 0 with spaces",
-			input:    "  0  ",
-			expected: true,
-		},
-		{
-			name:     "Only whitespace returns false",
-			input:    "   ",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isFalsy(tt.input)
-			if result != tt.expected {
-				t.Errorf("isFalsy(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-// Test edge cases and mutual exclusivity.
-func TestTruthyFalsyMutualExclusivity(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-	}{
-		{"Empty string", ""},
-		{"String 1", "1"},
-		{"String 0", "0"},
-		{"String true", "true"},
-		{"String false", "false"},
-		{"Random string", "maybe"},
-		{"Whitespace only", "   "},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			truthy := isTruthy(tt.input)
-			falsy := isFalsy(tt.input)
-
-			// A value should not be both truthy and falsy.
-			if truthy && falsy {
-				t.Errorf("isTruthy(%q) and isFalsy(%q) are both true - should be mutually exclusive", tt.input, tt.input)
-			}
-
-			// Some values (like empty string or random strings) are neither truthy nor falsy.
-			// This is expected behavior.
-		})
-	}
-}
 
 func TestIsCommandAvailable(t *testing.T) {
 	t.Run("available command", func(t *testing.T) {
@@ -327,7 +98,7 @@ func TestCalculateCommandWidth(t *testing.T) {
 
 func TestCalculateMaxCommandWidth(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
-		result := calculateMaxCommandWidth([]*cobra.Command{}, false)
+		result := calculateMaxCommandWidth([]*cobra.Command{}, false, false)
 		if result != 0 {
 			t.Errorf("Expected 0 for empty list, got %d", result)
 		}
@@ -337,7 +108,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 		commands := []*cobra.Command{
 			{Use: "test", Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands, false)
+		result := calculateMaxCommandWidth(commands, false, false)
 		if result != 4 {
 			t.Errorf("Expected 4, got %d", result)
 		}
@@ -349,7 +120,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 			{Use: "muchlongercommandname", Run: func(cmd *cobra.Command, args []string) {}},
 			{Use: "mid", Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands, false)
+		result := calculateMaxCommandWidth(commands, false, false)
 		expected := len("muchlongercommandname")
 		if result != expected {
 			t.Errorf("Expected %d, got %d", expected, result)
@@ -361,140 +132,22 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 			{Use: "short", Run: func(cmd *cobra.Command, args []string) {}},
 			{Use: "verylongbutthisishidden", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands, false)
+		result := calculateMaxCommandWidth(commands, false, false)
 		if result != 5 { // Length of "short".
 			t.Errorf("Expected 5 (ignoring hidden), got %d", result)
 		}
 	})
-}
 
-func TestDetectColorConfig(t *testing.T) {
-	tests := []struct {
-		name             string
-		env              map[string]string
-		expectedForce    bool
-		expectedDisabled bool
-	}{
-		{
-			name:             "NO_COLOR disables color",
-			env:              map[string]string{"NO_COLOR": "1"},
-			expectedForce:    false,
-			expectedDisabled: true,
-		},
-		{
-			name:             "FORCE_COLOR=1 enables color",
-			env:              map[string]string{"FORCE_COLOR": "1"},
-			expectedForce:    true,
-			expectedDisabled: false,
-		},
-		{
-			name:             "FORCE_COLOR=0 disables even if ATMOS_FORCE_COLOR=1",
-			env:              map[string]string{"ATMOS_FORCE_COLOR": "1", "FORCE_COLOR": "0"},
-			expectedForce:    false,
-			expectedDisabled: true,
-		},
-		{
-			name:             "CLICOLOR_FORCE=1 enables color",
-			env:              map[string]string{"CLICOLOR_FORCE": "1"},
-			expectedForce:    true,
-			expectedDisabled: false,
-		},
-		{
-			name:             "FORCE_COLOR=0 disables color",
-			env:              map[string]string{"FORCE_COLOR": "0"},
-			expectedForce:    false,
-			expectedDisabled: true,
-		},
-		{
-			name:             "NO_COLOR takes precedence over FORCE_COLOR",
-			env:              map[string]string{"NO_COLOR": "1", "FORCE_COLOR": "1"},
-			expectedForce:    false,
-			expectedDisabled: true,
-		},
-		{
-			name:             "empty env defaults to no force, no disable",
-			env:              map[string]string{},
-			expectedForce:    false,
-			expectedDisabled: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Clear viper state before each test.
-			viper.Reset()
-
-			// Clear and set environment variables.
-			envVars := []string{"NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "ATMOS_FORCE_COLOR", "ATMOS_DEBUG_COLORS", "TERM", "COLORTERM"}
-			for _, env := range envVars {
-				t.Setenv(env, "")
-			}
-
-			// Set test environment.
-			for k, v := range tt.env {
-				t.Setenv(k, v)
-			}
-
-			config := detectColorConfig()
-
-			if config.forceColor != tt.expectedForce {
-				t.Errorf("forceColor = %v, want %v", config.forceColor, tt.expectedForce)
-			}
-			if config.explicitlyDisabled != tt.expectedDisabled {
-				t.Errorf("explicitlyDisabled = %v, want %v", config.explicitlyDisabled, tt.expectedDisabled)
-			}
-		})
-	}
-}
-
-func TestConfigureWriter(t *testing.T) {
-	tests := []struct {
-		name           string
-		config         colorConfig
-		expectRenderer bool
-	}{
-		{
-			name: "disabled color creates Ascii renderer",
-			config: colorConfig{
-				forceColor:         false,
-				explicitlyDisabled: true,
-				debugColors:        false,
-			},
-			expectRenderer: true,
-		},
-		{
-			name: "forced color creates ANSI256 renderer",
-			config: colorConfig{
-				forceColor:         true,
-				explicitlyDisabled: false,
-				debugColors:        false,
-			},
-			expectRenderer: true,
-		},
-		{
-			name: "auto-detect creates renderer",
-			config: colorConfig{
-				forceColor:         false,
-				explicitlyDisabled: false,
-				debugColors:        false,
-			},
-			expectRenderer: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := &cobra.Command{Use: "test"}
-			wc := configureWriter(cmd, tt.config)
-
-			if tt.expectRenderer && wc.renderer == nil {
-				t.Error("Expected renderer to be created, got nil")
-			}
-			if wc.writer == nil {
-				t.Error("Expected writer to be created, got nil")
-			}
-		})
-	}
+	t.Run("filters by custom command bucket", func(t *testing.T) {
+		commands := []*cobra.Command{
+			{Use: "verylongbuiltin", Run: func(cmd *cobra.Command, args []string) {}},
+			{Use: "custom", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+		}
+		result := calculateMaxCommandWidth(commands, false, true)
+		if result != len("custom") {
+			t.Errorf("Expected custom command width, got %d", result)
+		}
+	})
 }
 
 func TestCreateHelpStyles(t *testing.T) {
@@ -1010,6 +663,61 @@ func TestIsConfigAlias(t *testing.T) {
 	}
 }
 
+func TestIsCustomCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		expected bool
+	}{
+		{
+			name: "command with custom command annotation",
+			cmd: &cobra.Command{
+				Use: "deploy",
+				Annotations: map[string]string{
+					annotationCustomCommand: annotationValueTrue,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "command without annotations",
+			cmd: &cobra.Command{
+				Use: "apply",
+			},
+			expected: false,
+		},
+		{
+			name: "command with different annotation",
+			cmd: &cobra.Command{
+				Use: "tp",
+				Annotations: map[string]string{
+					annotationConfigAlias: "terraform plan",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "command with false custom command annotation",
+			cmd: &cobra.Command{
+				Use: "deploy",
+				Annotations: map[string]string{
+					annotationCustomCommand: "false",
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isCustomCommand(tt.cmd)
+			if result != tt.expected {
+				t.Errorf("isCustomCommand() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFormatCommandLine(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1080,6 +788,7 @@ func TestPrintAvailableCommands(t *testing.T) {
 		subcommands []*cobra.Command
 		shouldPrint bool
 		contains    []string
+		notContains []string
 	}{
 		{
 			name: "with available subcommands",
@@ -1089,7 +798,38 @@ func TestPrintAvailableCommands(t *testing.T) {
 				{Use: "destroy", Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "apply", "plan", "destroy"},
+			contains:    []string{"BUILT-IN COMMANDS", "apply", "plan", "destroy"},
+			notContains: []string{"CUSTOM COMMANDS"},
+		},
+		{
+			name: "with custom subcommands only",
+			subcommands: []*cobra.Command{
+				{Use: "deploy", Short: "Deploy service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "release", Short: "Release service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"CUSTOM COMMANDS", "deploy", "release"},
+			notContains: []string{"BUILT-IN COMMANDS"},
+		},
+		{
+			name: "with built-in and custom subcommands",
+			subcommands: []*cobra.Command{
+				{Use: "terraform", Short: "Execute Terraform commands", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "deploy", Short: "Deploy service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"BUILT-IN COMMANDS", "terraform", "CUSTOM COMMANDS", "deploy"},
+		},
+		{
+			name: "config aliases excluded from command sections",
+			subcommands: []*cobra.Command{
+				{Use: "terraform", Short: "Execute Terraform commands", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "deploy", Short: "Deploy service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "tp", Short: "alias for `terraform plan`", Annotations: map[string]string{annotationConfigAlias: "terraform plan"}, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"BUILT-IN COMMANDS", "terraform", "CUSTOM COMMANDS", "deploy"},
+			notContains: []string{"tp", "alias for"},
 		},
 		{
 			name: "with hidden commands",
@@ -1098,7 +838,8 @@ func TestPrintAvailableCommands(t *testing.T) {
 				{Use: "hidden", Short: "Hidden command", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "apply"},
+			contains:    []string{"BUILT-IN COMMANDS", "apply"},
+			notContains: []string{"CUSTOM COMMANDS", "hidden"},
 		},
 		{
 			name:        "no subcommands",
@@ -1150,6 +891,11 @@ func TestPrintAvailableCommands(t *testing.T) {
 			for _, expected := range tt.contains {
 				if !strings.Contains(output, expected) {
 					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+			for _, unexpected := range tt.notContains {
+				if strings.Contains(output, unexpected) {
+					t.Errorf("Expected output not to contain %q, got: %q", unexpected, output)
 				}
 			}
 		})
@@ -1315,7 +1061,7 @@ func TestPrintAvailableCommandsWithAtmosConfig(t *testing.T) {
 				{Use: "plan", Short: "Plan changes", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "apply", "plan"},
+			contains:    []string{"BUILT-IN COMMANDS", "apply", "plan"},
 		},
 		{
 			name: "with markdown in command descriptions",
@@ -1324,7 +1070,7 @@ func TestPrintAvailableCommandsWithAtmosConfig(t *testing.T) {
 				{Use: "describe", Short: "Describe **components**", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "validate", "describe"},
+			contains:    []string{"BUILT-IN COMMANDS", "validate", "describe"},
 		},
 	}
 
@@ -1562,28 +1308,6 @@ func TestPrintFooterWithSubcommands(t *testing.T) {
 			if !tt.shouldPrint && len(output) > 0 {
 				t.Errorf("Expected no footer, got: %q", output)
 			}
-		})
-	}
-}
-
-func TestSetRendererProfileForAutoDetect(t *testing.T) {
-	tests := []struct {
-		name    string
-		profile colorprofile.Profile
-	}{
-		{name: "TrueColor", profile: colorprofile.TrueColor},
-		{name: "ANSI256", profile: colorprofile.ANSI256},
-		{name: "ANSI", profile: colorprofile.ANSI},
-		{name: "Ascii", profile: colorprofile.Ascii},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			renderer := lipgloss.NewRenderer(&buf)
-
-			// This should not panic.
-			setRendererProfileForAutoDetect(renderer, tt.profile, false)
 		})
 	}
 }

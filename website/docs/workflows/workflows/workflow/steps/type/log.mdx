@@ -1,0 +1,37 @@
+---
+title: log
+sidebar_label: log
+slug: /workflows/steps/type/log
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `log` step type emits a structured Atmos log message — the same leveled, field-aware logging Atmos uses internally — so your custom commands and workflows produce consistent, machine-readable output.
+</Intro>
+
+```yaml
+steps:
+  - name: audit
+    type: log
+    level: info
+    content: Starting deployment
+    fields:
+      component: vpc
+      stack: plat-ue2-prod
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Required. Log message. Supports templates.</dd>
+
+  <dt>`level`</dt>
+  <dd>Optional log level: `trace`, `debug`, `info`, `warn`, `warning`, or `error`. Defaults to `info`.</dd>
+
+  <dt>`fields`</dt>
+  <dd>Optional structured key-value fields. Values support templates.</dd>
+</dl>
+
+The step result value is the resolved log message.

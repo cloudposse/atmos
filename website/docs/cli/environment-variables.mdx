@@ -103,6 +103,13 @@ These environment variables configure Atmos behavior and can override settings i
     Force TTY mode for terminal output. Equivalent to `--force-tty`.
   </dd>
 
+  <dt>`COLUMNS`</dt>
+  <dd>
+    Standard convention supplying the terminal width when output is not a TTY (pipes, recordings, CI).
+    Atmos lays out width-sensitive output (such as help screens) at this width.
+    Ignored when a real terminal size is available; capped by `settings.terminal.max_width` when configured.
+  </dd>
+
   <dt>`ATMOS_REDIRECT_STDERR`</dt>
   <dd>
     Redirect stderr to a file. Equivalent to `--redirect-stderr`.
@@ -180,6 +187,21 @@ These environment variables configure Atmos behavior and can override settings i
     Custom directory for Terraform provider plugin cache. If not set, uses the XDG cache directory.
 
     - **YAML Path:** `components.terraform.plugin_cache_dir`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED`</dt>
+  <dd>
+    If set to `true`, enable the Terraform registry cache proxy for provider and module registry traffic.
+
+    - **YAML Path:** `components.terraform.cache.enabled`
+    - **Default:** `false`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION`</dt>
+  <dd>
+    Custom root directory for the Terraform registry cache. Pin this to a stable path in CI when the cache should be reused across `atmos` invocations.
+
+    - **YAML Path:** `components.terraform.cache.location`
   </dd>
 
   <dt>`ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`</dt>
@@ -395,6 +417,15 @@ These environment variables configure Atmos behavior and can override settings i
     Inject the GitHub token into component environments. Default: `true`. Set to `false` to prevent token injection.
   </dd>
 
+  <dt>`ATMOS_GITHUB_CLI`</dt>
+  <dd>
+    Name (or path) of the GitHub CLI used to obtain a token when no `GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN` is set.
+    Defaults to `gh`. Atmos runs `<cli> auth token` only as a last resort, after the flag and environment variables.
+    Set it to an empty value to disable the CLI fallback entirely, or to a nonexistent binary to force anonymous
+    (unauthenticated) GitHub access — useful for testing the public artifact/download paths (subject to GitHub's
+    60 requests/hour unauthenticated rate limit).
+  </dd>
+
   <dt>`GITHUB_USERNAME` / `GITHUB_ACTOR` / `ATMOS_GITHUB_USERNAME`</dt>
   <dd>
     GitHub username for OCI registry authentication to ghcr.io. `GITHUB_ACTOR` is automatically set in GitHub Actions.
@@ -576,6 +607,11 @@ These environment variables configure Atmos behavior and can override settings i
   <dt>`ATMOS_INIT_RUN_RECONFIGURE`</dt>
   <dd>
     Override the `init_run_reconfigure` setting from `atmos.yaml`.
+  </dd>
+
+  <dt>`ATMOS_TERRAFORM_VERIFY_PLAN`</dt>
+  <dd>
+    Set to `true` to force planfile drift verification (fail on drift) on `atmos terraform deploy`, equivalent to `--verify-plan`. Set to `false` to disable verification (equivalent to `--verify-plan=false`), overriding config and the CI default. See [Planfile drift verification](/components/terraform/planfiles#drift-verification).
   </dd>
 </dl>
 

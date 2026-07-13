@@ -1,0 +1,88 @@
+---
+title: command
+sidebar_label: command
+slug: /cli/configuration/commands/command
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+A `command` is one entry in the [`commands`](/cli/configuration/commands) list. It defines a custom `atmos` subcommand — its name, help text, the arguments and flags it accepts, the environment it runs in, and the steps it executes.
+</Intro>
+
+The example below uses the most common keys. Each key has its own reference page linked in [Fields](#fields).
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy a component to a stack
+    verbose: false                 # set true to see verbose execution output
+    identity: superadmin           # authenticate before running
+    working_directory: !repo-root . # where steps run
+    arguments:
+      - name: component
+        description: Component to deploy
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack to deploy to
+        required: true
+    env:
+      - key: ATMOS_COMPONENT
+        value: "{{ .Arguments.component }}"
+    dependencies:
+      tools:
+        terraform: "1.9.8"
+    steps:
+      - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }} -auto-approve
+```
+
+Run it with:
+
+```shell
+atmos deploy vpc -s plat-ue2-prod
+```
+
+## Fields
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Required. The command name as typed after `atmos` (for example, `deploy`). For nested commands, this is the subcommand name. Names appear in `atmos help`.</dd>
+
+  <dt>`description`</dt>
+  <dd>Required. Help text shown in `atmos help` and `atmos <command> --help`. Supports multi-line YAML for usage examples.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional. Name of the subcommand to run when this command is invoked without an explicit subcommand.</dd>
+
+  <dt>[`arguments`](/cli/configuration/commands/arguments)</dt>
+  <dd>Positional arguments the command accepts.</dd>
+
+  <dt>[`flags`](/cli/configuration/commands/flags)</dt>
+  <dd>Long/short flags the command accepts.</dd>
+
+  <dt>[`env`](/cli/configuration/commands/env)</dt>
+  <dd>Environment variables exported to every step.</dd>
+
+  <dt>[`steps`](/cli/configuration/commands/steps)</dt>
+  <dd>The work the command performs. Custom commands support the same step types as [workflows](/workflows).</dd>
+
+  <dt>[`component`](/cli/configuration/commands/component)</dt>
+  <dd>Bind the command to a custom component type so it can read stack configuration.</dd>
+
+  <dt>[`dependencies`](/cli/configuration/commands/dependencies)</dt>
+  <dd>Tools that must be installed (via the toolchain) before the command runs.</dd>
+
+  <dt>[`working_directory`](/cli/configuration/commands/working-directory)</dt>
+  <dd>The directory the command's steps execute in.</dd>
+
+  <dt>[`identity`](/cli/configuration/commands/identity)</dt>
+  <dd>An Atmos auth identity to authenticate as before running.</dd>
+
+  <dt>[`commands`](/cli/configuration/commands/commands)</dt>
+  <dd>Nested subcommands.</dd>
+
+  <dt>`verbose`</dt>
+  <dd>Set to `true` to print verbose execution output for the command. Defaults to `false`.</dd>
+</dl>

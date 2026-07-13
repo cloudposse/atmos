@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   release:
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     secrets: inherit
 
   homebrew:
@@ -50,7 +50,7 @@ jobs:
 
       - name: "Docker Build"
         id: build
-        uses: cloudposse/github-action-docker-build-push@main
+        uses: cloudposse/github-action-docker-build-push@f06d0f4bd286898b613412d2fcc6622e5b68bbdc # v3.0.0
         with:
           registry: ghcr.io
           organization: "${{ github.event.repository.owner.login }}"

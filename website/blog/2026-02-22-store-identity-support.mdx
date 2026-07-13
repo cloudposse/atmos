@@ -5,9 +5,17 @@ authors: [aknysh]
 tags: [feature]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos stores now support identity-based authentication. You can configure stores to authenticate using the same named identities from `atmos auth` instead of relying on default credential chains.
 
 <!--truncate-->
+
+See it in action:
+
+<CastPlayer src="/casts/examples/auth-stores/identity-backed-stores.cast" title="atmos auth-backed stores" chrome controls scrubber />
+
+[View the full example](/examples/auth-stores)
 
 ## What Changed
 
@@ -16,7 +24,7 @@ Stores (`!store` YAML function) can now reference an Atmos auth identity via a n
 ```yaml
 stores:
   prod/aws-ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-admin
     options:
       region: us-east-1
@@ -48,19 +56,19 @@ Previously, stores always used the default credential chain, which meant separat
 ```yaml
 stores:
   prod/aws-ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-admin
     options:
       region: us-east-1
 
   staging/azure-kv:
-    type: azure-key-vault
+    kind: azure/keyvault
     identity: staging-azure
     options:
       vault_url: https://staging-vault.vault.azure.net
 
   prod/gsm:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     identity: gcp-prod
     options:
       project_id: my-gcp-project

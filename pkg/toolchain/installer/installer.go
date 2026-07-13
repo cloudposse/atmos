@@ -17,6 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	github "github.com/cloudposse/atmos/pkg/github"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
@@ -44,6 +46,10 @@ const (
 
 	// Windows constants.
 	windowsExeExt = ".exe"
+
+	// Fallback cosign verifier bootstrap version for transient GitHub latest-release lookup failures.
+	// renovate: datasource=github-releases depName=sigstore/cosign.
+	defaultCosignVerifierVersion = "v3.0.6"
 )
 
 // EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
@@ -348,7 +354,15 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 }
 
 func (i *Installer) verifyDownloadedAsset(tool *registry.Tool, version, assetURL, assetPath string) (*verification.Result, error) {
-	verifier := verification.Verifier{}
+	// Attach a GitHub token when available so checksum/signature/SLSA sidecar fetches from
+	// GitHub release assets (verification.HTTPDownloader's default is an unauthenticated
+	// http.DefaultClient) get the same rate-limit headroom as the asset download itself
+	// (downloadToCacheOnce, a few functions away in this package, already does this).
+	verifier := verification.Verifier{
+		Downloader: verification.HTTPDownloader{
+			Client: httpClient.NewGitHubAuthenticatedHTTPClient(github.GetGitHubToken()),
+		},
+	}
 	result, err := verifier.Verify(context.Background(), verification.Request{
 		Tool:      tool,
 		Version:   version,
@@ -419,7 +433,25 @@ func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, e
 		lookupErrs = append(lookupErrs, err)
 	}
 
+	if version, ok := fallbackVerifierInstallVersion(owner, repo); ok && len(lookupErrs) > 0 {
+		log.Debug(
+			"Using fallback verifier bootstrap version after latest lookup failure",
+			logFieldOwner, owner,
+			logFieldRepo, repo,
+			logFieldVersion, version,
+			"lookup_errors", errors.Join(lookupErrs...),
+		)
+		return version, nil
+	}
+
 	return "", verifierVersionUnavailableError(owner, repo, lookupErrs)
+}
+
+func fallbackVerifierInstallVersion(owner, repo string) (string, bool) {
+	if owner == "sigstore" && repo == "cosign" {
+		return defaultCosignVerifierVersion, true
+	}
+	return "", false
 }
 
 func (i *Installer) aquaVerifierRegistry() registry.ToolRegistry {

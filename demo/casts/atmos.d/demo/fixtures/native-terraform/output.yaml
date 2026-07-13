@@ -1,0 +1,53 @@
+commands:
+  - name: casts generate demo fixtures native-terraform output
+    description: Regenerate the Terraform output cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: prepare-state
+        working_directory: &native_terraform_fixture "../../.context/cast-fixtures/native-terraform"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos --logs-level=Off terraform deploy vpc -s dev -auto-approve
+      - type: cast
+        name: output
+        working_directory: *native_terraform_fixture
+        title: atmos terraform output
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/demo/fixtures/native-terraform/output.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: shell
+            name: output
+            command: atmos terraform output vpc -s dev
+      - type: shell
+        name: validate
+        command: atmos casts validate demo fixtures native-terraform output
+  - name: casts validate demo fixtures native-terraform output
+    description: Validate the Terraform output cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          text = Path("../../website/static/casts/demo/fixtures/native-terraform/output.cast").read_text()
+          for needle in ["environment =", "dev", "vpc_cidr", "10.0.0.0/16"]:
+              if needle not in text:
+                  raise SystemExit(f"terraform output cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+              if bad in text:
+                  raise SystemExit(f"terraform output cast contains {bad!r}")
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/demo/fixtures/native-terraform/output.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)

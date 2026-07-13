@@ -7,10 +7,10 @@ management.
 
 USAGE
 
-                                             
-    $ atmos terraform [flags]                
-    $ atmos terraform [sub-command] [flags]  
-                                             
+
+    $ atmos terraform [flags]
+    $ atmos terraform [sub-command] [flags]
+
 
 ALIASES
 
@@ -18,17 +18,18 @@ ALIASES
 
 EXAMPLES
 
-                                                                      
-    – Execute a terraform subcommand                                  
-                                                                      
-                                                                      
-     $ atmos terraform [subcommand] <component-name> -s <stack-name>  
-                                                                      
 
-AVAILABLE COMMANDS
+    – Execute a terraform subcommand
+
+
+     $ atmos terraform [subcommand] <component-name> -s <stack-name>
+
+
+BUILT-IN COMMANDS
 
       apply                             Apply changes to infrastructure
       backend [command] [EXPERIMENTAL]  Manage Terraform state backends
+      cache [command] [EXPERIMENTAL]    Manage the Terraform registry cache
       clean                             Clean up Terraform state and artifacts
       console                           Try Terraform expressions at an interactive command prompt
       deploy                            Deploy the specified infrastructure using Terraform
@@ -50,7 +51,6 @@ AVAILABLE COMMANDS
       plan-diff                         Compare two Terraform plans and show the differences
       planfile [command]                Manage Terraform plan files
       providers [command]               Show the providers required for this configuration
-      provision                         This command provisions terraform components
       refresh                           Update the state to match remote systems
       shell                             Configure an environment for an Atmos component and start a new shell
       show                              Show the current state or a saved plan
@@ -63,6 +63,10 @@ AVAILABLE COMMANDS
       version                           Show the current Terraform version
       workdir [command] [EXPERIMENTAL]  Manage component working directories
       workspace [command]               Manage Terraform workspaces
+
+CUSTOM COMMANDS
+
+      provision  This command provisions terraform components
 
 FLAGS
 
@@ -100,6 +104,9 @@ FLAGS
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
 
+      --skip-hooks string         Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
+                                  skip-hooks=name1,name2 to skip specific hooks by name
+
       --skip-init                 Skip terraform init before running command
 
       --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH
@@ -117,6 +124,10 @@ GLOBAL FLAGS
       --ai                                   Enable AI-powered analysis of command output
 
       --base-path string                     Base path for Atmos project
+
+      --cast string                          Record command output as an asciinema cast (--cast for generated path, --
+                                             cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg
+                                             extension for explicit output)
 
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)
@@ -177,9 +188,6 @@ GLOBAL FLAGS
 
       --skill strings                        Specify skills for AI analysis context (comma-separated or repeated flag,
                                              requires --ai)
-
-      --skip-hooks string                    Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to
-                                             skip all, or --skip-hooks=name1,name2 to skip specific hooks by name
 
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

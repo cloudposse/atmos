@@ -48,7 +48,7 @@ CLI providers invoke your locally installed AI tool as a subprocess — no API k
 ```yaml
 ai:
   enabled: true
-  default_provider: "claude-code"  # or "codex-cli" or "gemini-cli"
+  default_provider: "claude-code"  # or "codex-cli", "copilot-cli", "gemini-cli"
   providers:
     claude-code:
       max_turns: 10
@@ -131,7 +131,7 @@ ai:
   <dd>Enable or disable AI features (default: `false`)</dd>
 
   <dt>`default_provider`</dt>
-  <dd>Default AI provider. **API providers:** `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`. **CLI providers:** `claude-code`, `codex-cli`, `gemini-cli`.</dd>
+  <dd>Default AI provider. **API providers:** `anthropic`, `openai`, `gemini`, `github`, `grok`, `ollama`, `bedrock`, `azureopenai`. **CLI providers:** `claude-code`, `codex-cli`, `copilot-cli`, `gemini-cli`.</dd>
 
   <dt>`default_skill`</dt>
   <dd>Default skill to activate (default: `general`)</dd>

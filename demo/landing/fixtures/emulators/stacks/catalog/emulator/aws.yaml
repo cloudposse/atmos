@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Local AWS cloud (Floci). `atmos emulator up aws -s <stack>` starts it; the
+# local-aws identity (atmos.yaml) wires Terraform to its live endpoint.
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: us-east-1
+      # Pin the Floci image to the known-good release the test suite verifies.
+      # Keep this digest in sync with tests/floci_containers_test.go.
+      container:
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2

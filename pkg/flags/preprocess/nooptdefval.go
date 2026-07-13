@@ -15,6 +15,9 @@ type FlagInfo interface {
 	GetShorthand() string
 	// GetNoOptDefVal returns the flag's NoOptDefVal sentinel value.
 	GetNoOptDefVal() string
+	// GetNoOptDefValConsumesNextArg reports whether "--flag value" should be
+	// rewritten to "--flag=value".
+	GetNoOptDefValConsumesNextArg() bool
 }
 
 // NoOptDefValPreprocessor rewrites space-separated syntax to equals syntax
@@ -65,13 +68,14 @@ func (p *NoOptDefValPreprocessor) Preprocess(args []string) []string {
 	return p.preprocessArgs(args, noOptDefValFlags)
 }
 
-// buildNoOptDefValFlagsSet builds a set of flag names (long and short) that have NoOptDefVal.
+// buildNoOptDefValFlagsSet builds a set of flag names (long and short) that have NoOptDefVal
+// and allow space-separated optional values.
 func (p *NoOptDefValPreprocessor) buildNoOptDefValFlagsSet() map[string]bool {
 	defer perf.Track(nil, "preprocess.NoOptDefValPreprocessor.buildNoOptDefValFlagsSet")()
 
 	noOptDefValFlags := make(map[string]bool)
 	for _, flag := range p.flags {
-		if flag.GetNoOptDefVal() != "" {
+		if flag.GetNoOptDefVal() != "" && flag.GetNoOptDefValConsumesNextArg() {
 			noOptDefValFlags[flag.GetName()] = true
 			if shorthand := flag.GetShorthand(); shorthand != "" {
 				noOptDefValFlags[shorthand] = true

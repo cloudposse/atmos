@@ -45,6 +45,97 @@ func TestLoadConfig_ProfilesDefault_LoadsWhenNoFlagOrEnv(t *testing.T) {
 		"profiles.default should populate ProfilesFromArg with 'developer'")
 }
 
+func TestLoadConfig_ProfileDefaultCanImportAuthConfig(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+	t.Setenv("ATMOS_PROFILE", "")
+	require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "profiles", "managers", "imports"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(`
+base_path: .
+profiles:
+  base_path: profiles
+  default: managers
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "profiles", "managers", "imports", "auth.yaml"), []byte(`
+auth:
+  providers:
+    imported-provider:
+      kind: aws/iam-identity-center
+      region: us-east-1
+  identities:
+    imported-identity:
+      via:
+        provider: imported-provider
+      principal:
+        account:
+          name: imported
+settings:
+  terminal:
+    max_width: 100
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "profiles", "managers", "atmos.yaml"), []byte(`
+import:
+  - imports/auth.yaml
+settings:
+  terminal:
+    max_width: 120
+`), 0o644))
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := LoadConfig(&configAndStacksInfo)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"managers"}, configAndStacksInfo.ProfilesFromArg)
+	assert.Contains(t, atmosConfig.Auth.Providers, "imported-provider")
+	assert.Contains(t, atmosConfig.Auth.Identities, "imported-identity")
+	assert.Equal(t, 120, atmosConfig.Settings.Terminal.MaxWidth,
+		"profile file should override values from imported profile config")
+}
+
+func TestLoadConfig_ProfileCanOverrideYAMLKeyDelimiter(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+	t.Setenv("ATMOS_PROFILE", "")
+	require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "profiles", "developer"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(`
+base_path: .
+profiles:
+  base_path: profiles
+  default: developer
+settings:
+  yaml:
+    key_delimiter: "::"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "profiles", "developer", "settings.yaml"), []byte(`
+settings:
+  yaml:
+    key_delimiter: "."
+`), 0o644))
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := LoadConfig(&configAndStacksInfo)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"developer"}, configAndStacksInfo.ProfilesFromArg)
+	assert.Equal(t, ".", atmosConfig.Settings.YAML.KeyDelimiter)
+}
+
 // TestLoadConfig_ProfilesDefault_OverriddenByExplicitFlag verifies that an
 // explicit --profile value takes precedence over profiles.default.
 func TestLoadConfig_ProfilesDefault_OverriddenByExplicitFlag(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,8 +14,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -129,6 +133,60 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	return nil
 }
 
+// onBeforeTest handles the before.terraform.test event.
+// Creates a check run with in_progress status.
+func (p *Plugin) onBeforeTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeTest")()
+
+	if isCheckEnabled(ctx.Config) {
+		if err := p.createCheckRun(ctx); err != nil {
+			logCheckRunError("CI check run creation skipped", err)
+		}
+	}
+	return nil
+}
+
+// onAfterTest handles the after.terraform.test event.
+// Writes the pass/fail summary, outputs, and updates the check run. There is no
+// planfile to upload and no PR comment for tests.
+func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterTest")()
+
+	result := p.parseOutputWithError(ctx)
+
+	// Summary -- warn-only.
+	var renderedSummary string
+	if isSummaryEnabled(ctx.Config) {
+		var err error
+		renderedSummary, err = p.writeSummary(ctx, result)
+		if err != nil {
+			log.Warn("CI summary failed", "error", err)
+		}
+	}
+
+	// Output -- warn-only. Also write a JUnit report (file + `junit_report` path).
+	if isOutputEnabled(ctx.Config) {
+		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
+			log.Warn("CI output failed", "error", err)
+		}
+		p.writeJUnitReport(ctx, result)
+	}
+
+	// Annotations -- warn-only. Inline `::error file:line` per failing assertion.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitTestAnnotations(ctx, result)
+	}
+
+	// Check -- warn-only.
+	if isCheckEnabled(ctx.Config) {
+		if err := p.updateCheckRun(ctx, result); err != nil {
+			logCheckRunError("CI check run update skipped", err)
+		}
+	}
+
+	return nil
+}
+
 // onBeforeDeploy handles the before.terraform.deploy event.
 // Downloads planfile from storage with stored prefix for verification.
 // Download is warn-only: deploy can proceed without a stored planfile.
@@ -144,9 +202,17 @@ func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	}
 
 	// Download -- warn-only (deploy works without a stored planfile).
-	// Skip if planfile storage is not configured.
+	// Skip if planfile storage is not configured, or if verification resolves to
+	// off (the downloaded stored plan would never be used). This hook only runs
+	// under CI, so resolve with ciEnabled=true.
 	if isPlanfileStorageEnabled(ctx.Config) {
-		if err := p.downloadPlanfileForVerification(ctx); err != nil {
+		var cliOverride schema.PlanfileVerifyMode
+		if ctx.Info != nil {
+			cliOverride = ctx.Info.VerifyPlanMode
+		}
+		if planfile.ResolveVerifyMode(ctx.Config, true, cliOverride) == schema.PlanfileVerifyOff {
+			log.Debug("Planfile verification is off; skipping stored-plan download", "event", "before.terraform.deploy")
+		} else if err := p.downloadPlanfileForVerification(ctx); err != nil {
 			log.Warn("CI hook handler failed", "event", "before.terraform.deploy", "error", err)
 		}
 	}
@@ -264,7 +330,7 @@ func (p *Plugin) downloadPlanfileForVerification(ctx *plugin.HookContext) error 
 // resource counts, output values, and error message bodies.
 //
 // Semantics by command:
-//   - apply/deploy: HasErrors = (exitCode != 0).
+//   - apply/deploy/destroy: HasErrors = (exitCode != 0).
 //   - plan: HasErrors = (exitCode == 1); exitCode == 2 implies HasChanges.
 //   - other commands: HasErrors = (exitCode != 0).
 //
@@ -276,8 +342,9 @@ func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputRes
 	result.ExitCode = ctx.ExitCode
 
 	// Derive HasErrors from exit code semantics. `terraform plan` uses
-	// -detailed-exitcode (0 = no change, 1 = error, 2 = change); apply/deploy
-	// and other commands treat any non-zero code as failure.
+	// -detailed-exitcode (0 = no change, 1 = error, 2 = change);
+	// apply/deploy/destroy and other commands treat any non-zero code as
+	// failure.
 	hasErrors := false
 	switch ctx.Command {
 	case "plan":
@@ -708,11 +775,40 @@ func (p *Plugin) resolveArtifactPath(ctx *plugin.HookContext) string {
 	ctx.Info.ComponentFolderPrefixReplaced = resolved.ComponentFolderPrefixReplaced
 	ctx.Info.ComponentSection = resolved.ComponentSection
 
+	if !applyResolvedWorkdirArtifactPath(ctx.Config, &resolved) {
+		return ""
+	}
+	ctx.Info.ComponentSection = resolved.ComponentSection
+
 	path := e.ConstructTerraformComponentPlanfilePath(ctx.Config, &resolved)
 	if path != "" {
 		ctx.Info.PlanFile = path
 	}
 	return path
+}
+
+func applyResolvedWorkdirArtifactPath(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return true
+	}
+
+	candidate, exists, err := component.BuildAndResolveWorkdirPath(config, info, cfg.TerraformComponentType)
+	if err != nil {
+		log.Warn("Failed to resolve workdir artifact path; planfile upload will be skipped", "error", err)
+		return false
+	}
+	if !exists {
+		// A workdir-enabled component whose plan already ran should have a workdir;
+		// falling back to the source path may miss the actual planfile, so say so.
+		log.Warn("Workdir-enabled component's working directory does not exist; falling back to the source path for the planfile",
+			"path", candidate)
+		return true
+	}
+
+	// ComponentSection is never nil here: IsWorkdirEnabled above requires a
+	// populated provision.workdir map inside it.
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = candidate
+	return true
 }
 
 // buildPlanfileMetadata builds metadata for a planfile.
@@ -774,6 +870,18 @@ func isOutputEnabled(cfg *schema.AtmosConfiguration) bool {
 		return true
 	}
 	return *cfg.CI.Output.Enabled
+}
+
+// isAnnotationsEnabled checks if inline CI annotations are enabled. Defaults to
+// true (nil) under ci.enabled, mirroring the scanner-hook behavior.
+func isAnnotationsEnabled(cfg *schema.AtmosConfiguration) bool {
+	if cfg == nil {
+		return true
+	}
+	if cfg.CI.Annotations.Enabled == nil {
+		return true
+	}
+	return *cfg.CI.Annotations.Enabled
 }
 
 // isPlanfileStorageEnabled checks if planfile storage is configured.
@@ -854,6 +962,11 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 		return "No changes"
 	}
 
+	// Terraform test reports pass/fail counts rather than resource changes.
+	if testData, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
+		return buildTerraformTestStatusDescription(testData)
+	}
+
 	if result.HasErrors {
 		return "Failed"
 	}
@@ -867,6 +980,23 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 	}
 
 	return "No changes"
+}
+
+func buildTerraformTestStatusDescription(testData *plugin.TerraformTestOutputData) string {
+	parts := []string{fmt.Sprintf("%d passed", testData.Pass)}
+	if testData.Fail > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", testData.Fail))
+	}
+	if testData.Error > 0 {
+		parts = append(parts, fmt.Sprintf("%d errored", testData.Error))
+	}
+	if testData.Skip > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", testData.Skip))
+	}
+	if len(testData.CleanupFailures) > 0 {
+		parts = append(parts, fmt.Sprintf("%d cleanup failed", len(testData.CleanupFailures)))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // getContextPrefix returns the context prefix from configuration, defaulting to "atmos".

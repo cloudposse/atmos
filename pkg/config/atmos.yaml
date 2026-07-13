@@ -7,6 +7,16 @@ logs:
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 
+diagnostics:
+  # Machine-readable JSONL diagnostic events. Disabled by default.
+  # Can also be set using 'ATMOS_DIAGNOSTICS_ENABLED' ENV var.
+  enabled: false
+  # Can also be set using 'ATMOS_DIAGNOSTICS_FILE' ENV var.
+  file: ""
+  # Include masked subprocess stdout/stderr chunks in diagnostics.
+  # Can also be set using 'ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT' ENV var.
+  include_output: false
+
 settings:
   telemetry:
     enabled: true

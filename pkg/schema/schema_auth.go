@@ -75,9 +75,14 @@ type Identity struct {
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
 	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
+	Spec        map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Kind-specific SDK/client configuration.
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	// Emulator references an emulator component by name (resolved against the stack
+	// the command runs in). Used by emulator identity kinds (kind: <target>/emulator)
+	// to harvest the running emulator's connection profile (SDK env vars or kubeconfig).
+	Emulator string `yaml:"emulator,omitempty" json:"emulator,omitempty" mapstructure:"emulator"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.
@@ -166,7 +171,7 @@ type IntegrationSpec struct {
 	PolicyName    string   `yaml:"policy_name,omitempty" json:"policy_name,omitempty" mapstructure:"policy_name"`             // Optional trust policy name (default "default").
 	GitConfigMode string   `yaml:"git_config_mode,omitempty" json:"git_config_mode,omitempty" mapstructure:"git_config_mode"` // "env" (inline GIT_CONFIG_*) or "file" (include.path). Overrides settings.pro default.
 	RevokeOnExit  *bool    `yaml:"revoke_on_exit,omitempty" json:"revoke_on_exit,omitempty" mapstructure:"revoke_on_exit"`    // Auto-revoke minted tokens at command-end. Overrides settings.pro default.
-	TokenEnv      string   `yaml:"token_env,omitempty" json:"token_env,omitempty" mapstructure:"token_env"`                   // Env var name-pattern to export the raw minted token under (e.g. "GH_TOKEN" or "GH_TOKEN_{owner}"). Empty keeps the token off the environment (default).
+	TokenEnv      string   `yaml:"token_env,omitempty" json:"token_env,omitempty" mapstructure:"token_env"`                   // Env var name to export the raw minted token under: a literal (e.g. "GH_TOKEN") or a Go template over .owner/.host (e.g. "GH_TOKEN_{{ .owner }}"). Empty defaults to "ATMOS_PRO_GITHUB_TOKEN" so the token bridges to gh/REST and Atmos's in-process git detector.
 }
 
 // ECRRegistry represents an ECR registry configuration for aws/ecr integrations.

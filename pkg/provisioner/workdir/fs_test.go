@@ -321,6 +321,73 @@ func TestSyncDir_SkipsAtmosDir(t *testing.T) {
 	assert.Equal(t, `{"test": true}`, string(content))
 }
 
+func TestSyncDir_SkipsTerraformAndOpenTofuRuntimeDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	dstDir := filepath.Join(tmpDir, "dst")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("resource"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, terraformDataDir, "providers"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, terraformDataDir, "providers", "from-src"), []byte("cache"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, terraformWorkspaceStateDir, "workspace"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, terraformWorkspaceStateDir, "workspace", "from-src"), []byte("state"), 0o644))
+
+	dstProviderCache := filepath.Join(dstDir, terraformDataDir, "providers", "existing")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dstProviderCache), 0o755))
+	require.NoError(t, os.WriteFile(dstProviderCache, []byte("keep"), 0o644))
+	dstState := filepath.Join(dstDir, terraformWorkspaceStateDir, "workspace", "existing")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dstState), 0o755))
+	require.NoError(t, os.WriteFile(dstState, []byte("keep"), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+
+	changed, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	content, err := os.ReadFile(filepath.Join(dstDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "resource", string(content))
+
+	_, err = os.Stat(filepath.Join(dstDir, terraformDataDir, "providers", "from-src"))
+	assert.True(t, os.IsNotExist(err), "source Terraform/OpenTofu data dir should not be copied")
+	_, err = os.Stat(filepath.Join(dstDir, terraformWorkspaceStateDir, "workspace", "from-src"))
+	assert.True(t, os.IsNotExist(err), "source terraform.tfstate.d state should not be copied")
+
+	content, err = os.ReadFile(dstProviderCache)
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(content))
+	content, err = os.ReadFile(dstState)
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(content))
+}
+
+func TestDefaultHasher_HashDir_SkipsTerraformAndOpenTofuRuntimeDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("resource"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, terraformDataDir, "providers"), 0o755))
+	providerCache := filepath.Join(tmpDir, terraformDataDir, "providers", "cache")
+	require.NoError(t, os.WriteFile(providerCache, []byte("first"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, terraformWorkspaceStateDir, "workspace"), 0o755))
+	stateFile := filepath.Join(tmpDir, terraformWorkspaceStateDir, "workspace", "state")
+	require.NoError(t, os.WriteFile(stateFile, []byte("first"), 0o644))
+
+	hasher := NewDefaultHasher()
+	hash1, err := hasher.HashDir(tmpDir)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(providerCache, []byte("second"), 0o644))
+	require.NoError(t, os.WriteFile(stateFile, []byte("second"), 0o644))
+
+	hash2, err := hasher.HashDir(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, hash1, hash2)
+}
+
 // Tests for DefaultPathFilter.
 
 func TestDefaultPathFilter_Match_NoPatterns(t *testing.T) {
@@ -448,4 +515,40 @@ func TestSyncDir_UpdateChangedFile(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(dstDir, "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "new content", string(content))
+}
+
+// TestSyncDir_PreservesLockFiles verifies the providers-lock lifecycle is not disturbed by
+// source→workdir sync: the workdir's own canonical lock survives even though it is absent from
+// the source, and a committed per-instance lock in the source is NOT dragged into the workdir.
+func TestSyncDir_PreservesLockFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	dstDir := filepath.Join(tmpDir, "dst")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+
+	// Source: component code plus a committed per-instance lock.
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("resource {}"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".dev-vpc.terraform.lock.hcl"), []byte("per-instance"), 0o644))
+
+	// Workdir already holds its own canonical lock from a prior run (not present in source).
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, ".terraform.lock.hcl"), []byte("workdir-canonical"), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+	_, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+
+	// main.tf is synced.
+	_, err = os.Stat(filepath.Join(dstDir, "main.tf"))
+	assert.NoError(t, err)
+
+	// The workdir's canonical lock is preserved (not deleted by the sync).
+	got, err := os.ReadFile(filepath.Join(dstDir, ".terraform.lock.hcl"))
+	require.NoError(t, err)
+	assert.Equal(t, "workdir-canonical", string(got))
+
+	// The source's per-instance lock is NOT copied into the workdir.
+	_, err = os.Stat(filepath.Join(dstDir, ".dev-vpc.terraform.lock.hcl"))
+	assert.True(t, os.IsNotExist(err), "source per-instance lock must not be synced into the workdir")
 }

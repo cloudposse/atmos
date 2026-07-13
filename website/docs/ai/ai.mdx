@@ -14,8 +14,8 @@ import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Atmos works with your existing AI tools and brings its own native, built-in capabilities.
-Use **API providers** with purchased tokens (Anthropic, OpenAI, Bedrock, Azure OpenAI, Gemini, Grok, Ollama),
-or use **CLI providers** that reuse your existing subscription (Claude Code, OpenAI Codex, Gemini CLI) — no API keys needed.
+Use **API providers** with purchased tokens (Anthropic, OpenAI, Bedrock, Azure OpenAI, Gemini, GitHub Models, Grok, Ollama),
+or use **CLI providers** that reuse your existing subscription (Claude Code, OpenAI Codex, GitHub Copilot, Gemini CLI) — no API keys needed.
 </Intro>
 
 <Experimental />
@@ -38,13 +38,13 @@ ai:
 
 ### With Your Existing Subscription (No API Key)
 
-Use your locally installed Claude Code, OpenAI Codex, or Gemini CLI binary. The CLI tool handles auth via its own subscription — no API key configuration needed.
+Use your locally installed Claude Code, OpenAI Codex, GitHub Copilot, or Gemini CLI binary. The CLI tool handles auth via its own subscription — no API key configuration needed.
 
 <File title="atmos.yaml">
 ```yaml
 ai:
   enabled: true
-  default_provider: "claude-code"  # or "codex-cli" or "gemini-cli"
+  default_provider: "claude-code"  # or "codex-cli", "copilot-cli", "gemini-cli"
   providers:
     claude-code:
       max_turns: 10
@@ -58,6 +58,9 @@ brew install --cask claude-code && claude auth login
 
 # OpenAI Codex
 npm install -g @openai/codex && codex login
+
+# GitHub Copilot CLI
+npm install -g @github/copilot && copilot   # then /login (or set GH_TOKEN)
 
 # Gemini CLI (authenticates on first run)
 npm install -g @google/gemini-cli && gemini
@@ -113,6 +116,7 @@ Atmos supports two types of AI providers:
 | OpenAI        | `openai`      | `OPENAI_API_KEY`       |
 | Google Gemini | `gemini`      | `GEMINI_API_KEY`       |
 | Grok (xAI)    | `grok`        | `XAI_API_KEY`          |
+| GitHub Models | `github`      | `GITHUB_TOKEN`         |
 | AWS Bedrock   | `bedrock`     | AWS IAM credentials    |
 | Azure OpenAI  | `azureopenai` | `AZURE_OPENAI_API_KEY` |
 | Ollama        | `ollama`      | None (local)           |
@@ -124,11 +128,12 @@ The CLI tool manages its own tool execution loop, and MCP servers are passed thr
 |--------------|---------------|----------|-------------------------------|-------------------------------|
 | Claude Code  | `claude-code` | `claude` | Claude Pro/Max subscription   | Full                          |
 | OpenAI Codex | `codex-cli`   | `codex`  | ChatGPT Plus/Pro subscription | Full                          |
+| GitHub Copilot | `copilot-cli` | `copilot` | Copilot subscription (`/login` or `GH_TOKEN`) | Full |
 | Gemini CLI   | `gemini-cli`  | `gemini` | Google account (free tier)    | Blocked for personal accounts |
 
 :::tip When to use which
 - **Interactive development with MCP** — `claude-code` or `codex-cli` (subscription, full MCP), or any of the API providers
-- **CI/CD pipelines** — API providers (env var auth, no interactive login)
+- **CI/CD pipelines** — API providers (env var auth, no interactive login); `github` is zero-secret in GitHub Actions (built-in `GITHUB_TOKEN` with `permissions: models: read`)
 - **Cost-conscious** — `gemini-cli` (free tier, prompt-only)
 - **Enterprise** — `bedrock` or `azureopenai` (compliance, audit trails)
 :::
@@ -226,7 +231,7 @@ ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc 
 
 ## Agent Skills
 
-Atmos ships 21+ agent skills that give AI coding assistants deep knowledge of Atmos conventions.
+Atmos ships 25 agent skills that give AI coding assistants deep knowledge of Atmos conventions.
 Skills follow the [Agent Skills](https://agentskills.io) open standard and work across Claude Code,
 Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
 
@@ -256,13 +261,14 @@ in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos t
 only the servers relevant to your question using a lightweight routing call. This keeps tool payloads small
 and responses fast. Use the `--mcp` flag to override and specify servers directly.
 
-**MCP Pass-Through** — With CLI AI providers (`claude-code`, `codex-cli`), all configured MCP servers are
+**MCP Pass-Through** — With CLI AI providers (`claude-code`, `codex-cli`, `copilot-cli`), all configured MCP servers are
 passed to the CLI tool via its native config format. The CLI tool decides which servers to use.
 Smart routing is skipped — the AI model handles server selection internally.
 
 :::note CLI Provider MCP
 - **Claude Code**: MCP servers passed via `--mcp-config` temp file
 - **Codex CLI**: MCP servers written to `~/.codex/config.toml` (backup/restore)
+- **Copilot CLI**: MCP servers merged into `~/.copilot/mcp-config.json` (backup/restore)
 - **Gemini CLI**: MCP blocked for personal Google accounts (`oauth-personal` auth)
 :::
 

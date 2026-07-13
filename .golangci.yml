@@ -20,6 +20,11 @@
 version: "2"
 run:
   tests: true
+  # golangci-lint takes a machine-global single-instance lock. Parallel
+  # worktree sessions (and pre-commit hooks racing manual runs) otherwise fail
+  # with "parallel golangci-lint is running"; serializing makes the second
+  # instance wait instead.
+  allow-serial-runners: true
 linters:
   enable:
     - bodyclose
@@ -64,6 +69,10 @@ linters:
             - "!**/pkg/auth/identities/**"
             - "!**/pkg/auth/cloud/**"
             - "!**/pkg/auth/factory/**"
+            # pkg/store is the cloud-backend storage layer (SSM, Secrets Manager, Vault,
+            # Azure Key Vault, GCP Secret Manager); it legitimately uses cloud SDKs and is
+            # not provider-agnostic auth code.
+            - "!**/pkg/store/**"
             - "!**/pkg/auth/types/aws_credentials.go"
             - "!**/pkg/auth/types/github_oidc_credentials.go"
             - "!**/pkg/ai/**"
@@ -148,6 +157,10 @@ linters:
           msg: Use `log.Debug()` for debug messages instead of `log.Warn()` with "DEBUG" in the message
         - pattern: log\.Error\(.*[Dd][Ee][Bb][Uu][Gg]
           msg: Use `log.Debug()` for debug messages instead of `log.Error()` with "DEBUG" in the message
+        - pattern: '^fmt\.Print(f|ln)?$'
+          msg: Use Atmos output helpers (`data.Write*` for stdout, `ui.Write*` for stderr) instead of direct `fmt.Print*` output
+        - pattern: 'fmt\.Fprint(f|ln)?\(\s*os\.(Stdout|Stderr)'
+          msg: Use Atmos output helpers (`data.Write*`/`ui.Write*`) or `iolib.Data`/`iolib.UI` instead of writing directly to `os.Stdout` or `os.Stderr`
         # Flag Binding Protection: ENFORCED
         # pkg/flags/ infrastructure is fully implemented - these patterns are now banned outside pkg/flags/.
         - pattern: viper\.BindEnv\(
@@ -323,6 +336,16 @@ linters:
           - forbidigo
         path: _test\.go$
         text: "viper\\.BindEnv|viper\\.BindPFlag"
+      # Legacy direct process output. New production code should use the Atmos
+      # I/O layer so stdout/stderr routing and masking stay consistent.
+      - linters:
+          - forbidigo
+        path: ^(cmd/auth/(env|list)\.go|cmd/cmd_utils\.go|cmd/devcontainer/helpers\.go|cmd/docs\.go|cmd/profile/(list|show)\.go|cmd/version/formatters\.go|internal/exec/(atmos|workflow_utils)\.go|pkg/ai/(context\.go|session/manager\.go|tools/permission/prompter\.go)|pkg/auth/(cloud/kube/config\.go|credentials/store\.go|identities/aws/webflow_ui\.go|providers/aws/sso\.go|providers/azure/device_code_ui\.go)|pkg/ci/providers/generic/provider\.go|pkg/devcontainer/(lifecycle_config|lifecycle_list)\.go|pkg/env/output\.go|pkg/pager/pager\.go|pkg/terminal/terminal\.go|pkg/ui/markdown/codeblock\.go|pkg/utils/version_utils\.go|tools/gomodcheck/main\.go)$
+        text: "Atmos output helpers|direct `fmt\\.Print\\*` output|writing directly to `os\\.Stdout` or `os\\.Stderr`"
+      - linters:
+          - forbidigo
+        path: ^tests/testhelpers/fake_container_runtime\.go$
+        text: "Atmos output helpers|direct `fmt\\.Print\\*` output|writing directly to `os\\.Stdout` or `os\\.Stderr`"
       # These files are temporarily over the 500-line limit due to terraform caching refactoring.
       # TODO: Refactor these files to reduce their size.
       - linters:

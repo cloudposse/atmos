@@ -23,6 +23,7 @@ import (
 	aiTypes "github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -85,6 +86,7 @@ var availableProviders = []struct {
 	{providerAnthropic, "Anthropic (Claude) - Industry-leading reasoning and coding"},
 	{"openai", "OpenAI (GPT) - Most popular, widely adopted models"},
 	{"gemini", "Google (Gemini) - Strong multimodal capabilities"},
+	{"github", "GitHub Models - Zero-secret CI with the built-in GITHUB_TOKEN"},
 	{"grok", "xAI (Grok) - Real-time data access"},
 	{"ollama", "Ollama - Local models for privacy and offline use"},
 	{"bedrock", "AWS Bedrock - Enterprise-grade AI with AWS security and compliance"},
@@ -248,6 +250,7 @@ func initSpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	fps.Apply(&s)
 	return s
 }
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	stdio "io"
 	"strings"
 	"sync"
 
@@ -149,6 +150,21 @@ func setColorProfileInternal(profile termenv.Profile) {
 //	ui.SetColorProfile(termenv.Ascii)
 func SetColorProfile(profile termenv.Profile) {
 	setColorProfileInternal(profile)
+
+	// The global formatter caches theme.GetCurrentStyles() as a snapshot at
+	// InitFormatter() time (see NewFormatter below). theme.InvalidateStyleCache
+	// (called by setColorProfileInternal) regenerates that package-level cache
+	// under a new pointer, but doesn't reach the formatter's already-captured
+	// copy — so ui.Success/Error/Warning/Info (which read the formatter's
+	// cached styles) would otherwise keep rendering with the pre-change
+	// profile even though direct theme.GetCurrentStyles() callers (e.g. step
+	// headers) pick up the change immediately. Refresh it here so every
+	// ui.* output function reflects the new profile right away.
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	if globalFormatter != nil {
+		globalFormatter.styles = theme.GetCurrentStyles()
+	}
 }
 
 // GetColorProfile returns the configured termenv color profile.
@@ -169,6 +185,36 @@ func GetColorProfile() termenv.Profile {
 	defer perf.Track(nil, "ui.GetColorProfile")()
 
 	return lipgloss.DefaultRenderer().ColorProfile()
+}
+
+// NewRenderer returns a lipgloss renderer bound to w that uses the globally
+// detected color profile (terminal detection plus force flags) with a dark
+// background assumed. Use this instead of lipgloss.NewRenderer so per-writer
+// renderers share the single Atmos color-detection pipeline instead of
+// re-detecting capabilities from the writer (which degrades to 16 colors on
+// pipes and breaks the --force-color TrueColor contract).
+func NewRenderer(w stdio.Writer) *lipgloss.Renderer {
+	defer perf.Track(nil, "ui.NewRenderer")()
+
+	renderer := lipgloss.NewRenderer(w)
+	renderer.SetColorProfile(GetColorProfile())
+	renderer.SetHasDarkBackground(true)
+	return renderer
+}
+
+// TerminalWidth returns the stdout width from the global terminal detection:
+// the real TTY size when available, or 0 when unknown (non-TTY streams ignore
+// COLUMNS so CI snapshots and piped output keep stable wrapping; callers apply
+// their own defaults). Returns 0 when the formatter has not been initialized.
+func TerminalWidth() int {
+	defer perf.Track(nil, "ui.TerminalWidth")()
+
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+	if globalTerminal == nil {
+		return 0
+	}
+	return globalTerminal.Width(terminal.Stdout)
 }
 
 // getFormatter returns the global formatter instance.
@@ -528,6 +574,22 @@ func FormatExperimentalBadge() string {
 	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
 }
 
+// FormatComponentLabel renders a short colored badge for a per-item label (e.g. a
+// container log prefix), cycling background colors by index so each item gets a
+// distinct, stable color in the log-level label style. When color is
+// unsupported (non-TTY, NO_COLOR, dumb terminal) it degrades to a plain `[name]`
+// label so output stays readable in pipes and CI.
+func FormatComponentLabel(name string, index int) string {
+	f, err := getFormatter()
+	if err != nil || !f.SupportsColor() {
+		return "[" + name + "]"
+	}
+	if index < 0 {
+		index = 0
+	}
+	return theme.ComponentLabelStyle(index).Render(name)
+}
+
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Writef(format string, a ...interface{}) {
@@ -835,7 +897,7 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	result, _ := f.toastMarkdown("ℹ", &f.styles.Info, text)
+	result, _ := f.toastMarkdown(theme.IconInfo, &f.styles.Info, text)
 	return result
 }
 
