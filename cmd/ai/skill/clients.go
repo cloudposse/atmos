@@ -21,16 +21,18 @@ import (
 // uninstall.go, and the scope-resolution helpers below.
 const scopeFlag = "scope"
 
-// resolveSkillClients resolves which AI clients `atmos ai skill install`/
-// `uninstall` should target. An explicit --client/--all-clients flag always
-// wins; otherwise this is "auto" mode: only ever act on what
-// marketplace.DetectClients actually finds -- interactively, that means
-// pre-checking the detected clients in a picker the user can adjust;
-// non-interactively (skipPrompt, no TTY, or CI), it means using exactly the
-// detected list, which may be empty. Auto mode never silently falls back to
-// every supported client just because nothing was detected -- that's what
-// --all-clients is for. Mirrors cmd/mcp/client.resolveInstallClients.
-func resolveSkillClients(basePath string, v *viper.Viper, skipPrompt bool, title string, scope string) ([]string, error) {
+// resolveSkillClients resolves which AI clients `atmos ai skill install`
+// should target (uninstall uses resolveUninstallClients instead, since it
+// must consider every scope in play rather than one). An explicit
+// --client/--all-clients flag always wins; otherwise this is "auto" mode:
+// only ever act on what marketplace.DetectClients actually finds --
+// interactively, that means pre-checking the detected clients in a picker
+// the user can adjust; non-interactively (skipPrompt, no TTY, or CI), it
+// means using exactly the detected list, which may be empty. Auto mode
+// never silently falls back to every supported client just because nothing
+// was detected -- that's what --all-clients is for. Mirrors
+// cmd/mcp/client.resolveInstallClients.
+func resolveSkillClients(basePath string, v *viper.Viper, skipPrompt bool, scope string) ([]string, error) {
 	clients := v.GetStringSlice("client")
 	if len(clients) > 0 {
 		return clients, nil
@@ -46,6 +48,7 @@ func resolveSkillClients(basePath string, v *viper.Viper, skipPrompt bool, title
 		}
 		return detected, nil
 	}
+	title := "Install skill into which clients?"
 	if scope == marketplace.ScopeUser {
 		title += " (user scope)"
 	}

@@ -826,7 +826,7 @@ func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
 
 	err := uninstallCmd.RunE(uninstallCmd, []string{})
 	require.NoError(t, err)
-	assert.Contains(t, uiOutput.String(), "skills uninstalled successfully")
+	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "skills uninstalled successfully")
 
 	_, statErr := os.Stat(filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform"))
 	assert.True(t, os.IsNotExist(statErr), "skill directory should be removed")

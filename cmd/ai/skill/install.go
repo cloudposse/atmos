@@ -67,7 +67,7 @@ var installCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			clients, err = resolveSkillClients(basePath, v, skipConfirm, "Install skill into which clients?", scope)
+			clients, err = resolveSkillClients(basePath, v, skipConfirm, scope)
 			if err != nil {
 				return err
 			}

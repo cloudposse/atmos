@@ -21,7 +21,7 @@ func TestResolveSkillClients_AutoNoFallbackWhenNothingDetected(t *testing.T) {
 	base := t.TempDir()
 	v := viper.New()
 
-	clients, err := resolveSkillClients(base, v, true, "Install skill into which clients?", marketplace.ScopeProject)
+	clients, err := resolveSkillClients(base, v, true, marketplace.ScopeProject)
 
 	require.NoError(t, err)
 	assert.Empty(t, clients, "auto mode must not fall back to installing into every supported client")
@@ -32,7 +32,7 @@ func TestResolveSkillClients_AutoUsesExactlyWhatWasDetected(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(base, ".vscode"), 0o755))
 	v := viper.New()
 
-	clients, err := resolveSkillClients(base, v, true, "Install skill into which clients?", marketplace.ScopeProject)
+	clients, err := resolveSkillClients(base, v, true, marketplace.ScopeProject)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{marketplace.ClientVSCode}, clients)
@@ -43,7 +43,7 @@ func TestResolveSkillClients_ExplicitClientBypassesDetection(t *testing.T) {
 	v := viper.New()
 	v.Set("client", []string{"vscode"})
 
-	clients, err := resolveSkillClients(base, v, true, "Install skill into which clients?", marketplace.ScopeProject)
+	clients, err := resolveSkillClients(base, v, true, marketplace.ScopeProject)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"vscode"}, clients)
@@ -56,7 +56,7 @@ func TestResolveSkillClients_ExplicitClientWinsEvenInteractively(t *testing.T) {
 
 	// skipPrompt is false here, but the explicit --client flag must still win
 	// without ever driving the interactive picker.
-	clients, err := resolveSkillClients(base, v, false, "Install skill into which clients?", marketplace.ScopeProject)
+	clients, err := resolveSkillClients(base, v, false, marketplace.ScopeProject)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"claude-code"}, clients)
@@ -67,7 +67,7 @@ func TestResolveSkillClients_AllClientsBypassesDetectionEvenWhenEmpty(t *testing
 	v := viper.New()
 	v.Set("all-clients", true)
 
-	clients, err := resolveSkillClients(base, v, true, "Install skill into which clients?", marketplace.ScopeProject)
+	clients, err := resolveSkillClients(base, v, true, marketplace.ScopeProject)
 
 	require.NoError(t, err)
 	assert.ElementsMatch(t, marketplace.SupportedClients, clients)
@@ -78,7 +78,7 @@ func TestResolveSkillClients_AllClientsWinsEvenInteractively(t *testing.T) {
 	v := viper.New()
 	v.Set("all-clients", true)
 
-	clients, err := resolveSkillClients(base, v, false, "Install skill into which clients?", marketplace.ScopeProject)
+	clients, err := resolveSkillClients(base, v, false, marketplace.ScopeProject)
 
 	require.NoError(t, err)
 	assert.ElementsMatch(t, marketplace.SupportedClients, clients)

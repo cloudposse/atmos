@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
@@ -143,11 +144,12 @@ func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
 
 	err := installCmd.RunE(installCmd, []string{})
 	require.NoError(t, err)
-	assert.Contains(t, uiOutput.String(), "Discovered")
-	assert.Contains(t, uiOutput.String(), "skills installed successfully in",
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "Discovered")
+	assert.Contains(t, output, "skills installed successfully in",
 		"batch install should say where the skills landed, combined with the count on one line")
-	assert.Contains(t, uiOutput.String(), filepath.Join("~", ".atmos", "skills"))
-	assert.NotContains(t, uiOutput.String(), "atmos ai chat",
+	assert.Contains(t, output, filepath.Join("~", ".atmos", "skills"))
+	assert.NotContains(t, output, "atmos ai chat",
 		"a plain CLI install is never run from inside atmos ai chat, so this hint must never print")
 
 	// A representative skill actually landed on disk under the fake HOME.
@@ -188,8 +190,9 @@ func TestInstallCmd_RunE_DistributingToShowsRealClientDirectory(t *testing.T) {
 	err := installCmd.RunE(installCmd, []string{})
 	require.NoError(t, err)
 
-	assert.Contains(t, uiOutput.String(), "claude-code")
-	assert.Contains(t, uiOutput.String(), filepath.Join("~", ".claude", "skills"),
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "claude-code")
+	assert.Contains(t, output, filepath.Join("~", ".claude", "skills"),
 		"the distribution line must show claude-code's actual skill directory, not Atmos's own ~/.atmos/skills store")
 }
 
@@ -221,10 +224,11 @@ func TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled(t *te
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, installCmd.RunE(installCmd, []string{}))
 
-	assert.Contains(t, uiOutput.String(), "0 skills installed")
-	assert.NotContains(t, uiOutput.String(), filepath.Join(".atmos", "skills"),
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "0 skills installed")
+	assert.NotContains(t, output, filepath.Join(".atmos", "skills"),
 		"nothing was installed, so there's no location to report")
-	assert.NotContains(t, uiOutput.String(), "atmos ai chat")
+	assert.NotContains(t, output, "atmos ai chat")
 }
 
 func TestInstallCmd_Examples(t *testing.T) {
