@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -39,7 +40,7 @@ type ComponentsOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
-	OnError          string
+	ErrorMode        string
 }
 
 // componentsCmd lists atmos components.
@@ -102,7 +103,7 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		OnError:          v.GetString("on-error"),
+		ErrorMode:        v.GetString("error-mode"),
 	}
 }
 
@@ -149,7 +150,7 @@ func init() {
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
-		WithOnErrorFlag,
+		WithErrorModeFlag,
 	)
 
 	// Register flags.
@@ -170,33 +171,44 @@ func listComponentsWithOptions(cmd *cobra.Command, args []string, opts *Componen
 	defer perf.Track(nil, "list.components.listComponentsWithOptions")()
 
 	// Initialize configuration and extract components.
-	atmosConfig, components, err := initAndExtractComponents(cmd, args, opts)
+	result, err := initAndExtractComponents(cmd, args, opts)
 	if err != nil {
 		return err
 	}
+	defer printErrorModeSummary(opts.ErrorMode, result.collector)
 
-	if len(components) == 0 {
+	if len(result.components) == 0 {
 		ui.Info("No components found")
 		return nil
 	}
 
 	// Build and execute render pipeline.
-	return renderComponents(atmosConfig, opts, components)
+	return renderComponents(result.atmosConfig, opts, result.components)
 }
 
-// initAndExtractComponents initializes config and extracts components from stacks.
-func initAndExtractComponents(cmd *cobra.Command, args []string, opts *ComponentsOptions) (*schema.AtmosConfiguration, []map[string]any, error) {
+// componentsExtractResult bundles initAndExtractComponents' outputs so the function stays
+// within revive's function-result-limit.
+type componentsExtractResult struct {
+	atmosConfig *schema.AtmosConfiguration
+	components  []map[string]any
+	collector   *degradation.Collector
+}
+
+// initAndExtractComponents initializes config and extracts components from stacks. The
+// returned Collector (nil unless opts.ErrorMode is "warn"/"silent") should be summarized
+// via printErrorModeSummary only after the caller has finished writing output.
+func initAndExtractComponents(cmd *cobra.Command, args []string, opts *ComponentsOptions) (componentsExtractResult, error) {
 	defer perf.Track(nil, "list.components.initAndExtractComponents")()
 
 	// Process command line args to get ConfigAndStacksInfo with CLI flags.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
-		return nil, nil, err
+		return componentsExtractResult{}, err
 	}
 
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
+		return componentsExtractResult{}, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}
 
 	// If format is empty, check command-specific config.
@@ -204,13 +216,18 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		opts.Format = atmosConfig.Components.List.Format
 	}
 
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// list.error_mode, else "warn".
+	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
+
 	// Create AuthManager for authentication support.
 	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
 	if err != nil {
-		return nil, nil, err
+		return componentsExtractResult{}, err
 	}
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
+	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
@@ -220,10 +237,10 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		skip,
 		authManager,
 		authManager == nil,
-		describeStacksErrorOptions(opts.OnError),
+		errOpts,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+		return componentsExtractResult{}, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Extract unique components (deduplicated across all stacks).
@@ -231,10 +248,10 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// Pass the stack pattern to filter which stacks to consider when deduplicating.
 	components, err := extract.UniqueComponents(stacksMap, opts.Stack)
 	if err != nil {
-		return nil, nil, err
+		return componentsExtractResult{}, err
 	}
 
-	return &atmosConfig, components, nil
+	return componentsExtractResult{atmosConfig: &atmosConfig, components: components, collector: collector}, nil
 }
 
 // renderComponents builds the render pipeline and renders components.

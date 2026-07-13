@@ -153,6 +153,18 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 			},
 			expectedErr: true,
 		},
+		{
+			name: "Set error-mode explicitly",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Set("error-mode", "silent")
+			},
+			expected: &exec.DescribeDependentsExecProps{
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				ErrorMode:            "silent",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -163,6 +175,7 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 			fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
 			fs.StringP("output", "o", "list", "Specify the output type (`list` is default)")
 			fs.StringP("query", "q", "", "Specify a query to filter the output")
+			fs.String("error-mode", "", "How to handle recoverable errors")
 			tt.setFlags(fs)
 			describeDependentArgs := &exec.DescribeDependentsExecProps{}
 			err := setFlagsForDescribeDependentsCmd(fs, describeDependentArgs)
@@ -174,6 +187,22 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 			assert.Equal(t, tt.expected, describeDependentArgs)
 		})
 	}
+}
+
+func TestValidateDescribeDependentsErrorMode(t *testing.T) {
+	_ = NewTestKit(t)
+
+	for _, mode := range []string{"strict", "warn", "silent"} {
+		t.Run(mode, func(t *testing.T) {
+			err := validateDescribeDependentsErrorMode(&exec.DescribeDependentsExecProps{ErrorMode: mode})
+			assert.NoError(t, err)
+		})
+	}
+
+	t.Run("invalid", func(t *testing.T) {
+		err := validateDescribeDependentsErrorMode(&exec.DescribeDependentsExecProps{ErrorMode: "bogus"})
+		assert.ErrorIs(t, err, exec.ErrInvalidErrorMode)
+	})
 }
 
 func TestDescribeDependentsCmd_Error(t *testing.T) {

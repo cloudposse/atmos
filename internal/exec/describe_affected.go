@@ -59,6 +59,7 @@ type DescribeAffectedCmdArgs struct {
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
+	ErrorMode                   string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -80,6 +81,7 @@ type describeAffectedExec struct {
 		excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -96,6 +98,7 @@ type describeAffectedExec struct {
 		excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -111,6 +114,7 @@ type describeAffectedExec struct {
 		excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -122,6 +126,7 @@ type describeAffectedExec struct {
 		onlyInStack string,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -141,9 +146,9 @@ func NewDescribeAffectedExec(
 
 	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
-		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
-		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefClone,
-		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckout,
+		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPathWithOptions,
+		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefCloneWithOptions,
+		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions,
 		addDependentsToAffected:                      addDependentsToAffected,
 		printOrWriteToFile:                           printOrWriteToFile,
 		IsTTYSupportForStdout:                        term.IsTTYSupportForStdout,
@@ -172,11 +177,18 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
 
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// describe.error_mode, else "warn".
+	result.ErrorMode = ResolveErrorMode(result.ErrorMode, atmosConfig.Describe.ErrorMode)
+
 	if result.Format != "yaml" && result.Format != "json" && result.Format != "matrix" {
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
 	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
 		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
+	}
+	if result.ErrorMode != "strict" && result.ErrorMode != "warn" && result.ErrorMode != "silent" {
+		return DescribeAffectedCmdArgs{}, fmt.Errorf("%w: %q", ErrInvalidErrorMode, result.ErrorMode)
 	}
 
 	return result, nil
@@ -209,6 +221,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
+		"error-mode":                     &describe.ErrorMode,
 	}
 
 	// By default, process templates and YAML functions
@@ -318,6 +331,11 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	var repoUrl string
 	var err error
 
+	// Built once and reused across every describe-stacks call this command makes (HEAD,
+	// BASE, and any dependents resolution) so the end-of-command summary reports one
+	// combined count instead of one per call site.
+	errOptions, collector := ErrorOptionsFromMode(a.ErrorMode)
+
 	switch {
 	case a.RepoPath != "":
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
@@ -332,6 +350,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ExcludeLocked,
 			a.AuthManager,
 			a.AuthDisabled,
+			errOptions,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -349,6 +368,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ExcludeLocked,
 			a.AuthManager,
 			a.AuthDisabled,
+			errOptions,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -365,6 +385,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ExcludeLocked,
 			a.AuthManager,
 			a.AuthDisabled,
+			errOptions,
 		)
 	}
 	if err != nil {
@@ -373,7 +394,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
 		if err != nil {
 			return err
 		}
@@ -385,7 +406,12 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		affected = StripAffectedForUpload(affected)
 	}
 
-	return d.view(a, repoUrl, headHead, baseHead, affected)
+	if err := d.view(a, repoUrl, headHead, baseHead, affected); err != nil {
+		return err
+	}
+
+	PrintErrorModeSummary(a.ErrorMode, collector)
+	return nil
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {

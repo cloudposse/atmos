@@ -37,7 +37,7 @@ func TestDescribeStacksExec(t *testing.T) {
 					printOrWriteToFile: func(_ *schema.AtmosConfiguration, _, _ string, _ any) error {
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -56,7 +56,7 @@ func TestDescribeStacksExec(t *testing.T) {
 						assert.Equal(t, "test", data)
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -74,7 +74,7 @@ func TestDescribeStacksExec(t *testing.T) {
 					printOrWriteToFile: func(_ *schema.AtmosConfiguration, _, _ string, _ any) error {
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, filterByStack string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, filterByStack string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						assert.Equal(t, "test-stack", filterByStack)
 						return map[string]any{"filtered": true}, nil
 					},
@@ -95,7 +95,7 @@ func TestDescribeStacksExec(t *testing.T) {
 						assert.Equal(t, "output.json", file)
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"output": "to file"}, nil
 					},
 				}
@@ -108,7 +108,7 @@ func TestDescribeStacksExec(t *testing.T) {
 				return &describeStacksExec{
 					pageCreator:           pager.NewMockPageCreator(ctrl),
 					isTTYSupportForStdout: func() bool { return false },
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return nil, errors.New("execution error")
 					},
 				}
@@ -124,7 +124,7 @@ func TestDescribeStacksExec(t *testing.T) {
 				return &describeStacksExec{
 					pageCreator:           pager.NewMockPageCreator(ctrl),
 					isTTYSupportForStdout: func() bool { return false },
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -269,6 +269,122 @@ func TestExecuteDescribeStacks_Ansible(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.settings.ansible.playbook")
 	assert.Nil(t, err)
 	assert.Equal(t, "site.yml", val)
+}
+
+// ---------------------------------------------------------------------------
+// ErrorOptionsFromMode / PrintErrorModeSummary
+// ---------------------------------------------------------------------------
+
+func TestResolveErrorMode(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagValue    string
+		settingValue string
+		expected     string
+	}{
+		{name: "flag wins over setting", flagValue: "strict", settingValue: "silent", expected: "strict"},
+		{name: "setting used when flag unset", flagValue: "", settingValue: "silent", expected: "silent"},
+		{name: "defaults to warn when both unset", flagValue: "", settingValue: "", expected: "warn"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, ResolveErrorMode(tt.flagValue, tt.settingValue))
+		})
+	}
+}
+
+// TestResolveErrorMode_ListAndDescribeAreIndependent guards against list.error_mode and
+// describe.error_mode being read from a shared config field: setting one must have zero
+// effect on the other's resolution.
+func TestResolveErrorMode_ListAndDescribeAreIndependent(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.List.ErrorMode = "strict"
+
+	assert.Equal(t, "strict", ResolveErrorMode("", atmosConfig.List.ErrorMode))
+	assert.Equal(t, "warn", ResolveErrorMode("", atmosConfig.Describe.ErrorMode), "describe.error_mode must not inherit list.error_mode")
+
+	atmosConfig = schema.AtmosConfiguration{}
+	atmosConfig.Describe.ErrorMode = "silent"
+
+	assert.Equal(t, "silent", ResolveErrorMode("", atmosConfig.Describe.ErrorMode))
+	assert.Equal(t, "warn", ResolveErrorMode("", atmosConfig.List.ErrorMode), "list.error_mode must not inherit describe.error_mode")
+}
+
+func TestErrorOptionsFromMode(t *testing.T) {
+	tests := []struct {
+		name          string
+		errorMode     string
+		expectWarn    bool
+		expectNilColl bool
+	}{
+		{name: "strict returns strict with nil collector", errorMode: "strict", expectWarn: false, expectNilColl: true},
+		{name: "empty value is strict", errorMode: "", expectWarn: false, expectNilColl: true},
+		{name: "warn enables OnErrorWarn with a non-nil collector", errorMode: "warn", expectWarn: true, expectNilColl: false},
+		{name: "silent also enables OnErrorWarn with a non-nil collector", errorMode: "silent", expectWarn: true, expectNilColl: false},
+		{name: "unrecognized value is strict", errorMode: "bogus", expectWarn: false, expectNilColl: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, collector := ErrorOptionsFromMode(tt.errorMode)
+
+			if tt.expectWarn {
+				assert.Equal(t, OnErrorWarn, opts.OnError)
+				require.NotNil(t, opts.OnWarning)
+			} else {
+				assert.Equal(t, OnErrorMode(""), opts.OnError)
+				assert.Nil(t, opts.OnWarning)
+			}
+
+			if tt.expectNilColl {
+				assert.Nil(t, collector)
+			} else {
+				require.NotNil(t, collector)
+				assert.Equal(t, 0, collector.Count())
+				opts.OnWarning(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+				assert.Equal(t, 1, collector.Count())
+			}
+		})
+	}
+}
+
+func TestPrintErrorModeSummary(t *testing.T) {
+	t.Run("warn mode with nil collector does not panic", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("warn", nil)
+		})
+	})
+
+	t.Run("strict mode is a no-op even with a populated collector", func(t *testing.T) {
+		_, collector := ErrorOptionsFromMode("warn")
+		require.NotNil(t, collector)
+		collector.Add(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("strict", collector)
+		})
+	})
+
+	t.Run("silent mode is a no-op even with a populated collector", func(t *testing.T) {
+		_, collector := ErrorOptionsFromMode("silent")
+		require.NotNil(t, collector)
+		collector.Add(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("silent", collector)
+		})
+	})
+
+	t.Run("warn mode with a populated collector prints the summary", func(t *testing.T) {
+		_, collector := ErrorOptionsFromMode("warn")
+		require.NotNil(t, collector)
+		collector.Add(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("warn", collector)
+		})
+	})
 }
 
 // ---------------------------------------------------------------------------

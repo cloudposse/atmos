@@ -339,22 +339,33 @@ func WithProcessFunctionsFlag(options *[]flags.Option) {
 	)
 }
 
-// WithOnErrorFlag adds the --on-error flag controlling how recoverable YAML-function
+// WithErrorModeFlag adds the --error-mode flag controlling how recoverable YAML-function
 // failures (e.g. a Terraform backend that has not been provisioned yet) are handled during
-// processing.
+// processing. Named to match this codebase's existing --failure-mode convention (see
+// cmd/terraform/{plan,apply,destroy,deploy}.go) rather than introducing a second
+// "-mode"-suffixed flag naming style.
 //
-//	strict (default): fail immediately, matching historical behavior.
-//	warn: substitute null for the unresolved value, print a warning, and continue.
+//	warn (default): substitute (computed) for the unresolved value, and print one summary
+//	    warning at the end of the command if anything was degraded.
+//	silent: same substitution as warn, but no summary warning is printed. Full detail is
+//	    still available via --logs-level=Debug in either mode.
+//	strict: fail immediately, matching this feature's original (pre-default-flip) behavior.
+//
+// The Go-level default is intentionally "" (not "warn"): an unset flag/env value must be
+// distinguishable from an explicit choice so exec.ResolveErrorMode can fall back to
+// atmos.yaml's `list.error_mode` before finally defaulting to "warn". Callers must call
+// exec.ResolveErrorMode(v.GetString("error-mode"), atmosConfig.List.ErrorMode) after loading
+// atmosConfig.
 //
 // Used by: stacks, components, settings.
-func WithOnErrorFlag(options *[]flags.Option) {
-	defer perf.Track(nil, "list.WithOnErrorFlag")()
+func WithErrorModeFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithErrorModeFlag")()
 
 	*options = append(
 		*options,
-		flags.WithStringFlag("on-error", "", "strict", "How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): strict (fail, default) or warn (degrade with warnings)"),
-		flags.WithEnvVars("on-error", "ATMOS_LIST_ON_ERROR"),
-		flags.WithValidValues("on-error", "strict", "warn"),
+		flags.WithStringFlag("error-mode", "", "", "How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): warn (degrade + summary, default), silent (degrade, no summary), or strict (fail immediately). Defaults to atmos.yaml's list.error_mode, or warn"),
+		flags.WithEnvVars("error-mode", "ATMOS_LIST_ERROR_MODE"),
+		flags.WithValidValues("error-mode", "strict", "warn", "silent"),
 	)
 }
 

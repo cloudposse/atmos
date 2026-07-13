@@ -55,7 +55,7 @@ func TestParseComponentsOptions(t *testing.T) {
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
 		assert.Empty(t, opts.Skip, "skip should default to empty")
-		assert.Equal(t, "strict", opts.OnError)
+		assert.Equal(t, "", opts.ErrorMode, "unresolved default is empty; exec.ResolveErrorMode fills in warn/atmos.yaml later")
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -68,7 +68,7 @@ func TestParseComponentsOptions(t *testing.T) {
 		setFlag(t, cmd, "process-functions", "false")
 		setFlag(t, cmd, "skip", "terraform.state")
 		setFlag(t, cmd, "skip", "terraform.output")
-		setFlag(t, cmd, "on-error", "warn")
+		setFlag(t, cmd, "error-mode", "strict")
 		v := bindFlagsToViper(t, cmd, componentsParser)
 
 		opts := parseComponentsOptions(cmd, v)
@@ -82,7 +82,7 @@ func TestParseComponentsOptions(t *testing.T) {
 		assert.False(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
 		assert.Equal(t, []string{"terraform.state", "terraform.output"}, opts.Skip)
-		assert.Equal(t, "warn", opts.OnError)
+		assert.Equal(t, "strict", opts.ErrorMode)
 	})
 }
 
@@ -250,7 +250,7 @@ func TestParseStacksOptions(t *testing.T) {
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
 		assert.Empty(t, opts.Skip)
-		assert.Equal(t, "strict", opts.OnError)
+		assert.Equal(t, "", opts.ErrorMode, "unresolved default is empty; exec.ResolveErrorMode fills in warn/atmos.yaml later")
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -261,7 +261,7 @@ func TestParseStacksOptions(t *testing.T) {
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
 		setFlag(t, cmd, "skip", "terraform.state")
-		setFlag(t, cmd, "on-error", "warn")
+		setFlag(t, cmd, "error-mode", "silent")
 		v := bindFlagsToViper(t, cmd, stacksParser)
 
 		opts := parseStacksOptions(cmd, v)
@@ -272,12 +272,12 @@ func TestParseStacksOptions(t *testing.T) {
 		assert.False(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
 		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
-		assert.Equal(t, "warn", opts.OnError)
+		assert.Equal(t, "silent", opts.ErrorMode)
 	})
 
-	t.Run("invalid_on_error_value_rejected", func(t *testing.T) {
+	t.Run("invalid_error_mode_value_rejected", func(t *testing.T) {
 		cmd := buildCmd()
-		setFlag(t, cmd, "on-error", "bogus")
+		setFlag(t, cmd, "error-mode", "bogus")
 		bindFlagsToViper(t, cmd, stacksParser)
 
 		_, err := stacksParser.Parse(t.Context(), nil)

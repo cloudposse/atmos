@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -43,8 +44,9 @@ func TestProcessCustomYamlTagsLenient_RecoverableError_Strict(t *testing.T) {
 }
 
 // TestProcessCustomYamlTagsLenient_RecoverableError_Warn verifies that in lenient (warn)
-// mode, a recoverable error is substituted with nil, reported via onWarning exactly once
-// with the right stack/component/function/reason, and sibling keys still resolve.
+// mode, a recoverable error is substituted with degradation.AtmosComputedValue{}, reported
+// via onWarning exactly once with the right stack/component/function/reason, and sibling
+// keys still resolve.
 func TestProcessCustomYamlTagsLenient_RecoverableError_Warn(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -76,7 +78,7 @@ func TestProcessCustomYamlTagsLenient_RecoverableError_Warn(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Nil(t, result["bucket"])
+	assert.Equal(t, degradation.AtmosComputedValue{}, result["bucket"])
 	assert.Equal(t, "unaffected-value", result["sibling"])
 
 	require.Len(t, warnings, 1)

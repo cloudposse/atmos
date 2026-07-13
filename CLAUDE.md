@@ -333,6 +333,12 @@ like a spec).
 Structure the body problem-first: frame the pain, THEN the fix, THEN how to use it. Do not lead with
 `## What Changed`.
 
+**Never start a sentence with a backtick-quoted term** (e.g. "`--error-mode` accepts three
+values" or "`list` and `describe` commands now..."). Rewrite with a plain lead-in word instead
+(e.g. "The `--error-mode` flag accepts..." or "The `list` and `describe` commands now...").
+This applies to every prose sentence in the post — intro, section body, captions — not to
+bullet/definition-list items like `- \`warn\` (default) — ...`.
+
 **Valid Tags (from `website/blog/tags.yml`):**
 - User-facing: `feature`, `enhancement`, `bugfix`, `dx`, `breaking-change`, `security`, `documentation`, `deprecation`
 - Internal: `core` (for contributor-only changes with zero user impact)

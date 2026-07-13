@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -21,14 +22,10 @@ type UnsetMarker struct {
 }
 
 // DegradationWarning describes one YAML function value that could not be resolved and
-// was substituted with nil under a lenient (warn) processing pass. See
-// ProcessCustomYamlTagsLenient.
-type DegradationWarning struct {
-	Stack     string
-	Component string
-	Function  string
-	Reason    string
-}
+// was substituted with degradation.AtmosComputedValue under a lenient (warn) processing
+// pass. See ProcessCustomYamlTagsLenient. Alias kept so existing internal/exec code and
+// callers don't need to change; degradation.Warning is the canonical type.
+type DegradationWarning = degradation.Warning
 
 func ProcessCustomYamlTags(
 	atmosConfig *schema.AtmosConfiguration,
@@ -58,8 +55,8 @@ func ProcessCustomYamlTags(
 // ProcessCustomYamlTagsLenient behaves like ProcessCustomYamlTags, except that when a
 // per-value YAML function error is classified recoverable (see isRecoverableTerraformError;
 // currently a Terraform backend/state that has not been provisioned yet), it substitutes
-// nil for that value, invokes onWarning with details, and continues processing sibling keys
-// and the rest of the tree instead of failing the whole call.
+// degradation.AtmosComputedValue{} for that value, invokes onWarning with details, and
+// continues processing sibling keys and the rest of the tree instead of failing the whole call.
 //
 // Non-recoverable errors (auth failures, malformed YAML, misconfiguration, etc.) still fail
 // the whole call, exactly like ProcessCustomYamlTags — this deliberately does not blanket-catch
@@ -105,9 +102,9 @@ func processNodes(
 
 // processNodesWithContext walks data and resolves every YAML function it finds. When
 // onWarning is non-nil, per-value errors classified recoverable by isRecoverableTerraformError
-// are tolerated: the value becomes nil, onWarning is invoked with details, and the walk
-// continues. All other errors — and every error when onWarning is nil — still abort the
-// whole call, matching the original strict behavior.
+// are tolerated: the value becomes degradation.AtmosComputedValue{}, onWarning is invoked
+// with details, and the walk continues. All other errors — and every error when onWarning
+// is nil — still abort the whole call, matching the original strict behavior.
 func processNodesWithContext(
 	atmosConfig *schema.AtmosConfiguration,
 	data map[string]any,
@@ -142,7 +139,7 @@ func processNodesWithContext(
 						Function:  v,
 						Reason:    err.Error(),
 					})
-					return nil
+					return degradation.AtmosComputedValue{}
 				}
 				log.Debug(
 					"Error processing YAML function",
