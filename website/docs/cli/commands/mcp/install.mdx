@@ -10,7 +10,7 @@ import Experimental from '@site/src/components/Experimental'
 import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
-Use this command to install the MCP servers configured in `atmos.yaml` directly into your AI client's config files — Claude Code, Cursor, VS Code, Codex, and Gemini.
+Use this command to install the MCP servers configured in `atmos.yaml` directly into your AI client's config files — Claude Code, Claude Desktop, Cursor, VS Code, Cline, Cline CLI, Codex, GitHub Copilot CLI, Gemini, Goose, OpenCode, Windsurf, Zed, Antigravity, and MCPorter.
 </Intro>
 
 <Experimental />
@@ -19,7 +19,7 @@ Use this command to install the MCP servers configured in `atmos.yaml` directly 
 
 ## Description
 
-The `atmos mcp install` command reads servers from `mcp.servers` in `atmos.yaml` and writes the appropriate client config for Claude Code, Cursor, VS Code, Codex, and Gemini. Both local stdio servers and remote HTTP servers are supported.
+The `atmos mcp install` command reads servers from `mcp.servers` in `atmos.yaml` and writes the appropriate client config across 15 supported AI clients: Claude Code, Claude Desktop, Cursor, VS Code, Cline, Cline CLI, Codex, GitHub Copilot CLI, Gemini, Goose, OpenCode, Windsurf, Zed, Antigravity, and MCPorter. Both local stdio servers and remote HTTP servers are supported.
 
 Unlike `atmos mcp export`, which produces a single `.mcp.json` file, `install` writes directly into each detected (or explicitly selected) client's own config format and location — project-scoped or user-scoped.
 
@@ -33,7 +33,7 @@ atmos mcp install [server-name...] [flags]
   <dt>`server-name...`</dt>
   <dd>Optional list of specific server names to install. When omitted, all servers configured under `mcp.servers` are installed.</dd>
   <dt>`--client`, `-c`</dt>
-  <dd>MCP client to install into (repeatable): `claude-code`, `cursor`, `vscode`, `codex`, `gemini`. When omitted, Atmos detects clients already configured in the project.</dd>
+  <dd>MCP client to install into (repeatable): `claude-code`, `cursor`, `vscode`, `codex`, `gemini`, `claude-desktop`, `windsurf`, `cline`, `cline-cli`, `zed`, `opencode`, `goose`, `copilot-cli`, `antigravity`, `mcporter`. When omitted, Atmos detects clients already configured in the project.</dd>
   <dt>`--all-clients`</dt>
   <dd>Install into all supported MCP clients instead of just detected or explicitly selected ones.</dd>
   <dt>`--scope`</dt>
@@ -68,3 +68,14 @@ atmos mcp install --global --client claude-code
 # Preview what would be installed without writing files.
 atmos mcp install --dry-run
 ```
+
+## Troubleshooting
+
+Writing the config file is only half the story — the client still has to notice it. `atmos mcp install` reports the server as `Added`, but whether it's actually usable depends on how (and when) that particular client rereads its own config:
+
+- **Restart required:** Claude Code, Claude Desktop, and Windsurf only read their MCP config at startup. After installing a new server, restart the app (for Claude Code, start a fresh session) before it shows up.
+- **Auto-reload, no restart needed:** Zed watches its settings file and restarts the affected context server on save, so a newly installed entry becomes available without closing the editor.
+- **Enable it manually:** Cursor adds the server to its config but leaves it toggled off — open **Settings → MCP** and switch it on. VS Code (and the GitHub Copilot extension) may similarly need a manual "Start" from its MCP servers view the first time it sees a new entry.
+- **New session required:** Codex and Gemini CLI read their config when a session starts, so an already-running session won't pick up a server installed mid-session — start a new one.
+
+If a server still isn't available after restarting or enabling it, run `atmos mcp install --dry-run` to confirm which file Atmos would write to, then check that file directly to make sure the entry landed where you expect.

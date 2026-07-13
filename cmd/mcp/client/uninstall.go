@@ -3,6 +3,7 @@ package client
 import (
 	_ "embed"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -31,7 +32,7 @@ var uninstallParser *flags.StandardParser
 
 func init() {
 	uninstallParser = flags.NewStandardParser(
-		flags.WithStringSliceFlag("client", "c", nil, "MCP client to uninstall from (repeatable): claude-code, cursor, vscode, codex, gemini"),
+		flags.WithStringSliceFlag("client", "c", nil, "MCP client to uninstall from (repeatable): "+strings.Join(mcpinstall.SupportedClients, ", ")),
 		flags.WithEnvVars("client", "ATMOS_MCP_CLIENT"),
 		flags.WithBoolFlag("all-clients", "", false, "Uninstall from all supported MCP clients"),
 		flags.WithEnvVars("all-clients", "ATMOS_MCP_ALL_CLIENTS"),

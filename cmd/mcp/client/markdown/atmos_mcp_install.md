@@ -1,7 +1,7 @@
 Install MCP servers configured in `atmos.yaml` into MCP-capable AI clients.
 
-The command reads `mcp.servers` and writes the appropriate client config for
-Claude Code, Cursor, VS Code, Codex, and Gemini. Both local stdio servers and
+The command reads `mcp.servers` and writes the appropriate client config across
+15 supported AI clients (see `--client` below). Both local stdio servers and
 remote HTTP servers are supported.
 
 **Examples:**
