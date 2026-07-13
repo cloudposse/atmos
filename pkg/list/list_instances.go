@@ -31,7 +31,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Default columns for list instances if not specified in atmos.yaml.
@@ -527,7 +526,7 @@ func uploadInstancesWithDeps(
 	}
 
 	enabled, disabled, drift := countEnabledDisabled(instances)
-	u.PrintfMessageToTUI("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)
+	ui.Writef("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)
 	return nil
 }
 

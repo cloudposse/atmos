@@ -19,12 +19,23 @@ anchors, and Go templates such as `{{.Version}}` in source URLs.
 ## Usage
 
 ```shell
-atmos vendor update [--check] [--pull] [--component <name>] [--tags <a,b>] [--outdated]
+atmos vendor update [--check] [--pull] [--component <name>] [--tags <a,b>] [--outdated] [--component-manifests]
 ```
 
 Sources whose version is templated (`{{...}}`) or whose source is not a Git repository
 are skipped and reported. Updates are written to the file that declares each source,
-including imported manifests.
+including imported manifests — a component declared in `vendor.yaml` has its
+`spec.sources[].version` updated, while a component resolved from a per-component
+`component.yaml` has its `spec.source.version` updated instead.
+
+If `--component` isn't declared in `vendor.yaml` — or no `vendor.yaml` exists — Atmos falls
+back to the component's own `component.yaml`/`component.yml` manifest, matching
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s existing precedence:
+`vendor.yaml` wins whenever it declares the component. Without `--component`, a repo-wide
+sweep of every `component.yaml` found under each component type's base path runs
+automatically whenever no `vendor.yaml` exists — a repo that vendors exclusively via
+`component.yaml` works with no extra flag. Add `--component-manifests` to also run that
+sweep alongside an existing `vendor.yaml` (for repos that mix both manifest styles).
 
 ## Examples
 
@@ -44,6 +55,9 @@ atmos vendor update --tags networking,aws
 
 # Show only sources with an available update.
 atmos vendor update --check --outdated
+
+# Also sweep per-component component.yaml manifests alongside an existing vendor.yaml.
+atmos vendor update --check --component-manifests
 ```
 
 ## Version constraints
@@ -76,6 +90,10 @@ sources:
   <dd>Update only components carrying any of these comma-separated tags.</dd>
   <dt>`--outdated`</dt>
   <dd>Show only sources with an available update.</dd>
+  <dt>`--type` / `-t` (string, default `terraform`)</dt>
+  <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`, or to restrict a `--component-manifests` sweep to one type.</dd>
+  <dt>`--component-manifests`</dt>
+  <dd>Also check per-component `component.yaml` manifests when a `vendor.yaml` is present (this sweep runs automatically when no `vendor.yaml` exists). Only applies when `--component` is not set.</dd>
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
   <dd>The vendor manifest to start from (imports are followed).</dd>
 </dl>
