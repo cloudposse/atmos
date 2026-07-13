@@ -5,12 +5,14 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/emulator"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 )
 
 // UnsetMarker is a special type to mark values that should be deleted from the configuration.
@@ -176,9 +178,22 @@ func processCustomTags(
 	return processCustomTagsWithContext(atmosConfig, input, currentStack, skip, nil, stackInfo)
 }
 
-// matchesPrefix checks if input has the given prefix and the function is not skipped.
+// matchesTag reports whether input starts with prefix as a complete YAML tag.
+func matchesTag(input, prefix string) bool {
+	if !strings.HasPrefix(input, prefix) {
+		return false
+	}
+	rest := strings.TrimPrefix(input, prefix)
+	return rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n'
+}
+
+// matchesPrefix checks if input has the given tag prefix and the function is not skipped.
 func matchesPrefix(input, prefix string, skip []string) bool {
-	return strings.HasPrefix(input, prefix) && !skipFunc(skip, prefix)
+	return matchesTag(input, prefix) && !skipFunc(skip, prefix)
+}
+
+func exactTagSkipped(input, tag string, skip []string) bool {
+	return input == tag && skipFunc(skip, tag)
 }
 
 // processContextAwareTags processes tags that support cycle detection.
@@ -302,20 +317,54 @@ func processSimpleTags(
 		return res, true, nil
 	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsAccountID, skip) {
+		return input, true, nil
+	}
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
 		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityArn, skip) {
+		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
 		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
 	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityUserID, skip) {
+		return input, true, nil
+	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
 		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsRegion, skip) {
+		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
 		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
 	}
 	if input == u.AtmosYamlFuncAwsOrganizationID && !skipFunc(skip, u.AtmosYamlFuncAwsOrganizationID) {
 		return processTagAwsOrganizationID(atmosConfig, input, stackInfo), true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncEmulator, skip) {
+		args, err := getStringAfterTag(input, u.AtmosYamlFuncEmulator)
+		if err != nil {
+			return nil, true, err
+		}
+		res, err := emulator.ResolveYAMLFunc(atmosConfig, args, currentStack, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncVersion, skip) {
+		name, err := getStringAfterTag(input, u.AtmosYamlFuncVersion)
+		if err != nil {
+			return nil, true, err
+		}
+		res, err := manager.ResolveYAMLFunc(atmosConfig, name, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
 	}
 	return nil, false, nil
 }

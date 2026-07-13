@@ -84,7 +84,7 @@ func run() (exitCode int) {
 		if err != nil {
 			errUtils.CaptureError(err)
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 			return errUtils.GetExitCode(err)
 		}
 		return 0 // Exit normally after printing version.
@@ -104,7 +104,7 @@ func run() (exitCode int) {
 
 		// Format and print error using centralized formatter.
 		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
+		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 
 		// Extract and use the correct exit code.
 		exitCode := errUtils.GetExitCode(err)

@@ -141,9 +141,10 @@ var storeBuilders = map[string]storeBuilder{
 
 // newStore constructs a single store from its configuration, dispatching on the normalized kind.
 func newStore(key string, storeConfig StoreConfig) (Store, error) {
-	builder, ok := storeBuilders[resolveKind(storeConfig)]
+	kind := resolveKind(storeConfig)
+	builder, ok := storeBuilders[kind]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrStoreTypeNotFound, storeConfig.Type)
+		return nil, fmt.Errorf("%w: %s", ErrStoreTypeNotFound, kind)
 	}
 	return builder(key, storeConfig)
 }
@@ -275,6 +276,10 @@ func defaultIdentityForStore(s Store, defaultIdentity string) string {
 
 	switch typed := s.(type) {
 	case *SSMStore:
+		if typed.identityName == "" {
+			return defaultIdentity
+		}
+	case *SecretsManagerStore:
 		if typed.identityName == "" {
 			return defaultIdentity
 		}

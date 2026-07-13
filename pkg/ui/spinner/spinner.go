@@ -12,10 +12,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const newline = "\n"
+
+// newDotSpinner builds the shared Dot spinner used by every spinner variant here.
+// Apply honors the ATMOS_SPINNER_FPS override (for VHS demo recordings).
+func newDotSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
+	return s
+}
 
 // ExecWithSpinner runs an operation with a spinner UI.
 // ProgressMsg is shown while operation is running (e.g., "Starting container").
@@ -40,11 +51,16 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 	model := newSpinnerModel(progressMsg, completedMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
 	// goroutineDone is closed once the operation finishes, guaranteeing that any
 	// side effects of the operation have completed before ExecWithSpinner returns.
@@ -144,9 +160,7 @@ func (m spinnerModel) View() string {
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return spinnerModel{
 		spinner:      s,
 		progressMsg:  progressMsg,
@@ -183,11 +197,16 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 	model := newDynamicSpinnerModel(progressMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
 	// goroutineDone is closed once the operation finishes, guaranteeing that any
 	// values the operation wrote (e.g. via a closure) are visible to the caller
@@ -297,9 +316,7 @@ func (m dynamicSpinnerModel) View() string {
 }
 
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return dynamicSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
@@ -346,11 +363,16 @@ func (s *Spinner) Start() {
 	}
 
 	model := newManualSpinnerModel(s.progressMsg)
-	s.program = tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	s.program = tea.NewProgram(model, opts...)
 	s.done = make(chan struct{})
 
 	go func() {
@@ -418,9 +440,7 @@ type manualStopMsg struct {
 }
 
 func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return manualSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,

@@ -85,7 +85,7 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	dummyFileURL := "dummyFileURL"
-	finalURL, err := writeOuterTopLevelFile(tempDir, dummyFileURL)
+	finalURL, err := writeOuterTopLevelFile(tempDir, dummyFileURL, map[string]interface{}{"name": "Atmos"})
 	if err != nil {
 		t.Fatalf("writeOuterTopLevelFile returned error: %v", err)
 	}
@@ -128,6 +128,9 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	}
 	if !strings.Contains(string(content), dummyFileURL) {
 		t.Errorf("Expected file content to contain %q, got %q", dummyFileURL, string(content))
+	}
+	if !strings.Contains(string(content), `"name":"Atmos"`) {
+		t.Errorf("Expected file content to contain root merged data, got %q", string(content))
 	}
 }
 
@@ -175,6 +178,37 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
 	expected = "Version: 1.0.0"
+	if result != expected {
+		t.Errorf("Expected result to be %q, got %q", expected, result)
+	}
+
+	// Test case 4: Root data fields remain available for fallback templates.
+	mergedData = map[string]interface{}{
+		"name": "Atmos",
+	}
+	tmpl = "Project: {{ .name }}"
+
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, true)
+	if err != nil {
+		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
+	}
+	expected = "Project: Atmos"
+	if result != expected {
+		t.Errorf("Expected result to be %q, got %q", expected, result)
+	}
+
+	// Test case 5: Legacy Cloud Posse README templates define their own config
+	// datasource from .Env.README_YAML.
+	mergedData = map[string]interface{}{
+		"name": "Atmos",
+	}
+	tmpl = "{{ defineDatasource \"config\" .Env.README_YAML }}Project: {{ (ds \"config\").name }}"
+
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, true)
+	if err != nil {
+		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
+	}
+	expected = "Project: Atmos"
 	if result != expected {
 		t.Errorf("Expected result to be %q, got %q", expected, result)
 	}

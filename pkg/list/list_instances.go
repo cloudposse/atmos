@@ -31,7 +31,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Default columns for list instances if not specified in atmos.yaml.
@@ -64,9 +63,10 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
-	// AuthDisabled is true when the caller explicitly used --identity=false.
-	// It prevents per-component auth auto-detection while still allowing
-	// templates and YAML functions that do not require credentials to run.
+	// AuthDisabled is true when the caller did not request an identity or
+	// explicitly used --identity=false. It prevents per-component auth
+	// auto-detection while still allowing templates and YAML functions that do
+	// not require credentials to run.
 	AuthDisabled bool
 	OutputFile   string
 	// ProcessTemplates toggles Go template processing of stack manifests
@@ -526,7 +526,7 @@ func uploadInstancesWithDeps(
 	}
 
 	enabled, disabled, drift := countEnabledDisabled(instances)
-	u.PrintfMessageToTUI("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)
+	ui.Writef("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)
 	return nil
 }
 

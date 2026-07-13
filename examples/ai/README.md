@@ -1,3 +1,8 @@
+---
+title: Atmos AI
+tags: [AI]
+---
+
 # Example: Atmos AI
 
 Use AI to chat with your infrastructure, inspect stacks and components, and analyze command output.

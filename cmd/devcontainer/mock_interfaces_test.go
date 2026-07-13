@@ -264,20 +264,6 @@ func (mr *MockUIProviderMockRecorder) Confirm(message any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Confirm", reflect.TypeOf((*MockUIProvider)(nil).Confirm), message)
 }
 
-// Error mocks base method.
-func (m *MockUIProvider) Error() io.Writer {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Error")
-	ret0, _ := ret[0].(io.Writer)
-	return ret0
-}
-
-// Error indicates an expected call of Error.
-func (mr *MockUIProviderMockRecorder) Error() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Error", reflect.TypeOf((*MockUIProvider)(nil).Error))
-}
-
 // IsInteractive mocks base method.
 func (m *MockUIProvider) IsInteractive() bool {
 	m.ctrl.T.Helper()
@@ -290,20 +276,6 @@ func (m *MockUIProvider) IsInteractive() bool {
 func (mr *MockUIProviderMockRecorder) IsInteractive() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsInteractive", reflect.TypeOf((*MockUIProvider)(nil).IsInteractive))
-}
-
-// Output mocks base method.
-func (m *MockUIProvider) Output() io.Writer {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Output")
-	ret0, _ := ret[0].(io.Writer)
-	return ret0
-}
-
-// Output indicates an expected call of Output.
-func (mr *MockUIProviderMockRecorder) Output() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Output", reflect.TypeOf((*MockUIProvider)(nil).Output))
 }
 
 // Prompt mocks base method.

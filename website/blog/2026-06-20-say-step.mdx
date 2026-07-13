@@ -1,0 +1,86 @@
+---
+slug: say-step
+title: "Atmos Can Finally Speak for Itself"
+authors: [osterman]
+tags: [feature]
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Workflows now have a `say` step type that speaks a message out loud using text-to-speech — an audible cue for when a long-running workflow finishes or needs your attention, even after you've switched to another window. When no speech engine is available (or you're in CI), it degrades gracefully and prints the message instead, so the same workflow works everywhere.
+
+<!--truncate-->
+
+## The Problem
+
+Long-running workflows — a multi-stack `terraform apply`, a build pipeline, a vendoring sweep — often outlast your attention. You kick one off, switch to another window, and forget about it. The existing `alert` step rings the terminal bell, but a bell doesn't tell you *what* happened, and it's easy to miss.
+
+People have worked around this by shelling out to `say` on macOS, but that breaks the moment a teammate runs the same workflow on Linux or in CI, where `say` doesn't exist.
+
+## The Solution
+
+A new `say` step speaks its `content` aloud and works across platforms:
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - name: apply
+        type: atmos
+        command: terraform apply vpc
+
+      - name: notify
+        type: say
+        content: "Deployment to {{ .steps.env.value }} is complete"
+```
+
+Under the hood it detects an available speech engine per OS — macOS `say`, Linux `spd-say`/`espeak`/`espeak-ng`, and Windows PowerShell's `System.Speech` — so the same workflow runs unchanged on any machine.
+
+### Pick a voice, font-family style
+
+Voice names are platform-specific, so `voice` is an **ordered list** — just like a CSS `font-family` stack. The first voice actually installed on the host wins; if none match, the engine's default is used:
+
+```yaml
+      - name: notify
+        type: say
+        content: "Build finished"
+        voice: [Samantha, Microsoft Zira, en-us]   # macOS, Windows, Linux
+        rate: normal                                # slow | normal | fast
+```
+
+That single list resolves to Samantha on macOS, Zira on Windows, and `en-us` (espeak) on Linux — no per-OS branching required.
+
+### Graceful degradation you control
+
+`say` only makes sense on an interactive workstation, so it never fails a workflow and never hangs CI. The `print` field decides what happens when speech is (or isn't) available:
+
+- `fallback` (default) — speak when possible; otherwise print the message as a Markdown blockquote so the information is never lost.
+- `always` — always print the blockquote **and** also speak when possible.
+- `never` — speak when possible; otherwise stay silent.
+
+In CI, or on any host with no speech engine, `say` automatically prints instead of speaking — so you can leave `say` steps in workflows that run both locally and in pipelines.
+
+## Try It
+
+A new `examples/say-something/` example demonstrates voices, rates, print policies, and composing `say` into a build pipeline:
+
+```bash
+cd examples/say-something
+
+atmos workflow notify -f say        # speak a completion message
+atmos workflow voices -f say        # cross-platform voice stack
+atmos workflow print-modes -f say   # the three print policies
+atmos workflow pipeline -f say      # announce each build milestone
+```
+
+Here's the build pipeline announcing its milestones end to end:
+
+<CastPlayer src="/casts/examples/say-something/pipeline.cast" title="atmos say steps" chrome controls scrubber />
+
+[View the full example](/examples/say-something)
+
+The cross-platform plumbing lives in a reusable `pkg/say` package, mirroring the existing browser-opening abstraction, so other parts of Atmos can adopt audible notifications too.
+
+## Get Involved
+
+Add a `say` step to the end of your slowest workflows and let Atmos tell you when it's done. Feedback and ideas are welcome on [GitHub](https://github.com/cloudposse/atmos).

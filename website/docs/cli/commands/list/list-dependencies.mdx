@@ -1,0 +1,145 @@
+---
+title: atmos list dependencies
+sidebar_label: dependencies
+sidebar_class_name: command
+id: dependencies
+description: Use this command to visualize the dependency relationships between Atmos components as a tree.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to visualize the dependency relationships between Atmos components across stacks. By default it renders a tree showing both directions for every component &mdash; what each component depends on, and what depends on it. Dependencies are read from both `dependencies.components` (preferred) and the legacy `settings.depends_on`, so the output stays consistent with [`atmos describe dependents`](/cli/commands/describe/dependents).
+</Intro>
+
+<CastPlayer title="atmos list dependencies --help" src="/casts/screengrabs/atmos-list-dependencies--help.cast" static chrome />
+
+## Usage
+
+Execute the `list dependencies` command like this:
+
+```shell
+atmos list dependencies
+```
+
+Focus on a single component in a stack by passing the component as a positional argument:
+
+```shell
+atmos list dependencies <component> --stack <stack>
+```
+
+:::tip
+Run `atmos list dependencies --help` to see all the available options.
+:::
+
+## Examples
+
+List dependencies for every component (tree, both directions):
+```shell
+atmos list dependencies
+```
+
+Limit to a single stack:
+```shell
+atmos list dependencies --stack plat-ue2-dev
+```
+
+Focus on a single component:
+```shell
+atmos list dependencies vpc --stack plat-ue2-dev
+```
+
+Show only one direction:
+```shell
+# What the component depends on (its prerequisites)
+atmos list dependencies vpc --stack plat-ue2-dev --direction forward
+
+# What depends on the component (its dependents)
+atmos list dependencies vpc --stack plat-ue2-dev --direction reverse
+```
+
+Output as structured data:
+```shell
+# JSON
+atmos list dependencies --format json
+
+# YAML
+atmos list dependencies --format yaml
+```
+
+## Tree Output
+
+The default `tree` format keeps stack context next to the component dependency
+tree. The `Component` column carries the hierarchy, while `Type` is secondary
+metadata on the right. Repeated metadata is omitted on child rows unless the
+stack or type changes.
+
+```text
+Dependencies
+Stack         Component                 Type
+plat-ue2-dev  app-config                terraform
+              ├──depends on ↓
+              │  ├──▶ dynamodb-table
+              │  └──▶ kms-key
+              └──required by ↑
+                 └──(none)
+
+plat-ue2-dev  kms-key                   terraform
+              ├──depends on ↓
+              │  └──(none)
+              └──required by ↑
+                 └──◀ app-config
+```
+
+The filled triangle marker shows edge direction:
+
+- `▶` marks a forward dependency edge: the selected component depends on that child.
+- `◀` marks a reverse dependency edge: that child depends on the selected component.
+
+When you select a single direction with `--direction forward` or
+`--direction reverse`, the dependency subtree is attached directly under each
+component (no `depends on` / `required by` branch labels).
+
+Circular dependencies are detected and marked with `(circular reference)` so the
+tree always terminates instead of recursing forever &mdash; unlike the execution
+dependency graph used by `terraform --affected`, this command tolerates cycles so
+they can be inspected.
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Limit the top-level entries to a single component. Combine with `--stack` to target one specific component instance.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--direction` / `-d`</dt>
+  <dd>Dependency direction to show: `both` (default), `forward` (what the component depends on), or `reverse` (what depends on the component).<br/>Environment variable: `ATMOS_LIST_DIRECTION`</dd>
+
+  <dt>`--stack` / `-s`</dt>
+  <dd>Filter the top-level entries to a single stack. Cross-stack dependency edges are still resolved and displayed.<br/>Environment variable: `ATMOS_STACK`</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `tree` (default), `json`, or `yaml`.<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing dependencies.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>Environment variable: `ATMOS_IDENTITY`</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Templates are processed so that cross-stack dependency references using templated stack names (e.g., `stack: "ue1-{{ .vars.stage }}"`) resolve correctly.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip executing a specific YAML function when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`).<br/>Environment variable: `ATMOS_SKIP`</dd>
+</dl>
+
+## Related Commands
+
+- [`atmos describe dependents`](/cli/commands/describe/dependents) - Show the components that depend on a given component
+- [`atmos list components`](/cli/commands/list/components) - List all components
+- [`atmos list stacks`](/cli/commands/list/stacks) - List all stacks, optionally as a tree with import provenance

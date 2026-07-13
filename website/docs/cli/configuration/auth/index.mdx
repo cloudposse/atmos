@@ -6,7 +6,7 @@ id: auth
 description: Configure cloud provider authentication in your `atmos.yaml` with providers, identities, and credential storage.
 ---
 import DocCardList from '@theme/DocCardList'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -67,6 +67,7 @@ auth:
   identities:
     <identity-name>:               # Named identity configurations
       kind: <identity-kind>
+      spec: {}                     # Kind-specific SDK/client configuration
       # Identity-specific fields...
 
   integrations:

@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -46,6 +47,7 @@ func initialSpinnerModel(message string) *spinnerModel {
 	s.Spinner = bspinner.Dot
 	styles := theme.GetCurrentStyles()
 	s.Style = styles.Spinner
+	fps.Apply(&s)
 	return &spinnerModel{
 		spinner: s,
 		message: message,
@@ -249,7 +251,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 	spinner.Spinner = bspinner.Dot
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithDefaultGradient())
+	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
 
 	var installedCount, failedCount, alreadyInstalledCount int
 
@@ -436,7 +438,7 @@ func installMultipleTools(toolSpecs []string, reinstallFlag bool) error {
 	spinner.Spinner = bspinner.Dot
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithDefaultGradient())
+	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
 
 	var installedCount, failedCount, skippedCount int
 

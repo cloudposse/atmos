@@ -6,13 +6,13 @@ id: trust
 description: Trust the registry cache proxy certificate in the OS trust store (required once on macOS and Windows).
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Install the registry cache's self-signed certificate into the operating system trust store so `terraform`/`tofu` trust the HTTPS cache proxy. This is a **one-time** step required on **macOS and Windows**. On Linux/BSD it is not needed — Atmos trusts the certificate automatically — and the command is a no-op there.
 </Intro>
 
-<Screengrab title="atmos terraform cache trust --help" slug="atmos-terraform-cache-trust--help" />
+<CastPlayer title="atmos terraform cache trust --help" src="/casts/screengrabs/atmos-terraform-cache-trust--help.cast" static chrome />
 
 ## Why this is needed (and only on macOS/Windows)
 

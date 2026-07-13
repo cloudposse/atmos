@@ -9,20 +9,24 @@
 ## No Changes Applied for `{{.Component}}` in `{{.Stack}}`
 {{- end }}
 
-<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a>
+<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg?v={{.AtmosVersion}}">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v={{.AtmosVersion}}">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v={{.AtmosVersion}}" alt="Atmos CI" height="32" align="right">
+</picture></a>
 
-{{- if .Result.HasErrors }}
-[![failed](https://shields.io/badge/APPLY-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
+{{ if .Result.HasErrors -}}
+[![failed](https://shields.io/badge/APPLY-FAILED-ff0000?style=for-the-badge)](#result-{{$target}})
 {{- else -}}
 {{- if .HasResourceChanges -}}
-{{- if gt .Resources.Create 0 }} [![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#user-content-create-{{$target}})
+{{- if gt .Resources.Create 0 }}[![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#create-{{$target}})
 {{- end -}}
-{{- if gt .Resources.Change 0 }} [![change](https://shields.io/badge/APPLY-CHANGE-important?style=for-the-badge)](#user-content-change-{{$target}})
+{{- if gt .Resources.Change 0 }}[![change](https://shields.io/badge/APPLY-CHANGE-important?style=for-the-badge)](#change-{{$target}})
 {{- end -}}
-{{- if gt .Resources.Destroy 0 }} [![destroy](https://shields.io/badge/APPLY-DESTROY-critical?style=for-the-badge)](#user-content-destroy-{{$target}})
+{{- if gt .Resources.Destroy 0 }}[![destroy](https://shields.io/badge/APPLY-DESTROY-critical?style=for-the-badge)](#destroy-{{$target}})
 {{- end -}}
-{{- else if .HasOutputChanges }} [![output changes](https://shields.io/badge/APPLY-OUTPUT_CHANGE-blue?style=for-the-badge)](#user-content-result-{{$target}})
-{{- else }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
+{{- else if .HasOutputChanges }}[![output changes](https://shields.io/badge/APPLY-OUTPUT_CHANGE-blue?style=for-the-badge)](#result-{{$target}})
+{{- else }}[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-{{$target}})
 {{- end }}
 {{- end }}
 

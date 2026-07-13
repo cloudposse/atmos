@@ -1,0 +1,99 @@
+---
+title: atmos emulator
+sidebar_label: emulator
+sidebar_class_name: command
+id: usage
+description: Manage cloud-API emulators (Floci, MiniStack, k3s, OpenBao)
+---
+import DocCardList from '@theme/DocCardList';
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Use these commands to manage emulator components: stack-scoped, long-running containers that stand in for a cloud API (AWS, GCP, Azure), Kubernetes, or a backing service (Vault) during local development and testing.
+
+An emulator container outlives the `atmos` process and is discovered by labels derived from the canonical component instance address, so subsequent commands (`ps`, `logs`, `exec`, `down`) reattach to the already-running container.
+</Intro>
+
+<CastPlayer src="/casts/examples/emulator-aws/lifecycle.cast" title="atmos emulator aws lifecycle" chrome controls scrubber />
+
+<Experimental />
+
+<ActionCard title="Configure Container Runtimes">
+    Learn how to select and configure the container runtime (Docker or Podman) that Atmos uses to run emulators.
+    <div>
+      <PrimaryCTA to="/stacks/components/emulator#container-runtime">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos emulator --help" src="/casts/screengrabs/atmos-emulator--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos emulator <subcommand> <component> --stack <stack> [flags]
+```
+
+The `emulator` command also has the alias `emu`.
+
+## Subcommands
+
+<DocCardList />
+
+## Container Runtime
+
+Emulators run inside a container runtime. Atmos selects the runtime via the global
+`container.runtime.provider` configuration and the `ATMOS_CONTAINER_RUNTIME`
+environment variable; Docker and Podman are auto-detected. There is no per-command
+runtime flag.
+
+```shell
+# Force Podman for emulator commands
+ATMOS_CONTAINER_RUNTIME=podman atmos emulator up aws --stack=plat-ue2-dev
+```
+
+## Configuration
+
+Emulator components are declared in your stacks under `components.emulator`. Each
+emulator selects a `driver` (for example, `floci/aws` for a local AWS sandbox):
+
+```yaml
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: "{{ .vars.region }}"
+```
+
+With the configuration above, `atmos emulator up aws --stack=plat-ue2-dev` starts the
+local AWS sandbox for the `plat-ue2-dev` stack.
+
+For the full list of drivers and how to configure each emulator type (AWS, GCP, Azure,
+Kubernetes, Vault/OpenBao, and registry), see [Emulator Components](/stacks/components/emulator).
+
+## Examples
+
+```shell
+# Start (or reuse) the aws emulator in the plat-ue2-dev stack
+atmos emulator up aws --stack=plat-ue2-dev
+
+# List running emulators in the stack
+atmos emulator ps aws --stack=plat-ue2-dev
+
+# Stream the emulator's logs
+atmos emulator logs aws --stack=plat-ue2-dev
+
+# Run a command inside the emulator container
+atmos emulator exec aws --stack=plat-ue2-dev -- aws s3 ls
+
+# Stop and remove the emulator container
+atmos emulator down aws --stack=plat-ue2-dev
+```
+
+## See Also
+
+- [Atmos Components](/components) — Learn about Atmos components
+- [Emulator Components](/stacks/components/emulator) — Configure emulator components in stack manifests

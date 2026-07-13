@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -103,6 +104,9 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -195,6 +199,9 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -259,6 +266,9 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -328,12 +338,11 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read from pipe: %v", err)
 	}
-	output := buf.String()
 
-	// Check the output.
-	if !strings.Contains(output, "workspace \"nonprod-component-1\"") {
-		t.Errorf("The output should contain 'nonprod-component-1'")
-	}
+	envFile := filepath.Join("..", "..", "components", "terraform", "mock", ".terraform", "environment")
+	workspace, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	assert.Equal(t, "nonprod-component-1", strings.TrimSpace(string(workspace)))
 }
 
 func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
@@ -425,12 +434,15 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
+	// Wait for the reader goroutine to finish before inspecting the captured output.
+	<-done
+
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-
-	// Wait for the reader goroutine to finish.
-	<-done
 
 	output := buf.String()
 
@@ -765,7 +777,7 @@ func extractKeyValuePairs(input string) map[string]string {
 
 	for _, line := range lines {
 		// Trim whitespace and skip empty lines
-		line = strings.TrimSpace(line)
+		line = strings.TrimSpace(atmosansi.Strip(line))
 		if line == "" {
 			continue
 		}
@@ -779,6 +791,10 @@ func extractKeyValuePairs(input string) map[string]string {
 		// Extract key and value
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
+		if strings.Contains(key, ":") {
+			prefixParts := strings.Split(key, ":")
+			key = strings.TrimSpace(prefixParts[len(prefixParts)-1])
+		}
 
 		// Remove surrounding quotes from the value
 		value = strings.Trim(value, `"`)

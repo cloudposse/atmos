@@ -13,12 +13,14 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -26,6 +28,8 @@ import (
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
+	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -111,6 +115,17 @@ func ExecuteShellCommand(
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
 
+	disableMasking := false
+	if viper.IsSet("mask") {
+		disableMasking = !viper.GetBool("mask")
+	} else if viper.IsSet("settings.terminal.mask.enabled") {
+		disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
+	}
+	ioLayer.ApplyMaskingConfig(&ioLayer.Config{
+		DisableMasking: disableMasking,
+		AtmosConfig:    atmosConfig,
+	})
+
 	// Apply functional options.
 	var cfg shellCommandConfig
 	for _, opt := range opts {
@@ -156,6 +171,12 @@ func ExecuteShellCommand(
 		}
 	}
 
+	diagConfig := diagnostics.FromSchema(atmosConfig.Diagnostics)
+	diagID := diagnostics.NewID("process")
+	diagStartedAt := time.Now()
+
+	var pacedClosers []io.Closer
+
 	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
 	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
 	// for workspace select so it doesn't pollute data-producing commands like output).
@@ -163,13 +184,16 @@ func ExecuteShellCommand(
 	if cfg.stdoutOverride != nil {
 		stdoutTarget = cfg.stdoutOverride
 	}
+	stdoutTarget = maybePaceTerminalWriter(stdoutTarget, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
 	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
-	var stdout io.Writer
-	if cfg.stdoutCapture != nil {
-		stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
-	} else {
-		stdout = maskedStdout
+	stdoutWriters := []io.Writer{maskedStdout}
+	if diagnostics.OutputEnabled(diagConfig) {
+		stdoutWriters = append(stdoutWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stdout"))
 	}
+	if cfg.stdoutCapture != nil {
+		stdoutWriters = append(stdoutWriters, cfg.stdoutCapture)
+	}
+	stdout := io.MultiWriter(stdoutWriters...)
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
@@ -180,12 +204,16 @@ func ExecuteShellCommand(
 
 	var stderr io.Writer
 	if redirectStdError == "/dev/stderr" {
-		maskedStderr := ioLayer.MaskWriter(streams.Stderr)
-		if cfg.stderrCapture != nil {
-			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
-		} else {
-			stderr = maskedStderr
+		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
+		maskedStderr := ioLayer.MaskWriter(stderrTarget)
+		stderrWriters := []io.Writer{maskedStderr}
+		if diagnostics.OutputEnabled(diagConfig) {
+			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
 		}
+		if cfg.stderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		}
+		stderr = io.MultiWriter(stderrWriters...)
 	} else if redirectStdError == "/dev/stdout" {
 		maskedStderr := ioLayer.MaskWriter(stdout)
 		if cfg.stderrCapture != nil {
@@ -194,12 +222,16 @@ func ExecuteShellCommand(
 			stderr = maskedStderr
 		}
 	} else if redirectStdError == "" {
-		maskedStderr := ioLayer.MaskWriter(streams.Stderr)
-		if cfg.stderrCapture != nil {
-			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
-		} else {
-			stderr = maskedStderr
+		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
+		maskedStderr := ioLayer.MaskWriter(stderrTarget)
+		stderrWriters := []io.Writer{maskedStderr}
+		if diagnostics.OutputEnabled(diagConfig) {
+			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
 		}
+		if cfg.stderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		}
+		stderr = io.MultiWriter(stderrWriters...)
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
@@ -218,8 +250,32 @@ func ExecuteShellCommand(
 	}
 	log.Debug("Executing", "command", command, "args", args)
 
+	emitDiagnosticsEvent(diagConfig, &diagnostics.Event{
+		Type:           "process.start",
+		ID:             diagID,
+		Command:        command,
+		Args:           append([]string{}, args...),
+		CWD:            resolveDiagnosticsCWD(dir),
+		DryRun:         diagnostics.Bool(dryRun),
+		TTY:            diagnostics.Bool(streamsHaveTTY(streams)),
+		StdinTTY:       diagnostics.Bool(isTTYReader(streams.Stdin)),
+		StdoutTTY:      diagnostics.Bool(terminalpkg.IsTTYWriter(stdoutTarget)),
+		StderrTTY:      diagnostics.Bool(terminalpkg.IsTTYWriter(streams.Stderr)),
+		RedirectStderr: redirectStdError,
+	})
+
 	if dryRun {
-		return nil
+		closeErr := closePacedWriters(pacedClosers)
+		emitDiagnosticsEvent(diagConfig, &diagnostics.Event{
+			Type:       "process.end",
+			ID:         diagID,
+			Started:    diagnostics.Bool(false),
+			Success:    diagnostics.Bool(closeErr == nil),
+			ExitCode:   diagnostics.Int(0),
+			DurationMS: diagnostics.Int64(time.Since(diagStartedAt).Milliseconds()),
+			Error:      errorString(closeErr),
+		})
+		return closeErr
 	}
 
 	ctx := cfg.ctx
@@ -238,6 +294,10 @@ func ExecuteShellCommand(
 			Stderr: stderr,
 		},
 	})
+	emitProcessEndDiagnostics(diagConfig, diagID, diagStartedAt, &result)
+	if closeErr := closePacedWriters(pacedClosers); closeErr != nil && result.Err == nil {
+		return closeErr
+	}
 	if result.Err == nil {
 		return nil
 	}
@@ -253,6 +313,102 @@ func ExecuteShellCommand(
 	return result.Err
 }
 
+func maybePaceTerminalWriter(w io.Writer, speed float64, closers *[]io.Closer) io.Writer {
+	if !terminalpkg.IsSpeedLimited(speed) || !terminalpkg.IsTTYWriter(w) {
+		return w
+	}
+
+	pacedWriter := terminalpkg.NewPacingWriter(w, speed)
+	*closers = append(*closers, pacedWriter)
+	return pacedWriter
+}
+
+func closePacedWriters(closers []io.Closer) error {
+	var closeErr error
+	for _, closer := range closers {
+		if err := closer.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	return closeErr
+}
+
+func emitProcessEndDiagnostics(config diagnostics.Config, id string, fallbackStart time.Time, result *process.Result) {
+	if result == nil {
+		return
+	}
+	finishedAt := result.FinishedAt
+	if finishedAt.IsZero() {
+		finishedAt = time.Now()
+	}
+
+	startedAt := result.StartedAt
+	if startedAt.IsZero() {
+		startedAt = fallbackStart
+	}
+
+	event := diagnostics.Event{
+		Type:       "process.end",
+		Time:       finishedAt.UTC(),
+		ID:         id,
+		Started:    diagnostics.Bool(result.Started),
+		Success:    diagnostics.Bool(result.Err == nil),
+		Canceled:   diagnostics.Bool(result.Canceled),
+		ExitCode:   diagnostics.Int(result.ExitCode),
+		DurationMS: diagnostics.Int64(finishedAt.Sub(startedAt).Milliseconds()),
+		Signaled:   diagnostics.Bool(result.Signaled),
+		Signal:     result.Signal,
+		Error:      errorString(result.Err),
+	}
+	if result.Signaled {
+		event.SignalNumber = diagnostics.Int(result.SignalNumber)
+	}
+	emitDiagnosticsEvent(config, &event)
+}
+
+func emitDiagnosticsEvent(config diagnostics.Config, event *diagnostics.Event) {
+	if err := diagnostics.EmitWithConfig(config, event); err != nil {
+		log.Debug("Failed to write diagnostics event", "error", err)
+	}
+}
+
+func resolveDiagnosticsCWD(dir string) string {
+	if dir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return ""
+		}
+		return cwd
+	}
+	if filepath.IsAbs(dir) {
+		return filepath.Clean(dir)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return filepath.Clean(dir)
+	}
+	return filepath.Clean(filepath.Join(cwd, dir))
+}
+
+func streamsHaveTTY(streams process.Streams) bool {
+	return isTTYReader(streams.Stdin) || terminalpkg.IsTTYWriter(streams.Stdout) || terminalpkg.IsTTYWriter(streams.Stderr)
+}
+
+func isTTYReader(r io.Reader) bool {
+	file, ok := r.(*os.File)
+	if !ok || file == nil {
+		return false
+	}
+	return xterm.IsTerminal(int(file.Fd())) //nolint:gosec // term.IsTerminal requires int file descriptors.
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
 type synchronizedWriter struct {
 	mu sync.Mutex
 	w  io.Writer
@@ -262,6 +418,17 @@ func (w *synchronizedWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.w.Write(p)
+}
+
+// ExecuteShellSpec configures shell execution.
+type ExecuteShellSpec struct {
+	Command string
+	Name    string
+	Dir     string
+	EnvVars []string
+	DryRun  bool
+	Stdout  io.Writer
+	Stderr  io.Writer
 }
 
 // ExecuteShell runs a shell script.
@@ -274,6 +441,21 @@ func ExecuteShell(
 ) error {
 	defer perf.Track(nil, "exec.ExecuteShell")()
 
+	return ExecuteShellWithWriters(&ExecuteShellSpec{
+		Command: command,
+		Name:    name,
+		Dir:     dir,
+		EnvVars: envVars,
+		DryRun:  dryRun,
+		Stdout:  ioLayer.MaskWriter(os.Stdout),
+		Stderr:  os.Stderr,
+	})
+}
+
+// ExecuteShellWithWriters runs a shell script with explicit stdout/stderr writers.
+func ExecuteShellWithWriters(spec *ExecuteShellSpec) error {
+	defer perf.Track(nil, "exec.ExecuteShellWithWriters")()
+
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
 		return err
@@ -285,19 +467,26 @@ func ExecuteShell(
 	// This matches the behavior before commit 9fd7d156a where the environment
 	// was merged rather than replaced.
 	mergedEnv := os.Environ()
-	for _, envVar := range envVars {
+	for _, envVar := range spec.EnvVars {
 		mergedEnv = envpkg.UpdateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
 	}
 
 	mergedEnv = append(mergedEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
-	log.Debug("Executing", "command", command)
+	log.Debug("Executing", "command", spec.Command)
 
-	if dryRun {
+	if spec.DryRun {
 		return nil
 	}
 
-	return u.ShellRunner(command, name, dir, mergedEnv, ioLayer.MaskWriter(os.Stdout))
+	return u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
+		Command: spec.Command,
+		Name:    spec.Name,
+		Dir:     spec.Dir,
+		Env:     mergedEnv,
+		Stdout:  spec.Stdout,
+		Stderr:  spec.Stderr,
+	})
 }
 
 // parseEnvVarKey extracts the key from an environment variable string (KEY=value).
@@ -555,11 +744,11 @@ func printShellEnterMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s %s", identityName, providerStyle.Render(fmt.Sprintf("(%s)", providerName)))
 	}
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n",
+	ui.Writef("\n%s %s\n",
 		headerStyle.Render("→ Entering Atmos shell with identity:"),
 		identityStyle.Render(identityDisplay))
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "%s\n\n",
+	ui.Writef("%s\n\n",
 		hintStyle.Render("  Type 'exit' to return to your normal shell"))
 }
 
@@ -577,7 +766,7 @@ func printShellExitMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s (%s)", identityName, providerName)
 	}
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n\n",
+	ui.Writef("\n%s %s\n\n",
 		headerStyle.Render("← Exited Atmos shell for identity:"),
 		identityStyle.Render(identityDisplay))
 }

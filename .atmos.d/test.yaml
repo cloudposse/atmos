@@ -1,0 +1,143 @@
+commands:
+  - name: test
+    description: Test commands for Atmos development
+    flags:
+      - name: short
+        type: bool
+        description: Run quick tests only
+        default: false
+      - name: full
+        type: bool
+        description: Run the full acceptance test suite
+        default: false
+      - name: coverage
+        type: bool
+        description: Run full tests and generate an HTML coverage report
+        default: false
+      - name: race
+        type: bool
+        description: Run quick tests with race detector and shuffled order
+        default: false
+      - name: generate-mocks
+        type: bool
+        description: Regenerate auth/http mocks using go:generate directives
+        default: false
+    steps:
+      - type: shell
+        command: |
+          set -eu
+
+          selected=0
+          [ "{{ .Flags.short }}" = "true" ] && selected=$((selected + 1))
+          [ "{{ .Flags.full }}" = "true" ] && selected=$((selected + 1))
+          [ "{{ .Flags.coverage }}" = "true" ] && selected=$((selected + 1))
+          [ "{{ .Flags.race }}" = "true" ] && selected=$((selected + 1))
+          [ "{{ index .Flags "generate-mocks" }}" = "true" ] && selected=$((selected + 1))
+
+          if [ "$selected" -gt 1 ]; then
+            echo "Select only one test mode: --short, --full, --coverage, --race, or --generate-mocks" >&2
+            exit 1
+          fi
+      - type: atmos
+        command: >-
+          test
+          {{- if .Flags.full }} acceptance
+          {{- else if .Flags.coverage }} acc-coverage
+          {{- else if .Flags.race }} race
+          {{- else if index .Flags "generate-mocks" }} generate-auth-http-mocks
+          {{- else }} short
+          {{- end }}
+    commands:
+      - name: acceptance
+        description: Run acceptance tests
+        env: &go_auto_env
+          GOTOOLCHAIN: &go_auto_toolchain auto
+          CGO_ENABLED: &go_cgo_disabled "0"
+        flags:
+          - name: cover
+            type: bool
+            description: Collect subprocess coverage into coverage.out
+            default: false
+        steps:
+          - type: atmos
+            command: build deps
+          - type: shell
+            command: |
+              if [ "{{ .Flags.cover }}" = "true" ]; then
+                scripts/collect-coverage.sh "${TEST:-$(go list ./...)}" "${TESTARGS:-}"
+              else
+                go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 40m
+              fi
+
+      - name: acc
+        description: Run acceptance tests
+        steps:
+          - type: atmos
+            command: test acceptance
+
+      - name: acc-cover
+        description: Run acceptance tests with subprocess coverage collection
+        steps:
+          - type: atmos
+            command: test acceptance --cover
+
+      - name: acc-coverage
+        description: Run acceptance tests and generate an HTML coverage report
+        env: *go_auto_env
+        steps:
+          - type: atmos
+            command: test acceptance --cover
+          - type: shell
+            command: go tool cover -html=coverage.out -o coverage.html
+
+      - name: short
+        description: Run quick tests only
+        env: *go_auto_env
+        steps:
+          - type: atmos
+            command: build deps
+          - type: shell
+            command: go test -short ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
+
+      - name: short-cover
+        description: Run quick tests with coverage
+        env:
+          GOTOOLCHAIN: *go_auto_toolchain
+          CGO_ENABLED: *go_cgo_disabled
+          GOCOVERDIR: coverage
+        steps:
+          - type: atmos
+            command: build deps
+          - type: shell
+            command: go test -short -cover ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
+
+      - name: coverage
+        description: Run tests with coverage report
+        env: *go_auto_env
+        steps:
+          - type: atmos
+            command: build deps
+          - type: shell
+            command: go test -coverprofile=coverage.out ${TEST:-$(go list ./...)} ${TESTARGS:-}
+          - type: shell
+            command: go tool cover -html=coverage.out -o coverage.html
+
+      - name: race
+        description: Run quick tests with race detector and shuffled order
+        env:
+          GOTOOLCHAIN: *go_auto_toolchain
+          CGO_ENABLED: "1"
+        steps:
+          - type: atmos
+            command: build deps
+          - type: shell
+            command: go test -race -shuffle=on ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 10m
+
+      - name: generate-auth-http-mocks
+        description: Regenerate auth/http mocks using go:generate directives
+        env: *go_auto_env
+        steps:
+          - type: shell
+            command: go generate ./pkg/auth/types/...
+          - type: shell
+            command: go generate ./pkg/http/...

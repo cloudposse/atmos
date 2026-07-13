@@ -37,6 +37,13 @@ atmos_cli_config:
       base_path: ""
       command: ""
       auto_generate_files: false
+    kubernetes:
+      base_path: ""
+      provider: ""
+      auto_generate_files: false
+    helm:
+      base_path: ""
+      auto_generate_files: false
   stacks:
     base_path: stacks
     included_paths:
@@ -625,9 +632,9 @@ settings:
   config:
     is_prod: false
   depends_on:
-    1:
+    "1":
       component: test/test-component-override
-    2:
+    "2":
       component: test/test-component
       stage: dev
   integrations:
@@ -864,9 +871,9 @@ sources:
             is_prod: false
     depends_on:
       final_value:
-        1:
+        "1":
           component: test/test-component-override
-        2:
+        "2":
           component: test/test-component
           stage: dev
       name: depends_on

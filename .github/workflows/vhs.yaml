@@ -42,12 +42,17 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           IS_LABELED: ${{ steps.labeled.outputs.labeled }}
         run: |
+          # Landing-page tapes (demo/landing/**) are rendered by landing-demos.yaml,
+          # not here — exclude them so they never enter this matrix.
           if [[ "$IS_LABELED" == "true" ]]; then
-            echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
+            files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)
           else
-            files=$(gh pr diff --name-only "$PR_NUMBER" | (grep '\.tape$' | grep -v '(style|defaults)\.tape$' || true) | cut -d/ -f2-)
-            echo "files=$files" >> $GITHUB_OUTPUT
+            files=$(gh pr diff --name-only "$PR_NUMBER" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
           fi
+          # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
+          # split; collapse to a single space-separated line.
+          files=$(printf '%s' "$files" | tr '\n' ' ' | sed -E 's/ +/ /g; s/^ //; s/ $//')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
 
       - name: Set up matrix
         id: create-matrix
@@ -76,20 +81,20 @@ jobs:
           persist-credentials: false
 
       - name: Install atmos
-        uses: jaxxstorm/action-install-gh-release@v1.14.0
+        uses: jaxxstorm/action-install-gh-release@cd6b2b78ad38bdd294341cda064ec0692b06215b # v1.14.0
         with: # Grab the latest version
           repo: cloudposse/atmos
           chmod: 0755
           extension-matching: disable
           rename-to: atmos
 
-      - uses: charmbracelet/vhs-action@v1
+      - uses: charmbracelet/vhs-action@5bc47255c016b6af28ad6b633ee9a07b79468804 # v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ matrix.file }}
           install-fonts: true
 
-      - uses: stefanzweifel/git-auto-commit-action@v4
+      - uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a # v4
         id: auto-commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

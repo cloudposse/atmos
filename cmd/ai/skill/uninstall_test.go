@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
@@ -481,6 +482,8 @@ func TestUninstallCmd_Args(t *testing.T) {
 // TestUninstallCmd_SuccessfulUninstall tests the successful uninstall path.
 // This test creates a mock registry with a skill and verifies it can be uninstalled.
 func TestUninstallCmd_SuccessfulUninstall(t *testing.T) {
+	uiOutput := setupSkillCommandUI(t)
+
 	// Create a temp directory to use as HOME.
 	tempHome := t.TempDir()
 
@@ -543,33 +546,19 @@ This is a test skill.
 	err = os.WriteFile(registryPath, registryData, 0o600)
 	require.NoError(t, err)
 
-	// Reset the force flag.
-	forceFlag := uninstallCmd.Flags().Lookup("force")
-	if forceFlag != nil {
-		_ = forceFlag.Value.Set("true") // Use force to skip confirmation prompt.
-	}
-
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	// Use force to skip confirmation prompt.
+	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+	t.Cleanup(func() {
+		_ = uninstallCmd.Flags().Set("force", "false")
+	})
 
 	// Run the uninstall command.
 	err = uninstallCmd.RunE(uninstallCmd, []string{"test-skill"})
 
-	w.Close()
-	os.Stdout = oldStdout
-
-	// Drain the pipe.
-	var buf bytes.Buffer
-	_, copyErr := io.Copy(&buf, r)
-	require.NoError(t, copyErr)
-
 	// Verify uninstallation was successful.
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "uninstalled successfully")
+	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "uninstalled successfully")
 
 	// Verify the skill directory was removed.
 	_, statErr := os.Stat(skillPath)
@@ -641,11 +630,11 @@ Another test skill.
 	err = os.WriteFile(registryPath, registryData, 0o600)
 	require.NoError(t, err)
 
-	// Reset the force flag.
-	forceFlag := uninstallCmd.Flags().Lookup("force")
-	if forceFlag != nil {
-		_ = forceFlag.Value.Set("true") // Use force to skip confirmation prompt.
-	}
+	// Use force to skip confirmation prompt.
+	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+	t.Cleanup(func() {
+		_ = uninstallCmd.Flags().Set("force", "false")
+	})
 
 	// Capture stdout.
 	oldStdout := os.Stdout

@@ -43,8 +43,91 @@ commands:
 ```
 
 A structured step is the same object documented for workflows. See the
-[step reference](/workflows/steps/step) for the common step fields (`name`, `type`, `command`,
+[step reference](/workflows/steps) for the common step fields (`name`, `type`, `command`,
 `output`, and more).
+
+## Conditional steps
+
+Structured custom command steps support the same `when` condition syntax as
+workflow steps. Omitted `when` means the step runs while the command status is
+still `success`. After a step fails, Atmos keeps evaluating later structured
+steps so `when: failure` and `when: always` steps can run. A false condition
+skips the step without failing the command. Atmos evaluates built-in predicate
+keywords first; any other scalar string is evaluated as a CEL expression. Use
+`!cel` when you want to make that explicit.
+
+```yaml
+commands:
+  - name: release
+    description: Run release checks
+    steps:
+      - type: shell
+        command: ./scripts/ci-release-checks.sh
+        when: ci
+      - type: shell
+        command: ./scripts/local-summary.sh
+        when:
+          not: ci
+      - type: shell
+        command: ./scripts/prod-only.sh
+        when: !cel 'stack == "prod" && ci'
+```
+
+String shorthand steps remain plain shell commands and always run. Use the
+structured form when a custom command step needs a condition.
+
+Use `when: always` for cleanup that must run even when an earlier step fails:
+
+```yaml
+commands:
+  - name: preview
+    description: Start a local service, run a preview, then tear it down
+    steps:
+      - type: shell
+        name: start-emulator
+        command: atmos emulator up aws -s dev --ephemeral
+      - type: shell
+        name: run-preview
+        command: atmos terraform apply demo -s dev -auto-approve
+      - type: shell
+        name: stop-emulator
+        when: always
+        command: atmos emulator down aws -s dev
+      - type: shell
+        name: validate
+        command: atmos terraform output demo -s dev
+```
+
+If `run-preview` fails, `stop-emulator` still runs and `validate` is skipped
+because its omitted `when` is equivalent to success-only. The command still
+returns the original preview failure; cleanup does not hide it.
+
+Step predicates are:
+
+<dl>
+  <dt>`ci`</dt>
+  <dd>Run only when Atmos detects CI using its standard CI detection.</dd>
+
+  <dt>`local`</dt>
+  <dd>Run only outside CI.</dd>
+
+  <dt>`always`</dt>
+  <dd>Run after success or failure. Use this for teardown and cleanup steps.</dd>
+
+  <dt>`never`</dt>
+  <dd>Never run.</dd>
+
+  <dt>`success`</dt>
+  <dd>Run when the step condition is evaluated with success status.</dd>
+
+  <dt>`failure`</dt>
+  <dd>Run only after an earlier step has failed.</dd>
+</dl>
+
+CEL expressions can read `ci`, `status`, `stack`, `component`, `workflow`,
+`step`, and `env`. For workflow and custom command steps, `status` is the
+current command status: `success` before any step fails and `failure` after an
+earlier step failed.
 
 ## Step types
 
@@ -159,6 +242,35 @@ the command's exit code is propagated as the Atmos exit code.
 Beyond `shell`, `atmos`, and `exec`, custom commands support the full set of extended step types —
 the same ones workflows use — enabling interactive CLI wizards directly in your custom commands.
 Use these step types to collect user input, display formatted output, and control execution flow.
+
+### Running Interactive Steps in CI (non-TTY)
+
+Interactive step types (`choose`, `input`, `confirm`, `filter`, `file`, `write`) need a terminal to
+prompt. When a custom command runs without a TTY — most commonly in CI — each interactive step uses
+its `default` value instead of prompting. A step **without** a `default` fails with
+`interactive terminal required for step`, so an unattended run never proceeds with an unintended
+value.
+
+Source the default from the environment with the `!env` function (`!env VAR fallback`) so the same
+command is interactive locally and non-interactive in CI:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy to an account
+    steps:
+      - name: account
+        type: choose
+        prompt: "Account"
+        options: [dev, prod]
+        default: !env STACK_ACCOUNT dev
+      - type: shell
+        command: 'echo "Deploying {{ .steps.account.value }}"'
+```
+
+Locally this prompts; in CI it reads `STACK_ACCOUNT` (falling back to `dev`) and passes the value to
+the shell step. The same behavior applies to
+[workflow steps](/workflows/steps#interactive-steps-in-ci-non-tty).
 
 ### Example: Interactive Deployment Command
 

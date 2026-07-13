@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -54,6 +55,8 @@ type EphemeralConfig struct {
 	CleanupPolicy     string
 	TTY               bool
 	Interactive       bool
+	Stdin             io.Reader
+	Host              bool // grant access to the host container runtime (Docker-out-of-Docker)
 }
 
 // EphemeralResult is the result of a one-shot container execution.
@@ -117,7 +120,7 @@ func pullImageIfAlways(ctx context.Context, runtime Runtime, config *EphemeralCo
 	if config.PullPolicy != PullAlways {
 		return nil
 	}
-	if err := runtime.Pull(ctx, config.Image); err != nil {
+	if err := pullWithRetry(ctx, runtime, config.Image); err != nil {
 		return fmt.Errorf("%w: pull image %q: %w", errUtils.ErrContainerRuntimeOperation, config.Image, err)
 	}
 	return nil
@@ -157,7 +160,7 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 		return containerID, err
 	}
 
-	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
+	if pullErr := pullWithRetry(ctx, runtime, config.Image); pullErr != nil {
 		return "", fmt.Errorf(
 			"failed to create container and pull image: %w",
 			errors.Join(
@@ -216,6 +219,7 @@ func buildEphemeralCreateConfig(config *EphemeralConfig) *CreateConfig {
 		Labels:          config.Labels,
 		RunArgs:         config.RunArgs,
 		OverrideCommand: true,
+		Host:            config.Host,
 	}
 }
 
@@ -224,13 +228,15 @@ func execEphemeralCommand(ctx context.Context, runtime Runtime, containerID stri
 		User:         config.User,
 		WorkingDir:   config.WorkspaceFolder,
 		Env:          config.Env,
-		AttachStdin:  config.Interactive,
+		AttachStdin:  config.Interactive || config.Stdin != nil,
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty:          config.TTY,
 	}
 
-	if config.Interactive {
+	if config.Stdin != nil {
+		opts.Stdin = config.Stdin
+	} else if config.Interactive {
 		opts.Stdin = os.Stdin
 	}
 

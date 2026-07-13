@@ -10,8 +10,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
-	"github.com/cloudposse/atmos/pkg/auth/identities/ambient"
-	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -210,20 +208,14 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
 func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (types.ICredentials, error) {
-	// TODO: Ideally this wouldn't be here, and would be handled by an identity interface function.
-	// Handle special case: standalone AWS user identity.
-	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
-		return aws.AuthenticateStandaloneAWSUser(ctx, m.chain[0], m.identities)
-	}
-
-	// Handle special case: standalone AWS ambient identity.
-	if aws.IsStandaloneAWSAmbientChain(m.chain, m.config.Identities) {
-		return aws.AuthenticateStandaloneAWSAmbient(ctx, m.chain[0], m.identities)
-	}
-
-	// Handle special case: standalone generic ambient identity.
-	if ambient.IsStandaloneAmbientChain(m.chain, m.config.Identities) {
-		return ambient.AuthenticateStandaloneAmbient(ctx, m.chain[0], m.identities)
+	// Standalone identities (aws/user, aws/ambient, generic ambient, emulator-bound) form
+	// a single-element chain with no provider step. Dispatch to them polymorphically via
+	// the StandaloneIdentity interface instead of special-casing each concrete kind, so the
+	// generic manager stays free of imports on concrete identity implementations.
+	if len(m.chain) == 1 {
+		if standalone, ok := m.identities[m.chain[0]].(types.StandaloneIdentity); ok && standalone.IsStandalone() {
+			return standalone.AuthenticateStandalone(ctx)
+		}
 	}
 
 	// Handle regular provider-based authentication chains.
@@ -656,9 +648,9 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 
 	// Standalone identities don't require via configuration.
-	// AWS user, AWS ambient, and generic ambient identities are all standalone.
+	// AWS user, AWS ambient, generic ambient, and emulator-bound identities are all standalone.
 	if identity.Via == nil {
-		if identity.Kind == "aws/user" || identity.Kind == "aws/ambient" || identity.Kind == "ambient" {
+		if types.IsStandaloneIdentityKind(identity.Kind) {
 			*chain = append(*chain, identityName)
 			return nil
 		}

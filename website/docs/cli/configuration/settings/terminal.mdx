@@ -21,6 +21,7 @@ Atmos provides configurable terminal settings that allow you to customize the ou
 - Configure syntax highlighting for terminal output
 - Customize color schemes and formatting options
 - Control output pagination and line wrapping
+- Pace terminal output for demos and recordings
 - Set display preferences for different output formats
 </KeyPoints>
 ## General Terminal Settings
@@ -36,6 +37,7 @@ settings:
     unicode: true         # Use Unicode characters in output
     tab_width: 2          # Number of spaces for YAML indentation (default: 2)
     theme: atmos          # Terminal color theme (default: atmos)
+    speed: 0              # Lines per second for paced output (0 = unlimited)
 ```
 
 ## Terminal Theme
@@ -182,6 +184,7 @@ settings:
     pager: true                     # Enable pager for all terminal output
     max_width: 120                  # Maximum width for terminal output
     color: true                     # Enable colored output
+    speed: 0                        # Lines per second for paced output (0 = unlimited)
 
     # Syntax highlighting specific settings
     syntax_highlighting:
@@ -228,6 +231,12 @@ settings:
     - List available themes: `atmos theme list`
     - Preview themes: `atmos theme show <theme-name>`
     - Popular options: `atmos`, `dracula`, `github`, `monokai`, `solarized-dark`, `solarized-light`
+  </dd>
+
+  <dt>`speed`</dt>
+  <dd>
+    Pace terminal output at the configured number of lines per second. Use this for demos, tutorials, and terminal recordings where instant output is hard to read. A value of `0` disables pacing and preserves the default unlimited output behavior.
+    - Environment variable: `ATMOS_TERMINAL_SPEED`
   </dd>
 </dl>
 

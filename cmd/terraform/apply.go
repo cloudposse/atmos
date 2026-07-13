@@ -33,7 +33,7 @@ For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/apply
 	https://opentofu.org/docs/cli/commands/apply`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformApply, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformApply, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset per-run globals. Both must be initialised before any early return
@@ -126,11 +126,13 @@ func init() {
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
 		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform apply failure handling mode. Supported values: fail-fast, keep-going"),
 		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform apply components to execute concurrently"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform apply logs. Supported values: stream, grouped"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
 		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_APPLY_FAILURE_MODE"),
 		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_APPLY_MAX_CONCURRENCY"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_APPLY_LOG_ORDER"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 

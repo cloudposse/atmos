@@ -20,3 +20,11 @@ func exitStatusCode(exitErr *exec.ExitError) int {
 	}
 	return exitErr.ExitCode()
 }
+
+func exitSignalStatus(exitErr *exec.ExitError) (bool, int, string) {
+	if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+		signal := ws.Signal()
+		return true, int(signal), signal.String()
+	}
+	return false, 0, ""
+}

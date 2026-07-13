@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
           cache: true
@@ -59,12 +59,12 @@ jobs:
           go mod download
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Run CloudPosse pre-commit action
-        uses: cloudposse/github-action-pre-commit@v4.0.0
+        uses: cloudposse/github-action-pre-commit@ed9906221c8a4ee1dcb1e665da895998e0f7b396 # v4.1.0
         with:
           # Run against files changed in the PR only
           # This prevents formatting/checking unrelated files

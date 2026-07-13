@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -23,16 +24,22 @@ type OutputModeWriter struct {
 	mode     OutputMode
 	stepName string
 	viewport *schema.ViewportConfig
+	show     *schema.ShowConfig
 }
 
 // NewOutputModeWriter creates a new OutputModeWriter.
-func NewOutputModeWriter(mode OutputMode, stepName string, viewport *schema.ViewportConfig) *OutputModeWriter {
+func NewOutputModeWriter(mode OutputMode, stepName string, viewport *schema.ViewportConfig, show ...*schema.ShowConfig) *OutputModeWriter {
 	defer perf.Track(nil, "step.NewOutputModeWriter")()
 
+	var showCfg *schema.ShowConfig
+	if len(show) > 0 {
+		showCfg = show[0]
+	}
 	return &OutputModeWriter{
 		mode:     mode,
 		stepName: stepName,
 		viewport: viewport,
+		show:     showCfg,
 	}
 }
 
@@ -159,12 +166,15 @@ func (w *OutputModeWriter) executeRaw(cmd *exec.Cmd) (string, string, error) {
 	// Get I/O context for stream access.
 	ioCtx := iolib.GetContext()
 
+	w.writeStepHeader()
+
 	// Use MultiWriter to both capture and forward output.
 	// Data() returns stdout for pipeable output, UI() returns stderr for human messages.
 	cmd.Stdout = io.MultiWriter(&stdout, ioCtx.Data())
 	cmd.Stderr = io.MultiWriter(&stderr, ioCtx.UI())
 
 	err := cmd.Run()
+	w.writeStepFooter(err)
 	return stdout.String(), stderr.String(), err
 }
 
@@ -172,7 +182,9 @@ func (w *OutputModeWriter) executeRawWithIO(runner func(stdout, stderr io.Writer
 	var stdout, stderr bytes.Buffer
 	ioCtx := iolib.GetContext()
 
+	w.writeStepHeader()
 	err := runner(io.MultiWriter(&stdout, ioCtx.Data()), io.MultiWriter(&stderr, ioCtx.UI()))
+	w.writeStepFooter(err)
 	return stdout.String(), stderr.String(), err
 }
 
@@ -182,15 +194,7 @@ func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	// Print step header.
-	styles := theme.GetCurrentStyles()
-	var stepLabel string
-	if styles != nil {
-		stepLabel = styles.Label.Render("[" + w.stepName + "]")
-	} else {
-		stepLabel = "[" + w.stepName + "]"
-	}
-	ui.Writeln(stepLabel)
+	w.writeStepHeader()
 
 	err := cmd.Run()
 
@@ -200,6 +204,15 @@ func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
 func (w *OutputModeWriter) executeLogWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 
+	w.writeStepHeader()
+	err := runner(&stdout, &stderr)
+	return w.fallbackToLog(stdout.String(), stderr.String(), err)
+}
+
+func (w *OutputModeWriter) writeStepHeader() {
+	if !ShowLabels(w.show) {
+		return
+	}
 	styles := theme.GetCurrentStyles()
 	var stepLabel string
 	if styles != nil {
@@ -208,9 +221,6 @@ func (w *OutputModeWriter) executeLogWithIO(runner func(stdout, stderr io.Writer
 		stepLabel = "[" + w.stepName + "]"
 	}
 	ui.Writeln(stepLabel)
-
-	err := runner(&stdout, &stderr)
-	return w.fallbackToLog(stdout.String(), stderr.String(), err)
 }
 
 // fallbackToLog writes captured output with boundaries.
@@ -223,11 +233,17 @@ func (w *OutputModeWriter) fallbackToLog(stdout, stderr string, runErr error) (s
 		ui.Write(stderr)
 	}
 
-	// Print step footer with status.
-	footer := w.formatStepFooter(runErr)
-	ui.Writeln(footer)
+	w.writeStepFooter(runErr)
 
 	return stdout, stderr, runErr
+}
+
+func (w *OutputModeWriter) writeStepFooter(runErr error) {
+	if !ShowLabels(w.show) {
+		return
+	}
+	footer := w.formatStepFooter(runErr)
+	ui.Writeln(footer)
 }
 
 // formatStepFooter creates the footer string based on step status.
@@ -287,8 +303,25 @@ func GetOutputMode(step *schema.WorkflowStep, workflow *schema.WorkflowDefinitio
 		return OutputMode(workflow.Output)
 	}
 
+	if envPagerEnabled() {
+		return OutputModeViewport
+	}
+
 	// Default to log mode.
 	return OutputModeLog
+}
+
+func envPagerEnabled() bool {
+	if os.Getenv("NO_PAGER") != "" { //nolint:forbidigo // NO_PAGER is a standard CLI env var.
+		return false
+	}
+
+	pagerValue := os.Getenv("ATMOS_PAGER") //nolint:forbidigo // Used here before command-level Viper binding is guaranteed.
+	if pagerValue == "" {
+		return false
+	}
+
+	return (&schema.Terminal{Pager: pagerValue}).IsPagerEnabled()
 }
 
 // GetViewportConfig returns the effective viewport config for a step.

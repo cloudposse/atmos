@@ -33,11 +33,27 @@ func buildCreateArgs(config *CreateConfig) []string {
 	args := []string{"create", "--name", config.Name, "-it"}
 
 	args = addRuntimeFlags(args, config)
+	args = addNetworkFlags(args, config.Networks)
 	args = addHealthAndRestart(args, config)
 	args = addMetadata(args, config)
 	args = addResourceBindings(args, config)
 	args = addImageAndCommand(args, config)
 
+	return args
+}
+
+func addNetworkFlags(args []string, networks []NetworkAttachment) []string {
+	for _, network := range networks {
+		if network.Name == "" {
+			continue
+		}
+		args = append(args, "--network", network.Name)
+		for _, alias := range network.Aliases {
+			if alias != "" {
+				args = append(args, "--network-alias", alias)
+			}
+		}
+	}
 	return args
 }
 
@@ -121,6 +137,17 @@ func addMetadata(args []string, config *CreateConfig) []string {
 	return args
 }
 
+// publishArg returns the `-p` publish value for a port binding. A HostPort of 0
+// means "auto-assign": the container engine picks a free host port (read back
+// later via inspect). We omit the host side in that case — passing a literal `0`
+// makes Podman reject the spec ("port numbers must be between 1 and 65535").
+func publishArg(port PortBinding) string {
+	if port.HostPort == 0 {
+		return fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol)
+	}
+	return fmt.Sprintf("%d:%d/%s", port.HostPort, port.ContainerPort, port.Protocol)
+}
+
 func addResourceBindings(args []string, config *CreateConfig) []string {
 	for _, mount := range config.Mounts {
 		mountStr := fmt.Sprintf("type=%s,source=%s,target=%s", mount.Type, mount.Source, mount.Target)
@@ -131,7 +158,7 @@ func addResourceBindings(args []string, config *CreateConfig) []string {
 	}
 
 	for _, port := range config.Ports {
-		args = append(args, "-p", fmt.Sprintf("%d:%d/%s", port.HostPort, port.ContainerPort, port.Protocol))
+		args = append(args, "-p", publishArg(port))
 	}
 
 	if config.User != "" {
@@ -313,7 +340,7 @@ func buildBakeArgs(config *BuildConfig) []string {
 }
 
 func appendFile(first string, rest []string) []string {
-	values := make([]string, 0, len(rest)+1)
+	values := make([]string, 0, len(rest))
 	if first != "" {
 		values = append(values, first)
 	}

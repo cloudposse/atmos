@@ -44,6 +44,27 @@ func TestBuildTerraformCommandArgs_Plan(t *testing.T) {
 	assert.Contains(t, args, "plan.tfplan")
 }
 
+func TestTerraformPhaseLabel(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		phase   string
+		want    string
+	}{
+		{name: "blank command defaults to terraform", command: "", phase: "plan", want: "terraform plan"},
+		{name: "dot command defaults to terraform", command: ".", phase: "init", want: "terraform init"},
+		{name: "absolute tool path uses base name", command: "/opt/bin/tofu", phase: "apply", want: "tofu apply"},
+		{name: "trimmed tool path uses base name", command: "  /opt/bin/terraform  ", phase: "destroy", want: "terraform destroy"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{Command: tt.command}
+			assert.Equal(t, tt.want, terraformPhaseLabel(info, tt.phase))
+		})
+	}
+}
+
 func TestBuildTerraformCommandArgs_PlanSkipPlanfile(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.Plan.SkipPlanfile = true
@@ -127,6 +148,57 @@ func TestBuildTerraformCommandArgs_Refresh(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, args, "refresh")
 	assert.Contains(t, args, varFileFlag)
+}
+
+func TestBuildTerraformCommandArgs_Test(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "test"}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json"}, args)
+}
+
+func TestBuildTerraformCommandArgs_TestAdditionalVarFileOverridesGeneratedVarFile(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "test",
+		AdditionalArgsAndFlags: []string{varFileFlag, "override.tfvars"},
+	}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json", varFileFlag, "override.tfvars"}, args)
+}
+
+func TestBuildTerraformCommandArgs_TestAddsTestVarFileBeforeUserArgs(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "test",
+		AdditionalArgsAndFlags: []string{varFileFlag, "override.tfvars"},
+	}
+	componentPath := "/tmp/my-component"
+
+	addTerraformTestVarfileArg(&info, "test-vars.json")
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json", varFileFlag, "test-vars.json", varFileFlag, "override.tfvars"}, args)
+}
+
+func TestAddTerraformTestVarfileArgIgnoresNonTestCommands(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "plan",
+		AdditionalArgsAndFlags: []string{"-compact-warnings"},
+	}
+
+	addTerraformTestVarfileArg(&info, "test-vars.json")
+
+	assert.Equal(t, []string{"-compact-warnings"}, info.AdditionalArgsAndFlags)
 }
 
 func TestBuildTerraformCommandArgs_Apply_WithoutPlan(t *testing.T) {

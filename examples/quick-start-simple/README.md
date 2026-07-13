@@ -1,3 +1,14 @@
+---
+title: Quick Start (Simple)
+tags: [Quickstart]
+description: >-
+  Minimal Atmos setup with a single component and three environments — no
+  cloud credentials or access required.
+cast:
+  file: /casts/examples/quick-start-simple/list-and-plan.cast
+  title: atmos quick start simple
+---
+
 # Example: Quick Start Simple
 
 Minimal Atmos setup with a single component and three environments.

@@ -1,7 +1,13 @@
 
 ## Resource Changes Found for `vpc` in `dev-us-east-1`
 
-<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a> [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-dev-us-east-1-vpc)
+<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg?v=">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
+</picture></a>
+
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#create-dev-us-east-1-vpc)
 <details><summary><a id="result-dev-us-east-1-vpc" />Plan: 3 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>

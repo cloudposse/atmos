@@ -11,3 +11,7 @@ import (
 func exitStatusCode(exitErr *exec.ExitError) int {
 	return exitErr.ExitCode()
 }
+
+func exitSignalStatus(_ *exec.ExitError) (bool, int, string) {
+	return false, 0, ""
+}

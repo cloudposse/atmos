@@ -6,6 +6,8 @@ tags: [feature, experimental]
 date: 2026-06-17
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos workflows and custom commands can now run containers natively. A new `type: container` step
 builds images, pushes them to registries, and runs containerized tools — Docker or Podman — through
 the same reusable step library that powers the rest of your automation.
@@ -26,7 +28,7 @@ steps:
   - name: build
     type: container
     action: build
-    build:
+    with:
       context: app
       tags:
         - "localhost:5001/app:{{ .git.sha }}"
@@ -34,24 +36,26 @@ steps:
   - name: push
     type: container
     action: push
-    push:
+    with:
       image: "localhost:5001/app:{{ .git.sha }}"
 
   - name: smoke
     type: container
     action: run
-    run:
+    with:
       image: "localhost:5001/app:{{ .git.sha }}"
       command: uname -a
 ```
 
-The flat shorthand still works for the common case:
+Every action takes its parameters under a single `with:` block:
 
 ```yaml
 - name: hello
   type: container
-  image: alpine:latest
-  command: echo hello
+  action: run
+  with:
+    image: alpine:latest
+    command: echo hello
 ```
 
 Docker Buildx and Buildx Bake are supported for builds; Podman uses the native `podman build` path.
@@ -67,7 +71,7 @@ shell parsing or temporary files:
 - name: build
   type: container
   action: build
-  build:
+  with:
     context: .
     tags: ["123456789012.dkr.ecr.us-east-2.amazonaws.com/app:{{ .env.GIT_SHA }}"]
   outputs:
@@ -76,7 +80,7 @@ shell parsing or temporary files:
 - name: push
   type: container
   action: push
-  push:
+  with:
     image: "{{ .steps.build.outputs.image }}"
 ```
 
@@ -113,7 +117,7 @@ auth:
   type: container
   action: push
   identity: dev-admin
-  push:
+  with:
     image: "{{ .steps.build.outputs.image }}"
 ```
 
@@ -129,6 +133,10 @@ The new `examples/container-step` example demonstrates build, push, run, Bake, a
 cd examples/container-step
 atmos workflow build -f container-step
 ```
+
+<CastPlayer src="/casts/examples/container-step/build-run.cast" title="atmos container build run" chrome controls scrubber />
+
+[View the full example](/examples/container-step)
 
 ## What Comes Next
 

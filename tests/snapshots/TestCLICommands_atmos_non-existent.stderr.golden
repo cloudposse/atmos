@@ -10,17 +10,22 @@ Valid subcommands are:
   • atlantis
   • auth
   • aws
+  • cast
   • ci
   • completion
   • composition
+  • config
   • container
   • describe
   • devcontainer
   • docs
+  • emulator
   • env
   • git
+  • helm
   • helmfile
   • help
+  • kubernetes
   • list
   • lsp
   • mcp
@@ -28,11 +33,9 @@ Valid subcommands are:
   • pro
   • profile
   • secret
-  • show
+  • stack
   • support
   • terraform
-  • tf
-  • tf-custom
   • theme
   • toolchain
   • validate
@@ -44,7 +47,5 @@ Valid subcommands are:
 
  atmos [flags]
  atmos [sub-command] [flags]
-
-## Hints
 
 💡 Run atmos --help for usage

@@ -6,6 +6,8 @@ import CodeBlock from '@theme/CodeBlock';
 import Mermaid from '@theme/Mermaid';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { remarkAlert } from 'remark-github-blockquote-alert';
+import { stripFrontmatter } from '../frontmatter';
 import SourceLink from './SourceLink';
 import { formatFileSize, isBinaryFile, isMarkdownFile } from './utils';
 import type { FileNode } from './types';
@@ -95,7 +97,7 @@ export default function FileViewer({ file }: FileViewerProps): JSX.Element {
         </div>
         <div className={styles.markdownContent}>
           <Markdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkAlert]}
             components={{
               // Render code blocks with syntax highlighting.
               code({ className, children, ...props }) {
@@ -120,7 +122,7 @@ export default function FileViewer({ file }: FileViewerProps): JSX.Element {
               },
             }}
           >
-            {file.content}
+            {stripFrontmatter(file.content)}
           </Markdown>
         </div>
       </div>

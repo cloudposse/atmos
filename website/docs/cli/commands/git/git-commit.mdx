@@ -5,14 +5,14 @@ sidebar_class_name: command
 id: commit
 description: Stage managed paths and create a commit in a managed Git repository.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Stage paths and create a commit in a repository configured under [`git.repositories`](/cli/configuration/git), or in any local path. Commits are path-scoped and safe by default: when `--path` is provided, only those paths are staged, and the commit **fails** if unrelated dirty files exist outside the managed paths — Atmos never sweeps up files it wasn't told to commit.
 </Intro>
 
-<Screengrab title="atmos git commit --help" slug="atmos-git-commit--help" />
+<CastPlayer title="atmos git commit --help" src="/casts/screengrabs/atmos-git-commit--help.cast" static chrome />
 
 ## Usage
 

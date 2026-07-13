@@ -3,6 +3,7 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/templates"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -48,9 +51,16 @@ type mockProvider struct {
 	checkRunCalls  []*provider.CreateCheckRunOptions
 	updateRunCalls []*provider.UpdateCheckRunOptions
 	commentCalls   []*provider.PostCommentOptions
+	annotateCalls  [][]provider.Annotation
 	commentErr     error
 	commentResult  *provider.Comment
 	nextID         int64
+}
+
+// Annotate implements provider.Annotator, capturing the emitted annotations.
+func (m *mockProvider) Annotate(annotations []provider.Annotation) error {
+	m.annotateCalls = append(m.annotateCalls, annotations)
+	return nil
 }
 
 func newMockProvider() *mockProvider {
@@ -272,6 +282,56 @@ func TestBuildStatusDescription(t *testing.T) {
 		result := &plugin.OutputResult{HasErrors: true}
 		assert.Equal(t, "Failed", buildStatusDescription("plan", result))
 	})
+
+	t.Run("with terraform test skipped and cleanup failure", func(t *testing.T) {
+		result := &plugin.OutputResult{
+			HasErrors: true,
+			Data: &plugin.TerraformTestOutputData{
+				Pass:  2,
+				Fail:  1,
+				Error: 1,
+				Skip:  3,
+				CleanupFailures: []plugin.TerraformTestCleanupFailure{
+					{File: "tests/app.tftest.hcl", Run: "cleanup"},
+				},
+			},
+		}
+		assert.Equal(t, "2 passed, 1 failed, 1 errored, 3 skipped, 1 cleanup failed", buildStatusDescription("test", result))
+	})
+
+	t.Run("with terraform test skips and no errors", func(t *testing.T) {
+		result := &plugin.OutputResult{
+			Data: &plugin.TerraformTestOutputData{
+				Pass: 4,
+				Skip: 2,
+			},
+		}
+		assert.Equal(t, "4 passed, 2 skipped", buildStatusDescription("test", result))
+	})
+}
+
+func TestEmitTestAnnotationsSkipsFailuresWithoutLocation(t *testing.T) {
+	provider := newMockProvider()
+	p := &Plugin{}
+	ctx := &plugin.HookContext{Provider: provider}
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformTestOutputData{
+			Runs: []plugin.TerraformTestRun{
+				{Name: "missing-file", Status: "fail", Error: "no file", Line: 12},
+				{Name: "missing-line", File: "tests/app.tftest.hcl", Status: "error", Error: "no line"},
+				{Name: "located", File: "tests/app.tftest.hcl", Line: 30, Status: "fail", Error: "broken"},
+				{Name: "passing", File: "tests/app.tftest.hcl", Line: 31, Status: "pass"},
+			},
+		},
+	}
+
+	p.emitTestAnnotations(ctx, result)
+
+	require.Len(t, provider.annotateCalls, 1)
+	require.Len(t, provider.annotateCalls[0], 1)
+	assert.Equal(t, "tests/app.tftest.hcl", provider.annotateCalls[0][0].Path)
+	assert.Equal(t, 30, provider.annotateCalls[0][0].StartLine)
+	assert.Equal(t, "terraform test: located", provider.annotateCalls[0][0].Title)
 }
 
 func TestGetContextPrefix(t *testing.T) {
@@ -568,6 +628,243 @@ func TestOnAfterApply_WritesOutputs(t *testing.T) {
 	assert.Equal(t, "vpc", mp.writer.outputs["component"])
 	assert.Equal(t, "apply", mp.writer.outputs["command"])
 	assert.Equal(t, "true", mp.writer.outputs["has_changes"])
+}
+
+func TestOnAfterTest_WritesOutputs(t *testing.T) {
+	// Output is enabled, so onAfterTest writes a JUnit report; isolate CWD so the
+	// `<component>.junit.xml` file lands in a temp dir, not the package directory.
+	t.Chdir(t.TempDir())
+
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		Output: "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n",
+	}
+
+	err := p.onAfterTest(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "local", mp.writer.outputs["stack"])
+	assert.Equal(t, "app", mp.writer.outputs["component"])
+	assert.Equal(t, "test", mp.writer.outputs["command"])
+	assert.Equal(t, "2", mp.writer.outputs["tests_total"])
+	assert.Equal(t, "2", mp.writer.outputs["tests_passed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_failed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_errored"])
+	assert.Equal(t, "true", mp.writer.outputs["success"])
+}
+
+func TestOnAfterTest_FailureSetsErrorOutputs(t *testing.T) {
+	// Output is enabled, so onAfterTest writes a JUnit report; isolate CWD so the
+	// `<component>.junit.xml` file lands in a temp dir, not the package directory.
+	t.Chdir(t.TempDir())
+
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		// A failing test run exits non-zero; the exit code is authoritative.
+		ExitCode: 1,
+		Output:   "  run \"a\"... pass\n  run \"b\"... fail\n\nError: Test assertion failed\n\nFailure! 1 passed, 1 failed.\n",
+	}
+
+	err := p.onAfterTest(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "false", mp.writer.outputs["success"])
+	assert.Equal(t, "true", mp.writer.outputs["has_errors"])
+	assert.Equal(t, "1", mp.writer.outputs["tests_failed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_errored"])
+}
+
+func TestOnAfterTest_RendersPassingSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		Output: "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	require.Len(t, mp.writer.summaries, 1, "test summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+	assert.Contains(t, rendered, "Tests Passed for `app` in `local`")
+	assert.Contains(t, rendered, "PASSED-2")
+	assert.NotContains(t, rendered, "Tests Failed")
+}
+
+func TestOnAfterTest_RendersFailingSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "test",
+		ExitCode:       1,
+		Info:           &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+		Output:         "  run \"a\"... pass\n  run \"b\"... fail\n\nError: assertion failed\n\nFailure! 1 passed, 1 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	require.Len(t, mp.writer.summaries, 1)
+	assert.Contains(t, mp.writer.summaries[0], "Tests Failed for `app` in `local`")
+	assert.Contains(t, mp.writer.summaries[0], "FAILED-1")
+}
+
+func TestOnBeforeTest_CreatesCheckRunWhenEnabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "test",
+		CICtx:    &provider.Context{RepoOwner: "owner", RepoName: "repo", SHA: "abc123"},
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+	}
+
+	require.NoError(t, p.onBeforeTest(ctx))
+	assert.Len(t, mp.checkRunCalls, 1, "a check run should be created when checks are enabled")
+}
+
+func TestOnBeforeTest_NoCheckRunWhenDisabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(false)}}},
+		Provider: mp,
+		Command:  "test",
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+	}
+
+	require.NoError(t, p.onBeforeTest(ctx))
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+func TestOnAfterTest_UpdatesCheckRunWhenEnabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		CICtx:    &provider.Context{RepoOwner: "owner", RepoName: "repo", SHA: "abc123"},
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+		Output:   "  run \"a\"... pass\n\nSuccess! 1 passed, 0 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+	require.Len(t, mp.updateRunCalls, 1, "the check run should be updated after the test")
+	assert.Equal(t, "1 passed", mp.updateRunCalls[0].Title)
+}
+
+func TestOnAfterTest_EmitsJUnitAndAnnotations(t *testing.T) {
+	// Write the JUnit file into an isolated CWD (resolveArtifactPath returns "" with
+	// no stack, so junitReportDir falls back to the working directory).
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	p := &Plugin{}
+	mp := newMockProvider()
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary:     schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:      schema.CIOutputConfig{Enabled: boolPtr(true)},
+				Annotations: schema.CIAnnotationsConfig{Enabled: boolPtr(true)},
+				Checks:      schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		ExitCode: 1,
+		Info:     &schema.ConfigAndStacksInfo{ComponentFromArg: "app"},
+		Output:   sampleTestJSON,
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	// JUnit file written + path exposed.
+	junitPath := mp.writer.outputs["junit_report"]
+	require.NotEmpty(t, junitPath, "junit_report path should be exposed")
+	assert.Equal(t, filepath.Join(dir, "app.junit.xml"), junitPath)
+	body, err := os.ReadFile(junitPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `<testsuite name="tests/app.tftest.hcl"`)
+	assert.Contains(t, string(body), `<failure message="Test assertion failed: bucket not created"`)
+
+	// One annotation per failing/errored run, with file:line.
+	require.Len(t, mp.annotateCalls, 1)
+	require.Len(t, mp.annotateCalls[0], 2)
+	ann := mp.annotateCalls[0][0]
+	assert.Equal(t, "tests/app.tftest.hcl", ann.Path)
+	assert.Equal(t, 30, ann.StartLine)
+	assert.Equal(t, provider.AnnotationError, ann.Level)
+	assert.Contains(t, ann.Message, "bucket not created")
+	ann = mp.annotateCalls[0][1]
+	assert.Equal(t, "tests/extra.tftest.hcl", ann.Path)
+	assert.Equal(t, 12, ann.StartLine)
+	assert.Equal(t, provider.AnnotationError, ann.Level)
+	assert.Contains(t, ann.Message, "could not create role")
 }
 
 func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {
@@ -1378,6 +1675,207 @@ func TestResolveArtifactPath_EmptyStackOrComponent(t *testing.T) {
 		path := p.resolveArtifactPath(ctx)
 		assert.Empty(t, path)
 	})
+}
+
+func TestResolveArtifactPath_WorkdirComponent(t *testing.T) {
+	basePath := t.TempDir()
+	writeTestFile(t, filepath.Join(basePath, "atmos.yaml"), `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+`)
+	writeTestFile(t, filepath.Join(basePath, "stacks", "deploy", "dev.yaml"), `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+`)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
+	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, workdirPath), 0o755))
+	t.Chdir(basePath)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	ctx := &plugin.HookContext{
+		Config: &atmosConfig,
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentType:    cfg.TerraformComponentType,
+		},
+	}
+
+	path := (&Plugin{}).resolveArtifactPath(ctx)
+
+	assert.Equal(t, filepath.Join(workdirPath, "dev-vpc.planfile"), path)
+	assert.Equal(t, path, ctx.Info.PlanFile)
+	assert.Equal(t, workdirPath, ctx.Info.ComponentSection[provWorkdir.WorkdirPathKey])
+}
+
+func TestResolveArtifactPath_WorkdirResolutionFailure(t *testing.T) {
+	basePath := t.TempDir()
+	writeTestFile(t, filepath.Join(basePath, "atmos.yaml"), `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+`)
+	writeTestFile(t, filepath.Join(basePath, "stacks", "deploy", "dev.yaml"), `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+`)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
+	// The workdir path exists as a regular file, so workdir resolution fails and
+	// resolveArtifactPath must return "" instead of a bogus planfile path.
+	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, filepath.Dir(workdirPath)), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(basePath, workdirPath), []byte("not a directory"), 0o644))
+	t.Chdir(basePath)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	ctx := &plugin.HookContext{
+		Config: &atmosConfig,
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentType:    cfg.TerraformComponentType,
+		},
+	}
+
+	path := (&Plugin{}).resolveArtifactPath(ctx)
+
+	assert.Empty(t, path)
+	assert.Empty(t, ctx.Info.PlanFile)
+}
+
+func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
+	t.Run("disabled workdir leaves section unchanged", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{},
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{}, info)
+
+		require.True(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+
+	t.Run("enabled workdir with existing root sets workdir path", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "vpc",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.True(t, ok)
+		assert.Equal(t, workdirPath, info.ComponentSection[provWorkdir.WorkdirPathKey])
+	})
+
+	t.Run("enabled workdir with component subpath sets resolved subpath", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-label", "exports")
+		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+		info := &schema.ConfigAndStacksInfo{
+			BaseComponentPath: "exports",
+			FinalComponent:    "null-label",
+			Stack:             "dev",
+			ComponentSection:  workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.True(t, ok)
+		assert.Equal(t, workdirPath, info.ComponentSection[provWorkdir.WorkdirPathKey])
+	})
+
+	t.Run("enabled workdir with missing path leaves section unchanged", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "missing",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: t.TempDir()}, info)
+
+		require.True(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+
+	t.Run("enabled workdir with regular file path fails", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		require.NoError(t, os.MkdirAll(filepath.Dir(workdirPath), 0o755))
+		require.NoError(t, os.WriteFile(workdirPath, []byte("not a directory"), 0o644))
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "vpc",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.False(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+}
+
+func workdirEnabledSection() map[string]any {
+	return map[string]any{
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+}
+
+func writeTestFile(t *testing.T, path string, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644))
 }
 
 func TestIsPlanfileStorageEnabled(t *testing.T) {

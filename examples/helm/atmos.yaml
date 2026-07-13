@@ -1,0 +1,71 @@
+# Atmos configuration for the native Helm component demo.
+# See https://atmos.tools for documentation.
+
+base_path: "."
+
+components:
+  helm:
+    # Base path for native Helm components (local charts live here).
+    base_path: "components/helm"
+
+auth:
+  identities:
+    local-k3s:
+      kind: kubernetes/emulator
+      emulator: kubernetes
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+toolchain:
+  install_path: .tools
+  aliases:
+    helm: helm/helm
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+commands:
+  - name: "test"
+    description: "Render the local Helm chart, deploy it to the k3s emulator, verify it, then tear it down"
+    steps:
+      - atmos validate stacks
+      - atmos helm template demo -s dev
+      - command: atmos emulator up kubernetes -s dev
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos helm diff demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos helm apply demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
+      - atmos helm delete demo -s dev --identity local-k3s
+      - atmos emulator down kubernetes -s dev

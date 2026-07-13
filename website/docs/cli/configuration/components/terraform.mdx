@@ -6,12 +6,15 @@ sidebar_class_name: command
 id: terraform
 description: Configure Terraform and OpenTofu component behavior in atmos.yaml.
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import DocCardList from "@theme/DocCardList";
 
 <Intro>
-Configure how Atmos executes Terraform and OpenTofu commands, including the base path for components, auto-approve behavior, backend file generation, and initialization options.
+  Configure how Atmos executes Terraform and OpenTofu commands, including the
+  base path for components, auto-approve behavior, backend file generation, and
+  initialization options.
 </Intro>
 
 :::note Disambiguation
@@ -65,6 +68,7 @@ components:
     # Interactive shell configuration
     shell:
       prompt: "Terraform Shell"
+
 ```
 </File>
 
@@ -156,6 +160,52 @@ components:
     **Default:** `false`
   </dd>
 
+  <dt>`planfiles`</dt>
+  <dd>
+    Configures [planfile storage](/ci/planfile-storage) and
+    [drift verification](/components/terraform/planfiles#drift-verification) for CI pipelines.
+    Storage is opt-in: when this section is absent, planfile upload, download, and verification are
+    skipped (and an explicit `--verify-plan` request errors, since there is no stored plan to verify
+    against).
+
+    ```yaml
+    components:
+      terraform:
+        planfiles:
+          stores:
+            github:
+              type: github/artifacts
+          priority: [github]
+          verify: fail
+    ```
+
+    <dl>
+      <dt>`planfiles.stores`</dt>
+      <dd>Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`) and backend-specific `options`.</dd>
+
+      <dt>`planfiles.default`</dt>
+      <dd>Name of the store to use when no priority list is set.</dd>
+
+      <dt>`planfiles.priority`</dt>
+      <dd>Ordered list of store names to try in turn for upload and download.</dd>
+
+      <dt>`planfiles.verify`</dt>
+      <dd>
+        Drift-verification behavior on `deploy`: `fail` (default under CI), `warn`, or `off`.
+        Precedence is **CLI flag (`--verify-plan` / `--verify-plan=false`) > config > CI default**.
+
+        **Environment variable (per-run override):** `ATMOS_TERRAFORM_VERIFY_PLAN`
+      </dd>
+
+      <dt>`planfiles.required`</dt>
+      <dd>Whether a stored planfile **must exist** for `deploy` to proceed. Unset, it tracks `verify` strictness (required when verification resolves to `fail`).</dd>
+    </dl>
+
+    See [Planfile Storage](/ci/planfile-storage) for backend configuration and
+    [Terraform Planfiles](/components/terraform/planfiles#drift-verification) for verification
+    semantics.
+  </dd>
+
   <dt>`plugin_cache`</dt>
   <dd>
     When `true`, Atmos enables Terraform provider plugin caching by automatically setting `TF_PLUGIN_CACHE_DIR`. This improves performance by reusing downloaded providers across components, reducing init times and network bandwidth.
@@ -215,6 +265,7 @@ components:
     command: tofu
     base_path: components/terraform
 ```
+
 </File>
 
 OpenTofu supports additional features like passing variables to `init` for dynamic backend configuration:
@@ -334,16 +385,58 @@ backend.tf.json
 
 ## Related Commands
 
-<DocCardList items={[
-  {type: 'link', href: '/cli/commands/terraform/usage', label: 'atmos terraform', description: 'Execute Terraform/OpenTofu commands'},
-  {type: 'link', href: '/cli/commands/terraform/plan', label: 'atmos terraform plan', description: 'Generate and show execution plan'},
-  {type: 'link', href: '/cli/commands/terraform/apply', label: 'atmos terraform apply', description: 'Apply infrastructure changes'},
-  {type: 'link', href: '/cli/commands/terraform/deploy', label: 'atmos terraform deploy', description: 'Run init, plan, and apply in sequence'},
-  {type: 'link', href: '/cli/commands/terraform/shell', label: 'atmos terraform shell', description: 'Open an interactive shell'},
-  {type: 'link', href: '/cli/commands/terraform/generate/backends', label: 'atmos terraform generate backends', description: 'Generate backend configuration files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/varfiles', label: 'atmos terraform generate varfiles', description: 'Generate variable files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/files', label: 'atmos terraform generate files', description: 'Generate auxiliary configuration files'},
-]} />
+<DocCardList
+  items={[
+    {
+      type: "link",
+      href: "/cli/commands/terraform/usage",
+      label: "atmos terraform",
+      description: "Execute Terraform/OpenTofu commands",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/plan",
+      label: "atmos terraform plan",
+      description: "Generate and show execution plan",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/apply",
+      label: "atmos terraform apply",
+      description: "Apply infrastructure changes",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/deploy",
+      label: "atmos terraform deploy",
+      description: "Run init, plan, and apply in sequence",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/shell",
+      label: "atmos terraform shell",
+      description: "Open an interactive shell",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/backends",
+      label: "atmos terraform generate backends",
+      description: "Generate backend configuration files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/varfiles",
+      label: "atmos terraform generate varfiles",
+      description: "Generate variable files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/files",
+      label: "atmos terraform generate files",
+      description: "Generate auxiliary configuration files",
+    },
+  ]}
+/>
 
 ## Related
 

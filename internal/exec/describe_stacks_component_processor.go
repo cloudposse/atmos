@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -30,6 +31,7 @@ type componentSections struct {
 	auth        map[string]any
 	providers   map[string]any
 	hooks       map[string]any
+	test        map[string]any
 	overrides   map[string]any
 	backend     map[string]any
 	backendType string
@@ -268,7 +270,10 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		{cfg.HelmfileSectionName, processComponentTypeOpts{}},
 		{cfg.PackerSectionName, processComponentTypeOpts{}},
 		{cfg.AnsibleSectionName, processComponentTypeOpts{}},
+		{cfg.KubernetesSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
+		{cfg.HelmSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
 		{cfg.ContainerSectionName, processComponentTypeOpts{}},
+		{cfg.EmulatorSectionName, processComponentTypeOpts{}},
 	}
 
 	for _, te := range typeEntries {
@@ -528,6 +533,12 @@ func extractDescribeComponentSections(componentSection map[string]any) component
 		s.hooks = map[string]any{}
 	}
 
+	if v, ok := componentSection[cfg.TestSectionName].(map[string]any); ok {
+		s.test = v
+	} else {
+		s.test = map[string]any{}
+	}
+
 	if v, ok := componentSection[cfg.OverridesSectionName].(map[string]any); ok {
 		s.overrides = v
 	} else {
@@ -574,6 +585,7 @@ func buildConfigAndStacksInfo(
 			cfg.AuthSectionName:        secs.auth,
 			cfg.ProvidersSectionName:   secs.providers,
 			cfg.HooksSectionName:       secs.hooks,
+			cfg.TestSectionName:        secs.test,
 			cfg.OverridesSectionName:   secs.overrides,
 			cfg.BackendSectionName:     secs.backend,
 			cfg.BackendTypeSectionName: secs.backendType,
@@ -742,13 +754,27 @@ func processComponentSectionTemplates(
 		settingsSectionStruct.Templates.Settings.Env = envMap
 	}
 
+	componentTemplateContext := make(map[string]any, len(componentSection))
+	for k, v := range componentSection {
+		componentTemplateContext[k] = v
+	}
+	componentTemplateContext, err = manager.AddTemplateContext(
+		atmosConfig,
+		componentSectionStr,
+		componentTemplateContext,
+		manager.EffectiveTrackFromStack(atmosConfig, info),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	processed, err := ProcessTmplWithDatasources(
 		atmosConfig,
 		info,
 		settingsSectionStruct,
 		"describe-stacks-all-sections",
 		componentSectionStr,
-		info.ComponentSection,
+		componentTemplateContext,
 		true,
 	)
 	if err != nil {
@@ -887,7 +913,10 @@ func hasStackExplicitComponents(stackSection map[string]any) bool {
 		cfg.HelmfileSectionName,
 		cfg.PackerSectionName,
 		cfg.AnsibleSectionName,
+		cfg.KubernetesSectionName,
+		cfg.HelmSectionName,
 		cfg.ContainerSectionName,
+		cfg.EmulatorSectionName,
 	} {
 		if typeMap, ok := comps[typeName].(map[string]any); ok && len(typeMap) > 0 {
 			return true

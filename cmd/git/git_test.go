@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -279,9 +280,9 @@ func TestRunConcurrent_AttemptAllErrorsJoin(t *testing.T) {
 	errB := errors.New("failure-b")
 	names := []string{"a", "b", "c"}
 
-	callCount := 0
+	var callCount atomic.Int32
 	err := runConcurrent(context.Background(), names, func(_ context.Context, name string) error {
-		callCount++
+		callCount.Add(1)
 		switch name {
 		case "a":
 			return errA
@@ -293,7 +294,7 @@ func TestRunConcurrent_AttemptAllErrorsJoin(t *testing.T) {
 	})
 
 	// All 3 were attempted.
-	assert.Equal(t, 3, callCount, "all repositories should be attempted")
+	assert.Equal(t, int32(3), callCount.Load(), "all repositories should be attempted")
 
 	// Combined error wraps both failures.
 	require.Error(t, err)

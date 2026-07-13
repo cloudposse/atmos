@@ -439,7 +439,7 @@ func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.Con
 	return result, err
 }
 
-// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, Ansible, or custom).
+// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, Ansible, Kubernetes, or custom).
 func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -470,6 +470,9 @@ func detectComponentType(
 		cfg.PackerComponentType,
 		cfg.AnsibleComponentType,
 		cfg.ContainerComponentType,
+		cfg.EmulatorComponentType,
+		cfg.KubernetesComponentType,
+		cfg.HelmComponentType,
 	}
 
 	var result schema.ConfigAndStacksInfo

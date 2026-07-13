@@ -1,0 +1,6 @@
+name: atmos
+kind: toolchain-demo
+features:
+  - registries
+  - aliases
+  - pipelines

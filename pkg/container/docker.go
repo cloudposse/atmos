@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +77,10 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (string, error) {
 	defer perf.Track(nil, "container.DockerRuntime.Create")()
 
+	if err := prepareHostRuntime(ctx, d, config); err != nil {
+		return "", err
+	}
+
 	args := buildCreateArgs(config)
 
 	cmd := d.command(ctx, args...)
@@ -93,6 +99,17 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 	log.Debug("Created docker container", logKeyID, containerID, "name", config.Name)
 
 	return containerID, nil
+}
+
+// EnsureNetwork idempotently creates a user-defined docker network. It implements
+// NetworkEnsurer so emulators in a stack can share a network and resolve each
+// other by component name.
+func (d *DockerRuntime) EnsureNetwork(ctx context.Context, name string) error {
+	defer perf.Track(nil, "container.DockerRuntime.EnsureNetwork")()
+
+	cmd := d.command(ctx, "network", "create", name)
+	output, err := cmd.CombinedOutput()
+	return networkCreateResult(err, string(output))
 }
 
 // Start starts a container.
@@ -192,6 +209,8 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 
 	// Parse labels.
 	info.Labels = getLabelsFromInspect(data)
+	info.Networks = getNetworksFromInspect(data)
+	info.NetworkIPs = getNetworkIPsFromInspect(data)
 
 	return info
 }
@@ -237,6 +256,55 @@ func getLabelsFromInspect(data map[string]interface{}) map[string]string {
 		if s, ok := v.(string); ok {
 			result[k] = s
 		}
+	}
+	return result
+}
+
+func getNetworksFromInspect(data map[string]interface{}) []string {
+	settings, ok := data["NetworkSettings"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	networks, ok := settings["Networks"].(map[string]interface{})
+	if !ok || len(networks) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(networks))
+	for name := range networks {
+		if name != "" {
+			result = append(result, name)
+		}
+	}
+	sort.Strings(result)
+	return result
+}
+
+func getNetworkIPsFromInspect(data map[string]interface{}) map[string]string {
+	settings, ok := data["NetworkSettings"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	networks, ok := settings["Networks"].(map[string]interface{})
+	if !ok || len(networks) == 0 {
+		return nil
+	}
+
+	result := make(map[string]string, len(networks))
+	for name, raw := range networks {
+		if name == "" {
+			continue
+		}
+		network, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ip := getString(network, "IPAddress"); ip != "" {
+			result[name] = ip
+		}
+	}
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }
@@ -295,6 +363,9 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 		if labelsStr := getString(containerJSON, "Labels"); labelsStr != "" {
 			info.Labels = parseLabels(labelsStr)
 		}
+		if portsStr := getString(containerJSON, "Ports"); portsStr != "" {
+			info.Ports = parseDockerPorts(portsStr)
+		}
 
 		containers = append(containers, info)
 	}
@@ -324,6 +395,66 @@ func parseLabels(labelsStr string) map[string]string {
 		}
 	}
 	return labels
+}
+
+func parseDockerPorts(portsStr string) []PortBinding {
+	var ports []PortBinding
+	seen := map[PortBinding]struct{}{}
+	for _, part := range strings.Split(portsStr, ",") {
+		binding, ok := parseDockerPort(strings.TrimSpace(part))
+		if !ok {
+			continue
+		}
+		if _, exists := seen[binding]; exists {
+			continue
+		}
+		seen[binding] = struct{}{}
+		ports = append(ports, binding)
+	}
+	return ports
+}
+
+func parseDockerPort(portStr string) (PortBinding, bool) {
+	left, right, ok := strings.Cut(portStr, "->")
+	if !ok {
+		return PortBinding{}, false
+	}
+	containerPort, protocol, ok := parseDockerContainerPort(right)
+	if !ok {
+		return PortBinding{}, false
+	}
+	hostPort, ok := parseDockerHostPort(left)
+	if !ok {
+		return PortBinding{}, false
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
+}
+
+func parseDockerContainerPort(portStr string) (int, string, bool) {
+	portPart, protocol, ok := strings.Cut(strings.TrimSpace(portStr), "/")
+	if !ok || strings.Contains(portPart, "-") {
+		return 0, "", false
+	}
+	port, err := strconv.Atoi(portPart)
+	if err != nil || port == 0 {
+		return 0, "", false
+	}
+	return port, protocol, true
+}
+
+func parseDockerHostPort(portStr string) (int, bool) {
+	hostPortPart := strings.TrimSpace(portStr)
+	if strings.Contains(hostPortPart, "-") {
+		return 0, false
+	}
+	if idx := strings.LastIndex(hostPortPart, ":"); idx >= 0 {
+		hostPortPart = hostPortPart[idx+1:]
+	}
+	port, err := strconv.Atoi(hostPortPart)
+	if err != nil || port == 0 {
+		return 0, false
+	}
+	return port, true
 }
 
 // Exec executes a command in a running container.

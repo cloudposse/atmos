@@ -26,8 +26,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -211,7 +212,7 @@ func (p *ssoProvider) newOIDCClient(ctx context.Context) (*ssooidc.Client, error
 		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
 	}
 
-	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(nil, p.config); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -408,24 +409,24 @@ func displayVerificationDialog(code, url string) {
 	}
 
 	// Render the box and display it.
-	fmt.Fprintf(os.Stderr, "%s\n", boxStyle.Render(content.String()))
+	ui.Writef("%s\n", boxStyle.Render(content.String()))
 }
 
 // displayVerificationPlainText shows verification code in plain text (for non-TTY/CI).
 func displayVerificationPlainText(code, url string) {
-	utils.PrintfMessageToTUI("🔐 **AWS SSO Authentication Required**\n")
-	utils.PrintfMessageToTUI("Verification Code: **%s**\n", code)
+	ui.Writef("🔐 **AWS SSO Authentication Required**\n")
+	ui.Writef("Verification Code: **%s**\n", code)
 
 	if url != "" {
 		if !telemetry.IsCI() {
-			utils.PrintfMessageToTUI("Opening browser to: %s\n", url)
-			utils.PrintfMessageToTUI("If the browser does not open, visit the URL above and enter the code.\n")
+			ui.Writef("Opening browser to: %s\n", url)
+			ui.Writef("If the browser does not open, visit the URL above and enter the code.\n")
 		} else {
-			utils.PrintfMessageToTUI("Verification URL: %s\n", url)
+			ui.Writef("Verification URL: %s\n", url)
 		}
 	}
 
-	utils.PrintfMessageToTUI("Waiting for authentication...\n")
+	ui.Writef("Waiting for authentication...\n")
 }
 
 // Validate validates the provider configuration.
@@ -570,6 +571,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
 
 	model := spinnerModel{
 		spinner:    s,

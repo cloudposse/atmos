@@ -1,19 +1,29 @@
 package hooks
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
 
 // Hook is the structure for a hook configured in stack YAML.
 // Each hook has a Kind that determines what engine runs it.
 type Hook struct {
 	// Kind selects the engine that runs this hook. Built-in kinds:
 	// "store" (existing semantics), "command" (generic binary execution),
-	// plus named tool kinds like "infracost", "checkov", "trivy", "kics".
+	// plus step-backed kinds like "step" and "steps", and named tool kinds
+	// like "infracost", "checkov", "trivy", "kics".
 	//
 	// For back-compat, the legacy `command:` YAML key is accepted as an
 	// alias when `kind:` is absent. See UnmarshalYAML.
 	Kind string `yaml:"kind,omitempty"`
 
 	Events []string `yaml:"events,omitempty"`
+
+	// When selects whether this hook runs. Empty defaults to success-only,
+	// preserving the original behavior where after-* hooks fired only when the
+	// operation succeeded.
+	When schema.Condition `yaml:"when,omitempty"`
 
 	// Generic command-kind fields. Used by the command engine and by named
 	// tool kinds via their defaults.
@@ -23,9 +33,18 @@ type Hook struct {
 	Command string            `yaml:"command,omitempty"`
 	Args    []string          `yaml:"args,omitempty"`
 	Env     map[string]string `yaml:"env,omitempty"`
-	// Format is the inline rendering hint for generic kinds. v1 accepts
-	// "markdown" or empty (= downloadable artifact, no inline render).
+	// Format is the inline rendering / parsing hint for generic kinds. Accepts
+	// "markdown" (render the artifact inline), "sarif" (parse the output as
+	// SARIF — giving a custom `kind: command` hook the same findings summary,
+	// CI annotations, and SARIF upload as the built-in scanner kinds), or
+	// empty (= downloadable artifact, no inline render).
 	Format string `yaml:"format,omitempty"`
+
+	// Results names the file a `format: sarif` command writes its SARIF to,
+	// relative to $ATMOS_OUTPUT_DIR, for tools that write a fixed filename
+	// into a directory rather than to $ATMOS_OUTPUT_FILE. When empty, the
+	// SARIF is read from $ATMOS_OUTPUT_FILE.
+	Results string `yaml:"results,omitempty"`
 
 	// OnFailure is the failure mode. "warn" (default for tool kinds),
 	// "fail" (propagate non-zero exit), or "ignore" (swallow).
@@ -44,6 +63,20 @@ type Hook struct {
 	Commit *GitCommitSpec `yaml:"commit,omitempty"`
 	// Push pushes the created commit to the remote when true.
 	Push bool `yaml:"push,omitempty"`
+
+	// Step-kind specific (kind: step; see pkg/hooks/step_engine.go).
+	//
+	// Type names the step-registry step type to run (e.g. "container",
+	// "toast", "http"). Required for kind: step.
+	Type string `yaml:"type,omitempty"`
+	// With holds the kind-specific payload. For kind: step it is the step's
+	// parameter map, decoded into one WorkflowStep. For kind: steps it is an
+	// ordered list of WorkflowStep objects. Rendered (templates + YAML
+	// functions) by resolveHookForExecution before the engine sees it.
+	With any `yaml:"with,omitempty"`
+	// Retry wraps the step execution in retry.Do. Same schema as a
+	// workflow step's retry block; interpreted by the bridge, not the step.
+	Retry *schema.RetryConfig `yaml:"retry,omitempty"`
 }
 
 // GitCommitSpec is the `commit` block of a git-kind hook. Message supports
@@ -76,6 +109,45 @@ func (h *Hook) UnmarshalYAML(unmarshal func(any) error) error {
 		h.Command = ""
 	}
 	return nil
+}
+
+// RunStatus is the outcome of the lifecycle operation a hook fires around.
+type RunStatus string
+
+// Lifecycle operation outcomes reported to hooks.
+const (
+	RunSuccess RunStatus = "success"
+	RunFailure RunStatus = "failure"
+)
+
+// When values for Hook.When.
+const (
+	WhenSuccess = "success"
+	WhenFailure = "failure"
+	WhenAlways  = "always"
+)
+
+// RunsWhen reports whether this hook should run given lifecycle status and CI
+// state. An empty When defaults to success-only, preserving the pre-When
+// behavior where after-* hooks fired only on success.
+func (h *Hook) RunsWhen(status RunStatus, isCI bool) bool {
+	ok, err := h.RunsWhenE(schema.ConditionContext{
+		CI:     isCI,
+		Status: string(status),
+	})
+	return err == nil && ok
+}
+
+//nolint:gocritic // Public compatibility API keeps ConditionContext by value.
+func (h *Hook) RunsWhenE(ctx schema.ConditionContext) (bool, error) {
+	return h.When.EvaluateWithImplicitSuccessE(ctx)
+}
+
+// RunsOnStatus reports whether this hook should run given the lifecycle
+// operation's status. It is retained for tests and callers that do not need CI
+// conditions.
+func (h *Hook) RunsOnStatus(status RunStatus) bool {
+	return h.RunsWhen(status, false)
 }
 
 // MatchesEvent reports whether this hook should run for the given event.

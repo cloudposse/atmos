@@ -11,7 +11,7 @@ import File from '@site/src/components/File'
 
 <Intro>
 Atmos hooks run automated actions at specific points in a component's
-lifecycle — before/after `terraform plan`, `apply`, `deploy`, or `init`.
+lifecycle — before/after `terraform plan`, `apply`, `test`, `deploy`, or `init`.
 Built-in kinds cover the common cases (cost analysis, security scanning,
 storing outputs) and the generic `command` kind plugs in any binary you
 need. Tools auto-install through the Atmos toolchain and their output
@@ -31,17 +31,17 @@ components:
       hooks:
         # Cost diff after every plan — zero config.
         cost:
-          events: [after-terraform-plan]
+          events: [after.terraform.plan]
           kind: infracost
 
         # Security scan after every plan.
         security:
-          events: [after-terraform-plan]
+          events: [after.terraform.plan]
           kind: trivy
 
         # Store outputs after apply (the original hook use case).
         outputs:
-          events: [after-terraform-apply]
+          events: [after.terraform.apply]
           kind: store
           name: prod/ssm
           outputs:
@@ -57,24 +57,27 @@ each level merges into the final result so you can keep configuration
 
 | Event | When it fires |
 |---|---|
-| `before-terraform-init` | Before `atmos terraform init` runs |
-| `after-terraform-init` | After `atmos terraform init` finishes |
-| `before-terraform-plan` | Before `atmos terraform plan` runs (after init has completed) |
-| `after-terraform-plan` | After `atmos terraform plan` finishes |
-| `before-terraform-apply` | Before `atmos terraform apply` runs |
-| `after-terraform-apply` | After `atmos terraform apply` finishes |
-| `before-terraform-deploy` | Alias of `before-terraform-apply` (deploy is apply with `-auto-approve`) |
-| `after-terraform-deploy` | Alias of `after-terraform-apply` |
+| `before.terraform.init` | Before `atmos terraform init` runs |
+| `after.terraform.init` | After `atmos terraform init` finishes |
+| `before.terraform.plan` | Before `atmos terraform plan` runs (after init has completed) |
+| `after.terraform.plan` | After `atmos terraform plan` finishes |
+| `before.terraform.apply` | Before `atmos terraform apply` runs |
+| `after.terraform.apply` | After `atmos terraform apply` finishes |
+| `before.terraform.test` | Before `atmos terraform test` runs |
+| `after.terraform.test` | After `atmos terraform test` finishes (fires on success and failure) |
+| `before.terraform.deploy` | Alias of `before.terraform.apply` (deploy is apply with `-auto-approve`) |
+| `after.terraform.deploy` | Alias of `after.terraform.apply` |
 
 Hooks with no `events` list fire on every supported event for backward
 compatibility with configs written before event filtering existed. You
-can use the dotted form (`after.terraform.plan`) or the hyphenated form
-(`after-terraform-plan`) — they're equivalent.
+should use the dotted form (`after.terraform.plan`) in new configs. The
+legacy hyphenated form (`after-terraform-plan`) is still accepted and
+equivalent for backward compatibility.
 
-The `before-terraform-init` and `after-terraform-init` events fire around the
+The `before.terraform.init` and `after.terraform.init` events fire around the
 explicit `atmos terraform init` command. They do not fire for the implicit
 `init` that `plan`, `apply`, and `deploy` run automatically — use
-`before-terraform-plan` / `before-terraform-apply` for those.
+`before.terraform.plan` / `before.terraform.apply` for those.
 
 ## Built-in Kinds
 
@@ -94,7 +97,7 @@ top resources by monthly cost.
 ```yaml
 hooks:
   cost:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: infracost
 ```
 
@@ -111,7 +114,7 @@ feeds the SARIF output through Atmos's shared scanner result handler.
 ```yaml
 hooks:
   security:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: trivy
 ```
 
@@ -146,7 +149,7 @@ result handler.
 ```yaml
 hooks:
   policy:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: checkov
 ```
 
@@ -180,7 +183,7 @@ the SARIF output through Atmos's shared scanner result handler.
 ```yaml
 hooks:
   iac-scan:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: kics
 ```
 
@@ -201,7 +204,7 @@ hooks:
   <dd>The `kics` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain — Atmos ships a curated registry override so `kics: "<version>"` resolves correctly even though the upstream Aqua entry uses an unsupported `go_build` type.</dd>
 
   <dt>`KICS_QUERIES_PATH`</dt>
-  <dd>Required at runtime. The KICS release tarball does not include the query library. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, point at the unpacked `assets/queries` directory shipped alongside the release archive.</dd>
+  <dd>Required at runtime. The KICS release tarball does not include the query library, so Atmos toolchain installs provide the binary only. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, supply a trusted KICS query library separately and point `KICS_QUERIES_PATH` at its `assets/queries` directory.</dd>
 </dl>
 
 All three scanner kinds emit SARIF and share a result handler that renders
@@ -220,7 +223,7 @@ the [`!store` function](/stacks/sharing-state/stores) for reading.
 ```yaml
 hooks:
   outputs:
-    events: [after-terraform-apply]
+    events: [after.terraform.apply]
     kind: store
     name: prod/ssm
     outputs:
@@ -310,7 +313,7 @@ your tool.
 ```yaml
 hooks:
   custom-scan:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: command
     command: my-internal-scanner
     args:
@@ -355,6 +358,258 @@ collide, and cleanup is automatic.
 Tool stdout/stderr stream through Atmos's I/O layer so you see them in
 real time — same UX as Terraform plan output.
 
+### `kind: step` (run a step type)
+
+Runs any registered [workflow / custom-command step type](/workflows/steps/type)
+— `container`, `toast`, `log`, `markdown`, `http`, and the rest — on a
+lifecycle event. Instead of growing the hook-kind list one tool at a
+time, `kind: step` makes the whole step library available as hooks, so a
+step you already use in a workflow runs identically as a hook.
+
+```yaml
+hooks:
+  notify-slack:
+    kind: step
+    type: http                 # any registered step type
+    events: [after.terraform.apply]
+    on_failure: warn           # envelope policy: warn | fail | ignore
+    retry:                     # envelope policy: same schema as a workflow step's retry
+      max_attempts: 3
+    with:                      # the step's own parameters
+      url: https://hooks.slack.com/services/XXX
+      method: POST
+      body: '{"text": "Deployed {{ .atmos_component }} to {{ .stack }}"}'
+```
+
+:::note The `http` step ships separately
+The Slack example above needs the `http` step type. If your Atmos build
+doesn't have it yet, use a step type that is registered (e.g. `container`,
+`toast`, `log`, `markdown`) — the bridge itself works with every
+registered step type.
+:::
+
+The split between the envelope and `with:` is deliberate:
+
+- The **envelope** (`kind`, `type`, `events`, `on_failure`, `retry`,
+  `env`) is what the *hook runner* interprets.
+- **`with:`** is what the *step* interprets — it is the step's own
+  parameter block, exactly as you'd write it in a workflow.
+
+`on_failure` and `retry` sit at the envelope because Atmos applies them
+*around* the step (retry the whole step, then decide warn/fail/ignore) —
+the step never sees them.
+
+```yaml
+# Build and push an image after apply, retried, non-blocking.
+hooks:
+  publish-image:
+    kind: step
+    type: container
+    events: [after.terraform.apply]
+    on_failure: warn
+    with:
+      action: build
+      image: example:latest
+      build:
+        context: .
+        tags: [example:latest]
+```
+
+A common pairing is the [`emulator` step type](/workflows/steps/type/emulator) on the
+`terraform test` events: bring a local cloud [emulator](/stacks/components/emulator) up before the tests
+and tear it down after (`when: always` guarantees teardown even when a test fails), so
+`atmos terraform test` runs against a local sandbox with no cloud account:
+
+```yaml
+hooks:
+  start-emulator:
+    kind: step
+    type: emulator
+    events: [before.terraform.test]
+    with: { component: aws, action: up }
+  stop-emulator:
+    kind: step
+    type: emulator
+    events: [after.terraform.test]
+    when: always
+    with: { component: aws, action: down }
+```
+
+<dl>
+  <dt>`type`</dt>
+  <dd>The step type to run — any registered workflow/custom-command step type. A typo fails the **preflight** check before Terraform runs.</dd>
+
+  <dt>`with`</dt>
+  <dd>The step's parameters. These are rendered with the standard hook template context and YAML functions (so `{{ .atmos_component }}` and `!store ...` work inside `with:`), then handed to the step. The step's own validation is the gate — the schema keeps `with:` open.</dd>
+
+  <dt>`when` (default `success`)</dt>
+  <dd>Declarative condition controlling whether this hook runs. See [Reacting to success or failure](#reacting-to-success-or-failure).</dd>
+
+  <dt>`retry`</dt>
+  <dd>Optional. Wraps the step execution in Atmos's retry policy — same schema as a [workflow step's `retry`](/workflows/steps/retry). Applied by the hook runner, not the step.</dd>
+
+  <dt>`env`</dt>
+  <dd>Extra environment variables layered on top of the standard `ATMOS_*` variables (`ATMOS_STACK`, `ATMOS_COMPONENT`, `ATMOS_COMPONENT_PATH`, …) the step receives.</dd>
+
+  <dt>`on_failure` (default `warn`)</dt>
+  <dd>`warn` | `fail` | `ignore`, applied to the **step's own** outcome (not the terraform operation's). Use `when:` to react to the operation outcome.</dd>
+</dl>
+
+All step types are available, including interactive ones — Atmos does not
+restrict them. Whether an interactive step makes sense on a (usually
+headless / CI) lifecycle event is the step's responsibility, not the
+hook's.
+
+### `kind: steps` (run ordered steps)
+
+Runs an ordered list of registered workflow/custom-command step types on one
+lifecycle event. Use this when a lifecycle needs sequencing but should still
+stay local to the component being operated on — for example, start an emulator,
+apply a fixture component, run the test, then destroy the fixture and stop the
+emulator.
+
+`kind: steps` uses the same hook envelope as every other hook (`events`, `when`,
+`on_failure`, `retry`, `env`). The ordered payload lives under `with:`, the same
+conventional payload key used by `kind: step`.
+
+```yaml
+hooks:
+  test-fixtures-up:
+    events: [before.terraform.test]
+    kind: steps
+    on_failure: fail
+    with:
+      - type: emulator
+        component: aws
+        stack: fixtures
+        action: up
+
+      - type: atmos
+        command: terraform apply vpc -s fixtures -auto-approve
+
+  test-fixtures-down:
+    events: [after.terraform.test]
+    when: always
+    kind: steps
+    with:
+      - type: atmos
+        command: terraform destroy vpc -s fixtures -auto-approve
+
+      - type: emulator
+        component: aws
+        stack: fixtures
+        action: down
+```
+
+Steps run in list order. A failing step stops the list and the hook's
+`on_failure` policy decides whether the Terraform operation fails, warns, or
+continues. A hook-level `retry` retries the whole ordered list.
+
+### Reacting to success or failure
+
+By default an `after-*` hook runs **only when the operation succeeds** — a
+`store` hook must not write outputs after a failed apply. Set `when:` to change
+that. Hooks support the same declarative predicates as workflow and custom
+command steps, plus the hook-specific lifecycle status predicates:
+
+<dl>
+  <dt>`when: success` (default)</dt>
+  <dd>Run only when the operation succeeded.</dd>
+
+  <dt>`when: failure`</dt>
+  <dd>Run only when the operation failed.</dd>
+
+  <dt>`when: always`</dt>
+  <dd>Run on both outcomes.</dd>
+
+  <dt>`when: ci`</dt>
+  <dd>Run in CI after a successful operation. Hooks apply `success` implicitly when the condition does not mention `success`, `failure`, or `always`.</dd>
+
+  <dt>`when: [ci, always]`</dt>
+  <dd>Run in CI after both successful and failed operations.</dd>
+</dl>
+
+Built-in predicates are `ci`, `local`, `always`, `never`, `success`, and
+`failure`. Atmos evaluates those keywords first; any other scalar string is a
+CEL expression. Use `!cel` when you want to make that explicit. Compose
+predicates and CEL expressions with list shorthand, `all`, `any`, and `not`:
+
+```yaml
+hooks:
+  ci-summary:
+    kind: command
+    events: [after.terraform.plan]
+    command: ./scripts/write-ci-summary.sh
+    when: [ci, always]
+
+  local-cleanup:
+    kind: command
+    events: [after.terraform.apply]
+    command: ./scripts/cleanup.sh
+    when:
+      all:
+        - local
+        - failure
+
+  skip-in-ci:
+    kind: command
+    events: [after.terraform.plan]
+    command: ./scripts/local-report.sh
+    when:
+      not: ci
+
+  prod-failure-summary:
+    kind: command
+    events: [after.terraform.apply]
+    command: ./scripts/write-prod-failure-summary.sh
+    when: !cel 'stack == "prod" && status == "failure"'
+```
+
+Condition filtering also applies during hook preflight. For example,
+`when: ci` hooks are skipped outside CI before Atmos validates or installs the
+hook's tools. Hook CEL expressions can read `ci`, `status`, `stack`,
+`component`, `hook`, `event`, and `env`.
+
+The outcome is available to the step both as **template context** and as
+**environment variables**, alongside the component and stack — so a hook can
+announce exactly what happened:
+
+```yaml
+hooks:
+  announce:
+    kind: step
+    type: say
+    events: [after.terraform.apply]
+    when: always
+    with:
+      print: always
+      content: >-
+        The {{ .atmos_component }} component in the {{ .stack }} stack
+        {{ if eq .status "failure" }}was not successful{{ else }}was successful{{ end }}
+```
+
+<dl>
+  <dt>`{{ .status }}`</dt>
+  <dd>`success` or `failure`. Also `ATMOS_HOOK_STATUS`.</dd>
+  <dt>`{{ .exit_code }}`</dt>
+  <dd>The operation's exit code (`0` on success). Also `ATMOS_HOOK_EXIT_CODE`.</dd>
+  <dt>`{{ .error }}`</dt>
+  <dd>The error message on failure, empty on success. Also `ATMOS_HOOK_ERROR`.</dd>
+  <dt>`{{ .atmos_component }}` / `{{ .stack }}`</dt>
+  <dd>The component and stack (already part of the hook template context). Also `ATMOS_COMPONENT` / `ATMOS_STACK`.</dd>
+</dl>
+
+Steps that read the environment instead of templates (e.g. a `shell` or `say`
+step) get the same values via `ATMOS_HOOK_STATUS`, `ATMOS_HOOK_EXIT_CODE`,
+`ATMOS_HOOK_ERROR`, `ATMOS_COMPONENT`, and `ATMOS_STACK`.
+
+:::note Outcome reaches all hook kinds
+`when:` and the `ATMOS_HOOK_*` variables apply to every hook kind, not just
+`kind: step` — e.g. a `kind: command` cleanup hook with `when: failure`. The
+outcome is only meaningful on `after-*` events; `before-*` events always run as
+`success`.
+:::
+
 ## Overriding Kind Defaults
 
 Every named kind (`infracost`, `trivy`, `checkov`, `kics`, `store`)
@@ -376,7 +631,7 @@ add your overrides:
 ```yaml
 hooks:
   security:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: trivy
     args:
       - config
@@ -396,7 +651,7 @@ make a scanner finding block the run:
 ```yaml
 hooks:
   security:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: trivy
     on_failure: fail            # default is warn
 ```
@@ -406,7 +661,7 @@ Or override `env` to inject a tool-specific config path:
 ```yaml
 hooks:
   policy:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: checkov
     env:
       CHECKOV_CONFIG_FILE: $ATMOS_COMPONENT_PATH/.checkov.yaml
@@ -432,8 +687,8 @@ components:
           infracost: "0.10.44"
           checkov: "3.2.529"
       hooks:
-        cost:     { events: [after-terraform-plan], kind: infracost }
-        security: { events: [after-terraform-plan], kind: checkov }
+        cost:     { events: [after.terraform.plan], kind: infracost }
+        security: { events: [after.terraform.plan], kind: checkov }
 ```
 
 A **pre-flight check** runs once per command invocation:
@@ -519,16 +774,97 @@ Every hook can declare an `on_failure` mode:
   <dd>Silently swallow failures. Useful for opportunistic notifications you don't want to ever break a run.</dd>
 </dl>
 
+:::note `on_failure` vs `when`
+These answer different questions. `on_failure` controls what happens when **the
+hook itself** fails. `when` (`success` | `failure` | `always`) controls whether
+the hook runs based on **the terraform operation's** outcome — see
+[Reacting to success or failure](#reacting-to-success-or-failure).
+:::
+
 ## Format Symmetry
 
 When a hook's kind produces a markdown summary (every built-in kind
 does), Atmos renders **the same bytes** in:
 
 - Your terminal (via `ui.MarkdownMessage`)
+- The GitHub Actions [job step summary](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary)
 - The Atmos Pro run page (when Pro is connected)
 
 No separate "terminal-friendly" vs "Pro-friendly" variants — write
 markdown once, get it everywhere.
+
+## CI Reporting
+
+When running in CI (GitHub Actions), Atmos can surface scanner-hook findings
+in the pipeline itself instead of leaving them buried in the `terraform plan`
+log. Three independent outputs are available, all under `ci:` and all gated by
+the `ci.enabled` master switch:
+
+```yaml
+ci:
+  enabled: true          # required for any CI reporting to fire
+  summary: true          # markdown report in the job step summary  (default: on)
+  annotations: true      # inline ::error/::warning on the PR diff   (default: on)
+  results: true          # upload SARIF to GitHub Code Scanning      (default: off)
+```
+
+<dl>
+  <dt>`ci.summary`</dt>
+  <dd>Appends each hook's markdown summary to the GitHub Actions job step summary. Default on.</dd>
+
+  <dt>`ci.annotations`</dt>
+  <dd>Renders each finding as an inline GitHub annotation (`::error`/`::warning`) anchored at its file and line on the pull request diff. This is the **non-Code-Scanning** path — it needs no GitHub Advanced Security. Default on.</dd>
+
+  <dt>`ci.results`</dt>
+  <dd>Uploads the raw SARIF to GitHub **Code Scanning** (the Security tab) as tracked alerts. Code Scanning is **free on public repositories**; on **private/internal repositories it requires [GitHub Advanced Security](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security)** — a paid add-on that **GitHub** licenses per active committer. Default off (opt-in). The analysis category is derived automatically from the scan target (`atmos/&lt;component&gt;` for shared component source, `atmos/&lt;stack&gt;/&lt;component&gt;` for a per-stack workdir) so per-component uploads don't overwrite each other.</dd>
+</dl>
+
+All three are **best-effort**: a reporting failure logs at debug and never fails
+the hook or the terraform command. Outside CI they no-op. Findings derive from the
+tool's SARIF, so the three built-in SARIF scanners — `checkov`, `trivy`, `kics` —
+all participate; `infracost` (cost, not findings) does not.
+
+`ci.annotations` and `ci.results` can both place line-level feedback on a pull
+request. Enable both when you intentionally want the lightweight Actions
+annotation and the tracked Code Scanning alert; otherwise enable only one of
+them to avoid duplicate comments on the same lines.
+
+### Required GitHub Actions permissions
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # ONLY required for ci.results (SARIF upload)
+```
+
+`ci.summary` and `ci.annotations` need **no special permissions and no paid
+add-on** — the step summary is a file write and annotations are log output, so
+they work on any repository. `ci.results` uploads to Code Scanning, which
+requires the `security-events: write` permission and — on **private/internal
+repositories** — **GitHub Advanced Security, which GitHub licenses as a paid
+add-on per active committer** (Code Scanning is free on public repositories).
+Note: pull requests **from forks** do not receive
+`security-events: write` on the default token, so `ci.results` is skipped there.
+
+### Custom hooks
+
+A custom `kind: command` hook gets the same reporting as the built-in scanners by
+declaring `format: sarif` — any SARIF-emitting tool (tfsec, semgrep, gitleaks,
+snyk, …) then flows to the summary, annotations, and Code Scanning with no extra
+code:
+
+```yaml
+hooks:
+  tfsec:
+    events: [after.terraform.plan]
+    kind: command
+    command: tfsec
+    args: ["--format", "sarif", "--out", "$ATMOS_OUTPUT_FILE", "$ATMOS_COMPONENT_PATH"]
+    format: sarif              # parse output as SARIF
+    # results: results.sarif   # optional: read SARIF from this file in $ATMOS_OUTPUT_DIR
+```
+
+The report is labeled by the SARIF's own tool name (e.g. "tfsec").
 
 ## Backwards Compatibility
 
@@ -538,7 +874,7 @@ The pre-rename `command:` YAML key is still accepted as an alias for
 ```yaml
 hooks:
   vpc-id:
-    events: [after-terraform-apply]
+    events: [after.terraform.apply]
     command: store      # legacy form — still works
     name: vpc/id
     outputs:
@@ -546,6 +882,10 @@ hooks:
 ```
 
 …parse identically post-upgrade. No migration required.
+
+Hyphenated lifecycle events such as `after-terraform-apply` are also still
+accepted. New documentation and examples use the canonical dotted form
+(`after.terraform.apply`).
 
 ## Store Function Reference
 
@@ -561,7 +901,16 @@ Stores](/stacks/sharing-state/stores).
   <dd>List of [lifecycle events](#supported-lifecycle-events) that trigger this hook.</dd>
 
   <dt>`hooks.<name>.kind`</dt>
-  <dd>Which engine runs the hook. One of `store`, `command`, `git`, `infracost`, `checkov`, `trivy`, `kics`. Aliased from legacy `command:` field.</dd>
+  <dd>Which engine runs the hook. One of `store`, `command`, `git`, `step`, `steps`, `infracost`, `checkov`, `trivy`, `kics`, or the CI integration hook kinds `ci.check`, `ci.output`, `ci.summary`, `ci.upload`, and `ci.download`. Aliased from legacy `command:` field.</dd>
+
+  <dt>`hooks.<name>.type`</dt>
+  <dd>For `kind: step`: the [step type](#kind-step-run-a-step-type) to run (e.g. `container`, `http`, `toast`, `log`).</dd>
+
+  <dt>`hooks.<name>.with`</dt>
+  <dd>For `kind: step`: the step's own parameters. For `kind: steps`: the ordered list of steps. Rendered with the hook template context and YAML functions, then validated by the step engine at run time.</dd>
+
+  <dt>`hooks.<name>.retry`</dt>
+  <dd>For `kind: step`: retry policy wrapping the step execution. For `kind: steps`: retry policy wrapping the whole ordered list. Same schema as a workflow step's `retry`.</dd>
 
   <dt>`hooks.<name>.command`</dt>
   <dd>For `kind: command`: the binary to execute (resolved via the toolchain or PATH). Named kinds default this.</dd>
@@ -576,7 +925,10 @@ Stores](/stacks/sharing-state/stores).
   <dd>Optional rendering hint. v1 supports `markdown` — tells Atmos to render the tool's output file as markdown in the terminal.</dd>
 
   <dt>`hooks.<name>.on_failure`</dt>
-  <dd>`warn` (default), `fail`, or `ignore`.</dd>
+  <dd>`warn` (default), `fail`, or `ignore`. Applies to the hook's own outcome, not the terraform operation's.</dd>
+
+  <dt>`hooks.<name>.when`</dt>
+  <dd>Declarative condition controlling whether the hook runs. Omitted means `success`; if the condition does not mention `success`, `failure`, or `always`, Atmos applies `success` implicitly. See [Reacting to success or failure](#reacting-to-success-or-failure).</dd>
 
   <dt>`hooks.<name>.name` / `hooks.<name>.outputs`</dt>
   <dd>Store-kind specific. See [store function reference](/stacks/sharing-state/stores).</dd>

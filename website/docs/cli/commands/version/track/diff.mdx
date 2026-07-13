@@ -1,0 +1,32 @@
+---
+title: atmos version track diff
+sidebar_position: 100
+sidebar_label: diff
+sidebar_class_name: command
+description: Show unlocked entries and policy-eligible updates.
+---
+
+Show the subset of status entries that are unlocked or have a policy-eligible update available. These are the entries that `atmos version track update` would change.
+
+## Usage
+
+```shell
+atmos version track diff [track] [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit the diff to entries in the named version group.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show all entries that need lock changes in prod
+atmos version track diff prod
+
+# Show only infrastructure group changes
+atmos version track diff prod --group=infrastructure
+```

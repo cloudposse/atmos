@@ -14,11 +14,37 @@ import (
 const (
 	// TaskTypeShell is the default task type for shell commands.
 	TaskTypeShell = "shell"
+	// TaskTypeScript is the task type for inline scripts run by an explicit interpreter.
+	TaskTypeScript = "script"
 	// TaskTypeAtmos is the task type for atmos commands.
 	TaskTypeAtmos = "atmos"
+	// TaskTypeParallel is the task type for running nested steps concurrently.
+	TaskTypeParallel = "parallel"
+	// TaskTypeMatrix is the task type for expanding and running nested steps concurrently.
+	TaskTypeMatrix = "matrix"
 	// TaskTypeExec is the task type for commands that replace the Atmos
 	// process entirely (shell exec semantics). Must be the final step.
 	TaskTypeExec = "exec"
+	// TaskTypeCast records nested steps or a scripted shell session as an asciicast.
+	TaskTypeCast = "cast"
+	// TaskTypeSimulate records simulated terminal activity inside a cast step.
+	TaskTypeSimulate = "simulate"
+	// TaskTypeWorkdir provisions a mutable working directory from a source.
+	TaskTypeWorkdir = "workdir"
+	// TaskTypeWait is the action step that blocks until the background step(s)
+	// named in `for:` are ready (a service's health check) or complete.
+	TaskTypeWait = "wait"
+	// TaskTypeWaitAll is the action step that blocks until all background steps
+	// in scope are ready/complete.
+	TaskTypeWaitAll = "wait-all"
+	// TaskTypeCancel is the action step that gracefully tears down the background
+	// step(s) named in `for:`.
+	TaskTypeCancel = "cancel"
+)
+
+const (
+	taskMapKeyPrompt = "prompt"
+	taskMapKeySteps  = "steps"
 )
 
 // Sentinel errors for task validation.
@@ -37,7 +63,11 @@ type Task struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
 	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	// Type specifies the command type: TaskTypeShell, TaskTypeAtmos, or TaskTypeExec. Defaults to TaskTypeShell.
+	// Script is the inline script body for TaskTypeScript.
+	Script string `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`
+	// Interpreter is the executable used to run Script for TaskTypeScript.
+	Interpreter string `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"`
+	// Type specifies the step type: shell, script, atmos, exec, cast, simulate, workdir, or another registered step kind. Defaults to shell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Timeout specifies the maximum duration for the task. Zero means no timeout.
 	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
@@ -49,19 +79,24 @@ type Task struct {
 	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	// Identity specifies the authentication identity to use.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Needs lists sibling task names that must complete before this task can run.
+	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
+	// When controls whether the task runs.
+	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
 	Tty bool `yaml:"tty,omitempty" json:"tty,omitempty" mapstructure:"tty"`
 
 	// Interactive step fields.
-	Prompt      string   `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
-	Options     []string `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`             // Options for choose/filter.
-	Default     string   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`             // Default value.
-	Placeholder string   `yaml:"placeholder,omitempty" json:"placeholder,omitempty" mapstructure:"placeholder"` // Input placeholder.
-	Password    bool     `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`          // Mask input.
-	Multiple    bool     `yaml:"multiple,omitempty" json:"multiple,omitempty" mapstructure:"multiple"`          // Allow multiple selection.
-	Limit       int      `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
+	Prompt         string          `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
+	SimulatePrompt *SimulatePrompt `yaml:"-" json:"simulate_prompt,omitempty" mapstructure:"simulate_prompt"`             // Structured prompt for cast simulation steps.
+	Options        []string        `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`             // Options for choose/filter.
+	Default        string          `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`             // Default value.
+	Placeholder    string          `yaml:"placeholder,omitempty" json:"placeholder,omitempty" mapstructure:"placeholder"` // Input placeholder.
+	Password       bool            `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`          // Mask input.
+	Multiple       bool            `yaml:"multiple,omitempty" json:"multiple,omitempty" mapstructure:"multiple"`          // Allow multiple selection.
+	Limit          int             `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
 
 	// Output/UI step fields.
 	Content   string           `yaml:"content,omitempty" json:"content,omitempty" mapstructure:"content"`       // Content for output types (supports templates).
@@ -71,18 +106,24 @@ type Task struct {
 	Separator string           `yaml:"separator,omitempty" json:"separator,omitempty" mapstructure:"separator"` // Separator for join type (default: newline).
 
 	// File picker fields.
-	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker.
+	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source for workdir provisioning; string or source map.
+	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
-	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
-	Height   int             `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
-	Viewport *ViewportConfig `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
-	Count    int             `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
+	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	CastOutput     *CastOutput           `yaml:"-" json:"cast_output,omitempty" mapstructure:"cast_output"`            // Structured output for cast artifacts.
+	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
+	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
+	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
+	Count          int                   `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
 
 	// Style step fields (like gum style).
-	Foreground       string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"`                      // Foreground color.
-	Background       string `yaml:"background,omitempty" json:"background,omitempty" mapstructure:"background"`                      // Background color.
+	Foreground string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"` // Foreground color.
+	// Background is the style background color. The YAML key `background:` is polymorphic
+	// (see UnmarshalYAML): a string value sets this color; a boolean value sets BackgroundAsync.
+	Background       string `yaml:"-" json:"background,omitempty" mapstructure:"background"`                                         // Background color (string-valued `background:`).
 	Border           string `yaml:"border,omitempty" json:"border,omitempty" mapstructure:"border"`                                  // Border style: none, hidden, normal, rounded, thick, double.
 	BorderForeground string `yaml:"border_foreground,omitempty" json:"border_foreground,omitempty" mapstructure:"border_foreground"` // Border foreground color.
 	BorderBackground string `yaml:"border_background,omitempty" json:"border_background,omitempty" mapstructure:"border_background"` // Border background color.
@@ -101,6 +142,11 @@ type Task struct {
 	Level  string            `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`    // Log level: trace, debug, info, warn, error.
 	Fields map[string]string `yaml:"fields,omitempty" json:"fields,omitempty" mapstructure:"fields"` // Structured log fields (key-value pairs).
 
+	// Say step fields.
+	Voice []string `yaml:"voice,omitempty" json:"voice,omitempty" mapstructure:"voice"` // Ordered voice candidates; first one installed on the host wins.
+	Rate  string   `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`    // Speech rate: slow, normal, fast.
+	Print string   `yaml:"print,omitempty" json:"print,omitempty" mapstructure:"print"` // Print policy: fallback, always, never.
+
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
@@ -110,25 +156,55 @@ type Task struct {
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
 
+	// HTTP step type fields (type: http; also accepts the alias type: webhook).
+	URL     string            `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`             // Request URL (required, supports templates).
+	Method  string            `yaml:"method,omitempty" json:"method,omitempty" mapstructure:"method"`    // HTTP method/verb: GET (default), POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty" mapstructure:"headers"` // Request headers (supports templates).
+	Query   map[string]string `yaml:"query,omitempty" json:"query,omitempty" mapstructure:"query"`       // Query-string parameters (supports templates).
+	Body    string            `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`          // Raw request body (supports templates); mutually exclusive with form.
+	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
+	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
+
+	// Cast step and session action fields.
+	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
+	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
+	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
+	Cursor      bool          `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`                   // Show a simulated cursor for cast simulate steps.
+	CursorSet   bool          `yaml:"-" json:"-" mapstructure:"cursor_set"`                                             // Internal marker for explicit cursor values.
+	Text        string        `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
+	Regex       string        `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
+	Key         string        `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
+	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Interval    string        `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
+	Repeat      int           `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
+	Defaults    *CastDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"`             // Cast child defaults.
+
 	// Container step fields.
-	Action            string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
-	Build             *ContainerBuildStep   `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
-	Push              *ContainerPushStep    `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
-	Run               *ContainerRunStep     `yaml:"run,omitempty" json:"run,omitempty" mapstructure:"run"`
-	Inspect           *ContainerInspectStep `yaml:"inspect,omitempty" json:"inspect,omitempty" mapstructure:"inspect"`
-	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
-	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
-	Provider          string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`                                  // docker, podman, or empty for auto-detect.
-	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
-	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
-	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
-	Cleanup           string                `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`                                     // always, on_success, never.
-	User              string                `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`                                              // Container user.
-	RunArgs           []string              `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
-	Mounts            []ContainerMount      `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
-	Ports             []ContainerPort       `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
-	Container         *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
+	//
+	// Action selects the container verb; its parameters are supplied under the single
+	// `with:` key. Build/Push/Run/Inspect are populated from `with:` by UnmarshalYAML
+	// based on Action, so they carry no YAML key (see decodeContainerWith).
+	//
+	// Only cross-cutting execution modifiers stay top-level (provider, runtime_auto_start,
+	// container). All action parameters — image, command, ports, mounts, healthcheck, etc. —
+	// live under `with:` (decoded into Build/Run/Push/Inspect).
+	Action           string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
+	Build            *ContainerBuildStep   `yaml:"-" json:"build,omitempty" mapstructure:"build"`
+	Push             *ContainerPushStep    `yaml:"-" json:"push,omitempty" mapstructure:"push"`
+	Run              *ContainerRunStep     `yaml:"-" json:"run,omitempty" mapstructure:"run"`
+	Inspect          *ContainerInspectStep `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
+	RuntimeAutoStart bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
+
+	// Require step type fields (type: require; also accepts the alias type: assert).
+	// The step is a read-only preconditions gate: it never mutates PATH or the environment.
+	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // Executables that must be found on PATH (supports templates).
+	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Paths that must exist (supports templates).
+	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
+	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
@@ -136,8 +212,51 @@ type Task struct {
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
 
+	// Control step fields.
+	Steps          []WorkflowStep      `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
+	MaxConcurrency int                 `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
+	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
+	Fail           *ParallelFailConfig `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
+
+	// BackgroundAsync marks a container step to run asynchronously (decoded from a
+	// boolean-valued `background:` key); a string-valued `background:` sets the style color.
+	// In v1 the validator accepts `background: true` only on `type: container` steps.
+	BackgroundAsync bool `yaml:"-" json:"background_async,omitempty" mapstructure:"background_async"`
+	// For lists the background step name(s) a `wait`/`cancel` action step targets.
+	For []string `yaml:"-" json:"for,omitempty" mapstructure:"for"`
+
 	// DryRun is set by executors and is not read from user configuration.
 	DryRun bool `yaml:"-" json:"-" mapstructure:"-"`
+}
+
+// UnmarshalYAML handles keys whose meaning depends on shape or a sibling field:
+//   - `output`     : scalar mode string or a structured ParallelOutputConfig.
+//   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
+//   - `background` : boolean async marker, or a string style color.
+//   - `for`        : scalar or sequence of target step names (wait/cancel).
+func (task *Task) UnmarshalYAML(value *yaml.Node) error {
+	type plain Task
+	// Decode into a zero-value temp first so a reused receiver does not retain
+	// fields omitted from this YAML node (Decode merges into the destination).
+	var fresh plain
+	nodes, sanitized := splitStepPolymorphicNodes(value)
+	if err := sanitized.Decode(&fresh); err != nil {
+		return err
+	}
+	*task = Task(fresh)
+	task.CursorSet = mappingHasField(value, "cursor")
+	return applyStepPolymorphicNodes(nodes, task.Type, task.Action, &stepPolyTargets{
+		output:    &task.Output,
+		prompt:    &task.Prompt,
+		simPrompt: &task.SimulatePrompt,
+		cast:      &task.CastOutput,
+		parallel:  &task.ParallelOutput,
+		async:     &task.BackgroundAsync,
+		color:     &task.Background,
+		forList:   &task.For,
+		steps:     &task.Steps,
+		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
+	})
 }
 
 // Tasks is a slice of Task that supports flexible YAML unmarshaling.
@@ -210,22 +329,27 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Core fields.
 		Name:             task.Name,
 		Command:          task.Command,
+		Script:           task.Script,
+		Interpreter:      task.Interpreter,
 		Type:             task.Type,
 		Stack:            task.Stack,
 		WorkingDirectory: task.WorkingDirectory,
 		Retry:            task.Retry,
 		Identity:         task.Identity,
+		Needs:            task.Needs,
+		When:             task.When,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
 
 		// Interactive step fields.
-		Prompt:      task.Prompt,
-		Options:     task.Options,
-		Default:     task.Default,
-		Placeholder: task.Placeholder,
-		Password:    task.Password,
-		Multiple:    task.Multiple,
-		Limit:       task.Limit,
+		Prompt:         task.Prompt,
+		SimulatePrompt: task.SimulatePrompt,
+		Options:        task.Options,
+		Default:        task.Default,
+		Placeholder:    task.Placeholder,
+		Password:       task.Password,
+		Multiple:       task.Multiple,
+		Limit:          task.Limit,
 
 		// Output/UI step fields.
 		Content:   task.Content,
@@ -236,14 +360,18 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 
 		// File picker fields.
 		Path:       task.Path,
+		Source:     task.Source,
+		Reset:      task.Reset,
 		Extensions: task.Extensions,
 
 		// Display configuration.
-		Output:   task.Output,
-		Height:   task.Height,
-		Viewport: task.Viewport,
-		Timeout:  timeoutStr,
-		Count:    task.Count,
+		Output:         task.Output,
+		CastOutput:     task.CastOutput,
+		ParallelOutput: task.ParallelOutput,
+		Height:         task.Height,
+		Viewport:       task.Viewport,
+		Timeout:        timeoutStr,
+		Count:          task.Count,
 
 		// Style step fields.
 		Foreground:       task.Foreground,
@@ -266,6 +394,11 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Level:  task.Level,
 		Fields: task.Fields,
 
+		// Say step fields.
+		Voice: task.Voice,
+		Rate:  task.Rate,
+		Print: task.Print,
+
 		// Environment variables.
 		Env: task.Env,
 
@@ -275,30 +408,59 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Exit step type fields.
 		Code: task.Code,
 
+		// HTTP step type fields.
+		URL:     task.URL,
+		Method:  task.Method,
+		Headers: task.Headers,
+		Query:   task.Query,
+		Body:    task.Body,
+		Form:    task.Form,
+		Expect:  task.Expect,
+
+		// Cast step and session action fields.
+		Mode:        task.Mode,
+		Shell:       task.Shell,
+		WriteRate:   task.WriteRate,
+		KeyInterval: task.KeyInterval,
+		Jitter:      task.Jitter,
+		Cursor:      task.Cursor,
+		CursorSet:   task.CursorSet,
+		Text:        task.Text,
+		Regex:       task.Regex,
+		Key:         task.Key,
+		Duration:    task.Duration,
+		Interval:    task.Interval,
+		Repeat:      task.Repeat,
+		Defaults:    task.Defaults,
+
 		// Container step fields.
-		Action:            task.Action,
-		Build:             task.Build,
-		Push:              task.Push,
-		Run:               task.Run,
-		Inspect:           task.Inspect,
-		RuntimeAutoStart:  task.RuntimeAutoStart,
-		Image:             task.Image,
-		Shell:             task.Shell,
-		Provider:          task.Provider,
-		Pull:              task.Pull,
-		Workspace:         task.Workspace,
-		WorkspaceReadOnly: task.WorkspaceReadOnly,
-		Cleanup:           task.Cleanup,
-		User:              task.User,
-		RunArgs:           task.RunArgs,
-		Mounts:            task.Mounts,
-		Ports:             task.Ports,
-		Container:         task.Container,
+		Action:           task.Action,
+		Build:            task.Build,
+		Push:             task.Push,
+		Run:              task.Run,
+		Inspect:          task.Inspect,
+		RuntimeAutoStart: task.RuntimeAutoStart,
+		Provider:         task.Provider,
+		Container:        task.Container,
+
+		// Require step fields.
+		Tools: task.Tools,
+		Files: task.Files,
+		Dirs:  task.Dirs,
+		Hint:  task.Hint,
 
 		Outputs: task.Outputs,
 
 		// Show configuration.
 		Show: task.Show,
+
+		// Control step fields.
+		Steps:           task.Steps,
+		MaxConcurrency:  task.MaxConcurrency,
+		Matrix:          task.Matrix,
+		Fail:            task.Fail,
+		BackgroundAsync: task.BackgroundAsync,
+		For:             task.For,
 
 		DryRun: task.DryRun,
 	}
@@ -318,23 +480,28 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Core fields.
 		Name:             step.Name,
 		Command:          step.Command,
+		Script:           step.Script,
+		Interpreter:      step.Interpreter,
 		Type:             step.Type,
 		Stack:            step.Stack,
 		WorkingDirectory: step.WorkingDirectory,
 		Retry:            step.Retry,
 		Identity:         step.Identity,
+		Needs:            step.Needs,
+		When:             step.When,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
 		Timeout:          timeout,
 
 		// Interactive step fields.
-		Prompt:      step.Prompt,
-		Options:     step.Options,
-		Default:     step.Default,
-		Placeholder: step.Placeholder,
-		Password:    step.Password,
-		Multiple:    step.Multiple,
-		Limit:       step.Limit,
+		Prompt:         step.Prompt,
+		SimulatePrompt: step.SimulatePrompt,
+		Options:        step.Options,
+		Default:        step.Default,
+		Placeholder:    step.Placeholder,
+		Password:       step.Password,
+		Multiple:       step.Multiple,
+		Limit:          step.Limit,
 
 		// Output/UI step fields.
 		Content:   step.Content,
@@ -345,13 +512,17 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 
 		// File picker fields.
 		Path:       step.Path,
+		Source:     step.Source,
+		Reset:      step.Reset,
 		Extensions: step.Extensions,
 
 		// Display configuration.
-		Output:   step.Output,
-		Height:   step.Height,
-		Viewport: step.Viewport,
-		Count:    step.Count,
+		Output:         step.Output,
+		CastOutput:     step.CastOutput,
+		ParallelOutput: step.ParallelOutput,
+		Height:         step.Height,
+		Viewport:       step.Viewport,
+		Count:          step.Count,
 
 		// Style step fields.
 		Foreground:       step.Foreground,
@@ -374,6 +545,11 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Level:  step.Level,
 		Fields: step.Fields,
 
+		// Say step fields.
+		Voice: step.Voice,
+		Rate:  step.Rate,
+		Print: step.Print,
+
 		// Environment variables.
 		Env: step.Env,
 
@@ -383,30 +559,59 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Exit step type fields.
 		Code: step.Code,
 
+		// HTTP step type fields.
+		URL:     step.URL,
+		Method:  step.Method,
+		Headers: step.Headers,
+		Query:   step.Query,
+		Body:    step.Body,
+		Form:    step.Form,
+		Expect:  step.Expect,
+
+		// Cast step and session action fields.
+		Mode:        step.Mode,
+		Shell:       step.Shell,
+		WriteRate:   step.WriteRate,
+		KeyInterval: step.KeyInterval,
+		Jitter:      step.Jitter,
+		Cursor:      step.Cursor,
+		CursorSet:   step.CursorSet,
+		Text:        step.Text,
+		Regex:       step.Regex,
+		Key:         step.Key,
+		Duration:    step.Duration,
+		Interval:    step.Interval,
+		Repeat:      step.Repeat,
+		Defaults:    step.Defaults,
+
 		// Container step fields.
-		Action:            step.Action,
-		Build:             step.Build,
-		Push:              step.Push,
-		Run:               step.Run,
-		Inspect:           step.Inspect,
-		RuntimeAutoStart:  step.RuntimeAutoStart,
-		Image:             step.Image,
-		Shell:             step.Shell,
-		Provider:          step.Provider,
-		Pull:              step.Pull,
-		Workspace:         step.Workspace,
-		WorkspaceReadOnly: step.WorkspaceReadOnly,
-		Cleanup:           step.Cleanup,
-		User:              step.User,
-		RunArgs:           step.RunArgs,
-		Mounts:            step.Mounts,
-		Ports:             step.Ports,
-		Container:         step.Container,
+		Action:           step.Action,
+		Build:            step.Build,
+		Push:             step.Push,
+		Run:              step.Run,
+		Inspect:          step.Inspect,
+		RuntimeAutoStart: step.RuntimeAutoStart,
+		Provider:         step.Provider,
+		Container:        step.Container,
+
+		// Require step fields.
+		Tools: step.Tools,
+		Files: step.Files,
+		Dirs:  step.Dirs,
+		Hint:  step.Hint,
 
 		Outputs: step.Outputs,
 
 		// Show configuration.
 		Show: step.Show,
+
+		// Control step fields.
+		Steps:           step.Steps,
+		MaxConcurrency:  step.MaxConcurrency,
+		Matrix:          step.Matrix,
+		Fail:            step.Fail,
+		BackgroundAsync: step.BackgroundAsync,
+		For:             step.For,
 
 		DryRun: step.DryRun,
 	}
@@ -427,14 +632,56 @@ func TasksDecodeHook() mapstructure.DecodeHookFunc {
 			return data, nil
 		}
 
-		// Get the slice data.
-		slice, ok := data.([]any)
+		slice, ok := sliceToAny(data)
 		if !ok {
 			return data, nil
 		}
 
 		return decodeTasksFromSlice(slice)
 	}
+}
+
+// WorkflowStepDecodeHook normalizes polymorphic workflow step maps before
+// mapstructure decodes them into WorkflowStep values.
+func WorkflowStepDecodeHook() mapstructure.DecodeHookFunc {
+	workflowStepType := reflect.TypeOf(WorkflowStep{})
+	workflowStepsType := reflect.TypeOf([]WorkflowStep{})
+
+	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
+		switch t {
+		case workflowStepType:
+			if f.Kind() != reflect.Map {
+				return data, nil
+			}
+			stepMap, ok := stringifyTaskMap(data)
+			if !ok {
+				return data, nil
+			}
+			return normalizeWorkflowStepMap(stepMap)
+		case workflowStepsType:
+			if f.Kind() != reflect.Slice {
+				return data, nil
+			}
+			return normalizeWorkflowStepMaps(data)
+		default:
+			return data, nil
+		}
+	}
+}
+
+func sliceToAny(data any) ([]any, bool) {
+	if slice, ok := data.([]any); ok {
+		return slice, true
+	}
+	rv := reflect.ValueOf(data)
+	if !rv.IsValid() || rv.Kind() != reflect.Slice {
+		return nil, false
+	}
+	slice := make([]any, rv.Len())
+	for i := range slice {
+		slice[i] = rv.Index(i).Interface()
+	}
+	return slice, true
 }
 
 // decodeTasksFromSlice converts a slice of interface{} values into Tasks.
@@ -460,6 +707,9 @@ func decodeTaskItem(item any, index int) (Task, error) {
 	case map[string]any:
 		return decodeTaskFromMap(v, index)
 	default:
+		if taskMap, ok := stringifyTaskMap(v); ok {
+			return decodeTaskFromMap(taskMap, index)
+		}
 		return Task{}, fmt.Errorf("%w at index %d: got %T (expected string or map)", ErrTaskUnexpectedNodeKind, index, item)
 	}
 }
@@ -467,11 +717,27 @@ func decodeTaskItem(item any, index int) (Task, error) {
 // decodeTaskFromMap decodes a map into a Task using mapstructure.
 func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	var task Task
+	m, err := normalizeTaskOutputMap(m, &task)
+	if err != nil {
+		return Task{}, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
+	}
+	m, err = normalizeTaskPromptMap(m, &task)
+	if err != nil {
+		return Task{}, fmt.Errorf("failed to decode task prompt at index %d: %w", index, err)
+	}
+	m, err = normalizeTaskStepsMap(m)
+	if err != nil {
+		return Task{}, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
+	}
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
 		WeaklyTypedInput: true,
-		DecodeHook:       mapstructure.StringToTimeDurationHookFunc(),
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
+		),
 	})
 	if err != nil {
 		return Task{}, fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
@@ -479,9 +745,197 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if err := decoder.Decode(m); err != nil {
 		return Task{}, fmt.Errorf("failed to decode task at index %d: %w", index, err)
 	}
+	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
 	// Default type to TaskTypeShell if not specified.
 	if task.Type == "" {
 		task.Type = TaskTypeShell
 	}
 	return task, nil
+}
+
+func normalizeTaskStepsMap(m map[string]any) (map[string]any, error) {
+	steps, ok := m[taskMapKeySteps]
+	if !ok {
+		return m, nil
+	}
+	normalized, err := normalizeWorkflowStepMaps(steps)
+	if err != nil {
+		return nil, err
+	}
+	copied := make(map[string]any, len(m))
+	for key, val := range m {
+		copied[key] = val
+	}
+	copied[taskMapKeySteps] = normalized
+	return copied, nil
+}
+
+func normalizeWorkflowStepMaps(value any) (any, error) {
+	rv := reflect.ValueOf(value)
+	if !rv.IsValid() || rv.Kind() != reflect.Slice {
+		return value, nil
+	}
+	normalized := make([]any, rv.Len())
+	for i := range normalized {
+		item := rv.Index(i).Interface()
+		stepMap, ok := stringifyTaskMap(item)
+		if !ok {
+			normalized[i] = item
+			continue
+		}
+		normalizedStep, err := normalizeWorkflowStepMap(stepMap)
+		if err != nil {
+			return nil, err
+		}
+		normalized[i] = normalizedStep
+	}
+	return normalized, nil
+}
+
+func stringifyTaskMap(item any) (map[string]any, bool) {
+	switch v := item.(type) {
+	case map[string]any:
+		return v, true
+	case map[any]any:
+		converted := make(map[string]any, len(v))
+		for key, val := range v {
+			converted[fmt.Sprint(key)] = val
+		}
+		return converted, true
+	default:
+		return nil, false
+	}
+}
+
+func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
+	copied := make(map[string]any, len(m))
+	for key, val := range m {
+		copied[key] = val
+	}
+	if mapHasKey(copied, "cursor") {
+		copied["cursor_set"] = true
+	}
+	if prompt, ok := copied[taskMapKeyPrompt]; ok {
+		switch v := prompt.(type) {
+		case string:
+		default:
+			promptMap, ok := stringifyTaskMap(v)
+			if !ok {
+				break
+			}
+			if copied["type"] != TaskTypeSimulate {
+				return nil, fmt.Errorf("%w: structured prompt is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
+			}
+			copied["simulate_prompt"] = promptMap
+			delete(copied, taskMapKeyPrompt)
+		}
+	}
+	if steps, ok := copied[taskMapKeySteps]; ok {
+		normalizedSteps, err := normalizeWorkflowStepMaps(steps)
+		if err != nil {
+			return nil, err
+		}
+		copied[taskMapKeySteps] = normalizedSteps
+	}
+	return copied, nil
+}
+
+func normalizeTaskPromptMap(m map[string]any, task *Task) (map[string]any, error) {
+	prompt, ok := m[taskMapKeyPrompt]
+	if !ok {
+		return m, nil
+	}
+	switch v := prompt.(type) {
+	case string:
+		return m, nil
+	default:
+		promptMap, ok := stringifyTaskMap(v)
+		if !ok {
+			return m, nil
+		}
+		if m["type"] != TaskTypeSimulate {
+			return nil, fmt.Errorf("%w: structured prompt is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
+		}
+		var cfg SimulatePrompt
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &cfg,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := decoder.Decode(promptMap); err != nil {
+			return nil, err
+		}
+		task.SimulatePrompt = &cfg
+		copied := make(map[string]any, len(m)-1)
+		for key, val := range m {
+			if key == taskMapKeyPrompt {
+				continue
+			}
+			copied[key] = val
+		}
+		return copied, nil
+	}
+}
+
+func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error) {
+	output, ok := m["output"]
+	if !ok {
+		return m, nil
+	}
+	switch v := output.(type) {
+	case string:
+		return m, nil
+	case map[string]any:
+		if m["type"] == TaskTypeCast {
+			var cfg CastOutput
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				Result:           &cfg,
+				TagName:          "mapstructure",
+				WeaklyTypedInput: true,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if err := decoder.Decode(v); err != nil {
+				return nil, err
+			}
+			task.CastOutput = &cfg
+			task.Output = cfg.Mode
+			copied := make(map[string]any, len(m)-1)
+			for key, val := range m {
+				if key == "output" {
+					continue
+				}
+				copied[key] = val
+			}
+			return copied, nil
+		}
+		var cfg ParallelOutputConfig
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &cfg,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := decoder.Decode(v); err != nil {
+			return nil, err
+		}
+		task.Output = cfg.Mode
+		task.ParallelOutput = &cfg
+		copied := make(map[string]any, len(m)-1)
+		for key, val := range m {
+			if key == "output" {
+				continue
+			}
+			copied[key] = val
+		}
+		return copied, nil
+	default:
+		return m, nil
+	}
 }

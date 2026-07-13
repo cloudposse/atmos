@@ -110,6 +110,7 @@ Locally, `--ci` produces identical output—same formatting, same behavior. Debu
 - Planfile storage inherits terraform state security model
 - GitHub token scoped to minimum required permissions
 - No secrets in job summaries or PR comments
+- `atmos git clone` refuses to fetch untrusted fork content under `pull_request_target`/`workflow_run` by default, requiring an explicit opt-in (see [Fork-PR Safety Gate](./framework/fork-pr-trust-gate.md))
 
 ### NFR-4: Extensibility
 
