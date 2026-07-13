@@ -544,6 +544,16 @@ func TestShouldOfferScaffoldUpdate(t *testing.T) {
 	}
 }
 
+// TestDefaultBaseRef pins the fix for a real bug: `atmos scaffold generate
+// <template> <dir> --update` with no --base-ref silently set up no git
+// storage at all (ExecuteWithDelimiters only calls SetupGitStorage when
+// baseRef is non-empty), so every file failed with an opaque "three-way
+// merge failed" even on a completely unmodified, freshly re-run directory.
+func TestDefaultBaseRef(t *testing.T) {
+	assert.Equal(t, "HEAD", defaultBaseRef(""))
+	assert.Equal(t, "v1.2.3", defaultBaseRef("v1.2.3"))
+}
+
 // TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory covers the
 // real bug --update fixes: re-running scaffold generation against an
 // already-generated, git-initialized directory with update+base-ref=HEAD

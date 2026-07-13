@@ -67,6 +67,9 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
+		if update {
+			baseRef = defaultBaseRef(baseRef)
+		}
 		sourceOverride := v.GetString("source-override")
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
@@ -371,9 +374,18 @@ func shouldOfferUpdate(err error, opts *initOptions) (bool, string) {
 	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
 		return false, ""
 	}
-	baseRef := opts.baseRef
+	return true, defaultBaseRef(opts.baseRef)
+}
+
+// defaultBaseRef fills in HEAD as the 3-way-merge base ref when the caller
+// didn't supply one. Without this, --update silently sets up no git storage
+// at all (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
+// non-empty) and every file fails with an opaque "three-way merge failed" --
+// HEAD is the obvious default since `atmos init --git` always creates an
+// initial commit.
+func defaultBaseRef(baseRef string) string {
 	if baseRef == "" {
-		baseRef = "HEAD"
+		return "HEAD"
 	}
-	return true, baseRef
+	return baseRef
 }

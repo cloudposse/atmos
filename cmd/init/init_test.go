@@ -546,6 +546,16 @@ func TestShouldOfferUpdate(t *testing.T) {
 	}
 }
 
+// TestDefaultBaseRef pins the fix for a real bug: `atmos init aws/app <dir>
+// --update` with no --base-ref silently set up no git storage at all
+// (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
+// non-empty), so every file failed with an opaque "three-way merge failed"
+// even on a completely unmodified, freshly re-run directory.
+func TestDefaultBaseRef(t *testing.T) {
+	assert.Equal(t, "HEAD", defaultBaseRef(""))
+	assert.Equal(t, "v1.2.3", defaultBaseRef("v1.2.3"))
+}
+
 // TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError covers
 // that a non-empty target directory fails outright (no update offered, no
 // interactive prompt attempted) when not running interactively — matches

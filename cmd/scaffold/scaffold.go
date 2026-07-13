@@ -110,6 +110,9 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
+		if update {
+			baseRef = defaultBaseRef(baseRef)
+		}
 		dryRun := v.GetBool("dry-run")
 		sourceOverride := v.GetString("scaffold-source-override")
 		ref := v.GetString("ref")
@@ -591,11 +594,20 @@ func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions) (bool, 
 	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
 		return false, ""
 	}
-	baseRef := opts.baseRef
+	return true, defaultBaseRef(opts.baseRef)
+}
+
+// defaultBaseRef fills in HEAD as the 3-way-merge base ref when the caller
+// didn't supply one. Without this, --update silently sets up no git storage
+// at all (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
+// non-empty) and every file fails with an opaque "three-way merge failed" --
+// HEAD is the obvious default since `atmos init/scaffold --git` always
+// creates an initial commit.
+func defaultBaseRef(baseRef string) string {
 	if baseRef == "" {
-		baseRef = "HEAD"
+		return "HEAD"
 	}
-	return true, baseRef
+	return baseRef
 }
 
 func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates.Configuration, opts *scaffoldGenerateOptions) error {
