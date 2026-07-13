@@ -1,4 +1,4 @@
-package exec
+package oci
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestGetGHCRAuth tests the getGHCRAuth function which provides authentication
+// TestGetGHCRAuth tests the GHCRAuth function which provides authentication
 // for GitHub Container Registry (ghcr.io).
 func TestGetGHCRAuth(t *testing.T) {
 	tests := []struct {
@@ -161,7 +161,7 @@ func TestGetGHCRAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			auth, source := getGHCRAuth(tt.atmosConfig)
+			auth, source := GHCRAuth(tt.atmosConfig)
 
 			if !tt.expectAuth {
 				assert.Nil(t, auth, "Should return nil when authentication not possible")
@@ -238,7 +238,7 @@ func TestGetGHCRAuth_TokenPrecedence(t *testing.T) {
 				},
 			}
 
-			auth, source := getGHCRAuth(atmosConfig)
+			auth, source := GHCRAuth(atmosConfig)
 
 			if !tt.expectAuth {
 				assert.Nil(t, auth)
@@ -298,7 +298,7 @@ func TestGetGHCRAuth_UsernameRequirement(t *testing.T) {
 				},
 			}
 
-			auth, source := getGHCRAuth(atmosConfig)
+			auth, source := GHCRAuth(atmosConfig)
 
 			if !tt.expectAuth {
 				assert.Nil(t, auth, "Should return nil: %s", tt.reason)
@@ -351,7 +351,7 @@ func TestGetGHCRAuth_AuthSourceFormat(t *testing.T) {
 				},
 			}
 
-			auth, source := getGHCRAuth(atmosConfig)
+			auth, source := GHCRAuth(atmosConfig)
 
 			require.NotNil(t, auth)
 			assert.Equal(t, tt.expectedSource, source,
@@ -366,11 +366,11 @@ func TestGetGHCRAuth_NilConfig(t *testing.T) {
 	// Note: In practice, this shouldn't happen, but defensive programming is good.
 	defer func() {
 		if r := recover(); r != nil {
-			t.Errorf("getGHCRAuth panicked with nil config: %v", r)
+			t.Errorf("GHCRAuth panicked with nil config: %v", r)
 		}
 	}()
 
-	auth, source := getGHCRAuth(&schema.AtmosConfiguration{})
+	auth, source := GHCRAuth(&schema.AtmosConfiguration{})
 	assert.Nil(t, auth, "Should return nil for empty config")
 	assert.Empty(t, source, "Should return empty source for empty config")
 }
@@ -387,7 +387,7 @@ func TestGetGHCRAuth_Consistency(t *testing.T) {
 
 	// Call the function multiple times.
 	for i := 0; i < 10; i++ {
-		auth, source := getGHCRAuth(atmosConfig)
+		auth, source := GHCRAuth(atmosConfig)
 
 		require.NotNil(t, auth, "Iteration %d: should return auth", i)
 		assert.Equal(t, "environment variable (GITHUB_TOKEN with username consistent_user)", source)
