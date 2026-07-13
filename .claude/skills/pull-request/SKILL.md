@@ -78,6 +78,7 @@ The how-to lives elsewhere — don't re-derive it:
 - **Valid tag values:** read `website/blog/tags.yml`. Never invent a tag.
 - **Authors:** read `website/blog/authors.yml`. Add yourself if missing (in the same PR).
 - **What does NOT get a blog post** (internal refactors with zero user-visible change): the `roadmap` agent owns this invariant. Default to "no blog post" when in doubt and let the label decision tree above settle it.
+- **Embed the feature's cast when one exists (or record one):** if the feature has, or should have, a recorded demo under `examples/<name>/` with `cast:` frontmatter (see the `atmos-asciicast` skill), embed just the recording near the top of the post with `<CastPlayer src="/casts/examples/<name>/<file>.cast" title="..." chrome controls scrubber />` (import from `@site/src/components/CastPlayer`), followed by a plain link to the full example: `[View the full example](/examples/<name>)`. Use the cast's own `title:` from the example README's frontmatter. Don't use `EmbedExample` in blog posts — its README/file-listing duplicates content the post's own prose already covers; that component is for docs pages that need the "browse the full example" callout.
 
 ## Roadmap — when required, who owns it
 
@@ -137,6 +138,7 @@ Run through these in order before `git push`. Every item has burned someone befo
    - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
    - Read `website/blog/tags.yml` and pick a defined tag.
    - Check `website/blog/authors.yml` for your handle; add yourself if missing.
+   - Embed the feature's cast (`CastPlayer`) if one exists or was recorded for this PR.
    - Delegate the roadmap update to the `roadmap` agent (do not touch `featured[]`).
 4. **Build the website** to verify MDX renders: `cd website && npm run build`.
 5. **Commit and push.**

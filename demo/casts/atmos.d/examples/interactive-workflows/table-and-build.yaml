@@ -28,7 +28,6 @@ commands:
           ATMOS_KEYRING_TYPE: memory
           ATMOS_EXPERIMENTAL: silence
           ATMOS_LOGS_LEVEL: Warning
-          PS1: '$ '
         show:
           labels: false
         output:

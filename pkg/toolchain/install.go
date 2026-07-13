@@ -251,7 +251,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 	spinner.Spinner = bspinner.Dot
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithDefaultGradient())
+	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
 
 	var installedCount, failedCount, alreadyInstalledCount int
 
@@ -438,7 +438,7 @@ func installMultipleTools(toolSpecs []string, reinstallFlag bool) error {
 	spinner.Spinner = bspinner.Dot
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithDefaultGradient())
+	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
 
 	var installedCount, failedCount, skippedCount int
 

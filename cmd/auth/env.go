@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/github/actions"
@@ -236,9 +237,11 @@ func outputEnvAsExport(envVars map[string]string) error {
 		safe := strings.ReplaceAll(value, "'", "'\\''")
 		// The purpose of this command is to output credentials for shell sourcing.
 		// This is intentional - similar to `aws configure export-credentials`.
-		// #nosec G104 -- intentional credential output
-		// codeql[go/clear-text-logging]: intentional - this command exports credentials for shell sourcing
-		fmt.Printf("export %s='%s'\n", key, safe)
+		// #nosec G104 -- intentional credential output via data.WriteUnmaskedf; see its godoc.
+		// codeql[go/clear-text-logging]: intentional - data.WriteUnmaskedf exports credentials for shell sourcing
+		if err := data.WriteUnmaskedf("export %s='%s'\n", key, safe); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -260,9 +263,11 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 		safe := strings.ReplaceAll(value, "'", "'\\''")
 		// The purpose of this command is to output credentials for shell sourcing.
 		// This is intentional - similar to `aws configure export-credentials`.
-		// #nosec G104 -- intentional credential output
-		// codeql[go/clear-text-logging]: intentional - this command exports credentials for shell sourcing
-		fmt.Printf("%s='%s'\n", key, safe)
+		// #nosec G104 -- intentional credential output via data.WriteUnmaskedf; see its godoc.
+		// codeql[go/clear-text-logging]: intentional - data.WriteUnmaskedf exports credentials for shell sourcing
+		if err := data.WriteUnmaskedf("%s='%s'\n", key, safe); err != nil {
+			return err
+		}
 	}
 	return nil
 }

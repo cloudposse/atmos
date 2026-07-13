@@ -1,0 +1,81 @@
+---
+slug: vendor-diff-and-update
+title: "See what changed before you update a vendored component"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Bumping a vendored component to a newer version has always meant guessing. `atmos vendor pull`
+fetches whatever version is pinned — it doesn't tell you a newer one exists, and it definitely
+doesn't show you what changed. Finding out meant a manual `git clone`, a `git diff` between two
+tags, and then hand-editing the `version` field in `vendor.yaml` without breaking a comment or a
+YAML anchor.
+
+<!--truncate-->
+
+## The Problem
+
+Every vendored component in `vendor.yaml` pins a version, but nothing checked whether a newer one
+was available or what it would change. Bumping a version meant three separate manual steps: check
+upstream tags yourself, clone the repo somewhere to diff two versions, then edit the `version`
+field by hand — risking a stripped comment or a mangled anchor, since most YAML tools rewrite the
+whole file to make one change.
+
+## The Fix
+
+Two new commands close that loop, both built on Atmos's format-preserving `pkg/yaml` engine (the
+same one behind `atmos config|stack|vendor get|set|delete`):
+
+- **`atmos vendor update`** checks every Git-backed source in `vendor.yaml` for a newer version —
+  honoring each source's `constraints` (semver range, excluded versions, `no_prereleases`) — and
+  writes the new `version` in place, preserving comments, anchors, and `{{.Version}}` templates.
+  `--check` previews updates without writing anything; `--pull` runs `atmos vendor pull`
+  immediately after.
+- **`atmos vendor diff`** shows the Git diff between two versions (tags, branches, or commits) of a
+  component, with no local checkout — it clones to a temp directory and cleans up after itself.
+
+Both commands also work for components vendored purely through a per-component `component.yaml`
+instead of a repo-level `vendor.yaml`, falling back to it the same way `atmos vendor pull` already
+does (`vendor.yaml` wins if it declares the component). A repo with no `vendor.yaml` at all gets
+this for free; `--component-manifests` runs the same sweep alongside an existing `vendor.yaml` for
+repos that mix both styles, and `component.yaml` sources can declare their own `constraints`,
+matching `vendor.yaml`.
+
+## How to Use It
+
+```shell
+# Dry run: show what would update, without touching any files.
+atmos vendor update --check
+
+# Update one component, or everything tagged 'networking'.
+atmos vendor update --component vpc
+atmos vendor update --tags networking
+
+# Update and immediately pull the new versions.
+atmos vendor update --pull
+
+# Diff the current pinned version against the latest tag.
+atmos vendor diff --component vpc
+
+# Diff two specific versions, restricted to one file.
+atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+
+# Works with component.yaml-only vendoring too — no vendor.yaml required.
+atmos vendor update --component vpc --check
+atmos vendor diff --component vpc --type helmfile
+```
+
+## Also Fixed: `vendor.base_path` and `--chdir`
+
+`atmos --chdir=<dir> vendor update --check` (and `diff`/`get`/`set`) failed with "No vendor.yaml
+found in the current directory" whenever `<dir>`'s `atmos.yaml` configured `vendor.base_path` to
+anything other than a literal `./vendor.yaml` — common in `infra-live`-style repos. Vendor-wide
+discovery only checked the process's working directory and ignored `atmos.yaml` entirely. All four
+commands now resolve `vendor.base_path` (and `ATMOS_VENDOR_BASE_PATH`) the same way `atmos vendor
+pull` already does.
+
+## Get Involved
+
+See the [`vendor diff`](/cli/commands/vendor/vendor-diff) and
+[`vendor update`](/cli/commands/vendor/vendor-update) docs for the full flag reference, or open an
+issue if you hit a vendoring setup this doesn't cover yet.

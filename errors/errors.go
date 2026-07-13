@@ -125,6 +125,7 @@ var (
 	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
 	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
 	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
+	ErrUnsupportedVersionField       = errors.New("unsupported --show value (supported: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked)")
 	ErrVersionFilesDrift             = errors.New("version-managed files are out of date; run `atmos version track apply`")
 	ErrUnknownVersionFileManager     = errors.New("unknown file manager")
 	ErrDuplicateVersionFileManager   = errors.New("duplicate file manager registration")
@@ -1223,6 +1224,7 @@ var (
 	ErrAIToolBlocked                = errors.New("tool is blocked")
 	ErrAIToolsDisabled              = errors.New("tools are disabled")
 	ErrAINoPrompter                 = errors.New("no prompter available")
+	ErrAIPermissionPromptFailed     = errors.New("permission prompt failed")
 	ErrAISessionsNotEnabled         = errors.New("sessions are not enabled in configuration")
 	ErrAIInvalidDurationFormat      = errors.New("invalid duration format")
 	ErrAIUnsupportedDurationUnit    = errors.New("unsupported duration unit")
@@ -1410,6 +1412,10 @@ var (
 	ErrParseVendorFile = errors.New("failed to parse vendor manifest")
 	// ErrInvalidGitRef indicates a Git ref (tag, branch, or commit) could not be resolved.
 	ErrInvalidGitRef = errors.New("invalid Git ref")
+	// ErrComponentManifestNotFound indicates no component.yaml/component.yml exists in a component's directory.
+	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
+	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
+	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

@@ -6,6 +6,8 @@ tags: [feature]
 date: 2026-06-22
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 A big challenge for infrastructure developers is how hard it is to iterate locally. Every
 `terraform apply` needs a real cloud account, costs real money, and touches a live environment. And in
 many enterprises developers don't have permission to the cloud at all, so they can't iterate locally
@@ -138,3 +140,15 @@ See the [emulator component reference](/stacks/components/emulator) and the
 
 - **`atmos emulator list`** renders every emulator across your stacks in a clean table — a status dot, the image, and the container ID — so you can see what's running at a glance. Scope it to a single stack with `--stack`, or omit it to list everything. See the [`atmos emulator list`](/cli/commands/emulator/list) reference.
 - **Ready-to-run examples.** Two new examples let you try emulators without assembling a stack yourself: [`examples/emulator-aws`](https://github.com/cloudposse/atmos/tree/main/examples/emulator-aws) brings up a local AWS environment, and [`examples/emulator-k8s`](https://github.com/cloudposse/atmos/tree/main/examples/emulator-k8s) brings up a local Kubernetes (k3s) cluster and deploys into it.
+
+See the AWS emulator lifecycle in action:
+
+<CastPlayer src="/casts/examples/emulator-aws/lifecycle.cast" title="atmos emulator aws lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/emulator-aws)
+
+And the Kubernetes emulator lifecycle:
+
+<CastPlayer src="/casts/examples/emulator-k8s/lifecycle.cast" title="atmos kubernetes emulator lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/emulator-k8s)

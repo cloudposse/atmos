@@ -1,3 +1,6 @@
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
 repos:
   # Go-specific hooks
   - repo: https://github.com/tekwizely/pre-commit-golang
@@ -58,16 +61,23 @@ repos:
 
 
   # General file hygiene
+  # NOTE: trailing-whitespace, end-of-file-fixer, and check-added-large-files hardcode
+  # `stages: [commit, push, manual]` upstream, which overrides our repo-level
+  # default_stages - so they need an explicit stages: override here to stay
+  # commit-only like every other hook.
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: end-of-file-fixer
+        stages: [pre-commit]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: check-yaml
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tests/fixtures/)
         args: [--allow-multiple-documents, --unsafe]
       - id: check-added-large-files
+        stages: [pre-commit]
         args: [--maxkb=500]
         exclude: ^(docs/demo.gif|website/)

@@ -42,11 +42,26 @@ func (h *ChooseHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for selection and returns the chosen value.
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// is returned without prompting. When there is no TTY and no `default` is set,
+// resolveInteractive returns ErrStepTTYRequired.
 func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.ChooseHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
+	shouldPrompt, err := h.resolveInteractive(step)
+	if err != nil {
 		return nil, err
+	}
+
+	defaultVal, err := h.ResolveDefault(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Non-TTY with a configured default: use the default without prompting.
+	if !shouldPrompt {
+		return NewStepResult(defaultVal), nil
 	}
 
 	prompt, err := h.ResolvePrompt(ctx, step, vars)
@@ -55,11 +70,6 @@ func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 	}
 
 	options, err := h.resolveOptions(step, vars)
-	if err != nil {
-		return nil, err
-	}
-
-	defaultVal, err := h.resolveDefault(step, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -78,18 +88,6 @@ func (h *ChooseHandler) resolveOptions(step *schema.WorkflowStep, vars *Variable
 		options[i] = resolved
 	}
 	return options, nil
-}
-
-// resolveDefault resolves the default value if present.
-func (h *ChooseHandler) resolveDefault(step *schema.WorkflowStep, vars *Variables) (string, error) {
-	if step.Default == "" {
-		return "", nil
-	}
-	defaultVal, err := vars.Resolve(step.Default)
-	if err != nil {
-		return "", fmt.Errorf("step '%s': failed to resolve default: %w", step.Name, err)
-	}
-	return defaultVal, nil
 }
 
 // createChooseKeyMap creates a keymap with ESC added to quit keys.

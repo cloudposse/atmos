@@ -17,10 +17,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_ai_ask.md
@@ -123,7 +124,7 @@ var askCmd = &cobra.Command{
 		defer cancel()
 
 		// Execute question with tool support.
-		utils.PrintfMessageToTUI("👽 Thinking...\n")
+		ui.Writef("👽 Thinking...\n")
 		result := exec.Execute(ctx, executor.Options{
 			Prompt:       finalQuestion,
 			ToolsEnabled: !noTools && toolExecutor != nil,
@@ -142,9 +143,7 @@ var askCmd = &cobra.Command{
 		if err := mdFormatter.Format(&buf, result); err != nil {
 			return fmt.Errorf("failed to format response: %w", err)
 		}
-		utils.PrintfMarkdown("%s", buf.String())
-
-		return nil
+		return data.Markdownf("%s", buf.String())
 	},
 }
 

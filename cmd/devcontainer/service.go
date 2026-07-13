@@ -2,12 +2,12 @@ package devcontainer
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Service coordinates devcontainer operations.
@@ -122,7 +122,7 @@ func (s *Service) ResolveDevcontainerName(ctx context.Context, args []string) (s
 			Err()
 	}
 
-	fmt.Fprintf(s.ui.Output(), "\nSelected devcontainer: %s\n\n", selected)
+	ui.Writef("\nSelected devcontainer: %s\n\n", selected)
 	return selected, nil
 }
 
