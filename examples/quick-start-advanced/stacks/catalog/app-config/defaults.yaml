@@ -4,6 +4,9 @@ components:
       metadata:
         component: app-config
         description: "Publishes resolved app configuration and secrets to SSM Parameter Store."
+        tags: [config, secrets]
+        labels:
+          tier: application
       # Component dependencies declare the apply order in the DAG (consumed by
       # `atmos describe dependents`, `--affected` runs, and workflows). This is the
       # current form; the legacy `settings.depends_on` map is deprecated.

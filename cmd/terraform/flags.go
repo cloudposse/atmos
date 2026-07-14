@@ -143,6 +143,20 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Description: "Filter by specific components",
 		EnvVars:     []string{"ATMOS_COMPONENTS"},
 	})
+	registry.Register(&flags.StringSliceFlag{
+		Name:        "tags",
+		Shorthand:   "",
+		Default:     nil,
+		Description: "Filter by tags (comma-separated, matches any): --tags=production,tier-1",
+		EnvVars:     []string{"ATMOS_TAGS"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "labels",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		EnvVars:     []string{"ATMOS_LABELS"},
+	})
 }
 
 // TerraformAffectedFlags returns a registry with flags for affected component detection.
