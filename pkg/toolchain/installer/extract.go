@@ -118,7 +118,11 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 		return i.extractFilesFromDir(tempDir, binaryPath, tool, symlinks, nil)
 	}
 
-	// Otherwise, fall back to searching for the binary by name.
+	// Otherwise, fall back to searching for the binary by name. Deferred symlinks
+	// are intentionally not materialized here: findBinaryInDir matches only
+	// regular files (filepath.Walk lstats and checks IsRegular), so a symlink can
+	// never be the resolved binary, and this fallback discards tempDir without
+	// preserving a tree.
 	binaryName := resolveBinaryName(tool)
 	found, err := findBinaryInDir(tempDir, binaryName)
 	if err != nil {
