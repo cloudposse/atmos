@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -236,6 +238,76 @@ func TestApplyFilters(t *testing.T) {
 	}
 }
 
+// TestApplyFilters_Tags asserts exact filtered contents (not just counts) and
+// that tags compose with, rather than replace, the name-based filters.
+func TestApplyFilters_Tags(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production", "aws"}},
+		"sso-dev":  {Kind: "aws/iam-identity-center", Tags: []string{"development", "aws"}},
+	}
+	identities := map[string]schema.Identity{
+		"prod-admin":    {Kind: "aws/permission-set", Tags: []string{"admin", "production"}},
+		"prod-readonly": {Kind: "aws/permission-set", Tags: []string{"readonly", "production"}},
+		"dev-readonly":  {Kind: "aws/permission-set", Tags: []string{"readonly", "development"}},
+	}
+
+	t.Run("tags alone filters both providers and identities by any-match", func(t *testing.T) {
+		gotProviders, gotIdentities, err := applyFilters(providers, identities, &filterConfig{
+			tagNames: []string{"production"},
+		})
+		require.NoError(t, err)
+
+		require.Len(t, gotProviders, 1)
+		assert.Contains(t, gotProviders, "sso-prod")
+		assert.Equal(t, []string{"production", "aws"}, gotProviders["sso-prod"].Tags)
+
+		require.Len(t, gotIdentities, 2)
+		assert.Contains(t, gotIdentities, "prod-admin")
+		assert.Contains(t, gotIdentities, "prod-readonly")
+		assert.NotContains(t, gotIdentities, "dev-readonly")
+	})
+
+	t.Run("tags compose with --identities name filter", func(t *testing.T) {
+		gotProviders, gotIdentities, err := applyFilters(providers, identities, &filterConfig{
+			showIdentitiesOnly: true,
+			identityNames:      []string{"prod-admin", "prod-readonly", "dev-readonly"},
+			tagNames:           []string{"readonly"},
+		})
+		require.NoError(t, err)
+
+		assert.Empty(t, gotProviders)
+		require.Len(t, gotIdentities, 2)
+		assert.Contains(t, gotIdentities, "prod-readonly")
+		assert.Contains(t, gotIdentities, "dev-readonly")
+		assert.NotContains(t, gotIdentities, "prod-admin")
+	})
+
+	t.Run("no matching tags returns empty results, not an error", func(t *testing.T) {
+		gotProviders, gotIdentities, err := applyFilters(providers, identities, &filterConfig{
+			tagNames: []string{"nonexistent"},
+		})
+		require.NoError(t, err)
+		assert.Empty(t, gotProviders)
+		assert.Empty(t, gotIdentities)
+	})
+
+	t.Run("multiple requested tags use any-match semantics", func(t *testing.T) {
+		gotProviders, gotIdentities, err := applyFilters(providers, identities, &filterConfig{
+			tagNames: []string{"production", "development"},
+		})
+		require.NoError(t, err)
+
+		require.Len(t, gotProviders, 2)
+		assert.Contains(t, gotProviders, "sso-prod")
+		assert.Contains(t, gotProviders, "sso-dev")
+
+		require.Len(t, gotIdentities, 3)
+		assert.Contains(t, gotIdentities, "prod-admin")
+		assert.Contains(t, gotIdentities, "prod-readonly")
+		assert.Contains(t, gotIdentities, "dev-readonly")
+	})
+}
+
 func TestRenderJSON(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -414,6 +486,7 @@ func TestParseFilterFlags(t *testing.T) {
 		cmd := &cobra.Command{Use: "list"}
 		cmd.Flags().String("providers", "", "providers")
 		cmd.Flags().String("identities", "", "identities")
+		cmd.Flags().String("tags", "", "tags")
 		return cmd
 	}
 
@@ -484,6 +557,36 @@ func TestParseFilterFlags(t *testing.T) {
 		assert.Nil(t, got)
 		assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
 	})
+
+	t.Run("--tags with comma list parses names", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		viper.Set(tagsKey, "production, admin")
+
+		cmd := newCmd()
+		require.NoError(t, cmd.Flags().Set("tags", "production, admin"))
+
+		got, err := parseFilterFlags(cmd)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"production", "admin"}, got.tagNames)
+	})
+
+	t.Run("--tags composes with --providers rather than erroring", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		viper.Set(tagsKey, "production")
+		viper.Set(providersKey, "p1")
+
+		cmd := newCmd()
+		require.NoError(t, cmd.Flags().Set("tags", "production"))
+		require.NoError(t, cmd.Flags().Set("providers", "p1"))
+
+		got, err := parseFilterFlags(cmd)
+		require.NoError(t, err)
+		assert.True(t, got.showProvidersOnly)
+		assert.Equal(t, []string{"p1"}, got.providerNames)
+		assert.Equal(t, []string{"production"}, got.tagNames)
+	})
 }
 
 // TestRenderOutput_InvalidFormatErrors guards the default-case error in the
@@ -543,6 +646,48 @@ func TestListFlagCompletions_NoConfig(t *testing.T) {
 			_, _ = listIdentitiesFlagCompletion(cmd, nil, "")
 		})
 	})
+
+	t.Run("listTagsFlagCompletion", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			_, _ = listTagsFlagCompletion(cmd, nil, "")
+		})
+	})
+}
+
+// TestListTagsFlagCompletion_WithConfig covers the success path: the union of
+// every tag on any provider or identity, sorted and deduplicated.
+func TestListTagsFlagCompletion_WithConfig(t *testing.T) {
+	tmp := t.TempDir()
+	atmosYaml := `base_path: "./"
+stacks:
+  base_path: stacks
+  included_paths: ["**/*"]
+  name_pattern: "{stage}"
+auth:
+  providers:
+    sso-prod:
+      kind: mock/aws
+      tags: [production, sso]
+  identities:
+    prod-admin:
+      kind: mock/aws
+      via:
+        provider: sso-prod
+      tags: [production, admin]
+logs:
+  level: Info
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "atmos.yaml"), []byte(atmosYaml), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "stacks"), 0o755))
+	t.Chdir(tmp)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	cmd := &cobra.Command{Use: "list-completion-test"}
+	got, directive := listTagsFlagCompletion(cmd, nil, "")
+
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"admin", "production", "sso"}, got)
 }
 
 // TestLoadAuthManagerForList_SmokeFromEmptyTempDir exercises the helper from a
@@ -607,6 +752,22 @@ func TestExecuteAuthListCommand_JSONFormat(t *testing.T) {
 	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags([]string{"--format=json"}))
+
+	err := executeAuthListCommand(cmd, nil)
+	assert.NoError(t, err)
+}
+
+// TestExecuteAuthListCommand_TagsFilter exercises the --tags composition
+// path end-to-end. The fixture's provider/identity carry no tags, so
+// filtering by tag must succeed (no error) and simply produce an empty
+// result set, rather than erroring or panicking.
+func TestExecuteAuthListCommand_TagsFilter(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authListCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--tags=production"}))
 
 	err := executeAuthListCommand(cmd, nil)
 	assert.NoError(t, err)

@@ -123,6 +123,55 @@ func TestComponents_DefaultValues(t *testing.T) {
 	assert.Equal(t, "real", comp["component_type"]) // real, abstract
 }
 
+// TestComponents_TagsAndLabels asserts exact tags/labels flattening from
+// metadata, including the default-empty-collection case (not just presence).
+func TestComponents_TagsAndLabels(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-prod": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{
+							"tags": []any{"production", "networking"},
+							"labels": map[string]any{
+								"cost-center": "platform",
+								"compliance":  "sox",
+							},
+						},
+					},
+					"eks": map[string]any{
+						"metadata": map[string]any{
+							"enabled": true, // No tags/labels set.
+						},
+					},
+					"no-metadata": map[string]any{}, // No metadata section at all.
+				},
+			},
+		},
+	}
+
+	components, err := Components(stacksMap)
+	require.NoError(t, err)
+	require.Len(t, components, 3)
+
+	byName := make(map[string]map[string]any, len(components))
+	for _, comp := range components {
+		byName[comp["component"].(string)] = comp
+	}
+
+	vpc := byName["vpc"]
+	assert.Equal(t, []string{"production", "networking"}, vpc["tags"])
+	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, vpc["labels"])
+
+	eks := byName["eks"]
+	assert.Equal(t, []string{}, eks["tags"], "components with metadata but no tags get an empty, non-nil slice")
+	assert.Equal(t, map[string]string{}, eks["labels"], "components with metadata but no labels get an empty, non-nil map")
+
+	noMetadata := byName["no-metadata"]
+	assert.Equal(t, []string{}, noMetadata["tags"], "components with no metadata section at all still get an empty, non-nil slice")
+	assert.Equal(t, map[string]string{}, noMetadata["labels"], "components with no metadata section at all still get an empty, non-nil map")
+}
+
 func TestComponentsForStack(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{

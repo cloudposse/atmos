@@ -109,6 +109,18 @@ const (
 
 	// Version resolves a locked version from the Atmos Version Tracker.
 	Version = "version"
+
+	// Tags returns the current component's own metadata.tags as a list.
+	Tags = "tags"
+
+	// Labels returns the current component's own metadata.labels as a map.
+	Labels = "labels"
+
+	// LabelsKeys returns the current component's own metadata.labels keys as a sorted list.
+	LabelsKeys = "labels.keys"
+
+	// LabelsValues returns the current component's own metadata.labels values as a list, ordered by key.
+	LabelsValues = "labels.values"
 )
 
 // YAMLPrefix is the prefix used for YAML custom tags.
@@ -152,6 +164,10 @@ func All() []string {
 		AwsOrganizationID,
 		Emulator,
 		Version,
+		Tags,
+		Labels,
+		LabelsKeys,
+		LabelsValues,
 	}
 }
 
@@ -190,6 +206,10 @@ var tagsMap = map[string]bool{
 	AwsOrganizationID:       true,
 	Emulator:                true,
 	Version:                 true,
+	Tags:                    true,
+	Labels:                  true,
+	LabelsKeys:              true,
+	LabelsValues:            true,
 }
 
 // IsValid checks if a tag name is registered. The name should not include the YAML prefix.

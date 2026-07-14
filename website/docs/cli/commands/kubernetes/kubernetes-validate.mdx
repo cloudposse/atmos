@@ -78,6 +78,13 @@ Validate affected Kubernetes components:
 atmos kubernetes validate --affected --base origin/main
 ```
 
+Validate components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos kubernetes validate --all --tags production,tier-1
+atmos kubernetes validate --affected --labels cost-center=platform
+```
+
 ## What is validated
 
 Offline (default):
@@ -124,4 +131,18 @@ With `--server`:
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent Kubernetes components.</dd>
+
+<dt>
+  `--tags` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>
+  `--labels` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
 </dl>
