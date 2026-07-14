@@ -19,6 +19,8 @@ const (
 	fieldComponent       = "component"
 	fieldComponentFolder = "component_folder"
 	fieldMetadata        = "metadata"
+	fieldTags            = "tags"
+	fieldLabels          = "labels"
 )
 
 // Components transforms stacksMap into structured component data.
@@ -137,6 +139,8 @@ func extractMetadataFields(comp map[string]any, metadata map[string]any) {
 	comp[metadataEnabled] = enabled
 	comp[metadataLocked] = locked
 	comp["component_type"] = getStringWithDefault(metadata, "type", "real")
+	comp[fieldTags] = getStringSliceFromMetadata(metadata, fieldTags)
+	comp[fieldLabels] = getStringMapFromMetadata(metadata, fieldLabels)
 
 	// Compute status indicators for display.
 	// status: Colored dot (●) for table display.
@@ -161,6 +165,8 @@ func setDefaultMetadataFields(comp map[string]any) {
 	comp[metadataEnabled] = true
 	comp[metadataLocked] = false
 	comp["component_type"] = "real"
+	comp[fieldTags] = []string{}
+	comp[fieldLabels] = map[string]string{}
 
 	// Default status indicators for enabled, not locked state.
 	comp["status"] = getStatusIndicator(true, false)
@@ -190,6 +196,47 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 		return val
 	}
 	return defaultValue
+}
+
+// getStringSliceFromMetadata safely extracts a []string from a metadata field
+// that was YAML-decoded as []any. Returns an empty (non-nil) slice if the key
+// is absent or not a list, so callers always get a rangeable value.
+func getStringSliceFromMetadata(m map[string]any, key string) []string {
+	defer perf.Track(nil, "list.extract.getStringSliceFromMetadata")()
+
+	raw, ok := m[key].([]any)
+	if !ok {
+		return []string{}
+	}
+
+	result := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// getStringMapFromMetadata safely extracts a map[string]string from a metadata
+// field that was YAML-decoded as map[string]any. Returns an empty (non-nil)
+// map if the key is absent or not an object, so callers always get a
+// rangeable value.
+func getStringMapFromMetadata(m map[string]any, key string) map[string]string {
+	defer perf.Track(nil, "list.extract.getStringMapFromMetadata")()
+
+	raw, ok := m[key].(map[string]any)
+	if !ok {
+		return map[string]string{}
+	}
+
+	result := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if s, ok := v.(string); ok {
+			result[k] = s
+		}
+	}
+	return result
 }
 
 // UniqueComponents extracts deduplicated components from all stacks.
