@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 const registrationTimeout = 60 * time.Second
@@ -76,22 +77,32 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 		if suppress {
 			session.SetSuppressStderr(true)
 		}
-		if err := session.Start(ctx, startOpts...); err != nil {
-			ui.Error(fmt.Sprintf("MCP server `%s` failed to start: %v", session.Name(), err))
-			continue
-		}
-
-		bridged := BridgeTools(session)
-		serverTools := 0
-		for _, bt := range bridged {
-			if regErr := registry.Register(bt); regErr != nil {
-				ui.Error(fmt.Sprintf("Failed to register MCP tool `%s`: %v", bt.Name(), regErr))
-				continue
-			}
-			serverTools++
-		}
-		totalTools += serverTools
-		ui.Info(fmt.Sprintf("MCP server `%s` started (%d tools)", session.Name(), serverTools))
+		totalTools += startAndRegisterSession(ctx, session, registry, startOpts)
 	}
 	return totalTools
+}
+
+// startAndRegisterSession starts a single MCP server session and registers its bridged
+// tools, showing a spinner while the handshake is in flight — server startup (e.g. an
+// npx/uvx cold start) can take several seconds with no other visible progress.
+func startAndRegisterSession(ctx context.Context, session *Session, registry *tools.Registry, startOpts []StartOption) int {
+	sp := spinner.New(fmt.Sprintf("Starting MCP server `%s`...", session.Name()))
+	sp.Start()
+
+	if err := session.Start(ctx, startOpts...); err != nil {
+		sp.Error(fmt.Sprintf("MCP server `%s` failed to start: %v", session.Name(), err))
+		return 0
+	}
+
+	bridged := BridgeTools(session)
+	serverTools := 0
+	for _, bt := range bridged {
+		if regErr := registry.Register(bt); regErr != nil {
+			ui.Error(fmt.Sprintf("Failed to register MCP tool `%s`: %v", bt.Name(), regErr))
+			continue
+		}
+		serverTools++
+	}
+	sp.Success(fmt.Sprintf("MCP server `%s` started (%d tools)", session.Name(), serverTools))
+	return serverTools
 }
