@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -36,10 +37,53 @@ func TestYamlFuncTerraformState(t *testing.T) {
 
 	stack := "nonprod"
 
-	// Define the working directory
+	// Compute the absolute path to the mock component before any directory changes so that
+	// both the pre-test cleanup and the deferred cleanup use a stable path on all platforms.
+	mockComponentPath, err := filepath.Abs("../../tests/fixtures/components/terraform/mock")
+	if err != nil {
+		t.Fatalf("Failed to compute absolute mock component path: %v", err)
+	}
+
+	defer func() {
+		// Delete the generated files and folders after the test.
+		// Log warnings instead of failing — cleanup errors should not mask test results.
+		if err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")); err != nil {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
+
+		if err := os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")); err != nil {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
+
+		// Remove any root-level state files that may have been left behind.
+		if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate")); err != nil && !os.IsNotExist(err) {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
+		if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup")); err != nil && !os.IsNotExist(err) {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
+	}()
+
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
 	setupTerraformYamlFunctionSandbox(t, workDir)
 	t.Chdir(workDir)
+
+	// Pre-test cleanup: remove any stale terraform state left by previously-run tests that
+	// share the same mock component directory.  On Windows, file-locking can prevent prior
+	// test teardowns from completing, so we proactively clean here before touching any state.
+	if err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")); err != nil {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")); err != nil {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
+	if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate")); err != nil && !os.IsNotExist(err) {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
+	if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup")); err != nil && !os.IsNotExist(err) {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -52,7 +96,7 @@ func TestYamlFuncTerraformState(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err := ExecuteTerraform(info)
+	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}

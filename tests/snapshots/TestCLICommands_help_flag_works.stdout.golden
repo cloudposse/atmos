@@ -50,7 +50,7 @@ BUILT-IN COMMANDS
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
       mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections
       packer [command]                       Manage packer-based machine images for multiple platforms
-      pro [command]                          Access premium features integrated with atmos-pro.com
+      pro [command] [EXPERIMENTAL]           Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
       stack [command]                        Read and edit stack manifests for a component

@@ -96,6 +96,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
+	_ "github.com/cloudposse/atmos/cmd/pro"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"

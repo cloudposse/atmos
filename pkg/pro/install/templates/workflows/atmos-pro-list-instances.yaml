@@ -1,0 +1,45 @@
+# Atmos Pro - List Instances.
+# Uploads the full list of component instances to Atmos Pro.
+# Runs on push to main, daily, and on manual dispatch.
+#
+# Prerequisites:
+#   - Set the ATMOS_PRO_WORKSPACE_ID repository variable
+#   - Set the ATMOS_VERSION repository variable
+#   - Configure profiles/github-plan/atmos.yaml with your AWS account identities
+#
+# See: https://atmos.tools/pro/
+name: "Atmos Pro - List Instances"
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  list-instances:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: List instances and upload to Atmos Pro
+        env:
+          ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
+          ATMOS_PROFILE: github-plan
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: atmos list instances --upload

@@ -9,7 +9,8 @@ import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Atmos CLI handles the execution layer — how you architect your cloud infrastructure, run automation
@@ -44,6 +45,94 @@ and gives you the coordination layer on top:
 
 ## Quick Start
 
+The right onboarding path depends on how much of your Atmos and CI authentication setup is already
+in place. Choose the path that matches your current state.
+
+<Tabs>
+<TabItem value="no-atmos" label="1. Don't use Atmos">
+
+Start by setting up Atmos itself before you connect the repository to Atmos Pro. The fastest path is
+to create your first stacks, get your project structure in place, and make sure GitHub Actions is
+part of your workflow.
+
+<ActionCard
+  title="Start with Atmos"
+  primaryCtaText="Simple Quick Start"
+  primaryCtaLink="/quick-start/simple"
+  secondaryCtaText="Project Layout"
+  secondaryCtaLink="/projects/layout"
+>
+  If this repository is not using Atmos yet, begin with the Quick Start and come back here once your
+  stacks are configured.
+</ActionCard>
+
+</TabItem>
+<TabItem value="atmos-no-oidc" label="2. Use Atmos but not OIDC">
+
+If the repository already uses Atmos, the next prerequisite for Atmos Pro is OIDC-based
+authentication in CI. Configure your cloud auth provider and the identities or stack auth settings
+that your workflows will use.
+
+<ActionCard
+  title="Set up OIDC"
+  primaryCtaText="Auth Providers"
+  primaryCtaLink="/cli/configuration/auth/providers"
+  secondaryCtaText="Stack Auth"
+  secondaryCtaLink="/stacks/auth"
+>
+  Atmos Pro relies on GitHub Actions OIDC token exchange. Configure cloud-side trust and Atmos auth
+  first, then return here to install the Pro integration.
+</ActionCard>
+
+</TabItem>
+<TabItem value="atmos-with-oidc" label="3. Use Atmos with OIDC" default>
+
+If your repository already uses Atmos and GitHub Actions OIDC is configured with your cloud
+provider, the fastest way to connect it to Atmos Pro is `atmos pro install`.
+
+### 1. Install the Pro integration
+
+```bash
+atmos pro install
+```
+
+Preview the generated changes before writing files:
+
+```bash
+atmos pro install --dry-run
+```
+
+<ActionCard
+  title="Install Atmos Pro"
+  primaryCtaText="Command Reference"
+  primaryCtaLink="/cli/commands/pro/install"
+  secondaryCtaText="Configuration Reference"
+  secondaryCtaLink="/cli/configuration/settings/pro"
+>
+  Use the installer for the fastest path to GitHub Actions workflows, auth profiles, and Atmos Pro
+  configuration.
+</ActionCard>
+
+</TabItem>
+</Tabs>
+
+## What the installer sets up
+
+Once those prerequisites are in place, the installer scaffolds the repository-side pieces needed to
+connect to Atmos Pro:
+
+- Workspace configuration in `atmos.yaml`
+- GitHub Actions OIDC permissions for token exchange
+- Workflow wiring for uploading affected stacks
+
+It does not create the cloud-side OIDC trust relationships for you. Configure those first if your CI
+environment is not already using Atmos auth with OIDC.
+
+## Manual setup
+
+If you need to configure the integration by hand, use the following steps. This assumes your Atmos
+project already exists and your CI authentication path is ready.
+
 ### 1. Configure Your Workspace
 
 <File title="atmos.yaml">
@@ -77,13 +166,6 @@ jobs:
         run: atmos describe affected --upload
 ```
 </File>
-
-<ActionCard title="Pro Configuration">
-    Configure workspace ID, authentication, payload chunking, and drift detection in your `atmos.yaml`.
-    <div>
-      <PrimaryCTA to="/cli/configuration/settings/pro">Configuration Reference</PrimaryCTA>
-    </div>
-</ActionCard>
 
 ## Authentication
 
@@ -156,6 +238,9 @@ atmos terraform plan vpc -s prod-use1 --upload-status
 ## Commands
 
 <dl>
+  <dt>[`atmos pro install`](/cli/commands/pro/install)</dt>
+  <dd>Scaffold workflows, auth profiles, and configuration to connect a repository to Atmos Pro.</dd>
+
   <dt>[`atmos describe affected --upload`](/cli/commands/describe/affected)</dt>
   <dd>Upload affected components and stacks to Atmos Pro for PR correlation.</dd>
 

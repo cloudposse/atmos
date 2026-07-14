@@ -32,6 +32,9 @@ type StandardOptions struct {
 	// Dry run flag (common across vendor, workflow, pro commands).
 	DryRun bool // Simulate operation without making changes (--dry-run)
 
+	// Force flag (common across commands that need confirmation bypass).
+	Force bool // Force operation without confirmation (--force)
+
 	// Query flag (for describe commands with jq/jmespath).
 	Query string // JQ/JMESPath query string (--query)
 

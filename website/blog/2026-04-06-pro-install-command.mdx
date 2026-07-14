@@ -1,0 +1,38 @@
+---
+slug: pro-install-command
+title: "One-Command Atmos Pro Setup"
+authors: [osterman]
+tags: [feature]
+---
+
+Setting up [Atmos Pro](https://atmos-pro.com) in a repository used to mean manually creating GitHub Actions workflows, authentication profiles, and stack configuration. The new `atmos pro install` command scaffolds everything in seconds.
+
+<!--truncate-->
+
+## What It Does
+
+`atmos pro install` generates the complete set of files needed to connect your repository to Atmos Pro's CI/CD orchestration platform:
+
+- **GitHub Actions workflows** for terraform plan, apply, affected stacks detection, and instance listing
+- **Authentication profiles** with GitHub OIDC for separate plan (read-only) and apply (admin) roles
+- **Stack mixin** that configures Pro workflow triggers for PRs, merges, and drift detection
+
+## Usage
+
+```bash
+# Interactive installation with confirmation prompts
+atmos pro install
+
+# Preview what would be created
+atmos pro install --dry-run
+
+# Skip confirmation prompts
+atmos pro install --yes
+
+# Overwrite existing files
+atmos pro install --force
+```
+
+## Why This Matters
+
+Teams adopting Atmos Pro no longer need to copy workflow templates, configure auth profiles by hand, or wire up stack mixins manually. One command produces a working CI/CD integration that follows best practices — then you customize the generated files for your environment.
