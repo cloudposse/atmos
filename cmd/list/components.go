@@ -21,6 +21,7 @@ import (
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -41,6 +42,8 @@ type ComponentsOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	ErrorMode        string
+	Tags             []string
+	LabelsRaw        string
 }
 
 // componentsCmd lists atmos components.
@@ -104,6 +107,8 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 }
 
@@ -151,6 +156,8 @@ func init() {
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
 		WithErrorModeFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 	)
 
 	// Register flags.
@@ -259,7 +266,10 @@ func renderComponents(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOp
 	defer perf.Track(nil, "list.components.renderComponents")()
 
 	// Build filters.
-	filters := buildComponentFilters(opts)
+	filters, err := buildComponentFilters(opts)
+	if err != nil {
+		return err
+	}
 
 	// Get column configuration.
 	columns := getComponentColumns(atmosConfig, opts.Columns)
@@ -285,7 +295,7 @@ func renderComponents(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOp
 
 // buildComponentFilters creates filters based on command options.
 // Note: --stack filter is not applicable to unique components (use "list instances" for per-stack filtering).
-func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
+func buildComponentFilters(opts *ComponentsOptions) ([]filter.Filter, error) {
 	defer perf.Track(nil, "list.components.buildComponentFilters")()
 
 	var filters []filter.Filter
@@ -312,7 +322,21 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 		filters = append(filters, filter.NewBoolFilter("locked", opts.Locked))
 	}
 
-	return filters
+	// Tags filter (any-match).
+	if len(opts.Tags) > 0 {
+		filters = append(filters, filter.NewTagFilter("tags", opts.Tags))
+	}
+
+	// Labels filter (all-match).
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, err
+	}
+	if len(labels) > 0 {
+		filters = append(filters, filter.NewLabelFilter("labels", labels))
+	}
+
+	return filters, nil
 }
 
 // getComponentColumns returns column configuration for unique components listing.

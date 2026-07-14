@@ -249,6 +249,30 @@ func WithTypeFlag(options *[]flags.Option) {
 	)
 }
 
+// WithTagsFlag adds a tags filter flag (comma-separated, matches any).
+// Used by: components.
+func WithTagsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithTagsFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("tags", "", "", "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithEnvVars("tags", "ATMOS_COMPONENT_TAGS"),
+	)
+}
+
+// WithLabelsFlag adds a labels filter flag (comma-separated key=value pairs, matches all).
+// Used by: components.
+func WithLabelsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithLabelsFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithEnvVars("labels", "ATMOS_COMPONENT_LABELS"),
+	)
+}
+
 // WithComponentFlag adds component filter flag for filtering stacks by component.
 // Used by: stacks.
 func WithComponentFlag(options *[]flags.Option) {
