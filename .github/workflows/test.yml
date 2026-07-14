@@ -162,28 +162,13 @@ jobs:
         shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
-      - name: Download build artifacts for ${{ matrix.flavor.target }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: ./.github/actions/setup-atmos-install
         with:
-          name: build-artifacts-${{ matrix.flavor.target }}
+          target: ${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
-
-      - name: Add build artifacts directory to PATH for linux or macos
-        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
-        run: |
-          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
-          chmod +x "${{ github.workspace }}/atmos"
-
-      - name: Add build artifacts directory to PATH for windows
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: |
-          $atmosPath = Join-Path ${{ github.workspace }} "atmos.exe"
-          if (-not (Test-Path $atmosPath)) {
-            throw "atmos.exe not found at: $atmosPath"
-          }
-          echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
+          add-to-path: 'true'
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
@@ -324,7 +309,7 @@ jobs:
           persist-credentials: false
 
       - name: Download linux coverage report artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: ./.github/actions/download-artifact-retry
         with:
           name: acceptance-coverage-linux
           path: ${{ github.workspace }}
@@ -418,19 +403,15 @@ jobs:
     timeout-minutes: 30
     steps:
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: build-artifacts-linux
-          path: /usr/local/bin
-
-      - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
+
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
 
       - name: Install Terraform and OpenTofu with Atmos toolchain
         env:
@@ -478,19 +459,15 @@ jobs:
 
     timeout-minutes: 30
     steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: build-artifacts-linux
-          path: /usr/local/bin
-
-      - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
+
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
@@ -558,26 +535,11 @@ jobs:
       # attaches new virtual network interfaces on the macOS host, which can
       # transiently disrupt host DNS resolution right as it happens; this is the
       # only step in the job that needs public DNS from the host, so keep it away
-      # from that window. actions/download-artifact also doesn't retry network
-      # errors like ENOTFOUND (only retries HTTP 5xx/429), so add a manual retry
-      # as defense-in-depth, mirroring the retry loop used below for `atmos test`.
-      - name: Download build artifacts
-        id: download_artifacts_1
-        continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      # from that window.
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
         with:
-          name: build-artifacts-${{ matrix.flavor.artifact }}
-          path: /usr/local/bin
-
-      - name: Download build artifacts (retry)
-        if: steps.download_artifacts_1.outcome == 'failure'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: build-artifacts-${{ matrix.flavor.artifact }}
-          path: /usr/local/bin
-
-      - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
+          target: ${{ matrix.flavor.artifact }}
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
@@ -750,24 +712,13 @@ jobs:
         shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
-      - name: Download build artifacts for ${{ matrix.flavor.target }}
+      - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: ./.github/actions/setup-atmos-install
         with:
-          name: build-artifacts-${{ matrix.flavor.target }}
+          target: ${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
-
-      - name: Add build artifacts directory to PATH for linux or macos
-        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
-        run: |
-          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
-          chmod +x "${{ github.workspace }}/atmos"
-
-      - name: Add build artifacts directory to PATH for windows
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: |
-          echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
+          add-to-path: 'true'
 
       - name: Install Terraform and OpenTofu with Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -867,14 +818,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
         with:
-          name: build-artifacts-linux
-          path: /usr/local/bin
-
-      - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
+          target: linux
 
       - name: Install OpenTofu with Atmos toolchain
         env:
@@ -936,14 +883,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
         with:
-          name: build-artifacts-linux
-          path: /usr/local/bin
-
-      - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
+          target: linux
 
       # Dogfood Atmos to validate the example stacks instead of a third-party action.
       # `atmos validate stacks` checks YAML syntax, validates every manifest against the
@@ -979,19 +922,15 @@ jobs:
 
     timeout-minutes: 15
     steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: build-artifacts-linux
-          path: /usr/local/bin
-
-      - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
+
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
 
       - name: Run container steps (run, build, bake, push, workspace, env)
         working-directory: examples/container-step

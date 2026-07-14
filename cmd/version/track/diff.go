@@ -26,11 +26,14 @@ var trackDiffCmd = &cobra.Command{
 				changed = append(changed, status.Entries[i])
 			}
 		}
-		return writeFormatted(cmd, changed)
+		if isStructuredFormat(cmd) {
+			return writeFormatted(cmd, changed)
+		}
+		return writeRows(cmd, statusColumns(), statusRows(status.Track, changed), "No entries differ from their resolved target.")
 	},
 }
 
 func init() {
-	flags.NewStandardParser(trackParserOptions(groupFlagOption())...).RegisterFlags(trackDiffCmd)
+	flags.NewStandardParser(trackTableParserOptions(groupFlagOption())...).RegisterFlags(trackDiffCmd)
 	trackCmd.AddCommand(trackDiffCmd)
 }
