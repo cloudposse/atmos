@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendor"
@@ -480,6 +481,8 @@ func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configur
 // mergeConfiguredTemplates merges scaffold templates from atmos.yaml into the configs map.
 // It also updates the origins map to track which templates came from atmos.yaml.
 func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string) error {
+	defer perf.Track(nil, "scaffold.mergeConfiguredTemplates")()
+
 	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
 	if err != nil {
 		return errUtils.Build(errUtils.ErrReadScaffoldConfig).
