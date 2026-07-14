@@ -524,6 +524,21 @@ var (
 	ErrMissingWorkingDir     = errors.New("working directory is required")
 	ErrMissingProviderSource = errors.New("required_providers entry missing 'source' field")
 
+	// Archive package errors (pkg/archive).
+	ErrArchiveUnknownFormat           = errors.New("unknown or unsupported archive format")
+	ErrArchiveActionNotImplemented    = errors.New("archive action is not yet implemented")
+	ErrArchiveUpdateUnsupportedFormat = errors.New("archive update is not supported for this format")
+	ErrArchiveOptionsRequired         = errors.New("archive options are required")
+	ErrArchiveSourceRequired          = errors.New("archive source is required")
+	ErrArchiveSourceNotFound          = errors.New("archive source does not exist")
+	ErrArchiveDestinationRequired     = errors.New("archive destination is required")
+	ErrArchiveInvalidGlobPattern      = errors.New("invalid archive include/exclude glob pattern")
+	ErrArchiveInvalidSubpath          = errors.New("invalid archive subpath")
+	ErrArchiveFormatNotImplemented    = errors.New("archive format is not yet implemented")
+	ErrArchiveWriteFailed             = errors.New("failed to write archive")
+	ErrArchiveWalkFailed              = errors.New("failed to walk archive source")
+	ErrArchiveInvalidMtimeMode        = errors.New("invalid archive mtime mode")
+
 	// List command errors.
 	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
 	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
@@ -741,6 +756,8 @@ var (
 	ErrHTTPStepRequestFailed         = errors.New("http request failed")
 	ErrHTTPStepUnexpectedStatus      = errors.New("http response did not match expected status")
 	ErrHTTPStepUnexpectedResponse    = errors.New("http response body did not match expected pattern")
+	ErrArchiveStepInvalidAction      = errors.New("invalid action for archive step")
+	ErrArchiveStepInvalidSource      = errors.New("archive step source must be a string path")
 	ErrRequireStepEmpty              = errors.New("require step must specify at least one of tools, files, or dirs")
 	ErrRequirementsNotMet            = errors.New("required tools or paths are missing")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
@@ -825,7 +842,9 @@ var (
 	ErrGetImageLayers        = errors.New("failed to get image layers")
 	ErrProcessLayer          = errors.New("failed to process layer")
 	ErrLayerDecompression    = errors.New("layer decompression error")
-	ErrTarballExtraction     = errors.New("tarball extraction error")
+	ErrLayerExtraction       = errors.New("layer extraction error")
+	ErrArchiveTooLarge       = errors.New("archive exceeds maximum size")
+	ErrArchiveEntryTooLarge  = errors.New("archive entry exceeds maximum extracted size")
 
 	// Initialization and configuration errors.
 	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
@@ -943,6 +962,8 @@ var (
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
 	ErrNoProvidersAvailable          = errors.New("no providers available")
+	ErrNoIdentitiesMatchTags         = errors.New("no identities match the specified tags")
+	ErrNoProvidersMatchTags          = errors.New("no providers match the specified tags")
 	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
 	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)
@@ -1334,7 +1355,7 @@ var (
 
 	// Kubernetes-native component errors.
 	ErrKubernetesFlagsMutuallyExclusive     = errors.New("--all and --affected are mutually exclusive")
-	ErrKubernetesComponentArgWithSelection  = errors.New("component argument cannot be used with --all or --affected")
+	ErrKubernetesComponentArgWithSelection  = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
 	ErrKubernetesOutputSingleComponentOnly  = errors.New("--output and --output-dir are only supported when rendering one component")
 	ErrKubernetesComponentArgRequired       = errors.New("requires exactly one component argument unless --all or --affected is set")
 	ErrKubernetesUnsupportedOperation       = errors.New("unsupported kubernetes operation")
@@ -1364,7 +1385,7 @@ var (
 
 	// Helm-native component errors.
 	ErrHelmFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
-	ErrHelmComponentArgWithSelection = errors.New("component argument cannot be used with --all or --affected")
+	ErrHelmComponentArgWithSelection = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
 	ErrHelmOutputSingleComponentOnly = errors.New("--output and --output-dir are only supported when rendering one component")
 	ErrHelmComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
 	ErrHelmUnsupportedOperation      = errors.New("unsupported helm operation")
