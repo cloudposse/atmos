@@ -425,7 +425,7 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 
 // requiresTerraformAutoApprove reports whether concurrent execution must be explicitly approved.
 func requiresTerraformAutoApprove(info *schema.ConfigAndStacksInfo) bool {
-	return info != nil && (info.SubCommand == "apply" || info.SubCommand == terraformSubCommandDestroy)
+	return info != nil && (info.SubCommand == terraformSubCommandApply || info.SubCommand == terraformSubCommandDestroy)
 }
 
 // hasTerraformAutoApprove detects auto-approve from config, CLI flags, or Terraform env flags.
@@ -433,7 +433,7 @@ func hasTerraformAutoApprove(atmosConfig *schema.AtmosConfiguration, info *schem
 	if info == nil {
 		return false
 	}
-	if info.SubCommand == "apply" && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
+	if info.SubCommand == terraformSubCommandApply && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
 		return true
 	}
 	if containsTerraformFlag(info.AdditionalArgsAndFlags, "-auto-approve") {

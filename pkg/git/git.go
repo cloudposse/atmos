@@ -30,6 +30,14 @@ import (
 // filesystem paths like `dir:file`.
 var scpLikeURLPattern = regexp.MustCompile(`^[^@/]+@([^:/]+):(.+?)(?:\.git)?$`)
 
+// GitURLParts holds the host, owner, and repository name resolved from a
+// remote Git URL by ParseGenericGitURL/ParseRepoURL.
+type GitURLParts struct {
+	Host  string
+	Owner string
+	Name  string
+}
+
 // ParseGenericGitURL is a fallback parser used when the canonical parser
 // (github.com/kubescape/go-git-url) rejects a URL because the host is not
 // one of the few it ships hardcoded support for (github.com, gitlab.com,
@@ -39,31 +47,31 @@ var scpLikeURLPattern = regexp.MustCompile(`^[^@/]+@([^:/]+):(.+?)(?:\.git)?$`)
 //   - ssh://[user@]host[:port]/owner/repo[.git]
 //   - [user@]host:owner/repo[.git]                   (scp-style)
 //
-// On success returns (host, owner, name, true). On unrecognized shape returns
-// ("", "", "", false) — the caller should treat this as a parse error and
+// On success returns (parts, true). On unrecognized shape returns
+// (GitURLParts{}, false) — the caller should treat this as a parse error and
 // surface the original kubescape error to preserve existing semantics.
 //
-// `owner` is the first path segment and `name` is the remainder (with any
+// `Owner` is the first path segment and `Name` is the remainder (with any
 // trailing `.git` stripped). For GitLab-style nested groups
 // (`group/subgroup/repo.git`) this assigns the top-level group as owner and
 // `subgroup/repo` as name, matching kubescape's behavior.
-func ParseGenericGitURL(repoUrl string) (host, owner, name string, ok bool) {
+func ParseGenericGitURL(repoUrl string) (GitURLParts, bool) {
 	if u, err := url.Parse(repoUrl); err == nil && u.Scheme != "" && u.Host != "" {
-		host = u.Hostname()
+		host := u.Hostname()
 		path := strings.TrimPrefix(u.Path, "/")
 		path = strings.TrimSuffix(path, ".git")
 		if i := strings.Index(path, "/"); i > 0 {
-			return host, path[:i], path[i+1:], true
+			return GitURLParts{Host: host, Owner: path[:i], Name: path[i+1:]}, true
 		}
 	}
 	if m := scpLikeURLPattern.FindStringSubmatch(repoUrl); m != nil {
-		host = m[1]
+		host := m[1]
 		path := strings.TrimSuffix(m[2], ".git")
 		if i := strings.Index(path, "/"); i > 0 {
-			return host, path[:i], path[i+1:], true
+			return GitURLParts{Host: host, Owner: path[:i], Name: path[i+1:]}, true
 		}
 	}
-	return "", "", "", false
+	return GitURLParts{}, false
 }
 
 func GetLocalRepo() (*git.Repository, error) {
@@ -156,7 +164,7 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 		return RepoInfo{}, nil
 	}
 
-	host, owner, name, err := ParseRepoURL(repoUrl)
+	parts, err := ParseRepoURL(repoUrl)
 	if err != nil {
 		return RepoInfo{}, err
 	}
@@ -165,27 +173,27 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 		LocalWorktree:     localRepoWorktree,
 		LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
 		RepoUrl:           repoUrl,
-		RepoOwner:         owner,
-		RepoName:          name,
-		RepoHost:          host,
+		RepoOwner:         parts.Owner,
+		RepoName:          parts.Name,
+		RepoHost:          parts.Host,
 	}, nil
 }
 
 // ParseRepoURL resolves host, owner, and repo name from a remote URL.
 //
-// kubescape/go-git-url ships hardcoded support for github.com, gitlab.com,
+// Kubescape/go-git-url ships hardcoded support for github.com, gitlab.com,
 // and azure DevOps. Self-hosted instances (GitHub Enterprise Server, GitLab
 // self-managed, Bitbucket Server, etc.) fall back to ParseGenericGitURL,
 // which handles the URL shapes Git itself supports. If both parsers fail,
 // the canonical error is returned so genuinely-malformed URLs still
 // propagate as before.
-func ParseRepoURL(repoUrl string) (host, owner, name string, err error) {
+func ParseRepoURL(repoUrl string) (GitURLParts, error) {
 	if gitURL, gerr := giturl.NewGitURL(repoUrl); gerr == nil {
-		return gitURL.GetHostName(), gitURL.GetOwnerName(), gitURL.GetRepoName(), nil
-	} else if h, o, n, ok := ParseGenericGitURL(repoUrl); ok {
-		return h, o, n, nil
+		return GitURLParts{Host: gitURL.GetHostName(), Owner: gitURL.GetOwnerName(), Name: gitURL.GetRepoName()}, nil
+	} else if parts, ok := ParseGenericGitURL(repoUrl); ok {
+		return parts, nil
 	} else {
-		return "", "", "", gerr
+		return GitURLParts{}, gerr
 	}
 }
 

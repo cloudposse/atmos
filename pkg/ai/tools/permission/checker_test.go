@@ -104,8 +104,8 @@ func TestChecker_CheckPermission_YOLOMode(t *testing.T) {
 
 func TestChecker_CheckPermission_BlockedTool(t *testing.T) {
 	config := &Config{
-		Mode:         ModePrompt,
-		BlockedTools: []string{"dangerous_*", "blocked_tool"},
+		Mode:    ModePrompt,
+		Blocked: []string{"dangerous_*", "blocked_tool"},
 	}
 	checker := NewChecker(config, nil)
 	ctx := context.Background()
@@ -195,8 +195,8 @@ func TestChecker_CheckPermission_ModeDeny(t *testing.T) {
 
 func TestChecker_CheckPermission_AllowedList(t *testing.T) {
 	config := &Config{
-		Mode:         ModePrompt,
-		AllowedTools: []string{"atmos_*", "safe_tool"},
+		Mode:    ModePrompt,
+		Allowed: []string{"atmos_*", "safe_tool"},
 	}
 	checker := NewChecker(config, nil) // No prompter needed for allowed tools.
 	ctx := context.Background()
@@ -286,8 +286,8 @@ func TestChecker_CheckPermission_RestrictedTools(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &Config{
-				Mode:            ModePrompt,
-				RestrictedTools: tt.restrictedList,
+				Mode:       ModePrompt,
+				Restricted: tt.restrictedList,
 			}
 
 			prompter := new(MockPrompter)
@@ -422,7 +422,7 @@ func TestMatchesPattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchesPattern(tt.toolName, tt.pattern)
+			got := MatchesPattern(tt.toolName, tt.pattern)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -431,10 +431,10 @@ func TestMatchesPattern(t *testing.T) {
 func TestChecker_CheckPermission_ComplexScenario(t *testing.T) {
 	// Complex scenario: allowed list, restricted list, and blocked list.
 	config := &Config{
-		Mode:            ModePrompt,
-		AllowedTools:    []string{"atmos_*"},
-		RestrictedTools: []string{"atmos_validate_*"},
-		BlockedTools:    []string{"atmos_delete_*"},
+		Mode:       ModePrompt,
+		Allowed:    []string{"atmos_*"},
+		Restricted: []string{"atmos_validate_*"},
+		Blocked:    []string{"atmos_delete_*"},
 	}
 
 	prompter := new(MockPrompter)
