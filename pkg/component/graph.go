@@ -13,6 +13,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // graphNodeIDFormat builds an unambiguous node ID from a component and stack name.
@@ -179,13 +180,64 @@ func FilterGraph(graph *dependency.Graph, info *schema.ConfigAndStacksInfo, sele
 	if graph == nil {
 		return dependency.NewGraph()
 	}
-	if selection != nil {
-		return filterGraphBySelection(graph, selection)
+
+	var filtered *dependency.Graph
+	switch {
+	case selection != nil:
+		filtered = filterGraphBySelection(graph, selection)
+	case info == nil || info.Stack == "":
+		filtered = graph
+	default:
+		filtered = filterGraphByStack(graph, info.Stack)
 	}
-	if info == nil || info.Stack == "" {
+
+	// Tags/labels compose with whichever selection produced the graph above
+	// (an explicit node selection, a stack filter, or neither), rather than
+	// being an alternative selection mechanism. Because this lives in the
+	// shared component package (not per component type), any component type —
+	// built-in or custom — that calls ExecuteGraph/FilterGraph gets tag/label
+	// filtering automatically.
+	return filterGraphByTagsAndLabels(filtered, info)
+}
+
+// filterGraphByTagsAndLabels narrows graph nodes to those matching info.Tags
+// (any-match) and info.Labels (all-match), applied as an additional pass. A
+// no-op when neither is set.
+func filterGraphByTagsAndLabels(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) *dependency.Graph {
+	if info == nil || (len(info.Tags) == 0 && len(info.Labels) == 0) {
 		return graph
 	}
-	return filterGraphByStack(graph, info.Stack)
+
+	nodeIDs := make([]string, 0)
+	for id, node := range graph.Nodes {
+		if matchesGraphTagsAndLabels(node, info) {
+			nodeIDs = append(nodeIDs, id)
+		}
+	}
+	return graph.Filter(dependency.Filter{NodeIDs: sortedUniqueStrings(nodeIDs)})
+}
+
+// matchesGraphTagsAndLabels reports whether a node's component metadata
+// matches the requested tags (any) and labels (all).
+func matchesGraphTagsAndLabels(node *dependency.Node, info *schema.ConfigAndStacksInfo) bool {
+	if node == nil {
+		return false
+	}
+	metadataSection, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
+
+	if len(info.Tags) > 0 {
+		nodeTags := tags.ToStringSlice(metadataSection["tags"])
+		if !tags.MatchesTags(nodeTags, info.Tags, tags.TagModeAny) {
+			return false
+		}
+	}
+	if len(info.Labels) > 0 {
+		nodeLabels := tags.ToStringMap(metadataSection["labels"])
+		if !tags.MatchesLabels(nodeLabels, info.Labels) {
+			return false
+		}
+	}
+	return true
 }
 
 // filterGraphBySelection filters the graph to the explicitly selected node IDs.

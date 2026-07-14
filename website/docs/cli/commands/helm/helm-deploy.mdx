@@ -19,6 +19,10 @@ import Intro from "@site/src/components/Intro";
 ```shell
 atmos helm deploy <component> --stack <stack> [options]
 atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
+
+# Deploy components filtered by tags or labels (composes with --all/--affected)
+atmos helm deploy --all --tags production,tier-1
+atmos helm deploy --affected --labels cost-center=platform
 ```
 
 ## Flags
@@ -32,4 +36,7 @@ atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
 
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order. See [`apply`](/cli/commands/helm/apply).</dd>
+
+  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 </dl>

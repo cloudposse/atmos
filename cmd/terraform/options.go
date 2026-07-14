@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -42,6 +43,8 @@ type TerraformRunOptions struct {
 	// Multi-component flags.
 	Query      string
 	Components []string
+	Tags       []string
+	Labels     map[string]string
 	All        bool
 	Affected   bool
 
@@ -81,6 +84,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		DeployRunInit:           v.GetBool("deploy-run-init"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
+		Tags:                    v.GetStringSlice("tags"),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
@@ -91,6 +95,12 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
 	}
+	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+	if err != nil {
+		return nil, err
+	}
+	opts.Labels = labels
+
 	if err := validateTerraformRunOptions(opts); err != nil {
 		return nil, err
 	}

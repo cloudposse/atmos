@@ -962,6 +962,8 @@ var (
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
 	ErrNoProvidersAvailable          = errors.New("no providers available")
+	ErrNoIdentitiesMatchTags         = errors.New("no identities match the specified tags")
+	ErrNoProvidersMatchTags          = errors.New("no providers match the specified tags")
 	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
 	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)
@@ -1353,7 +1355,7 @@ var (
 
 	// Kubernetes-native component errors.
 	ErrKubernetesFlagsMutuallyExclusive     = errors.New("--all and --affected are mutually exclusive")
-	ErrKubernetesComponentArgWithSelection  = errors.New("component argument cannot be used with --all or --affected")
+	ErrKubernetesComponentArgWithSelection  = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
 	ErrKubernetesOutputSingleComponentOnly  = errors.New("--output and --output-dir are only supported when rendering one component")
 	ErrKubernetesComponentArgRequired       = errors.New("requires exactly one component argument unless --all or --affected is set")
 	ErrKubernetesUnsupportedOperation       = errors.New("unsupported kubernetes operation")
@@ -1383,7 +1385,7 @@ var (
 
 	// Helm-native component errors.
 	ErrHelmFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
-	ErrHelmComponentArgWithSelection = errors.New("component argument cannot be used with --all or --affected")
+	ErrHelmComponentArgWithSelection = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
 	ErrHelmOutputSingleComponentOnly = errors.New("--output and --output-dir are only supported when rendering one component")
 	ErrHelmComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
 	ErrHelmUnsupportedOperation      = errors.New("unsupported helm operation")
