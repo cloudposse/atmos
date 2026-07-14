@@ -540,9 +540,11 @@ func TestExtractAndInstall_FlatReplacesStaleOnedir(t *testing.T) {
 	require.NoError(t, err)
 
 	// The stale onedir artifacts are gone and the flat binary is what resolves.
+	// extractAndInstall applies the Windows .exe suffix, so build the expected
+	// path with the same helper rather than hardcoding it.
 	assert.NoFileExists(t, filepath.Join(versionDir, onedirManifestName))
 	assert.NoDirExists(t, filepath.Join(versionDir, onedirTreeName))
-	assert.Equal(t, filepath.Join(versionDir, "tool"), resolved)
+	assert.Equal(t, filepath.Join(versionDir, EnsureWindowsExeExtension("tool")), resolved)
 	got, err := os.ReadFile(resolved)
 	require.NoError(t, err)
 	assert.Equal(t, "NEW-FLAT-BINARY", string(got))
