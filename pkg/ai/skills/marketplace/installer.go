@@ -1172,10 +1172,16 @@ func redactHomePath(path string) string {
 	if err != nil {
 		return "~/.atmos/skills/..."
 	}
-	if strings.HasPrefix(path, homeDir) {
-		return "~" + strings.TrimPrefix(path, homeDir)
+	// filepath.Rel (rather than a raw string prefix+trim) correctly handles a
+	// trailing separator on homeDir -- e.g. on Windows CI, homedir.Dir() can
+	// return one, which previously left the "~" glued directly onto the next
+	// path segment with no separator (e.g. "~.atmos\skills" instead of
+	// "~\.atmos\skills").
+	rel, err := filepath.Rel(homeDir, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
 	}
-	return path
+	return filepath.Join("~", rel)
 }
 
 // hasDestructiveTools checks if any of the allowed tools are destructive.

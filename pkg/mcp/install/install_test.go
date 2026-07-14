@@ -505,12 +505,13 @@ func TestResolveTarget_NewProjectAndUserScopeClients(t *testing.T) {
 	home := t.TempDir()
 
 	tests := []struct {
-		name       string
-		client     string
-		wantRoot   string
-		wantFormat string
-		projectHas string // expected suffix of the project-scope path.
-		userHas    string // expected suffix of the user-scope path.
+		name           string
+		client         string
+		wantRoot       string
+		wantFormat     string
+		projectHas     string // expected suffix of the project-scope path.
+		userHas        string // expected suffix of the user-scope path.
+		userHasWindows string // overrides userHas on Windows, when the real per-OS path (see zedUserPath/gooseUserPath) diverges from the Unix suffix.
 	}{
 		{
 			name:       "zed",
@@ -519,6 +520,10 @@ func TestResolveTarget_NewProjectAndUserScopeClients(t *testing.T) {
 			wantFormat: "json",
 			projectHas: filepath.Join(".zed", "settings.json"),
 			userHas:    filepath.Join("zed", "settings.json"),
+			// Zed's real Windows config lives at %APPDATA%\Zed\settings.json
+			// (capital "Zed", confirmed against Zed's own docs) -- not the
+			// lowercase "zed" directory name used on macOS/Linux.
+			userHasWindows: filepath.Join("Zed", "settings.json"),
 		},
 		{
 			name:       "opencode",
@@ -535,6 +540,11 @@ func TestResolveTarget_NewProjectAndUserScopeClients(t *testing.T) {
 			wantFormat: "yaml",
 			projectHas: filepath.Join(".goose", "config.yaml"),
 			userHas:    filepath.Join("goose", "config.yaml"),
+			// Goose's real Windows config lives at
+			// %APPDATA%\Block\goose\config\config.yaml (nested under the
+			// "Block" vendor folder with an extra "config" directory),
+			// per block.github.io/goose/docs/guides/config-file.
+			userHasWindows: filepath.Join("Block", "goose", "config", "config.yaml"),
 		},
 		{
 			name:       "mcporter",
@@ -554,12 +564,16 @@ func TestResolveTarget_NewProjectAndUserScopeClients(t *testing.T) {
 			assert.True(t, strings.HasSuffix(filepath.ToSlash(project.Path), filepath.ToSlash(tt.projectHas)),
 				"project path %q must end with %q", project.Path, tt.projectHas)
 
+			wantUserHas := tt.userHas
+			if runtime.GOOS == "windows" && tt.userHasWindows != "" {
+				wantUserHas = tt.userHasWindows
+			}
 			user, err := ResolveTarget(base, home, ScopeUser, tt.client)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantRoot, user.Root)
 			assert.Equal(t, tt.wantFormat, user.Format)
-			assert.True(t, strings.HasSuffix(filepath.ToSlash(user.Path), filepath.ToSlash(tt.userHas)),
-				"user path %q must end with %q", user.Path, tt.userHas)
+			assert.True(t, strings.HasSuffix(filepath.ToSlash(user.Path), filepath.ToSlash(wantUserHas)),
+				"user path %q must end with %q", user.Path, wantUserHas)
 		})
 	}
 }
@@ -617,6 +631,12 @@ func TestDetectClients_GlobalOnlyClientNotDetectedAtProjectScope(t *testing.T) {
 
 func TestInstallJSONTarget_ClaudeDesktopGlobalScope(t *testing.T) {
 	home := t.TempDir()
+	// claudeDesktopUserPath resolves via the real %APPDATA% on Windows --
+	// matching where Claude Desktop itself actually reads its config from --
+	// rather than the injected homeDir, so this override is needed for the
+	// test to stay isolated from (and not pollute, across repeated runs) the
+	// CI runner's real user profile. A no-op on non-Windows.
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	installer, err := New(
 		WithHomeDir(home),
 		WithScope(ScopeUser),
