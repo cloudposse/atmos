@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -481,8 +480,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 			Err()
 	}
 
-	// Parse the repo URL.
-	gitURL, err := giturl.NewGitURL(repoUrl)
+	repoHost, repoOwner, repoName, err := atmosgit.ParseRepoURL(repoUrl)
 	if err != nil {
 		return err
 	}
@@ -512,9 +510,9 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		HeadSHA:   headSHA,
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
-		RepoName:  gitURL.GetRepoName(),
-		RepoOwner: gitURL.GetOwnerName(),
-		RepoHost:  gitURL.GetHostName(),
+		RepoName:  repoName,
+		RepoOwner: repoOwner,
+		RepoHost:  repoHost,
 		Stacks:    affected,
 	}
 
