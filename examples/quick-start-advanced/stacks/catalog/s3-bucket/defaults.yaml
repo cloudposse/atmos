@@ -4,6 +4,9 @@ components:
       metadata:
         component: s3-bucket
         description: "Encrypted S3 bucket for application assets."
+        tags: [storage, security]
+        labels:
+          tier: foundational
       settings:
         validation:
           validate-s3-bucket-with-jsonschema:

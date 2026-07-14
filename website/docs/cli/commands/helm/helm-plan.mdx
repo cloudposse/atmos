@@ -26,6 +26,9 @@ atmos helm plan monitoring -s plat-ue2-dev
 # Diff offline against a local manifest or the GitOps deployment repository.
 atmos helm plan monitoring -s plat-ue2-dev --from-manifest=current.yaml
 atmos helm plan monitoring -s plat-ue2-dev --against=target
+
+# Plan all components tagged "production" (composes with --all/--affected)
+atmos helm plan --all --tags production
 ```
 
 ## Flags
@@ -39,4 +42,7 @@ atmos helm plan monitoring -s plat-ue2-dev --against=target
 
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order.</dd>
+
+  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 </dl>
