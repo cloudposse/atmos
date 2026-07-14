@@ -2433,6 +2433,36 @@
           "type": "boolean",
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "format": {
+          "type": "string",
+          "description": "Archive format for the archive step type: zip, tar, tgz, tar.bz2, or tar.xz. Inferred from destination's extension when omitted."
+        },
+        "destination": {
+          "type": "string",
+          "description": "Archive file to write (pack), or directory to extract into (extract), for the archive step type."
+        },
+        "subpath": {
+          "type": "string",
+          "description": "Nests source content under this path inside the archive (pack), or extracts only this path with the prefix stripped (extract), for the archive step type."
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob(s); keep only matching files for the archive step type."
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob(s); drop matching files, evaluated before include, for the archive step type."
+        },
+        "mtime": {
+          "type": "string",
+          "description": "Modification-time metadata stamped into each entry for the archive step type (not the source files on disk, not the archive file's own OS-level mtime): filesystem (default, same as omitting the field) preserves real source mtime/mode; epoch pins every entry to the same git-derived timestamp; git resolves each entry's own timestamp, falling back to the epoch value. epoch/git also normalize permission bits."
+        },
         "files": {
           "type": "array",
           "items": {
