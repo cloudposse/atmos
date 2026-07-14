@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -145,22 +147,13 @@ func prepareEnv(ctx context.Context, config *ParsedConfig, opts []StartOption) (
 
 // connectAndDiscover spawns the MCP server, performs the handshake, and lists tools.
 func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
-	// Resolve the command using the subprocess environment PATH, not the parent process PATH.
-	// This is necessary because toolchain binaries (uvx, npx) may only exist in the
-	// toolchain PATH prepended by WithToolchain, not in the system PATH.
-	command := resolveCommandInEnv(s.config.Command, env)
-	cmd := exec.CommandContext(ctx, command, s.config.Args...)
-	cmd.Env = env
-	if !s.suppressStderr {
-		cmd.Stderr = os.Stderr
-	}
-
 	s.client = mcpsdk.NewClient(&mcpsdk.Implementation{
 		Name:    "atmos",
 		Version: version.Version,
 	}, nil)
 
-	session, err := s.client.Connect(ctx, &mcpsdk.CommandTransport{Command: cmd}, nil)
+	transport := s.buildTransport(ctx, env)
+	session, err := s.client.Connect(ctx, transport, nil)
 	if err != nil {
 		s.status = StatusError
 		s.lastError = fmt.Errorf("%w: %s: %w", errUtils.ErrMCPServerStartFailed, s.name, err)
@@ -181,6 +174,51 @@ func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
 	s.status = StatusRunning
 	s.lastError = nil
 	return nil
+}
+
+func (s *Session) buildTransport(ctx context.Context, env []string) mcpsdk.Transport {
+	if s.config.Type == schema.MCPTransportHTTP {
+		return &mcpsdk.StreamableClientTransport{
+			Endpoint:   s.config.URL,
+			HTTPClient: httpClientWithHeaders(s.config.Headers),
+		}
+	}
+
+	// Resolve the command using the subprocess environment PATH, not the parent process PATH.
+	// This is necessary because toolchain binaries (uvx, npx) may only exist in the
+	// toolchain PATH prepended by WithToolchain, not in the system PATH.
+	command := resolveCommandInEnv(s.config.Command, env)
+	cmd := exec.CommandContext(ctx, command, s.config.Args...)
+	cmd.Env = env
+	if !s.suppressStderr {
+		cmd.Stderr = os.Stderr
+	}
+	return &mcpsdk.CommandTransport{Command: cmd}
+}
+
+func httpClientWithHeaders(headers map[string]string) *http.Client {
+	if len(headers) == 0 {
+		return nil
+	}
+	return &http.Client{
+		Transport: headerRoundTripper{
+			headers: headers,
+			base:    http.DefaultTransport,
+		},
+	}
+}
+
+type headerRoundTripper struct {
+	headers map[string]string
+	base    http.RoundTripper
+}
+
+func (h headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	cloned := req.Clone(req.Context())
+	for k, v := range h.headers {
+		cloned.Header.Set(k, v)
+	}
+	return h.base.RoundTrip(cloned)
 }
 
 // Stop gracefully shuts down the MCP server subprocess.

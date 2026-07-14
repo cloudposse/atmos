@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
@@ -21,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_ai_chat.md
@@ -31,10 +31,7 @@ var chatParser *flags.StandardParser
 
 // getProviderFromConfig returns the current provider from configuration.
 func getProviderFromConfig(atmosConfig *schema.AtmosConfiguration) string {
-	if atmosConfig.AI.DefaultProvider != "" {
-		return atmosConfig.AI.DefaultProvider
-	}
-	return "anthropic"
+	return ai.GetProvider(atmosConfig)
 }
 
 // getModelFromConfig returns the model for the current provider from configuration.
@@ -51,6 +48,7 @@ var chatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Start interactive AI chat session",
 	Long:  chatLongMarkdown,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bind parsed flags to Viper for precedence handling.
 		v := viper.GetViper()
@@ -60,18 +58,22 @@ var chatCmd = &cobra.Command{
 
 		mcpServers := v.GetStringSlice("mcp")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// chat can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
+			return errAINotEnabled()
 		}
+
+		// Resolve provider (explicit config, auto-detected CLI tool, or anthropic) once
+		// so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		log.Debug("Starting AI chat session")
 
@@ -179,6 +181,8 @@ var chatCmd = &cobra.Command{
 			return fmt.Errorf("chat session failed: %w", err)
 		}
 
+		printChatExitMessage(sess)
+
 		return nil
 	},
 }
@@ -201,6 +205,16 @@ func init() {
 	}
 
 	aiCmd.AddCommand(chatCmd)
+}
+
+// printChatExitMessage confirms the chat session ended and, when session persistence is
+// enabled, how to resume it. Printed unconditionally so exiting the TUI (e.g. via Ctrl+C)
+// never just silently drops back to the shell prompt.
+func printChatExitMessage(sess *session.Session) {
+	ui.Success("Chat session ended.")
+	if sess != nil {
+		ui.Info(fmt.Sprintf("Resume with: atmos ai chat --session %s", sess.Name))
+	}
 }
 
 // getSessionStoragePath returns the path to the session storage file.

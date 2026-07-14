@@ -55,6 +55,17 @@ enabling AI. This ensures that enabling AI chat features does not inadvertently 
 
 ### 2. Configure Claude Desktop
 
+<Terminal>
+```shell
+# Automated: writes mcp.enabled + the client entry for you.
+atmos mcp add self --install
+```
+</Terminal>
+
+`atmos mcp add self --install` does steps 1 and 2 for supported clients (Claude Code, Cursor, VS
+Code, Codex, Gemini) in one command — see [`atmos mcp add`](/cli/commands/mcp/add). Claude
+Desktop isn't one of the auto-installable clients yet, so configure it manually below.
+
 Create or edit the config file at `~/.config/claude/claude_desktop_config.json` (macOS/Linux)
 or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
@@ -403,7 +414,7 @@ For any deployment beyond `localhost`:
   <dd>Forward the port over SSH for secure remote access: `ssh -L 8080:localhost:8080 user@server`.</dd>
 
   <dt>Tool permissions</dt>
-  <dd>Restrict tools in `atmos.yaml` using `allowed_tools` and `blocked_tools`. Disable write operations if not needed.</dd>
+  <dd>Restrict tools in `atmos.yaml` using `ai.tools.allowed` and `ai.tools.blocked`. Disable write operations if not needed.</dd>
 
   <dt>Monitoring</dt>
   <dd>Poll `/health` and log all tool executions.</dd>
@@ -460,8 +471,10 @@ atmos mcp start   # should start without errors; Ctrl+C to exit
 
 **Tools not appearing in conversations:**
 
-Make sure `ai.tools.enabled` is `true` in `atmos.yaml` and that you have not added the tools
-to `blocked_tools`. If tools still do not appear, try asking Claude explicitly:
+Tools register for MCP regardless of `ai.tools.enabled` (that setting only gates `atmos ai
+chat`/`ask`/`exec`'s own tool-use loop) — `mcp.enabled: true` is the MCP server's own opt-in.
+Make sure you have not restricted the set with `ai.tools.allowed`, and that the tool isn't in
+`ai.tools.blocked`. If tools still do not appear, try asking Claude explicitly:
 "Use the atmos_list_stacks tool to show my stacks."
 
 **"Command not found" errors:**
@@ -489,10 +502,10 @@ or add `atmos` to the macOS application firewall).
 
 ### Common Configuration Errors
 
-**"AI tools are not enabled"** -- Set `ai.enabled: true` and `ai.tools.enabled: true`
-in `atmos.yaml`.
+**"MCP server is not enabled"** -- Set `mcp.enabled: true` in `atmos.yaml`. This is the MCP
+server's own opt-in; `ai.enabled`/`ai.tools.enabled` are unrelated to it.
 
-**Tools not executing** -- Check `allowed_tools` and `blocked_tools` in your AI tool config. Remove overly
+**Tools not executing** -- Check `ai.tools.allowed` and `ai.tools.blocked` in your AI tool config. Remove overly
 restrictive entries.
 
 **Slow responses** -- Increase `ai.timeout_seconds` (default varies by provider). For HTTP transport,
