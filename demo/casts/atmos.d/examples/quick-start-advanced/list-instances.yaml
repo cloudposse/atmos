@@ -62,6 +62,24 @@ commands:
             interval: 750ms
             command: *list_instances_cmd
           - type: simulate
+            text: "# every component carries metadata.tags/metadata.labels for bulk selection"
+          - type: simulate
+            text: &list_tags_cmd atmos list components --tags messaging
+          - type: shell
+            name: list-tags
+            duration: 450ms
+            interval: 750ms
+            command: *list_tags_cmd
+          - type: simulate
+            text: "# --labels matches every key=value pair (AND); --tags matches any (OR)"
+          - type: simulate
+            text: &list_labels_cmd atmos list components --labels tier=foundational
+          - type: shell
+            name: list-labels
+            duration: 450ms
+            interval: 750ms
+            command: *list_labels_cmd
+          - type: simulate
             text: "# deploy the whole component graph when the local AWS emulator is running"
           - type: simulate
             text: &deploy_all_cmd atmos terraform deploy --all -s plat-ue2-dev
@@ -117,7 +135,7 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           assert_colored(text, "plat-ue2-dev")
-          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config", "atmos terraform deploy --all -s plat-ue2-dev"]:
+          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config", "atmos terraform deploy --all -s plat-ue2-dev", "sns-topic", "kms-key", "atmos list components --tags messaging", "atmos list components --labels tier=foundational"]:
               if needle not in plain:
                   raise SystemExit(f"list-instances cast missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-instances]", "completed"]:

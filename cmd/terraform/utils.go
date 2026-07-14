@@ -61,7 +61,7 @@ var preResolvedComponent string
 
 // multiComponentFlagNames are the flags that put terraform into multi-component
 // mode, where interactive single-component/stack selection does not apply.
-var multiComponentFlagNames = []string{"all", "affected", "components", "query"}
+var multiComponentFlagNames = []string{"all", "affected", "components", "query", "tags", "labels"}
 
 // runBeforeHooks resolves interactive component/stack selection BEFORE firing the
 // before-hooks, so lifecycle hooks (e.g. a `kind: step` emulator hook on
@@ -116,7 +116,9 @@ func isMultiComponentInvocation(cmd_ *cobra.Command) bool {
 	return v.GetBool("all") ||
 		v.GetBool("affected") ||
 		len(v.GetStringSlice("components")) > 0 ||
-		v.GetString("query") != ""
+		v.GetString("query") != "" ||
+		len(v.GetStringSlice("tags")) > 0 ||
+		v.GetString("labels") != ""
 }
 
 // applyPreResolvedComponent injects the interactively-selected component into info
@@ -623,7 +625,8 @@ func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
 // isMultiComponentExecution reports whether the parsed command targets more than one component.
 func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "")
+	return info.All || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0 ||
+		(info.Stack != "" && info.ComponentFromArg == "")
 }
 
 // executeSingleComponent executes terraform for a single component.
@@ -681,6 +684,8 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.ProcessFunctions = opts.ProcessFunctions
 	info.Skip = opts.Skip
 	info.Components = opts.Components
+	info.Tags = opts.Tags
+	info.Labels = opts.Labels
 	info.DryRun = opts.DryRun
 	info.SkipInit = opts.SkipInit
 	info.UploadStatus = opts.UploadStatus
@@ -924,10 +929,13 @@ func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.
 
 // hasMultiComponentFlags checks if any multi-component flags are set.
 func hasMultiComponentFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || info.Affected || len(info.Components) > 0 || info.Query != ""
+	return info.All || info.Affected || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0
 }
 
 // hasNonAffectedMultiFlags checks if multi-component flags (excluding --affected) are set.
+// --tags/--labels are deliberately excluded here: they compose with --affected to further
+// narrow the affected set (`--affected --tags production`), rather than being an alternative
+// selection mechanism that conflicts with it.
 func hasNonAffectedMultiFlags(info *schema.ConfigAndStacksInfo) bool {
 	return info.All || len(info.Components) > 0 || info.Query != ""
 }
