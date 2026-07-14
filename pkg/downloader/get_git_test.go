@@ -452,10 +452,19 @@ func writeFakeGitFailingOn(t *testing.T, failArg string) {
 	dir := t.TempDir()
 	if runtime.GOOS == "windows" {
 		fname := filepath.Join(dir, "git.bat")
+		// cmd.exe parses and substitutes %vars% for an entire line before
+		// executing any part of it, so setting and reading %last% on the same
+		// line (joined with &) would expand to its pre-line value (empty).
+		// Keep the set and the mkdir on separate lines so %last% is read only
+		// after the prior line has actually run.
 		script := "@echo off\r\n" +
 			"for %%a in (%*) do if \"%%a\"==\"" + failArg + "\" exit /b 1\r\n" +
-			"if \"%1\"==\"init\" (for %%a in (%*) do set last=%%a) & mkdir \"%last%\" 2>nul\r\n" +
-			"if \"%1\"==\"clone\" (for %%a in (%*) do set last=%%a) & mkdir \"%last%\" 2>nul\r\n" +
+			"if \"%1\"==\"init\" goto :mkdirlast\r\n" +
+			"if \"%1\"==\"clone\" goto :mkdirlast\r\n" +
+			"exit /b 0\r\n" +
+			":mkdirlast\r\n" +
+			"for %%a in (%*) do set last=%%a\r\n" +
+			"mkdir \"%last%\" 2>nul\r\n" +
 			"exit /b 0\r\n"
 		if err := os.WriteFile(fname, []byte(script), 0o755); err != nil {
 			t.Fatalf("write fake git: %v", err)
