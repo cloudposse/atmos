@@ -241,6 +241,38 @@ Use `custom` for:
 The `custom` section is inherited from base components when `stacks.inherit.metadata` is enabled (the default). Like other metadata fields, values from derived components override inherited values, and nested maps are deep-merged.
 :::
 
+### `tags`
+
+A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        tags:
+          - production
+          - tier-1
+```
+
+`--tags` matches **any** of the given tags (OR semantics). For example, `atmos terraform apply --tags production,tier-1` applies components tagged `production` **or** `tier-1`.
+
+### `labels`
+
+A map of `key: value` labels used to select this component with the `--labels` flag, similar to a Kubernetes label selector:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          cost-center: platform
+          compliance: sox
+```
+
+`--labels` matches **all** of the given `key=value` pairs (AND semantics). For example, `atmos terraform apply --labels cost-center=platform,compliance=sox` only applies components whose `metadata.labels` contain both `cost-center: platform` **and** `compliance: sox`.
+
 ## Examples
 
 ### Multiple Instances from One Module

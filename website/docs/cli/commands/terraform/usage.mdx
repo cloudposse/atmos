@@ -112,6 +112,12 @@ atmos terraform <command> --affected
 
 # Execute on components matching a query
 atmos terraform <command> --query '.vars.tags.team == "eks"'
+
+# Execute on affected components that are also tagged "production"
+atmos terraform <command> --affected --tags production
+
+# Execute on components labeled cost-center=platform
+atmos terraform <command> --all --labels cost-center=platform
 ```
 </Terminal>
 
@@ -416,6 +422,26 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         atmos terraform apply --affected --clone-target-ref=true
         atmos terraform deploy --affected --include-dependents
         atmos terraform apply --affected --include-dependents --dry-run --logs-level=Debug
+        ```
+    </dd>
+
+    <dt>`--tags` <em>(optional)</em></dt>
+    <dd>
+        Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further, rather than being mutually exclusive with them. Cannot be combined with a single `component` argument.
+
+        ```shell
+        atmos terraform apply --tags production,tier-1
+        atmos terraform apply --affected --tags production
+        ```
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`. Cannot be combined with a single `component` argument.
+
+        ```shell
+        atmos terraform apply --labels cost-center=platform
+        atmos terraform apply --all --labels cost-center=platform,compliance=sox
         ```
     </dd>
 
