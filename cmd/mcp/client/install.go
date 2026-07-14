@@ -1,0 +1,376 @@
+package client
+
+import (
+	_ "embed"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/huh"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
+	errUtils "github.com/cloudposse/atmos/errors"
+	term "github.com/cloudposse/atmos/internal/tui/templates/term"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	mcpinstall "github.com/cloudposse/atmos/pkg/mcp/install"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+//go:embed markdown/atmos_mcp_install.md
+var installLongMarkdown string
+
+var installCmd = &cobra.Command{
+	Use:   "install [server-name...]",
+	Short: "Install configured MCP servers into AI client config files",
+	Long:  installLongMarkdown,
+	Args:  cobra.ArbitraryArgs,
+	RunE:  executeMCPInstall,
+}
+
+var installParser *flags.StandardParser
+
+const (
+	installScopeFlag = "scope"
+	globalFlag       = "global"
+	dryRunFlag       = "dry-run"
+	yesFlag          = "yes"
+)
+
+var errMCPServerNotConfigured = errors.New("MCP server is not configured")
+
+func init() {
+	installParser = flags.NewStandardParser(
+		flags.WithStringSliceFlag("client", "c", nil, "MCP client to install into (repeatable): "+strings.Join(mcpinstall.SupportedClients, ", ")),
+		flags.WithEnvVars("client", "ATMOS_MCP_CLIENT"),
+		flags.WithBoolFlag("all-clients", "", false, "Install into all supported MCP clients"),
+		flags.WithEnvVars("all-clients", "ATMOS_MCP_ALL_CLIENTS"),
+		flags.WithStringFlag(installScopeFlag, "", mcpinstall.ScopeProject, "Install scope: project or user"),
+		flags.WithEnvVars(installScopeFlag, "ATMOS_MCP_SCOPE"),
+		flags.WithValidValues(installScopeFlag, mcpinstall.ScopeProject, mcpinstall.ScopeUser),
+		flags.WithBoolFlag(globalFlag, "g", false, "Alias for --scope user"),
+		flags.WithEnvVars(globalFlag, "ATMOS_MCP_GLOBAL"),
+		flags.WithBoolFlag(yesFlag, "y", false, "Skip confirmation prompts"),
+		flags.WithEnvVars(yesFlag, "ATMOS_YES"),
+		flags.WithBoolFlag(dryRunFlag, "", false, "Show what would be installed without writing files"),
+		flags.WithEnvVars(dryRunFlag, "ATMOS_DRY_RUN"),
+		flags.WithBoolFlag("force", "", false, "Overwrite existing server entries without prompting"),
+		flags.WithEnvVars("force", "ATMOS_FORCE"),
+		flags.WithBoolFlag("gitignore", "", false, "Add generated project config files to .gitignore"),
+		flags.WithEnvVars("gitignore", "ATMOS_MCP_GITIGNORE"),
+	)
+	installParser.RegisterFlags(installCmd)
+	if err := installParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+	mcpcmd.McpCmd.AddCommand(installCmd)
+}
+
+func executeMCPInstall(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "cmd.mcpInstall")()
+	v := viper.GetViper()
+	if err := installParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return err
+	}
+	if nudge := atmosProNudge(&atmosConfig); nudge != "" {
+		ui.Info(nudge)
+	}
+
+	servers, err := selectServers(atmosConfig.MCP.Servers, args)
+	if err != nil {
+		return err
+	}
+	if len(servers) == 0 {
+		return handleNoServersToInstall(cmd, &atmosConfig, args, v.GetBool(yesFlag))
+	}
+
+	scope, err := resolveInstallScope(cmd, v)
+	if err != nil {
+		return err
+	}
+	clients, err := resolveInstallClients(&atmosConfig, scope, v)
+	if err != nil {
+		return err
+	}
+	if len(clients) == 0 {
+		ui.Warningf("No AI clients detected to install into — run `atmos mcp install --client <client>` (or `--all-clients`) to install manually.")
+		return nil
+	}
+
+	return installServers(&atmosConfig, servers, installCommandOptions{
+		clients:    clients,
+		scope:      scope,
+		allClients: v.GetBool("all-clients"),
+		yes:        v.GetBool(yesFlag),
+		force:      v.GetBool("force"),
+		dryRun:     v.GetBool(dryRunFlag),
+		gitignore:  v.GetBool("gitignore"),
+	})
+}
+
+type installCommandOptions struct {
+	clients    []string
+	scope      string
+	allClients bool
+	yes        bool
+	force      bool
+	dryRun     bool
+	gitignore  bool
+}
+
+// handleNoServersToInstall runs when `atmos mcp install` (or a name filter
+// that resolved to nothing) has nothing configured to install. With no
+// explicit server names, it offers to add+install the self preset
+// interactively; otherwise (or if declined) it prints the static hint.
+func handleNoServersToInstall(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, args []string, yes bool) error {
+	if len(args) == 0 {
+		installed, err := offerSelfInstall(cmd, atmosConfig, yes)
+		if err != nil {
+			return err
+		}
+		if installed {
+			return nil
+		}
+	}
+	ui.Info(noServersConfiguredMessage(atmosConfig.MCP.Enabled))
+	return nil
+}
+
+func selectServers(configured map[string]schema.MCPServerConfig, names []string) (map[string]schema.MCPServerConfig, error) {
+	if len(names) == 0 {
+		return configured, nil
+	}
+	selected := make(map[string]schema.MCPServerConfig, len(names))
+	for _, name := range names {
+		server, ok := configured[name]
+		if !ok {
+			return nil, fmt.Errorf("%w: %q", errMCPServerNotConfigured, name)
+		}
+		selected[name] = server
+	}
+	return selected, nil
+}
+
+// resolveInstallScope resolves the install/uninstall scope (project versus
+// user). An explicit --scope or --global flag always wins; otherwise, in
+// non-interactive contexts (--yes, no TTY, or CI), it silently falls back
+// to the flag's default value ("project"). Only when running interactively
+// with neither flag explicitly set does it prompt the user to choose.
+func resolveInstallScope(cmd *cobra.Command, v *viper.Viper) (string, error) {
+	if cmd != nil && cmd.Flags().Changed(installScopeFlag) {
+		return v.GetString(installScopeFlag), nil
+	}
+	if cmd != nil && cmd.Flags().Changed(globalFlag) {
+		if v.GetBool(globalFlag) {
+			return mcpinstall.ScopeUser, nil
+		}
+		return v.GetString(installScopeFlag), nil
+	}
+	if v.GetBool(yesFlag) || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+		return v.GetString(installScopeFlag), nil
+	}
+	return promptForScope()
+}
+
+// promptForScope shows an interactive single-choice picker for install/
+// uninstall scope, mirroring promptForMCPClients's form setup and cancel
+// handling but as a single-select rather than a multi-select.
+func promptForScope() (string, error) {
+	scope := mcpinstall.ScopeProject
+	options := []huh.Option[string]{
+		huh.NewOption("project (this repo only)", mcpinstall.ScopeProject),
+		huh.NewOption("user (all your projects)", mcpinstall.ScopeUser),
+	}
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "cancel"),
+	)
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Install scope?").
+				Options(options...).
+				Value(&scope),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
+		return "", err
+	}
+	return scope, nil
+}
+
+// resolveInstallClients resolves which clients to install into. An explicit
+// --client/--all-clients flag always wins; otherwise this is "auto" mode:
+// only ever act on what DetectClients actually finds -- interactively, that
+// means pre-checking the detected clients in a picker the user can adjust;
+// non-interactively, it means using exactly the detected list, which may be
+// empty. Auto mode never silently falls back to installing into every
+// supported client just because nothing was detected -- that's what
+// --all-clients is for.
+func resolveInstallClients(atmosConfig *schema.AtmosConfiguration, scope string, v *viper.Viper) ([]string, error) {
+	clients := v.GetStringSlice("client")
+	if len(clients) > 0 {
+		return clients, nil
+	}
+	if v.GetBool("all-clients") {
+		return append([]string(nil), mcpinstall.SupportedClients...), nil
+	}
+
+	basePath := installBasePath(atmosConfig)
+	detected := mcpinstall.DetectClients(basePath, "", scope)
+	if v.GetBool(yesFlag) || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+		if len(detected) > 0 {
+			ui.Infof("Auto-detected AI clients: %s", strings.Join(detected, ", "))
+		}
+		return detected, nil
+	}
+	return promptForMCPClients(detected)
+}
+
+func promptForMCPClients(defaultClients []string) ([]string, error) {
+	selected := append([]string(nil), defaultClients...)
+	selectedByClient := make(map[string]bool, len(selected))
+	for _, client := range selected {
+		selectedByClient[client] = true
+	}
+	options := make([]huh.Option[string], 0, len(mcpinstall.SupportedClients))
+	for _, client := range mcpinstall.SupportedClients {
+		options = append(options, huh.NewOption(client, client).Selected(selectedByClient[client]))
+	}
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "cancel"),
+	)
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Install MCP servers into which clients?").
+				Description("Space toggles, enter confirms.").
+				Options(options...).
+				Value(&selected),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil, errUtils.ErrUserAborted
+		}
+		return nil, err
+	}
+	sort.Strings(selected)
+	return selected, nil
+}
+
+func installServers(
+	atmosConfig *schema.AtmosConfiguration,
+	servers map[string]schema.MCPServerConfig,
+	opts installCommandOptions,
+) error {
+	basePath := installBasePath(atmosConfig)
+	if opts.scope == mcpinstall.ScopeUser {
+		servers = withUserScopeCwd(servers, basePath)
+	}
+	installer, err := mcpinstall.New(
+		mcpinstall.WithBasePath(basePath),
+		mcpinstall.WithScope(opts.scope),
+		mcpinstall.WithClients(opts.clients),
+		mcpinstall.WithAllClients(opts.allClients),
+		mcpinstall.WithOverwrite(opts.force),
+		mcpinstall.WithDryRun(opts.dryRun),
+		mcpinstall.WithGitignore(opts.gitignore),
+		mcpinstall.WithOnConflict(mcpConflictHandler(opts.yes)),
+	)
+	if err != nil {
+		return err
+	}
+	result, err := installer.Install(servers)
+	if err != nil {
+		return err
+	}
+	reportMCPInstallResult(result, opts.dryRun)
+	return nil
+}
+
+// withUserScopeCwd returns a copy of servers with Cwd set to the absolute
+// project base path for stdio servers that don't already declare one.
+// User-scoped (global) client configs aren't colocated with the project, so
+// the server subprocess needs an explicit cwd to know which project to
+// operate on. HTTP servers don't spawn a subprocess, so cwd is meaningless
+// for them.
+func withUserScopeCwd(servers map[string]schema.MCPServerConfig, basePath string) map[string]schema.MCPServerConfig {
+	abs, err := filepath.Abs(basePath)
+	if err != nil {
+		return servers
+	}
+	result := make(map[string]schema.MCPServerConfig, len(servers))
+	for name, server := range servers { //nolint:gocritic // rangeValCopy: value must be copied to mutate Cwd before storing.
+		if server.Cwd == "" && server.TransportType() == schema.MCPTransportStdio {
+			server.Cwd = abs
+		}
+		result[name] = server
+	}
+	return result
+}
+
+func installBasePath(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.BasePath != "" {
+		return atmosConfig.BasePath
+	}
+	return "."
+}
+
+func mcpConflictHandler(yes bool) mcpinstall.ConflictFunc {
+	if yes {
+		return func(mcpinstall.Target, string) (bool, error) {
+			return false, nil
+		}
+	}
+	return func(target mcpinstall.Target, serverName string) (bool, error) {
+		return flags.PromptForConfirmation(
+			fmt.Sprintf("Overwrite MCP server %q in %s?", serverName, target.Path),
+			false,
+		)
+	}
+}
+
+func reportMCPInstallResult(result *mcpinstall.Result, dryRun bool) {
+	prefixAdded := "Added"
+	prefixUpdated := "Updated"
+	if dryRun {
+		prefixAdded = "Would add"
+		prefixUpdated = "Would update"
+	}
+	for _, entry := range result.AddedServers {
+		ui.Successf("%s `%s`", prefixAdded, entry)
+	}
+	for _, entry := range result.UpdatedServers {
+		ui.Successf("%s `%s`", prefixUpdated, entry)
+	}
+	for _, entry := range result.UnchangedServers {
+		ui.Infof("Already configured `%s`", entry)
+	}
+	for _, entry := range result.SkippedServers {
+		ui.Warningf("Skipped `%s`", entry)
+	}
+	for _, path := range result.GitignoredFiles {
+		ui.Successf("Added `%s` to .gitignore", path)
+	}
+}
