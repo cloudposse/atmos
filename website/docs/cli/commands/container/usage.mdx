@@ -276,6 +276,12 @@ is optional, and there are three ways to select what to operate on:
   <dt>`--all --stack=<stack>`</dt>
   <dd>Operate on every container component in just that stack.</dd>
 
+  <dt>`--tags <tags>`</dt>
+  <dd>Operate on container components matching any of the given tags (comma-separated): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Composes with `--all`; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels <labels>`</dt>
+  <dd>Operate on container components matching all of the given labels (comma-separated `key=value` pairs): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--tags`; cannot be combined with a single component argument.</dd>
+
   <dt>no component (interactive)</dt>
   <dd>In an interactive terminal, Atmos prompts for a **stack** (skipped if only one exists or `--stack`
   is given) and then a **multi-select of components** (all pre-selected). Outside a TTY (CI, pipes) this
@@ -350,6 +356,12 @@ compositions:
   combined with `--stack=<stack>`. Cannot be combined with a `<component>` argument. See
   [Bulk operation](#bulk-operation).</dd>
 
+  <dt>`--tags` <em>(bulk verbs only)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all` to narrow the selected set further; cannot be combined with a `<component>` argument.</dd>
+
+  <dt>`--labels` <em>(bulk verbs only)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--tags`; cannot be combined with a `<component>` argument.</dd>
+
   <dt>`--follow` / `-f` <em>(logs)</em></dt>
   <dd>Stream logs continuously. With multiple components the streams are interleaved and each line is
   prefixed with the component name. Press `Ctrl-C` to stop.</dd>
@@ -399,6 +411,9 @@ atmos container up --all
 
 # Bulk: tear down a whole stack (reverse order), continue-on-error.
 atmos container down --all --stack=dev
+
+# Bulk: bring up only components tagged "production" and labeled cost-center=platform.
+atmos container up --all --tags production --labels cost-center=platform
 
 # Bulk: interactive picker (TTY) — choose a stack, then components.
 atmos container up
