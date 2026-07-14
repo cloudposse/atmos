@@ -52,6 +52,9 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "version": {
+      "$ref": "#/definitions/version"
     }
   },
   "additionalProperties": true,
@@ -1435,6 +1438,20 @@
             "locked": {
               "type": "boolean",
               "description": "Flag to lock the component and prevent modifications while allowing read operations"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering components (atmos list components --tags)."
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
             }
           },
           "required": []
@@ -2482,6 +2499,26 @@
         }
       ]
     },
+    "version": {
+      "title": "version",
+      "description": "Stack-level Atmos Version Tracker track assertion. Selects which version track (`atmos version track`) this stack resolves `!version` and `{{ .version.* }}` against.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "track": {
+              "type": "string",
+              "description": "The version track this stack asserts (e.g. `dev`, `prod`). Defaults to `version.track` in `atmos.yaml` when omitted."
+            }
+          }
+        }
+      ]
+    },
     "component_secrets": {
       "title": "component_secrets",
       "description": "Secrets configuration. Declares secrets resolved at runtime via the `!secret` YAML function, and (at the stack/global level) the non-store secret providers (e.g. SOPS) that back them. Store-backed secrets reference a `secret: true` store under `stores`.",
@@ -2722,6 +2759,13 @@
               "type": "object",
               "additionalProperties": true,
               "description": "Provider-specific configuration"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering providers (atmos auth list/logout --tags)."
             }
           },
           "required": [
@@ -2834,6 +2878,13 @@
             },
             "session": {
               "$ref": "#/definitions/auth_session"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering identities (atmos auth list/login --tags)."
             }
           },
           "required": [

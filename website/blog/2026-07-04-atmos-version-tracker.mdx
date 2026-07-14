@@ -5,7 +5,15 @@ authors: [osterman]
 tags: [feature]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Your infrastructure's versions live everywhere except one place. `actions/checkout@v4` in a dozen workflow files, `TOFU_VERSION=1.9.0` in a Dockerfile, `nginx:1.27` in a stack, `kubectl` wherever your bootstrap script says. When a version needs to move, you grep and hope. When it shouldn't move, nothing enforces that either — and every unpinned mutable tag is a supply-chain incident waiting for its moment. The Atmos Version Tracker gives all of those versions a single source of truth: a catalog in `atmos.yaml`, a deterministic lock file, policy-driven updates, and file managers that rewrite your workflows, Dockerfiles, and rendered files from the lock.
+
+Here's the same idea applied to vendored component versions:
+
+<CastPlayer src="/casts/examples/demo-component-versions/vendor-versions.cast" title="atmos component version vendoring" chrome controls scrubber />
+
+[View the full example](/examples/demo-component-versions)
 
 <!--truncate-->
 
@@ -64,17 +72,13 @@ Resolved versions land in a committed `versions.lock.yaml`, so local runs and CI
 atmos version track update
 ```
 
-```yaml
-track: prod
-results:
-  - name: checkout
-    from: v6.1.0
-    to: v6.2.0
-    updated: true
-  - name: nginx
-    from: 1.29.0
-    updated: false
-    reason: "1.30.0 released 3d ago; cooldown 14d has not elapsed"
+In an interactive terminal this renders as a styled table. Use `--format=csv` or
+`--format=tsv` for delimited output; piped table output remains a table:
+
+```shell
+Track,Name,From,To,Updated,Reason
+prod,checkout,v6.1.0,v6.2.0,true,
+prod,nginx,1.29.0,,false,"1.30.0 released 3d ago; cooldown 14d has not elapsed"
 ```
 
 File managers then rewrite your actual project files from the lock. Pinned entries get the immutable SHA with the human-readable version as a trailing comment — the same round-trip convention Renovate and Dependabot use:
@@ -113,7 +117,7 @@ steps:
 
 `atmos version track status` shows where you stand at any time — including `newer-available (blocked)` when a newer version exists upstream but your cooldown or strategy is deliberately holding it back. That's a passing state, not a failure: the locked version is exactly what your policy wants deployed.
 
-See the [`atmos version track` command reference](/cli/commands/version/track) and [Managed Versions configuration](/cli/configuration/version/managed-versions) for the full surface, or try the runnable [`examples/demo-version-tracker`](https://github.com/cloudposse/atmos/tree/main/examples/demo-version-tracker) example.
+See the [`atmos version track` command reference](/cli/commands/version/track) and [Managed Versions configuration](/cli/configuration/version/managed-versions) for the full surface, or try the runnable [`examples/version-tracker`](https://github.com/cloudposse/atmos/tree/main/examples/version-tracker) example.
 
 ## Get Involved
 

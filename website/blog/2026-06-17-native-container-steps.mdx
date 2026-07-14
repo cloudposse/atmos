@@ -6,6 +6,8 @@ tags: [feature, experimental]
 date: 2026-06-17
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos workflows and custom commands can now run containers natively. A new `type: container` step
 builds images, pushes them to registries, and runs containerized tools — Docker or Podman — through
 the same reusable step library that powers the rest of your automation.
@@ -131,6 +133,10 @@ The new `examples/container-step` example demonstrates build, push, run, Bake, a
 cd examples/container-step
 atmos workflow build -f container-step
 ```
+
+<CastPlayer src="/casts/examples/container-step/build-run.cast" title="atmos container build run" chrome controls scrubber />
+
+[View the full example](/examples/container-step)
 
 ## What Comes Next
 

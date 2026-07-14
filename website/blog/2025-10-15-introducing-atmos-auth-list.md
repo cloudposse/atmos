@@ -9,9 +9,17 @@ tags:
 release: v1.196.0
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 We're excited to announce a powerful new command for managing authentication in Atmos: `atmos auth list`. This command provides comprehensive visibility into your authentication configuration, making it easier than ever to understand and manage complex authentication chains across multiple cloud providers and identities.
 
 <!--truncate-->
+
+See it in action:
+
+<CastPlayer src="/casts/examples/demo-auth/auth-list.cast" title="atmos auth identities" chrome controls scrubber />
+
+[View the full example](/examples/demo-auth)
 
 ## Why atmos auth list?
 

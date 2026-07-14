@@ -48,9 +48,9 @@ func TestCatalog(t *testing.T) {
 
 	// Entries are sorted by name; assert first and last by value, not just length.
 	first := catalog[0]
-	assert.Equal(t, "atmos-ansible", first.Name)
+	assert.Equal(t, "atmos-ai", first.Name)
 	assert.Equal(t, "1.0.0", first.Version)
-	assert.Equal(t, "github.com/cloudposse/atmos//agent-skills/skills/atmos-ansible", first.Source)
+	assert.Equal(t, "github.com/cloudposse/atmos//agent-skills/skills/atmos-ai", first.Source)
 	assert.NotEmpty(t, first.Description)
 
 	last := catalog[len(catalog)-1]

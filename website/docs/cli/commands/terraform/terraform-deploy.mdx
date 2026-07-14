@@ -188,6 +188,47 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
         ```
     </dd>
 
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of components to deploy concurrently when running with `--all`, `--affected`, `--components`, or `--query`. Default is `1` (sequential).
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_MAX_CONCURRENCY`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4
+        ```
+    </dd>
+
+    <dt>`--failure-mode` <em>(optional)</em></dt>
+    <dd>
+        Controls how the concurrent scheduler handles a failed component when using `--all`, `--affected`, `--components`, or `--query` with `--max-concurrency > 1`.
+
+        Supported values:
+        - `fail-fast` *(default)* — stop scheduling new components as soon as one fails
+        - `keep-going` — continue deploying independent graph branches even after a failure
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_FAILURE_MODE`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4 --failure-mode keep-going
+        ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_LOG_ORDER`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4 --log-order grouped
+        ```
+    </dd>
+
     <dt>`--ci` <em>(optional)</em></dt>
     <dd>
         Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.
@@ -324,6 +365,21 @@ atmos terraform deploy --query '.settings.context.account_id == 12345'
 atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
 ```
 
+### Deploy Components by Tags and Labels
+
+Filter components by `metadata.tags`/`metadata.labels`. These flags compose with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further, rather than being mutually exclusive with them:
+
+```shell
+# Deploy components tagged production or tier-1 (matches any)
+atmos terraform deploy --tags production,tier-1
+
+# Deploy components labeled cost-center=platform (matches all given labels)
+atmos terraform deploy --labels cost-center=platform
+
+# Narrow an --affected run to only production-tagged components
+atmos terraform deploy --affected --tags production
+```
+
 ### Multi-Component Flags
 
 <dl>
@@ -338,6 +394,12 @@ atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
 
     <dt>`--query`</dt>
     <dd>Deploy components matching a YQ expression. All Atmos sections are available: `vars`, `settings`, `env`, `metadata`, etc.</dd>
+
+    <dt>`--tags`</dt>
+    <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+    <dt>`--labels`</dt>
+    <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
 
     <dt>`--include-dependents`</dt>
     <dd>With `--affected`, also deploy components that depend on affected components, recursively.</dd>

@@ -4,6 +4,9 @@ components:
       metadata:
         component: app-config
         description: "Publishes resolved app configuration and secrets to SSM Parameter Store."
+        tags: [config, secrets]
+        labels:
+          tier: application
       # Component dependencies declare the apply order in the DAG (consumed by
       # `atmos describe dependents`, `--affected` runs, and workflows). This is the
       # current form; the legacy `settings.depends_on` map is deprecated.
@@ -30,10 +33,10 @@ components:
         # Every coordinate is read straight from the upstream component's Terraform
         # state, so there are no hand-derived ARNs/names that can drift from what was
         # actually deployed (and nothing AWS-account- or endpoint-specific is hardcoded).
-        kms_key_arn: !terraform.state kms-key key_arn
-        bucket_id: !terraform.state s3-bucket bucket_id
-        table_name: !terraform.state dynamodb-table table_name
-        topic_arn: !terraform.state sns-topic topic_arn
-        queue_url: !terraform.state sqs-queue queue_url
+        kms_key_arn: !terraform.state kms-key ".key_arn // ""pending"""
+        bucket_id: !terraform.state s3-bucket ".bucket_id // ""pending"""
+        table_name: !terraform.state dynamodb-table ".table_name // ""pending"""
+        topic_arn: !terraform.state sns-topic ".topic_arn // ""pending"""
+        queue_url: !terraform.state sqs-queue ".queue_url // ""pending"""
         api_key: !secret API_KEY
         db_password: !secret DB_CONFIG | path ".password"

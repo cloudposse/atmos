@@ -13,6 +13,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	pkgdata "github.com/cloudposse/atmos/pkg/data"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -56,6 +57,10 @@ const (
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
 	AtmosYamlFuncEmulator                = "!emulator"
 	AtmosYamlFuncVersion                 = "!version"
+	AtmosYamlFuncTags                    = "!tags"
+	AtmosYamlFuncLabels                  = "!labels"
+	AtmosYamlFuncLabelsKeys              = "!labels.keys"
+	AtmosYamlFuncLabelsValues            = "!labels.values"
 
 	DefaultYAMLIndent    = 2
 	cacheFingerprintBase = 16
@@ -95,6 +100,10 @@ var (
 		AtmosYamlFuncAwsOrganizationID,
 		AtmosYamlFuncEmulator,
 		AtmosYamlFuncVersion,
+		AtmosYamlFuncTags,
+		AtmosYamlFuncLabels,
+		AtmosYamlFuncLabelsKeys,
+		AtmosYamlFuncLabelsValues,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
@@ -132,6 +141,10 @@ var (
 		AtmosYamlFuncAwsOrganizationID:       true,
 		AtmosYamlFuncEmulator:                true,
 		AtmosYamlFuncVersion:                 true,
+		AtmosYamlFuncTags:                    true,
+		AtmosYamlFuncLabels:                  true,
+		AtmosYamlFuncLabelsKeys:              true,
+		AtmosYamlFuncLabelsValues:            true,
 	}
 
 	// ParsedYAML cache stores parsed yaml.Node objects and their position
@@ -544,8 +557,7 @@ func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
-	return nil
+	return pkgdata.Writeln(y)
 }
 
 // PrintAsYAMLSimple prints the provided value as YAML document without syntax highlighting.
@@ -563,8 +575,7 @@ func PrintAsYAMLSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
-	return nil
+	return pkgdata.Writeln(y)
 }
 
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {

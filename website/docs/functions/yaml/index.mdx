@@ -83,6 +83,16 @@ YAML supports three types of data: core, defined, and user-defined.
    [__`!git.url`__](/functions/yaml/git.url) YAML functions retrieve repository metadata
    (the `<owner>/<name>` slug, owner, name, host, and remote URL) from the current Git repository.
 
+ - The [__`!git.sha`__](/functions/yaml/git.sha), [__`!git.ref`__](/functions/yaml/git.ref), and
+   [__`!git.branch`__](/functions/yaml/git.branch) YAML functions retrieve the current commit SHA
+   (`!git.sha` and its source-pinning alias `!git.ref`) and the current branch name.
+
+ - The [__`!git.root`__](/functions/yaml/git.root) YAML function is an alias of
+   [__`!repo-root`__](/functions/yaml/repo-root) that retrieves the root directory of the current Git repository.
+
+ - The [__`!emulator`__](/functions/yaml/emulator) YAML function retrieves connection information
+   (endpoint, credentials, kubeconfig) from a running [emulator](/cli/commands/emulator/up) component.
+
  - The [__`!cwd`__](/functions/yaml/cwd) YAML function is used to retrieve the current working directory
    where Atmos is executed from. Useful when you need paths relative to where you run Atmos
    rather than relative to the configuration file.
@@ -114,6 +124,13 @@ YAML supports three types of data: core, defined, and user-defined.
 
  - The [__`!aws.region`__](/functions/yaml/aws.region) YAML function retrieves the AWS region
    from the current SDK configuration.
+
+ - The [__`!tags`__](/functions/yaml/tags) and [__`!labels`__](/functions/yaml/labels) YAML functions
+   return the current component's own `metadata.tags` (list) and `metadata.labels` (map), typed
+   correctly with no `!template`/`toJson` boilerplate — commonly used to bridge `metadata.labels`
+   into the `vars.tags`/`vars.labels` a `terraform-null-label`-style module expects.
+   [__`!labels.keys`__](/functions/yaml/labels.keys) and [__`!labels.values`__](/functions/yaml/labels.values)
+   return just the keys or values of `metadata.labels` as a flat list.
 
 :::tip
 You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
@@ -215,6 +232,19 @@ components:
         helm_annotation: !literal "{{ .Values.ingress.class }}"
         terraform_var: !literal "${var.hostname}"
         db_users: [!literal "{{external.email}}", !literal "{{external.admin}}"]
+
+        # Get this component's own metadata.tags (list) and metadata.labels (map)
+        component_tags: !tags
+        component_labels: !labels
+
+        # Bridge metadata.labels into the var.tags a terraform-null-label-style module expects
+        tags: !labels
+
+      metadata:
+        tags: [production, networking]
+        labels:
+          cost-center: platform
+          compliance: sox
 
       settings:
         # Append to an inherited list instead of replacing it

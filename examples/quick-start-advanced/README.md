@@ -14,7 +14,7 @@ cast:
 
 [Atmos](https://atmos.tools/) is a universal tool for DevOps and cloud automation. This advanced
 example provisions a small AWS application stack — **entirely offline** — against a local AWS
-emulator ([Floci](https://floci.io/)), so you can learn the patterns end to end without a real AWS
+emulator ([Floci](https://github.com/floci-io/floci)), so you can learn the patterns end to end without a real AWS
 account or any credentials.
 
 Follow the [Quick Start: Advanced](https://atmos.tools/quick-start/advanced/) guide for a step-by-step
@@ -105,6 +105,28 @@ See it resolved per stage (no deploy required):
 ```shell
 atmos describe component s3-bucket -s plat-ue2-dev
 atmos describe component s3-bucket -s plat-ue2-prod
+```
+
+## Tags and labels
+
+Every component in the [catalog](stacks/catalog/) carries `metadata.tags` (a list, matched with
+*any*) and `metadata.labels` (a map, matched with *all*) — see the
+[Component Metadata reference](https://atmos.tools/stacks/components/component-metadata). Use them
+to select components across the whole stack without listing names:
+
+```shell
+# Everything tagged "messaging" (sns-topic, sqs-queue) — regardless of stack.
+atmos list components --tags messaging
+
+# Everything labeled tier=foundational (kms-key, s3-bucket) — the components
+# everything else in this stack depends on.
+atmos list components --labels tier=foundational
+
+# Plan (or deploy/destroy) only the messaging components for a stack.
+atmos terraform plan --all --tags messaging -s plat-ue2-dev
+
+# Plan only the foundational tier — composes with --all the same way --affected does.
+atmos terraform plan --all --labels tier=foundational -s plat-ue2-dev
 ```
 
 ## Operator commands

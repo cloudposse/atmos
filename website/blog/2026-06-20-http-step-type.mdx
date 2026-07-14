@@ -5,6 +5,8 @@ authors: [osterman]
 tags: [feature]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Workflows and custom commands now support a native `http` step type that performs an HTTP request — any verb, query-string parameters, headers, and a request body (raw or form/JSON) — with per-attempt timeouts and retries that compose with the existing `retry:` policy. No more shelling out to `curl`. (Prefer `type: webhook`? It's an accepted alias.)
 
 <!--truncate-->
@@ -59,6 +61,12 @@ workflows:
 ```
 
 Everything templates, including the URL, headers, query params, and body — so you can thread values from earlier steps or the environment straight into the request.
+
+Here's the `http` step calling a local endpoint end to end:
+
+<CastPlayer src="/casts/examples/http-webhooks/local-endpoints.cast" title="atmos HTTP webhooks" chrome controls scrubber />
+
+[View the full example](/examples/http-webhooks)
 
 ## Sending Parameters
 

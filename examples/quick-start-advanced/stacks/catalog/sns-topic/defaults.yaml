@@ -4,6 +4,9 @@ components:
       metadata:
         component: sns-topic
         description: "SNS topic for application events."
+        tags: [messaging]
+        labels:
+          tier: application
       # https://atmos.tools/stacks/dependencies/components
       dependencies:
         components:
@@ -19,4 +22,4 @@ components:
       vars:
         name: events
         # Read the KMS key ARN straight from the kms-key component's Terraform state.
-        kms_key_arn: !terraform.state kms-key key_arn
+        kms_key_arn: !terraform.state kms-key ".key_arn // ""pending"""

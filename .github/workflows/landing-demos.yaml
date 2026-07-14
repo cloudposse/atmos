@@ -38,7 +38,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
@@ -100,7 +100,7 @@ jobs:
 
       - name: Upload diagnostics as an artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: landing-demos-diagnostics
           path: diag/
@@ -108,7 +108,7 @@ jobs:
 
       # Always make the renders downloadable, even before S3 is wired up.
       - name: Upload renders as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: landing-demos
           path: website/static/img/demos/

@@ -117,6 +117,14 @@ Successfully logged out from 4 identities
    browser session.
 ```
 
+### Logout by Tags
+
+```shell
+atmos auth logout --tags production
+```
+
+This removes credentials for every identity and provider tagged with any of the given tags, using the same confirmation flow as `--all`. This is useful when you want to log out of an entire environment (e.g. everything tagged `production`) without listing each identity individually.
+
 ### Logout from Specific Provider
 
 ```shell
@@ -294,6 +302,11 @@ All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth lo
 
   <dt>`--provider`</dt>
   <dd>Logout from a specific provider instead of an identity. Clears session data for all identities using this provider. Combine with `--keychain` to also remove stored credentials.</dd>
+
+  <dt>`--tags`</dt>
+  <dd>
+    Logout from every provider and identity matching any of the given tags (comma-separated): `--tags=production`. Providers and identities are tagged via an optional `tags: [...]` list in `atmos.yaml`. Uses the same confirmation flow as `--all`. Combine with `--keychain` to also remove stored credentials.
+  </dd>
 
   <dt>`--keychain`</dt>
   <dd>

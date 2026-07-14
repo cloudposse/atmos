@@ -4,6 +4,9 @@ components:
       metadata:
         component: s3-bucket
         description: "Encrypted S3 bucket for application assets."
+        tags: [storage, security]
+        labels:
+          tier: foundational
       settings:
         validation:
           validate-s3-bucket-with-jsonschema:
@@ -37,4 +40,4 @@ components:
         versioning_enabled: true
         # Read the KMS key ARN straight from the kms-key component's Terraform state,
         # so it always matches the key that was actually deployed.
-        kms_key_arn: !terraform.state kms-key key_arn
+        kms_key_arn: !terraform.state kms-key ".key_arn // ""pending"""

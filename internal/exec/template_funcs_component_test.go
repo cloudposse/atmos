@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -92,6 +93,96 @@ func TestComponentFunc(t *testing.T) {
 	assert.Contains(t, y, "bar: component-1-b")
 	// Helmfile components don't have `outputs` (terraform output) - this should result in `<no value>`
 	assert.Contains(t, y, "baz: <no value>")
+}
+
+// TestResolveComponentFuncAuthManager verifies that atmos.Component()'s auth resolution mirrors
+// !terraform.state / !terraform.output: the nested target's own auth section (when it declares a
+// default identity) overrides the enclosing component's propagated AuthContext, instead of atmos.Component()
+// always reusing the enclosing component's credentials verbatim regardless of the target's own identity.
+func TestResolveComponentFuncAuthManager(t *testing.T) {
+	t.Parallel()
+
+	parentContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "enclosing-identity"}}
+	type sentinelAuthManager struct{ auth.AuthManager }
+	targetMgr := &sentinelAuthManager{}
+
+	t.Run("target's own auth section overrides the enclosing component's AuthManager", func(t *testing.T) {
+		t.Parallel()
+
+		var gotParent auth.AuthManager
+		resolve := func(_ *schema.AtmosConfiguration, component, stack string, parent auth.AuthManager) (auth.AuthManager, error) {
+			gotParent = parent
+			assert.Equal(t, "target-component", component)
+			assert.Equal(t, "target-stack", stack)
+			return targetMgr, nil
+		}
+
+		got := resolveComponentFuncAuthManager(
+			&schema.AtmosConfiguration{},
+			&schema.ConfigAndStacksInfo{AuthContext: parentContext},
+			"target-component", "target-stack",
+			resolve,
+		)
+
+		assert.Same(t, targetMgr, got, "the target's own resolved AuthManager must be used")
+		require.NotNil(t, gotParent, "the resolver must receive the enclosing component's AuthContext as parent")
+		assert.Same(t, parentContext, gotParent.GetStackInfo().AuthContext,
+			"the parent passed to the resolver must wrap the enclosing component's AuthContext")
+	})
+
+	t.Run("resolver error falls back to the enclosing component's AuthManager", func(t *testing.T) {
+		t.Parallel()
+
+		resolve := func(_ *schema.AtmosConfiguration, _, _ string, parent auth.AuthManager) (auth.AuthManager, error) {
+			return nil, assert.AnError
+		}
+
+		got := resolveComponentFuncAuthManager(
+			&schema.AtmosConfiguration{},
+			&schema.ConfigAndStacksInfo{AuthContext: parentContext},
+			"target-component", "target-stack",
+			resolve,
+		)
+
+		require.NotNil(t, got, "must fall back to a non-nil wrapper around the enclosing component's AuthContext")
+		assert.Same(t, parentContext, got.GetStackInfo().AuthContext)
+	})
+
+	t.Run("auth disabled skips resolution and keeps the enclosing component's AuthManager", func(t *testing.T) {
+		t.Parallel()
+
+		called := false
+		resolve := func(_ *schema.AtmosConfiguration, _, _ string, _ auth.AuthManager) (auth.AuthManager, error) {
+			called = true
+			return targetMgr, nil
+		}
+
+		got := resolveComponentFuncAuthManager(
+			&schema.AtmosConfiguration{},
+			&schema.ConfigAndStacksInfo{AuthContext: parentContext, AuthDisabled: true},
+			"target-component", "target-stack",
+			resolve,
+		)
+
+		assert.False(t, called, "resolver must not run when auth is disabled")
+		require.NotNil(t, got)
+		assert.Same(t, parentContext, got.GetStackInfo().AuthContext)
+	})
+
+	t.Run("nil enclosing context still lets the target resolve its own auth", func(t *testing.T) {
+		t.Parallel()
+
+		var gotParent auth.AuthManager
+		resolve := func(_ *schema.AtmosConfiguration, _, _ string, parent auth.AuthManager) (auth.AuthManager, error) {
+			gotParent = parent
+			return targetMgr, nil
+		}
+
+		got := resolveComponentFuncAuthManager(&schema.AtmosConfiguration{}, nil, "target-component", "target-stack", resolve)
+
+		assert.Nil(t, gotParent, "with no enclosing AuthContext, the resolver must receive a nil parent")
+		assert.Same(t, targetMgr, got)
+	})
 }
 
 // TestWrapComponentDescribeError_BreaksErrInvalidComponentChain tests that WrapComponentDescribeError

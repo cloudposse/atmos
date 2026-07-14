@@ -6,9 +6,31 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &quick_start_advanced_fixture "../../.context/cast-fixtures/quick-start-advanced"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos --logs-level=Off emulator down aws -s plat-ue2-dev || true
+          atmos --logs-level=Off terraform reset || true
+      - type: shell
+        name: emulator-up
+        working_directory: *quick_start_advanced_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos emulator up aws -s plat-ue2-dev --ephemeral
+      - type: shell
+        name: seed-secrets
+        working_directory: *quick_start_advanced_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos secret set API_KEY=sk-quickstart-example -s plat-ue2-dev -c app-config --force
+          atmos secret set 'DB_CONFIG={"username":"app","password":"s3cr3t"}' -s plat-ue2-dev -c app-config --force
       - type: cast
         name: list-instances
-        working_directory: "../../.context/cast-fixtures/quick-start-advanced"
+        working_directory: *quick_start_advanced_fixture
         title: "Quick Start Advanced: list instances"
         mode: steps
         defaults:
@@ -40,9 +62,61 @@ commands:
             interval: 750ms
             command: *list_instances_cmd
           - type: simulate
+            text: "# every component carries metadata.tags/metadata.labels for bulk selection"
+          - type: simulate
+            text: &list_tags_cmd atmos list components --tags messaging
+          - type: shell
+            name: list-tags
+            duration: 450ms
+            interval: 750ms
+            command: *list_tags_cmd
+          - type: simulate
+            text: "# --labels matches every key=value pair (AND); --tags matches any (OR)"
+          - type: simulate
+            text: &list_labels_cmd atmos list components --labels tier=foundational
+          - type: shell
+            name: list-labels
+            duration: 450ms
+            interval: 750ms
+            command: *list_labels_cmd
+          - type: simulate
             text: "# deploy the whole component graph when the local AWS emulator is running"
           - type: simulate
-            text: atmos terraform deploy --all -s plat-ue2-dev
+            text: &deploy_all_cmd atmos terraform deploy --all -s plat-ue2-dev
+          - type: shell
+            name: deploy-all
+            duration: 550ms
+            interval: 900ms
+            command: *deploy_all_cmd
+      - type: script
+        name: sanitize-cast-paths
+        interpreter: python3
+        script: |
+          # `provision.workdir.enabled` logs the real source path when syncing
+          # component files ("Local component files synced: <path>"), which is the
+          # first thing an examples/* cast has ever captured that contains a
+          # machine-specific absolute path (the type: cast step itself has no
+          # built-in sanitization, unlike the screengrabs recorder). Rewrite it to
+          # the same "/absolute/path/to/repo" placeholder cast_checks.assert_no_local_paths
+          # requires, mirroring atmos.d/screengrabs/cli.yaml's sanitize_paths usage.
+          import os, sys
+          from pathlib import Path
+
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import sanitize_paths
+
+          repo = Path("..", "..").resolve()
+          out = Path("../../website/static/casts/examples/quick-start-advanced/list-instances.cast")
+          out.write_text(sanitize_paths(out.read_text(), repo))
+      - type: shell
+        name: teardown
+        working_directory: *quick_start_advanced_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        when: always
+        command: |
+          atmos --logs-level=Off terraform destroy --all -s plat-ue2-dev -auto-approve || true
+          atmos --logs-level=Off emulator down aws -s plat-ue2-dev || true
       - type: shell
         name: validate
         command: atmos casts validate examples quick-start-advanced list-instances
@@ -61,7 +135,7 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           assert_colored(text, "plat-ue2-dev")
-          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config", "atmos terraform deploy --all -s plat-ue2-dev"]:
+          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config", "atmos terraform deploy --all -s plat-ue2-dev", "sns-topic", "kms-key", "atmos list components --tags messaging", "atmos list components --labels tier=foundational"]:
               if needle not in plain:
                   raise SystemExit(f"list-instances cast missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-instances]", "completed"]:

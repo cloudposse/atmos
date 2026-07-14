@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -753,13 +754,27 @@ func processComponentSectionTemplates(
 		settingsSectionStruct.Templates.Settings.Env = envMap
 	}
 
+	componentTemplateContext := make(map[string]any, len(componentSection))
+	for k, v := range componentSection {
+		componentTemplateContext[k] = v
+	}
+	componentTemplateContext, err = manager.AddTemplateContext(
+		atmosConfig,
+		componentSectionStr,
+		componentTemplateContext,
+		manager.EffectiveTrackFromStack(atmosConfig, info),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	processed, err := ProcessTmplWithDatasources(
 		atmosConfig,
 		info,
 		settingsSectionStruct,
 		"describe-stacks-all-sections",
 		componentSectionStr,
-		info.ComponentSection,
+		componentTemplateContext,
 		true,
 	)
 	if err != nil {

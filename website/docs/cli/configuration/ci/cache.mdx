@@ -44,6 +44,13 @@ single cache captures it. The cache key defaults to a value derived from the too
 lockfile (`toolchain.lock.yaml`) plus the OS and architecture, with a prefix restore-key
 fallback — mirroring `actions/cache`.
 
+A fixed set of Atmos's own auth session-cache subdirectories — `aws-sso`, `azure-device-code`,
+`aws-webflow`, and `auth` (AWS SSO tokens, Azure device-code tokens, AWS webflow refresh
+tokens, and provisioned-identity metadata) — is **always excluded** from the cache, regardless
+of `ci.cache.paths`, with no opt-out. This is defensive hardening: it makes it structurally
+impossible for these directories to end up in a cache archive, rather than relying on every
+`ci.cache.paths` configuration to avoid them by convention.
+
 Cache entries are **write-once**. To keep automatic and manual usage from conflicting, Atmos
 records how each key was restored and whether it was saved: a save is skipped when the exact
 key was an exact hit at restore time (content unchanged) or has already been saved. This is
@@ -92,9 +99,9 @@ supported CI provider, the cache is a no-op.
   <dt>`ci.cache.paths`</dt>
   <dd>
     Root-relative subpaths to include in the cache. When empty, the entire cache root is
-    cached.
+    cached, **except** the default-excluded auth-cache subdirectories, which are never cached.
 
-    **Default:** the entire cache root
+    **Default:** the entire cache root, minus the default-excluded auth-cache subdirectories
   </dd>
 
   <dt>`ci.cache.key`</dt>
@@ -147,6 +154,17 @@ GitHub's Actions cache service needs runtime credentials (`ACTIONS_RUNTIME_TOKEN
 
 :::tip Recommended (most secure)
 Prefer the **`actions/cache` composite** (or the **explicit** form) — both expose **no** runtime token. Security ranking: **no token (composite/explicit) > scoped token > ambient token**. If you need Atmos to own restore/save, prefer `mode: output` (scoped) over `mode: env` (ambient).
+:::
+
+:::caution Known upstream limitation with native `actions/cache` excludes
+`atmos ci cache paths` renders the default auth-cache exclusions as `!`-prefixed glob lines for
+the native `actions/cache` action, but `@actions/glob` (which `actions/cache` uses to resolve
+`path:`) only reliably honors a directory-level exclusion when the paired include is also a
+wildcard pattern at the same depth — see the still-open
+[actions/toolkit#713](https://github.com/actions/toolkit/issues/713). If you need a hard
+guarantee rather than a best-effort exclusion, prefer the **Atmos-managed backend**
+(`atmos ci cache restore`/`save`, below) — its exclusion logic is enforced directly in Atmos's
+own archiving code and covered by tests, independent of upstream glob behavior.
 :::
 
 <Tabs>
@@ -242,6 +260,7 @@ The actions ship inside the Atmos repository, so pin them to an Atmos release (`
 | `ATMOS_CI_CACHE_KEY` | Override the cache key (`--key`) |
 | `ATMOS_CI_CACHE_ROOT` | Override the cache root (`--root`) |
 | `ATMOS_CI_CACHE_PATHS` | Override the cached paths (`--path`) |
+| `ATMOS_CI_CACHE_EXCLUDE_PATHS` | (`atmos ci cache paths --format=env` output) The resolved default-excluded paths |
 | `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` | Provided automatically inside a GitHub Actions runner; required for the GitHub Actions cache backend |
 
 ## Related

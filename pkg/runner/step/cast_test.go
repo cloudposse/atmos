@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/muesli/termenv"
+	"github.com/spf13/viper"
+
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -697,6 +700,106 @@ func TestApplyCastStepEnvAddsEnvToVariables(t *testing.T) {
 	if !strings.HasPrefix(vars.Env["PATH"], prefix) {
 		t.Fatalf("PATH = %q, want %q prefix", vars.Env["PATH"], prefix)
 	}
+}
+
+// withRestoredEnv snapshots key's current value and schedules it to be
+// restored (set or unset, whichever matched) after the test completes.
+func withRestoredEnv(t *testing.T, key string) {
+	t.Helper()
+	origValue, origSet := os.LookupEnv(key)
+	t.Cleanup(func() {
+		if origSet {
+			_ = os.Setenv(key, origValue)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+	_ = os.Unsetenv(key)
+}
+
+func TestForceRecordingUIEnvForcesTrueColorAndRestoresEnv(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	ui.InitFormatter(iolib.GetContext())
+	t.Cleanup(ui.ReinitFormatter)
+
+	// Normally bound once in cmd/root.go's init(), which this package-level
+	// test binary never runs. Bind it here so viper.GetBool("force-color")
+	// (consulted by pkg/terminal's color detection during ReinitFormatter)
+	// sees ATMOS_FORCE_COLOR the same way it would in the real atmos binary.
+	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
+		t.Fatalf("bind force-color env: %v", err)
+	}
+
+	const key = "ATMOS_FORCE_COLOR"
+	withRestoredEnv(t, key)
+
+	restore := forceRecordingUIEnv(map[string]string{key: "1"})
+
+	if got, ok := os.LookupEnv(key); !ok || got != "1" {
+		t.Fatalf("%s during recording = (%q, %v), want (1, true)", key, got, ok)
+	}
+	if got := ui.GetColorProfile(); got != termenv.TrueColor {
+		t.Fatalf("color profile during recording = %v, want TrueColor", got)
+	}
+
+	restore()
+
+	if _, ok := os.LookupEnv(key); ok {
+		t.Fatalf("%s after restore should be unset", key)
+	}
+}
+
+func TestForceRecordingUIEnvNoColorForcesAsciiProfile(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	ui.InitFormatter(iolib.GetContext())
+	t.Cleanup(ui.ReinitFormatter)
+
+	const key = "NO_COLOR"
+	withRestoredEnv(t, key)
+
+	restore := forceRecordingUIEnv(map[string]string{key: "1"})
+
+	if got := ui.GetColorProfile(); got != termenv.Ascii {
+		t.Fatalf("color profile with NO_COLOR set = %v, want Ascii", got)
+	}
+
+	restore()
+}
+
+func TestForceRecordingUIEnvNestedCallsOnlyRestoreOnOutermostExit(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	ui.InitFormatter(iolib.GetContext())
+	t.Cleanup(ui.ReinitFormatter)
+
+	const key = "FORCE_COLOR"
+	withRestoredEnv(t, key)
+
+	outerRestore := forceRecordingUIEnv(map[string]string{key: "1"})
+	innerRestore := forceRecordingUIEnv(map[string]string{key: "1"})
+
+	innerRestore()
+
+	// The outer scope is still active — env must still be forced.
+	if got, ok := os.LookupEnv(key); !ok || got != "1" {
+		t.Fatalf("%s after inner restore = (%q, %v), want (1, true) while outer scope is active", key, got, ok)
+	}
+
+	outerRestore()
+
+	if _, ok := os.LookupEnv(key); ok {
+		t.Fatalf("%s after outer restore should be unset", key)
+	}
+}
+
+func TestForceRecordingUIEnvNoopWhenNoRelevantKeysPresent(t *testing.T) {
+	restore := forceRecordingUIEnv(map[string]string{"SOME_OTHER_VAR": "x"})
+	restore() // must not panic
 }
 
 func TestRecordCastTypedLineWritesPromptAndCharactersAsEvents(t *testing.T) {

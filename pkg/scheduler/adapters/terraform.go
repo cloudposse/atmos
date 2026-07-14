@@ -25,13 +25,19 @@ import (
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
-	terraformDefaultCommand = "terraform"
-	terraformNodeIDFormat   = "%s-%s"
+	terraformDefaultCommand    = "terraform"
+	terraformNodeIDFormat      = "%s-%s"
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDeploy  = "deploy"
+	terraformSubCommandDestroy = "destroy"
+	terraformSubCommandInit    = "init"
 )
 
 const (
@@ -40,9 +46,9 @@ const (
 )
 
 const (
-	terraformPlanLogOrderStream  = "stream"
-	terraformPlanLogOrderGrouped = "grouped"
-	terraformPlanHideNoChanges   = "no-changes"
+	terraformLogOrderStream    = "stream"
+	terraformLogOrderGrouped   = "grouped"
+	terraformPlanHideNoChanges = "no-changes"
 )
 
 const (
@@ -148,7 +154,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 	// Debug, not Info: the user-facing "Processing components..." line is emitted once
 	// by the caller (e.g. ExecuteTerraformAll); this duplicate carries only the count.
-	if opts.Info.SubCommand == "destroy" {
+	if opts.Info.SubCommand == terraformSubCommandDestroy {
 		log.Debug("Processing components in reverse dependency order for destroy", "count", graph.Size())
 	} else {
 		log.Debug("Processing components in dependency order", "count", graph.Size())
@@ -193,7 +199,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if processedCount(result) == 0 {
 		ui.Success("No components matched")
 	}
-	if opts.Info.SubCommand == "plan" && terraformPlanChanged(result) {
+	if opts.Info.SubCommand == terraformSubCommandPlan && terraformPlanChanged(result) {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
@@ -245,22 +251,73 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) (*dependency.Graph, error) {
 	defer perf.Track(atmosConfig, "scheduler.adapters.FilterTerraformGraph")()
 
+	var filtered *dependency.Graph
 	if selection != nil {
-		return filterTerraformGraphBySelection(graph, selection), nil
+		filtered = filterTerraformGraphBySelection(graph, selection)
+	} else {
+		nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
+		if err != nil {
+			return nil, err
+		}
+		if len(nodeIDs) == graph.Size() {
+			filtered = graph
+		} else {
+			filtered = graph.Filter(dependency.Filter{
+				NodeIDs:             nodeIDs,
+				IncludeDependencies: false,
+				IncludeDependents:   false,
+			})
+		}
 	}
 
-	nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
-	if err != nil {
-		return nil, err
+	// Tags/labels compose with whichever selection produced the graph above
+	// (--all/--components/--query or a precomputed --affected selection), rather
+	// than being an alternative selection mechanism.
+	return filterTerraformGraphByTagsAndLabels(filtered, info), nil
+}
+
+// filterTerraformGraphByTagsAndLabels narrows graph nodes to those matching
+// info.Tags (any-match) and info.Labels (all-match), applied as an additional
+// pass after the primary selection. A no-op when neither is set.
+func filterTerraformGraphByTagsAndLabels(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) *dependency.Graph {
+	if info == nil || (len(info.Tags) == 0 && len(info.Labels) == 0) {
+		return graph
 	}
-	if len(nodeIDs) == graph.Size() {
-		return graph, nil
+
+	var nodeIDs []string
+	for _, id := range sortedGraphNodeIDs(graph) {
+		if matchesTerraformTagsAndLabels(graph.Nodes[id], info) {
+			nodeIDs = append(nodeIDs, id)
+		}
 	}
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
 		IncludeDependencies: false,
 		IncludeDependents:   false,
-	}), nil
+	})
+}
+
+// matchesTerraformTagsAndLabels reports whether a node's component metadata
+// matches the requested tags (any) and labels (all).
+func matchesTerraformTagsAndLabels(node *dependency.Node, info *schema.ConfigAndStacksInfo) bool {
+	if node == nil {
+		return false
+	}
+	metadataSection, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
+
+	if len(info.Tags) > 0 {
+		nodeTags := tags.ToStringSlice(metadataSection["tags"])
+		if !tags.MatchesTags(nodeTags, info.Tags, tags.TagModeAny) {
+			return false
+		}
+	}
+	if len(info.Labels) > 0 {
+		nodeLabels := tags.ToStringMap(metadataSection["labels"])
+		if !tags.MatchesLabels(nodeLabels, info.Labels) {
+			return false
+		}
+	}
+	return true
 }
 
 // filterTerraformGraphBySelection narrows graph using precomputed affected node IDs.
@@ -288,7 +345,7 @@ func filterTerraformGraphBySelection(graph *dependency.Graph, selection *Terrafo
 
 // prepareTerraformGraphForCommand adjusts graph ordering for command-specific execution.
 func prepareTerraformGraphForCommand(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) (*dependency.Graph, error) {
-	if info == nil || graph == nil || info.SubCommand != "destroy" {
+	if info == nil || graph == nil || info.SubCommand != terraformSubCommandDestroy {
 		return graph, nil
 	}
 	return reverseTerraformGraph(graph)
@@ -368,7 +425,7 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 
 // requiresTerraformAutoApprove reports whether concurrent execution must be explicitly approved.
 func requiresTerraformAutoApprove(info *schema.ConfigAndStacksInfo) bool {
-	return info != nil && (info.SubCommand == "apply" || info.SubCommand == "destroy")
+	return info != nil && (info.SubCommand == "apply" || info.SubCommand == terraformSubCommandDestroy)
 }
 
 // hasTerraformAutoApprove detects auto-approve from config, CLI flags, or Terraform env flags.
@@ -974,17 +1031,17 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	if maxConcurrency <= 1 && !hideNoChanges {
 		return nil, nil
 	}
-	logOrder := terraformPlanLogOrderStream
-	if info != nil && info.TerraformPlanLogOrder != "" {
-		logOrder = strings.ToLower(info.TerraformPlanLogOrder)
+	logOrder := terraformLogOrderStream
+	if info != nil && info.TerraformLogOrder != "" {
+		logOrder = strings.ToLower(info.TerraformLogOrder)
 	}
 	if hideNoChanges {
-		logOrder = terraformPlanLogOrderGrouped
+		logOrder = terraformLogOrderGrouped
 	}
 	switch logOrder {
-	case terraformPlanLogOrderStream, terraformPlanLogOrderGrouped:
+	case terraformLogOrderStream, terraformLogOrderGrouped:
 	default:
-		return nil, fmt.Errorf("%w: unsupported Terraform plan log order %q", errUtils.ErrInvalidConfig, logOrder)
+		return nil, fmt.Errorf("%w: unsupported Terraform log order %q", errUtils.ErrInvalidConfig, logOrder)
 	}
 	command := terraformOutputCommand(info)
 	logDir := terraformLogDir(atmosConfig, command)
@@ -998,7 +1055,7 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 // captureOutput reports whether the executor should capture stdout and stderr.
 func (o *terraformOutput) captureOutput() bool {
-	return o != nil && o.logOrder == terraformPlanLogOrderGrouped
+	return o != nil && o.logOrder == terraformLogOrderGrouped
 }
 
 // nodeWriters returns stdout/stderr writers, a flush function, and created log paths for a node.
@@ -1007,7 +1064,7 @@ func (o *terraformOutput) nodeWriters(node *dependency.Node) (io.Writer, io.Writ
 		return nil, nil, nil, nil
 	}
 	stdoutFile, stderrFile, logFiles := o.openNodeLogFiles(node)
-	if o.logOrder == terraformPlanLogOrderGrouped {
+	if o.logOrder == terraformLogOrderGrouped {
 		stdout := combineWriters(io.Discard, stdoutFile)
 		stderr := combineWriters(io.Discard, stderrFile)
 		return stdout, stderr, closeTerraformLogFiles(stdoutFile, stderrFile), logFiles
@@ -1087,7 +1144,7 @@ func closeTerraformLogFiles(files ...*os.File) func() error {
 }
 
 func terraformPlanHideNoChangesEnabled(info *schema.ConfigAndStacksInfo) (bool, error) {
-	if info == nil || info.SubCommand != "plan" {
+	if info == nil || info.SubCommand != terraformSubCommandPlan {
 		return false, nil
 	}
 	hideNoChanges := info.TerraformPlanHideNoChanges
@@ -1139,7 +1196,7 @@ func safeTerraformLogName(label string) string {
 
 // finishNode replays grouped node output after the node completes.
 func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExecutionResult, execErr error) {
-	if o == nil || o.logOrder != terraformPlanLogOrderGrouped {
+	if o == nil || o.logOrder != terraformLogOrderGrouped {
 		return
 	}
 	if o.hideNoChanges && terraformPlanHasNoChanges(result, execErr) {
@@ -1197,7 +1254,7 @@ func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) b
 
 // terraformPlanChangedError treats Terraform plan exit code 2 as a changed result.
 func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
-	if info == nil || info.SubCommand != "plan" {
+	if info == nil || info.SubCommand != terraformSubCommandPlan {
 		return false
 	}
 	var exitCodeErr errUtils.ExitCodeError
@@ -1487,7 +1544,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case "plan", "apply", "destroy":
+	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDeploy, terraformSubCommandDestroy, terraformSubCommandInit:
 		return true
 	default:
 		return false

@@ -92,7 +92,8 @@ func processTagTerraformOutputWithContext(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
+		log.Debug(
+			"Executing Atmos YAML function with component and output parameters; using current stack",
 			log.FieldFunction, input,
 			"stack", currentStack,
 		)
@@ -113,6 +114,12 @@ func processTagTerraformOutputWithContext(
 	if stackInfo != nil {
 		authContext = stackInfo.AuthContext
 		authManager = stackInfo.AuthManager
+		// Propagate AuthDisabled downstream even when no AuthManager was created (mirrors
+		// !terraform.state): the wrapper's stack info tells the output getter to skip resolving
+		// the target component's own auth section.
+		if authManager == nil && stackInfo.AuthDisabled {
+			authManager = &authContextWrapper{stackInfo: stackInfo}
+		}
 	}
 
 	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager)
@@ -120,7 +127,8 @@ func processTagTerraformOutputWithContext(
 		// Only use YQ defaults for recoverable terraform errors (state not provisioned, output not found).
 		// Non-recoverable errors (API failures, auth errors, infrastructure issues) should fail hard.
 		if isRecoverableTerraformError(err) && hasYqDefault(output) {
-			log.Debug("Evaluating YQ default for recoverable error",
+			log.Debug(
+				"Evaluating YQ default for recoverable error",
 				log.FieldFunction, input,
 				"error", err.Error(),
 			)
@@ -138,7 +146,8 @@ func processTagTerraformOutputWithContext(
 	// If the output doesn't exist, check if we can use YQ default.
 	if !exists {
 		if hasYqDefault(output) {
-			log.Debug("Evaluating YQ default for non-existent output",
+			log.Debug(
+				"Evaluating YQ default for non-existent output",
 				log.FieldFunction, input,
 				"component", component,
 				"stack", stack,
@@ -148,7 +157,8 @@ func processTagTerraformOutputWithContext(
 			defaultValue, yqErr := evaluateYqDefault(atmosConfig, output)
 			if yqErr != nil {
 				// If YQ evaluation fails, return nil (backward compatible).
-				log.Debug("YQ default evaluation failed, returning nil",
+				log.Debug(
+					"YQ default evaluation failed, returning nil",
 					log.FieldFunction, input,
 					"error", yqErr.Error(),
 				)
