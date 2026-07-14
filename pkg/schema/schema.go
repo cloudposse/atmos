@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
@@ -356,6 +357,7 @@ type ToolchainVerification struct {
 	Checksums       string `yaml:"checksums,omitempty" json:"checksums,omitempty" mapstructure:"checksums"`
 	Signatures      string `yaml:"signatures,omitempty" json:"signatures,omitempty" mapstructure:"signatures"`
 	VerifierInstall string `yaml:"verifier_install,omitempty" json:"verifier_install,omitempty" mapstructure:"verifier_install"`
+	VerifierTrust   string `yaml:"verifier_trust,omitempty" json:"verifier_trust,omitempty" mapstructure:"verifier_trust"`
 }
 
 // ToolchainRegistry defines a registry source for tool metadata.
@@ -772,6 +774,36 @@ type ShellConfig struct {
 // fully completed.
 type TerraformPlanCIResultHandler interface {
 	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
+}
+
+// ComponentNodeHooks fires per-component lifecycle hooks (user-defined
+// hooks.RunAll and CI hooks.RunCIHooks, before and after) around one
+// component's execution during a multi-component/bulk run — Terraform
+// (--all/--affected/--query/--components) — or around Helmfile's
+// single-component execution. Implemented in cmd/terraform and cmd/helmfile
+// respectively (both already depend on pkg/hooks) and injected via this
+// interface so pkg/scheduler/adapters and internal/exec stay decoupled from
+// pkg/hooks: pkg/hooks imports internal/exec, and internal/exec imports
+// pkg/scheduler/adapters, so a direct import from pkg/scheduler/adapters (or
+// internal/exec) to pkg/hooks would cycle.
+type ComponentNodeHooks interface {
+	// Before runs before-event hooks prior to one component's execution. A
+	// non-nil error aborts that component's execution without ever running
+	// it — mirroring how a failing before-hook in the single-component
+	// Terraform path prevents Cobra's RunE from ever running. hooks.RunAll
+	// already resolves each hook's on_failure mode internally
+	// (applyOnFailure): on_failure: warn/ignore already returns nil from
+	// RunAll, so most hook failures never reach here — a non-nil return
+	// specifically means on_failure: fail.
+	Before(ctx context.Context, info *ConfigAndStacksInfo) error
+
+	// After runs after-event hooks following one component's execution,
+	// including an executor error. It is not called when Before aborts
+	// execution. A non-nil return (again, only possible for on_failure: fail)
+	// must be treated as this component's execution failing, matching
+	// single-component Terraform behavior where an after-hook failure fails
+	// the command.
+	After(ctx context.Context, info *ConfigAndStacksInfo, output string, execErr error) error
 }
 
 // TerraformPlanCIResultSet contains deterministic per-node Terraform results
@@ -1584,11 +1616,14 @@ type ConfigAndStacksInfo struct {
 	ClusterName                string // EKS cluster name from --cluster-name flag.
 	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
 
-	// PerComponentHook is called after each component executes in multi-component mode
-	// (--all, --query, --components). Receives a snapshot of info with Component/Stack
-	// set to the executed component, combined stdout+stderr output, and the execution
-	// error (nil on success). Nil means no per-component callback.
-	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
+	// NodeHooks fires per-component lifecycle hooks (user hooks + CI hooks,
+	// before and after) for each component in a multi-component/bulk
+	// Terraform run, or around Helmfile's single-component execution. Nil
+	// means no per-component hooks are wired for this run (e.g.
+	// single-component Terraform invocations, which run hooks directly via
+	// cmd/terraform's PreRunE/PostRunE instead, since they don't go through
+	// a per-node dispatch loop).
+	NodeHooks ComponentNodeHooks
 
 	// TerraformPlanCIResultHandler is called once after a graph-backed
 	// multi-component Terraform plan/apply/destroy run completes. It

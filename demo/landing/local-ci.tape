@@ -25,7 +25,7 @@ Wait /❯$/
 Show
 
 Sleep 800ms
-Type `perl -i -pe 's/location: Stockholm/location: Berlin/' stacks/deploy/dev.yaml` Sleep 400ms Enter
+Type `atmos stack set vars.location Berlin -s dev -c myapp` Sleep 400ms Enter
 Wait /❯$/
 Type "git diff stacks/deploy/dev.yaml" Sleep 400ms Enter
 Wait /❯$/
