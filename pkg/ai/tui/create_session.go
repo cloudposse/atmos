@@ -33,6 +33,8 @@ type createSessionForm struct {
 func newCreateSessionForm() createSessionForm {
 	ti := textinput.New()
 	ti.Placeholder = "Enter session name"
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetBorderColor()))
+	ti.PlaceholderStyle = theme.GetCurrentStyles().Muted
 	ti.Focus()
 	ti.CharLimit = sessionNameCharLimit
 	ti.Width = sessionNameWidth
@@ -188,22 +190,7 @@ func (m *ChatModel) handleSessionCreated(msg sessionCreatedMsg) {
 	m.createForm = newCreateSessionForm()
 
 	// Add welcome message.
-	m.addMessage(roleAssistant, `I'm here to help you with your Atmos infrastructure management. I can:
-
-• Describe components and their configurations
-• List available components and stacks
-• Validate stack configurations
-• Generate Terraform plans (read-only)
-• Answer questions about Atmos concepts and best practices
-• Help debug configuration issues
-
-Try asking me something like:
-- "List all available components"
-- "Describe the vpc component in the dev stack"
-- "What are Atmos stacks?"
-- "How do I validate my stack configuration?"
-
-What would you like to know?`)
+	m.addWelcomeMessage()
 	m.updateViewportContent()
 }
 

@@ -200,6 +200,65 @@ func TestInstall_BundledWithCustomName(t *testing.T) {
 	assert.FileExists(t, filepath.Join(installPath, "SKILL.md"))
 }
 
+// TestInstallAllBundled covers `atmos ai skill install` with no <source>:
+// every bundled skill gets installed in one call, with a single upfront
+// confirmation rather than one per skill.
+func TestInstallAllBundled(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	catalog, err := Catalog()
+	require.NoError(t, err)
+	require.NotEmpty(t, catalog, "the embedded catalog must be non-empty for this test to be meaningful")
+
+	opts := &InstallOptions{SkipConfirm: true}
+	require.NoError(t, installer.InstallAllBundled(opts))
+
+	installed := installer.List()
+	assert.Len(t, installed, len(catalog))
+
+	// Spot-check a specific skill landed on disk and in the registry, not
+	// just that the count matches.
+	skill, err := installer.Get("atmos-terraform")
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(skill.Path, "SKILL.md"))
+
+	t.Run("re-running without --force skips everything already installed", func(t *testing.T) {
+		require.NoError(t, installer.InstallAllBundled(opts))
+		assert.Len(t, installer.List(), len(catalog), "no duplicates or new entries")
+	})
+
+	t.Run("re-running with --force reinstalls everything", func(t *testing.T) {
+		forceOpts := &InstallOptions{SkipConfirm: true, Force: true}
+		require.NoError(t, installer.InstallAllBundled(forceOpts))
+		assert.Len(t, installer.List(), len(catalog))
+	})
+}
+
+// TestInstallOneBundledSkill_Outcomes covers the three-way result
+// (installed/updated/skipped) the batch summary relies on to distinguish
+// fresh installs from --force updates and already-installed skips.
+func TestInstallOneBundledSkill_Outcomes(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	available, ok := LookupBundledSkill("atmos-terraform")
+	require.True(t, ok)
+
+	t.Run("fresh install reports outcomeInstalled", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true}
+		assert.Equal(t, outcomeInstalled, installer.installOneBundledSkill(&available, opts, nil))
+	})
+
+	t.Run("already installed without --force reports outcomeSkipped", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true}
+		assert.Equal(t, outcomeSkipped, installer.installOneBundledSkill(&available, opts, nil))
+	})
+
+	t.Run("already installed with --force reports outcomeUpdated", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true, Force: true}
+		assert.Equal(t, outcomeUpdated, installer.installOneBundledSkill(&available, opts, nil))
+	})
+}
+
 // TestInstall_BundledForceReplacesOnDiskDir covers the --force branch of
 // prepareInstallPath: an existing on-disk directory (with stale content that is
 // not in the registry) is removed and replaced rather than rejected.
