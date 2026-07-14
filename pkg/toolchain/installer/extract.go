@@ -107,14 +107,14 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 	}
 	defer os.RemoveAll(tempDir)
 
-	err = Unzip(zipPath, tempDir)
+	symlinks, err := unpackZip(zipPath, tempDir)
 	if err != nil {
 		return fmt.Errorf("%w: failed to extract ZIP: %w", ErrFileOperation, err)
 	}
 
 	// If Files config is provided, use the Src path to find the binary.
 	if len(tool.Files) > 0 {
-		return i.extractFilesFromDir(tempDir, binaryPath, tool)
+		return i.extractFilesFromDir(tempDir, binaryPath, tool, symlinks)
 	}
 
 	// Otherwise, fall back to searching for the binary by name.
@@ -204,7 +204,7 @@ func installExtractedBinary(src, dst string) error {
 //
 // Template variables in file.Src (e.g., {{.OS}}-{{.Arch}}/helm) are expanded
 // using the same template data as asset URLs.
-func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool) error {
+func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool, symlinks []pendingSymlink) error {
 	if len(tool.Files) == 0 {
 		return fmt.Errorf("%w: no files configured for extraction", ErrFileOperation)
 	}
@@ -214,7 +214,7 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 		return err
 	}
 
-	preserve, err := shouldPreserveTree(tempDir, eps)
+	preserve, err := shouldPreserveTree(tempDir, eps, symlinks)
 	if err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 	if preserve {
 		log.Debug("Installing multi-file (onedir) package: preserving archive tree",
 			"binary", filepath.Base(binaryPath), "entrypoints", len(eps))
-		return i.installOnedir(tempDir, binaryPath, eps)
+		return i.installOnedir(tempDir, binaryPath, eps, symlinks)
 	}
 
 	log.Debug("Installing single-binary package (flat layout)",
@@ -272,28 +272,44 @@ func (i *Installer) expandFileSrcTemplate(srcPath string, tool *registry.Tool) (
 	return buf.String(), nil
 }
 
-// Unzip extracts a zip archive to a destination directory.
-// Works on Windows, macOS, and Linux.
+// Unzip extracts a zip archive to a destination directory, discarding any
+// symlink entries. It works on Windows, macOS, and Linux and is the entry point
+// for callers that do not preserve an archive tree (a single binary is located
+// by name afterward). The onedir install path uses unpackZip instead, which
+// returns the collected symlinks for later, validated materialization.
 func Unzip(src, dest string) error {
 	defer perf.Track(nil, "toolchain.Unzip")()
+
+	_, err := unpackZip(src, dest)
+	return err
+}
+
+// unpackZip extracts a zip archive to dest and returns the symlink entries it
+// contains WITHOUT creating them. Deferring symlink creation keeps the archive
+// header data out of any os.Symlink call during extraction (see pendingSymlink);
+// onedir installs materialize the returned links afterward, in the final tree,
+// through the single validated sink createValidatedSymlink.
+func unpackZip(src, dest string) ([]pendingSymlink, error) {
+	defer perf.Track(nil, "toolchain.unpackZip")()
 
 	const maxDecompressedSize = maxDecompressedSizeMB * 1024 * 1024 // 3000MB limit per file.
 
 	r, err := zip.OpenReader(src)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer r.Close()
 
+	var symlinks []pendingSymlink
 	for _, f := range r.File {
-		if err := extractZipFile(f, dest, maxDecompressedSize); err != nil {
-			return err
+		if err := extractZipFile(f, dest, maxDecompressedSize, &symlinks); err != nil {
+			return nil, err
 		}
 	}
-	return nil
+	return symlinks, nil
 }
 
-func extractZipFile(f *zip.File, dest string, maxSize int64) error {
+func extractZipFile(f *zip.File, dest string, maxSize int64, symlinks *[]pendingSymlink) error {
 	fpath, err := validatePath(f.Name, dest)
 	if err != nil {
 		return err
@@ -303,9 +319,16 @@ func extractZipFile(f *zip.File, dest string, maxSize int64) error {
 		return os.MkdirAll(fpath, os.ModePerm)
 	}
 
-	// A zip symlink entry stores its target path as the entry's content.
+	// A zip symlink entry stores its target path as the entry's content. Defer
+	// its creation (never os.Symlink straight from archive data) by collecting
+	// it for validated materialization after the tree is in place.
 	if f.Mode()&os.ModeSymlink != 0 {
-		return extractZipSymlink(f, fpath, dest, maxSize)
+		target, err := readZipSymlinkTarget(f, maxSize)
+		if err != nil {
+			return err
+		}
+		*symlinks = append(*symlinks, pendingSymlink{rel: f.Name, target: target})
+		return nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
@@ -315,20 +338,21 @@ func extractZipFile(f *zip.File, dest string, maxSize int64) error {
 	return copyFileContents(f, fpath, maxSize)
 }
 
-// extractZipSymlink materializes a symlink stored in a zip archive, where the
-// link target is the entry's file content.
-func extractZipSymlink(f *zip.File, linkPath, dest string, maxSize int64) error {
+// readZipSymlinkTarget reads the link target stored as a zip symlink entry's
+// content. The value is not validated here; createValidatedSymlink sanitizes it
+// when the link is materialized.
+func readZipSymlinkTarget(f *zip.File, maxSize int64) (string, error) {
 	rc, err := f.Open()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer rc.Close()
 
 	buf, err := io.ReadAll(io.LimitReader(rc, maxSize))
 	if err != nil {
-		return fmt.Errorf("%w: failed to read symlink target for %s: %w", ErrFileOperation, f.Name, err)
+		return "", fmt.Errorf("%w: failed to read symlink target for %s: %w", ErrFileOperation, f.Name, err)
 	}
-	return extractSymlink(linkPath, string(buf), dest)
+	return string(buf), nil
 }
 
 func validatePath(name, dest string) (string, error) {
@@ -383,22 +407,39 @@ func copyWithLimit(src io.Reader, dst io.Writer, name string, maxSize int64) err
 	return nil
 }
 
-// ExtractTarGz extracts a .tar.gz file to the given destination directory.
+// ExtractTarGz extracts a .tar.gz file to the given destination directory,
+// discarding any symlink entries. It is the entry point for callers that do not
+// preserve an archive tree (a single binary is located by name afterward). The
+// onedir install path uses unpackTarGz instead, which returns the collected
+// symlinks for later, validated materialization.
 func ExtractTarGz(src, dest string) error {
 	defer perf.Track(nil, "toolchain.ExtractTarGz")()
 
+	_, err := unpackTarGz(src, dest)
+	return err
+}
+
+// unpackTarGz extracts a .tar.gz file to dest and returns the symlink entries it
+// contains WITHOUT creating them. Deferring symlink creation keeps the archive
+// header data out of any os.Symlink call during extraction (see pendingSymlink);
+// onedir installs materialize the returned links afterward, in the final tree,
+// through the single validated sink createValidatedSymlink.
+func unpackTarGz(src, dest string) ([]pendingSymlink, error) {
+	defer perf.Track(nil, "toolchain.unpackTarGz")()
+
 	f, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("%w: failed to open source file: %w", ErrFileOperation, err)
+		return nil, fmt.Errorf("%w: failed to open source file: %w", ErrFileOperation, err)
 	}
 	defer f.Close()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create gzip reader: %w", ErrFileOperation, err)
+		return nil, fmt.Errorf("%w: failed to create gzip reader: %w", ErrFileOperation, err)
 	}
 	defer gzr.Close()
 
+	var symlinks []pendingSymlink
 	tr := tar.NewReader(gzr)
 	for {
 		header, err := tr.Next()
@@ -406,17 +447,17 @@ func ExtractTarGz(src, dest string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("%w: error reading tar: %w", ErrFileOperation, err)
+			return nil, fmt.Errorf("%w: error reading tar: %w", ErrFileOperation, err)
 		}
 
-		if err := extractEntry(tr, header, dest); err != nil {
-			return err
+		if err := extractEntry(tr, header, dest, &symlinks); err != nil {
+			return nil, err
 		}
 	}
-	return nil
+	return symlinks, nil
 }
 
-func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
+func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink) error {
 	//nolint:gosec // G305: Path is validated by isSafePath check on next line.
 	targetPath := filepath.Join(dest, header.Name)
 	if !isSafePath(targetPath, dest) {
@@ -429,9 +470,13 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
 	case tar.TypeReg:
 		return extractFile(tr, targetPath, header)
 	case tar.TypeSymlink:
-		// Preserve symlink entrypoints (e.g. nodejs npm/npx/corepack) instead of
-		// dropping them, so onedir packages install completely.
-		return extractSymlink(targetPath, header.Linkname, dest)
+		// Defer symlink creation: never create a symlink directly from archive
+		// header data during extraction (that archive -> os.Symlink flow is a
+		// zip-slip write primitive). onedir installs materialize the collected
+		// symlinks afterward, in the final tree, via a single validated sink
+		// (see materializeSymlinks / createValidatedSymlink).
+		*symlinks = append(*symlinks, pendingSymlink{rel: header.Name, target: header.Linkname})
+		return nil
 	case tar.TypeLink:
 		return extractHardLink(targetPath, header.Linkname, dest)
 	default:
@@ -486,13 +531,14 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool
 	}
 	defer os.RemoveAll(tempDir)
 
-	if err = ExtractTarGz(tarPath, tempDir); err != nil {
+	symlinks, err := unpackTarGz(tarPath, tempDir)
+	if err != nil {
 		return fmt.Errorf("%w: failed to extract tar.gz: %w", ErrFileOperation, err)
 	}
 
 	// If Files config is provided, use the Src path to find the binary.
 	if len(tool.Files) > 0 {
-		return i.extractFilesFromDir(tempDir, binaryPath, tool)
+		return i.extractFilesFromDir(tempDir, binaryPath, tool, symlinks)
 	}
 
 	// Otherwise, fall back to searching for the binary by name.
@@ -533,9 +579,11 @@ func (i *Installer) extractPkg(pkgPath, binaryPath string, tool *registry.Tool) 
 		return fmt.Errorf("%w: pkgutil failed: %w\nOutput: %s", ErrFileOperation, err, string(output))
 	}
 
-	// If Files config is provided, use it to find binaries.
+	// If Files config is provided, use it to find binaries. pkgutil expands the
+	// package to disk (materializing any of its own symlinks itself), so there
+	// are no deferred symlinks to thread through here.
 	if len(tool.Files) > 0 {
-		return i.extractFilesFromDir(tempDir, binaryPath, tool)
+		return i.extractFilesFromDir(tempDir, binaryPath, tool, nil)
 	}
 
 	// Otherwise, fall back to searching for the binary by name.
