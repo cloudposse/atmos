@@ -15,8 +15,13 @@ import (
 )
 
 const (
-	// MaxLockRetries is the number of times to retry acquiring a lock.
-	maxLockRetries = 50
+	// MaxLockRetries is the number of times to retry acquiring a lock. At
+	// lockRetryDelay between attempts, this gives a 2s total budget — enough
+	// slack for legitimate contention (e.g. several goroutines calling
+	// Set/Delete against the same cache directory's single lock file
+	// concurrently) on a loaded CI runner without hanging indefinitely on a
+	// genuinely stuck/orphaned lock.
+	maxLockRetries = 200
 	// LockRetryDelay is the delay between lock retry attempts.
 	lockRetryDelay = 10 * time.Millisecond
 )

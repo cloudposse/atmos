@@ -524,6 +524,21 @@ var (
 	ErrMissingWorkingDir     = errors.New("working directory is required")
 	ErrMissingProviderSource = errors.New("required_providers entry missing 'source' field")
 
+	// Archive package errors (pkg/archive).
+	ErrArchiveUnknownFormat           = errors.New("unknown or unsupported archive format")
+	ErrArchiveActionNotImplemented    = errors.New("archive action is not yet implemented")
+	ErrArchiveUpdateUnsupportedFormat = errors.New("archive update is not supported for this format")
+	ErrArchiveOptionsRequired         = errors.New("archive options are required")
+	ErrArchiveSourceRequired          = errors.New("archive source is required")
+	ErrArchiveSourceNotFound          = errors.New("archive source does not exist")
+	ErrArchiveDestinationRequired     = errors.New("archive destination is required")
+	ErrArchiveInvalidGlobPattern      = errors.New("invalid archive include/exclude glob pattern")
+	ErrArchiveInvalidSubpath          = errors.New("invalid archive subpath")
+	ErrArchiveFormatNotImplemented    = errors.New("archive format is not yet implemented")
+	ErrArchiveWriteFailed             = errors.New("failed to write archive")
+	ErrArchiveWalkFailed              = errors.New("failed to walk archive source")
+	ErrArchiveInvalidMtimeMode        = errors.New("invalid archive mtime mode")
+
 	// List command errors.
 	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
 	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
@@ -741,6 +756,8 @@ var (
 	ErrHTTPStepRequestFailed         = errors.New("http request failed")
 	ErrHTTPStepUnexpectedStatus      = errors.New("http response did not match expected status")
 	ErrHTTPStepUnexpectedResponse    = errors.New("http response body did not match expected pattern")
+	ErrArchiveStepInvalidAction      = errors.New("invalid action for archive step")
+	ErrArchiveStepInvalidSource      = errors.New("archive step source must be a string path")
 	ErrRequireStepEmpty              = errors.New("require step must specify at least one of tools, files, or dirs")
 	ErrRequirementsNotMet            = errors.New("required tools or paths are missing")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
