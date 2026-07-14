@@ -397,8 +397,8 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 	}
 	bootstrap := *r.installer
 	bootstrap.verificationPolicy = verification.Policy{
-		Checksums:       verification.PolicyDisabled,
-		Signatures:      verification.PolicyDisabled,
+		Checksums:       verification.PolicyWhenAvailable,
+		Signatures:      verification.PolicyDisabled, // Avoid circularity: verifying cosign's signature would itself need cosign.
 		VerifierInstall: verification.VerifierInstallPathOnly,
 	}
 	version, err := bootstrap.resolveVerifierInstallVersion(owner, repo)
@@ -409,8 +409,19 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 	if err != nil {
 		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, name, err)
 	}
+	if r.policy.VerifierTrust != verification.VerifierTrustDisabled {
+		if trustErr := trustVerifierBinaryFunc(binaryPath); trustErr != nil {
+			log.Warn("Could not mark downloaded verifier binary as locally trusted; the next command may fail",
+				"path", binaryPath, "error", trustErr)
+		}
+	}
 	return runVerifierCommand(ctx, binaryPath, args...)
 }
+
+// trustVerifierBinaryFunc indirects trustVerifierBinary so tests can observe
+// and override the platform-specific trust step without depending on
+// darwin-only behavior.
+var trustVerifierBinaryFunc = trustVerifierBinary
 
 func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
 	var lookupErrs []error

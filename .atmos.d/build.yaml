@@ -47,9 +47,10 @@ commands:
           - command: cd "$(git rev-parse --show-toplevel)" && go mod download
             type: shell
             retry:
-              max_attempts: 3
-              initial_delay: 10s
-              backoff_strategy: constant
+              max_attempts: 5
+              initial_delay: 5s
+              max_delay: 60s
+              backoff_strategy: exponential
 
       - name: binary
         description: Build the Atmos binary

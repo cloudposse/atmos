@@ -266,6 +266,62 @@ func TestUsageErrorHelpersExit(t *testing.T) {
 		_ = showFlagUsageAndExit(known, errors.New("unknown flag: --bad"))
 	})
 	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		exitCode = 0
+		showArgCountErrorAndExit(known, errors.New("accepts 1 arg(s), received 2"))
+	})
+	assert.Equal(t, 1, exitCode)
+}
+
+// TestShowArgCountErrorAndExit_MessageContent locks in the fix for a
+// misleading-error regression: a leaf command (no subcommands) whose Args
+// validator fails on argument count (e.g. `atmos config delete a b` against
+// cobra.ExactArgs(1)) must report the actual "wrong argument count" cause,
+// never "Unknown command <first-arg>" -- the first arg is often a perfectly
+// valid value, just accompanied by too many/few others.
+func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
+	_ = NewTestKit(t)
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+	errUtils.OsExit = func(int) {
+		panic("exit")
+	}
+
+	deleteCmd := &cobra.Command{
+		Use:  "delete",
+		Args: cobra.ExactArgs(1),
+	}
+	parent := &cobra.Command{Use: "config"}
+	parent.AddCommand(deleteCmd)
+
+	argErr := deleteCmd.Args(deleteCmd, []string{"mcp.enabled", "true"})
+	require.Error(t, argErr)
+
+	oldStderr := os.Stderr
+	r, w, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+	})
+
+	assert.Panics(t, func() {
+		showArgCountErrorAndExit(deleteCmd, argErr)
+	})
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+
+	var output bytes.Buffer
+	_, err := io.Copy(&output, r)
+	require.NoError(t, err)
+
+	got := output.String()
+	assert.Contains(t, got, argErr.Error(), "must surface Cobra's own argument-count message")
+	assert.NotContains(t, got, "Unknown command", "must not misreport a wrong-argument-count error as an unknown command")
 }
 
 func TestHandlePathResolutionError(t *testing.T) {
