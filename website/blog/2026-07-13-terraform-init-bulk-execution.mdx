@@ -1,0 +1,42 @@
+---
+slug: terraform-init-bulk-execution
+title: "Bulk `terraform init --all` and `--affected`"
+authors: [osterman]
+tags: [feature]
+---
+
+Bulk commands like `terraform apply`, `plan`, and `destroy` could already run across every component in dependency order with `--all`, but `init` couldn't — reinitializing a whole stack meant scripting a loop over components yourself, or falling back to one-at-a-time runs.
+
+<!--truncate-->
+
+## The Problem
+
+- Bulk execution flags `--all` and `--affected` landed on `apply`/`plan`/`destroy` when Terraform bulk execution moved onto the scheduler-backed dependency graph, but `init` was left out.
+- Reinitializing every component after a provider upgrade, or bootstrapping a new environment, meant looping `atmos terraform init <component> -s <stack>` by hand.
+- The scheduler also capped concurrency to `1` for any subcommand it didn't explicitly recognize, so there was no way to route around it either.
+
+## The Fix
+
+- `terraform init` now accepts `--all`, `--affected`, `--max-concurrency`, `--failure-mode`, and `--log-order`, matching `destroy`.
+- Init keeps the natural forward dependency order — prerequisites before dependents — unlike `destroy`, which reverses the graph.
+- Concurrent bulk init automatically disables the shared provider plugin cache for worker subprocesses, since sharing it isn't safe across concurrent `terraform init` runs.
+
+## How to Use It
+
+```shell
+# Initialize every Terraform component, in dependency order
+atmos terraform init --all -s prod
+
+# Initialize only the affected components
+atmos terraform init --affected
+
+# Run independent components concurrently
+atmos terraform init --all -s prod --max-concurrency 4
+
+# Keep going past a failed component instead of stopping
+atmos terraform init --all -s prod --failure-mode keep-going
+```
+
+## Get Involved
+
+Have a bulk-execution flag you'd like to see on another command? Open an issue or join the discussion on [GitHub](https://github.com/cloudposse/atmos).
