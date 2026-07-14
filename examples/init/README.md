@@ -19,6 +19,9 @@ Learn more in the [Init Command Documentation](https://atmos.tools/cli/commands/
 
 - Interactive and non-interactive `atmos init` usage
 - Generating `atmos.yaml`, stacks, and components from the `basic` template
+- Provisioning the generated project for real — `atmos terraform apply` on
+  the `greeting` component, a local-only resource that needs no cloud
+  account or emulator
 - Where to find the fuller catalog templates (`aws/app`, `aws/landing-zone`,
   `gcp/landing-zone`, `azure/landing-zone`)
 
@@ -39,7 +42,7 @@ atmos scaffold list
 
 | Template | Purpose |
 |----------|---------|
-| `basic` | Minimal, cloud-agnostic layout — `atmos.yaml`, one stack, an empty components dir |
+| `basic` | Minimal, cloud-agnostic layout — `atmos.yaml`, one stack, and a real local `greeting` component (no cloud account needed) |
 | `simple` | A slightly fuller starter project |
 | `atmos` | Convention-following full project skeleton |
 | `aws/app` | Application SDLC repository for AWS (see `examples/scaffolds/aws/app`) |

@@ -6,39 +6,129 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &init_fixture "../../.context/cast-fixtures/init"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: rm -rf my-project || true
       - type: cast
         name: init-basic
-        working_directory: "../../.context/cast-fixtures/init"
+        working_directory: *init_fixture
         title: "atmos init: bootstrap a new project"
-        mode: steps
+        mode: session
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 250ms
+        timeout: 60s
         defaults:
           cast: !include cast-defaults.yaml .cast
-          simulate: !include cast-defaults.yaml .simulate
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          PS1: '$ '
         show:
           labels: false
         output:
           mode: raw
           cast: "../../website/static/casts/examples/init/init-basic.cast"
-        env: !include cast-defaults.yaml .env.recording
         steps:
-          - type: simulate
+          # Interactive prompting: real keystrokes drive the actual huh
+          # prompts (project name input, environments multiselect), not a
+          # scripted --set bypass -- this is what mode: session is for.
+          - type: pause
+            duration: 500ms
+          - type: write
             text: "# bootstrap a brand-new Atmos project from a built-in template"
-          - type: simulate
-            text: &init_cmd atmos init basic ./my-project --set project_name=my-project
-          - type: shell
-            name: init-basic
-            duration: 550ms
-            interval: 900ms
-            command: *init_cmd
-          - type: simulate
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos init basic ./my-project"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Project name"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Which environments do you need?"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: down
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: space
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Generated 11 files."
+            timeout: 15s
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "cd my-project"
+          - type: key
+            key: enter
+          - type: write
+            text: "# only the environments you selected were generated"
+          - type: key
+            key: enter
+          - type: write
+            text: "ls stacks/"
+          - type: key
+            key: enter
+          - type: wait
+            text: "staging.yaml"
+            timeout: 10s
+          - type: pause
+            duration: 500ms
+          - type: write
             text: "# the generated project is immediately valid, no manual wiring needed"
-          - type: simulate
-            text: &validate_cmd atmos --chdir=my-project validate stacks
-          - type: shell
-            name: validate-stacks
-            duration: 450ms
-            interval: 750ms
-            command: *validate_cmd
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos validate stacks"
+          - type: key
+            key: enter
+          - type: wait
+            # "All stacks validated" and " successfully" render as two
+            # separately-styled spans (an SGR reset/re-color sequence sits
+            # between them) -- wait actions match against the raw,
+            # un-stripped output, so the full phrase never appears as one
+            # contiguous substring. Match the unstyled-boundary prefix
+            # instead; the offline validate script below checks the full
+            # phrase against ANSI-stripped text, where this isn't an issue.
+            text: "All stacks validated"
+            timeout: 15s
+          - type: pause
+            duration: 700ms
+          # Deliberately ends here rather than running a real `terraform
+          # apply`/`destroy`: a real terraform subprocess under this
+          # scripted PTY (no terminal emulator to answer its capability-probe
+          # escape sequences) reliably stalls for a long, variable amount of
+          # time before falling back and continuing -- confirmed by direct
+          # reproduction outside this harness. atmos commands that don't
+          # spawn terraform as a subprocess (validate, the init prompts
+          # themselves) are unaffected. The interactive multiselect -> only
+          # the selected stacks exist -> stacks validate story is complete
+          # without it; see the aws-landing-zone-lifecycle example for a
+          # full apply/destroy lifecycle demo recorded in mode: steps.
       - type: script
         name: sanitize
         interpreter: python3
@@ -81,15 +171,27 @@ commands:
           assert_colored(text, "All stacks validated successfully")
           for needle in [
               "# bootstrap a brand-new Atmos project",
+              "Project name",
+              "Which environments do you need?",
               "Generating basic in",
               "atmos.yaml",
               "stacks/dev.yaml",
-              "Generated 6 files.",
+              "stacks/staging.yaml",
+              # The unselected "prod" environment is expected to appear here,
+              # explicitly marked skipped -- that's the conditional-generation
+              # feature being demonstrated, not a leak. What must never
+              # appear is stacks/prod.yaml actually being created (checked
+              # below via the `ls stacks/` output, which lists only
+              # _defaults.yaml, dev.yaml, and staging.yaml).
+              "stacks/prod.yaml (skipped)",
+              "Generated 11 files.",
+              "# only the environments you selected were generated",
+              "_defaults.yaml\tdev.yaml\tstaging.yaml",
               "All stacks validated successfully",
           ]:
               if needle not in plain:
                   raise SystemExit(f"init-basic cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[init-basic]", "[validate-stacks]"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
               if bad in plain:
                   raise SystemExit(f"init-basic cast contains {bad!r}")
           assert_no_error_output(text)

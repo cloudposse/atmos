@@ -7,24 +7,28 @@ Minimal Atmos project created with `atmos init basic`.
 
 - `atmos.yaml` — Atmos CLI configuration (component and stack paths, stack naming)
 - `stacks/_defaults.yaml` — shared configuration imported by every stack
-- `stacks/dev.yaml` — the `dev` stack (sets `vars.stage: dev`)
-- `components/terraform/` — where your Terraform components live
+- One stack file per environment you selected, each with the `greeting`
+  component enabled (sets `vars.stage` to the environment name):
+{{ range .Config.environments }}  - `stacks/{{ . }}.yaml`
+{{ end -}}
+- `components/terraform/greeting/` — a real, local-only Terraform component
+  (no cloud account or emulator needed)
 
 ## Next Steps
 
-1. Add a Terraform component under `components/terraform/<name>/`
-2. Configure it in `stacks/dev.yaml` (see the commented example)
-3. Validate your configuration:
+1. Try out the generated `greeting` component in any environment you selected:
 
    ```shell
    atmos validate stacks
+   atmos terraform apply greeting -s {{ index .Config.environments 0 }}
    ```
 
-4. Plan and apply the component:
+2. Add your own Terraform component under `components/terraform/<name>/`,
+   configure it in a stack file, then plan and apply it the same way:
 
    ```shell
-   atmos terraform plan <name> -s dev
-   atmos terraform apply <name> -s dev
+   atmos terraform plan <name> -s {{ index .Config.environments 0 }}
+   atmos terraform apply <name> -s {{ index .Config.environments 0 }}
    ```
 
 ## Learn More

@@ -256,9 +256,21 @@ func TestConfiguration_BasicMetadata(t *testing.T) {
 
 // renderBasicTemplate renders the embedded "basic" template into a temp
 // directory using the same engine the init command uses, and returns the
-// (absolute) target directory.
+// (absolute) target directory. This renders every file unconditionally
+// (bypassing spec.files[].when: gating, which only applies in the real
+// generation path), so README.md's reference to .Config.environments always
+// needs a value; callers that don't care about it get a default of ["dev"].
 func renderBasicTemplate(t *testing.T, values map[string]interface{}) string {
 	t.Helper()
+
+	if _, ok := values["environments"]; !ok {
+		withDefault := make(map[string]interface{}, len(values)+1)
+		for k, v := range values {
+			withDefault[k] = v
+		}
+		withDefault["environments"] = []string{"dev"}
+		values = withDefault
+	}
 
 	configs, err := GetAvailableConfigurations()
 	require.NoError(t, err)
@@ -316,9 +328,17 @@ func listRenderedFiles(t *testing.T, targetDir string) []string {
 }
 
 // TestBasicTemplate_Render verifies that rendering the "basic" template
-// produces the exact expected file set with correct contents.
+// produces the exact expected file set with correct contents. This renders
+// every file in the raw template (bypassing spec.files[].when: gating, which
+// only applies in the real generation path — see
+// TestExecuteWithSetup_BasicTemplate_EnvironmentsGating in pkg/generator/ui
+// for that), so all three stack files are always present here regardless of
+// the "environments" value passed.
 func TestBasicTemplate_Render(t *testing.T) {
-	targetDir := renderBasicTemplate(t, map[string]interface{}{"project_name": "test-proj"})
+	targetDir := renderBasicTemplate(t, map[string]interface{}{
+		"project_name": "test-proj",
+		"environments": []string{"dev"},
+	})
 	rendered := listRenderedFiles(t, targetDir)
 
 	expected := []string{
@@ -326,8 +346,14 @@ func TestBasicTemplate_Render(t *testing.T) {
 		"README.md",
 		"atmos.yaml",
 		"components/terraform/README.md",
+		"components/terraform/greeting/main.tf",
+		"components/terraform/greeting/outputs.tf",
+		"components/terraform/greeting/variables.tf",
+		"components/terraform/greeting/versions.tf",
 		"stacks/_defaults.yaml",
 		"stacks/dev.yaml",
+		"stacks/prod.yaml",
+		"stacks/staging.yaml",
 	}
 	require.Equal(t, expected, rendered)
 
@@ -348,7 +374,7 @@ backend.tf.json
 `
 	assert.Equal(t, expectedGitignore, string(gitignore))
 
-	// Assert the last file (stacks/dev.yaml) by value: copied verbatim.
+	// Assert stacks/dev.yaml by value: copied verbatim.
 	devStack, err := os.ReadFile(filepath.Join(targetDir, "stacks", "dev.yaml"))
 	require.NoError(t, err)
 	expectedDevStack := `# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
@@ -362,25 +388,30 @@ import:
 vars:
   stage: dev
 
-# Define components for this stack. For example, after adding a Terraform
-# component under ` + "`components/terraform/my-component`" + `:
-#
-# components:
-#   terraform:
-#     my-component:
-#       vars:
-#         enabled: true
-#
-# Then run:
-#   atmos terraform plan my-component -s dev
+# ` + "`greeting`" + ` is a real, local-only Terraform component (no cloud account or
+# emulator required) — it proves the generated project actually applies.
+# Add your own components the same way, then run:
+#   atmos terraform plan <name> -s dev
+components:
+  terraform:
+    greeting:
+      vars: {}
 `
 	assert.Equal(t, expectedDevStack, string(devStack))
 
-	// The README is a template: the project name must be substituted and the
-	// magic comment stripped.
+	// Assert stacks/staging.yaml differs from dev.yaml only in the stage name.
+	stagingStack, err := os.ReadFile(filepath.Join(targetDir, "stacks", "staging.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(stagingStack), "stage: staging")
+	assert.Contains(t, string(stagingStack), "greeting:")
+
+	// The README is a template: the project name must be substituted, the
+	// selected environments listed, and the magic comment stripped.
 	readme, err := os.ReadFile(filepath.Join(targetDir, "README.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(readme), "# test-proj")
+	assert.Contains(t, string(readme), "`stacks/dev.yaml`")
+	assert.Contains(t, string(readme), "-s dev")
 	assert.NotContains(t, string(readme), "atmos:template")
 	assert.NotContains(t, string(readme), "{{")
 }
