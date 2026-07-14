@@ -359,6 +359,19 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 
 	versionDir := filepath.Dir(binaryPath)
 	treeDir := filepath.Join(versionDir, onedirTreeName)
+	backupDir := treeDir + onedirBackupSuffix
+
+	// Recover from an interrupted prior run BEFORE doing anything else: if the
+	// tree was renamed aside but the replacement never completed, treeDir is
+	// missing while backupDir holds the only good install. Restore it first so a
+	// restart (even one that then fails) cannot delete the sole surviving copy.
+	if !dirExists(treeDir) && dirExists(backupDir) {
+		if err := os.Rename(backupDir, treeDir); err != nil {
+			return fmt.Errorf("%w: failed to restore backup tree %s: %w", ErrFileOperation, backupDir, err)
+		}
+	}
+	// Any remaining backup is now stale residue from a completed prior run.
+	_ = os.RemoveAll(backupDir)
 
 	// Validate before replacing an existing install.
 	resolvedEntrypoints, err := resolveOnedirEntrypoints(stagingDir, eps, deferred, goos)
@@ -368,8 +381,6 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 
 	// Rename aside so a failed move, materialization, or manifest write can roll
 	// back to the known-good install.
-	backupDir := treeDir + onedirBackupSuffix
-	_ = os.RemoveAll(backupDir)
 	hadExisting := dirExists(treeDir)
 	if hadExisting {
 		if err := os.Rename(treeDir, backupDir); err != nil {

@@ -1019,6 +1019,38 @@ func TestInstallOnedir_ReinstallReplacesTreeAndClearsBackup(t *testing.T) {
 	assert.Equal(t, "NEW", string(got))
 }
 
+// TestInstallOnedir_RecoversInterruptedBackup verifies that a run interrupted
+// right after the tree was renamed aside (treeDir missing, only backupDir holds
+// the good install) does not lose that install: the next run restores the
+// backup first, so even a subsequent failed reinstall leaves the good tree
+// intact. Before the fix, the leading os.RemoveAll(backupDir) deleted the sole
+// surviving copy.
+func TestInstallOnedir_RecoversInterruptedBackup(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+
+	// Simulate the interrupted state: treeDir is ABSENT; the only good install
+	// survives in the backup directory.
+	backupDir := treeDir + onedirBackupSuffix
+	writeFileUnder(t, backupDir, "old/tool", "KNOWN-GOOD")
+
+	// A reinstall that fails validation (missing entrypoint) must not destroy
+	// the recovered install.
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "REPLACEMENT")
+	eps := []entrypoint{{name: "tool", src: "new/missing"}} // absent -> validation fails
+
+	err := (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps, nil, nil)
+	require.Error(t, err)
+
+	// The known-good install was recovered from the backup and preserved.
+	got, err := os.ReadFile(filepath.Join(treeDir, "old", "tool"))
+	require.NoError(t, err)
+	assert.Equal(t, "KNOWN-GOOD", string(got))
+	assert.NoDirExists(t, backupDir, "no backup residue should remain")
+}
+
 // TestInstallOnedir_ManifestFailureRestoresExistingTree verifies that a failed
 // manifest write during reinstall rolls back to the known-good tree instead of
 // leaving a new tree with no manifest. The failure is injected by occupying the
@@ -1521,6 +1553,16 @@ func TestExtractHardLink(t *testing.T) {
 	t.Run("rejects a target that escapes dest", func(t *testing.T) {
 		dest := t.TempDir()
 		err := extractHardLink(filepath.Join(dest, "h"), "../../../../etc/passwd", dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("rejects an absolute target", func(t *testing.T) {
+		dest := t.TempDir()
+		// A genuinely OS-absolute target (volume-qualified on Windows).
+		absTarget := filepath.Join(t.TempDir(), "outside")
+		require.True(t, filepath.IsAbs(absTarget))
+		err := extractHardLink(filepath.Join(dest, "h"), absTarget, dest)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
