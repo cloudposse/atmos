@@ -17,7 +17,6 @@ vendor:
   #   base_path: "./vendor.yaml"          # Single file
   #   base_path: "./vendor.d/"            # Directory containing multiple vendor configuration files
   base_path: "./vendor.yaml"
-
 components:
   terraform:
     # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
@@ -57,7 +56,6 @@ components:
     helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
     cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
-
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
   # Supports both absolute and relative paths
@@ -70,12 +68,10 @@ stacks:
     - "**/_defaults.yaml"
   # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
-
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
   # Supports both absolute and relative paths
   base_path: "stacks/workflows"
-
 logs:
   # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
   # File or standard file descriptor to write logs to
@@ -84,47 +80,33 @@ logs:
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
-
 validate:
   # The configuration settings for the editorconfig-checker.
-
   editorconfig:
     # A list of file paths or patterns to exclude from checks.
     exclude: []
-
     # If set to true, the default ignore patterns (like .git/*) will not be applied.
     ignore_defaults: false
-
     # Runs the checker without making any changes or producing output, useful for testing configuration.
     dry_run: false
-
     # Specifies the output format. Options: "default", "json".
     format: "default"
-
     # Enables/Disables colored output in the terminal if .
     color: true
-
     # Disables checking for trailing whitespace at the end of lines.
     disable_trim_trailing_whitespace: false
-
     # Disables checking for consistent line endings (e.g., LF vs. CRLF).
     disable_end_of_line: false
-
     # Disables checking for the presence of a newline at the end of files.
     disable_insert_final_newline: false
-
     # Disables checking for consistent indentation style (e.g., tabs or spaces).
     disable_indentation: false
-
     # Disables checking for consistent indentation size (e.g., 2 spaces or 4 spaces).
     disable_indent_size: false
-
     # Disables checking for lines exceeding a maximum length.
     disable_max_line_length: false
-
 # Integrations
 integrations:
-
   # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
@@ -135,7 +117,6 @@ integrations:
     # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to 'stdout'
     # On Linux/macOS, you can also use '--output-path=/dev/stdout' to dump the content to 'stdout' without setting it to an empty string in 'atlantis.path'
     path: "atlantis.yaml"
-
     # Config templates
     # Select a template by using the '--config-template <config_template>' command-line argument in 'atmos atlantis generate repo-config' command
     config_templates:
@@ -149,7 +130,6 @@ integrations:
           - dev/
           - staging/
           - prod/
-
     # Project templates
     # Select a template by using the '--project-template <project_template>' command-line argument in 'atmos atlantis generate repo-config' command
     project_templates:
@@ -167,7 +147,6 @@ integrations:
             - "varfiles/$PROJECT_NAME.tfvars.json"
         apply_requirements:
           - "approved"
-
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
@@ -183,14 +162,12 @@ integrations:
         apply:
           steps:
             - run: terraform apply $PLANFILE
-
   # GitHub integration
   github:
     gitops:
       opentofu-version: 1.8.4
       terraform-version: 1.9.8
       infracost-enabled: false
-
 # Validation schemas (for validating atmos stacks and components)
 schemas:
   # https://json-schema.org
@@ -204,20 +181,19 @@ schemas:
     # Supports both absolute and relative paths
     # If not specified in `atmos.yaml` in `schemas.atmos.manifest`, an embedded schema will be used
     base_path: "stacks/schemas/opa"
-  # JSON Schema to validate Atmos manifests
-  # https://atmos.tools/cli/schemas/
-  # https://atmos.tools/cli/commands/validate/stacks/
-  # https://atmos.tools/quick-start/advanced/configure-validation/
-  # https://json-schema.org/draft/2020-12/release-notes
-  # https://www.schemastore.org/json
-  # https://github.com/SchemaStore/schemastore
-  # atmos:
-  # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
-  # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
-  # Supports URLs like https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
-  #   manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
-  #   manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
-
+    # JSON Schema to validate Atmos manifests
+    # https://atmos.tools/cli/schemas/
+    # https://atmos.tools/cli/commands/validate/stacks/
+    # https://atmos.tools/quick-start/advanced/configure-validation/
+    # https://json-schema.org/draft/2020-12/release-notes
+    # https://www.schemastore.org/json
+    # https://github.com/SchemaStore/schemastore
+    # atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
+    # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
+    # Supports URLs like https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+    #   manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+    #   manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 # `Go` templates in Atmos manifests
 # https://atmos.tools/core-concepts/stacks/templates
 # https://pkg.go.dev/text/template
@@ -234,7 +210,6 @@ templates:
       timeout: 5
       # https://docs.gomplate.ca/datasources
       datasources: {}
-
 settings:
   # `list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
   # Can also be set using 'ATMOS_SETTINGS_LIST_MERGE_STRATEGY' environment variable, or '--settings-list-merge-strategy' command-line argument
@@ -247,20 +222,17 @@ settings:
   #            If the source and destination lists have the same length, all items in the destination lists are
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
-
   # Terminal settings for displaying content
   terminal:
-    max_width: 120          # Maximum width for terminal output
-    pager: false            # Pager setting for all terminal output
-    unicode: true           # Use unicode characters
-
+    max_width: 120 # Maximum width for terminal output
+    pager: false # Pager setting for all terminal output
+    unicode: true # Use unicode characters
     syntax_highlighting:
       enabled: true
-      formatter: terminal   # Output formatter (e.g., terminal, html)
-      theme: dracula        # Highlighting theme
-      line_numbers: true    # Display line numbers
-      wrap: false           # Wrap long lines
-
+      formatter: terminal # Output formatter (e.g., terminal, html)
+      theme: dracula # Highlighting theme
+      line_numbers: true # Display line numbers
+      wrap: false # Wrap long lines
   # Markdown element styling
   markdown:
     document:
@@ -280,7 +252,6 @@ settings:
     emph:
       color: "${colors.muted}"
       italic: true
-
 docs:
   generate:
     # Generate README in current working directory
@@ -289,7 +260,7 @@ docs:
       input:
         - "./README.yaml"
       # To Do: template can be a remote URL/github, using this local for testing
-      template:  "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl"
+      template: "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl"
       # The final README
       output: "./README.md"
       terraform:
@@ -302,7 +273,6 @@ docs:
         sort_by: "name"
         hide_empty: false
         indent_level: 2
-
 # CI build cache (dogfooded in .github/workflows/test.yml). The cache archives
 # the Atmos XDG cache root (~/.cache/atmos), where CI keeps toolchain installs,
 # and Terraform's provider plugin cache. The key is defined here (once) rather
@@ -319,16 +289,25 @@ ci:
     key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2'
     restore_keys:
       - 'atmos-toolchain-{{.OS}}-{{.Arch}}-'
-
 toolchain:
   registries:
     # Default Aqua registry
     - name: aqua
       type: aqua
       priority: 10
-
 version:
   check:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
+ai:
+  enabled: true
+mcp:
+  enabled: true
+  servers:
+    atmos:
+      command: atmos
+      args:
+        - mcp
+        - start
+      description: Atmos's own AI tools (describe, list, validate, ...) exposed via MCP

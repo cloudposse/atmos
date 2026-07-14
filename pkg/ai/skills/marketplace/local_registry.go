@@ -204,3 +204,18 @@ func GetSkillsDir() (string, error) {
 
 	return filepath.Join(homeDir, ".atmos", "skills"), nil
 }
+
+// ResolveSkillsDir returns the directory where skill files should be installed,
+// honoring an explicit override (e.g. from --path / ATMOS_AI_SKILL_PATH). A relative
+// override is resolved against the current working directory. When override is
+// empty, delegates to GetSkillsDir().
+func ResolveSkillsDir(override string) (string, error) {
+	if override == "" {
+		return GetSkillsDir()
+	}
+	abs, err := filepath.Abs(override)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve skills directory override %q: %w", override, err)
+	}
+	return abs, nil
+}
