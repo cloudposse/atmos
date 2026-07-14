@@ -219,7 +219,7 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 func printInstallSuccess(displayName, version, installPath string) error {
 	ui.Successf("Skill %q installed successfully", displayName)
 	ui.Infof("Version: %s", version)
-	ui.Infof("Location: %s", redactHomePath(installPath))
+	ui.Infof("Location: `%s`", redactHomePath(installPath))
 	return nil
 }
 
@@ -327,7 +327,7 @@ func tallyBatchOutcomes(outcomes []batchInstallOutcome) (installed, updated, ski
 
 // formatBatchInstallSummary renders the final tally for a batch install as
 // the spinner's completion message, distinguishing new installs from --force
-// updates, where distributionDesc is the comma-joined "`client` (dir)"
+// updates, where distributionDesc is the comma-joined "`client` (`dir`)"
 // fragment from resolveDistributionClientsForBatch. When non-empty it's
 // woven into this same message rather than left to the spinner's
 // in-progress line, because ExecWithSpinnerDynamic only prints the progress
@@ -339,7 +339,11 @@ func tallyBatchOutcomes(outcomes []batchInstallOutcome) (installed, updated, ski
 // no clients were resolved) -- it's the only location that matters then.
 func formatBatchInstallSummary(installed, updated int, skillsDir, distributionDesc string) string {
 	total := installed + updated
-	suffix := " in " + redactHomePath(skillsDir)
+	// Backtick-wrapped so the Markdown renderer treats it as a code span:
+	// CommonMark backslash-escapes (e.g. "\." before a dot-directory like
+	// ".atmos") would otherwise silently swallow the separator in a
+	// Windows path (see redactHomePath).
+	suffix := " in `" + redactHomePath(skillsDir) + "`"
 	if distributionDesc != "" {
 		suffix = " → " + distributionDesc
 	}
@@ -1027,7 +1031,7 @@ func (i *Installer) resolveDistributionClientsForBatch(basePath string, opts *In
 			described[idx] = BacktickJoin([]string{client})
 			continue
 		}
-		described[idx] = fmt.Sprintf("`%s` (%s)", client, redactHomePath(dir))
+		described[idx] = fmt.Sprintf("`%s` (`%s`)", client, redactHomePath(dir))
 	}
 	return clients, strings.Join(described, ", ")
 }
