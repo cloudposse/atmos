@@ -1,6 +1,8 @@
 package kubernetes
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -117,6 +120,8 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringFlag("ssh-key", "", "", "Path to the SSH private key used to clone the target ref for affected detection."),
 		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
+		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 	}
 
 	if name == "render" {
@@ -151,7 +156,15 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	if all && affected {
 		return errUtils.ErrKubernetesFlagsMutuallyExclusive
 	}
-	if all || affected {
+
+	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
+	labelsFlag, _ := cmd.Flags().GetString("labels")
+	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
+		return err
+	}
+	hasTagsOrLabels := len(tagsFlag) > 0 || labelsFlag != ""
+
+	if all || affected || hasTagsOrLabels {
 		return validateSelectionFlags(cmd, args)
 	}
 	if len(args) != 1 {
@@ -241,6 +254,13 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	}
 	if affectedFlag := cmd.Flag(flagAffected); affectedFlag != nil && affectedFlag.Value.String() == valueTrue {
 		info.Affected = true
+	}
+	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
+		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
+	}
+	if labelsFlag := cmd.Flag("labels"); labelsFlag != nil {
+		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
+		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
 	}
 
 	return info

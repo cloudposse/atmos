@@ -25,6 +25,7 @@ import (
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -250,22 +251,73 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) (*dependency.Graph, error) {
 	defer perf.Track(atmosConfig, "scheduler.adapters.FilterTerraformGraph")()
 
+	var filtered *dependency.Graph
 	if selection != nil {
-		return filterTerraformGraphBySelection(graph, selection), nil
+		filtered = filterTerraformGraphBySelection(graph, selection)
+	} else {
+		nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
+		if err != nil {
+			return nil, err
+		}
+		if len(nodeIDs) == graph.Size() {
+			filtered = graph
+		} else {
+			filtered = graph.Filter(dependency.Filter{
+				NodeIDs:             nodeIDs,
+				IncludeDependencies: false,
+				IncludeDependents:   false,
+			})
+		}
 	}
 
-	nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
-	if err != nil {
-		return nil, err
+	// Tags/labels compose with whichever selection produced the graph above
+	// (--all/--components/--query or a precomputed --affected selection), rather
+	// than being an alternative selection mechanism.
+	return filterTerraformGraphByTagsAndLabels(filtered, info), nil
+}
+
+// filterTerraformGraphByTagsAndLabels narrows graph nodes to those matching
+// info.Tags (any-match) and info.Labels (all-match), applied as an additional
+// pass after the primary selection. A no-op when neither is set.
+func filterTerraformGraphByTagsAndLabels(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) *dependency.Graph {
+	if info == nil || (len(info.Tags) == 0 && len(info.Labels) == 0) {
+		return graph
 	}
-	if len(nodeIDs) == graph.Size() {
-		return graph, nil
+
+	var nodeIDs []string
+	for _, id := range sortedGraphNodeIDs(graph) {
+		if matchesTerraformTagsAndLabels(graph.Nodes[id], info) {
+			nodeIDs = append(nodeIDs, id)
+		}
 	}
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
 		IncludeDependencies: false,
 		IncludeDependents:   false,
-	}), nil
+	})
+}
+
+// matchesTerraformTagsAndLabels reports whether a node's component metadata
+// matches the requested tags (any) and labels (all).
+func matchesTerraformTagsAndLabels(node *dependency.Node, info *schema.ConfigAndStacksInfo) bool {
+	if node == nil {
+		return false
+	}
+	metadataSection, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
+
+	if len(info.Tags) > 0 {
+		nodeTags := tags.ToStringSlice(metadataSection["tags"])
+		if !tags.MatchesTags(nodeTags, info.Tags, tags.TagModeAny) {
+			return false
+		}
+	}
+	if len(info.Labels) > 0 {
+		nodeLabels := tags.ToStringMap(metadataSection["labels"])
+		if !tags.MatchesLabels(nodeLabels, info.Labels) {
+			return false
+		}
+	}
+	return true
 }
 
 // filterTerraformGraphBySelection narrows graph using precomputed affected node IDs.
