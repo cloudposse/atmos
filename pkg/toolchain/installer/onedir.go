@@ -161,49 +161,68 @@ func isIgnorableExtraFile(rel string) bool {
 }
 
 // shouldPreserveTree decides whether an extracted archive is a multi-file
-// ("onedir") bundle that must be kept intact. It returns true when the tree
-// contains files beyond the declared entrypoints and the ignorable-docs
-// allowlist — i.e. potential runtime siblings (shared libraries, node_modules).
+// ("onedir") bundle that must be kept intact, versus a self-contained single
+// binary that can be installed flat.
 //
-// This is the onedir gate. It errs toward preserving the tree (correctness for
-// bundles like aws-cli/node), while keeping genuinely single-binary tools on the
-// flat layout (bounded blast radius).
+// This is the onedir gate. It preserves the tree when either:
+//   - a declared entrypoint is itself a symlink in the archive (e.g. Node's
+//     npm/npx -> ../lib/...), which only resolves with the whole tree present; or
+//   - the PRIMARY entrypoint's own directory contains a non-entrypoint, non-doc
+//     file — a bundled runtime or shared library the binary loads at runtime,
+//     as with aws-cli's dist/libpython... (runtime siblings live next to the
+//     binary).
+//
+// Files in unrelated subdirectories (completions/, manpages/, sbom/, ...) and
+// documentation next to the binary do NOT trigger onedir, so a self-contained
+// single binary that merely ships docs/completions/man pages stays flat
+// (bounded blast radius).
 func shouldPreserveTree(root string, eps []entrypoint) (bool, error) {
 	defer perf.Track(nil, "installer.shouldPreserveTree")()
 
-	entrySet := make(map[string]struct{}, len(eps))
-	for _, ep := range eps {
-		entrySet[filepath.Clean(ep.src)] = struct{}{}
+	if len(eps) == 0 {
+		return false, nil
 	}
 
-	preserve := false
-	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	// A symlinked entrypoint needs the whole tree preserved to resolve.
+	for _, ep := range eps {
+		if info, err := os.Lstat(filepath.Join(root, ep.src)); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return true, nil
 		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return relErr
-		}
-		rel = filepath.Clean(rel)
-		if _, isEntry := entrySet[rel]; isEntry {
-			return nil // The entrypoint itself is expected, not "extra" payload.
-		}
-		if isIgnorableExtraFile(rel) {
-			return nil // Docs do not count as runtime siblings.
-		}
-		// A non-entrypoint, non-doc file (or symlink) means the tool ships
-		// runtime siblings: preserve the whole tree. Stop walking early.
-		preserve = true
-		return filepath.SkipAll
-	})
-	if walkErr != nil {
-		return false, fmt.Errorf("%w: failed to inspect extracted archive: %w", ErrFileOperation, walkErr)
 	}
-	return preserve, nil
+
+	// Recognize entrypoints by their archive-relative path, tolerating the
+	// Windows `.exe` suffix that registry files[].src usually omits (e.g. src
+	// "tofu" matches the archive file "tofu.exe").
+	entrySet := make(map[string]struct{}, 2*len(eps))
+	for _, ep := range eps {
+		clean := filepath.Clean(ep.src)
+		entrySet[clean] = struct{}{}
+		entrySet[clean+windowsExeExt] = struct{}{}
+	}
+
+	// Inspect only the directory that holds the primary entrypoint (non-recursive):
+	// runtime siblings live beside the binary, not in unrelated subdirectories.
+	primaryRelDir := filepath.Clean(filepath.Dir(eps[0].src))
+	entries, err := os.ReadDir(filepath.Join(root, primaryRelDir))
+	if err != nil {
+		return false, fmt.Errorf("%w: failed to inspect extracted archive: %w", ErrFileOperation, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		rel := filepath.Clean(filepath.Join(primaryRelDir, e.Name()))
+		if _, isEntry := entrySet[rel]; isEntry {
+			continue // A declared entrypoint (or its .exe form) is not "extra".
+		}
+		if isIgnorableExtraFile(e.Name()) {
+			continue // Docs/man/completions do not count as runtime siblings.
+		}
+		// A non-entrypoint, non-doc file (or symlink) beside the binary means the
+		// tool ships runtime siblings: preserve the whole tree.
+		return true, nil
+	}
+	return false, nil
 }
 
 // installFlat installs the configured entrypoints directly into the version dir

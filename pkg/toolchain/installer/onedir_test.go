@@ -162,6 +162,44 @@ func TestShouldPreserveTree(t *testing.T) {
 			},
 			want: true,
 		},
+		{
+			// gum/k9s shape: a self-contained binary shipping completions/ and
+			// manpages/ in SUBDIRS stays flat (subdir files are not siblings).
+			name: "completions and manpages subdirs stay flat",
+			eps:  []entrypoint{{name: "gum", src: "gum_0.17.0/gum"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "gum_0.17.0/gum", "bin")
+				writeFileUnder(t, root, "gum_0.17.0/LICENSE", "license")
+				writeFileUnder(t, root, "gum_0.17.0/README.md", "readme")
+				writeFileUnder(t, root, "gum_0.17.0/completions/gum.bash", "comp")
+				writeFileUnder(t, root, "gum_0.17.0/manpages/gum.1", "man")
+			},
+			want: false,
+		},
+		{
+			// kots shape: a single binary with an sbom/ subdir stays flat.
+			name: "sbom subdir stays flat",
+			eps:  []entrypoint{{name: "kots", src: "kots"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "kots", "bin")
+				writeFileUnder(t, root, "LICENSE", "license")
+				writeFileUnder(t, root, "sbom/kots-sbom.tgz", "sbom")
+			},
+			want: false,
+		},
+		{
+			// Windows: the archive carries `tofu.exe` while the registry src is
+			// `tofu` (no extension). The `.exe` variant must be recognized as the
+			// entrypoint, not treated as an extra file that forces onedir.
+			name: "windows .exe entrypoint stays flat",
+			eps:  []entrypoint{{name: "tofu", src: "tofu"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "tofu.exe", "bin")
+				writeFileUnder(t, root, "LICENSE", "license")
+				writeFileUnder(t, root, "CHANGELOG.md", "changes")
+			},
+			want: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -174,6 +212,29 @@ func TestShouldPreserveTree(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// TestShouldPreserveTree_SymlinkEntrypoint verifies that a symlinked entrypoint
+// (Node's npm/npx -> ../lib/...) forces onedir even when the binary's own
+// directory has no other non-doc files. Requires creating a real symlink, so
+// it's Unix-only (Node's Windows archive uses real .cmd files, not symlinks).
+func TestShouldPreserveTree_SymlinkEntrypoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating a symlink requires privilege on Windows")
+	}
+
+	root := t.TempDir()
+	writeFileUnder(t, root, "node-v1/bin/node", "NODE")
+	writeFileUnder(t, root, "node-v1/lib/npm-cli.js", "NPM")
+	require.NoError(t, os.Symlink("../lib/npm-cli.js", filepath.Join(root, "node-v1", "bin", "npm")))
+
+	eps := []entrypoint{
+		{name: "node", src: "node-v1/bin/node"},
+		{name: "npm", src: "node-v1/bin/npm"},
+	}
+	got, err := shouldPreserveTree(root, eps)
+	require.NoError(t, err)
+	assert.True(t, got, "a symlinked entrypoint must force onedir")
 }
 
 func TestIsIgnorableExtraFile(t *testing.T) {
@@ -450,14 +511,20 @@ func TestExtractSymlinkForOS_Validation(t *testing.T) {
 
 	t.Run("rejects an absolute target", func(t *testing.T) {
 		root := t.TempDir()
-		err := extractSymlinkForOS(filepath.Join(root, "link"), filepath.FromSlash("/etc/passwd"), root, runtime.GOOS)
+		// Use a genuinely OS-absolute path outside root (a Unix-style "/etc/..."
+		// is NOT absolute on Windows, where filepath.IsAbs requires a volume).
+		absOutside := filepath.Join(t.TempDir(), "evil")
+		require.True(t, filepath.IsAbs(absOutside))
+		err := extractSymlinkForOS(filepath.Join(root, "link"), absOutside, root, runtime.GOOS)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
 	t.Run("rejects a target escaping root", func(t *testing.T) {
 		root := t.TempDir()
-		err := extractSymlinkForOS(filepath.Join(root, "node", "bin", "npm"), "../../../../etc/passwd", root, runtime.GOOS)
+		// A relative "../" climb escapes on every platform.
+		escaping := filepath.Join("..", "..", "..", "..", "etc", "passwd")
+		err := extractSymlinkForOS(filepath.Join(root, "node", "bin", "npm"), escaping, root, runtime.GOOS)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1185,6 +1252,45 @@ func TestMoveTree_CopyFallback(t *testing.T) {
 // kubectl, ...) are laid out on disk. It passes on the pre-change code (which
 // always flattens) and must keep passing after the onedir change (the gate must
 // keep single-file archives flat).
+// TestExtractFilesFromDir_Flat_SelfContainedBinaryWithExtras is a regression
+// guard for the CI failure where gum/kots (self-contained single binaries that
+// ship completions/, manpages/, sbom/, and docs) were wrongly installed as
+// onedir, breaking the flat `<versionDir>/<binary>` path consumers rely on.
+// Such tools MUST stay flat: the binary lands directly in the version dir with
+// no `.pkg` tree and no manifest.
+func TestExtractFilesFromDir_Flat_SelfContainedBinaryWithExtras(t *testing.T) {
+	tmp := t.TempDir()
+	staging := filepath.Join(tmp, "staging")
+	// gum-shaped: binary at the root of its top dir, docs beside it, and
+	// completions/manpages in subdirs.
+	writeFileUnder(t, staging, "gum_0.17.0/gum", "GUM-BINARY")
+	writeFileUnder(t, staging, "gum_0.17.0/LICENSE", "license")
+	writeFileUnder(t, staging, "gum_0.17.0/README.md", "readme")
+	writeFileUnder(t, staging, "gum_0.17.0/completions/gum.bash", "comp")
+	writeFileUnder(t, staging, "gum_0.17.0/manpages/gum.1", "man")
+
+	inst := &Installer{binDir: tmp}
+	versionDir := filepath.Join(tmp, "charmbracelet", "gum", "0.17.0")
+	binaryPath := filepath.Join(versionDir, "gum")
+	tool := &registry.Tool{Files: []registry.File{{Name: "gum", Src: "gum_0.17.0/gum"}}}
+
+	require.NoError(t, inst.extractFilesFromDir(staging, binaryPath, tool))
+
+	// Flat: the binary is a regular file directly in the version dir.
+	info, err := os.Lstat(binaryPath)
+	require.NoError(t, err)
+	require.True(t, info.Mode().IsRegular(), "self-contained binary must install flat, got mode %s", info.Mode())
+	got, err := os.ReadFile(binaryPath)
+	require.NoError(t, err)
+	assert.Equal(t, "GUM-BINARY", string(got))
+
+	// No onedir artifacts.
+	_, statErr := os.Stat(filepath.Join(versionDir, onedirTreeName))
+	assert.True(t, os.IsNotExist(statErr), "must not create a %q tree", onedirTreeName)
+	_, ok := readOnedirManifest(versionDir)
+	assert.False(t, ok, "must not write a onedir manifest for a flat install")
+}
+
 func TestExtraction_FlatLayout_SingleBinary_Unchanged(t *testing.T) {
 	const script = "#!/bin/sh\necho hello\n"
 
