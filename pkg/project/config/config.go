@@ -22,8 +22,10 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/generator/types"
+	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -90,6 +92,66 @@ type ScaffoldSpec struct {
 	// Values holds the user's answers. Written to project records; may also
 	// provide preset values in template manifests.
 	Values map[string]any `yaml:"values,omitempty" json:"values,omitempty" jsonschema:"description=Field values (answers) keyed by field name"`
+	// Files optionally gates generation of specific auto-discovered template
+	// files based on collected answers. Files not listed here always
+	// generate (subject to the existing path-templating skip behavior).
+	Files []FileSpec `yaml:"files,omitempty" json:"files,omitempty" jsonschema:"description=Conditional generation overlay keyed by each file's discovered path"`
+	// Hooks runs step-backed actions around generation, keyed by hook name.
+	// Reuses the exact schema and vocabulary of stack-level lifecycle hooks
+	// (events, kind, when, type, with) -- see pkg/hooks.Hook and the
+	// atmos-hooks skill. Only kind: step and kind: steps are supported for
+	// scaffold hooks; the events are before.scaffold.generate and
+	// after.scaffold.generate. Kept as a raw map (not map[string]hooks.Hook)
+	// because pkg/hooks.Hook has no json tags -- like the stacks JSON Schema,
+	// which hand-authors its own "hooks" definition rather than reflecting
+	// the Go struct, this stays untyped for schema purposes and is decoded
+	// into hooks.Hook via DecodeHooks at the point of use.
+	Hooks map[string]any `yaml:"hooks,omitempty" json:"hooks,omitempty" jsonschema:"description=Step-backed hooks around generation reusing the stack-level hooks vocabulary"`
+}
+
+// DecodeHooks converts a ScaffoldSpec's raw Hooks map into typed
+// pkg/hooks.Hook values by round-tripping through YAML, the same technique
+// pkg/hooks.StepFromHook uses to decode a hook's own `with:` block -- Hook
+// is designed to unmarshal from YAML, not to be reflected into JSON Schema.
+func DecodeHooks(raw map[string]any) (map[string]hooks.Hook, error) {
+	defer perf.Track(nil, "config.DecodeHooks")()
+
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	data, err := yaml.Marshal(raw)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidScaffoldSection).
+			WithCause(err).
+			WithExplanation("Failed to encode the scaffold `hooks:` block").
+			Err()
+	}
+
+	decoded := make(map[string]hooks.Hook, len(raw))
+	if err := yaml.Unmarshal(data, &decoded); err != nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidScaffoldSection).
+			WithCause(err).
+			WithExplanation("Failed to decode the scaffold `hooks:` block").
+			Err()
+	}
+	return decoded, nil
+}
+
+// FileSpec optionally gates whether an auto-discovered template file is
+// generated, based on the collected field answers.
+type FileSpec struct {
+	// Path is the file's path as discovered in the template's file tree
+	// (matched against the file's original, pre-template-rendering path).
+	Path string `yaml:"path" json:"path" jsonschema:"description=File path as discovered in the template's file tree"`
+	// When gates generation of this file. Evaluated against the collected
+	// answers (as the `answers` CEL variable); a false result skips the
+	// file entirely. Empty always generates the file. Schema-restricted to
+	// a predicate/CEL string or a list (implicit all) -- the {all:/any:/not:}
+	// map form is deliberately excluded here (see the comment on
+	// FieldDefinition.When for why) even though pkg/condition itself parses
+	// it; use CEL's &&/||/! instead.
+	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file is generated,oneof_type=string;array"`
 }
 
 // FieldValidation constrains the allowed values for a FieldDefinition.
@@ -112,6 +174,16 @@ type FieldDefinition struct {
 	Options     []string         `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Choices for select and multiselect fields"`
 	Placeholder string           `yaml:"placeholder,omitempty" json:"placeholder,omitempty" jsonschema:"description=Placeholder text for input fields"`
 	Validation  *FieldValidation `yaml:"validation,omitempty" json:"validation,omitempty" jsonschema:"description=Optional validation constraints for this field"`
+	// When gates whether this field is prompted for, evaluated against
+	// answers collected from fields declared earlier in Fields (as the
+	// `answers` CEL variable). Empty always prompts. Schema-restricted to a
+	// predicate/CEL string or a list (implicit all): invopop reflects
+	// Condition's oneOf branches alongside a sibling additionalProperties:
+	// false (Condition has no exported fields), so including "object" here
+	// would make the {all:/any:/not:} map form fail schema validation even
+	// though pkg/condition parses it -- confirmed empirically, not assumed.
+	// Use CEL's &&/||/! for compound conditions instead.
+	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this field is prompted for,oneof_type=string;array"`
 }
 
 // Config represents the user's configuration values as a generic map to support dynamic fields from scaffold.yaml.
@@ -281,7 +353,9 @@ func isMissingValue(value interface{}) bool {
 // MissingRequiredValues returns the names of required fields that have no
 // usable (non-nil, non-empty-string) value in the provided values map. Used
 // to fail fast in non-interactive mode instead of generating a broken
-// project.
+// project. A field whose When condition evaluates false against the
+// already-known values is not prompted for interactively either, so it is
+// never treated as missing here.
 func MissingRequiredValues(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) []string {
 	defer perf.Track(nil, "config.MissingRequiredValues")()
 
@@ -289,6 +363,9 @@ func MissingRequiredValues(scaffoldConfig *ScaffoldConfig, values map[string]int
 	for i := range scaffoldConfig.Spec.Fields {
 		field := &scaffoldConfig.Spec.Fields[i]
 		if !field.Required {
+			continue
+		}
+		if !field.When.Evaluate(condition.Context{Answers: values}) {
 			continue
 		}
 		value, exists := values[field.Name]
@@ -367,7 +444,9 @@ func initializeFormValues(scaffoldConfig *ScaffoldConfig, userValues map[string]
 }
 
 // buildConfigForm builds the configuration form preserving the field order
-// declared in the template.
+// declared in the template. Each field gets its own huh.Group so a field
+// declaring When can hide its group based on answers collected from fields
+// declared earlier (huh runs groups sequentially, one page at a time).
 // Returns the form and value getters for extracting values after submission.
 // Returns a nil form when the template declares no fields.
 func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]interface{}) (*huh.Form, map[string]func() interface{}, error) {
@@ -382,10 +461,12 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 	_ = v.BindEnv("ACCESSIBLE")
 	accessible := v.GetBool("ACCESSIBLE")
 
-	// Store value getters for after form completion
+	// Store value getters for after form completion. Also read live (by a
+	// hidden field's WithHideFunc closure below) to answer "what has the
+	// user entered so far" during the form session itself.
 	valueGetters := make(map[string]func() interface{})
 
-	var groupFields []huh.Field
+	var groups []*huh.Group
 	for i := range scaffoldConfig.Spec.Fields {
 		field := &scaffoldConfig.Spec.Fields[i]
 		if _, exists := valueGetters[field.Name]; exists {
@@ -400,13 +481,40 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 				Err()
 		}
 		huhField, getter := createField(field.Name, field, formValues)
-		groupFields = append(groupFields, huhField)
 		valueGetters[field.Name] = getter
+
+		group := huh.NewGroup(huhField)
+		if !field.When.IsZero() {
+			group = group.WithHideFunc(fieldHideFunc(field.When, valueGetters))
+		}
+		groups = append(groups, group)
 	}
 
-	huhForm := huh.NewForm(huh.NewGroup(groupFields...)).WithAccessible(accessible)
+	huhForm := huh.NewForm(groups...).WithAccessible(accessible)
 
 	return huhForm, valueGetters, nil
+}
+
+// snapshotAnswers reads the current live value of every field's getter into
+// a plain map, for evaluating a later field's When condition against
+// answers collected so far. Getters for fields not yet reached by the user
+// simply return their zero/default value, which a well-formed When
+// referencing only earlier-declared fields never observes.
+func snapshotAnswers(valueGetters map[string]func() interface{}) map[string]any {
+	answers := make(map[string]any, len(valueGetters))
+	for name, getter := range valueGetters {
+		answers[name] = getter()
+	}
+	return answers
+}
+
+// fieldHideFunc builds the huh.Group.WithHideFunc closure for a field
+// declaring When: the group is hidden whenever When evaluates false against
+// a live snapshot of every other field's current answer.
+func fieldHideFunc(when condition.Condition, valueGetters map[string]func() interface{}) func() bool {
+	return func() bool {
+		return !when.Evaluate(condition.Context{Answers: snapshotAnswers(valueGetters)})
+	}
 }
 
 // runFormInteraction is the seam used to execute a huh form.

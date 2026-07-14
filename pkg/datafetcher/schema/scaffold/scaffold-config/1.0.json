@@ -101,6 +101,34 @@
                   "boolean"
                 ],
                 "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "description": "Optional validation constraints for this field",
+                "properties": {
+                  "message": {
+                    "description": "Error message shown when validation fails",
+                    "type": "string"
+                  },
+                  "pattern": {
+                    "description": "Regular expression the value must match",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "when": {
+                "additionalProperties": false,
+                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this field is prompted for",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array"
+                  }
+                ],
+                "properties": {}
               }
             },
             "required": [
@@ -109,6 +137,40 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "files": {
+          "description": "Conditional generation overlay keyed by each file's discovered path",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "description": "File path as discovered in the template's file tree",
+                "type": "string"
+              },
+              "when": {
+                "additionalProperties": false,
+                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this file is generated",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array"
+                  }
+                ],
+                "properties": {}
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "hooks": {
+          "description": "Step-backed hooks around generation reusing the stack-level hooks vocabulary",
+          "type": "object"
         },
         "source": {
           "description": "Where the template came from (written to project records)",

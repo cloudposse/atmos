@@ -17,10 +17,13 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/generator/scaffoldhooks"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/project/config"
@@ -74,6 +77,28 @@ const (
 func fileExistsAt(targetPath, relativePath string) bool {
 	info, err := os.Stat(filepath.Join(targetPath, relativePath))
 	return err == nil && !info.IsDir()
+}
+
+// toEngineFile converts a template-loaded file (tmpl.File) to the shape the
+// templating engine's Processor consumes (engine.File).
+func toEngineFile(file tmpl.File) engine.File {
+	return engine.File{
+		Path:        file.Path,
+		Content:     file.Content,
+		IsTemplate:  file.IsTemplate,
+		Permissions: file.Permissions,
+	}
+}
+
+// fileConditionsByPath indexes a scaffold config's spec.files overlay by
+// declared path, for O(1) lookup during the file-generation loop. Files not
+// listed in the overlay generate unconditionally.
+func fileConditionsByPath(scaffoldConfig *config.ScaffoldConfig) map[string]condition.Condition {
+	whenByPath := make(map[string]condition.Condition, len(scaffoldConfig.Spec.Files))
+	for _, f := range scaffoldConfig.Spec.Files {
+		whenByPath[f.Path] = f.When
+	}
+	return whenByPath
 }
 
 // truncateString truncates a string to the specified length and adds "..." if truncated.
@@ -258,6 +283,7 @@ type InitUI struct {
 	processor    *engine.Processor
 	ioCtx        iolib.Context
 	term         terminal.Terminal
+	skipHooks    func(string) bool
 }
 
 // NewInitUI creates a new InitUI instance.
@@ -291,6 +317,14 @@ func (ui *InitUI) SetDryRun(dryRun bool) {
 // (merge.ConflictStrategyManual) is today's existing behavior.
 func (ui *InitUI) SetConflictStrategy(strategy merge.ConflictStrategy) {
 	ui.processor.SetConflictStrategy(strategy)
+}
+
+// SetSkipHooks configures the --skip-hooks predicate (see
+// hooks.NewSkipPredicate) consulted before running any scaffold hook. A nil
+// predicate (the zero value) runs every hook, matching today's behavior for
+// templates that don't set one.
+func (ui *InitUI) SetSkipHooks(skip func(string) bool) {
+	ui.skipHooks = skip
 }
 
 // GetTerminalWidth returns the current terminal width with a fallback.
@@ -629,16 +663,8 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 			continue
 		}
 
-		// Process the file using the templating processor
-		// Convert tmpl.File to engine.File
-		templatingFile := engine.File{
-			Path:        file.Path,
-			Content:     file.Content,
-			IsTemplate:  file.IsTemplate,
-			Permissions: file.Permissions,
-		}
-
-		err := ui.processor.ProcessFile(templatingFile, targetPath, force, update, delimitersConfig, cmdTemplateValues)
+		// Process the file using the templating processor.
+		err := ui.processor.ProcessFile(toEngineFile(file), targetPath, force, update, delimitersConfig, cmdTemplateValues)
 
 		// Display result using proper UI output
 		if err != nil {
@@ -801,6 +827,18 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to run setup form: %w", err)
 	}
 
+	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)
+	if err != nil {
+		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
+	}
+
+	// Run pre-generate hooks before any file is written: nothing has run yet
+	// (status: success), and a hook failure aborts before any write happens,
+	// so no rollback is needed.
+	if err := scaffoldhooks.Run(scaffoldHooks, hooks.BeforeScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+		return fmt.Errorf("pre-generate hook failed: %w", err)
+	}
+
 	// Process each file with rich configuration
 	var successCount, errorCount int
 	var failedFiles []string
@@ -808,6 +846,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
 	// check and the actual file-body rendering below never disagree.
 	activeDelimiters := resolveDelimiters(delimiters, scaffoldConfig)
+	whenByPath := fileConditionsByPath(scaffoldConfig)
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
@@ -818,6 +857,18 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// writing each file, so explicit directory entries are redundant and
 		// would otherwise be written as empty files, breaking nested paths.
 		if file.IsDirectory {
+			continue
+		}
+
+		// Declarative spec.files[].when: gates generation before any template
+		// rendering happens, keyed by the file's original (undiscovered) path
+		// -- distinct from the path-templating sentinel-skip check below,
+		// which reacts to a *rendered* path evaluating to empty/false/null.
+		if when, ok := whenByPath[file.Path]; ok && !when.Evaluate(condition.Context{Answers: mergedValues}) {
+			ui.writeOutput(fileStatusFormat,
+				ui.grayStyle.Render(bulletSymbol),
+				file.Path,
+				ui.grayStyle.Render(skippedText))
 			continue
 		}
 
@@ -844,15 +895,8 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// dry-run mode, so the file's existence is unaffected either way).
 		existedBefore := ui.processor.DryRun && fileExistsAt(targetPath, renderedPath)
 
-		// Use the templating processor to handle file processing
-		// Convert tmpl.File to engine.File
-		templatingFile := engine.File{
-			Path:        file.Path,
-			Content:     file.Content,
-			IsTemplate:  file.IsTemplate,
-			Permissions: file.Permissions,
-		}
-		err := ui.processor.ProcessFile(templatingFile, targetPath, force, update, scaffoldConfig, mergedValues)
+		// Use the templating processor to handle file processing.
+		err := ui.processor.ProcessFile(toEngineFile(file), targetPath, force, update, scaffoldConfig, mergedValues)
 
 		// Display result using proper UI output
 		var skipErr *engine.FileSkippedError
@@ -897,6 +941,13 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		ui.writeOutput("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
 		// Don't render README if there were errors - flush output and return error immediately.
 		ui.flushOutput()
+		// Post-generate hooks still get a chance to run on failure (e.g. a
+		// cleanup step declaring when: always/failure); the implicit-success
+		// default on an unconditioned hook skips it here, matching hooks
+		// elsewhere in Atmos.
+		if hookErr := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "failure", ui.skipHooks); hookErr != nil {
+			log.Warn("Post-generate hook failed", "error", hookErr)
+		}
 		return errUtils.Build(errUtils.ErrScaffoldGeneration).
 			WithExplanationf("Failed to generate files: %s", strings.Join(failedFiles, ", ")).
 			Err()
@@ -909,6 +960,12 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// fully initialised.
 	if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
 		return fmt.Errorf("failed to save project record: %w", err)
+	}
+
+	// Run post-generate hooks after the project record is saved, so a hook
+	// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
+	if err := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+		return fmt.Errorf("post-generate hook failed: %w", err)
 	}
 
 	// Flush all output before rendering README.

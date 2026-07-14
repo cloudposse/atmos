@@ -14,6 +14,7 @@ import (
 type ScaffoldUI interface {
 	SetConflictStrategy(strategy merge.ConflictStrategy)
 	SetDryRun(dryRun bool)
+	SetSkipHooks(skip func(string) bool)
 	PromptForTemplate(templateType string, templates interface{}) (string, error)
 	DisplayTemplateTable(header []string, rows [][]string)
 	ExecuteWithBaseRef(embedsConfig *templates.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error

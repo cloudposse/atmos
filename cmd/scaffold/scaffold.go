@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -119,6 +120,7 @@ If no target directory is specified, you will be prompted for one.`,
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 		mergeStrategy := v.GetString("merge-strategy")
+		skipHooks := hooks.NewSkipPredicate(hooks.ResolveSkipHooks(cmd))
 
 		// Interactive prompting requires both an interactive-capable flag
 		// value AND a real terminal on both stdin and stdout: in CI or
@@ -167,6 +169,7 @@ If no target directory is specified, you will be prompted for one.`,
 			ref:            ref,
 			git:            gitEnabled,
 			mergeStrategy:  mergeStrategy,
+			skipHooks:      skipHooks,
 		})
 	},
 }
@@ -186,6 +189,7 @@ type scaffoldGenerateOptions struct {
 	ref            string
 	git            bool
 	mergeStrategy  string
+	skipHooks      func(string) bool
 }
 
 // scaffoldListCmd represents the scaffold list subcommand.
@@ -237,6 +241,12 @@ func init() {
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
+		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
+		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
+		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
+		// named hooks.
+		flags.WithStringFlag("skip-hooks", "", "", "Skip scaffold hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name"),
+		flags.WithNoOptDefVal("skip-hooks", "*"),
 		flags.WithEnvVars("force", "ATMOS_SCAFFOLD_FORCE"),
 		flags.WithEnvVars("update", "ATMOS_SCAFFOLD_UPDATE"),
 		flags.WithEnvVars("base-ref", "ATMOS_SCAFFOLD_BASE_REF"),
@@ -249,6 +259,7 @@ func init() {
 		flags.WithEnvVars("git", "ATMOS_SCAFFOLD_GIT"),
 		flags.WithEnvVars("no-git", "ATMOS_SCAFFOLD_NO_GIT"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_SCAFFOLD_MERGE_STRATEGY"),
+		flags.WithEnvVars("skip-hooks", "ATMOS_SCAFFOLD_SKIP_HOOKS"),
 	)
 
 	// Register flags to generate subcommand.
@@ -598,6 +609,7 @@ func executeTemplateGeneration(
 	}
 
 	// Target directory provided, use normal Execute.
+	scaffoldUI.SetSkipHooks(opts.skipHooks)
 	err := scaffoldUI.ExecuteWithBaseRef(selectedConfig, targetDir, opts.force, opts.update, opts.useDefaults, opts.baseRef, opts.templateValues)
 	if offer, retryBaseRef := shouldOfferScaffoldUpdate(err, opts); offer {
 		if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
@@ -779,6 +791,7 @@ func executeTemplateWithoutTargetDir(
 ) (string, error) {
 	if opts.interactive && !opts.dryRun {
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
+		scaffoldUI.SetSkipHooks(opts.skipHooks)
 		targetDir, err := scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, opts.useDefaults, opts.baseRef, opts.templateValues)
 		if offer, retryBaseRef := shouldOfferScaffoldUpdate(err, opts); offer {
 			if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {

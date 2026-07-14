@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/generator/ui"
+	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -75,6 +76,7 @@ If no target directory is specified, you will be prompted for one.`,
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 		mergeStrategy := v.GetString("merge-strategy")
+		skipHooks := hooks.NewSkipPredicate(hooks.ResolveSkipHooks(cmd))
 
 		// Interactive prompting requires both an interactive-capable flag
 		// value AND a real terminal on both stdin and stdout: in CI or
@@ -106,6 +108,7 @@ If no target directory is specified, you will be prompted for one.`,
 			ref:            ref,
 			git:            gitEnabled,
 			mergeStrategy:  mergeStrategy,
+			skipHooks:      skipHooks,
 		})
 	},
 }
@@ -126,6 +129,12 @@ func init() {
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
+		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
+		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
+		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
+		// named hooks.
+		flags.WithStringFlag("skip-hooks", "", "", "Skip scaffold hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name"),
+		flags.WithNoOptDefVal("skip-hooks", "*"),
 		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
 		flags.WithEnvVars("update", "ATMOS_INIT_UPDATE"),
 		flags.WithEnvVars("base-ref", "ATMOS_INIT_BASE_REF"),
@@ -136,6 +145,7 @@ func init() {
 		flags.WithEnvVars("git", "ATMOS_INIT_GIT"),
 		flags.WithEnvVars("no-git", "ATMOS_INIT_NO_GIT"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_INIT_MERGE_STRATEGY"),
+		flags.WithEnvVars("skip-hooks", "ATMOS_INIT_SKIP_HOOKS"),
 	)
 
 	// Register flags on the command.
@@ -225,6 +235,7 @@ type initOptions struct {
 	ref            string
 	git            bool
 	mergeStrategy  string
+	skipHooks      func(string) bool
 }
 
 // executeInit initializes a new Atmos project from a template.
@@ -244,6 +255,7 @@ func executeInit(_ context.Context, opts *initOptions) error {
 		return err
 	}
 	initUI.SetConflictStrategy(conflictStrategy)
+	initUI.SetSkipHooks(opts.skipHooks)
 
 	// Get available template configurations.
 	configs, err := templates.GetAvailableConfigurations()

@@ -27,6 +27,7 @@ func TestExecuteTemplateGeneration_OffersUpdateAndRetriesOnConfirm(t *testing.T)
 
 	ctrl := gomock.NewController(t)
 	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetSkipHooks(gomock.Any())
 
 	gomock.InOrder(
 		mockUI.EXPECT().
@@ -53,6 +54,7 @@ func TestExecuteTemplateGeneration_DeclinesUpdateOffer(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetSkipHooks(gomock.Any())
 
 	// ExecuteWithBaseRef must be called exactly once: declining the offer
 	// must not trigger a retry.
@@ -79,6 +81,7 @@ func TestExecuteTemplateGeneration_NoOfferWhenForceSet(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetSkipHooks(gomock.Any())
 
 	// With --force already set, a failure must propagate directly -- no
 	// ConfirmUpdateInstead call at all.

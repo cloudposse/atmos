@@ -1147,6 +1147,7 @@ var (
 	ErrSymlinkWrite                  = errors.New("refusing to write through a symlink")
 	ErrMetadataLoad                  = errors.New("failed to load init metadata")
 	ErrMetadataSave                  = errors.New("failed to save init metadata")
+	ErrScaffoldHookKindUnsupported   = errors.New("scaffold hook kind not supported")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

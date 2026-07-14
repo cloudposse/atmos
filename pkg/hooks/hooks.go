@@ -145,7 +145,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 	}
 
 	log.Debug("Running hooks", "count", len(h.items), "status", outcome.Status)
-	skipPredicate := newSkipPredicate(resolveSkipHooks(cmd))
+	skipPredicate := NewSkipPredicate(ResolveSkipHooks(cmd))
 	filter := hookFilter{
 		event:         event.Normalize(),
 		skipPredicate: skipPredicate,
@@ -502,14 +502,14 @@ func processHookExecutionYAMLFunction(atmosConfig *schema.AtmosConfiguration, va
 	return processHookExecutionString(atmosConfig, processedString, info)
 }
 
-// resolveSkipHooks returns the effective --skip-hooks value. It prefers the
+// ResolveSkipHooks returns the effective --skip-hooks value. It prefers the
 // Cobra flag when explicitly set, because before-* hooks run in PreRunE —
 // before the flag is bound to Viper in RunE (see pkg/flags/standard.go
 // BindFlagsToViper) — so viper.GetString would miss the CLI value there (it
 // only sees ATMOS_SKIP_HOOKS / the default). Reading the parsed Cobra flag
 // makes skipping symmetric across before-* and after-* events. Falling back to
 // Viper preserves env-var support and the nil-cmd path used by tests.
-func resolveSkipHooks(cmd *cobra.Command) string {
+func ResolveSkipHooks(cmd *cobra.Command) string {
 	if cmd != nil {
 		if f := cmd.Flags().Lookup("skip-hooks"); f != nil && f.Changed {
 			return f.Value.String()
@@ -518,11 +518,11 @@ func resolveSkipHooks(cmd *cobra.Command) string {
 	return viper.GetString("skip-hooks")
 }
 
-// newSkipPredicate builds the per-hook skip decision from the value of the
+// NewSkipPredicate builds the per-hook skip decision from the value of the
 // --skip-hooks flag / ATMOS_SKIP_HOOKS env. Empty / "false" runs all hooks;
 // "*" / "true" (set when --skip-hooks is passed without a value) skips
 // everything; a comma-separated list skips only the named hooks.
-func newSkipPredicate(raw string) func(string) bool {
+func NewSkipPredicate(raw string) func(string) bool {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.EqualFold(raw, "false") {
 		return func(string) bool { return false }

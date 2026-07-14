@@ -6,7 +6,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/manifest"
 )
 
@@ -86,7 +88,7 @@ func TestPromptForScaffoldConfig_FormCreation(t *testing.T) {
 func TestPromptForScaffoldConfig_MixedFieldTypes(t *testing.T) {
 	withNoOpFormRunner(t)
 
-	// Fields of mixed types prompt in declared order within a single group.
+	// Fields of mixed types prompt in declared order, one huh.Group per field.
 	scaffoldConfig := &ScaffoldConfig{
 		Metadata: manifest.Metadata{
 			Name:        "test-scaffold",
@@ -543,4 +545,120 @@ func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
 	if authorValue != "Foobar" {
 		t.Errorf("Expected author getter to return 'Foobar' (existing value), but got '%v'", authorValue)
 	}
+}
+
+func TestFieldHideFunc(t *testing.T) {
+	tests := []struct {
+		name         string
+		when         string
+		valueGetters map[string]func() interface{}
+		wantHidden   bool
+	}{
+		{
+			name:         "shown when condition true",
+			when:         "answers.deploy_multi_env == true",
+			valueGetters: map[string]func() interface{}{"deploy_multi_env": func() interface{} { return true }},
+			wantHidden:   false,
+		},
+		{
+			name:         "hidden when condition false",
+			when:         "answers.deploy_multi_env == true",
+			valueGetters: map[string]func() interface{}{"deploy_multi_env": func() interface{} { return false }},
+			wantHidden:   true,
+		},
+		{
+			name:         "shown when list membership matches",
+			when:         `"'dev' in answers.environments"`,
+			valueGetters: map[string]func() interface{}{"environments": func() interface{} { return []string{"dev", "staging"} }},
+			wantHidden:   false,
+		},
+		{
+			name:         "hidden when referenced field never answered (zero value)",
+			when:         "answers.deploy_multi_env == true",
+			valueGetters: map[string]func() interface{}{},
+			wantHidden:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var field FieldDefinition
+			require.NoError(t, yaml.Unmarshal([]byte("when: "+tt.when+"\n"), &field))
+
+			hide := fieldHideFunc(field.When, tt.valueGetters)
+			assert.Equal(t, tt.wantHidden, hide())
+		})
+	}
+}
+
+func TestSnapshotAnswers(t *testing.T) {
+	valueGetters := map[string]func() interface{}{
+		"name":  func() interface{} { return "widget" },
+		"count": func() interface{} { return 3 },
+	}
+
+	got := snapshotAnswers(valueGetters)
+	assert.Equal(t, "widget", got["name"])
+	assert.Equal(t, 3, got["count"])
+	assert.Len(t, got, 2)
+}
+
+func TestBuildConfigForm_FieldWhenGating(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "deploy_multi_env", Type: "confirm", Label: "Deploy to multiple environments?"},
+				{
+					Name:    "environments",
+					Type:    "multiselect",
+					Label:   "Environments",
+					Options: []string{"dev", "staging", "prod"},
+					When:    mustCondition(t, "answers.deploy_multi_env == true"),
+				},
+			},
+		},
+	}
+
+	huhForm, valueGetters, err := buildConfigForm(scaffoldConfig, map[string]interface{}{})
+	require.NoError(t, err)
+	require.NotNil(t, huhForm)
+	assert.Len(t, valueGetters, 2)
+	assert.Contains(t, valueGetters, "deploy_multi_env")
+	assert.Contains(t, valueGetters, "environments")
+}
+
+func TestMissingRequiredValues_RespectsWhen(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "deploy_multi_env", Type: "confirm", Required: false},
+				{
+					Name:     "environments",
+					Type:     "multiselect",
+					Required: true,
+					When:     mustCondition(t, "answers.deploy_multi_env == true"),
+				},
+			},
+		},
+	}
+
+	// deploy_multi_env is false: the gated required field is never prompted
+	// for, so it must not be reported as missing.
+	missing := MissingRequiredValues(scaffoldConfig, map[string]interface{}{"deploy_multi_env": false})
+	assert.Empty(t, missing)
+
+	// deploy_multi_env is true: the gated required field is now visible and
+	// unanswered, so it must be reported as missing.
+	missing = MissingRequiredValues(scaffoldConfig, map[string]interface{}{"deploy_multi_env": true})
+	assert.Equal(t, []string{"environments"}, missing)
+}
+
+// mustCondition parses a bare CEL when: expression for test fixtures.
+func mustCondition(t *testing.T, expr string) condition.Condition {
+	t.Helper()
+	var field FieldDefinition
+	require.NoError(t, yaml.Unmarshal([]byte("when: "+expr+"\n"), &field))
+	return field.When
 }

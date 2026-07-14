@@ -178,7 +178,7 @@ with:
 	require.NoError(t, yaml.Unmarshal([]byte(src), &hook))
 
 	assert.Equal(t, stepsKindName, hook.Kind)
-	steps, err := stepsFromHook(&hook)
+	steps, err := StepsFromHook(&hook)
 	require.NoError(t, err)
 	require.Len(t, steps, 2)
 	assert.Equal(t, "emulator", steps[0].Type)
@@ -206,7 +206,7 @@ func TestStepFromHookDecodesNestedConfig(t *testing.T) {
 		},
 	}
 
-	ws, err := stepFromHook(hook)
+	ws, err := StepFromHook(hook)
 	require.NoError(t, err)
 
 	// Envelope wins: type + retry are set from the hook, not `with`.
@@ -258,7 +258,7 @@ func TestStepsFromHookValidationErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := stepsFromHook(tt.hook)
+			_, err := StepsFromHook(tt.hook)
 			require.Error(t, err)
 			assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
 		})

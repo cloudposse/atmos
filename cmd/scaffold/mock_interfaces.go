@@ -135,3 +135,15 @@ func (mr *MockScaffoldUIMockRecorder) SetDryRun(dryRun any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDryRun", reflect.TypeOf((*MockScaffoldUI)(nil).SetDryRun), dryRun)
 }
+
+// SetSkipHooks mocks base method.
+func (m *MockScaffoldUI) SetSkipHooks(skip func(string) bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetSkipHooks", skip)
+}
+
+// SetSkipHooks indicates an expected call of SetSkipHooks.
+func (mr *MockScaffoldUIMockRecorder) SetSkipHooks(skip any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSkipHooks", reflect.TypeOf((*MockScaffoldUI)(nil).SetSkipHooks), skip)
+}
