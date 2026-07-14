@@ -132,12 +132,16 @@ output:
   prefix: "{{ .step.name }}"
 ```
 
-- **`grouped`** (default) — capture each child's output and print it as a labeled block when the child
-  finishes. `order` is `completion` (as children finish) or `definition` (declared order).
-- **`prefixed`** — stream child output live, prefixing every complete line with the child's label.
+- **`grouped`** (default) — announce each child with a `Running` banner live, the moment it starts, then
+  capture its output and print it as a labeled block with a completion banner. Under `order: completion`
+  (the default), that block prints live, the instant the child finishes; under `order: definition`,
+  completion blocks are held back and printed together, in declared order, once every child in the group
+  has finished (start banners still stream live either way).
+- **`prefixed`** — stream child output live, prefixing every complete line with the child's label. No
+  start/completion banners are printed in this mode.
 - **`none`** — suppress child output (metadata still captured).
 - **`show_summary`** — print a summary line, e.g.
-  `[checks] summary: 2 succeeded, 0 failed, 0 skipped, 0 canceled`.
+  `` `checks` summary: 2 succeeded, 0 failed, 0 skipped, 0 canceled ``.
 - **`prefix`** — Go template for the per-child label, evaluated with the child step context.
 
 ---

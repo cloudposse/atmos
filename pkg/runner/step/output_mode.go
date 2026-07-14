@@ -209,18 +209,25 @@ func (w *OutputModeWriter) executeLogWithIO(runner func(stdout, stderr io.Writer
 	return w.fallbackToLog(stdout.String(), stderr.String(), err)
 }
 
+// writeStepHeader announces the step before execution through the shared
+// ui.Info pipeline (icon + markdown + masking), so raw/log step banners read
+// as part of Atmos's themed UI instead of ad hoc debug markers.
 func (w *OutputModeWriter) writeStepHeader() {
-	if !ShowLabels(w.show) {
+	AnnounceStepStart(w.show, w.stepName)
+}
+
+// AnnounceStepStart prints the themed "Running `name`" banner. Shared by
+// OutputModeWriter (extended step-type runner, custom commands) and the
+// legacy atmos/shell workflow execution path in internal/exec, so every
+// workflow step announces itself the same way regardless of which engine
+// executes it.
+func AnnounceStepStart(show *schema.ShowConfig, name string) {
+	defer perf.Track(nil, "step.AnnounceStepStart")()
+
+	if !ShowLabels(show) {
 		return
 	}
-	styles := theme.GetCurrentStyles()
-	var stepLabel string
-	if styles != nil {
-		stepLabel = styles.Label.Render("[" + w.stepName + "]")
-	} else {
-		stepLabel = "[" + w.stepName + "]"
-	}
-	ui.Writeln(stepLabel)
+	ui.Infof("Running `%s`", name)
 }
 
 // fallbackToLog writes captured output with boundaries.
@@ -238,37 +245,29 @@ func (w *OutputModeWriter) fallbackToLog(stdout, stderr string, runErr error) (s
 	return stdout, stderr, runErr
 }
 
+// writeStepFooter reports the step's completion status through the shared
+// ui.Success/ui.Error pipeline (icon + markdown + masking), matching how
+// spin.go and toast.go report step completion, instead of hand-built strings.
 func (w *OutputModeWriter) writeStepFooter(runErr error) {
-	if !ShowLabels(w.show) {
+	AnnounceStepEnd(w.show, w.stepName, runErr)
+}
+
+// AnnounceStepEnd prints the themed completion/failure banner. Shared by
+// OutputModeWriter (extended step-type runner, custom commands) and the
+// legacy atmos/shell workflow execution path in internal/exec, so every
+// workflow step reports completion the same way regardless of which engine
+// executed it.
+func AnnounceStepEnd(show *schema.ShowConfig, name string, runErr error) {
+	defer perf.Track(nil, "step.AnnounceStepEnd")()
+
+	if !ShowLabels(show) {
 		return
 	}
-	footer := w.formatStepFooter(runErr)
-	ui.Writeln(footer)
-}
-
-// formatStepFooter creates the footer string based on step status.
-func (w *OutputModeWriter) formatStepFooter(runErr error) string {
-	styles := theme.GetCurrentStyles()
 	if runErr != nil {
-		return w.formatFailedFooter(styles)
+		ui.Errorf("`%s` failed", name)
+		return
 	}
-	return w.formatSuccessFooter(styles)
-}
-
-// formatFailedFooter creates the footer for a failed step.
-func (w *OutputModeWriter) formatFailedFooter(styles *theme.StyleSet) string {
-	if styles != nil {
-		return styles.XMark.String() + " " + w.stepName + " failed"
-	}
-	return "✗ " + w.stepName + " failed"
-}
-
-// formatSuccessFooter creates the footer for a successful step.
-func (w *OutputModeWriter) formatSuccessFooter(styles *theme.StyleSet) string {
-	if styles != nil {
-		return styles.Checkmark.String() + " " + w.stepName + " completed"
-	}
-	return "✓ " + w.stepName + " completed"
+	ui.Successf("`%s` completed", name)
 }
 
 // executeNone runs command silently.

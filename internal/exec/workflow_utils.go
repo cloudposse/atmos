@@ -506,6 +506,12 @@ func ExecuteWorkflow(
 			commandType = "atmos"
 		}
 
+		// atmos/shell steps run through the inline switch below rather than the
+		// pkg/runner/step registry (see IsExtendedStepType), so they need their
+		// own start/completion announcement. Extended step types already get one
+		// from their OutputModeWriter (or their own bespoke UI, e.g. spin/toast).
+		announceStep := commandType == "shell" || commandType == "atmos"
+
 		// Resolve step-variable templates in workflow/step env values (parity with
 		// custom command steps) so a value like `X: "{{ .steps.select.value }}"`
 		// is populated before it reaches the subprocess.
@@ -588,6 +594,10 @@ func ExecuteWorkflow(
 		// grouping.
 		if commandType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(&atmosConfig, ci.DimensionStep) {
 			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
+		}
+
+		if announceStep {
+			stepPkg.AnnounceStepStart(showCfg, step.Name)
 		}
 
 		executeStep := func() error {
@@ -830,10 +840,14 @@ func ExecuteWorkflow(
 		if err != nil {
 			// Terminal-handoff steps (tty/interactive/exec) that exit non-zero
 			// propagate the code silently, like a shell - don't wrap them in a
-			// themed workflow error (which would query the terminal post-session).
+			// themed workflow error (which would query the terminal post-session),
+			// and don't print a themed failure banner either.
 			var silentExit errUtils.ExitCodeError
 			if errors.As(err, &silentExit) && silentExit.Silent {
 				return err
+			}
+			if announceStep {
+				stepPkg.AnnounceStepEnd(showCfg, step.Name, err)
 			}
 			stepErr := err
 			if !errors.Is(err, errUtils.ErrInvalidWorkflowStepType) {
@@ -853,6 +867,8 @@ func ExecuteWorkflow(
 				workflowErr = errors.Join(workflowErr, stepErr)
 			}
 			conditionStatus = schema.ConditionPredicateFailure
+		} else if announceStep {
+			stepPkg.AnnounceStepEnd(showCfg, step.Name, nil)
 		}
 	}
 

@@ -37,17 +37,34 @@ func expandMatrix(matrix map[string][]string) []map[string]string {
 	return rows
 }
 
-func matrixRowSuffix(row map[string]string) string {
+func sortedMatrixAxes(row map[string]string) []string {
 	axes := make([]string, 0, len(row))
 	for axis := range row {
 		axes = append(axes, axis)
 	}
 	sort.Strings(axes)
+	return axes
+}
+
+func matrixRowSuffix(row map[string]string) string {
+	axes := sortedMatrixAxes(row)
 	parts := make([]string, 0, len(axes))
 	for _, axis := range axes {
 		parts = append(parts, matrixRowPart(axis, row[axis]))
 	}
 	return strings.Join(parts, controlNameSep)
+}
+
+// matrixRowLabel builds a human-readable "axis=value, axis=value" summary of
+// a matrix row for display (banners, summaries), as opposed to
+// matrixRowSuffix's hash-qualified graph-node-ID-safe form.
+func matrixRowLabel(row map[string]string) string {
+	axes := sortedMatrixAxes(row)
+	parts := make([]string, 0, len(axes))
+	for _, axis := range axes {
+		parts = append(parts, axis+"="+row[axis])
+	}
+	return strings.Join(parts, ", ")
 }
 
 func matrixRowPart(axis, value string) string {

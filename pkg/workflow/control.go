@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -72,8 +73,9 @@ type controlFailConfig struct {
 }
 
 type controlNode struct {
-	step   schema.WorkflowStep
-	matrix map[string]string
+	step        schema.WorkflowStep
+	matrix      map[string]string
+	displayName string
 }
 
 type ControlResult struct {
@@ -102,8 +104,15 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 	var completedSeq atomic.Int64
 	var failures atomic.Int64
-	completionOrder := make([]string, 0, len(order))
-	var completionMu sync.Mutex
+
+	// renderMu serializes every grouped-mode print (start banners and
+	// completion blocks) across worker goroutines - nothing in pkg/ui,
+	// pkg/data, or pkg/io serializes concurrent writers for us. rendered
+	// tracks which node IDs were already streamed live from the completion
+	// hook so the post-Run flush below doesn't print them a second time.
+	var renderMu sync.Mutex
+	rendered := make(map[string]bool, len(order))
+	liveStream := outputCfg.mode == ControlOutputGrouped && outputCfg.order == ControlOutputCompletion
 
 	dispatcher := newControlDispatcher(&controlDispatchConfig{
 		executor:     executor,
@@ -117,18 +126,36 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 	schedOpts := []scheduler.Option{
 		scheduler.WithMaxConcurrency(effectiveControlConcurrency(parent, len(order))),
-		scheduler.WithNodeCompleteHook(func(node *dependency.Node, _ scheduler.Result) {
-			completionMu.Lock()
-			completionOrder = append(completionOrder, node.ID)
-			completionMu.Unlock()
+		scheduler.WithNodeCompleteHook(func(node *dependency.Node, result scheduler.Result) {
+			if !liveStream {
+				return
+			}
+			renderMu.Lock()
+			defer renderMu.Unlock()
+			renderControlChildBlock(&result)
+			rendered[node.ID] = true
 		}),
+	}
+	if outputCfg.mode == ControlOutputGrouped {
+		// Starting has no ordering constraint to preserve (unlike completion
+		// blocks under order: definition), so announce every child live
+		// regardless of the configured order.
+		schedOpts = append(schedOpts, scheduler.WithNodeStartHook(func(node *dependency.Node) {
+			renderMu.Lock()
+			defer renderMu.Unlock()
+			stepPkg.AnnounceStepStart(nil, controlNodeLabel(node))
+		}))
 	}
 	if failCfg.mode == ControlFailFast && failCfg.maxFailures <= 1 {
 		schedOpts = append(schedOpts, scheduler.WithFailFast(true))
 	}
 
 	aggregate := scheduler.New(graph, dispatcher, schedOpts...).Run(runCtx)
-	renderControlOutput(aggregate, order, completionOrder, outputCfg)
+	// Flush anything not already streamed live: everything, in definition
+	// order, when order: definition (liveStream is false so rendered stays
+	// empty); only skipped/never-dispatched nodes when order: completion
+	// (liveStream already streamed dispatched nodes, rendered filters them out).
+	renderControlOutput(aggregate, order, rendered, outputCfg)
 	storeControlResults(aggregate, opts.StoreResult)
 	if outputCfg.showSummary {
 		renderControlSummary(parent, aggregate)
@@ -153,9 +180,10 @@ type controlDispatchConfig struct {
 func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 	return scheduler.DispatcherFunc(func(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 		child := node.Metadata["child"].(controlNode)
+		label := controlDisplayLabel(child.displayName, child.matrix)
 		resolved, err := resolveControlStep(&child.step, child.matrix, cfg.dataFunc)
 		if err != nil {
-			return scheduler.Result{Value: &ControlResult{Name: child.step.Name, Err: err, Status: string(scheduler.StatusFailed)}}, err
+			return scheduler.Result{Value: &ControlResult{Name: label, Err: err, Status: string(scheduler.StatusFailed)}}, err
 		}
 		child.step = resolved
 		childOutput := ControlChildOutput{
@@ -163,13 +191,37 @@ func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 			Prefix: controlPrefix(cfg.outputCfg, child.step.Name, child.matrix, cfg.dataFunc),
 		}
 		execResult, dispatchErr := cfg.executor(ctx, &ControlChild{Step: child.step, Matrix: child.matrix}, childOutput)
-		nodeResult := controlNodeResult(child.step.Name, cfg.completedSeq.Add(1), execResult, dispatchErr)
+		nodeResult := controlNodeResult(label, cfg.completedSeq.Add(1), execResult, dispatchErr)
 		if dispatchErr != nil && shouldCancelControl(cfg.failCfg, cfg.failures.Add(1)) {
 			nodeResult.Canceled = nodeResult.Canceled || errors.Is(dispatchErr, context.Canceled)
 			cfg.cancel()
 		}
 		return scheduler.Result{Value: nodeResult}, dispatchErr
 	})
+}
+
+// controlDisplayLabel builds a human-readable name for a parallel/matrix
+// child result. Matrix children carry a hash-qualified graph node ID (see
+// matrixRowSuffix) that exists purely to keep dependency-graph IDs
+// collision-free after sanitization - it's not meant for display, so
+// banners/summaries use the original step name plus the raw matrix values
+// instead (e.g. "test (go=1.22, os=linux)").
+func controlDisplayLabel(name string, matrix map[string]string) string {
+	if len(matrix) == 0 {
+		return name
+	}
+	return name + " (" + matrixRowLabel(matrix) + ")"
+}
+
+// controlNodeLabel resolves a graph node's display label from its stored
+// controlNode metadata, which is set at graph-build time and so is available
+// even for skipped/canceled nodes that were never dispatched (unlike
+// ControlResult, which only exists once a node actually ran).
+func controlNodeLabel(node *dependency.Node) string {
+	if child, ok := node.Metadata["child"].(controlNode); ok {
+		return controlDisplayLabel(child.displayName, child.matrix)
+	}
+	return node.ID
 }
 
 func controlNodeResult(name string, completed int64, execResult *ControlChildResult, err error) *ControlResult {
@@ -212,7 +264,7 @@ func buildParallelGraph(parent *schema.WorkflowStep) (*dependency.Graph, []strin
 		if err := graph.AddNode(&dependency.Node{
 			ID: child.Name,
 			Metadata: map[string]any{
-				"child": controlNode{step: *child},
+				"child": controlNode{step: *child, displayName: child.Name},
 			},
 		}); err != nil {
 			return nil, nil, err
@@ -260,7 +312,7 @@ func addMatrixRowNodes(graph *dependency.Graph, steps []schema.WorkflowStep, chi
 		if err := graph.AddNode(&dependency.Node{
 			ID: expanded.Name,
 			Metadata: map[string]any{
-				"child": controlNode{step: expanded, matrix: row},
+				"child": controlNode{step: expanded, matrix: row, displayName: child.Name},
 			},
 		}); err != nil {
 			return err
@@ -292,13 +344,18 @@ func addMatrixRowDependencies(graph *dependency.Graph, steps []schema.WorkflowSt
 	return nil
 }
 
-func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder []string, completionOrder []string, outputCfg controlOutputConfig) {
+// renderControlOutput renders any child blocks not already streamed live.
+// Order is always the graph's definition order; skip marks node IDs already
+// printed by the live WithNodeCompleteHook callback in ExecuteControlStep
+// (order: completion mode) so they aren't printed twice. When nothing was
+// streamed live (order: definition, or an empty/nil skip set), this
+// reproduces a full replay in declared order - which also covers
+// skipped/never-dispatched nodes, since the scheduler's node-complete hook
+// never fires for them (they're synthesized directly by the scheduler
+// without going through a worker).
+func renderControlOutput(aggregate *scheduler.AggregateResult, order []string, skip map[string]bool, outputCfg controlOutputConfig) {
 	if aggregate == nil || outputCfg.mode != ControlOutputGrouped {
 		return
-	}
-	order := definitionOrder
-	if outputCfg.order == ControlOutputCompletion {
-		order = completionOrder
 	}
 	resultsByID := make(map[string]scheduler.Result, len(aggregate.Results))
 	for i := range aggregate.Results {
@@ -306,6 +363,9 @@ func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder [
 		resultsByID[result.NodeID] = result
 	}
 	for _, nodeID := range order {
+		if skip[nodeID] {
+			continue
+		}
 		result, ok := resultsByID[nodeID]
 		if !ok {
 			continue
@@ -314,13 +374,26 @@ func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder [
 	}
 }
 
+// renderControlChildBlock reports a parallel/matrix child's completion status
+// through the shared ui.Success/ui.Warning/ui.Error pipeline, matching the
+// `AnnounceStepStart`/`AnnounceStepEnd` banner convention used by other
+// workflow step engines instead of a raw "[nodeID] status" line. A child's
+// own stdout/stderr is still buffered for the duration of its own execution
+// (grouped mode doesn't stream a running child's output line-by-line - see
+// `prefixed` mode for that), but the finished block is emitted live, the
+// moment that child completes, for the default order: completion mode
+// (called from ExecuteControlStep's WithNodeCompleteHook, under renderMu);
+// for order: definition it's still emitted once for the whole group, in
+// declared order, after every child has finished (called from
+// renderControlOutput, which runs single-threaded after Run() returns so no
+// lock is needed there). Either way, the buffered output prints before the
+// completion banner so the log reads as "here's what happened, here's the
+// verdict" instead of announcing completion before showing any output.
 func renderControlChildBlock(result *scheduler.Result) {
 	child, _ := result.Value.(*ControlResult)
-	status := string(result.Status)
-	if child != nil && child.Canceled {
-		status = "canceled"
-	}
-	ui.Writeln(fmt.Sprintf("[%s] %s", result.NodeID, status))
+	canceled := child != nil && child.Canceled
+	name := controlNodeLabel(&result.Node)
+
 	if child != nil {
 		if child.Stdout != "" {
 			_ = data.Write(child.Stdout)
@@ -329,6 +402,17 @@ func renderControlChildBlock(result *scheduler.Result) {
 			ui.Write(child.Stderr)
 		}
 	}
+
+	switch {
+	case canceled:
+		ui.Warningf("`%s` canceled", name)
+	case result.Status == scheduler.StatusFailed:
+		ui.Errorf("`%s` failed", name)
+	case result.Status == scheduler.StatusSkipped:
+		ui.Warningf("`%s` skipped", name)
+	default:
+		ui.Successf("`%s` completed", name)
+	}
 }
 
 func renderControlSummary(parent *schema.WorkflowStep, aggregate *scheduler.AggregateResult) {
@@ -336,7 +420,7 @@ func renderControlSummary(parent *schema.WorkflowStep, aggregate *scheduler.Aggr
 		return
 	}
 	counts := countControlResults(aggregate)
-	format := "[%s] summary: %d succeeded, %d failed, %d skipped, %d canceled"
+	format := "`%s` summary: %d succeeded, %d failed, %d skipped, %d canceled"
 	args := []interface{}{parent.Name, counts.succeeded, counts.failed, counts.skipped, counts.canceled}
 	if aggregate.Err != nil || counts.failed > 0 || counts.canceled > 0 {
 		ui.Errorf(format, args...)

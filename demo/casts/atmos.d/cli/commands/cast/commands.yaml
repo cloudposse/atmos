@@ -192,7 +192,7 @@ commands:
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
               if bad in plain:
                   raise SystemExit(f"cast play demo contains {bad!r}")
-          assert_colored(text, "[play]")
+          assert_colored(text, "play")
           assert_no_error_output(text)
           assert_no_local_paths(text)
   - name: casts validate cli commands cast render
