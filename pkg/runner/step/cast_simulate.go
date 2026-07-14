@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -119,8 +119,7 @@ func recordCastTypedLine(ctx context.Context, opts castTypedLineOptions) error {
 	if err := sleepCastInput(ctx, opts.EnterDelay); err != nil {
 		return err
 	}
-	_, err := fmt.Fprint(iolib.GetContext().Data(), "\n")
-	return err
+	return data.Write("\n")
 }
 
 func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, line string, writeRate time.Duration, jitter float64) error {
@@ -129,7 +128,7 @@ func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, lin
 		return err
 	}
 	if stylePrefix != "" {
-		if _, err := fmt.Fprint(iolib.GetContext().Data(), stylePrefix); err != nil {
+		if err := data.Write(stylePrefix); err != nil {
 			return err
 		}
 	}
@@ -138,15 +137,14 @@ func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, lin
 		if err := sleepCastInput(ctx, castTypedCharDelay(line, chars, i, writeRate, jitter)); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprint(iolib.GetContext().Data(), string(char)); err != nil {
+		if err := data.Write(string(char)); err != nil {
 			return err
 		}
 	}
 	if styleSuffix == "" {
 		return nil
 	}
-	_, err = fmt.Fprint(iolib.GetContext().Data(), styleSuffix)
-	return err
+	return data.Write(styleSuffix)
 }
 
 func castTypedCharDelay(line string, chars []rune, index int, baseDelay time.Duration, jitter float64) time.Duration {
@@ -322,8 +320,7 @@ func recordCastPrompt(prompt *schema.SimulatePrompt) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(iolib.GetContext().Data(), rendered)
-	return err
+	return data.Write(rendered)
 }
 
 func recordCastPromptWithCursor(prompt *schema.SimulatePrompt, cursor bool) error {
@@ -334,8 +331,7 @@ func recordCastPromptWithCursor(prompt *schema.SimulatePrompt, cursor bool) erro
 	if cursor {
 		rendered += castCursorShow
 	}
-	_, err = fmt.Fprint(iolib.GetContext().Data(), rendered)
-	return err
+	return data.Write(rendered)
 }
 
 func castStepHasVisibleCursor(step *schema.WorkflowStep) bool {

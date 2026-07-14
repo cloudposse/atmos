@@ -107,11 +107,78 @@ func (dw *dynamicWriter) Write(p []byte) (n int, err error) {
 	return written, nil
 }
 
+// invalidFd is the sentinel returned by maskedWriter.Fd() when the underlying
+// writer doesn't expose a real file descriptor. It deliberately uses a value
+// that can never be a valid fd (all bits set) rather than 0: 0 is stdin's real
+// fd number on POSIX, so returning 0 here would make callers like
+// term.IsTerminal(fd) incorrectly probe stdin's terminal-ness instead of
+// correctly reporting "not a terminal" for this writer.
+const invalidFd = ^uintptr(0)
+
 // maskedWriter wraps a stdio.Writer and automatically masks sensitive data.
 // Used by MaskWriter() to wrap arbitrary writers with masking.
+//
+// It also implements Fd()/Read()/Close() so that, when it wraps a real
+// *os.File (e.g. os.Stdout), it transparently satisfies capability
+// interfaces like term.File (github.com/charmbracelet/x/term) that TTY
+// detection code type-asserts against. Without this, wrapping os.Stdout with
+// MaskWriter makes it indistinguishable from a non-terminal writer to callers
+// like Bubble Tea, which silently disables their own terminal-size detection,
+// cursor hiding, and line-clearing behavior. See the Bubble Tea program setup
+// in internal/exec/vendor_model.go for the motivating case.
 type maskedWriter struct {
 	underlying stdio.Writer
 	masker     Masker
+}
+
+// Fd implements the fd-capability interface (e.g. term.File) used by TTY
+// detection code. It delegates to the underlying writer's Fd() when
+// available (e.g. *os.File), so wrapping a real terminal file remains
+// transparent to that detection. Returns invalidFd when the underlying
+// writer doesn't expose a real file descriptor (e.g. a bytes.Buffer, or a
+// nil underlying writer), so syscalls against it harmlessly fail instead of
+// aliasing an unrelated real fd (like stdin's fd 0).
+func (mw *maskedWriter) Fd() uintptr {
+	defer perf.Track(nil, "io.maskedWriter.Fd")()
+
+	if f, ok := mw.underlying.(interface{ Fd() uintptr }); ok {
+		return f.Fd()
+	}
+	return invalidFd
+}
+
+// Read implements io.Reader so *maskedWriter can satisfy full read/write/close
+// file-handle interfaces (e.g. term.File) required by some TTY-detection type
+// assertions. It is fundamentally an output-only wrapper -- the only consumer
+// that needs this (Bubble Tea) reads input via a separate tea.WithInput
+// reader and never reads from the configured output writer. Delegate to the
+// underlying reader if it happens to implement one (unlikely for
+// stdout/stderr), otherwise report EOF rather than panicking.
+func (mw *maskedWriter) Read(p []byte) (int, error) {
+	defer perf.Track(nil, "io.maskedWriter.Read")()
+
+	if r, ok := mw.underlying.(stdio.Reader); ok {
+		return r.Read(p)
+	}
+	return 0, stdio.EOF
+}
+
+// Close implements io.Closer. It intentionally never closes the process-wide
+// os.Stdout/os.Stderr handles, even though *os.File implements io.Closer --
+// closing either would break all subsequent output for the rest of the
+// process. Any other underlying io.Closer (e.g. a real log file) is
+// delegated to; writers that aren't closers are a no-op.
+func (mw *maskedWriter) Close() error {
+	defer perf.Track(nil, "io.maskedWriter.Close")()
+
+	switch mw.underlying {
+	case os.Stdout, os.Stderr:
+		return nil
+	}
+	if c, ok := mw.underlying.(stdio.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // Write implements stdio.Writer with automatic masking.
