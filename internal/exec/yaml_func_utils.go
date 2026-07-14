@@ -366,6 +366,32 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
+	// !tags/!labels family - no arguments; check the longer .keys/.values
+	// suffixes before the bare !labels match.
+	if exactTagSkipped(input, u.AtmosYamlFuncTags, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncTags && !skipFunc(skip, u.AtmosYamlFuncTags) {
+		return processTagTags(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabelsKeys, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabelsKeys && !skipFunc(skip, u.AtmosYamlFuncLabelsKeys) {
+		return processTagLabelsKeys(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabelsValues, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabelsValues && !skipFunc(skip, u.AtmosYamlFuncLabelsValues) {
+		return processTagLabelsValues(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabels, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabels && !skipFunc(skip, u.AtmosYamlFuncLabels) {
+		return processTagLabels(atmosConfig, input, stackInfo), true, nil
+	}
 	return nil, false, nil
 }
 

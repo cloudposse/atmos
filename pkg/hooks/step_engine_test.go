@@ -1,8 +1,11 @@
 package hooks
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -633,6 +636,39 @@ func TestStepsEngineRejectsMissingWith(t *testing.T) {
 	_, err := stepsEngine{}.Run(stepsExecContext(&Hook{Kind: stepsKindName}))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestStepEngineRunsArchiveType proves the archive step type needs no
+// hook-side code: `kind: step` + `type: archive` already works through the
+// generic bridge, exactly like any other registered step type. See
+// docs/prd/archive-step.md.
+func TestStepEngineRunsArchiveType(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("exports.handler = 1;"), 0o644))
+	dest := filepath.Join(dir, "handler.zip")
+
+	hook := &Hook{
+		Kind: stepKindName,
+		Type: "archive",
+		With: map[string]any{
+			"source":      src,
+			"destination": dest,
+		},
+	}
+
+	out, err := stepEngine{}.Run(stepExecContext(hook))
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	r, err := zip.OpenReader(dest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
 }
 
 func TestVerifyStepsHookTypes(t *testing.T) {

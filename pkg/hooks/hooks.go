@@ -29,6 +29,9 @@ import (
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
 
+// logKeyStatus is the structured-log/template key for a hook's lifecycle outcome status.
+const logKeyStatus = "status"
+
 // runHookLogGroup is a test seam for wrapping each lifecycle hook in CI log
 // group markers without making hooks tests depend on the active CI provider.
 //
@@ -144,7 +147,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		outcome.Status = RunSuccess
 	}
 
-	log.Debug("Running hooks", "count", len(h.items), "status", outcome.Status)
+	log.Debug("Running hooks", "count", len(h.items), logKeyStatus, outcome.Status)
 	skipPredicate := NewSkipPredicate(ResolveSkipHooks(cmd))
 	filter := hookFilter{
 		event:         event.Normalize(),
@@ -213,7 +216,7 @@ func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) err
 		return err
 	}
 	if !runs {
-		log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, "status", ctx.outcome.Status)
+		log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, logKeyStatus, ctx.outcome.Status)
 		return nil
 	}
 
@@ -362,7 +365,7 @@ func withOutcomeTemplateData(section map[string]any, outcome Outcome) map[string
 	for k, v := range section {
 		augmented[k] = v
 	}
-	augmented["status"] = string(outcome.Status)
+	augmented[logKeyStatus] = string(outcome.Status)
 	augmented["exit_code"] = outcome.ExitCode
 	if outcome.Err != nil {
 		augmented["error"] = outcome.Err.Error()
@@ -879,6 +882,62 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 		ExitCode:     opts.ExitCode,
 		Aggregate:    opts.Aggregate,
 	})
+}
+
+// RunPerComponentHooksOptions configures a RunPerComponentHooks invocation for
+// one resolved component/stack node in a multi-component (bulk) Terraform run,
+// or for Helmfile's single-component execution.
+type RunPerComponentHooksOptions struct {
+	// Event is the hook event (e.g., "before.terraform.apply", "after.terraform.apply").
+	Event HookEvent
+
+	// AtmosConfig is the Atmos configuration, already initialized for this component.
+	AtmosConfig *schema.AtmosConfiguration
+
+	// Info is the fully resolved component/stack info for this node (Component,
+	// ComponentFromArg, and Stack already set to this node's values).
+	Info *schema.ConfigAndStacksInfo
+
+	// Cmd is the cobra command in effect, used for --skip-hooks resolution
+	// (ResolveSkipHooks) exactly as the single-component Terraform path does.
+	Cmd *cobra.Command
+
+	// Args is the CLI args threaded through to hook engines that read them.
+	// Optional; nil is safe.
+	Args []string
+
+	// Outcome is the lifecycle outcome (success/failure) used to filter `when:`
+	// and expose status to hook engines. Zero value defaults to success.
+	Outcome Outcome
+}
+
+// RunPerComponentHooks resolves and runs one component's user-defined hooks
+// (the `hooks:` stack section) for a single lifecycle event. It is the exact
+// GetHooks + SetOutcome + RunAll sequence used by the single-component
+// Terraform CLI path (runUserHooks in cmd/terraform/utils.go), parameterized
+// so it can be called once per graph node — both before and after that node's
+// execution — from bulk Terraform/Helmfile dispatch. The returned error
+// already reflects each hook's on_failure resolution (fail returns non-nil;
+// warn/ignore already resolve to nil inside RunAll) — callers must not
+// swallow it.
+func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
+	if opts == nil || opts.Info == nil {
+		return nil
+	}
+	defer perf.Track(opts.AtmosConfig, "hooks.RunPerComponentHooks")()
+
+	hooksForComponent, err := GetHooks(opts.AtmosConfig, opts.Info)
+	if err != nil {
+		return err
+	}
+	if hooksForComponent == nil || !hooksForComponent.HasHooks() {
+		return nil
+	}
+
+	hooksForComponent.SetOutcome(opts.Outcome)
+	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
+		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
+	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
 }
 
 // ciExperimentalFeature is the feature name used in experimental warnings for CI hooks.

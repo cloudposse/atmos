@@ -1968,6 +1968,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/mikefarah/yq/blob/v4.53.2/LICENSE
 
+  - github.com/minamijoyo/hcledit/editor
+    License: MIT
+    URL: https://github.com/minamijoyo/hcledit/blob/v0.2.18/LICENSE
+
   - github.com/mitchellh/copystructure
     License: MIT
     URL: https://github.com/mitchellh/copystructure/blob/v1.2.0/LICENSE

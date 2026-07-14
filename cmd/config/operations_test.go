@@ -38,6 +38,56 @@ func TestConfigCommands_EditCurrentDirectoryConfig(t *testing.T) {
 	require.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
 }
 
+// TestConfigSetCommand_CreatedVsUpdated exercises both branches of the
+// created/updated distinction: RunE must succeed either way, so this only
+// asserts on the resulting file state (message wording is covered manually).
+func TestConfigSetCommand_CreatedVsUpdated(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("settings:\n  enabled: false\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeString
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	// settings.region does not exist yet -- created branch.
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.region", "us-east-1"}))
+	got, err := atmosyaml.GetFile(file, "settings.region")
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", got)
+
+	// settings.region now exists -- updated branch.
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.region", "us-west-2"}))
+	got, err = atmosyaml.GetFile(file, "settings.region")
+	require.NoError(t, err)
+	assert.Equal(t, "us-west-2", got)
+}
+
+// TestConfigDeleteCommand_NothingToDelete exercises the delete/no-op
+// distinction: deleting an absent path must still succeed (not error), and
+// must not disturb the rest of the file.
+func TestConfigDeleteCommand_NothingToDelete(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("settings:\n  enabled: false\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	require.NoError(t, configDeleteCmd.RunE(configDeleteCmd, []string{"settings.does_not_exist"}))
+	got, err := atmosyaml.GetFile(file, "settings.enabled")
+	require.NoError(t, err)
+	assert.Equal(t, "false", got, "an absent-path delete must not touch the rest of the file")
+}
+
 func TestConfigFormatCommand_FormatsCurrentDirectoryConfig(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")
