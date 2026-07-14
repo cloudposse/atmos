@@ -59,39 +59,45 @@ commands:
             interval: 900ms
             command: *scaffold_generate_cmd
           - type: simulate
+            text: "cd my-landing-zone"
+          - type: simulate
             text: "# start the local AWS emulator, no real account needed"
           - type: simulate
-            text: &emulator_up_cmd atmos --chdir=my-landing-zone emulator up aws -s dev --ephemeral
+            text: &emulator_up_cmd atmos emulator up aws -s dev --ephemeral
           - type: shell
             name: emulator-up
+            working_directory: &landing_zone_dir "../../.context/cast-fixtures/scaffolds/my-landing-zone"
             duration: 450ms
             interval: 750ms
             command: *emulator_up_cmd
           - type: simulate
             text: "# dependencies.components already orders kms first; apply everything with one command"
           - type: simulate
-            text: &apply_all_cmd atmos --chdir=my-landing-zone terraform apply --all -s dev -auto-approve
+            text: &apply_all_cmd atmos terraform apply --all -s dev -auto-approve
           - type: shell
             name: apply-all
+            working_directory: *landing_zone_dir
             duration: 700ms
             interval: 1100ms
             command: *apply_all_cmd
           - type: simulate
             text: "# check what monitoring produced"
           - type: simulate
-            text: &terraform_output_cmd atmos --chdir=my-landing-zone terraform output monitoring -s dev
+            text: &terraform_output_cmd atmos terraform output monitoring -s dev
           - type: shell
             name: terraform-output
+            working_directory: *landing_zone_dir
             duration: 450ms
             interval: 750ms
             command: *terraform_output_cmd
           - type: simulate
             text: "# tear it down when you're done"
           - type: simulate
-            text: &emulator_down_cmd atmos --chdir=my-landing-zone emulator down aws -s dev
+            text: &emulator_down_cmd atmos emulator down aws -s dev
           - type: shell
             name: emulator-down
             when: always
+            working_directory: *landing_zone_dir
             duration: 450ms
             interval: 750ms
             command: *emulator_down_cmd
