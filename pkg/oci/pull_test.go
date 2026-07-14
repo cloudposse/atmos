@@ -1,12 +1,14 @@
-package exec
+package oci
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -27,10 +29,12 @@ import (
 
 // MockLayer implements v1.Layer for testing.
 type MockLayer struct {
-	digestVal       v1.Hash
-	sizeVal         int64
-	uncompressedErr error
-	compressedErr   error
+	digestVal        v1.Hash
+	sizeVal          int64
+	uncompressedErr  error
+	compressedErr    error
+	mediaTypeVal     types.MediaType
+	uncompressedData []byte
 }
 
 func (m *MockLayer) Digest() (v1.Hash, error) {
@@ -49,7 +53,7 @@ func (m *MockLayer) Uncompressed() (io.ReadCloser, error) {
 	if m.uncompressedErr != nil {
 		return nil, m.uncompressedErr
 	}
-	return nil, nil
+	return io.NopCloser(bytes.NewReader(m.uncompressedData)), nil
 }
 
 func (m *MockLayer) Size() (int64, error) {
@@ -57,6 +61,9 @@ func (m *MockLayer) Size() (int64, error) {
 }
 
 func (m *MockLayer) MediaType() (types.MediaType, error) {
+	if m.mediaTypeVal != "" {
+		return m.mediaTypeVal, nil
+	}
 	return types.DockerLayer, nil
 }
 
@@ -65,7 +72,7 @@ func TestProcessOciImage_InvalidReference(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test with invalid image reference.
-	err := processOciImage(atmosConfig, "invalid::image//name", "/tmp/dest")
+	err := ProcessImage(context.Background(), atmosConfig, "invalid::image//name", "/tmp/dest")
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference), "Expected ErrInvalidImageReference, got: %v", err)
@@ -87,6 +94,30 @@ func TestProcessLayer_DecompressionError(t *testing.T) {
 	assert.Contains(t, err.Error(), "layer decompression")
 }
 
+// TestProcessLayer_ZipMediaType tests that a layer declaring the OpenTofu
+// module-package media type ("archive/zip") is extracted as a zip archive
+// instead of a tar stream. Regression test for
+// https://github.com/cloudposse/atmos/issues/2716 following up: OpenTofu's
+// native OCI module-package format failed with "archive/tar: invalid tar
+// header" because processLayer always assumed a tar+gzip layer.
+func TestProcessLayer_ZipMediaType(t *testing.T) {
+	dest := t.TempDir()
+	zipBuf := writeTestZip(t, map[string]string{"main.tf": "# from zip layer\n"})
+
+	mockLayer := &MockLayer{
+		digestVal:        v1.Hash{Algorithm: "sha256", Hex: "zip123"},
+		mediaTypeVal:     zipLayerMediaType,
+		uncompressedData: zipBuf.Bytes(),
+	}
+
+	err := processLayer(mockLayer, 0, dest)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dest, "main.tf"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "from zip layer")
+}
+
 // TestProcessOciImageWithFS_TempDirCreationFailure tests error handling when temp directory creation fails.
 func TestProcessOciImageWithFS_TempDirCreationFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -101,7 +132,7 @@ func TestProcessOciImageWithFS_TempDirCreationFailure(t *testing.T) {
 		Return("", expectedErr)
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	err := processOciImageWithFS(atmosConfig, "test/image:latest", "/tmp/dest", mockFS)
+	err := processImageWithFS(context.Background(), atmosConfig, "test/image:latest", "/tmp/dest", mockFS)
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrCreateTempDirectory), "Expected ErrCreateTempDirectory, got: %v", err)
@@ -162,39 +193,6 @@ func TestCheckArtifactType(t *testing.T) {
 			// without complex log capture, so we just verify no panic occurs.
 		})
 	}
-}
-
-// TestRemoveTempDir tests the removeTempDir function.
-func TestRemoveTempDir_OCIUtils(t *testing.T) {
-	// Create a temporary directory for testing.
-	tempDir := t.TempDir()
-
-	// Ensure directory exists.
-	_, err := os.Stat(tempDir)
-	assert.NoError(t, err)
-
-	// Remove the directory.
-	removeTempDir(tempDir)
-
-	// Verify directory was removed.
-	_, err = os.Stat(tempDir)
-	assert.True(t, os.IsNotExist(err))
-}
-
-// TestRemoveTempDir_NonExistent tests removeTempDir with non-existent directory.
-func TestRemoveTempDir_NonExistent(t *testing.T) {
-	// This should not panic when removing a non-existent directory.
-	// Use defer/recover to verify no panic occurs.
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("removeTempDir panicked on non-existent directory: %v", r)
-		}
-	}()
-
-	removeTempDir("/nonexistent/directory/path")
-
-	// Test passes if no panic occurs.
-	assert.True(t, true, "Function executed without panic on non-existent directory")
 }
 
 // TestParseOCIManifest tests the parseOCIManifest function.
@@ -402,7 +400,7 @@ func installPullImageShim(t *testing.T, shim *pullImageShim) {
 	t.Cleanup(func() { remoteGet = original })
 }
 
-// ghcrConfigWithCreds returns a config that causes getGHCRAuth to resolve a
+// ghcrConfigWithCreds returns a config that causes GHCRAuth to resolve a
 // non-anonymous Basic auth for ghcr.io.
 func ghcrConfigWithCreds() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
@@ -432,7 +430,7 @@ func TestPullImage_AnonymousFallback_403(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.NoError(t, err)
 	assert.NotNil(t, desc)
 	assert.Equal(t, 2, shim.calls, "expected one authed attempt followed by one anonymous retry")
@@ -448,7 +446,7 @@ func TestPullImage_AnonymousFallback_401(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.NoError(t, err)
 	assert.NotNil(t, desc)
 	assert.Equal(t, 2, shim.calls)
@@ -466,7 +464,7 @@ func TestPullImage_AnonymousFallback_DeniedString(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.NoError(t, err)
 	assert.NotNil(t, desc)
 	assert.Equal(t, 2, shim.calls)
@@ -481,7 +479,7 @@ func TestPullImage_NoFallback_DeadlineExceeded(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "deadline-exceeded must not trigger anonymous retry")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage), "error should wrap ErrPullImage")
@@ -497,7 +495,7 @@ func TestPullImage_NoFallback_500(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "5xx must not trigger anonymous retry")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
@@ -512,7 +510,7 @@ func TestPullImage_NoFallback_NetOpError(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "DNS-style errors must not trigger anonymous retry")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
@@ -529,7 +527,7 @@ func TestPullImage_NoRetry_WhenAlreadyAnonymous(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "registry.example.com/myimage:v1")
-	_, err := pullImage(&schema.AtmosConfiguration{}, ref)
+	_, err := pullImage(context.Background(), &schema.AtmosConfiguration{}, ref)
 	require.Error(t, err)
 	assert.Equal(t, 1, shim.calls, "anonymous 403 must not retry anonymously again")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
@@ -546,7 +544,7 @@ func TestPullImage_RichError_ContextAndHints(t *testing.T) {
 	installPullImageShim(t, shim)
 
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
-	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
 	assert.Equal(t, 2, shim.calls, "expected authed + anonymous-retry attempts before failing")
 

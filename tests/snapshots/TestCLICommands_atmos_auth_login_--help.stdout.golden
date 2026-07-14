@@ -17,6 +17,8 @@ FLAGS
 
   -p, --provider string  Provider name to authenticate with (for SSO auto-provisioning)
 
+      --tags string      Select an identity by tags (comma-separated, matches any): --tags=production,admin
+
 
 
 Use --help=usage for examples or --help=all for all flags and full help.

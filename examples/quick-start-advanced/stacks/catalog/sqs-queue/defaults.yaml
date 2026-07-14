@@ -4,6 +4,9 @@ components:
       metadata:
         component: sqs-queue
         description: "SQS queue subscribed to the events topic."
+        tags: [messaging]
+        labels:
+          tier: application
       # https://atmos.tools/stacks/dependencies/components
       dependencies:
         components:
