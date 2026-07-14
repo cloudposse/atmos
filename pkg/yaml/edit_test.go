@@ -248,16 +248,63 @@ func TestFileWrappers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "7", got)
 
-	require.NoError(t, SetFileWithType(file, "vars.enabled", "false", TypeBool))
+	created, err := SetFileWithType(file, "vars.enabled", "false", TypeBool)
+	require.NoError(t, err)
+	assert.False(t, created, "vars.enabled already existed in the fixture")
 	got, err = GetFile(file, "vars.enabled")
 	require.NoError(t, err)
 	assert.Equal(t, "false", got)
 
-	require.NoError(t, DeleteFile(file, "vars.enabled"))
+	existed, err := DeleteFile(file, "vars.enabled")
+	require.NoError(t, err)
+	assert.True(t, existed)
 	_, err = GetFile(file, "vars.enabled")
 	require.ErrorIs(t, err, ErrYAMLPathNotFound)
 
 	require.NoError(t, FormatFile(file))
+}
+
+func TestSetFileWithType_ReportsCreatedVsUpdated(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
+
+	created, err := SetFileWithType(file, "vars.timeout", "30", TypeInt)
+	require.NoError(t, err)
+	assert.True(t, created, "vars.timeout is new")
+
+	created, err = SetFileWithType(file, "vars.timeout", "60", TypeInt)
+	require.NoError(t, err)
+	assert.False(t, created, "vars.timeout now exists")
+
+	got, err := GetFile(file, "vars.timeout")
+	require.NoError(t, err)
+	assert.Equal(t, "60", got)
+}
+
+func TestDeleteFile_ReportsExistedVsNoOp(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
+
+	before, err := os.ReadFile(file)
+	require.NoError(t, err)
+
+	existed, err := DeleteFile(file, "vars.missing")
+	require.NoError(t, err)
+	assert.False(t, existed, "vars.missing was never set")
+
+	after, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "a no-op delete must not rewrite the file")
+
+	existed, err = DeleteFile(file, "vars.enabled")
+	require.NoError(t, err)
+	assert.True(t, existed, "vars.enabled was present")
+
+	existed, err = DeleteFile(file, "vars.enabled")
+	require.NoError(t, err)
+	assert.False(t, existed, "vars.enabled was already removed")
 }
 
 func TestFileWrappers_ReadAndValidationErrors(t *testing.T) {
@@ -268,12 +315,14 @@ func TestFileWrappers_ReadAndValidationErrors(t *testing.T) {
 	require.ErrorIs(t, err, ErrReadFile)
 	assert.ErrorIs(t, SetFile(missing, "vars.region", "x"), ErrReadFile)
 	assert.ErrorIs(t, SetFileRaw(missing, "vars.region", `"x"`), ErrReadFile)
-	assert.ErrorIs(t, DeleteFile(missing, "vars.region"), ErrReadFile)
+	_, err = DeleteFile(missing, "vars.region")
+	assert.ErrorIs(t, err, ErrReadFile)
 	assert.ErrorIs(t, FormatFile(missing), ErrReadFile)
 
 	file := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
-	assert.ErrorIs(t, SetFileWithType(file, "vars.region", "not-bool", TypeBool), ErrInvalidYAMLExpression)
+	_, err = SetFileWithType(file, "vars.region", "not-bool", TypeBool)
+	assert.ErrorIs(t, err, ErrInvalidYAMLExpression)
 	assert.ErrorIs(t, EvalFile(file, "bad["), ErrInvalidYAMLExpression)
 }
 

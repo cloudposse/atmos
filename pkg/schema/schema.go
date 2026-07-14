@@ -357,6 +357,7 @@ type ToolchainVerification struct {
 	Checksums       string `yaml:"checksums,omitempty" json:"checksums,omitempty" mapstructure:"checksums"`
 	Signatures      string `yaml:"signatures,omitempty" json:"signatures,omitempty" mapstructure:"signatures"`
 	VerifierInstall string `yaml:"verifier_install,omitempty" json:"verifier_install,omitempty" mapstructure:"verifier_install"`
+	VerifierTrust   string `yaml:"verifier_trust,omitempty" json:"verifier_trust,omitempty" mapstructure:"verifier_trust"`
 }
 
 // ToolchainRegistry defines a registry source for tool metadata.

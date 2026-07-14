@@ -68,7 +68,7 @@ ai:
   tools:
     enabled: true
     require_confirmation: true
-    allowed_tools:
+    allowed:
       - atmos_describe_component
       - atmos_list_stacks
       - atmos_validate_stacks
