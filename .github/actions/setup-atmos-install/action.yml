@@ -1,0 +1,49 @@
+name: 'Set up Atmos (Install Prebuilt Build)'
+description: >
+  Installs atmos by downloading the binary already built for this workflow
+  run by the `build` job (with retry, via download-artifact-retry), then
+  makes it runnable: sets the executable bit (skipped on Windows) and
+  optionally adds the install directory to PATH. Counterpart to
+  setup-atmos-build, which compiles atmos from source instead of reusing a
+  build artifact already produced earlier in the same run.
+
+inputs:
+  target:
+    description: 'Build flavor the artifact was built for (e.g. linux, macos, macos-intel, windows); used to derive the default build-artifacts-<target> artifact name'
+    required: true
+  name:
+    description: 'Override the artifact name to download (defaults to build-artifacts-<target>)'
+    required: false
+    default: ''
+  path:
+    description: 'Destination directory to download the binary into'
+    required: false
+    default: /usr/local/bin
+  add-to-path:
+    description: 'Append `path` to GITHUB_PATH — set true when path is not already on PATH (e.g. github.workspace)'
+    required: false
+    default: 'false'
+  backoff-seconds:
+    description: 'Seconds to wait before each download retry'
+    required: false
+    default: '15'
+
+runs:
+  using: composite
+  steps:
+    - name: Download atmos build artifact
+      uses: ./.github/actions/download-artifact-retry
+      with:
+        name: ${{ inputs.name || format('build-artifacts-{0}', inputs.target) }}
+        path: ${{ inputs.path }}
+        backoff-seconds: ${{ inputs.backoff-seconds }}
+
+    - name: Add install directory to PATH
+      if: inputs.add-to-path == 'true'
+      shell: bash
+      run: echo "${{ inputs.path }}" >> "$GITHUB_PATH"
+
+    - name: Set execute permissions on atmos
+      if: runner.os != 'Windows'
+      shell: bash
+      run: chmod +x "${{ inputs.path }}/atmos"
