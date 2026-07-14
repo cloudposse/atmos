@@ -40,9 +40,11 @@ var configSetCmd = &cobra.Command{
 	Use:   "set <path> <value>",
 	Short: "Set a value in atmos.yaml by dot-notation path",
 	Long: `Set a value in atmos.yaml using a dot-notation path, preserving comments,
-anchors, YAML functions, and templates. By default the value is written as a
-string; use --type to write an int, bool, float, null, or raw YAML literal.`,
-	Example: "atmos config set logs.level debug\natmos config set --type=bool settings.list_merge_strategy_disabled true",
+anchors, YAML functions, and templates. The value's type (string, int, bool,
+float) is inferred from the Atmos config schema when the path matches a known
+field (e.g. mcp.enabled infers bool); pass --type explicitly to override, or
+for paths the schema doesn't model (falls back to string).`,
+	Example: "atmos config set logs.level debug\natmos config set mcp.enabled true\natmos config set --type=yaml logs.exclude '[\"a\", \"b\"]'",
 	Args:    cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "config.setRunE")()
@@ -52,12 +54,32 @@ string; use --type to write an int, bool, float, null, or raw YAML literal.`,
 			return err
 		}
 
-		if err := atmosyaml.SetFileWithType(file, args[0], args[1], valueType); err != nil {
+		created, err := atmosyaml.SetFileWithType(file, args[0], args[1], effectiveValueType(cmd, args[0]))
+		if err != nil {
 			return err
 		}
-		ui.Successf("Updated %s in %s", args[0], file)
+		if created {
+			ui.Successf("Created `%s` = `%s` in `%s`", args[0], args[1], atmosyaml.DisplayPath(file))
+			return nil
+		}
+		ui.Successf("Updated `%s` to `%s` in `%s`", args[0], args[1], atmosyaml.DisplayPath(file))
 		return nil
 	},
+}
+
+// effectiveValueType returns the --type flag's value when the user passed it
+// explicitly. Otherwise it infers a type from the Atmos config schema for
+// dotPath (e.g. a known bool field), falling back to the flag's default
+// (atmosyaml.TypeString) when the path isn't modeled by the schema -- most
+// commonly free-form sections like vars.
+func effectiveValueType(cmd *cobra.Command, dotPath string) string {
+	if cmd.Flags().Changed("type") {
+		return valueType
+	}
+	if inferred, ok := cfg.InferValueType(dotPath); ok {
+		return inferred
+	}
+	return valueType
 }
 
 var configDeleteCmd = &cobra.Command{
@@ -75,10 +97,15 @@ var configDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		if err := atmosyaml.DeleteFile(file, args[0]); err != nil {
+		existed, err := atmosyaml.DeleteFile(file, args[0])
+		if err != nil {
 			return err
 		}
-		ui.Successf("Deleted %s from %s", args[0], file)
+		if !existed {
+			ui.Successf("Nothing to delete — `%s` is not set in `%s`", args[0], atmosyaml.DisplayPath(file))
+			return nil
+		}
+		ui.Successf("Deleted `%s` from `%s`", args[0], atmosyaml.DisplayPath(file))
 		return nil
 	},
 }
@@ -101,14 +128,15 @@ Atmos YAML functions, and Go templates.`,
 		if err := atmosyaml.FormatFile(file); err != nil {
 			return err
 		}
-		ui.Successf("Formatted %s", file)
+		ui.Successf("Formatted `%s`", atmosyaml.DisplayPath(file))
 		return nil
 	},
 }
 
 func init() {
 	configSetCmd.Flags().StringVar(&valueType, "type", atmosyaml.TypeString,
-		"Value type: string, int, bool, float, null, or yaml (raw literal)")
+		"Value type: string, int, bool, float, null, or yaml (raw literal). "+
+			"Auto-inferred from the Atmos config schema when omitted and the path is recognized.")
 }
 
 // resolveConfigFile picks the atmos.yaml to edit. The inherited persistent
