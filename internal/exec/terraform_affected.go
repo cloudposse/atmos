@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -12,6 +13,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// extractAffectedNodeIDs extracts node IDs from the affected components list.
+func extractAffectedNodeIDs(affectedList []schema.Affected) []string {
+	nodeIDs := make([]string, len(affectedList))
+	for i := range affectedList {
+		nodeIDs[i] = fmt.Sprintf("%s-%s", affectedList[i].Component, affectedList[i].Stack)
+	}
+	return nodeIDs
+}
 
 // filterTerraformAffected narrows the affected list to items that `atmos terraform
 // plan/apply --affected` should actually execute: terraform components only, and
@@ -185,44 +195,4 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 			IncludeDependents: args.IncludeDependents,
 		},
 	})
-}
-
-// executeAffectedComponents processes each affected component in dependency order.
-func executeAffectedComponents(affectedList []schema.Affected, info *schema.ConfigAndStacksInfo, args *DescribeAffectedCmdArgs) error {
-	defer perf.Track(nil, "exec.executeAffectedComponents")()
-
-	// Early return for empty list - nothing to process.
-	if len(affectedList) == 0 {
-		ui.Success("No components affected")
-		return nil
-	}
-
-	affectedYaml, err := u.ConvertToYAML(affectedList)
-	if err != nil {
-		return err
-	}
-	log.Debug("Affected", "components", affectedYaml)
-
-	for i := 0; i < len(affectedList); i++ {
-		affected := &affectedList[i]
-		// If the affected component is included in the dependencies of any other component, don't process it now.
-		// It will be processed in the dependency order.
-		if !affected.IncludedInDependents {
-			err = executeTerraformAffectedComponentInDepOrder(
-				info,
-				affectedList,
-				&affectedDepOrderParams{
-					AffectedComponent: affected.Component,
-					AffectedStack:     affected.Stack,
-					Dependents:        affected.Dependents,
-				},
-				args,
-			)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
