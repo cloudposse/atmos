@@ -78,10 +78,15 @@ strings; use --type for int, bool, float, null, or raw YAML literals.`,
 // runVendorConfigSet writes value at path in a vendor manifest file. Shared by
 // vendor config set and its vendor set alias.
 func runVendorConfigSet(file, path, value, valueType string) error {
-	if err := atmosyaml.SetFileWithType(file, path, value, valueType); err != nil {
+	created, err := atmosyaml.SetFileWithType(file, path, value, valueType)
+	if err != nil {
 		return err
 	}
-	ui.Successf("Updated %s in %s", path, file)
+	if created {
+		ui.Successf("Created `%s` = `%s` in `%s`", path, value, atmosyaml.DisplayPath(file))
+		return nil
+	}
+	ui.Successf("Updated `%s` to `%s` in `%s`", path, value, atmosyaml.DisplayPath(file))
 	return nil
 }
 
@@ -98,10 +103,15 @@ var vendorConfigDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := atmosyaml.DeleteFile(file, args[0]); err != nil {
+		existed, err := atmosyaml.DeleteFile(file, args[0])
+		if err != nil {
 			return err
 		}
-		ui.Successf("Deleted %s from %s", args[0], file)
+		if !existed {
+			ui.Successf("Nothing to delete — `%s` is not set in `%s`", args[0], atmosyaml.DisplayPath(file))
+			return nil
+		}
+		ui.Successf("Deleted `%s` from `%s`", args[0], atmosyaml.DisplayPath(file))
 		return nil
 	},
 }

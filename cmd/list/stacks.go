@@ -1,6 +1,7 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -54,7 +55,10 @@ var stacksCmd = &cobra.Command{
 		v := viper.GetViper()
 
 		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
-		if err := checkAtmosConfig(cmd, v); err != nil {
+		// Skip the stacks-directory-exists check here: listStacksWithOptions below already
+		// reports a friendly "No stacks found" message when there are no stack manifests yet,
+		// whether the stacks directory is missing or simply empty (a brand-new project).
+		if err := checkAtmosConfig(cmd, v, true); err != nil {
 			return err
 		}
 
@@ -155,6 +159,10 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 	// Initialize configuration and auth.
 	atmosConfig, authManager, err := initStacksConfig(cmd, args, opts)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrFailedToFindImport) || errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			ui.Info("No stacks found")
+			return nil
+		}
 		return err
 	}
 

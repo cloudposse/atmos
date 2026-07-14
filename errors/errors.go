@@ -89,6 +89,7 @@ var (
 	ErrUnsafeVendorTarget                    = errors.New("unsafe vendor target directory")
 	ErrInvalidConfig                         = errors.New("invalid configuration")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
+	ErrRefuseWriteThroughSymlink             = errors.New("refusing to write through symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
@@ -847,10 +848,11 @@ var (
 	ErrArchiveEntryTooLarge  = errors.New("archive entry exceeds maximum extracted size")
 
 	// Initialization and configuration errors.
-	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
-	ErrGetHooks            = errors.New("error getting hooks")
-	ErrSetFlag             = errors.New("failed to set flag")
-	ErrVersionMismatch     = errors.New("version mismatch")
+	ErrInitializeCLIConfig    = errors.New("error initializing CLI config")
+	ErrGetHooks               = errors.New("error getting hooks")
+	ErrPerComponentHookFailed = errors.New("per-component hook failed")
+	ErrSetFlag                = errors.New("failed to set flag")
+	ErrVersionMismatch        = errors.New("version mismatch")
 
 	// Download and client errors.
 	ErrMergeConfiguration = errors.New("failed to merge configuration")
@@ -1306,6 +1308,15 @@ var (
 	ErrAIUnsupportedCheckpointFormat  = errors.New("unsupported checkpoint format")
 	ErrAIComponentPathNotFound        = errors.New("component path not found")
 	ErrAIComponentPathNotDirectory    = errors.New("component path is not a directory")
+
+	// AI MCP config/stack/vendor get-set-delete-format-list tool errors.
+	ErrAIConfigFileNotFound         = errors.New("atmos config file not found")
+	ErrAIStackConfigPathNotEditable = errors.New("stack config path is not editable without an explicit file")
+	ErrAIVendorFileNotFound         = errors.New("no vendor manifest found")
+	ErrAICommandNotFound            = errors.New("command not found")
+	ErrAICommandTreeNotConfigured   = errors.New("command tree provider is not configured")
+	ErrAIToolInvalidOutputType      = errors.New("invalid output_type: must be one of 'list', 'map', or 'all'")
+	ErrAINoSchemaForFile            = errors.New("no schema registered for this file; pass schema_path explicitly")
 
 	// AWS security and compliance errors.
 	ErrAWSSecurityNotEnabled       = errors.New("security features are not enabled: add 'aws.security.enabled: true' to atmos.yaml")
