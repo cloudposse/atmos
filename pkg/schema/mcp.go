@@ -1,5 +1,14 @@
 package schema
 
+import "strings"
+
+const (
+	// MCPTransportStdio runs an MCP server as a local subprocess over stdio.
+	MCPTransportStdio = "stdio"
+	// MCPTransportHTTP connects to a remote MCP server over streamable HTTP.
+	MCPTransportHTTP = "http"
+)
+
 // MCPSettings contains configuration for the MCP (Model Context Protocol) server
 // and external MCP server connections.
 type MCPSettings struct {
@@ -31,9 +40,12 @@ func (r *MCPRoutingConfig) IsEnabled() bool {
 // provide additional functionality.
 type MCPServerConfig struct {
 	// Standard MCP server fields (compatible with mcpServers JSON format).
-	Command string            `yaml:"command" json:"command" mapstructure:"command"`
+	Command string            `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
 	Args    []string          `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
 	Env     map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Type    string            `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	URL     string            `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty" mapstructure:"headers"`
 
 	// Atmos-specific extensions.
 	Description string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
@@ -41,4 +53,21 @@ type MCPServerConfig struct {
 	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
 	// Identity is the Atmos Auth identity (from the auth section) for credential injection.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Cwd is the working directory a stdio server subprocess should be launched from.
+	// Used for user-scoped (global) client installs, where the client config isn't
+	// colocated with the Atmos project, so the server needs an explicit cwd.
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty" mapstructure:"cwd"`
+}
+
+// TransportType returns the configured MCP transport, inferring a default when
+// omitted for backward compatibility with existing stdio-only configurations.
+func (c MCPServerConfig) TransportType() string { //nolint:gocritic // This value receiver keeps literal calls ergonomic in config tests.
+	t := strings.ToLower(strings.TrimSpace(c.Type))
+	if t != "" {
+		return t
+	}
+	if c.URL != "" {
+		return MCPTransportHTTP
+	}
+	return MCPTransportStdio
 }

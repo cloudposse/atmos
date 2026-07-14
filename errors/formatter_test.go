@@ -884,7 +884,7 @@ func TestResolveFormatterWidth(t *testing.T) {
 	}
 }
 
-func TestResolveFormatterWidth_HonorsConfiguredWidth(t *testing.T) {
+func TestResolveFormatterWidth_CapsAtDetectedWidthWhenNarrower(t *testing.T) {
 	originalConfig := atmosConfig
 	originalDetectWidth := detectFormatterTerminalWidth
 	defer func() {
@@ -901,10 +901,34 @@ func TestResolveFormatterWidth_HonorsConfiguredWidth(t *testing.T) {
 		return 100
 	}
 
-	assert.Equal(t, 160, resolveFormatterWidth(DefaultFormatterConfig()))
+	// max_width is a ceiling, not a fixed width -- when the real terminal is
+	// narrower than the configured max, the narrower width must win so
+	// padded content (like the title pill) doesn't wrap onto extra lines.
+	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
 }
 
-func TestResolveFormatterWidth_IgnoresDetectedDefaultWidth(t *testing.T) {
+func TestResolveFormatterWidth_UsesConfiguredWidthWhenNarrowerThanDetected(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{MaxWidth: 100},
+		},
+	}
+	detectFormatterTerminalWidth = func() int {
+		return 160
+	}
+
+	// When the terminal is wider than the configured max, the max caps it.
+	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_ConfiguredWidthWinsEvenWhenItMatchesDetected(t *testing.T) {
 	originalConfig := atmosConfig
 	originalDetectWidth := detectFormatterTerminalWidth
 	defer func() {
@@ -921,7 +945,30 @@ func TestResolveFormatterWidth_IgnoresDetectedDefaultWidth(t *testing.T) {
 		return 80
 	}
 
-	assert.Equal(t, DefaultMarkdownWidth, resolveFormatterWidth(DefaultFormatterConfig()))
+	// Configured width should still be honored even when it happens to equal
+	// the detected width -- there's no reason to distrust it in that case.
+	assert.Equal(t, 80, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_UsesDetectedWidthWhenNoConfigOverride(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = nil
+	detectFormatterTerminalWidth = func() int {
+		return 90
+	}
+
+	// With no explicit config override, the actual detected terminal width
+	// must be used -- not the hardcoded DefaultMarkdownWidth. Regression test
+	// for a bug where the detected width was computed but never returned,
+	// causing content to be padded to 120 columns in narrower terminals and
+	// wrap onto extra visual lines.
+	assert.Equal(t, 90, resolveFormatterWidth(DefaultFormatterConfig()))
 }
 
 func TestResolveFormatterWidth_FallsBackToDefaultMarkdownWidth(t *testing.T) {

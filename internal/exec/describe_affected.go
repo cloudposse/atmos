@@ -454,7 +454,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 			Err()
 	}
 
-	repoHost, repoOwner, repoName, err := atmosgit.ParseRepoURL(repoUrl)
+	repoURLParts, err := atmosgit.ParseRepoURL(repoUrl)
 	if err != nil {
 		return err
 	}
@@ -484,9 +484,9 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		HeadSHA:   headSHA,
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
-		RepoName:  repoName,
-		RepoOwner: repoOwner,
-		RepoHost:  repoHost,
+		RepoName:  repoURLParts.Name,
+		RepoOwner: repoURLParts.Owner,
+		RepoHost:  repoURLParts.Host,
 		Stacks:    affected,
 	}
 
