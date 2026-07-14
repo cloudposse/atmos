@@ -7,6 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // _ATMOS_STEP_SESSION_SHELL gates a fake interactive shell used to drive
@@ -52,6 +56,13 @@ func TestMain(m *testing.M) {
 		removeGlobMatches(os.Getenv(atmosStepFakeRMGlobEnv))
 		os.Exit(1)
 	}
+
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		panic(err)
+	}
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
 
 	os.Exit(m.Run())
 }
