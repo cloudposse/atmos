@@ -1137,7 +1137,8 @@ func TestExtractEntry(t *testing.T) {
 		}
 
 		var symlinks []pendingSymlink
-		err := extractEntry(nil, header, destDir, &symlinks)
+		var hardLinks []pendingHardLink
+		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
 		assert.NoError(t, err)
 
 		// Verify directory was created.
@@ -1158,7 +1159,8 @@ func TestExtractEntry(t *testing.T) {
 		}
 
 		var symlinks []pendingSymlink
-		err := extractEntry(nil, header, destDir, &symlinks)
+		var hardLinks []pendingHardLink
+		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1180,7 +1182,8 @@ func TestExtractEntry(t *testing.T) {
 		}
 
 		var symlinks []pendingSymlink
-		require.NoError(t, extractEntry(nil, header, destDir, &symlinks))
+		var hardLinks []pendingHardLink
+		require.NoError(t, extractEntry(nil, header, destDir, &symlinks, &hardLinks))
 
 		// The entry is collected verbatim, not written to disk.
 		require.Len(t, symlinks, 1)
@@ -1208,7 +1211,8 @@ func TestExtractEntry(t *testing.T) {
 		}
 
 		var symlinks []pendingSymlink
-		require.NoError(t, extractEntry(nil, header, destDir, &symlinks))
+		var hardLinks []pendingHardLink
+		require.NoError(t, extractEntry(nil, header, destDir, &symlinks, &hardLinks))
 		require.Len(t, symlinks, 1)
 		assert.Equal(t, "../../../../etc/passwd", symlinks[0].target)
 		_, statErr := os.Lstat(filepath.Join(destDir, "evil"))
@@ -1228,7 +1232,8 @@ func TestExtractEntry(t *testing.T) {
 
 		// Should not return an error for unknown types (just skip them).
 		var symlinks []pendingSymlink
-		err := extractEntry(nil, header, destDir, &symlinks)
+		var hardLinks []pendingHardLink
+		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
 		assert.NoError(t, err)
 		_, statErr := os.Lstat(filepath.Join(destDir, "fifo"))
 		assert.True(t, os.IsNotExist(statErr), "unknown type must not be materialized")

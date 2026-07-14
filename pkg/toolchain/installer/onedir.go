@@ -2,6 +2,7 @@ package installer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,68 +12,34 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// onedirTreeName is the subdirectory within a tool's version directory that
-// holds the complete, preserved archive tree for "onedir" (multi-file) packages
-// such as aws-cli and nodejs/node.
-//
-// Atmos does not create symlinks to expose these entrypoints (symlinks have
-// intentionally been avoided elsewhere in Atmos, e.g. the source provisioner's
-// "Copy Strategy"; see docs/prd/source-provisioner.md). Instead, each
-// entrypoint's real path inside this tree is recorded in a sidecar manifest
-// (see onedirManifestName) and resolved on demand by GetBinaryPath, so a
-// bundled binary is invoked from its real location and keeps its runtime
-// siblings (shared libraries, node_modules, and similar) alongside it — without
-// any symlink privilege required on Windows.
-//
-// The only symlinks a onedir install may contain are ones the upstream archive
-// itself ships (e.g. Node's `bin/npm -> ../lib/node_modules/...` on Unix).
-// Those are never created straight from archive header data during extraction
-// (that archive -> os.Symlink flow is a classic zip-slip write primitive).
-// Instead extraction collects them (see pendingSymlink) and they are
-// materialized afterward, inside the final tree, through the single validated
-// sink createValidatedSymlink — not by Atmos's install/exposure logic.
-//
-// Single-binary tools do not use this directory; they remain flat in the version
-// dir (see the onedir gate in extractFilesFromDir).
+// onedirTreeName holds a preserved multi-file package tree. Entrypoints resolve
+// through its manifest; archive symlinks are materialized only after extraction.
 const onedirTreeName = ".pkg"
 
-// onedirManifestName is the sidecar file recorded in a preserved onedir version
-// directory. Its presence is also how callers (Uninstall, GetBinaryPath)
-// distinguish a onedir install from a flat one.
+// onedirManifestName identifies a preserved onedir install.
 const onedirManifestName = ".atmos-onedir.json"
 
-// onedirBackupSuffix names the transient backup of an existing preserved tree
-// used to make a reinstall atomic (rename aside, then restore on failure).
+// onedirBackupSuffix identifies the transient reinstall backup tree.
 const onedirBackupSuffix = ".bak"
 
-// moveTreeFunc relocates the extracted tree into place during a onedir install.
-// It is a package variable solely so tests can force a move failure and exercise
-// the reinstall rollback path deterministically; production always uses moveTree.
+// moveTreeFunc allows tests to force a move failure.
 var moveTreeFunc = moveTree
 
-// pendingSymlink is a symlink entry discovered while reading an archive, held
-// aside instead of being created inline. Creating a symlink straight from
-// archive header data during extraction is a zip-slip write primitive (the
-// exact "arbitrary file write via archive symlinks" flow CodeQL flags), so
-// onedir installs collect symlinks here and materialize them afterward — in the
-// final tree, through the single validated sink createValidatedSymlink.
+// pendingSymlink is an archive symlink materialized after extraction.
 type pendingSymlink struct {
-	// rel is the symlink's location relative to the extraction root (the raw
-	// archive entry name, e.g. "node-v1.2.3/bin/npm").
-	rel string
-	// target is the raw link target recorded in the archive (e.g.
-	// "../lib/node_modules/npm/bin/npm-cli.js"). It is validated only at
-	// materialization time, never trusted at collection time.
+	rel    string
 	target string
 }
 
-// symlinkRelSet indexes collected symlinks by their cleaned, root-relative
-// location, so the onedir gate and entrypoint resolver can recognize a
-// symlinked path that is not yet present on disk (extraction defers symlink
-// creation; see pendingSymlink).
+// pendingHardLink records a tar hard link until its target has been extracted.
+type pendingHardLink struct {
+	rel    string
+	target string
+}
+
+// symlinkRelSet indexes deferred symlinks by cleaned relative path.
 func symlinkRelSet(symlinks []pendingSymlink) map[string]struct{} {
 	set := make(map[string]struct{}, len(symlinks))
 	for _, s := range symlinks {
@@ -81,20 +48,13 @@ func symlinkRelSet(symlinks []pendingSymlink) map[string]struct{} {
 	return set
 }
 
-// onedirManifest records, for a onedir install, where each entrypoint really
-// lives inside the version directory.
+// onedirManifest records onedir entrypoint paths.
 type onedirManifest struct {
-	// Entrypoints maps a configured entrypoint name (e.g. "node", "npm") to its
-	// path relative to the version directory (e.g. ".pkg/node-v1.2.3-.../bin/node").
 	Entrypoints map[string]string `json:"entrypoints"`
-	// Primary is the entrypoint name representing the tool's main binary
-	// (registry files[0]), returned when callers ask for the version's binary
-	// without naming a specific entrypoint.
-	Primary string `json:"primary"`
+	Primary     string            `json:"primary"`
 }
 
-// writeOnedirManifest persists the manifest for a onedir install, creating the
-// version directory if it does not already exist.
+// writeOnedirManifest persists an onedir manifest.
 func writeOnedirManifest(versionDir string, manifest onedirManifest) error {
 	if err := os.MkdirAll(versionDir, defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("%w: failed to create version directory: %w", ErrFileOperation, err)
@@ -110,9 +70,7 @@ func writeOnedirManifest(versionDir string, manifest onedirManifest) error {
 	return nil
 }
 
-// readOnedirManifest reads a version directory's onedir manifest, if present.
-// The second return value is false for a flat (non-onedir) install or when the
-// manifest is missing/unreadable.
+// readOnedirManifest returns the manifest when present and valid.
 func readOnedirManifest(versionDir string) (onedirManifest, bool) {
 	data, err := os.ReadFile(filepath.Join(versionDir, onedirManifestName)) // #nosec G304 -- versionDir is the installer-managed version directory.
 	if err != nil {
@@ -125,11 +83,7 @@ func readOnedirManifest(versionDir string) (onedirManifest, bool) {
 	return manifest, true
 }
 
-// versionDirFromBinaryPath returns the tool's version directory given a
-// resolved binary path. For a flat install the binary lives directly in the
-// version dir, so this is just filepath.Dir(binaryPath). For a onedir install
-// the resolved binary is nested inside the preserved tree, so this walks up
-// looking for the directory that holds the onedir manifest.
+// versionDirFromBinaryPath finds the flat or onedir version directory.
 func versionDirFromBinaryPath(binDir, binaryPath string) string {
 	dir := filepath.Dir(binaryPath)
 	for dir != binDir && dir != "." && dir != string(filepath.Separator) {
@@ -145,8 +99,7 @@ func versionDirFromBinaryPath(binDir, binaryPath string) string {
 	return filepath.Dir(binaryPath)
 }
 
-// entrypoint is a resolved registry files[] entry: the exposed command name and
-// the template-expanded source path within the extracted archive tree.
+// entrypoint is a resolved registry files[] entry.
 type entrypoint struct {
 	name string // The exposed command/binary name at the version-dir root.
 	src  string // Template-expanded path of the file within the archive root.
@@ -171,10 +124,7 @@ func (i *Installer) resolveEntrypoints(tool *registry.Tool) ([]entrypoint, error
 	return eps, nil
 }
 
-// isIgnorableExtraFile reports whether a non-entrypoint file is "documentation"
-// that a tool does not need at runtime (LICENSE, README, ...). Such files do not
-// trigger onedir (preserved-tree) mode, so single-binary tools that merely ship
-// docs alongside the binary stay on the flat layout.
+// isIgnorableExtraFile reports whether a file is documentation.
 func isIgnorableExtraFile(rel string) bool {
 	base := strings.ToUpper(filepath.Base(rel))
 	switch {
@@ -191,22 +141,7 @@ func isIgnorableExtraFile(rel string) bool {
 	return false
 }
 
-// shouldPreserveTree decides whether an extracted archive is a multi-file
-// ("onedir") bundle that must be kept intact, versus a self-contained single
-// binary that can be installed flat.
-//
-// This is the onedir gate. It preserves the tree when either:
-//   - a declared entrypoint is itself a symlink in the archive (e.g. Node's
-//     npm/npx -> ../lib/...), which only resolves with the whole tree present; or
-//   - the PRIMARY entrypoint's own directory contains a non-entrypoint, non-doc
-//     file — a bundled runtime or shared library the binary loads at runtime,
-//     as with aws-cli's dist/libpython... (runtime siblings live next to the
-//     binary).
-//
-// Files in unrelated subdirectories (such as completions/, manpages/, sbom/)
-// and documentation next to the binary do NOT trigger onedir, so a
-// self-contained single binary that merely ships docs/completions/man pages
-// stays flat (bounded blast radius).
+// shouldPreserveTree keeps archives with symlinked entrypoints or runtime files.
 func shouldPreserveTree(root string, eps []entrypoint, symlinks []pendingSymlink) (bool, error) {
 	defer perf.Track(nil, "installer.shouldPreserveTree")()
 
@@ -214,26 +149,42 @@ func shouldPreserveTree(root string, eps []entrypoint, symlinks []pendingSymlink
 		return false, nil
 	}
 
-	// Symlinks are collected during extraction rather than written to disk (see
-	// pendingSymlink), so recognize them from the set instead of os.Lstat.
 	symSet := symlinkRelSet(symlinks)
 
-	// A symlinked entrypoint needs the whole tree preserved to resolve.
 	for _, ep := range eps {
 		if _, ok := symSet[filepath.Clean(ep.src)]; ok {
 			return true, nil
 		}
 	}
 
-	// Inspect only the directory that holds the primary entrypoint (non-recursive):
-	// runtime siblings live beside the binary, not in unrelated subdirectories.
 	primaryRelDir := filepath.Clean(filepath.Dir(eps[0].src))
+	if preserve, err := hasRuntimeDirectory(root, primaryRelDir); err != nil || preserve {
+		return preserve, err
+	}
 	return hasRuntimeSibling(root, primaryRelDir, entrypointSet(eps), symSet)
 }
 
-// entrypointSet indexes entrypoints by their archive-relative path, tolerating
-// the Windows `.exe` suffix that registry files[].src usually omits (e.g. src
-// "tofu" matches the archive file "tofu.exe").
+// hasRuntimeDirectory detects standard shared-library directories near a binary.
+func hasRuntimeDirectory(root, primaryRelDir string) (bool, error) {
+	dirs := []string{primaryRelDir}
+	if filepath.Base(primaryRelDir) == "bin" {
+		dirs = append(dirs, filepath.Dir(primaryRelDir))
+	}
+	for _, dir := range dirs {
+		for _, name := range []string{"lib", "lib64"} {
+			info, err := os.Stat(filepath.Join(root, dir, name))
+			if err == nil && info.IsDir() {
+				return true, nil
+			}
+			if err != nil && !os.IsNotExist(err) {
+				return false, fmt.Errorf("%w: failed to inspect extracted archive: %w", ErrFileOperation, err)
+			}
+		}
+	}
+	return false, nil
+}
+
+// entrypointSet includes Windows .exe variants.
 func entrypointSet(eps []entrypoint) map[string]struct{} {
 	set := make(map[string]struct{}, 2*len(eps))
 	for _, ep := range eps {
@@ -244,12 +195,8 @@ func entrypointSet(eps []entrypoint) map[string]struct{} {
 	return set
 }
 
-// hasRuntimeSibling reports whether the primary entrypoint's own directory
-// contains a runtime sibling (a non-entrypoint, non-doc file the tool loads at
-// runtime), inspecting both the regular files materialized on disk and the
-// symlink entries collected during extraction (which never hit disk).
+// hasRuntimeSibling checks regular and deferred symlink siblings.
 func hasRuntimeSibling(root, primaryRelDir string, entrySet, symSet map[string]struct{}) (bool, error) {
-	// (a) Regular-file siblings materialized on disk during extraction.
 	entries, err := os.ReadDir(filepath.Join(root, primaryRelDir))
 	if err != nil {
 		return false, fmt.Errorf("%w: failed to inspect extracted archive: %w", ErrFileOperation, err)
@@ -263,8 +210,6 @@ func hasRuntimeSibling(root, primaryRelDir string, entrySet, symSet map[string]s
 		}
 	}
 
-	// (b) Symlink siblings, which extraction collects rather than writing to
-	// disk, so they never appear in the os.ReadDir above.
 	for rel := range symSet {
 		if filepath.Dir(rel) != primaryRelDir {
 			continue
@@ -276,23 +221,18 @@ func hasRuntimeSibling(root, primaryRelDir string, entrySet, symSet map[string]s
 	return false, nil
 }
 
-// isRuntimeSibling reports whether a file beside the primary entrypoint is a
-// runtime sibling that forces onedir: a non-entrypoint, non-doc file the tool
-// loads at runtime (a bundled library or script, say). Declared entrypoints
-// (and their Windows `.exe` form) and documentation do not count.
+// isRuntimeSibling excludes entrypoints and documentation.
 func isRuntimeSibling(rel, base string, entrySet map[string]struct{}) bool {
 	if _, isEntry := entrySet[rel]; isEntry {
-		return false // A declared entrypoint (or its .exe form) is not "extra".
+		return false
 	}
 	if isIgnorableExtraFile(base) {
-		return false // Docs/man/completions do not count as runtime siblings.
+		return false
 	}
 	return true
 }
 
-// installFlat installs the configured entrypoints directly into the version dir
-// (the legacy, single-binary layout). The first file is the primary binary; any
-// additional files are placed alongside it by their configured name.
+// installFlat installs entrypoints in the version directory.
 func (i *Installer) installFlat(stagingDir, binaryPath string, eps []entrypoint) error {
 	defer perf.Track(nil, "installer.installFlat")()
 
@@ -313,21 +253,17 @@ func (i *Installer) installFlat(stagingDir, binaryPath string, eps []entrypoint)
 	return nil
 }
 
-// moveEntrypointFile moves a single extracted file into place, handling the
-// Windows convention where archives may carry a `.exe` extension the registry
-// omits.
+// moveEntrypointFile moves one extracted entrypoint.
 func moveEntrypointFile(src, dst string) error {
 	return moveEntrypointFileForOS(src, dst, runtime.GOOS)
 }
 
-// moveEntrypointFileForOS is the OS-parameterized implementation of
-// moveEntrypointFile, so the Windows `.exe` handling is testable on any platform.
+// moveEntrypointFileForOS supports testable Windows .exe handling.
 func moveEntrypointFileForOS(src, dst, goos string) error {
 	if _, err := os.Stat(src); os.IsNotExist(err) {
 		if goos != "windows" {
 			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, src)
 		}
-		// Windows archives often carry a `.exe` extension the registry omits.
 		srcWithExe := src + windowsExeExt
 		if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
 			if !os.IsNotExist(exeErr) {
@@ -348,51 +284,37 @@ func moveEntrypointFileForOS(src, dst, goos string) error {
 	return nil
 }
 
-// installOnedir preserves the complete extracted tree under <versionDir>/.pkg and
-// records each entrypoint's real path in a sidecar manifest (see
-// onedirManifestName), so a bundled binary is invoked from its real location and
-// keeps its runtime siblings alongside it — matching the way the aqua CLI
-// installs onedir packages, but without Atmos creating any symlinks of its own
-// (see the package doc on onedirTreeName).
+// installOnedir preserves the archive tree and writes its manifest.
 func (i *Installer) installOnedir(stagingDir, binaryPath string, eps []entrypoint, symlinks []pendingSymlink) error {
 	return i.installOnedirForOS(stagingDir, binaryPath, eps, symlinks, runtime.GOOS)
 }
 
-// installOnedirForOS is the OS-parameterized implementation of installOnedir,
-// so Windows archive entrypoint resolution is testable on every platform.
+// installOnedirForOS supports testable Windows entrypoint resolution.
 func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entrypoint, symlinks []pendingSymlink, goos string) error {
 	defer perf.Track(nil, "installer.installOnedir")()
 
 	versionDir := filepath.Dir(binaryPath)
 	treeDir := filepath.Join(versionDir, onedirTreeName)
 
-	// Validate every entrypoint BEFORE replacing an existing tree. A failed
-	// reinstall must leave the known-good package and manifest intact rather
-	// than turning a missing secondary file into a broken install. Symlinked
-	// entrypoints are recognized from the collected set, since extraction does
-	// not write them to disk (see pendingSymlink).
+	// Validate before replacing an existing install.
 	resolvedEntrypoints, err := resolveOnedirEntrypoints(stagingDir, eps, symlinks, goos)
 	if err != nil {
 		return err
 	}
 
-	// Atomically replace any existing tree. Rename the current tree aside first
-	// (rather than deleting it outright) so that if the move or symlink
-	// materialization fails partway (disk full, interrupted cross-device copy,
-	// escaping symlink, ...) the known-good install can be restored instead of
-	// being left with no tree and a stale manifest.
+	// Rename aside so a failed move or materialization can roll back.
 	backupDir := treeDir + onedirBackupSuffix
-	_ = os.RemoveAll(backupDir) // Clear any residue from an interrupted prior run.
+	_ = os.RemoveAll(backupDir)
 	hadExisting := dirExists(treeDir)
 	if hadExisting {
 		if err := os.Rename(treeDir, backupDir); err != nil {
 			return fmt.Errorf("%w: failed to back up existing tree dir %s: %w", ErrFileOperation, treeDir, err)
 		}
 	}
-	if err := populateOnedirTree(stagingDir, treeDir, symlinks, goos); err != nil {
-		_ = os.RemoveAll(treeDir) // Discard the partial tree.
+	if err := populateOnedirTree(stagingDir, treeDir, symlinks); err != nil {
+		_ = os.RemoveAll(treeDir)
 		if hadExisting {
-			_ = os.Rename(backupDir, treeDir) // Restore the known-good tree.
+			_ = os.Rename(backupDir, treeDir)
 		}
 		return err
 	}
@@ -400,36 +322,25 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 		_ = os.RemoveAll(backupDir)
 	}
 
-	// Record each entrypoint's real path relative to the version dir. This is
-	// the ONLY exposure mechanism Atmos uses for onedir installs — no root
-	// symlink is created (see the package doc on onedirTreeName).
 	manifest := onedirManifest{Entrypoints: make(map[string]string, len(resolvedEntrypoints))}
 	for idx, ep := range resolvedEntrypoints {
 		manifest.Entrypoints[ep.name] = filepath.Join(onedirTreeName, ep.src)
 		if idx == 0 {
-			manifest.Primary = ep.name // The first file is the tool's main binary.
+			manifest.Primary = ep.name
 		}
 	}
 	return writeOnedirManifest(versionDir, manifest)
 }
 
-// populateOnedirTree moves the extracted regular-file tree into its final
-// location and then materializes the archive's own symlinks inside it. Symlinks
-// are recreated only after the move so they go through the single validated
-// sink (createValidatedSymlink) in the final tree, never straight from archive
-// header data during extraction.
-func populateOnedirTree(stagingDir, treeDir string, symlinks []pendingSymlink, goos string) error {
+// populateOnedirTree moves files, then materializes archive symlinks.
+func populateOnedirTree(stagingDir, treeDir string, symlinks []pendingSymlink) error {
 	if err := moveTreeFunc(stagingDir, treeDir); err != nil {
 		return err
 	}
-	return materializeSymlinks(treeDir, symlinks, goos)
+	return materializeSymlinks(treeDir, symlinks)
 }
 
-// resolveOnedirEntrypoints verifies that every configured entrypoint exists in
-// the staged archive tree. Windows registries commonly omit the `.exe` suffix
-// in files[].src, so resolve the matching archive file before the tree moves.
-// A symlinked entrypoint is not yet on disk (extraction defers symlink
-// creation; see pendingSymlink), so it is recognized from the collected set.
+// resolveOnedirEntrypoints validates staged entrypoints.
 func resolveOnedirEntrypoints(stagingDir string, eps []entrypoint, symlinks []pendingSymlink, goos string) ([]entrypoint, error) {
 	symSet := symlinkRelSet(symlinks)
 	resolved := make([]entrypoint, len(eps))
@@ -443,11 +354,7 @@ func resolveOnedirEntrypoints(stagingDir string, eps []entrypoint, symlinks []pe
 	return resolved, nil
 }
 
-// resolveOnedirEntrypointSourceForOS returns the archive-relative source path
-// for an onedir entrypoint. A path is present if it was extracted to disk or
-// collected as a pending symlink (symSet). On Windows, try `.exe` when the
-// registry's source path omits it, matching the flat installation path's
-// existing behavior.
+// resolveOnedirEntrypointSourceForOS resolves a file, deferred symlink, or .exe.
 func resolveOnedirEntrypointSourceForOS(stagingDir, src string, symSet map[string]struct{}, goos string) (string, error) {
 	if present, err := onedirSourcePresent(stagingDir, src, symSet); err != nil {
 		return "", err
@@ -467,8 +374,7 @@ func resolveOnedirEntrypointSourceForOS(stagingDir, src string, symSet map[strin
 	return "", fmt.Errorf("%w: entrypoint not found in archive: %s", ErrToolNotFound, src)
 }
 
-// onedirSourcePresent reports whether an archive-relative source path was
-// materialized on disk or collected as a pending symlink.
+// onedirSourcePresent checks staged files and deferred symlinks.
 func onedirSourcePresent(stagingDir, src string, symSet map[string]struct{}) (bool, error) {
 	if _, ok := symSet[filepath.Clean(src)]; ok {
 		return true, nil
@@ -481,50 +387,26 @@ func onedirSourcePresent(stagingDir, src string, symSet map[string]struct{}) (bo
 	return false, nil
 }
 
-// materializeSymlinks recreates an archive's own symlinks inside the final
-// onedir tree, after the regular files have been moved into place. Every link
-// is created through createValidatedSymlink — the single validated os.Symlink
-// sink — so a symlink is never written straight from archive header data during
-// extraction (that archive -> os.Symlink flow is a zip-slip write primitive).
-func materializeSymlinks(root string, symlinks []pendingSymlink, goos string) error {
+// materializeSymlinks creates archive symlinks after the tree is moved.
+func materializeSymlinks(root string, symlinks []pendingSymlink) error {
 	for _, s := range symlinks {
-		if err := createValidatedSymlink(root, filepath.Join(root, s.rel), s.target, goos); err != nil {
+		if err := createValidatedSymlink(root, filepath.Join(root, s.rel), s.target); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// createValidatedSymlink is the single symlink-creation sink in the installer.
-// It reproduces an archive's own symlink inside the preserved onedir tree, with
-// both archive-controlled inputs sanitized INLINE, immediately before the
-// os.Symlink call:
-//   - the symlink's LOCATION (linkPath, from the entry name) must stay within root, and
-//   - the symlink's TARGET, resolved relative to the link's own directory, must
-//     stay within root (absolute targets are rejected outright).
-//
-// Security (CodeQL go/zipslip — "arbitrary file write via archive symlinks"):
-// os.Symlink receives the SAME cleaned, absolute path (resolved) that the
-// containment check guards, in this function's own body — not a value
-// re-derived after the check, and not a value guarded in a different function.
-// That intraprocedural "guard, then pass the guarded value" shape is what the
-// analysis credits, and it is why extraction defers symlink creation to this
-// sink instead of calling os.Symlink from the archive-reading loop.
-//
-// The link target is therefore absolute, so a onedir tree is pinned to its
-// version directory: it is reinstalled rather than relocated (documented in the
-// install guide's "How Tools Are Installed on Disk").
-func createValidatedSymlink(root, linkPath, linkname, goos string) error {
+// createValidatedSymlink creates an in-tree archive symlink.
+// It validates both link and target paths immediately before os.Symlink.
+func createValidatedSymlink(root, linkPath, linkname string) error {
 	cleanRoot := filepath.Clean(root)
 
-	// (1) The symlink's own location must stay within root.
 	cleanLinkPath := filepath.Clean(linkPath)
 	if cleanLinkPath != cleanRoot && !strings.HasPrefix(cleanLinkPath, cleanRoot+string(os.PathSeparator)) {
 		return fmt.Errorf("%w: symlink path escapes root: %s", ErrFileOperation, linkPath)
 	}
 
-	// (2) The target must be relative and, once resolved against the link's own
-	// directory, stay within root.
 	if linkname == "" || filepath.IsAbs(linkname) {
 		return fmt.Errorf("%w: illegal symlink target: %s -> %q", ErrFileOperation, linkPath, linkname)
 	}
@@ -538,22 +420,36 @@ func createValidatedSymlink(root, linkPath, linkname, goos string) error {
 	}
 	_ = os.Remove(cleanLinkPath)
 
-	// os.Symlink receives the guarded absolute `resolved` value directly.
 	if err := os.Symlink(resolved, cleanLinkPath); err != nil {
-		if goos == "windows" {
-			// Windows onedir support is tracked separately; preserve the legacy
-			// behavior of skipping links rather than failing the whole extract.
-			ui.Warningf("Skipping symlink (unsupported on this platform): %s", filepath.Base(linkPath))
-			return nil
-		}
 		return fmt.Errorf("%w: failed to create symlink %s: %w", ErrFileOperation, linkPath, err)
 	}
 	return nil
 }
 
-// extractHardLink materializes a tar hard-link entry. The target is relative to
-// the archive root (dest). If a hard link cannot be created it falls back to
-// copying the referenced file; if the target is not yet present it is skipped.
+// materializeHardLinks creates deferred tar hard links after extraction.
+func materializeHardLinks(root string, links []pendingHardLink) error {
+	remaining := links
+	for len(remaining) > 0 {
+		next := make([]pendingHardLink, 0, len(remaining))
+		for _, link := range remaining {
+			err := extractHardLink(filepath.Join(root, link.rel), link.target, root)
+			if errors.Is(err, ErrToolNotFound) {
+				next = append(next, link)
+				continue
+			}
+			if err != nil {
+				return err
+			}
+		}
+		if len(next) == len(remaining) {
+			return fmt.Errorf("%w: hard link target not found: %s", ErrToolNotFound, next[0].target)
+		}
+		remaining = next
+	}
+	return nil
+}
+
+// extractHardLink materializes a tar hard link relative to root.
 func extractHardLink(linkPath, linkname, dest string) error {
 	target := filepath.Join(dest, linkname)
 	if !isSafePath(target, dest) {
@@ -570,8 +466,7 @@ func extractHardLink(linkPath, linkname, dest string) error {
 
 	info, statErr := os.Stat(target)
 	if statErr != nil {
-		ui.Warningf("Skipping hard link (target missing): %s", filepath.Base(linkPath))
-		return nil
+		return fmt.Errorf("%w: hard link target not found: %s", ErrToolNotFound, linkname)
 	}
 	return copyRegularFile(target, linkPath, info.Mode().Perm())
 }
@@ -621,7 +516,7 @@ func copyTree(src, dst string) error {
 			// install the staging tree has no symlinks — they are collected and
 			// materialized separately — so this is a defensive path for the
 			// generic cross-device copy fallback.)
-			return createValidatedSymlink(dst, target, link, runtime.GOOS)
+			return createValidatedSymlink(dst, target, link)
 		default:
 			return copyRegularFile(path, target, info.Mode().Perm())
 		}

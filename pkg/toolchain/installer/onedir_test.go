@@ -164,6 +164,15 @@ func TestShouldPreserveTree(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "bin entrypoint plus lib directory triggers onedir",
+			eps:  []entrypoint{{name: "tool", src: "bundle/bin/tool"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "bundle/bin/tool", "bin")
+				writeFileUnder(t, root, "bundle/lib/libtool.so", "shared-lib")
+			},
+			want: true,
+		},
+		{
 			// gum/k9s shape: a self-contained binary shipping completions/ and
 			// manpages/ in SUBDIRS stays flat (subdir files are not siblings).
 			name: "completions and manpages subdirs stay flat",
@@ -254,33 +263,22 @@ func TestShouldPreserveTree(t *testing.T) {
 	}
 }
 
-// TestShouldPreserveTree_SymlinkEntrypoint verifies that the gate recognizes a
-// symlinked entrypoint (Node's npm launcher that links into its lib tree) from
-// the COLLECTED set rather than from disk: extraction defers symlink creation
-// (see pendingSymlink), so the link is never present on disk when the gate runs.
-// Both directions are checked so a regression that ignores the set (or probes
-// disk instead) is caught. Needs no symlink privilege, so it runs everywhere.
+// TestShouldPreserveTree_SymlinkEntrypoint uses a deferred symlink entrypoint.
 func TestShouldPreserveTree_SymlinkEntrypoint(t *testing.T) {
 	root := t.TempDir()
-	// The archive's regular files are on disk; the npm entrypoint is a symlink
-	// that has NOT been written to disk (only collected).
 	writeFileUnder(t, root, "node-v1/bin/node", "NODE")
-	writeFileUnder(t, root, "node-v1/lib/npm-cli.js", "NPM")
 
 	eps := []entrypoint{
 		{name: "node", src: "node-v1/bin/node"},
 		{name: "npm", src: "node-v1/bin/npm"},
 	}
 
-	// With npm in the collected symlink set, the gate must force onedir.
 	got, err := shouldPreserveTree(root, eps, []pendingSymlink{
 		{rel: "node-v1/bin/npm", target: "../lib/npm-cli.js"},
 	})
 	require.NoError(t, err)
 	assert.True(t, got, "a symlinked entrypoint (from the set) must force onedir")
 
-	// Without it in the set (and absent from disk), the same layout stays flat,
-	// proving the decision is driven by the set and not a stale disk probe.
 	got, err = shouldPreserveTree(root, eps, nil)
 	require.NoError(t, err)
 	assert.False(t, got, "with no symlink and no runtime sibling, the layout must stay flat")
@@ -297,14 +295,7 @@ func TestIsIgnorableExtraFile(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Sidecar manifest / real-path exposure (no Atmos-created symlinks).
-//
-// Atmos avoids symlinks by design (see the onedirTreeName doc). These tests
-// run on every platform, including a real windows-latest CI runner (Atmos
-// already runs `go test ./...` there via the acceptance-test job), so they are
-// NOT Windows-skipped.
-// ---------------------------------------------------------------------------
+// Sidecar manifest tests.
 
 func TestOnedirManifest_WriteReadRoundtrip(t *testing.T) {
 	versionDir := t.TempDir()
@@ -371,7 +362,6 @@ func TestVersionDirFromBinaryPath(t *testing.T) {
 		binDir := t.TempDir()
 		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
 		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "node"}))
-		// The resolved binary lives several levels deep inside the preserved tree.
 		binaryPath := filepath.Join(versionDir, onedirTreeName, "node-v24.18.0-darwin-arm64", "bin", "node")
 
 		assert.Equal(t, versionDir, versionDirFromBinaryPath(binDir, binaryPath))
@@ -379,8 +369,6 @@ func TestVersionDirFromBinaryPath(t *testing.T) {
 
 	t.Run("legacy alternative-path layout: no manifest, falls back to immediate parent", func(t *testing.T) {
 		binDir := t.TempDir()
-		// This mirrors FindBinaryPath's legacy "<binDir>/<version>/<name>" layout
-		// (no owner/repo nesting), which predates onedir and has no manifest.
 		versionDir := filepath.Join(binDir, "1.9.8")
 		binaryPath := filepath.Join(versionDir, "terraform")
 
@@ -388,9 +376,6 @@ func TestVersionDirFromBinaryPath(t *testing.T) {
 	})
 
 	t.Run("binaryPath outside binDir walks to the filesystem root and falls back", func(t *testing.T) {
-		// binDir is NOT an ancestor of binaryPath at all, so the upward walk
-		// never encounters it and must stop at the filesystem root instead of
-		// looping forever, still returning the safe fallback.
 		binDir := filepath.Join(t.TempDir(), "unrelated-bindir")
 		binaryPath := filepath.Join(t.TempDir(), "elsewhere", "tool")
 
@@ -505,7 +490,7 @@ func TestCreateValidatedSymlink(t *testing.T) {
 	t.Run("creates a symlink with a guarded absolute in-tree target", func(t *testing.T) {
 		dest := t.TempDir()
 		link := filepath.Join(dest, "bin", "npm")
-		require.NoError(t, createValidatedSymlink(dest, link, "../lib/npm-cli.js", runtime.GOOS))
+		require.NoError(t, createValidatedSymlink(dest, link, "../lib/npm-cli.js"))
 
 		info, err := os.Lstat(link)
 		require.NoError(t, err)
@@ -522,7 +507,7 @@ func TestCreateValidatedSymlink(t *testing.T) {
 	t.Run("rejects a relative target that escapes dest", func(t *testing.T) {
 		dest := t.TempDir()
 		link := filepath.Join(dest, "evil")
-		err := createValidatedSymlink(dest, link, "../../../../etc/passwd", runtime.GOOS)
+		err := createValidatedSymlink(dest, link, "../../../../etc/passwd")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -530,7 +515,7 @@ func TestCreateValidatedSymlink(t *testing.T) {
 	t.Run("rejects an absolute target outside dest", func(t *testing.T) {
 		dest := t.TempDir()
 		link := filepath.Join(dest, "evil")
-		err := createValidatedSymlink(dest, link, "/etc/passwd", runtime.GOOS)
+		err := createValidatedSymlink(dest, link, "/etc/passwd")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -539,7 +524,7 @@ func TestCreateValidatedSymlink(t *testing.T) {
 		dest := t.TempDir()
 		link := filepath.Join(dest, "bin", "npm")
 		// The target does not exist yet (archive ordering); the link must still be created.
-		require.NoError(t, createValidatedSymlink(dest, link, "../lib/cli.js", runtime.GOOS))
+		require.NoError(t, createValidatedSymlink(dest, link, "../lib/cli.js"))
 
 		// Materialize the target afterwards and confirm the link resolves.
 		writeFileUnder(t, dest, "lib/cli.js", "CLI")
@@ -557,7 +542,7 @@ func TestCreateValidatedSymlink(t *testing.T) {
 func TestCreateValidatedSymlink_Validation(t *testing.T) {
 	t.Run("rejects an empty target", func(t *testing.T) {
 		root := t.TempDir()
-		err := createValidatedSymlink(root, filepath.Join(root, "link"), "", runtime.GOOS)
+		err := createValidatedSymlink(root, filepath.Join(root, "link"), "")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -568,7 +553,7 @@ func TestCreateValidatedSymlink_Validation(t *testing.T) {
 		// is NOT absolute on Windows, where filepath.IsAbs requires a volume).
 		absOutside := filepath.Join(t.TempDir(), "evil")
 		require.True(t, filepath.IsAbs(absOutside))
-		err := createValidatedSymlink(root, filepath.Join(root, "link"), absOutside, runtime.GOOS)
+		err := createValidatedSymlink(root, filepath.Join(root, "link"), absOutside)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -577,7 +562,7 @@ func TestCreateValidatedSymlink_Validation(t *testing.T) {
 		root := t.TempDir()
 		// A relative "../" climb escapes on every platform.
 		escaping := filepath.Join("..", "..", "..", "..", "etc", "passwd")
-		err := createValidatedSymlink(root, filepath.Join(root, "node", "bin", "npm"), escaping, runtime.GOOS)
+		err := createValidatedSymlink(root, filepath.Join(root, "node", "bin", "npm"), escaping)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -586,7 +571,7 @@ func TestCreateValidatedSymlink_Validation(t *testing.T) {
 		root := t.TempDir()
 		// The symlink's own location is outside root (sibling of root).
 		outside := filepath.Join(filepath.Dir(root), "outside-link")
-		err := createValidatedSymlink(root, outside, "x", runtime.GOOS)
+		err := createValidatedSymlink(root, outside, "x")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 		_, statErr := os.Lstat(outside)
@@ -599,7 +584,7 @@ func TestCreateValidatedSymlink_Validation(t *testing.T) {
 		}
 		root := t.TempDir()
 		link := filepath.Join(root, "node", "bin", "npm")
-		require.NoError(t, createValidatedSymlink(root, link, "../lib/npm-cli.js", runtime.GOOS))
+		require.NoError(t, createValidatedSymlink(root, link, "../lib/npm-cli.js"))
 		got, err := os.Readlink(link)
 		require.NoError(t, err)
 		assert.Equal(t, filepath.Join(root, "node", "lib", "npm-cli.js"), got)
@@ -611,7 +596,7 @@ func TestCreateValidatedSymlink_Validation(t *testing.T) {
 		}
 		root := t.TempDir()
 		link := filepath.Join(root, "node", "bin", "npm")
-		require.NoError(t, createValidatedSymlink(root, link, "./sub/../other", runtime.GOOS))
+		require.NoError(t, createValidatedSymlink(root, link, "./sub/../other"))
 		got, err := os.Readlink(link)
 		require.NoError(t, err)
 		assert.Equal(t, filepath.Join(root, "node", "bin", "other"), got)
@@ -1071,7 +1056,7 @@ func TestOnedir_ErrorPaths(t *testing.T) {
 		base := t.TempDir()
 		fileAsParent := filepath.Join(base, "iamafile")
 		require.NoError(t, os.WriteFile(fileAsParent, []byte("x"), 0o644))
-		err := createValidatedSymlink(base, filepath.Join(fileAsParent, "child"), "target", runtime.GOOS)
+		err := createValidatedSymlink(base, filepath.Join(fileAsParent, "child"), "target")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1126,10 +1111,7 @@ func TestOnedir_ErrorPaths(t *testing.T) {
 	})
 }
 
-// TestExtractSymlinkForOS_SymlinkFailure exercises the branch taken when the
-// underlying os.Symlink call fails (forced here by a pre-existing non-empty
-// directory at the link path): Windows skips with a warning, other platforms
-// return an error.
+// TestCreateValidatedSymlink_SymlinkFailure rejects a blocked link path.
 func TestCreateValidatedSymlink_SymlinkFailure(t *testing.T) {
 	newBlockedLink := func(t *testing.T) (dest, linkPath string) {
 		t.Helper()
@@ -1140,14 +1122,9 @@ func TestCreateValidatedSymlink_SymlinkFailure(t *testing.T) {
 		return dest, linkPath
 	}
 
-	t.Run("windows skips with warning", func(t *testing.T) {
+	t.Run("returns an error", func(t *testing.T) {
 		dest, linkPath := newBlockedLink(t)
-		assert.NoError(t, createValidatedSymlink(dest, linkPath, "target", "windows"))
-	})
-
-	t.Run("non-windows returns an error", func(t *testing.T) {
-		dest, linkPath := newBlockedLink(t)
-		err := createValidatedSymlink(dest, linkPath, "target", "linux")
+		err := createValidatedSymlink(dest, linkPath, "target")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1217,8 +1194,7 @@ func TestCopyRegularFile_OpenFileError(t *testing.T) {
 	assert.ErrorIs(t, err, ErrFileOperation)
 }
 
-// TestExtractTarGz_PreservesHardLink verifies the tar TypeLink dispatch path in
-// extractEntry recreates hard links end to end.
+// TestExtractTarGz_PreservesHardLink verifies tar hard-link extraction.
 func TestExtractTarGz_PreservesHardLink(t *testing.T) {
 	tmp := t.TempDir()
 	archive := filepath.Join(tmp, "tool.tar.gz")
@@ -1236,6 +1212,25 @@ func TestExtractTarGz_PreservesHardLink(t *testing.T) {
 	require.NoError(t, (&Installer{}).extractTarGz(archive, binaryPath, tool))
 
 	// The hard link was materialized in the preserved tree with the same content.
+	got, err := os.ReadFile(filepath.Join(versionDir, onedirTreeName, "pkg", "hardlink"))
+	require.NoError(t, err)
+	assert.Equal(t, "PAYLOAD", string(got))
+}
+
+func TestExtractTarGz_PreservesForwardHardLink(t *testing.T) {
+	tmp := t.TempDir()
+	archive := filepath.Join(tmp, "tool.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "pkg/", dir: true},
+		{name: "pkg/hardlink", hardlink: "pkg/real"},
+		{name: "pkg/real", content: "PAYLOAD", mode: 0o755},
+		{name: "pkg/extra.so", content: "LIB"},
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	tool := &registry.Tool{Files: []registry.File{{Name: "real", Src: "pkg/real"}}}
+	require.NoError(t, (&Installer{}).extractTarGz(archive, filepath.Join(versionDir, "real"), tool))
+
 	got, err := os.ReadFile(filepath.Join(versionDir, onedirTreeName, "pkg", "hardlink"))
 	require.NoError(t, err)
 	assert.Equal(t, "PAYLOAD", string(got))
@@ -1261,13 +1256,32 @@ func TestExtractHardLink(t *testing.T) {
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
-	t.Run("skips when the target is missing", func(t *testing.T) {
+	t.Run("returns an error when the target is missing", func(t *testing.T) {
 		dest := t.TempDir()
 		linkPath := filepath.Join(dest, "h")
-		// A missing hard-link target is skipped (not fatal) rather than crashing.
-		require.NoError(t, extractHardLink(linkPath, "not-there", dest))
-		_, err := os.Lstat(linkPath)
+		err := extractHardLink(linkPath, "not-there", dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+		_, err = os.Lstat(linkPath)
 		assert.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestMaterializeHardLinks(t *testing.T) {
+	t.Run("returns not-found when no target is extracted", func(t *testing.T) {
+		err := materializeHardLinks(t.TempDir(), []pendingHardLink{{rel: "link", target: "missing"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+	})
+
+	t.Run("propagates link creation errors", func(t *testing.T) {
+		root := t.TempDir()
+		writeFileUnder(t, root, "target", "data")
+		require.NoError(t, os.WriteFile(filepath.Join(root, "blocked"), []byte("x"), 0o644))
+
+		err := materializeHardLinks(root, []pendingHardLink{{rel: filepath.Join("blocked", "link"), target: "target"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 }
 

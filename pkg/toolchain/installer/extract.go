@@ -272,11 +272,7 @@ func (i *Installer) expandFileSrcTemplate(srcPath string, tool *registry.Tool) (
 	return buf.String(), nil
 }
 
-// Unzip extracts a zip archive to a destination directory, discarding any
-// symlink entries. It works on Windows, macOS, and Linux and is the entry point
-// for callers that do not preserve an archive tree (a single binary is located
-// by name afterward). The onedir install path uses unpackZip instead, which
-// returns the collected symlinks for later, validated materialization.
+// Unzip extracts a zip archive and discards deferred symlinks.
 func Unzip(src, dest string) error {
 	defer perf.Track(nil, "toolchain.Unzip")()
 
@@ -284,11 +280,7 @@ func Unzip(src, dest string) error {
 	return err
 }
 
-// unpackZip extracts a zip archive to dest and returns the symlink entries it
-// contains WITHOUT creating them. Deferring symlink creation keeps the archive
-// header data out of any os.Symlink call during extraction (see pendingSymlink);
-// onedir installs materialize the returned links afterward, in the final tree,
-// through the single validated sink createValidatedSymlink.
+// unpackZip extracts files and returns deferred symlink entries.
 func unpackZip(src, dest string) ([]pendingSymlink, error) {
 	defer perf.Track(nil, "toolchain.unpackZip")()
 
@@ -319,9 +311,6 @@ func extractZipFile(f *zip.File, dest string, maxSize int64, symlinks *[]pending
 		return os.MkdirAll(fpath, os.ModePerm)
 	}
 
-	// A zip symlink entry stores its target path as the entry's content. Defer
-	// its creation (never os.Symlink straight from archive data) by collecting
-	// it for validated materialization after the tree is in place.
 	if f.Mode()&os.ModeSymlink != 0 {
 		target, err := readZipSymlinkTarget(f, maxSize)
 		if err != nil {
@@ -338,9 +327,7 @@ func extractZipFile(f *zip.File, dest string, maxSize int64, symlinks *[]pending
 	return copyFileContents(f, fpath, maxSize)
 }
 
-// readZipSymlinkTarget reads the link target stored as a zip symlink entry's
-// content. The value is not validated here; createValidatedSymlink sanitizes it
-// when the link is materialized.
+// readZipSymlinkTarget reads a zip symlink target.
 func readZipSymlinkTarget(f *zip.File, maxSize int64) (string, error) {
 	rc, err := f.Open()
 	if err != nil {
@@ -407,11 +394,7 @@ func copyWithLimit(src io.Reader, dst io.Writer, name string, maxSize int64) err
 	return nil
 }
 
-// ExtractTarGz extracts a .tar.gz file to the given destination directory,
-// discarding any symlink entries. It is the entry point for callers that do not
-// preserve an archive tree (a single binary is located by name afterward). The
-// onedir install path uses unpackTarGz instead, which returns the collected
-// symlinks for later, validated materialization.
+// ExtractTarGz extracts a tar.gz archive and discards deferred symlinks.
 func ExtractTarGz(src, dest string) error {
 	defer perf.Track(nil, "toolchain.ExtractTarGz")()
 
@@ -419,11 +402,7 @@ func ExtractTarGz(src, dest string) error {
 	return err
 }
 
-// unpackTarGz extracts a .tar.gz file to dest and returns the symlink entries it
-// contains WITHOUT creating them. Deferring symlink creation keeps the archive
-// header data out of any os.Symlink call during extraction (see pendingSymlink);
-// onedir installs materialize the returned links afterward, in the final tree,
-// through the single validated sink createValidatedSymlink.
+// unpackTarGz extracts files and returns deferred symlink entries.
 func unpackTarGz(src, dest string) ([]pendingSymlink, error) {
 	defer perf.Track(nil, "toolchain.unpackTarGz")()
 
@@ -440,6 +419,7 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, error) {
 	defer gzr.Close()
 
 	var symlinks []pendingSymlink
+	var hardLinks []pendingHardLink
 	tr := tar.NewReader(gzr)
 	for {
 		header, err := tr.Next()
@@ -450,14 +430,17 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, error) {
 			return nil, fmt.Errorf("%w: error reading tar: %w", ErrFileOperation, err)
 		}
 
-		if err := extractEntry(tr, header, dest, &symlinks); err != nil {
+		if err := extractEntry(tr, header, dest, &symlinks, &hardLinks); err != nil {
 			return nil, err
 		}
+	}
+	if err := materializeHardLinks(dest, hardLinks); err != nil {
+		return nil, err
 	}
 	return symlinks, nil
 }
 
-func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink) error {
+func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink, hardLinks *[]pendingHardLink) error {
 	//nolint:gosec // G305: Path is validated by isSafePath check on next line.
 	targetPath := filepath.Join(dest, header.Name)
 	if !isSafePath(targetPath, dest) {
@@ -470,15 +453,11 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]p
 	case tar.TypeReg:
 		return extractFile(tr, targetPath, header)
 	case tar.TypeSymlink:
-		// Defer symlink creation: never create a symlink directly from archive
-		// header data during extraction (that archive -> os.Symlink flow is a
-		// zip-slip write primitive). onedir installs materialize the collected
-		// symlinks afterward, in the final tree, via a single validated sink
-		// (see materializeSymlinks / createValidatedSymlink).
 		*symlinks = append(*symlinks, pendingSymlink{rel: header.Name, target: header.Linkname})
 		return nil
 	case tar.TypeLink:
-		return extractHardLink(targetPath, header.Linkname, dest)
+		*hardLinks = append(*hardLinks, pendingHardLink{rel: header.Name, target: header.Linkname})
+		return nil
 	default:
 		ui.Warningf("Skipping unknown type: %s", header.Name)
 		return nil
