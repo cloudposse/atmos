@@ -13,6 +13,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	pkgdata "github.com/cloudposse/atmos/pkg/data"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -544,8 +545,7 @@ func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
-	return nil
+	return pkgdata.Writeln(y)
 }
 
 // PrintAsYAMLSimple prints the provided value as YAML document without syntax highlighting.
@@ -563,8 +563,7 @@ func PrintAsYAMLSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
-	return nil
+	return pkgdata.Writeln(y)
 }
 
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {

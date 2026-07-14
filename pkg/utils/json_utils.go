@@ -8,6 +8,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 
+	pkgdata "github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -21,8 +22,7 @@ func PrintAsJSON(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(highlighted)
-	return nil
+	return pkgdata.Writeln(highlighted)
 }
 
 // PrintAsJSONSimple prints the provided value as JSON document without syntax highlighting.
@@ -41,8 +41,7 @@ func PrintAsJSONSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(prettyJSON.String())
-	return nil
+	return pkgdata.Writeln(prettyJSON.String())
 }
 
 func GetHighlightedJSON(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
