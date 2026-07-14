@@ -112,9 +112,10 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 		return fmt.Errorf("%w: failed to extract ZIP: %w", ErrFileOperation, err)
 	}
 
-	// If Files config is provided, use the Src path to find the binary.
+	// If Files config is provided, use the Src path to find the binary. Zip
+	// archives have no hard-link entries, so none are threaded through.
 	if len(tool.Files) > 0 {
-		return i.extractFilesFromDir(tempDir, binaryPath, tool, symlinks)
+		return i.extractFilesFromDir(tempDir, binaryPath, tool, symlinks, nil)
 	}
 
 	// Otherwise, fall back to searching for the binary by name.
@@ -183,28 +184,11 @@ func installExtractedBinary(src, dst string) error {
 }
 
 // extractFilesFromDir installs the configured entrypoints from an extracted
-// archive tree. The binaryPath parameter specifies the destination for the
-// primary binary.
-//
-// File placement convention:
-//   - The FIRST file in tool.Files is treated as the primary binary. It is
-//     installed to binaryPath (flat mode) or symlinked to it (onedir mode). This
-//     matches the Aqua registry convention where the first entry is the main
-//     executable.
-//   - ADDITIONAL files (index > 0) are exposed in the same directory using their
-//     configured Name.
-//
-// Layout is chosen by the onedir gate (shouldPreserveTree):
-//   - Single-binary tools keep the legacy FLAT layout (the entrypoints are moved
-//     directly into the version dir).
-//   - Multi-file ("onedir") bundles such as aws-cli and nodejs/node keep the
-//     COMPLETE archive tree under <versionDir>/.pkg and expose the entrypoints as
-//     symlinks into it, so bundled binaries keep their runtime siblings (shared
-//     libraries, node_modules, ...) alongside them.
-//
-// Template variables in file.Src (e.g., {{.OS}}-{{.Arch}}/helm) are expanded
-// using the same template data as asset URLs.
-func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool, symlinks []pendingSymlink) error {
+// archive tree. The first configured file is the primary binary; the onedir
+// gate (shouldPreserveTree) decides between the flat layout and a preserved
+// .pkg tree. Deferred symlinks and hard links are threaded in so the gate sees
+// them and onedir installs can materialize them.
+func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool, symlinks []pendingSymlink, hardLinks []pendingHardLink) error {
 	if len(tool.Files) == 0 {
 		return fmt.Errorf("%w: no files configured for extraction", ErrFileOperation)
 	}
@@ -214,7 +198,7 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 		return err
 	}
 
-	preserve, err := shouldPreserveTree(tempDir, eps, symlinks)
+	preserve, err := shouldPreserveTree(tempDir, eps, symlinks, hardLinks)
 	if err != nil {
 		return err
 	}
@@ -222,9 +206,14 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 	if preserve {
 		log.Debug("Installing multi-file (onedir) package: preserving archive tree",
 			"binary", filepath.Base(binaryPath), "entrypoints", len(eps))
-		return i.installOnedir(tempDir, binaryPath, eps, symlinks)
+		return i.installOnedir(tempDir, binaryPath, eps, symlinks, hardLinks)
 	}
 
+	// Flat layout keeps only the entrypoints. Hard links are materialized here so
+	// an entrypoint that is itself a hard link resolves before it is moved.
+	if err := materializeHardLinks(tempDir, hardLinks); err != nil {
+		return err
+	}
 	log.Debug("Installing single-binary package (flat layout)",
 		"binary", filepath.Base(binaryPath), "entrypoints", len(eps))
 	return i.installFlat(tempDir, binaryPath, eps)
@@ -394,27 +383,31 @@ func copyWithLimit(src io.Reader, dst io.Writer, name string, maxSize int64) err
 	return nil
 }
 
-// ExtractTarGz extracts a tar.gz archive and discards deferred symlinks.
+// ExtractTarGz extracts a tar.gz archive, materializing hard links and
+// discarding deferred symlinks (callers that preserve a tree use unpackTarGz).
 func ExtractTarGz(src, dest string) error {
 	defer perf.Track(nil, "toolchain.ExtractTarGz")()
 
-	_, err := unpackTarGz(src, dest)
-	return err
+	_, hardLinks, err := unpackTarGz(src, dest)
+	if err != nil {
+		return err
+	}
+	return materializeHardLinks(dest, hardLinks)
 }
 
 // unpackTarGz extracts files and returns deferred symlink entries.
-func unpackTarGz(src, dest string) ([]pendingSymlink, error) {
+func unpackTarGz(src, dest string) ([]pendingSymlink, []pendingHardLink, error) {
 	defer perf.Track(nil, "toolchain.unpackTarGz")()
 
 	f, err := os.Open(src)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to open source file: %w", ErrFileOperation, err)
+		return nil, nil, fmt.Errorf("%w: failed to open source file: %w", ErrFileOperation, err)
 	}
 	defer f.Close()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create gzip reader: %w", ErrFileOperation, err)
+		return nil, nil, fmt.Errorf("%w: failed to create gzip reader: %w", ErrFileOperation, err)
 	}
 	defer gzr.Close()
 
@@ -427,17 +420,14 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: error reading tar: %w", ErrFileOperation, err)
+			return nil, nil, fmt.Errorf("%w: error reading tar: %w", ErrFileOperation, err)
 		}
 
 		if err := extractEntry(tr, header, dest, &symlinks, &hardLinks); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	if err := materializeHardLinks(dest, hardLinks); err != nil {
-		return nil, err
-	}
-	return symlinks, nil
+	return symlinks, hardLinks, nil
 }
 
 func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink, hardLinks *[]pendingHardLink) error {
@@ -510,17 +500,21 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool
 	}
 	defer os.RemoveAll(tempDir)
 
-	symlinks, err := unpackTarGz(tarPath, tempDir)
+	symlinks, hardLinks, err := unpackTarGz(tarPath, tempDir)
 	if err != nil {
 		return fmt.Errorf("%w: failed to extract tar.gz: %w", ErrFileOperation, err)
 	}
 
 	// If Files config is provided, use the Src path to find the binary.
 	if len(tool.Files) > 0 {
-		return i.extractFilesFromDir(tempDir, binaryPath, tool, symlinks)
+		return i.extractFilesFromDir(tempDir, binaryPath, tool, symlinks, hardLinks)
 	}
 
-	// Otherwise, fall back to searching for the binary by name.
+	// Otherwise, materialize hard links (so a hard-linked binary exists) and
+	// search for the binary by name.
+	if err := materializeHardLinks(tempDir, hardLinks); err != nil {
+		return err
+	}
 	binaryName := resolveBinaryName(tool)
 	found, err := findBinaryInDir(tempDir, binaryName)
 	if err != nil {
@@ -559,10 +553,10 @@ func (i *Installer) extractPkg(pkgPath, binaryPath string, tool *registry.Tool) 
 	}
 
 	// If Files config is provided, use it to find binaries. pkgutil expands the
-	// package to disk (materializing any of its own symlinks itself), so there
-	// are no deferred symlinks to thread through here.
+	// package to disk (materializing its own symlinks and hard links), so there
+	// are no deferred entries to thread through here.
 	if len(tool.Files) > 0 {
-		return i.extractFilesFromDir(tempDir, binaryPath, tool, nil)
+		return i.extractFilesFromDir(tempDir, binaryPath, tool, nil, nil)
 	}
 
 	// Otherwise, fall back to searching for the binary by name.

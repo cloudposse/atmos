@@ -92,7 +92,10 @@ works identically on macOS, Linux, and Windows — no elevated privileges or
 Developer Mode required.
 
 The only symlinks a onedir install may contain are ones the upstream archive
-itself ships (for example Node's `npm` → `../lib/node_modules/...` on Unix);
-those are reproduced inside the preserved `.pkg` tree during extraction so the
-tool functions identically to how it would if installed from its original
-archive, they are never created by Atmos's exposure logic.
+itself ships (for example Node's `npm` → `../lib/node_modules/...` on Unix).
+Those are recreated inside the preserved `.pkg` tree after extraction, through a
+single validated step, so the tool functions identically to how it would if
+installed from its original archive; they are never created by Atmos's exposure
+logic. Their targets are absolute, so a onedir install is **pinned to its
+install path** — reinstall a tool rather than moving or copying its version
+directory to a different absolute path.

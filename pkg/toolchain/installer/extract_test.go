@@ -654,7 +654,7 @@ func TestUnpackTarGz_ErrorPaths(t *testing.T) {
 		notGz := filepath.Join(tmp, "not.tar.gz")
 		require.NoError(t, os.WriteFile(notGz, []byte("this is not gzip"), 0o644))
 
-		_, err := unpackTarGz(notGz, filepath.Join(tmp, "out"))
+		_, _, err := unpackTarGz(notGz, filepath.Join(tmp, "out"))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -664,7 +664,7 @@ func TestUnpackTarGz_ErrorPaths(t *testing.T) {
 		archive := filepath.Join(tmp, "evil.tar.gz")
 		writeTarGzTree(t, archive, []tarEntry{{name: "../escape", content: "x"}})
 
-		_, err := unpackTarGz(archive, filepath.Join(tmp, "out"))
+		_, _, err := unpackTarGz(archive, filepath.Join(tmp, "out"))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -996,7 +996,7 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			},
 		}
 
-		err := installer.extractFilesFromDir(srcDir, binaryPath, tool, nil)
+		err := installer.extractFilesFromDir(srcDir, binaryPath, tool, nil, nil)
 		assert.NoError(t, err)
 
 		content, err := os.ReadFile(binaryPath)
@@ -1014,7 +1014,7 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			Files: []registry.File{},
 		}
 
-		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil)
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil, nil)
 		assert.Error(t, err)
 	})
 
@@ -1030,7 +1030,7 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			},
 		}
 
-		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil)
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil, nil)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrToolNotFound)
 	})

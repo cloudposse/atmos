@@ -39,11 +39,39 @@ type pendingHardLink struct {
 	target string
 }
 
+// deferredEntries carries the archive entries whose creation is deferred until
+// after regular files are extracted. They travel together through the onedir
+// install so a hard link whose target is a symlink resolves.
+type deferredEntries struct {
+	symlinks  []pendingSymlink
+	hardLinks []pendingHardLink
+}
+
 // symlinkRelSet indexes deferred symlinks by cleaned relative path.
 func symlinkRelSet(symlinks []pendingSymlink) map[string]struct{} {
 	set := make(map[string]struct{}, len(symlinks))
 	for _, s := range symlinks {
 		set[filepath.Clean(s.rel)] = struct{}{}
+	}
+	return set
+}
+
+// hardLinkRelSet indexes deferred hard links by cleaned relative path.
+func hardLinkRelSet(hardLinks []pendingHardLink) map[string]struct{} {
+	set := make(map[string]struct{}, len(hardLinks))
+	for _, h := range hardLinks {
+		set[filepath.Clean(h.rel)] = struct{}{}
+	}
+	return set
+}
+
+// deferredRelSet unions the symlink and hard-link rel sets. Both are collected
+// during extraction rather than written to disk, so callers that need to see
+// every deferred entry (the onedir gate, entrypoint resolution) use this.
+func deferredRelSet(symlinks []pendingSymlink, hardLinks []pendingHardLink) map[string]struct{} {
+	set := symlinkRelSet(symlinks)
+	for rel := range hardLinkRelSet(hardLinks) {
+		set[rel] = struct{}{}
 	}
 	return set
 }
@@ -142,15 +170,16 @@ func isIgnorableExtraFile(rel string) bool {
 }
 
 // shouldPreserveTree keeps archives with symlinked entrypoints or runtime files.
-func shouldPreserveTree(root string, eps []entrypoint, symlinks []pendingSymlink) (bool, error) {
+func shouldPreserveTree(root string, eps []entrypoint, symlinks []pendingSymlink, hardLinks []pendingHardLink) (bool, error) {
 	defer perf.Track(nil, "installer.shouldPreserveTree")()
 
 	if len(eps) == 0 {
 		return false, nil
 	}
 
+	// A symlinked entrypoint needs the whole tree to resolve. Hard-linked
+	// entrypoints do not (they become real files), so only symlinks count here.
 	symSet := symlinkRelSet(symlinks)
-
 	for _, ep := range eps {
 		if _, ok := symSet[filepath.Clean(ep.src)]; ok {
 			return true, nil
@@ -161,7 +190,10 @@ func shouldPreserveTree(root string, eps []entrypoint, symlinks []pendingSymlink
 	if preserve, err := hasRuntimeDirectory(root, primaryRelDir); err != nil || preserve {
 		return preserve, err
 	}
-	return hasRuntimeSibling(root, primaryRelDir, entrypointSet(eps), symSet)
+	// Deferred symlinks and hard links are not on disk yet, so include both when
+	// scanning for runtime siblings beside the primary binary.
+	deferred := deferredRelSet(symlinks, hardLinks)
+	return hasRuntimeSibling(root, primaryRelDir, entrypointSet(eps), deferred)
 }
 
 // hasRuntimeDirectory detects standard shared-library directories near a binary.
@@ -195,8 +227,8 @@ func entrypointSet(eps []entrypoint) map[string]struct{} {
 	return set
 }
 
-// hasRuntimeSibling checks regular and deferred symlink siblings.
-func hasRuntimeSibling(root, primaryRelDir string, entrySet, symSet map[string]struct{}) (bool, error) {
+// hasRuntimeSibling checks regular and deferred (symlink/hard-link) siblings.
+func hasRuntimeSibling(root, primaryRelDir string, entrySet, deferredSet map[string]struct{}) (bool, error) {
 	entries, err := os.ReadDir(filepath.Join(root, primaryRelDir))
 	if err != nil {
 		return false, fmt.Errorf("%w: failed to inspect extracted archive: %w", ErrFileOperation, err)
@@ -210,7 +242,7 @@ func hasRuntimeSibling(root, primaryRelDir string, entrySet, symSet map[string]s
 		}
 	}
 
-	for rel := range symSet {
+	for rel := range deferredSet {
 		if filepath.Dir(rel) != primaryRelDir {
 			continue
 		}
@@ -285,24 +317,25 @@ func moveEntrypointFileForOS(src, dst, goos string) error {
 }
 
 // installOnedir preserves the archive tree and writes its manifest.
-func (i *Installer) installOnedir(stagingDir, binaryPath string, eps []entrypoint, symlinks []pendingSymlink) error {
-	return i.installOnedirForOS(stagingDir, binaryPath, eps, symlinks, runtime.GOOS)
+func (i *Installer) installOnedir(stagingDir, binaryPath string, eps []entrypoint, symlinks []pendingSymlink, hardLinks []pendingHardLink) error {
+	return i.installOnedirForOS(stagingDir, binaryPath, eps, deferredEntries{symlinks: symlinks, hardLinks: hardLinks}, runtime.GOOS)
 }
 
 // installOnedirForOS supports testable Windows entrypoint resolution.
-func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entrypoint, symlinks []pendingSymlink, goos string) error {
+func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entrypoint, deferred deferredEntries, goos string) error {
 	defer perf.Track(nil, "installer.installOnedir")()
 
 	versionDir := filepath.Dir(binaryPath)
 	treeDir := filepath.Join(versionDir, onedirTreeName)
 
 	// Validate before replacing an existing install.
-	resolvedEntrypoints, err := resolveOnedirEntrypoints(stagingDir, eps, symlinks, goos)
+	resolvedEntrypoints, err := resolveOnedirEntrypoints(stagingDir, eps, deferred, goos)
 	if err != nil {
 		return err
 	}
 
-	// Rename aside so a failed move or materialization can roll back.
+	// Rename aside so a failed move, materialization, or manifest write can roll
+	// back to the known-good install.
 	backupDir := treeDir + onedirBackupSuffix
 	_ = os.RemoveAll(backupDir)
 	hadExisting := dirExists(treeDir)
@@ -311,7 +344,8 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 			return fmt.Errorf("%w: failed to back up existing tree dir %s: %w", ErrFileOperation, treeDir, err)
 		}
 	}
-	if err := populateOnedirTree(stagingDir, treeDir, symlinks); err != nil {
+
+	if err := i.finishOnedirInstall(stagingDir, versionDir, treeDir, resolvedEntrypoints, deferred); err != nil {
 		_ = os.RemoveAll(treeDir)
 		if hadExisting {
 			_ = os.Rename(backupDir, treeDir)
@@ -321,9 +355,20 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 	if hadExisting {
 		_ = os.RemoveAll(backupDir)
 	}
+	return nil
+}
 
-	manifest := onedirManifest{Entrypoints: make(map[string]string, len(resolvedEntrypoints))}
-	for idx, ep := range resolvedEntrypoints {
+// finishOnedirInstall populates the tree and writes the manifest. The manifest
+// is written before the caller removes the backup, so a manifest-write failure
+// still rolls back to the known-good install rather than leaving a tree with a
+// stale or missing manifest.
+func (i *Installer) finishOnedirInstall(stagingDir, versionDir, treeDir string, eps []entrypoint, deferred deferredEntries) error {
+	if err := populateOnedirTree(stagingDir, treeDir, deferred); err != nil {
+		return err
+	}
+
+	manifest := onedirManifest{Entrypoints: make(map[string]string, len(eps))}
+	for idx, ep := range eps {
 		manifest.Entrypoints[ep.name] = filepath.Join(onedirTreeName, ep.src)
 		if idx == 0 {
 			manifest.Primary = ep.name
@@ -332,20 +377,26 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 	return writeOnedirManifest(versionDir, manifest)
 }
 
-// populateOnedirTree moves files, then materializes archive symlinks.
-func populateOnedirTree(stagingDir, treeDir string, symlinks []pendingSymlink) error {
+// populateOnedirTree moves files, then materializes archive symlinks and hard
+// links. Hard links are created after symlinks so a hard link whose target is a
+// symlink entry resolves.
+func populateOnedirTree(stagingDir, treeDir string, deferred deferredEntries) error {
 	if err := moveTreeFunc(stagingDir, treeDir); err != nil {
 		return err
 	}
-	return materializeSymlinks(treeDir, symlinks)
+	if err := materializeSymlinks(treeDir, deferred.symlinks); err != nil {
+		return err
+	}
+	return materializeHardLinks(treeDir, deferred.hardLinks)
 }
 
-// resolveOnedirEntrypoints validates staged entrypoints.
-func resolveOnedirEntrypoints(stagingDir string, eps []entrypoint, symlinks []pendingSymlink, goos string) ([]entrypoint, error) {
-	symSet := symlinkRelSet(symlinks)
+// resolveOnedirEntrypoints validates staged entrypoints. Deferred symlinks and
+// hard links are not on disk yet, so both count as present.
+func resolveOnedirEntrypoints(stagingDir string, eps []entrypoint, deferred deferredEntries, goos string) ([]entrypoint, error) {
+	deferredSet := deferredRelSet(deferred.symlinks, deferred.hardLinks)
 	resolved := make([]entrypoint, len(eps))
 	for idx, ep := range eps {
-		src, err := resolveOnedirEntrypointSourceForOS(stagingDir, ep.src, symSet, goos)
+		src, err := resolveOnedirEntrypointSourceForOS(stagingDir, ep.src, deferredSet, goos)
 		if err != nil {
 			return nil, err
 		}
