@@ -1,14 +1,18 @@
 package exec
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -451,4 +455,43 @@ func TestMultipleYamlFunctionsAuthPropagation(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, "state-bucket", result["bucket"])
 	assert.Equal(t, "output-region", result["region"])
+}
+
+// TestExecuteTerraformQueryComponent covers executeTerraformQueryComponent
+// directly — it has no test at all today (only ExecuteTerraformQuery /
+// ExecuteTerraformQueryWithContext, which call it indirectly through the
+// scheduler, are exercised elsewhere). A nonexistent component/stack makes
+// the underlying ExecuteTerraform fail fast during stack processing, without
+// needing a real terraform/tofu binary, so both CaptureOutput branches can be
+// asserted directly.
+func TestExecuteTerraformQueryComponent(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "examples", "demo-stacks"))
+
+	tests := []struct {
+		name          string
+		captureOutput bool
+	}{
+		{name: "without output capture", captureOutput: false},
+		{name: "with output capture", captureOutput: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			execution := scheduleradapters.TerraformExecution{
+				Context: context.Background(),
+				Info: schema.ConfigAndStacksInfo{
+					ComponentFromArg: "nonexistent",
+					Stack:            "nonexistent",
+					SubCommand:       "plan",
+				},
+				CaptureOutput: tc.captureOutput,
+			}
+
+			result, err := executeTerraformQueryComponent(execution)
+
+			require.Error(t, err, "a nonexistent component/stack must fail during stack processing")
+			assert.Empty(t, result.Stdout, "no shell command ever runs, so nothing is captured")
+			assert.Empty(t, result.Stderr)
+		})
+	}
 }
