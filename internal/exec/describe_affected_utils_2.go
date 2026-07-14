@@ -808,13 +808,3 @@ func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Depen
 	}
 	return false
 }
-
-// isComponentInStackAffected checks if a component in a stack is in the affected list, recursively.
-func isComponentInStackAffected(affectedList []schema.Affected, stackSlug string) bool {
-	for i := range affectedList {
-		if affectedList[i].StackSlug == stackSlug {
-			return true
-		}
-	}
-	return false
-}

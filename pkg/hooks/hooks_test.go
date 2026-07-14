@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -501,6 +502,140 @@ vars:
 	))
 
 	return tempDir
+}
+
+// TestRunPerComponentHooks exercises the full GetHooks + SetOutcome + RunAll
+// sequence that RunPerComponentHooks wraps for the bulk-dispatch hook fix
+// (pkg/scheduler/adapters/terraform.go's Dispatch calls this indirectly via
+// cmd/terraform's terraformNodeHooks / cmd/helmfile's helmfileNodeHooks). The
+// returned error must reflect hooks.RunAll's own on_failure resolution
+// (already covered at the CommandEngine level by
+// TestCommandEngine_OnFailureFailPropagates and its siblings) rather than
+// invent new semantics — RunPerComponentHooks is a thin pass-through.
+func TestRunPerComponentHooks(t *testing.T) {
+	t.Run("no-op when component/stack are empty", func(t *testing.T) {
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        &schema.ConfigAndStacksInfo{},
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("nil opts is a no-op", func(t *testing.T) {
+		assert.NoError(t, RunPerComponentHooks(nil))
+	})
+
+	t.Run("nil Info is a no-op", func(t *testing.T) {
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        nil,
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("GetHooks error is propagated", func(t *testing.T) {
+		// A non-empty component/stack pair that doesn't exist in any stack
+		// forces ExecuteDescribeComponent (called by GetHooks) to fail, which
+		// RunPerComponentHooks must surface rather than swallow.
+		t.Chdir(t.TempDir())
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "nonexistent", Stack: "nonexistent"},
+		})
+		assert.Error(t, err)
+	})
+
+	// newFixture writes a minimal atmos project with one terraform component
+	// ("vpc") whose after.terraform.apply hook always fails (kind: command,
+	// running the test binary itself with _ATMOS_TEST_EXIT_ONE=1 — a
+	// cross-platform stand-in for "exit 1", per this repo's testing rules),
+	// configured with the given on_failure mode.
+	newFixture := func(t *testing.T, onFailure string) *schema.ConfigAndStacksInfo {
+		t.Helper()
+		exe, err := os.Executable()
+		require.NoError(t, err)
+
+		tempDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "terraform", "vpc"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf"), nil, 0o644))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tempDir, "atmos.yaml"),
+			[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+			0o644,
+		))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tempDir, "stacks", "test.yaml"),
+			[]byte(fmt.Sprintf(`vars:
+  stage: test
+components:
+  terraform:
+    vpc:
+      hooks:
+        always-fails:
+          events:
+            - after-terraform-apply
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_EXIT_ONE: "1"
+          on_failure: %s
+`, exe, onFailure)),
+			0o644,
+		))
+
+		t.Chdir(tempDir)
+		return &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "test"}
+	}
+
+	t.Run("on_failure fail propagates the error", func(t *testing.T) {
+		info := newFixture(t, "fail")
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        info,
+			Outcome:     Outcome{Status: RunSuccess},
+		})
+		assert.Error(t, err)
+	})
+
+	t.Run("on_failure warn resolves to nil", func(t *testing.T) {
+		info := newFixture(t, "warn")
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        info,
+			Outcome:     Outcome{Status: RunSuccess},
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("on_failure ignore resolves to nil", func(t *testing.T) {
+		info := newFixture(t, "ignore")
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        info,
+			Outcome:     Outcome{Status: RunSuccess},
+		})
+		assert.NoError(t, err)
+	})
 }
 
 func TestRunAll(t *testing.T) {
