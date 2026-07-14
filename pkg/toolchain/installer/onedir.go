@@ -2,9 +2,7 @@ package installer
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -98,6 +96,22 @@ func writeOnedirManifest(versionDir string, manifest onedirManifest) error {
 	return nil
 }
 
+// finalizeFlatInstall removes any onedir artifacts left in a version directory
+// after a flat install. When a tool changes from a onedir to a flat layout for
+// the SAME version (changed registry metadata or a re-shaped upstream asset), a
+// stale .pkg tree and manifest would otherwise remain and shadow the freshly
+// installed flat binary through the manifest. Call only after a flat write
+// succeeds. A missing manifest/tree (the common case) is not an error.
+func finalizeFlatInstall(versionDir string) error {
+	if err := os.Remove(filepath.Join(versionDir, onedirManifestName)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("%w: failed to remove stale onedir manifest: %w", ErrFileOperation, err)
+	}
+	if err := os.RemoveAll(filepath.Join(versionDir, onedirTreeName)); err != nil {
+		return fmt.Errorf("%w: failed to remove stale onedir tree: %w", ErrFileOperation, err)
+	}
+	return nil
+}
+
 // readOnedirManifest returns the manifest when present and valid.
 func readOnedirManifest(versionDir string) (onedirManifest, bool) {
 	data, err := os.ReadFile(filepath.Join(versionDir, onedirManifestName)) // #nosec G304 -- versionDir is the installer-managed version directory.
@@ -109,6 +123,24 @@ func readOnedirManifest(versionDir string) (onedirManifest, bool) {
 		return onedirManifest{}, false
 	}
 	return manifest, true
+}
+
+// resolveManifestEntrypoint resolves an entrypoint's real path from a version
+// directory's onedir manifest. An empty name selects the primary entrypoint.
+// The second return is false for a flat install (no manifest) or an unknown name.
+func resolveManifestEntrypoint(versionDir, name string) (string, bool) {
+	manifest, ok := readOnedirManifest(versionDir)
+	if !ok {
+		return "", false
+	}
+	if name == "" {
+		name = manifest.Primary
+	}
+	rel, ok := manifest.Entrypoints[name]
+	if !ok {
+		return "", false
+	}
+	return filepath.Join(versionDir, rel), true
 }
 
 // versionDirFromBinaryPath finds the flat or onedir version directory.
@@ -436,165 +468,6 @@ func onedirSourcePresent(stagingDir, src string, symSet map[string]struct{}) (bo
 		return false, fmt.Errorf("%w: failed to stat entrypoint in archive: %s: %w", ErrFileOperation, src, err)
 	}
 	return false, nil
-}
-
-// materializeSymlinks creates archive symlinks after the tree is moved.
-func materializeSymlinks(root string, symlinks []pendingSymlink) error {
-	for _, s := range symlinks {
-		if err := createValidatedSymlink(root, filepath.Join(root, s.rel), s.target); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// createValidatedSymlink creates an in-tree archive symlink.
-// It validates both link and target paths immediately before os.Symlink.
-func createValidatedSymlink(root, linkPath, linkname string) error {
-	cleanRoot := filepath.Clean(root)
-
-	cleanLinkPath := filepath.Clean(linkPath)
-	if cleanLinkPath != cleanRoot && !strings.HasPrefix(cleanLinkPath, cleanRoot+string(os.PathSeparator)) {
-		return fmt.Errorf("%w: symlink path escapes root: %s", ErrFileOperation, linkPath)
-	}
-
-	if linkname == "" || filepath.IsAbs(linkname) {
-		return fmt.Errorf("%w: illegal symlink target: %s -> %q", ErrFileOperation, linkPath, linkname)
-	}
-	resolved := filepath.Clean(filepath.Join(filepath.Dir(cleanLinkPath), linkname))
-	if resolved != cleanRoot && !strings.HasPrefix(resolved, cleanRoot+string(os.PathSeparator)) {
-		return fmt.Errorf("%w: symlink target escapes root: %s -> %q", ErrFileOperation, linkPath, linkname)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(cleanLinkPath), defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
-	}
-	_ = os.Remove(cleanLinkPath)
-
-	if err := os.Symlink(resolved, cleanLinkPath); err != nil {
-		return fmt.Errorf("%w: failed to create symlink %s: %w", ErrFileOperation, linkPath, err)
-	}
-	return nil
-}
-
-// materializeHardLinks creates deferred tar hard links after extraction.
-func materializeHardLinks(root string, links []pendingHardLink) error {
-	remaining := links
-	for len(remaining) > 0 {
-		next := make([]pendingHardLink, 0, len(remaining))
-		for _, link := range remaining {
-			err := extractHardLink(filepath.Join(root, link.rel), link.target, root)
-			if errors.Is(err, ErrToolNotFound) {
-				next = append(next, link)
-				continue
-			}
-			if err != nil {
-				return err
-			}
-		}
-		if len(next) == len(remaining) {
-			return fmt.Errorf("%w: hard link target not found: %s", ErrToolNotFound, next[0].target)
-		}
-		remaining = next
-	}
-	return nil
-}
-
-// extractHardLink materializes a tar hard link relative to root.
-func extractHardLink(linkPath, linkname, dest string) error {
-	target := filepath.Join(dest, linkname)
-	if !isSafePath(target, dest) {
-		return fmt.Errorf("%w: illegal hard link target: %s -> %s", ErrFileOperation, linkPath, linkname)
-	}
-	if err := os.MkdirAll(filepath.Dir(linkPath), defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
-	}
-	_ = os.Remove(linkPath)
-
-	if err := os.Link(target, linkPath); err == nil {
-		return nil
-	}
-
-	info, statErr := os.Stat(target)
-	if statErr != nil {
-		return fmt.Errorf("%w: hard link target not found: %s", ErrToolNotFound, linkname)
-	}
-	return copyRegularFile(target, linkPath, info.Mode().Perm())
-}
-
-// moveTree relocates a directory tree, preferring a fast same-filesystem rename
-// and falling back to a recursive copy across filesystems.
-func moveTree(src, dst string) error {
-	if err := os.Rename(src, dst); err == nil {
-		return nil
-	}
-	if err := copyTree(src, dst); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(src); err != nil {
-		return fmt.Errorf("%w: failed to remove staging dir %s: %w", ErrFileOperation, src, err)
-	}
-	return nil
-}
-
-// copyTree recursively copies a directory tree, preserving regular files (with
-// their mode) and symlinks.
-func copyTree(src, dst string) error {
-	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, relErr := filepath.Rel(src, path)
-		if relErr != nil {
-			return relErr
-		}
-		target := filepath.Join(dst, rel)
-		info, infoErr := d.Info()
-		if infoErr != nil {
-			return infoErr
-		}
-
-		switch {
-		case d.IsDir():
-			return os.MkdirAll(target, info.Mode().Perm()|0o200) // Ensure the copied dir is writable.
-		case info.Mode()&os.ModeSymlink != 0:
-			link, linkErr := os.Readlink(path)
-			if linkErr != nil {
-				return linkErr
-			}
-			// Reproduce the link through the single validated symlink sink so a
-			// copied tree cannot introduce a link escaping dst. (During a onedir
-			// install the staging tree has no symlinks — they are collected and
-			// materialized separately — so this is a defensive path for the
-			// generic cross-device copy fallback.)
-			return createValidatedSymlink(dst, target, link)
-		default:
-			return copyRegularFile(path, target, info.Mode().Perm())
-		}
-	})
-}
-
-// copyRegularFile copies a single file, creating parents and preserving mode.
-func copyRegularFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src) // #nosec G304 -- src is an installer-extracted archive path.
-	if err != nil {
-		return fmt.Errorf("%w: failed to open %s: %w", ErrFileOperation, src, err)
-	}
-	defer in.Close()
-
-	if err := os.MkdirAll(filepath.Dir(dst), defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
-	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode) // #nosec G304 -- dst is within the installer version dir.
-	if err != nil {
-		return fmt.Errorf("%w: failed to create %s: %w", ErrFileOperation, dst, err)
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return fmt.Errorf("%w: failed to copy %s: %w", ErrFileOperation, src, err)
-	}
-	return nil
 }
 
 // dirExists reports whether path exists and is a directory.

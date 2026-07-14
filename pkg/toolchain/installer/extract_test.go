@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -702,6 +703,20 @@ func TestUnpackZip_ErrorPaths(t *testing.T) {
 		info, err := os.Stat(filepath.Join(dest, "emptydir"))
 		require.NoError(t, err)
 		assert.True(t, info.IsDir())
+	})
+
+	t.Run("rejects an oversized symlink target", func(t *testing.T) {
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "bigsymlink.zip")
+		// A symlink whose target payload exceeds the dedicated limit must be
+		// rejected rather than read into memory.
+		writeZipTree(t, archive, []zipEntry{
+			{name: "bin/link", link: strings.Repeat("a", maxSymlinkTargetBytes+1)},
+		})
+
+		_, err := unpackZip(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 }
 

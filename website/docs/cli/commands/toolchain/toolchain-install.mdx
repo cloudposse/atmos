@@ -87,9 +87,10 @@ resolves directly to the real, nested path (for example
 `.../24.18.0/.pkg/node-v24.18.0-darwin-arm64/bin/node`), and
 [`atmos toolchain env`](/cli/commands/toolchain/env),
 [`exec`](/cli/commands/toolchain/exec), and
-[`which`](/cli/commands/toolchain/which) all resolve it the same way, so this
-works identically on macOS, Linux, and Windows — no elevated privileges or
-Developer Mode required.
+[`which`](/cli/commands/toolchain/which) all resolve it the same way — including
+every command a multi-command package exposes, whose directories are all added
+to `PATH`. Because exposure needs no symlink, this works identically on macOS,
+Linux, and Windows with no elevated privileges or Developer Mode required.
 
 The only symlinks a onedir install may contain are ones the upstream archive
 itself ships (for example Node's `npm` → `../lib/node_modules/...` on Unix).
@@ -99,3 +100,9 @@ installed from its original archive; they are never created by Atmos's exposure
 logic. Their targets are absolute, so a onedir install is **pinned to its
 install path** — reinstall a tool rather than moving or copying its version
 directory to a different absolute path.
+
+On Windows, where creating a symlink normally requires Developer Mode or
+elevated privilege, an archive's own **file** symlink is reproduced as a hard
+link (or a copy if hard-linking is unavailable), so packages that ship such
+links still install without elevation. Archives that ship **directory**
+symlinks remain unsupported on Windows without the required privilege.

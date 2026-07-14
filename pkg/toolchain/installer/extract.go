@@ -301,7 +301,7 @@ func extractZipFile(f *zip.File, dest string, maxSize int64, symlinks *[]pending
 	}
 
 	if f.Mode()&os.ModeSymlink != 0 {
-		target, err := readZipSymlinkTarget(f, maxSize)
+		target, err := readZipSymlinkTarget(f)
 		if err != nil {
 			return err
 		}
@@ -316,17 +316,23 @@ func extractZipFile(f *zip.File, dest string, maxSize int64, symlinks *[]pending
 	return copyFileContents(f, fpath, maxSize)
 }
 
-// readZipSymlinkTarget reads a zip symlink target.
-func readZipSymlinkTarget(f *zip.File, maxSize int64) (string, error) {
+// readZipSymlinkTarget reads a zip symlink target, bounded to
+// maxSymlinkTargetBytes so a crafted archive cannot drive a large allocation.
+func readZipSymlinkTarget(f *zip.File) (string, error) {
 	rc, err := f.Open()
 	if err != nil {
 		return "", err
 	}
 	defer rc.Close()
 
-	buf, err := io.ReadAll(io.LimitReader(rc, maxSize))
+	// Read one extra byte so an over-limit target is detected rather than
+	// silently truncated.
+	buf, err := io.ReadAll(io.LimitReader(rc, maxSymlinkTargetBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to read symlink target for %s: %w", ErrFileOperation, f.Name, err)
+	}
+	if len(buf) > maxSymlinkTargetBytes {
+		return "", fmt.Errorf("%w: symlink target for %s exceeds %d bytes", ErrFileOperation, f.Name, maxSymlinkTargetBytes)
 	}
 	return string(buf), nil
 }

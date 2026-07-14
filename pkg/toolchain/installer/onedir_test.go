@@ -403,7 +403,25 @@ func TestVersionDirFromBinaryPath(t *testing.T) {
 }
 
 func TestGetBinaryPath_OnedirManifest(t *testing.T) {
-	t.Run("explicit binaryName is unaffected by a manifest", func(t *testing.T) {
+	t.Run("explicit binaryName resolves its manifest entrypoint", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{
+				"node": filepath.Join(onedirTreeName, "bin", "node"),
+				"npm":  filepath.Join(onedirTreeName, "lib", "npm"),
+			},
+			Primary: "node",
+		}))
+
+		// A named secondary entrypoint resolves to its real nested path, not the
+		// version-dir root (which is where the old bug looked).
+		got := inst.GetBinaryPath("nodejs", "node", "24.18.0", "npm")
+		assert.Equal(t, filepath.Join(versionDir, onedirTreeName, "lib", "npm"), got)
+	})
+
+	t.Run("explicit binaryName not in the manifest falls back to the flat path", func(t *testing.T) {
 		binDir := t.TempDir()
 		inst := &Installer{binDir: binDir}
 		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
@@ -412,8 +430,8 @@ func TestGetBinaryPath_OnedirManifest(t *testing.T) {
 			Primary:     "node",
 		}))
 
-		got := inst.GetBinaryPath("nodejs", "node", "24.18.0", "node")
-		assert.Equal(t, filepath.Join(versionDir, "node"), got, "an explicit binaryName must bypass manifest resolution")
+		got := inst.GetBinaryPath("nodejs", "node", "24.18.0", "ghost")
+		assert.Equal(t, filepath.Join(versionDir, "ghost"), got, "an unknown explicit name uses the flat layout")
 	})
 
 	t.Run("empty binaryName resolves the primary entrypoint via the manifest", func(t *testing.T) {
@@ -454,6 +472,109 @@ func TestGetBinaryPath_OnedirManifest(t *testing.T) {
 
 		got := inst.GetBinaryPath("hashicorp", "terraform", "1.9.8", "")
 		assert.Equal(t, filepath.Join(binDir, "hashicorp", "terraform", "1.9.8", "terraform"), got)
+	})
+}
+
+func TestGetBinaryPaths(t *testing.T) {
+	t.Run("onedir returns every entrypoint path, sorted", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{
+				"node": filepath.Join(onedirTreeName, "bin", "node"),
+				"npm":  filepath.Join(onedirTreeName, "lib", "npm", "npm"),
+			},
+			Primary: "node",
+		}))
+
+		got := inst.GetBinaryPaths("nodejs", "node", "24.18.0")
+		assert.Equal(t, []string{
+			filepath.Join(versionDir, onedirTreeName, "bin", "node"),
+			filepath.Join(versionDir, onedirTreeName, "lib", "npm", "npm"),
+		}, got, "all entrypoints returned, sorted by path")
+	})
+
+	t.Run("flat install returns nil", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		assert.Nil(t, inst.GetBinaryPaths("hashicorp", "terraform", "1.9.8"))
+	})
+
+	t.Run("resolves the latest pointer", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{"node": filepath.Join(onedirTreeName, "bin", "node")},
+			Primary:     "node",
+		}))
+		require.NoError(t, inst.CreateLatestFile("nodejs", "node", "24.18.0"))
+
+		got := inst.GetBinaryPaths("nodejs", "node", "latest")
+		assert.Equal(t, []string{filepath.Join(versionDir, onedirTreeName, "bin", "node")}, got)
+	})
+}
+
+// TestExtractAndInstall_FlatReplacesStaleOnedir verifies that installing a flat
+// binary over an existing same-version onedir install clears the stale manifest
+// and .pkg tree, so the freshly installed flat binary is what resolves.
+func TestExtractAndInstall_FlatReplacesStaleOnedir(t *testing.T) {
+	tmp := t.TempDir()
+	inst := &Installer{binDir: tmp}
+	versionDir := filepath.Join(tmp, "acme", "tool", "1.0.0")
+
+	// Seed a stale onedir install for the same version.
+	writeFileUnder(t, filepath.Join(versionDir, onedirTreeName), "dist/tool", "OLD-ONEDIR")
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "dist", "tool")},
+		Primary:     "tool",
+	}))
+
+	// Install a flat raw binary asset for the same version.
+	asset := filepath.Join(tmp, "asset")
+	require.NoError(t, os.WriteFile(asset, []byte("NEW-FLAT-BINARY"), 0o755))
+	tool := &registry.Tool{RepoOwner: "acme", RepoName: "tool", BinaryName: "tool"}
+
+	resolved, err := inst.extractAndInstall(tool, asset, "1.0.0")
+	require.NoError(t, err)
+
+	// The stale onedir artifacts are gone and the flat binary is what resolves.
+	assert.NoFileExists(t, filepath.Join(versionDir, onedirManifestName))
+	assert.NoDirExists(t, filepath.Join(versionDir, onedirTreeName))
+	assert.Equal(t, filepath.Join(versionDir, "tool"), resolved)
+	got, err := os.ReadFile(resolved)
+	require.NoError(t, err)
+	assert.Equal(t, "NEW-FLAT-BINARY", string(got))
+
+	_, ok := readOnedirManifest(versionDir)
+	assert.False(t, ok, "no manifest may remain after a flat replacement")
+}
+
+// TestFinalizeFlatInstall covers the artifact cleanup helper directly.
+func TestFinalizeFlatInstall(t *testing.T) {
+	t.Run("removes manifest and tree", func(t *testing.T) {
+		versionDir := t.TempDir()
+		writeFileUnder(t, filepath.Join(versionDir, onedirTreeName), "dist/tool", "x")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "tool"}))
+
+		require.NoError(t, finalizeFlatInstall(versionDir))
+		assert.NoFileExists(t, filepath.Join(versionDir, onedirManifestName))
+		assert.NoDirExists(t, filepath.Join(versionDir, onedirTreeName))
+	})
+
+	t.Run("no-op when no onedir artifacts exist", func(t *testing.T) {
+		require.NoError(t, finalizeFlatInstall(t.TempDir()))
+	})
+
+	t.Run("errors when the manifest cannot be removed", func(t *testing.T) {
+		versionDir := t.TempDir()
+		// A non-empty directory at the manifest path makes os.Remove fail with a
+		// non-IsNotExist error.
+		require.NoError(t, os.MkdirAll(filepath.Join(versionDir, onedirManifestName, "child"), 0o755))
+		err := finalizeFlatInstall(versionDir)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 }
 
@@ -1176,6 +1297,71 @@ func TestCreateValidatedSymlink_SymlinkFailure(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
+}
+
+// TestCreateValidatedSymlinkForOS_WindowsFallback exercises the Windows
+// best-effort fallback (hard link or copy for a file target) when symlink
+// creation is unavailable. The symlinkFunc seam forces a failure so the path
+// runs on any platform.
+func TestCreateValidatedSymlinkForOS_WindowsFallback(t *testing.T) {
+	orig := symlinkFunc
+	t.Cleanup(func() { symlinkFunc = orig })
+	symlinkFunc = func(string, string) error { return assert.AnError }
+
+	t.Run("reproduces a file target as a real file (hard link)", func(t *testing.T) {
+		root := t.TempDir()
+		writeFileUnder(t, root, "lib/real.js", "PAYLOAD")
+		link := filepath.Join(root, "bin", "npm")
+
+		require.NoError(t, createValidatedSymlinkForOS(root, link, "../lib/real.js", "windows"))
+
+		got, err := os.ReadFile(link)
+		require.NoError(t, err)
+		assert.Equal(t, "PAYLOAD", string(got))
+		info, err := os.Lstat(link)
+		require.NoError(t, err)
+		assert.Zero(t, info.Mode()&os.ModeSymlink, "fallback must produce a real file, not a symlink")
+	})
+
+	t.Run("rejects a directory target", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "lib", "sub"), 0o755))
+		err := createValidatedSymlinkForOS(root, filepath.Join(root, "bin", "dirlink"), "../lib/sub", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("errors when the target is missing", func(t *testing.T) {
+		root := t.TempDir()
+		err := createValidatedSymlinkForOS(root, filepath.Join(root, "bin", "ghost"), "../lib/missing", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("non-windows still returns the symlink error", func(t *testing.T) {
+		root := t.TempDir()
+		writeFileUnder(t, root, "lib/real.js", "PAYLOAD")
+		err := createValidatedSymlinkForOS(root, filepath.Join(root, "bin", "npm"), "../lib/real.js", "linux")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestWindowsSymlinkFallback_CopyBranch covers the copy path taken when
+// hard-linking fails (forced here by a pre-existing destination).
+func TestWindowsSymlinkFallback_CopyBranch(t *testing.T) {
+	root := t.TempDir()
+	writeFileUnder(t, root, "real", "PAYLOAD")
+	target := filepath.Join(root, "real")
+	linkPath := filepath.Join(root, "copy")
+	// A pre-existing destination makes os.Link fail, forcing the copy fallback.
+	require.NoError(t, os.WriteFile(linkPath, []byte("OLD"), 0o644))
+
+	require.NoError(t, windowsSymlinkFallback(target, linkPath, linkPath))
+
+	got, err := os.ReadFile(linkPath)
+	require.NoError(t, err)
+	assert.Equal(t, "PAYLOAD", string(got))
 }
 
 // TestMoveEntrypointFileForOS_Windows covers the Windows `.exe` handling: an

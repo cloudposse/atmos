@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,6 +36,11 @@ const (
 	maxUnixPermissions          = 0o7777
 	maxDecompressedSizeMB       = 3000
 	bufferSizeBytes             = 32 * 1024
+	// Symlink targets read from an archive are bounded to maxSymlinkTargetBytes.
+	// Real link targets are short filesystem paths; a huge payload is malformed
+	// or hostile and would otherwise let a crafted archive drive a large
+	// allocation.
+	maxSymlinkTargetBytes = 4096
 
 	// Registry path parsing constants.
 	filenameKey = "filename" // Key for filename in template replacements.
@@ -702,15 +708,24 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
 	}
 
+	// A flat install writes the primary binary at binaryPath; a onedir install
+	// writes only the .pkg tree + manifest (never binaryPath). So if the binary
+	// is at binaryPath, this install is flat: clear any stale onedir artifacts
+	// from a prior same-version onedir install, which would otherwise shadow the
+	// freshly installed flat binary through readOnedirManifest below.
+	if info, err := os.Stat(binaryPath); err == nil && !info.IsDir() {
+		if err := finalizeFlatInstall(versionDir); err != nil {
+			return "", err
+		}
+	}
+
 	// Onedir (multi-file) installs record the real entrypoint path in a sidecar
 	// manifest instead of exposing a root symlink (Atmos creates no symlinks of
-	// its own; see onedir.go). Resolve it here so the caller (chmod, mtime, lock
-	// file) targets the file that was actually installed. Flat installs are
-	// unaffected: with no manifest present, binaryPath is returned unchanged.
-	if manifest, ok := readOnedirManifest(versionDir); ok {
-		if rel, ok := manifest.Entrypoints[manifest.Primary]; ok {
-			return filepath.Join(versionDir, rel), nil
-		}
+	// its own; see onedir.go). Resolve the primary here so the caller (chmod,
+	// mtime, lock file) targets the file that was actually installed. Flat
+	// installs are unaffected: with no manifest present, binaryPath is returned.
+	if path, ok := resolveManifestEntrypoint(versionDir, ""); ok {
+		return path, nil
 	}
 
 	return binaryPath, nil
@@ -724,28 +739,28 @@ func (i *Installer) GetBinDir() string {
 }
 
 // GetBinaryPath returns the path to a specific version of a binary.
-// If binaryName is provided and non-empty, it will be used directly.
-// Otherwise, it will search the version directory for an executable file,
-// falling back to using the repo name as the binary name.
+// If binaryName is provided and non-empty, it names the desired entrypoint;
+// otherwise the tool's primary entrypoint is used. Onedir (multi-file) installs
+// resolve the entrypoint's real (nested) path through the sidecar manifest;
+// flat installs fall back to the version-dir root, auto-detecting an executable
+// or using the repo name.
 func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) string {
 	defer perf.Track(nil, "installer.Installer.GetBinaryPath")()
 
 	versionDir := filepath.Join(i.binDir, owner, repo, version)
 
-	// If binary name is explicitly provided, use it directly.
-	if binaryName != "" {
-		return filepath.Join(versionDir, binaryName)
+	// Onedir installs record each entrypoint's real path in a sidecar manifest
+	// instead of exposing a root symlink (Atmos creates no symlinks of its own;
+	// see onedir.go). Resolve through it first — an explicit name maps to its
+	// manifest entry, an empty name to the primary — since the entrypoint lives
+	// nested inside the preserved .pkg tree, not at the version-dir root.
+	if path, ok := resolveManifestEntrypoint(versionDir, binaryName); ok {
+		return path
 	}
 
-	// Onedir (multi-file) installs record the primary entrypoint's real path in
-	// a sidecar manifest instead of exposing a root symlink (Atmos creates no
-	// symlinks of its own; see onedir.go). Prefer it over the auto-detect scan
-	// below, which only looks at the version-dir root and would otherwise miss
-	// the entrypoint (it lives nested inside the preserved .pkg tree).
-	if manifest, ok := readOnedirManifest(versionDir); ok {
-		if rel, ok := manifest.Entrypoints[manifest.Primary]; ok {
-			return filepath.Join(versionDir, rel)
-		}
+	// If binary name is explicitly provided, use it directly (flat layout).
+	if binaryName != "" {
+		return filepath.Join(versionDir, binaryName)
 	}
 
 	// Try to find the actual binary in the version directory.
@@ -777,6 +792,34 @@ func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) strin
 
 	// Fallback: use repo name as binary name.
 	return filepath.Join(versionDir, repo)
+}
+
+// GetBinaryPaths returns every installed entrypoint path for a version. A onedir
+// (multi-file) package exposes multiple commands that may live in different
+// directories inside the preserved .pkg tree, so all of them are returned (for
+// example so callers can add each command's directory to PATH). It returns nil
+// for a flat install (no manifest); callers should fall back to GetBinaryPath.
+func (i *Installer) GetBinaryPaths(owner, repo, version string) []string {
+	defer perf.Track(nil, "installer.Installer.GetBinaryPaths")()
+
+	if version == "latest" {
+		if actual, err := i.ReadLatestFile(owner, repo); err == nil {
+			version = actual
+		}
+	}
+
+	versionDir := filepath.Join(i.binDir, owner, repo, version)
+	manifest, ok := readOnedirManifest(versionDir)
+	if !ok || len(manifest.Entrypoints) == 0 {
+		return nil
+	}
+
+	paths := make([]string, 0, len(manifest.Entrypoints))
+	for _, rel := range manifest.Entrypoints {
+		paths = append(paths, filepath.Join(versionDir, rel))
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 // Uninstall removes a previously installed tool.
