@@ -32,8 +32,13 @@ source of truth on current behavior.
 **What exists today**:
 - `atmos init` command with embedded templates (`simple`, `atmos`)
 - Interactive and non-interactive (`--interactive=false`) project setup
-- `--force`, `--update`, `--base-ref`, `--merge-strategy` flags
+- `--force`, `--update`, `--base-ref`, `--merge-strategy`, `--skip-hooks` flags
 - `pkg/generator` package (shared with `atmos scaffold`)
+- Because `atmos init` shares `atmos scaffold`'s `pkg/generator/ui.InitUI` code
+  path, it also inherits `spec.fields[].when:`, `spec.files[].when:`, and
+  generic `spec.hooks:` (`before.scaffold.generate`/`after.scaffold.generate`,
+  reusing `pkg/hooks.Hook`'s vocabulary) from a project template's
+  `scaffold.yaml` — see `docs/prd/atmos-scaffold.md` for the full schema
 
 **Still not implemented** (a real, open gap — not just historical planning):
 - ❌ **`--dry-run` on `atmos init`.** Unlike `atmos scaffold generate`, `atmos
@@ -43,7 +48,10 @@ source of truth on current behavior.
 - ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
   threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
 - ❌ Custom template sources (Git URLs), template versioning/compatibility checks
-- ❌ `pre_update`/`post_update` migration hooks
+- ❌ `pre_update`/`post_update` *migration* hooks scoped to `.atmos/init/metadata.yaml`
+  (see "Migration Hooks" under Future Enhancements) — a distinct, still-unbuilt
+  concept from the generic `spec.hooks:` inherited from `atmos scaffold` above,
+  which fire on every generate/update, not specifically on migration
 
 ## Goals
 
@@ -394,7 +402,8 @@ for `atmos init` (still absent; see "Current State" above).
 **Potential enhancements**:
 - Custom template sources (Git URLs)
 - Template versioning and compatibility checks
-- Pre/post generation hooks
+- ✅ **Shipped** (inherited from `atmos scaffold`): generic pre/post generation
+  hooks via a project template's `spec.hooks:` — see "Current State" above
 - Template validation
 - Diff preview mode (`--dry-run`) — this is the same gap noted in "Current
   State" above: `atmos scaffold generate` got `--dry-run` (including a real
@@ -657,6 +666,11 @@ atmos init ~/my-templates/custom ./my-project
 - Publish custom templates
 
 ### Migration Hooks
+
+Distinct from the generic `spec.hooks:` block already shipped in a project
+template's `scaffold.yaml` (see "Current State" above, inherited from `atmos
+scaffold`) — this would be a project-record-scoped hook keyed to the *update*
+lifecycle specifically, not a template-authored, every-generate hook:
 
 ```yaml
 # .atmos/init/metadata.yaml

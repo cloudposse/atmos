@@ -38,10 +38,21 @@ and `pkg/generator/` for the source of truth on current behavior.
   (see "Update Mode" below for what shipped vs. this PRD's original phasing)
 - `pkg/generator` package (shared with `atmos init`)
 
+**Also implemented, shipped after this PRD was first written**:
+- `spec.fields[].when:` and `spec.files[].when:` — declarative conditional
+  prompting and file generation, gated on prompt answers via the same CEL
+  `when:` engine workflows/hooks/custom commands use (`pkg/condition`)
+- `spec.hooks:` — real `pre`/`post`-generate hooks (`before.scaffold.generate`
+  / `after.scaffold.generate`), reusing `pkg/hooks.Hook`'s exact vocabulary
+  (`events`/`kind`/`when`/`type`/`with`) and executed through the same shared
+  step engine (`pkg/runner/step`) workflows/custom commands use. Only
+  `kind: step`/`kind: steps` are supported today. `--skip-hooks` (mirroring
+  `terraform`'s flag) bypasses hooks for a run.
+
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
-- ❌ `pre_generate`/`post_generate` lifecycle hooks (the `hooks:` block shown
-  later in this doc is aspirational schema, not something the generator reads)
+- ❌ `for_each`-style dynamic file generation over an unbounded/unknown answer
+  set (static per-file `when:`, above, covers a fixed/enumerable option set)
 - ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
   threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
 
@@ -287,64 +298,67 @@ scaffold:
 
 ### Template Structure
 
-**scaffold.yaml** (template configuration):
+**scaffold.yaml** (template configuration — the real `AtmosScaffoldConfig` manifest
+shape; template files themselves are auto-discovered by walking the template
+directory, not declared under `spec.files:` — that key is reserved for the
+optional conditional-generation overlay shown below):
 
 ```yaml
-name: terraform-component
-description: Standard Terraform component structure
-author: CloudPosse
-version: 1.0.0
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: terraform-component
+  description: Standard Terraform component structure
+  author: CloudPosse
+  version: 1.0.0
+spec:
+  fields:
+    - name: component_name
+      label: Name of the Terraform component
+      type: input
+      required: true
 
-prompts:
-  - name: component_name
-    description: "Name of the Terraform component"
-    type: input
-    required: true
+    - name: aws_region
+      label: AWS region
+      type: select
+      options:
+        - us-east-1
+        - us-east-2
+        - us-west-1
+        - us-west-2
+      default: us-east-1
 
-  - name: aws_region
-    description: "AWS region"
-    type: select
-    options:
-      - us-east-1
-      - us-east-2
-      - us-west-1
-      - us-west-2
-    default: us-east-1
+    - name: enable_monitoring
+      label: Enable CloudWatch monitoring?
+      type: confirm
+      default: true
 
-  - name: enable_monitoring
-    description: "Enable CloudWatch monitoring?"
-    type: confirm
-    default: true
+    # Only prompted for when enable_monitoring is true -- per-field when:
+    # gates a question on an earlier field's answer.
+    - name: alert_email
+      label: Alert notification email
+      type: input
+      when: "answers.enable_monitoring == true"
 
-files:
-  - source: main.tf.tmpl
-    target: main.tf
-    is_template: true
+  # Optional: gate specific auto-discovered files on collected answers.
+  # Files not listed here (main.tf.tmpl, variables.tf.tmpl, ...) always
+  # generate.
+  files:
+    - path: alerts.tf
+      when: "answers.enable_monitoring == true"
 
-  - source: variables.tf.tmpl
-    target: variables.tf
-    is_template: true
-
-  - source: outputs.tf.tmpl
-    target: outputs.tf
-    is_template: true
-
-  - source: README.md.tmpl
-    target: README.md
-    is_template: true
-
-dependencies:
-  - terraform >= 1.5.0
-  - aws provider >= 5.0.0
-
-# NOTE: hooks: is aspirational schema — the generator does not currently
-# read or execute pre_generate/post_generate hooks (see "Future Enhancements"
-# below). Including this block in a scaffold.yaml today has no effect.
-hooks:
-  pre_generate:
-    - command: "terraform fmt"
-  post_generate:
-    - command: "terraform validate"
+  # Optional: step-backed hooks around generation. Reuses the exact
+  # events/kind/when/type/with vocabulary stack-level lifecycle hooks use
+  # (pkg/hooks.Hook) -- see the atmos-hooks skill for the shared vocabulary.
+  # Only kind: step / kind: steps are supported for scaffold hooks.
+  hooks:
+    format:
+      events:
+        - after.scaffold.generate
+      kind: step
+      type: shell
+      with:
+        command: "terraform fmt"
 ```
 
 **Template files** (with Go template syntax):
@@ -403,6 +417,13 @@ module "{{ .Config.component_name }}" {
 | `select` | Single choice from list | AWS region, instance type |
 | `confirm` | Yes/no question | Enable feature? |
 | `multiselect` | Multiple choices from list | Availability zones |
+
+Any field can declare `when:` (a predicate keyword, CEL expression, or list treated as
+"all") to gate whether it's prompted for, evaluated against answers already collected
+from fields declared earlier — e.g. `when: "answers.enable_monitoring == true"`. `spec.files:`
+supports the same `when:` mechanism to gate whether a specific auto-discovered file is
+generated. Compound conditions use CEL's `&&`/`||`/`!` (the `{all:/any:/not:}` map form
+pkg/condition also parses is not accepted by the scaffold JSON Schema).
 
 ### Update Flow (with 3-Way Merge)
 
@@ -642,6 +663,11 @@ atmos init              # Specialized for project initialization
 | `pkg/generator/ui` | Interactive prompts | Project setup flow |
 | `pkg/generator/merge` | 3-way merge (shipped) | Project update mode |
 
+Because `atmos init` drives generation through the same `pkg/generator/ui.InitUI`
+code path as `atmos scaffold generate`, it inherits `spec.fields[].when:`,
+`spec.files[].when:`, `spec.hooks:`, and `--skip-hooks` automatically — see
+`docs/prd/atmos-init.md` for the init-specific flag/behavior differences.
+
 **Key differences**:
 
 | Feature | atmos scaffold | atmos init |
@@ -812,9 +838,16 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 
 ### Advanced Prompts
 
-- Conditional prompts (based on previous answers)
-- Validation rules (regex, min/max, etc.)
-- Dynamic default values (computed from other inputs)
+- ✅ **Shipped**: conditional prompts based on previous answers
+  (`spec.fields[].when:`, see "Template Structure" above)
+- ✅ **Shipped**: regex validation (`spec.fields[].validation.pattern`/`message`)
+- Dynamic default values (computed from other inputs) — still future
+- `for_each`-style dynamic file generation over an unbounded/unknown answer set
+  (e.g. a free-text multi-value field, rather than a fixed `options:` list) —
+  the shipped `spec.files[].when:` overlay only gates a *known, fixed* set of
+  files declared by the template author; a true loop would require the
+  file-discovery step itself to become answer-aware, which today runs once
+  before any prompt
 
 ### IDE Integration
 
@@ -824,15 +857,20 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 
 ### Hooks and Lifecycle
 
-```yaml
-hooks:
-  pre_generate:
-    - validate_prerequisites.sh
-  post_generate:
-    - terraform fmt
-    - terraform validate
-    - git add .
-```
+**Shipped.** `spec.hooks:` runs step-backed actions around generation, keyed by
+hook name, reusing the exact vocabulary stack-level lifecycle hooks use
+(`pkg/hooks.Hook` — `events`/`kind`/`when`/`type`/`with`; see the `atmos-hooks`
+skill for the shared vocabulary and `atmos-steps` for available step types).
+Events are `before.scaffold.generate` and `after.scaffold.generate`; only
+`kind: step`/`kind: steps` are supported (the `command`/`store`/`git` kinds
+stack-level hooks also support are not yet wired up for scaffold — their
+engines assume stack/component context scaffold generation doesn't have).
+`--skip-hooks`/`--skip-hooks=name1,name2` bypasses hooks for a run, mirroring
+`terraform`'s flag of the same name. See "Template Structure" above for a
+worked example.
+
+Future: `command`/`store`/`git` scaffold hook kinds, once/if there's a real
+need to run them outside a stack/component context.
 
 ## References
 
