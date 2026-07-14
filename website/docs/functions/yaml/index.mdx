@@ -125,6 +125,13 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!aws.region`__](/functions/yaml/aws.region) YAML function retrieves the AWS region
    from the current SDK configuration.
 
+ - The [__`!tags`__](/functions/yaml/tags) and [__`!labels`__](/functions/yaml/labels) YAML functions
+   return the current component's own `metadata.tags` (list) and `metadata.labels` (map), typed
+   correctly with no `!template`/`toJson` boilerplate — commonly used to bridge `metadata.labels`
+   into the `vars.tags`/`vars.labels` a `terraform-null-label`-style module expects.
+   [__`!labels.keys`__](/functions/yaml/labels.keys) and [__`!labels.values`__](/functions/yaml/labels.values)
+   return just the keys or values of `metadata.labels` as a flat list.
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
@@ -225,6 +232,19 @@ components:
         helm_annotation: !literal "{{ .Values.ingress.class }}"
         terraform_var: !literal "${var.hostname}"
         db_users: [!literal "{{external.email}}", !literal "{{external.admin}}"]
+
+        # Get this component's own metadata.tags (list) and metadata.labels (map)
+        component_tags: !tags
+        component_labels: !labels
+
+        # Bridge metadata.labels into the var.tags a terraform-null-label-style module expects
+        tags: !labels
+
+      metadata:
+        tags: [production, networking]
+        labels:
+          cost-center: platform
+          compliance: sox
 
       settings:
         # Append to an inherited list instead of replacing it
