@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -114,6 +115,57 @@ func TestDescribeDependentsSetsAuthDisabled(t *testing.T) {
 	}
 }
 
+// TestDescribeDependentsRunnable_InvalidErrorMode covers the dispatch call site inside
+// getRunnableDescribeDependentsCmd that invokes validateDescribeDependentsErrorMode once
+// --error-mode has been resolved against atmos.yaml's describe.error_mode: an invalid
+// resolved value must short-circuit before the describe-dependents executor ever runs.
+//
+// The getRunnableDescribeDependentsCmd function does not take setFlagsForDescribeDependentsCmd
+// as an injectable prop (unlike describe_stacks' setCliArgsForDescribeStackCli), so the invalid
+// value is forced directly onto the shared describeDependentsCmd's real --error-mode flag.
+// NewTestKit only snapshots RootCmd's own flags, not subcommand flags, so the flag is
+// restored manually via t.Cleanup to avoid leaking state into other tests.
+func TestDescribeDependentsRunnable_InvalidErrorMode(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Reset Viper to clear any environment variable bindings from previous tests.
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "")
+	t.Setenv("IDENTITY", "")
+
+	errorModeFlag := describeDependentsCmd.Flags().Lookup("error-mode")
+	require.NotNil(t, errorModeFlag, "error-mode flag must be registered on describeDependentsCmd")
+	origValue := errorModeFlag.Value.String()
+	origChanged := errorModeFlag.Changed
+	t.Cleanup(func() {
+		_ = errorModeFlag.Value.Set(origValue)
+		errorModeFlag.Changed = origChanged
+	})
+	require.NoError(t, errorModeFlag.Value.Set("bogus"))
+	errorModeFlag.Changed = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	describeDependentsMock := exec.NewMockDescribeDependentsExec(ctrl)
+	describeDependentsMock.EXPECT().Execute(gomock.Any()).Times(0)
+
+	run := getRunnableDescribeDependentsCmd(func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(atmosConfig *schema.AtmosConfiguration) exec.DescribeDependentsExec {
+			return describeDependentsMock
+		})
+
+	err := run(describeDependentsCmd, []string{"component"})
+
+	assert.ErrorIs(t, err, exec.ErrInvalidErrorMode, "invalid error-mode should be rejected before executing")
+}
+
 func TestSetFlagInDescribeDependents(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -187,6 +239,30 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 			assert.Equal(t, tt.expected, describeDependentArgs)
 		})
 	}
+}
+
+// TestSetFlagsForDescribeDependentsCmd_ErrorModeWrongType covers the genuinely-forceable
+// return err inside setStringFlagIfChanged: pflag.FlagSet.GetString errors when a flag was
+// registered as a different type than expected. Registering "error-mode" as a Bool flag
+// (instead of the real String flag) and marking it Changed reproduces that mismatch without
+// needing to touch any BindFlagsToViper-adjacent code path.
+func TestSetFlagsForDescribeDependentsCmd_ErrorModeWrongType(t *testing.T) {
+	_ = NewTestKit(t)
+
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
+	fs.String("file", "", "Write the result to the file")
+	fs.String("stack", "", "Filter by a specific stack")
+	fs.StringP("query", "q", "", "Specify a query to filter the output")
+	fs.Bool("process-templates", true, "Enable/disable Go template processing")
+	fs.Bool("process-functions", true, "Enable/disable YAML functions processing")
+	fs.StringSlice("skip", nil, "Skip executing a YAML function")
+	fs.Bool("error-mode", false, "How to handle recoverable errors")
+	require.NoError(t, fs.Set("error-mode", "true"))
+
+	describeDependentArgs := &exec.DescribeDependentsExecProps{}
+	err := setFlagsForDescribeDependentsCmd(fs, describeDependentArgs)
+	assert.Error(t, err, "GetString on a Bool-typed flag must return an error")
 }
 
 func TestValidateDescribeDependentsErrorMode(t *testing.T) {

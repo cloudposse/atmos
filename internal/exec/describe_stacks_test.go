@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -669,6 +671,113 @@ func TestExecuteDescribeStacks_ProcessStackFileError(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	require.Error(t, err)
+}
+
+// buildDescribeStacksDegradationFixture creates a temp atmos project with one terraform
+// component (vpc) in stack file "dev.yaml" whose "bucket" var uses a `!terraform.state`
+// YAML function, changes the process working directory to the fixture root, and returns the
+// initialized AtmosConfiguration. Used by
+// TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError and its _Strict companion
+// to exercise the OnErrorWarn dispatch in executeDescribeStacks (describe_stacks.go).
+func buildDescribeStacksDegradationFixture(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	vpcDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	// Minimal main.tf so the component directory exists.
+	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte(""), 0o644))
+
+	stackContent := "components:\n  terraform:\n    vpc:\n      vars:\n        bucket: \"!terraform.state vpc dev bucket_name\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(stackContent), 0o644))
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	return atmosConfig
+}
+
+// TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError exercises the
+// `errOptions.OnError == OnErrorWarn` dispatch in executeDescribeStacks (describe_stacks.go)
+// end-to-end through the exported ExecuteDescribeStacksWithOptions: a recoverable
+// `!terraform.state` error is degraded to degradation.AtmosComputedValue{} instead of
+// failing the whole describe-stacks call, and reported exactly once via OnWarning.
+func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := buildDescribeStacksDegradationFixture(t)
+
+	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, recoverableErr).
+		Times(1)
+
+	var warnings []DegradationWarning
+	result, err := ExecuteDescribeStacksWithOptions(
+		&atmosConfig, "", nil, nil, nil, false,
+		false, // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil, nil, false,
+		DescribeStacksErrorOptions{
+			OnError: OnErrorWarn,
+			OnWarning: func(w DegradationWarning) {
+				warnings = append(warnings, w)
+			},
+		},
+	)
+
+	require.NoError(t, err)
+	assert.Len(t, warnings, 1)
+	assert.NotEmpty(t, result)
+}
+
+// TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError_Strict is the contrasting
+// strict-mode companion to TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError:
+// with a zero-value DescribeStacksErrorOptions{} (OnErrorStrict), the same recoverable error
+// now fails the whole call instead of being degraded.
+func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError_Strict(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := buildDescribeStacksDegradationFixture(t)
+
+	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, recoverableErr).
+		Times(1)
+
+	_, err := ExecuteDescribeStacksWithOptions(
+		&atmosConfig, "", nil, nil, nil, false,
+		false, // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil, nil, false,
+		DescribeStacksErrorOptions{},
+	)
+
 	require.Error(t, err)
 }
 
