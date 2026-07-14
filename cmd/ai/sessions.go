@@ -19,7 +19,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -286,9 +285,9 @@ func cleanSessionsCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if count == 0 {
-		u.PrintMessage("No sessions to clean.")
+		ui.Info("No sessions to clean.")
 	} else {
-		u.PrintMessage(fmt.Sprintf("✅ Deleted %d session(s) older than %s", count, olderThanStr))
+		ui.Successf("Deleted %d session(s) older than %s", count, olderThanStr)
 	}
 
 	return nil
@@ -364,7 +363,7 @@ func exportSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to export session: %w", err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("✅ Session '%s' exported to '%s'", sessionName, outputPath))
+	ui.Successf("Session '%s' exported to '%s'", sessionName, outputPath)
 
 	return nil
 }
@@ -405,13 +404,13 @@ func importSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to import session: %w", err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("✅ Session '%s' imported successfully", importedSession.Name))
-	u.PrintMessage(fmt.Sprintf("  ID: %s", importedSession.ID))
-	u.PrintMessage(fmt.Sprintf("  Model: %s", importedSession.Model))
-	u.PrintMessage(fmt.Sprintf("  Provider: %s", importedSession.Provider))
-	u.PrintMessage(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
-	u.PrintMessage("")
-	u.PrintMessage("Resume the session with: atmos ai chat --session " + importedSession.Name)
+	ui.Successf("Session '%s' imported successfully", importedSession.Name)
+	ui.Writeln(fmt.Sprintf("  ID: %s", importedSession.ID))
+	ui.Writeln(fmt.Sprintf("  Model: %s", importedSession.Model))
+	ui.Writeln(fmt.Sprintf("  Provider: %s", importedSession.Provider))
+	ui.Writeln(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
+	ui.Writeln("")
+	ui.Writeln(fmt.Sprintf("Resume the session with: atmos ai chat --session %s", importedSession.Name))
 
 	return nil
 }

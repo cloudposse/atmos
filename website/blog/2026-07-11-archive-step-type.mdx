@@ -1,0 +1,179 @@
+---
+slug: archive-step-type
+title: "Archive Step Type: Pack Zip/Tar Archives Without Shelling Out"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-11
+---
+
+Packaging a directory into a deployable archive — most commonly zipping a Lambda
+function's source into `handler.zip` before `terraform plan`/`apply` — has always
+meant reaching for a shell-based hook that wraps the `zip`/`tar` binary. That works
+until you actually depend on it: the flags aren't even the same between BSD `tar`
+(macOS) and GNU `tar` (most Linux CI images), errors surface as opaque shell exit
+codes instead of anything typed, and — the part that's easy to miss — the archive you
+get back isn't reproducible. Build the exact same source twice and you get two
+different files. A new `archive` step type fixes all three: implemented on the Go
+standard library only, it behaves identically everywhere Atmos runs, validates its
+config before touching the filesystem, and can now produce byte-identical output for
+identical input.
+
+<!--truncate-->
+
+## The Problem
+
+This surfaced while migrating a Terragrunt Lambda example (Lambda + DynamoDB + IAM
+role) to Atmos. The source unit used a `before_hook "package"` wrapping
+`scripts/package.sh`, which itself wrapped the `zip` binary, before every
+`plan`/`apply`/`destroy`. Translating that directly meant an equivalent shell-based
+hook:
+
+```yaml
+hooks:
+  package:
+    kind: command
+    command: bash
+    args: ["-c", "cd src && zip -r ../handler.zip . -x '*.test.js'"]
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+```
+
+Three problems with this, once you look past "it worked when I tested it":
+
+- **The invocation isn't even portable between macOS and Linux**, let alone Windows.
+  `zip -x` and `tar --exclude` take different glob syntax; BSD `tar` (what macOS
+  ships) and GNU `tar` (most Linux CI images) disagree on flags like `--exclude` vs.
+  `-X excludefile`. Two engineers on the same team can get different results running
+  the "same" hook.
+- **Failures are opaque.** A typo in a glob, a missing source directory — all of it
+  surfaces as a shell exit code with no structure Atmos can validate ahead of time.
+- **The output isn't reproducible.** Zip and tar both bake in each file's real
+  modification time and permission bits. A fresh `git clone` sets every file's mtime
+  to checkout time, and umask varies across machines and CI images — so identical
+  source content produces a *different archive* on every rebuild. This is the same
+  failure mode Terraform's own `archive_file` provider has been
+  [reported for](https://github.com/hashicorp/terraform-provider-archive/issues/34)
+  over the years: two runs, same input, different checksum. Anything downstream that
+  keys off the archive's hash — Lambda only redeploying when the zip's checksum
+  changes, a build cache, a provenance check — sees a "change" that isn't one.
+
+A `data "archive_file"` Terraform data source was tried first for the packaging step
+itself. It works fine when a config references the data source's own output attribute
+directly (`output_path`, `output_base64sha256`) — Terraform's graph orders that
+correctly. It broke here because the migrated module computed the zip path
+independently in a `locals` block, mirroring the original Terragrunt script's own
+variable, instead of referencing the data source's attribute — so there was no
+dependency edge forcing `archive_file` to run first. That's not a one-off: it's a
+[documented class of bug](https://github.com/hashicorp/terraform/issues/30042),
+closed once the reporter switched to referencing the output attribute directly — the
+same fix this migration's module hadn't made. A `before.terraform.*` hook sidesteps
+the whole class of problem
+structurally — it runs and completes before Terraform's graph is even evaluated, so
+there's no reference to get wrong.
+
+## The Fix
+
+The new `archive` step type packages a directory or file into a `zip`, `tar`, or
+`tgz` archive using only Go's standard library — `archive/zip`, `archive/tar`,
+`compress/gzip`. No shelling out, so the same config produces the same archive
+structure everywhere Atmos runs:
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    exclude:
+      - "**/*.test.js"
+      - "**/node_modules/**"
+```
+
+It has no dedicated hook kind — like every step type added since
+[`kind: step`](/changelog/hooks-step-types) shipped, it reaches hooks through the same
+bridge, so it works as a lifecycle hook with zero extra plumbing:
+
+```yaml
+hooks:
+  package:
+    kind: step
+    type: archive
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+    with:
+      source: src/
+      destination: handler.zip
+```
+
+## How to Use It
+
+- `source` / `destination` — required. What to archive, and where to write it.
+- `format` — `zip`, `tar`, `tgz`, `tar.bz2`, or `tar.xz`. Inferred from
+  `destination`'s extension when omitted (writing `tar.bz2`/`tar.xz` isn't
+  implemented yet — see below).
+- `subpath` — nests `source`'s content under a path inside the archive, e.g.
+  `subpath: opt/nodejs` for a Lambda Layer.
+- `include` / `exclude` — glob filters, evaluated exclude-then-include.
+- `action` — `replace` (default) always rebuilds the archive fresh from `source`.
+  `update` adds/refreshes entries in an existing archive without touching the rest —
+  supported for `zip` and uncompressed `tar` only, since `tgz`/`tar.bz2`/`tar.xz`
+  compress the whole stream as one unit and can't be edited surgically. Selecting
+  `update` on one of those formats fails with a clear error instead of silently
+  falling back to a full rebuild.
+
+`create` and `extract` are reserved in the schema for a future release, so it won't
+need a breaking change to add them later.
+
+## Reproducible Output
+
+A native step type fixes the shelling-out problems, but not the reproducibility one
+by itself — by default, entries still carry the source files' real mtime and
+permission bits (same as omitting the field, or setting it to `filesystem`
+explicitly). Set `mtime: epoch` or `mtime: git` to fix that too:
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    mtime: epoch
+```
+
+`mtime` names the mechanism, not an outcome: it's the modification-time metadata
+stamped into each *archive entry* — not the source files on disk, and not the
+archive file's own OS-level mtime.
+
+- `filesystem` — the default. Every entry carries the source file's real mtime and
+  permission bits.
+- `epoch` — every entry gets the same timestamp: the most recent Git commit that
+  touched anything under `source`. One timestamp, whole archive. Named after the
+  [`SOURCE_DATE_EPOCH`](https://reproducible-builds.org/docs/source-date-epoch/)
+  reproducible-builds convention, which this mirrors conceptually — one shared
+  reference timestamp for the whole build — even though the value here comes from
+  Git history rather than an environment variable.
+- `git` — each entry gets its own timestamp, from its most recent commit. Files
+  with no Git history (build output, `node_modules/`) fall back to the same value
+  `epoch` would use.
+
+`epoch` and `git` both also normalize permission bits (`0644`, or `0755` if the
+source is executable), since inconsistent umask-derived permissions produce different
+archive bytes just as reliably as inconsistent timestamps do. Timestamps come from
+Git commit history via `go-git` — no shelling out to `git log`, and no dependency on
+`SOURCE_DATE_EPOCH` being threaded through every tool in the chain. Outside a Git
+repository, both modes fall back to a fixed reference date rather than failing the
+step. It's opt-in: existing workflows that don't set `mtime` see no change in
+behavior.
+
+**`action: replace` + `mtime` is idempotent — `action: update` is not.** With
+`replace`, the same `source` produces the same bytes on every rerun, because
+`replace` always rebuilds from scratch. `update` doesn't get that guarantee even with
+`mtime` set: its existing entries keep whatever mtime/mode a prior write already gave
+them, and only the entries a given `update` call adds or refreshes get normalized —
+so the final bytes depend on the archive's history, not just `source`'s current
+content. If you need the idempotent guarantee, use `replace`.
+
+## Get Involved
+
+See the [archive step reference](/workflows/steps/type/archive) for the full field
+list, and the [hooks reference](/stacks/hooks#kind-step-run-a-step-type) for using it
+as a lifecycle hook. Questions or ideas? Join us in the
+[Cloud Posse community Slack](https://cloudposse.com/slack).
