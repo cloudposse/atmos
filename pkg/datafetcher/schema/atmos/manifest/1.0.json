@@ -3103,6 +3103,36 @@
           "type": "boolean",
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "format": {
+          "type": "string",
+          "description": "Archive format for the archive step type: zip, tar, tgz, tar.bz2, or tar.xz; inferred from destination/source extension when omitted."
+        },
+        "destination": {
+          "type": "string",
+          "description": "Archive step type: archive file to write when packing, or directory to extract into when extracting."
+        },
+        "subpath": {
+          "type": "string",
+          "description": "Archive step type: nest source content under this path inside the archive when packing; only extract this path (prefix stripped) when extracting."
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Archive step type: glob(s); keep only matching files."
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Archive step type: glob(s); drop matching files, evaluated before include."
+        },
+        "mtime": {
+          "type": "string",
+          "description": "Archive step type: modification-time metadata stamped into each archive entry: filesystem (default), epoch (one shared timestamp for the whole archive), or git (per-entry timestamps). epoch/git also normalize permission bits."
+        },
         "files": {
           "type": "array",
           "items": {
