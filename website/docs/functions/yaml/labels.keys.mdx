@@ -1,0 +1,68 @@
+---
+title: "!labels.keys"
+sidebar_position: 93
+sidebar_label: "!labels.keys"
+sidebar_class_name: command
+description: Retrieve the current component's own metadata.labels keys as a sorted list
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!labels.keys` YAML function returns the keys of the current component's own `metadata.labels`
+as a sorted `[]string` — useful when a module or script wants a flat list of label names instead
+of the full map (for example, an allow-list of label keys).
+</Intro>
+
+## Usage
+
+The `!labels.keys` function takes no parameters:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          Namespace: eg
+          Environment: prod
+          cost-center: platform
+      vars:
+        label_keys: !labels.keys
+```
+
+## Arguments
+
+This function takes no arguments. It reads `metadata.labels` from the component it's used on.
+
+## How It Works
+
+`!labels.keys` reads the component's `metadata.labels` map and returns its keys as a `[]string`,
+sorted alphabetically for deterministic output (Go map iteration order is randomized, so sorting
+matters for reproducible plans). If `metadata.labels` is unset, `!labels.keys` returns an empty
+list rather than an error.
+
+## Examples
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          Namespace: eg
+          Environment: prod
+          cost-center: platform
+      vars:
+        # label_keys will be ["Environment", "Namespace", "cost-center"] (sorted)
+        label_keys: !labels.keys
+```
+</File>
+
+## Related Functions
+
+- [!labels](/functions/yaml/labels) - Get the current component's own `metadata.labels` as a map
+- [!labels.values](/functions/yaml/labels.values) - Get the current component's `metadata.labels` values
+- [!tags](/functions/yaml/tags) - Get the current component's own `metadata.tags` as a list

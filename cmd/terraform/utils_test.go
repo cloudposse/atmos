@@ -372,6 +372,16 @@ func TestHasMultiComponentFlags(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			name:     "tags flag set",
+			info:     &schema.ConfigAndStacksInfo{Tags: []string{"production"}},
+			expected: true,
+		},
+		{
+			name:     "labels flag set",
+			info:     &schema.ConfigAndStacksInfo{Labels: map[string]string{"cost-center": "platform"}},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -523,6 +533,16 @@ func TestIsMultiComponentExecution(t *testing.T) {
 			info:     &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
 			expected: false,
 		},
+		{
+			name:     "tags set",
+			info:     &schema.ConfigAndStacksInfo{Tags: []string{"production"}},
+			expected: true,
+		},
+		{
+			name:     "labels set",
+			info:     &schema.ConfigAndStacksInfo{Labels: map[string]string{"cost-center": "platform"}},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -531,6 +551,21 @@ func TestIsMultiComponentExecution(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestHasNonAffectedMultiFlags_TagsAndLabelsComposeWithAffected asserts that
+// --tags/--labels are deliberately excluded from hasNonAffectedMultiFlags, so
+// `--affected --tags production` passes checkTerraformFlags instead of being
+// rejected as a conflicting multi-component selector.
+func TestHasNonAffectedMultiFlags_TagsAndLabelsComposeWithAffected(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		Affected: true,
+		Tags:     []string{"production"},
+		Labels:   map[string]string{"cost-center": "platform"},
+	}
+
+	assert.False(t, hasNonAffectedMultiFlags(info), "tags/labels alone must not trip the non-affected multi-flag check")
+	assert.NoError(t, checkTerraformFlags(info), "--affected --tags/--labels must compose without error")
 }
 
 // TestHasNonAffectedMultiFlags tests the hasNonAffectedMultiFlags function.
