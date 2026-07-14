@@ -1,4 +1,4 @@
-package exec
+package oci
 
 import (
 	"archive/tar"
@@ -14,13 +14,13 @@ import (
 
 var ErrInvalidFilePath = errors.New("invalid file path")
 
-// extractTarball extracts the tarball file from an io.Reader into the destination directory .
+// extractTarball extracts the tarball file from an io.Reader into the destination directory.
 func extractTarball(reader io.Reader, extractPath string) error {
-	// Call untar function to handle tar extraction
+	// Call untar function to handle tar extraction.
 	return untar(reader, extractPath)
 }
 
-// untar extracts a tar archive into the destination directory .
+// untar extracts a tar archive into the destination directory.
 func untar(reader io.Reader, extractPath string) error {
 	tarReader := tar.NewReader(reader)
 
@@ -95,9 +95,9 @@ func createFileFromTar(filePath string, tarReader *tar.Reader, header *tar.Heade
 		log.Error("Failed to write file contents", "path", filePath, "error", err)
 		return err
 	}
-	// Set correct permissions (remove setuid/setgid bits for security) , os.ModeSetuid, os.ModeSetgid standard Cross-platform
+	// Remove setuid/setgid bits for security; standard cross-platform.
 	newMode := header.FileInfo().Mode() &^ (os.ModeSetuid | os.ModeSetgid)
-	// Set permissions using os.Chmod for all platforms
+	// Set permissions using os.Chmod for all platforms.
 	if err := os.Chmod(filePath, newMode); err != nil {
 		log.Error("Failed to set file permissions", "path", filePath, "error", err)
 	}

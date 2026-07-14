@@ -1,0 +1,43 @@
+---
+slug: oci-source-jit-provisioning
+title: "oci:// Sources Now Work with JIT Auto-Provisioning"
+authors: [zack-is-cool]
+tags: [feature, bugfix]
+---
+
+A component with an `oci://` source and `provision.workdir.enabled: true` failed the moment you ran any Terraform operation against it. JIT auto-provisioning (the `before.terraform.init` hook) failed with go-getter's `download not supported for scheme 'oci'`, even though `atmos vendor pull` handled the exact same source fine. Registries distributing modules in OpenTofu's native OCI module-package format couldn't be pulled by either path at all.
+
+<!--truncate-->
+
+## The Problem
+
+- JIT auto-provisioning and `atmos vendor pull` had two separate, non-overlapping implementations of "download a source." Only the vendor-pull one understood `oci://`.
+- Registries publishing modules via OpenTofu's native "install modules from OCI registries" format ship their content as a ZIP-archive layer, not the tar+gzip layer Atmos expected. Pulling one failed with `archive/tar: invalid tar header` regardless of which path you used.
+- OCI pulls also had no timeout, so a slow or unresponsive registry could hang a command indefinitely.
+
+## The Fix
+
+- The OCI-fetch implementation moved into a shared `pkg/oci` package so both `atmos vendor pull` and JIT auto-provisioning use the same implementation instead of two divergent ones.
+- The puller now recognizes ZIP-layer OCI artifacts (OpenTofu's module-package format) in addition to Atmos's own tar+gzip format, with the same directory-traversal and decompression-size guards either way.
+- OCI pulls are now bounded by a 10-minute timeout, matching the existing go-getter download path.
+
+## How to Use It
+
+```yaml
+components:
+  terraform:
+    my-component:
+      source:
+        uri: "oci://ghcr.io/my-org/my-module:v1.2.0"
+      provision:
+        workdir:
+          enabled: true
+```
+
+Running `atmos terraform plan my-component -s <stack>` now auto-provisions the source before running, the same way it already does for git and HTTP sources.
+
+Authentication works the same way it already does for `atmos vendor pull`: your existing registry credentials are picked up automatically, with an anonymous fallback if none are configured.
+
+## Get Involved
+
+See the [Workdir Provisioning](/stacks/components/provision/workdir) docs for the full `provision.workdir` reference, or open an issue if you hit an OCI registry format that still doesn't extract cleanly.
