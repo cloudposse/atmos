@@ -1570,6 +1570,8 @@ type ConfigAndStacksInfo struct {
 	Affected                   bool
 	All                        bool
 	Components                 []string
+	Tags                       []string
+	Labels                     map[string]string
 	MaxConcurrency             int
 	TerraformFailureMode       string
 	FailFast                   bool

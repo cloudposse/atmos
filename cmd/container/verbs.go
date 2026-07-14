@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // newVerbCmd builds a container subcommand that takes a required `component`
@@ -47,14 +48,30 @@ func buildVerbCmd(name, short, long string, optionalArg, withAllFlag bool) *cobr
 	cmd.Args = validator
 
 	if withAllFlag {
-		// Register `--all` as a local flag on this verb only. It is read directly
-		// from the executing command's flag (see buildConfigAndStacksInfo), not via
-		// the global Viper, so binding it to Viper here would only risk colliding
-		// with other commands' `all` key without adding value.
+		// Register `--all`/`--tags`/`--labels` as local flags on this verb only.
+		// They are read directly from the executing command's flags (see
+		// buildConfigAndStacksInfo), not via the global Viper, so binding them to
+		// Viper here would only risk colliding with other commands' keys without
+		// adding value.
 		parser := flags.NewStandardParser(
 			flags.WithBoolFlag("all", "", false, "Operate on all container components in all stacks (scope to one stack with --stack)"),
+			flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+			flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 		)
 		parser.RegisterFlags(cmd)
+
+		// Wrap the positional-args validator to also reject a malformed --labels
+		// value up front, so a parse failure never silently falls through to "no
+		// filter" (which would be dangerous for destructive verbs like down/rm/stop).
+		baseValidator := cmd.Args
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			if err := baseValidator(c, args); err != nil {
+				return err
+			}
+			labelsFlag, _ := c.Flags().GetString("labels")
+			_, err := tags.ParseLabelsFlag(labelsFlag)
+			return err
+		}
 	}
 
 	return cmd

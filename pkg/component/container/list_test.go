@@ -90,9 +90,9 @@ func TestCollectContainerInstances(t *testing.T) {
 
 	// Abstract "base" is excluded; remaining sorted by stack then component.
 	require.Len(t, rows, 3)
-	assert.Equal(t, instanceRow{stack: "dev", component: "api", image: "api:dev"}, rows[0])
-	assert.Equal(t, instanceRow{stack: "dev", component: "worker", image: "worker:dev"}, rows[1])
-	assert.Equal(t, instanceRow{stack: "prod", component: "api", image: "api:prod"}, rows[2])
+	assert.Equal(t, instanceRow{stack: "dev", component: "api", image: "api:dev", tags: []string{}, labels: map[string]string{}}, rows[0])
+	assert.Equal(t, instanceRow{stack: "dev", component: "worker", image: "worker:dev", tags: []string{}, labels: map[string]string{}}, rows[1])
+	assert.Equal(t, instanceRow{stack: "prod", component: "api", image: "api:prod", tags: []string{}, labels: map[string]string{}}, rows[2])
 }
 
 func TestCollectContainerInstances_Empty(t *testing.T) {
