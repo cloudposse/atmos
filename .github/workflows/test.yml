@@ -281,12 +281,13 @@ jobs:
 
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
-        # Build job's timeout comment above): it has repeatedly run right up
-        # against a 45-minute cap and then gotten force-cancelled by the step
-        # timeout before finishing, failing the job with no real test failure
-        # in the logs. Give it the same headroom as Linux's coverage-enabled
-        # run (60m); macOS finishes this step in ~35m today so the extra
-        # headroom is a no-op for it.
+        # Build job's timeout comment above): runs of this step have been
+        # observed between 37m43s and 45m06s (the latter timed out at the
+        # old 45m budget) — 7-8 minutes of CI-to-CI variance on a budget with
+        # almost no headroom, force-cancelling the step with no real test
+        # failure in the logs. 60m matches Linux's coverage-enabled step
+        # budget and gives real slack; macOS finishes this step in ~35m
+        # today so the extra headroom is a no-op for it.
         timeout-minutes: 60
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
