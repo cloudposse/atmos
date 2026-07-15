@@ -21,6 +21,10 @@ const (
 	ProxyInstallPathEnv  = "ATMOS_TOOLCHAIN_PROXY_INSTALL_PATH"
 )
 
+// proxyExecutable is replaceable in tests so proxy links never need to target
+// the running test binary. Windows cannot remove a hard link to that binary.
+var proxyExecutable = os.Executable
+
 // ProxyEnvironment is the PATH entry and private context required by a proxy.
 type ProxyEnvironment struct {
 	Path         string
@@ -115,7 +119,7 @@ func SyncProxies(config *schema.AtmosConfiguration) error {
 	if config == nil || len(config.Toolchain.Proxies) == 0 {
 		return nil
 	}
-	target, err := os.Executable()
+	target, err := proxyExecutable()
 	if err != nil {
 		return fmt.Errorf("resolve Atmos executable for proxies: %w", err)
 	}
