@@ -758,6 +758,12 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	// Debug: Log valueSources map.
 	log.Debug("valueSources map", "valueSources", valueSources)
 
+	// --set (and other external string sources) always supplies raw strings;
+	// coerce boolean-typed fields (confirm/bool/boolean) to native bools so
+	// When conditions and templates see the same type regardless of whether
+	// the value came from a flag, an interactive prompt, or a YAML default.
+	config.CoerceFieldValueTypes(scaffoldConfig, mergedValues)
+
 	// Prompt the user to edit the configuration values unless --use-defaults is specified
 	// This allows them to review and modify values from command line, config, or defaults
 	if !useDefaults {

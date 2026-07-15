@@ -1,0 +1,17 @@
+# atmos:template
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: "{{ .Config.project_name }}"
+  description: "Atmos vendoring manifest for {{ .Config.project_name }}"
+spec:
+  imports: []
+
+  sources:
+    - component: "example"
+      source: "{{ .Config.vendor_source }}//components/terraform/example?ref=main"
+      version: "main"
+      targets:
+        - "components/terraform/example"
+      tags:
+        - example

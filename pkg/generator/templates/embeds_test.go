@@ -346,6 +346,7 @@ func TestBasicTemplate_Render(t *testing.T) {
 		"README.md",
 		"atmos.yaml",
 		"components/terraform/README.md",
+		"components/terraform/greeting/.terraform.lock.hcl",
 		"components/terraform/greeting/main.tf",
 		"components/terraform/greeting/outputs.tf",
 		"components/terraform/greeting/variables.tf",

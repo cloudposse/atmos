@@ -36,3 +36,15 @@ spec:
       description: Whether to include a vendor.yaml manifest
       type: confirm
       default: true
+
+    - name: vendor_source
+      label: Vendor source repository
+      description: Git repository to pin in the generated vendor.yaml
+      type: input
+      default: github.com/cloudposse/terraform-aws-components.git
+      when: "answers.enable_vendoring == true"
+
+  # vendor.yaml is only generated when vendoring is enabled; skip it otherwise.
+  files:
+    - path: vendor.yaml
+      when: "answers.enable_vendoring == true"

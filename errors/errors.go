@@ -56,6 +56,7 @@ var (
 	ErrMissingFFmpeg                         = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
 	ErrMissingRenderOutput                   = errors.New("specify an output path with --output")
 	ErrUnknownSessionAction                  = errors.New("unknown cast session action type")
+	ErrSimulateActionMissingCallback         = errors.New("simulate session action has no callback")
 	ErrWaitTimeout                           = errors.New("timed out waiting for cast output")
 	ErrUnsupportedCastKey                    = errors.New("unsupported cast key")
 	ErrMissingExecCommand                    = errors.New("exec recording requires a command")

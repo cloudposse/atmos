@@ -1,3 +1,11 @@
+toolchain:
+  aliases:
+    coreutils: uutils/coreutils
+  proxies:
+    ls:
+      tool: coreutils
+      args: [ls]
+
 commands:
   - name: casts
     description: Generate published website asciicast demos

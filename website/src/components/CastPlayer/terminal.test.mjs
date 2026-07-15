@@ -70,6 +70,25 @@ test('replayTerminal cursor-up followed by ESC[K clear-then-draw still fully rep
   assert.equal(result, 'replaced\nline1\nline2\n');
 });
 
+test('replayTerminal clears completed Huh form rows with ESC[J', () => {
+  const form = [
+    'prompt\n',
+    'Which environments do you need?\n',
+    'dev\n',
+    'staging\n',
+    'prod\n',
+    'controls\n',
+    '\x1b[6A \x1b[K\x1b[J\r\x1b[2K',
+    'Generating basic\n',
+    'CONFIGURATION SUMMARY\n',
+  ].join('');
+
+  const result = replayTerminal(form);
+  assert.match(result, /Generating basic/);
+  assert.match(result, /CONFIGURATION SUMMARY/);
+  assert.doesNotMatch(result, /Which environments|dev|staging|prod|controls/);
+});
+
 test('replayTerminal cursor-down preserves an existing row it lands on', () => {
   const frame1 = 'line0\nline1\nline2\n';
   // Up 3 (back to line0), down 1 (lands on the existing "line1"), overwrite.
@@ -118,11 +137,45 @@ test('parseEscape parses ESC[<n>A / ESC[<n>B with an explicit count', () => {
   });
 });
 
-test('parseEscape still ignores sequences with no current handler (H, J, C, D)', () => {
+test('parseEscape parses default erase-display sequences', () => {
+  for (const sequence of ['\x1b[J', '\x1b[0J']) {
+    assert.deepEqual(parseEscape(sequence, 0), {
+      kind: 'clearDisplay',
+      sequence,
+      nextIndex: sequence.length,
+    });
+  }
+});
+
+test('parseEscape still ignores sequences with no current handler (H, 2J, C, D)', () => {
   for (const sequence of ['\x1b[H', '\x1b[2J', '\x1b[5C', '\x1b[5D', '\x1b[?1049h']) {
     const parsed = parseEscape(sequence, 0);
     assert.equal(parsed.kind, 'ignore');
   }
+});
+
+test('regression: init cast clears the interactive multiselect before its summary', () => {
+  const castPath = path.join(
+    dirname,
+    '..',
+    '..',
+    '..',
+    'static',
+    'casts',
+    'examples',
+    'init',
+    'init-basic.cast',
+  );
+  const { events } = parseCast(readFileSync(castPath, 'utf8'));
+  const upTo = events
+    .filter(([time]) => time <= 6.8)
+    .map(([, , data]) => data.replace(/\r\n/g, '\n'))
+    .join('');
+  const rendered = stripAnsi(replayTerminal(upTo));
+
+  assert.match(rendered, /CONFIGURATION SUMMARY/);
+  assert.doesNotMatch(rendered, /Select the stacks to generate/);
+  assert.doesNotMatch(rendered, /┃   • prod/);
 });
 
 test('regression: the recorded interactive-menu cast is not blank at the reported bug timestamp', () => {

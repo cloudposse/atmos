@@ -59,7 +59,7 @@ commands:
           - type: key
             key: enter
           - type: wait
-            text: "Generated 2 files."
+            text: "Generated 3 files."
             timeout: 10s
           - type: pause
             duration: 500ms
@@ -103,6 +103,13 @@ commands:
             duration: 350ms
           - type: write
             text: "y"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Vendor source repository"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
           - type: key
             key: enter
           - type: wait
@@ -161,12 +168,13 @@ commands:
               "example",
               "# generate a new project from the template",
               "Generating example in",
-              "Generated 2 files.",
+              "Generated 3 files.",
               "# or run it interactively and answer the prompts",
               "Project name",
               "Terraform version",
               "Default AWS region",
               "Enable component vendoring",
+              "Vendor source repository",
               "Target directory",
           ]:
               if needle not in plain:

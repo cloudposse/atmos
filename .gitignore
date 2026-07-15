@@ -12,6 +12,11 @@
 **/*.helmfile.vars.yaml
 **/*.packer.vars.json
 **/.terraform.lock.hcl
+# Exception: the basic scaffold template ships a committed, multi-platform
+# lock file for its "greeting" component so generated projects don't hit
+# Terraform's "Incomplete lock file information for providers" warning on
+# their first `terraform init` (see pkg/generator/templates/basic/components/terraform/greeting/versions.tf).
+!/pkg/generator/templates/basic/components/terraform/greeting/.terraform.lock.hcl
 .vscode/
 **/nohup.out
 **/kubeconfig.yaml
@@ -61,6 +66,7 @@ demos/audio/
 .tool-versions
 !examples/toolchain/.tool-versions
 !examples/mcp-for-ai-coding-assistants/.tool-versions
+!demo/casts/.tool-versions
 
 # Ignore cache files and sessions
 **/.atmos/cache.yaml

@@ -495,6 +495,15 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
+		// Proxy links are available to every child process launched by Atmos.
+		// Keep this at the shared command boundary so built-in commands,
+		// workflows, hooks, and custom commands inherit the same PATH/context.
+		if err == nil {
+			if proxyErr := toolchain.ApplyProxyEnvironment(&tmpConfig); proxyErr != nil {
+				errUtils.CheckErrorPrintAndExit(proxyErr, "Failed to prepare toolchain proxies", "")
+			}
+		}
+
 		// Check for version.use configuration and re-exec with specified version if needed.
 		// This runs after profiles are loaded, so version.use can be set via profiles.
 		if !isHelpRequested && err == nil {

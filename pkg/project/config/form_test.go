@@ -655,6 +655,75 @@ func TestMissingRequiredValues_RespectsWhen(t *testing.T) {
 	assert.Equal(t, []string{"environments"}, missing)
 }
 
+func TestCoerceFieldValueTypes(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "enable_vendoring", Type: "confirm"},
+				{Name: "project_name", Type: "input"},
+			},
+		},
+	}
+
+	// "true"/"false" strings are exactly what --set always supplies.
+	values := map[string]interface{}{
+		"enable_vendoring": "false",
+		"project_name":     "acme", // non-boolean field: left untouched
+	}
+	CoerceFieldValueTypes(scaffoldConfig, values)
+
+	assert.Equal(t, false, values["enable_vendoring"])
+	assert.Equal(t, "acme", values["project_name"])
+}
+
+func TestCoerceFieldValueTypes_LeavesUnparsableValuesUntouched(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{{Name: "enable_vendoring", Type: "confirm"}},
+		},
+	}
+	values := map[string]interface{}{"enable_vendoring": "not-a-bool"}
+
+	CoerceFieldValueTypes(scaffoldConfig, values)
+
+	assert.Equal(t, "not-a-bool", values["enable_vendoring"],
+		"unparsable values are left as-is for downstream validation to catch")
+}
+
+// TestCoerceFieldValueTypes_FixesSetFlagWhenCondition reproduces the bug this
+// function fixes: --set always supplies raw strings, so a When condition
+// comparing a boolean field to the CEL literal `true`/`false` silently never
+// matches unless the value is coerced to a native bool first.
+func TestCoerceFieldValueTypes_FixesSetFlagWhenCondition(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "enable_vendoring", Type: "confirm"},
+				{
+					Name:     "vendor_source",
+					Type:     "input",
+					Required: true,
+					When:     mustCondition(t, "answers.enable_vendoring == true"),
+				},
+			},
+		},
+	}
+
+	// Simulates `--set enable_vendoring=true` before the fix: the gated
+	// field's When condition compares a string to a bool and never matches,
+	// so the field is wrongly treated as not visible (never missing).
+	values := map[string]interface{}{"enable_vendoring": "true"}
+	missing := MissingRequiredValues(scaffoldConfig, values)
+	assert.Empty(t, missing, "uncoerced string value fails the When comparison, hiding the gated field")
+
+	// After coercion, the same values correctly surface the gated field.
+	CoerceFieldValueTypes(scaffoldConfig, values)
+	missing = MissingRequiredValues(scaffoldConfig, values)
+	assert.Equal(t, []string{"vendor_source"}, missing)
+}
+
 // mustCondition parses a bare CEL when: expression for test fixtures.
 func mustCondition(t *testing.T, expr string) condition.Condition {
 	t.Helper()

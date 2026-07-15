@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -374,6 +375,44 @@ func MissingRequiredValues(scaffoldConfig *ScaffoldConfig, values map[string]int
 		}
 	}
 	return missing
+}
+
+// isBooleanFieldType reports whether a field's declared type represents a
+// boolean value (the confirm prompt type, or an explicit bool/boolean type).
+func isBooleanFieldType(fieldType string) bool {
+	switch fieldType {
+	case "confirm", "bool", "boolean":
+		return true
+	default:
+		return false
+	}
+}
+
+// CoerceFieldValueTypes converts string values for boolean-typed fields
+// (confirm/bool/boolean) to native Go bools, in place. --set (and other
+// external string sources) always supplies raw strings; without this, a
+// value like "false" stays the truthy non-empty string "false" for both Go
+// template interpolation and When condition evaluation (e.g. `answers.x ==
+// true` never matches a string). Values that aren't strings (YAML defaults,
+// or bools already returned by an interactive confirm prompt) and values
+// that fail to parse are left untouched so downstream validation can surface
+// a clear error instead of this silently swallowing a typo.
+func CoerceFieldValueTypes(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) {
+	defer perf.Track(nil, "config.CoerceFieldValueTypes")()
+
+	for i := range scaffoldConfig.Spec.Fields {
+		field := &scaffoldConfig.Spec.Fields[i]
+		if !isBooleanFieldType(field.Type) {
+			continue
+		}
+		raw, ok := values[field.Name].(string)
+		if !ok {
+			continue
+		}
+		if parsed, err := strconv.ParseBool(raw); err == nil {
+			values[field.Name] = parsed
+		}
+	}
 }
 
 // GetConfigPath returns the path where the config directory should be stored based on the user's home directory and returns an error if the user home directory cannot be determined.

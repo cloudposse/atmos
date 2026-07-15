@@ -1,0 +1,59 @@
+---
+slug: init-real-starter-project
+title: "atmos init now hands you something you can actually run"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Bootstrapping a new project is supposed to save you time, but a lot of generators hand you an
+empty shell instead: a config file, a folder structure, and a comment telling you to fill in the
+rest yourself. You still have to write and wire up the first real thing before you know any of it
+actually works.
+
+<!--truncate-->
+
+## The Problem
+
+The minimal, cloud-agnostic `atmos init basic` starting point generated `atmos.yaml`, a stack, and
+a components directory containing nothing but a README telling you to add your own component.
+Reasonable in spirit (a cloud-agnostic template can't assume AWS, GCP, or Azure), but it meant the
+very first thing you'd do after `atmos init` was write and wire up a component by hand before you
+could confirm the generated project even worked end to end.
+
+## The Fix
+
+The `basic` template now ships with a real, working `greeting` component — a single `local_file`
+resource, no cloud account, credentials, or emulator required. It's small on purpose: the point
+isn't to be useful infrastructure, it's proof that what you just generated actually applies.
+
+```shell
+atmos init basic ./my-project --set project_name=my-project
+cd my-project
+atmos validate stacks
+atmos terraform apply greeting -s dev
+```
+
+That last command really does create a file, print real Terraform output, and give you something
+to `terraform destroy` afterward — the same round trip you'd expect from a real component, just
+without needing anything outside your own machine.
+
+This pairs with the same conditional-generation engine described in the [scaffold conditional
+fields, files, and hooks post](/blog/scaffold-conditional-generation-and-hooks): `basic`'s
+environments prompt already uses conditional file generation under the hood — answer with just the
+environments you need and only those stacks get generated, skipping the rest. `atmos init`
+templates get the same `when:`-gated fields, files, and hooks that `atmos scaffold generate`
+templates do, since both commands run through the same engine.
+
+## How to Use It
+
+```shell
+# Generate, then prove it actually works
+atmos init basic ./my-project --set project_name=my-project
+cd my-project
+atmos terraform apply greeting -s dev
+```
+
+## Get Involved
+
+See the [Init Command Documentation](/cli/commands/init) for the full template list, or open an
+issue if there's a starting point you wish existed.

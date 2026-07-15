@@ -16,13 +16,31 @@ commands:
         name: init-basic
         working_directory: *init_fixture
         title: "atmos init: bootstrap a new project"
-        mode: session
+        # mode omitted -> defaults to steps. Only the interactive `atmos
+        # init` prompts below need a real PTY (type: session); everything
+        # else is ordinary steps-mode simulate/shell, exactly like
+        # aws-landing-zone-lifecycle.yaml. Mixing type: simulate's injected
+        # output directly into a *live* session (the old approach) desynced
+        # the recorded terminal's cursor from the real shell's actual prompt
+        # position -- every simulate write landed "for free" without the PTY
+        # itself advancing, so the shell's next real prompt/echo appeared on
+        # the wrong line (a doubled "> > " prompt, and typed commands
+        # floating with no leading prompt at all). Keeping simulate and real
+        # PTY output in separate, non-overlapping phases avoids that class of
+        # bug entirely, and steps-mode's shell children are synchronous, so
+        # none of the old `wait:` races against streaming output are needed
+        # for them either.
         shell: /bin/sh
         write_rate: 25ms
         key_interval: 250ms
         timeout: 60s
         defaults:
           cast: !include cast-defaults.yaml .cast
+          # type: simulate narration lines (below) use the same styled
+          # prompt/typing defaults the nested `type: session` block's own
+          # PS1 uses (via applySessionPromptEnv in pkg/runner/step/cast.go),
+          # so narration and the real interactive prompt render identically.
+          simulate: !include cast-defaults.yaml .simulate
         env:
           NO_COLOR: ''
           TERM: xterm-256color
@@ -34,101 +52,79 @@ commands:
           ATMOS_KEYRING_TYPE: memory
           ATMOS_EXPERIMENTAL: silence
           ATMOS_LOGS_LEVEL: Warning
-          PS1: '$ '
         show:
           labels: false
         output:
           mode: raw
           cast: "../../website/static/casts/examples/init/init-basic.cast"
         steps:
-          # Interactive prompting: real keystrokes drive the actual huh
-          # prompts (project name input, environments multiselect), not a
-          # scripted --set bypass -- this is what mode: session is for.
-          - type: pause
-            duration: 500ms
-          - type: write
+          - type: simulate
             text: "# bootstrap a brand-new Atmos project from a built-in template"
-          - type: key
-            key: enter
-          - type: write
-            text: "atmos init basic ./my-project"
-          - type: key
-            key: enter
-          - type: wait
-            text: "Project name"
-            timeout: 10s
-          - type: pause
-            duration: 350ms
-          - type: key
-            key: enter
-          - type: wait
-            text: "Which environments do you need?"
-            timeout: 10s
-          - type: pause
-            duration: 350ms
-          - type: key
-            key: down
-          - type: pause
-            duration: 350ms
-          - type: key
-            key: space
-          - type: pause
-            duration: 350ms
-          - type: key
-            key: enter
-          - type: wait
-            text: "Generated 11 files."
-            timeout: 15s
-          - type: pause
-            duration: 500ms
-          - type: write
+          - type: session
+            # Interactive prompting: real keystrokes drive the actual huh
+            # prompts (project name input, environments multiselect) -- this
+            # is what a nested type: session is for. Inherits shell/write_rate/
+            # key_interval/env/defaults from the enclosing cast step.
+            steps:
+              - type: pause
+                duration: 500ms
+              - type: write
+                text: "atmos init basic ./my-project"
+              - type: key
+                key: enter
+              - type: wait
+                text: "Project name"
+                timeout: 10s
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: enter
+              - type: wait
+                text: "Which environments do you need?"
+                timeout: 10s
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: down
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: space
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: enter
+              - type: wait
+                text: "Generated 12 files."
+                timeout: 15s
+              - type: pause
+                duration: 500ms
+          - type: simulate
             text: "cd my-project"
-          - type: key
-            key: enter
-          - type: write
+          - type: simulate
             text: "# only the environments you selected were generated"
-          - type: key
-            key: enter
-          - type: write
-            text: "ls stacks/"
-          - type: key
-            key: enter
-          - type: wait
-            text: "staging.yaml"
-            timeout: 10s
-          - type: pause
-            duration: 500ms
-          - type: write
+          - type: simulate
+            text: &ls_cmd "ls stacks/"
+          - type: shell
+            name: list-stacks
+            working_directory: &project_dir "../../.context/cast-fixtures/init/my-project"
+            command: *ls_cmd
+          - type: simulate
             text: "# the generated project is immediately valid, no manual wiring needed"
-          - type: key
-            key: enter
-          - type: write
-            text: "atmos validate stacks"
-          - type: key
-            key: enter
-          - type: wait
-            # "All stacks validated" and " successfully" render as two
-            # separately-styled spans (an SGR reset/re-color sequence sits
-            # between them) -- wait actions match against the raw,
-            # un-stripped output, so the full phrase never appears as one
-            # contiguous substring. Match the unstyled-boundary prefix
-            # instead; the offline validate script below checks the full
-            # phrase against ANSI-stripped text, where this isn't an issue.
-            text: "All stacks validated"
-            timeout: 15s
-          - type: pause
-            duration: 700ms
-          # Deliberately ends here rather than running a real `terraform
-          # apply`/`destroy`: a real terraform subprocess under this
-          # scripted PTY (no terminal emulator to answer its capability-probe
-          # escape sequences) reliably stalls for a long, variable amount of
-          # time before falling back and continuing -- confirmed by direct
-          # reproduction outside this harness. atmos commands that don't
-          # spawn terraform as a subprocess (validate, the init prompts
-          # themselves) are unaffected. The interactive multiselect -> only
-          # the selected stacks exist -> stacks validate story is complete
-          # without it; see the aws-landing-zone-lifecycle example for a
-          # full apply/destroy lifecycle demo recorded in mode: steps.
+          - type: simulate
+            text: &validate_cmd "atmos validate stacks"
+          - type: shell
+            name: validate
+            working_directory: *project_dir
+            command: *validate_cmd
+          - type: simulate
+            text: "# prove it: deploy every selected environment for real, right here"
+          - type: simulate
+            text: &deploy_cmd "atmos terraform deploy --all --deploy-run-init"
+          - type: shell
+            name: deploy-all
+            working_directory: *project_dir
+            command: *deploy_cmd
       - type: script
         name: sanitize
         interpreter: python3
@@ -168,7 +164,9 @@ commands:
           plain = strip_ansi(text)
           assert_no_experimental(text)
           assert_body_color(text)
+          assert_colored(text, "# bootstrap a brand-new Atmos project")
           assert_colored(text, "All stacks validated successfully")
+          assert_colored(text, "# prove it: deploy every selected environment for real")
           for needle in [
               "# bootstrap a brand-new Atmos project",
               "Project name",
@@ -184,10 +182,17 @@ commands:
               # below via the `ls stacks/` output, which lists only
               # _defaults.yaml, dev.yaml, and staging.yaml).
               "stacks/prod.yaml (skipped)",
-              "Generated 11 files.",
+              "Generated 12 files.",
               "# only the environments you selected were generated",
-              "_defaults.yaml\tdev.yaml\tstaging.yaml",
+              # ls runs via type: shell (no PTY), so it lists one file per
+              # line (its normal non-tty behavior) rather than in
+              # terminal-width-aware columns.
+              "ls stacks/\n_defaults.yaml\ndev.yaml\nstaging.yaml",
               "All stacks validated successfully",
+              "# prove it: deploy every selected environment for real, right here",
+              "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+              "Hello from the dev stage!",
+              "Hello from the staging stage!",
           ]:
               if needle not in plain:
                   raise SystemExit(f"init-basic cast missing {needle!r}")
