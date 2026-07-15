@@ -44,6 +44,7 @@ func createValidatedSymlinkForOS(root, linkPath, linkname, goos string) error {
 	if linkname == "" || filepath.IsAbs(linkname) {
 		return fmt.Errorf("%w: illegal symlink target: %s -> %q", ErrFileOperation, linkPath, linkname)
 	}
+	// resolved is used only for the containment check and the Windows fallback.
 	resolved := filepath.Clean(filepath.Join(filepath.Dir(cleanLinkPath), linkname))
 	if resolved != cleanRoot && !strings.HasPrefix(resolved, cleanRoot+string(os.PathSeparator)) {
 		return fmt.Errorf("%w: symlink target escapes root: %s -> %q", ErrFileOperation, linkPath, linkname)
@@ -54,7 +55,8 @@ func createValidatedSymlinkForOS(root, linkPath, linkname, goos string) error {
 	}
 	_ = os.Remove(cleanLinkPath)
 
-	if err := symlinkFunc(resolved, cleanLinkPath); err == nil {
+	// Symlink to the archive's relative target so it resolves from the link's own directory.
+	if err := symlinkFunc(linkname, cleanLinkPath); err == nil {
 		return nil
 	} else if goos != "windows" {
 		return fmt.Errorf("%w: failed to create symlink %s: %w", ErrFileOperation, linkPath, err)
