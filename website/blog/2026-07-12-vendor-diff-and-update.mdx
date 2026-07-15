@@ -1,6 +1,6 @@
 ---
 slug: vendor-diff-and-update
-title: "Introducing the Native Component Updater"
+title: "Manage Vendored Dependencies Locally"
 date: 2026-07-12T12:00:00.000Z
 authors: [osterman]
 tags: [feature, dx]
@@ -26,7 +26,7 @@ request through CI.
 
 ## The Fix
 
-The native Component Updater brings that workflow into the Atmos CLI.
+Atmos now provides that package-management workflow directly in the CLI.
 
 - **`atmos vendor update`** finds newer versions for Git-backed component sources, honors each
   source's version constraints, and updates the pinned version in place while preserving comments,
@@ -43,8 +43,8 @@ commands use the same vendoring layout as `atmos vendor pull`.
 ### Migrating from the legacy GitHub Action
 
 The `cloudposse/github-action-atmos-component-updater` GitHub Action is deprecated. Use the
-native [Component Updater](/integrations/github-actions/component-updater) and its
-`atmos vendor update` and `atmos vendor diff` commands instead. The legacy Action documentation
+native [vendored dependency management](/vendor/updates) commands,
+`atmos vendor update` and `atmos vendor diff`, instead. The legacy Action documentation
 remains available as a [deprecated reference](/deprecated/github-actions/component-updater).
 
 ## How to Use It
@@ -69,7 +69,7 @@ atmos vendor diff --component vpc --from 1.0.0 --to 2.0.0 --diff-file variables.
 
 ## Get Involved
 
-Read the [Component Updater](/integrations/github-actions/component-updater),
+Read the [Vendored Dependency Management](/vendor/updates),
 [`vendor diff`](/cli/commands/vendor/vendor-diff), and
 [`vendor update`](/cli/commands/vendor/vendor-update) documentation for the full reference. To
 share feedback or request an improvement, [open an issue](https://github.com/cloudposse/atmos/issues).

@@ -16,7 +16,7 @@ import StepNumber from '@site/src/components/StepNumber'
 
 `cloudposse/github-action-atmos-component-updater` is deprecated.
 
-Use Atmos’s native [Component Updater](/integrations/github-actions/component-updater):
+Use Atmos’s native [vendored dependency management](/vendor/updates):
 [`atmos vendor update`](/cli/commands/vendor/vendor-update) discovers and updates
 vendored component versions, and
 [`atmos vendor diff`](/cli/commands/vendor/vendor-diff) lets you review upstream changes first.
@@ -99,7 +99,7 @@ You may notice that we pass a generated token from a GitHub App to `github-acces
   GitHub requires all GitHub Apps to have globally unique names. The name you select for this GitHub App can be whatever you'd prefer, so long as it's not already in use. For example, an `acme` organization might name their GitHub App `Atmos Component Updater [ACME]`.
   </Admonition>
 
-3. List a Homepage URL of your choosing. This is required by GitHub, but you can use any URL. For example use our documentation page: `https://atmos.tools/integrations/github-actions/component-updater/`
+3. List a Homepage URL of your choosing. This is required by GitHub, but you can use any URL. For example, use this legacy-action reference: `https://atmos.tools/deprecated/github-actions/component-updater/`
 4. (Optional) Add an icon for your new app (See below)
 
 <details>
