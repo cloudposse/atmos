@@ -85,6 +85,20 @@ type describeStacksProcessor struct {
 	// single-threaded, so a plain map needs no locking.
 	// See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
 	authManagerCache map[string]auth.AuthManager
+	// onWarning, when non-nil, switches YAML-function processing to lenient mode: a
+	// recoverable per-value error (e.g. backend not yet provisioned) is substituted with
+	// nil and reported here instead of aborting the whole describe-stacks call. See
+	// ProcessCustomYamlTagsLenient and ExecuteDescribeStacksWithOptions.
+	onWarning func(DegradationWarning)
+}
+
+// withDegradation switches the processor to lenient YAML-function processing: recoverable
+// per-value errors are substituted with nil and reported via onWarning instead of failing
+// the whole describe-stacks call. Passing a nil onWarning restores the default strict
+// behavior (equivalent to not calling withDegradation at all).
+func (p *describeStacksProcessor) withDegradation(onWarning func(DegradationWarning)) *describeStacksProcessor {
+	p.onWarning = onWarning
+	return p
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
@@ -452,7 +466,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if !isComponentEnabled(secs.metadata, componentName) {
 			skip = disabledComponentTerraformSkip(p.skip)
 		}
-		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, skip)
+		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, skip, p.onWarning)
 		if err != nil {
 			return err
 		}
@@ -798,23 +812,39 @@ func processComponentSectionTemplates(
 }
 
 // processComponentSectionYAMLFunctions applies YAML function processing to a component section.
+// When onWarning is non-nil, recoverable per-value errors (e.g. a Terraform backend not yet
+// provisioned) are tolerated — see ProcessCustomYamlTagsLenient.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	skip []string,
+	onWarning func(DegradationWarning),
 ) (map[string]any, error) {
 	// `describe stacks` and the `list` family are inspection commands: when masking is enabled
 	// (the default), resolve `!secret` to the mask replacement WITHOUT contacting the backend,
 	// so inspection needs no credentials for the secret provider.
 	info.SecretsMaskOnly = iolib.MaskingEnabled()
-	converted, err := ProcessCustomYamlTags(
-		atmosConfig,
-		componentSection,
-		info.Stack,
-		skip,
-		info,
-	)
+	var converted map[string]any
+	var err error
+	if onWarning != nil {
+		converted, err = ProcessCustomYamlTagsLenient(
+			atmosConfig,
+			componentSection,
+			info.Stack,
+			skip,
+			info,
+			onWarning,
+		)
+	} else {
+		converted, err = ProcessCustomYamlTags(
+			atmosConfig,
+			componentSection,
+			info.Stack,
+			skip,
+			info,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}

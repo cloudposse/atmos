@@ -31,6 +31,7 @@ type DescribeDependentsExecProps struct {
 	Skip                 []string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 	AuthDisabled         bool             // True when --identity=false (or alias) explicitly disables authentication; forwarded to DescribeDependentsArgs.
+	ErrorMode            string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 }
 
 // DescribeDependentsArgs holds arguments for ExecuteDescribeDependents.
@@ -53,6 +54,10 @@ type DescribeDependentsArgs struct {
 	// When provided, ExecuteDescribeDependents skips the O(all_stacks × all_components)
 	// scan and uses the index for O(1) lookup per component name.
 	DepIndex dependencyIndex
+	// ErrOptions configures graceful degradation for the internal stack resolution when
+	// Stacks is not pre-computed. The zero value (OnErrorStrict) matches the historical
+	// fail-fast behavior.
+	ErrOptions DescribeStacksErrorOptions
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -91,6 +96,8 @@ func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeD
 func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
 	defer perf.Track(nil, "exec.Execute")()
 
+	errOptions, collector := ErrorOptionsFromMode(describeDependentsExecProps.ErrorMode)
+
 	dependents, err := d.executeDescribeDependents(
 		d.atmosConfig,
 		&DescribeDependentsArgs{
@@ -103,6 +110,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 			OnlyInStack:          "", // empty string means process all stacks for direct CLI usage
 			AuthManager:          describeDependentsExecProps.AuthManager,
 			AuthDisabled:         describeDependentsExecProps.AuthDisabled,
+			ErrOptions:           errOptions,
 		},
 	)
 	if err != nil {
@@ -120,7 +128,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		res = dependents
 	}
 
-	return viewWithScroll(&viewWithScrollProps{
+	if err := viewWithScroll(&viewWithScrollProps{
 		atmosConfig:           d.atmosConfig,
 		format:                describeDependentsExecProps.Format,
 		file:                  describeDependentsExecProps.File,
@@ -129,7 +137,12 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		isTTYSupportForStdout: d.isTTYSupportForStdout,
 		displayName:           fmt.Sprintf("Dependents of '%s' in stack '%s'", describeDependentsExecProps.Component, describeDependentsExecProps.Stack),
 		printOrWriteToFile:    printOrWriteToFile,
-	})
+	}); err != nil {
+		return err
+	}
+
+	PrintErrorModeSummary(describeDependentsExecProps.ErrorMode, collector)
+	return nil
 }
 
 // ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
@@ -151,7 +164,7 @@ func ExecuteDescribeDependents(
 	stacks := args.Stacks
 	if stacks == nil {
 		var err error
-		stacks, err = ExecuteDescribeStacksWithAuthDisabled(
+		stacks, err = ExecuteDescribeStacksWithOptions(
 			atmosConfig,
 			args.OnlyInStack,
 			nil,
@@ -164,6 +177,7 @@ func ExecuteDescribeDependents(
 			args.Skip,
 			args.AuthManager,
 			args.AuthDisabled,
+			args.ErrOptions,
 		)
 		if err != nil {
 			return nil, err
