@@ -453,3 +453,69 @@ func TestBuildPathEntriesWithLocator_SortingConsistency(t *testing.T) {
 	assert.Equal(t, "middle", toolPaths[1].Tool)
 	assert.Equal(t, "zebra", toolPaths[2].Tool)
 }
+
+// fakePathsLocator implements InstallLocator plus the optional binaryPathsLocator
+// so onedir multi-directory PATH behavior can be exercised.
+type fakePathsLocator struct {
+	owner, repo string
+	primary     string
+	all         []string
+}
+
+func (f *fakePathsLocator) ParseToolSpec(string) (string, string, error) {
+	return f.owner, f.repo, nil
+}
+
+func (f *fakePathsLocator) FindBinaryPath(_, _, _ string, _ ...string) (string, error) {
+	return f.primary, nil
+}
+
+func (f *fakePathsLocator) GetBinaryPaths(_, _, _ string) []string {
+	return f.all
+}
+
+// TestBuildPathEntriesWithLocator_OnedirMultipleDirs verifies that a onedir
+// package's separate entrypoint directories are all added to PATH, while a
+// single ToolPath record is kept for the tool (keyed to its primary directory).
+func TestBuildPathEntriesWithLocator_OnedirMultipleDirs(t *testing.T) {
+	loc := &fakePathsLocator{
+		owner:   "nodejs",
+		repo:    "node",
+		primary: filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin/node"),
+		all: []string{
+			filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin/node"),
+			filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/lib/node_modules/npm/bin/npm"),
+		},
+	}
+	toolVersions := &ToolVersions{Tools: map[string][]string{"node": {"24.18.0"}}}
+
+	pathEntries, toolPaths, err := buildPathEntriesWithLocator(toolVersions, loc, true)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{
+		filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin"),
+		filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/lib/node_modules/npm/bin"),
+	}, pathEntries, "every entrypoint directory must be on PATH")
+
+	require.Len(t, toolPaths, 1)
+	assert.Equal(t, filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin"), toolPaths[0].Path)
+}
+
+// TestBuildPathEntriesWithLocator_OnedirSameDirDeduped verifies that multiple
+// entrypoints in the same directory collapse to a single PATH entry.
+func TestBuildPathEntriesWithLocator_OnedirSameDirDeduped(t *testing.T) {
+	loc := &fakePathsLocator{
+		owner:   "aws",
+		repo:    "aws-cli",
+		primary: filepath.FromSlash("/tools/aws/aws-cli/2.35.15/.pkg/dist/aws"),
+		all: []string{
+			filepath.FromSlash("/tools/aws/aws-cli/2.35.15/.pkg/dist/aws"),
+			filepath.FromSlash("/tools/aws/aws-cli/2.35.15/.pkg/dist/aws_completer"),
+		},
+	}
+	toolVersions := &ToolVersions{Tools: map[string][]string{"aws-cli": {"2.35.15"}}}
+
+	pathEntries, _, err := buildPathEntriesWithLocator(toolVersions, loc, true)
+	require.NoError(t, err)
+	assert.Len(t, pathEntries, 1, "entrypoints in the same directory collapse to one PATH entry")
+}
