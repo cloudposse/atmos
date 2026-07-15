@@ -73,6 +73,10 @@ atmos vendor update [--check] [--pull] [--component <name>] [--tags a,b] [--outd
 atmos vendor diff --component <name> [--from <ref>] [--to <ref>] [--diff-file <path>]
 ```
 
+For CI branch/PR publishing, scoped update groups, and GitHub step summaries, see the
+[Native Component Updater PR Workflow](./component-updater.md). The core update/diff
+semantics in this document remain the local primitive used by that workflow.
+
 - `update --check` is a dry run; `--pull` runs `atmos vendor pull` after writing;
   `--outdated` shows only sources with an available update.
 - `diff` defaults `--from` to the source's current pinned version and `--to` to

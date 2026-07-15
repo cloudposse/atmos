@@ -4,9 +4,13 @@ description: "Component vendoring: vendor.yaml manifests, pulling from Git/S3/HT
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+references:
+  - references/component-updater.md
 ---
 
 # Atmos Component Vendoring
+
+For scheduled native Component Updater pull requests, scopes/groups, GitHub permissions, and CI summaries, use [references/component-updater.md](references/component-updater.md).
 
 Vendoring copies external components, stacks, and other artifacts into your repository. This gives you full control over when and how dependencies change, with visibility through `git diff`, an immutable audit trail, and the ability to apply emergency patches without waiting for upstream releases.
 

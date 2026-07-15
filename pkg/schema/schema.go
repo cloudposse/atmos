@@ -1946,6 +1946,10 @@ type Vendor struct {
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	// Retry configuration for vendor operations (global default).
 	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	// Update configures selection and execution policy for `atmos vendor update`.
+	Update VendorUpdateConfig `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
+	// CI configures optional CI-only publishing and reporting for vendor updates.
+	CI VendorCIConfig `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 }
 
 type ChromaStyle struct {

@@ -18,6 +18,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | `name_pattern` | `name_template` or explicit stack `name` |
 | `settings.depends_on` | `dependencies.components` |
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
+| `cloudposse/github-action-atmos-component-updater` | `atmos vendor update --pull-request` with native GitHub PR publishing |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |
 | `hashicorp/setup-terraform` / `opentofu/setup-opentofu` in Atmos jobs | Atmos `dependencies.tools` and toolchain |
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
@@ -58,6 +59,17 @@ jobs:
 
 Use `atmos describe affected --format=matrix` for PR matrices and `atmos list instances
 --format=matrix` for full estate operations.
+
+## Component Updater Migration
+
+Replace the legacy Component Updater action with checkout plus `atmos vendor update --pull-request`.
+Keep update selection under `vendor.update` (including named groups) and PR/summary policy under
+`vendor.ci`. Grant only `contents: write`, `pull-requests: write`, and `issues: write` where
+needed. Atmos writes a native GitHub step summary for every vendor update; it links to any created
+or reused PR. Do not use third-party actions for update, commit, push, or PR creation. For exact
+configuration and staged migration, use the vendoring
+[component-updater reference](../atmos-vendoring/references/component-updater.md) and migration
+[from-component-updater reference](../atmos-migration/references/from-component-updater.md).
 
 ## Drift Direction
 

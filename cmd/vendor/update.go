@@ -9,11 +9,15 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring"
+	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 )
 
 var vendorUpdateParser *flags.StandardParser
@@ -26,7 +30,7 @@ var vendorUpdateCmd = &cobra.Command{
 	Long: `Check each Git-backed source in the vendor manifest for a newer version (honoring
 any per-source constraints) and update the version field in place, preserving
 comments, anchors, and templates. Use --check for a dry run.`,
-	Example: "atmos vendor update --check\natmos vendor update --component vpc\natmos vendor update --pull",
+	Example: "atmos vendor update --check\natmos vendor update --component vpc\natmos vendor update --pull\natmos vendor update --pull-request",
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.updateRunE")()
@@ -37,56 +41,112 @@ comments, anchors, and templates. Use --check for a dry run.`,
 		}
 
 		check := v.GetBool("check")
-		component := v.GetString("component")
+		components, flagErr := cmd.Flags().GetStringSlice("component")
+		if flagErr != nil {
+			return flagErr
+		}
+		if !cmd.Flags().Changed("component") {
+			components = nil
+		}
+		// The shared flag parser serializes an omitted StringSlice default as
+		// the literal "[]" in a few embedded-command test paths. Treat that
+		// representation as the empty selector users intended.
+		components = normalizeComponentSelectors(components)
+		component := ""
+		if len(components) == 1 {
+			component = components[0]
+		}
 		componentType := v.GetString("type")
 		tags := splitTags(v.GetString("tags"))
 		typeChanged := cmd.Flags().Changed("type")
+		pullRequest := v.GetBool("pull-request")
+		all := v.GetBool("all")
+		group := v.GetString("group")
+		format := v.GetString("format")
+		scope := updateScope(group, components)
+		result := updater.Result{Scope: scope, Check: check, Status: "no_updates"}
+		defer func() {
+			if !vendorSummaryEnabled(v) {
+				return
+			}
+			// CI summary output is intentionally best-effort: it must never hide
+			// the actual update, push, or API result.
+			_ = ci.WriteStepSummary(updater.MarkdownSummary(&result))
+		}()
+
+		invocation := updateInvocation{PullRequest: pullRequest, All: all, Group: group, Components: components}
+		if err := validateUpdateInvocation(v, cmd, invocation); err != nil {
+			result.Status, result.Failure = "failed", err.Error()
+			return err
+		}
+		if pullRequest {
+			// Publishing necessarily pulls the updated sources, even if --pull was
+			// omitted. --check remains strictly mutation-free.
+			v.Set("pull", true)
+		}
 
 		var report *vendoring.UpdateReport
 		var err error
 
-		if component != "" {
-			resolved, rErr := vendoring.ResolveComponentSource(&vendoring.ResolveSourceParams{
-				VendorFile:    v.GetString("file"),
-				Component:     component,
-				ComponentType: componentType,
-			})
-			if rErr != nil {
-				return rErr
+		// Discover first for PR publication. This guarantees a no-op update does
+		// not create a branch, commit, push, or pull request.
+		selected := components
+		if pullRequest && !check {
+			discovery, dErr := runVendorUpdate(v, componentType, tags, typeChanged, selected, group, true)
+			if dErr != nil {
+				result.Status, result.Failure = "failed", dErr.Error()
+				return dErr
 			}
-			report, err = runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
-				return vendoring.UpdateResolved(resolved, &vendoring.UpdateParams{
-					Tags:       tags,
-					DryRun:     check,
-					OnProgress: onProgress,
-				})
-			})
-		} else {
-			report, err = runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
-				return runRepoWideUpdate(v, repoWideUpdateParams{
-					typeChanged:   typeChanged,
-					componentType: componentType,
-					tags:          tags,
-					check:         check,
-					onProgress:    onProgress,
-				})
-			})
+			if discovery.UpdatedCount() == 0 {
+				result.Updates, result.Updated = discovery.Results, 0
+				renderVendorUpdateResult(discovery, true, v, format)
+				renderComponentUpdaterJSON(&result, format)
+				return nil
+			}
+			if group != "" {
+				selected = updatedComponents(discovery)
+			}
+			branch, pErr := prepareComponentUpdateBranch(cmd.Context(), v, scope)
+			if pErr != nil {
+				result.Status, result.Failure = "failed", pErr.Error()
+				return pErr
+			}
+			result.Branch = branch
 		}
 
+		report, err = runVendorUpdate(v, componentType, tags, typeChanged, selected, group, check)
+
 		if report != nil {
-			renderUpdateReport(report, check, v.GetBool("outdated"), v.GetBool("archived"))
+			result.Updates, result.Updated = report.Results, report.UpdatedCount()
+			result.Status = "updated"
+			renderVendorUpdateResult(report, check, v, format)
 		}
 		if err != nil {
+			result.Status, result.Failure = "failed", err.Error()
 			return err
 		}
 
 		if report != nil && v.GetBool("pull") && !check && report.UpdatedCount() > 0 {
-			return runVendorPull(cmd, args, report, vendorPullParams{
+			err = runVendorPull(cmd, args, report, vendorPullParams{
 				component:     component,
 				componentType: componentType,
 				dryRun:        v.GetBool("dry-run"),
 			})
+			if err != nil {
+				result.Status, result.Failure = "failed", err.Error()
+				return err
+			}
 		}
+		if pullRequest && !check && report != nil && report.UpdatedCount() > 0 {
+			pr, commit, pErr := publishComponentUpdate(cmd.Context(), v, scope, result.Branch, report)
+			if pErr != nil {
+				result.Status, result.Failure = "failed", pErr.Error()
+				return pErr
+			}
+			result.Commit = commit
+			result.PullRequest = pr
+		}
+		renderComponentUpdaterJSON(&result, format)
 		return nil
 	},
 }
@@ -152,11 +212,15 @@ func runRepoWideUpdate(v *viper.Viper, p repoWideUpdateParams) (*vendoring.Updat
 
 func init() {
 	vendorUpdateParser = flags.NewStandardParser(
-		flags.WithStringFlag("component", "c", "", "Update only this component"),
+		flags.WithStringSliceFlag("component", "c", []string{}, "Update only these components (repeatable)"),
 		flags.WithStringFlag("type", "t", "terraform", "Component type (terraform, helmfile, or packer)"),
 		flags.WithStringFlag("tags", "", "", "Update only components with any of these comma-separated tags"),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
 		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
+		flags.WithBoolFlag("all", "", false, "Update all discoverable vendor sources (the default when no selector is given)"),
+		flags.WithBoolFlag("pull-request", "", false, "Commit, push, and create or update a pull request for available updates"),
+		flags.WithStringFlag("group", "", "", "Update the named vendor.update.groups selection"),
+		flags.WithStringFlag("format", "", "table", "Output format: table or json"),
 		flags.WithBoolFlag("component-manifests", "", false,
 			"Also check per-component component.yaml manifests when a vendor.yaml is present (automatic when no vendor.yaml exists)"),
 		flags.WithBoolFlag("outdated", "", false, "Show only sources with an available update"),
