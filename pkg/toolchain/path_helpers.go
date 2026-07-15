@@ -17,10 +17,59 @@ type ToolPath struct {
 	Path    string `json:"path"`
 }
 
+// binaryPathsLocator is an optional extension of InstallLocator that returns
+// every installed entrypoint path for a tool version. A onedir (multi-file)
+// package exposes multiple commands that may live in different directories, so
+// each of their directories must be added to PATH. The real *installer.Installer
+// implements it; locators that only implement InstallLocator (e.g. test mocks)
+// keep the primary-only behavior.
+type binaryPathsLocator interface {
+	GetBinaryPaths(owner, repo, version string) []string
+}
+
 // buildPathEntries constructs PATH entries from tool versions.
 // This is a backward-compatible wrapper around buildPathEntriesWithLocator.
 func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relativeFlag bool) ([]string, []ToolPath, error) {
 	return buildPathEntriesWithLocator(toolVersions, installer, relativeFlag)
+}
+
+// entrypointBinaryPaths returns every installed entrypoint path for a tool. For
+// a onedir package it returns all manifest entrypoints (via the optional
+// binaryPathsLocator); otherwise it falls back to the single primary path
+// already resolved by FindBinaryPath (which handles legacy layouts and the
+// "latest" keyword).
+func entrypointBinaryPaths(locator InstallLocator, owner, repo, version, primary string) []string {
+	if bpl, ok := locator.(binaryPathsLocator); ok {
+		if paths := bpl.GetBinaryPaths(owner, repo, version); len(paths) > 0 {
+			return paths
+		}
+	}
+	return []string{primary}
+}
+
+// entrypointDirs resolves the (relative or absolute) directory of each given
+// binary path, skipping any that cannot be resolved.
+func entrypointDirs(binaryPaths []string, relativeFlag bool) []string {
+	dirs := make([]string, 0, len(binaryPaths))
+	for _, bp := range binaryPaths {
+		dir, err := resolveDirPath(bp, relativeFlag)
+		if err != nil {
+			continue
+		}
+		dirs = append(dirs, dir)
+	}
+	return dirs
+}
+
+// appendUniqueDirs appends dirs not already in seen to pathEntries.
+func appendUniqueDirs(pathEntries []string, seen map[string]struct{}, dirs []string) []string {
+	for _, dir := range dirs {
+		if _, exists := seen[dir]; !exists {
+			seen[dir] = struct{}{}
+			pathEntries = append(pathEntries, dir)
+		}
+	}
+	return pathEntries
 }
 
 // buildPathEntriesWithLocator constructs PATH entries from tool versions using an InstallLocator.
@@ -57,17 +106,13 @@ func buildPathEntriesWithLocator(toolVersions *ToolVersions, locator InstallLoca
 			continue
 		}
 
-		// Deduplicate PATH entries.
-		if _, exists := seen[dirPath]; !exists {
-			seen[dirPath] = struct{}{}
-			pathEntries = append(pathEntries, dirPath)
-		}
+		// Add every entrypoint directory (a onedir package exposes multiple
+		// commands that may live in different directories), deduplicated.
+		allPaths := entrypointBinaryPaths(locator, owner, repo, version, binaryPath)
+		pathEntries = appendUniqueDirs(pathEntries, seen, entrypointDirs(allPaths, relativeFlag))
 
-		toolPaths = append(toolPaths, ToolPath{
-			Tool:    toolName,
-			Version: version,
-			Path:    dirPath,
-		})
+		// Record one entry per configured tool, keyed to its primary directory.
+		toolPaths = append(toolPaths, ToolPath{Tool: toolName, Version: version, Path: dirPath})
 	}
 
 	if len(pathEntries) == 0 {
