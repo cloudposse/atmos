@@ -199,6 +199,9 @@ This means you can write simple `select()` expressions without worrying about th
 
   <dt>`--skip`</dt>
   <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
+
+  <dt>`--on-error`</dt>
+  <dd>How to handle a recoverable YAML-function error, such as a Terraform backend that has not been provisioned yet (default `strict`). `strict` fails the command on the first such error. `warn` substitutes `null` for the unresolved value, prints a warning naming the stack/component/function, and continues processing the rest of the components. Errors unrelated to backend provisioning (auth failures, malformed YAML, etc.) still fail the command in either mode.<br/>Environment variable: `ATMOS_LIST_ON_ERROR`</dd>
 </dl>
 
 ## Configuration
