@@ -20,8 +20,8 @@ YQ expressions with default values now work correctly in all scenarios:
 ```yaml
 # This now works reliably when vpc component isn't provisioned
 vars:
-  vpc_id: !terraform.output vpc {{ .stack }} ".vpc_id // ""default-vpc"""
-  subnets: !terraform.state vpc {{ .stack }} ".subnets // [""subnet-1"", ""subnet-2""]"
+  vpc_id: !terraform.output vpc {{ .stack }} .vpc_id // "default-vpc"
+  subnets: !terraform.state vpc {{ .stack }} .subnets // ["subnet-1", "subnet-2"]
 ```
 
 ## The Problem
@@ -49,7 +49,7 @@ We refactored the YAML function processing to:
 
 ```yaml
 vars:
-  bucket_name: !terraform.output s3 {{ .stack }} ".bucket_name // ""default-bucket"""
+  bucket_name: !terraform.output s3 {{ .stack }} .bucket_name // "default-bucket"
 ```
 
 If the `s3` component isn't provisioned, `bucket_name` will be `"default-bucket"`.
@@ -58,7 +58,7 @@ If the `s3` component isn't provisioned, `bucket_name` will be `"default-bucket"
 
 ```yaml
 vars:
-  subnets: !terraform.state vpc {{ .stack }} ".private_subnets // [""subnet-a"", ""subnet-b""]"
+  subnets: !terraform.state vpc {{ .stack }} .private_subnets // ["subnet-a", "subnet-b"]
 ```
 
 If the `vpc` component isn't provisioned, `subnets` will be `["subnet-a", "subnet-b"]`.
@@ -67,7 +67,7 @@ If the `vpc` component isn't provisioned, `subnets` will be `["subnet-a", "subne
 
 ```yaml
 vars:
-  tags: !terraform.output common {{ .stack }} ".tags // {\"env\": \"dev\", \"team\": \"platform\"}"
+  tags: !terraform.output 'common {{ .stack }} .tags // {"env": "dev", "team": "platform"}'
 ```
 
 ### No Default (Error on Missing)
