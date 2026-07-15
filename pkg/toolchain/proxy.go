@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -19,7 +20,18 @@ const (
 	ProxyConfigPathEnv   = "ATMOS_TOOLCHAIN_PROXY_CONFIG_PATH"
 	ProxyVersionsFileEnv = "ATMOS_TOOLCHAIN_PROXY_VERSIONS_FILE"
 	ProxyInstallPathEnv  = "ATMOS_TOOLCHAIN_PROXY_INSTALL_PATH"
+	proxyMetadataFile    = ".atmos-proxies.json"
+	proxyFilePermissions = 0o600
 )
+
+var errProxyConfigurationRequired = errors.New("toolchain proxy requires configuration")
+
+// proxyMetadata records proxy entries created by Atmos. It lets SyncProxies
+// safely refresh stale links after the Atmos binary changes without replacing
+// an unrelated file a user placed in the proxy directory.
+type proxyMetadata struct {
+	Proxies map[string]struct{} `json:"proxies"`
+}
 
 // proxyExecutable is replaceable in tests so proxy links never need to target
 // the running test binary. Windows cannot remove a hard link to that binary.
@@ -123,10 +135,19 @@ func SyncProxies(config *schema.AtmosConfiguration) error {
 	if err != nil {
 		return fmt.Errorf("resolve Atmos executable for proxies: %w", err)
 	}
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("resolve absolute Atmos executable path for proxies: %w", err)
+	}
 	dir := ProxyDir(config)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create proxy directory: %w", err)
 	}
+	metadata, err := loadProxyMetadata(dir)
+	if err != nil {
+		return err
+	}
+	metadataChanged := false
 	for name, proxy := range config.Toolchain.Proxies {
 		if err := validateProxy(name, proxy); err != nil {
 			return err
@@ -134,24 +155,27 @@ func SyncProxies(config *schema.AtmosConfiguration) error {
 		link := filepath.Join(dir, proxyFilename(name))
 		info, statErr := os.Lstat(link)
 		if statErr == nil {
-			if runtime.GOOS == "windows" {
-				targetInfo, targetErr := os.Stat(target)
-				if targetErr == nil && os.SameFile(info, targetInfo) {
-					continue
-				}
-				return fmt.Errorf("toolchain proxy %q already exists and is not managed by Atmos", name)
+			managed := false
+			if _, ok := metadata.Proxies[name]; ok {
+				managed = true
 			}
-			if info.Mode()&os.ModeSymlink == 0 {
-				return fmt.Errorf("toolchain proxy %q already exists and is not managed by Atmos", name)
+			current, currentErr := proxyTargetsExecutable(info, link, target)
+			if currentErr != nil {
+				return fmt.Errorf("inspect toolchain proxy %q: %w", name, currentErr)
 			}
-			existing, readErr := os.Readlink(link)
-			if readErr != nil {
-				return fmt.Errorf("read toolchain proxy %q: %w", name, readErr)
-			}
-			if existing == target {
+			if current {
 				continue
 			}
-			return fmt.Errorf("toolchain proxy %q already exists and points to %q", name, existing)
+			if !managed {
+				return fmt.Errorf("toolchain proxy %q already exists and is not managed by Atmos", name)
+			}
+			if err := os.Remove(link); err != nil {
+				return fmt.Errorf("remove stale toolchain proxy %q: %w", name, err)
+			}
+			if err := createProxyLink(target, link); err != nil {
+				return fmt.Errorf("refresh toolchain proxy %q: %w", name, err)
+			}
+			continue
 		}
 		if !errors.Is(statErr, os.ErrNotExist) {
 			return fmt.Errorf("inspect toolchain proxy %q: %w", name, statErr)
@@ -159,8 +183,78 @@ func SyncProxies(config *schema.AtmosConfiguration) error {
 		if err := createProxyLink(target, link); err != nil {
 			return fmt.Errorf("create toolchain proxy %q: %w", name, err)
 		}
+		metadata.Proxies[name] = struct{}{}
+		metadataChanged = true
+	}
+	if metadataChanged {
+		if err := writeProxyMetadata(dir, metadata); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func proxyMetadataPath(dir string) string {
+	return filepath.Join(dir, proxyMetadataFile)
+}
+
+func loadProxyMetadata(dir string) (proxyMetadata, error) {
+	metadata := proxyMetadata{Proxies: map[string]struct{}{}}
+	data, err := os.ReadFile(proxyMetadataPath(dir))
+	if errors.Is(err, os.ErrNotExist) {
+		return metadata, nil
+	}
+	if err != nil {
+		return proxyMetadata{}, fmt.Errorf("read toolchain proxy metadata: %w", err)
+	}
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return proxyMetadata{}, fmt.Errorf("parse toolchain proxy metadata: %w", err)
+	}
+	if metadata.Proxies == nil {
+		metadata.Proxies = map[string]struct{}{}
+	}
+	return metadata, nil
+}
+
+func writeProxyMetadata(dir string, metadata proxyMetadata) error {
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("marshal toolchain proxy metadata: %w", err)
+	}
+	path := proxyMetadataPath(dir)
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, data, proxyFilePermissions); err != nil {
+		return fmt.Errorf("write toolchain proxy metadata: %w", err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("commit toolchain proxy metadata: %w", err)
+	}
+	return nil
+}
+
+func proxyTargetsExecutable(info os.FileInfo, link, target string) (bool, error) {
+	if runtime.GOOS == "windows" {
+		targetInfo, err := os.Stat(target)
+		if err != nil {
+			return false, err
+		}
+		return os.SameFile(info, targetInfo), nil
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return false, nil
+	}
+	existing, err := os.Readlink(link)
+	if err != nil {
+		return false, err
+	}
+	if !filepath.IsAbs(existing) {
+		existing = filepath.Join(filepath.Dir(link), existing)
+	}
+	existing, err = filepath.Abs(existing)
+	if err != nil {
+		return false, err
+	}
+	return existing == target, nil
 }
 
 func proxyFilename(name string) string {
@@ -183,7 +277,7 @@ func validateProxy(name string, proxy schema.ToolchainProxy) error {
 	if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsAny(name, `\\/`) {
 		return fmt.Errorf("invalid toolchain proxy name %q", name)
 	}
-	if name == "atmos" {
+	if strings.EqualFold(name, "atmos") {
 		return fmt.Errorf("toolchain proxy name %q is reserved", name)
 	}
 	if strings.TrimSpace(proxy.Tool) == "" {
@@ -195,6 +289,9 @@ func validateProxy(name string, proxy schema.ToolchainProxy) error {
 // RunProxy executes a configured proxy. The caller must have initialized the
 // toolchain configuration. A child exit status is returned silently.
 func RunProxy(config *schema.AtmosConfiguration, name string, args []string) error {
+	if config == nil {
+		return fmt.Errorf("%w for %q", errProxyConfigurationRequired, name)
+	}
 	proxy, ok := config.Toolchain.Proxies[name]
 	if !ok {
 		return fmt.Errorf("toolchain proxy %q is not configured", name)

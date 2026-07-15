@@ -671,13 +671,13 @@ func TestCoerceFieldValueTypes(t *testing.T) {
 		"enable_vendoring": "false",
 		"project_name":     "acme", // non-boolean field: left untouched
 	}
-	CoerceFieldValueTypes(scaffoldConfig, values)
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
 
 	assert.Equal(t, false, values["enable_vendoring"])
 	assert.Equal(t, "acme", values["project_name"])
 }
 
-func TestCoerceFieldValueTypes_LeavesUnparsableValuesUntouched(t *testing.T) {
+func TestCoerceFieldValueTypesRejectsUnparsableValues(t *testing.T) {
 	scaffoldConfig := &ScaffoldConfig{
 		Spec: ScaffoldSpec{
 			Fields: []FieldDefinition{{Name: "enable_vendoring", Type: "confirm"}},
@@ -685,10 +685,10 @@ func TestCoerceFieldValueTypes_LeavesUnparsableValuesUntouched(t *testing.T) {
 	}
 	values := map[string]interface{}{"enable_vendoring": "not-a-bool"}
 
-	CoerceFieldValueTypes(scaffoldConfig, values)
+	err := CoerceFieldValueTypes(scaffoldConfig, values)
 
-	assert.Equal(t, "not-a-bool", values["enable_vendoring"],
-		"unparsable values are left as-is for downstream validation to catch")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `enable_vendoring`)
 }
 
 // TestCoerceFieldValueTypes_FixesSetFlagWhenCondition reproduces the bug this
@@ -719,7 +719,7 @@ func TestCoerceFieldValueTypes_FixesSetFlagWhenCondition(t *testing.T) {
 	assert.Empty(t, missing, "uncoerced string value fails the When comparison, hiding the gated field")
 
 	// After coercion, the same values correctly surface the gated field.
-	CoerceFieldValueTypes(scaffoldConfig, values)
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
 	missing = MissingRequiredValues(scaffoldConfig, values)
 	assert.Equal(t, []string{"vendor_source"}, missing)
 }

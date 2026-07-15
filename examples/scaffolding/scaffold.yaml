@@ -37,11 +37,11 @@ spec:
       type: confirm
       default: true
 
-    - name: vendor_source
-      label: Vendor source repository
-      description: Git repository to pin in the generated vendor.yaml
+    - name: vendor_version
+      label: Vendor component version
+      description: Immutable tag for the generated S3 bucket component
       type: input
-      default: github.com/cloudposse/terraform-aws-components.git
+      default: "1.536.0"
       when: "answers.enable_vendoring == true"
 
   # vendor.yaml is only generated when vendoring is enabled; skip it otherwise.

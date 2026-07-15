@@ -374,6 +374,7 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 	if workflow != nil {
 		executor.SetWorkflow(workflow)
 	}
+	runner := castChildStepRunner{ctx: ctx, castStep: castStep, vars: vars, executor: executor, workflow: workflow}
 	conditionContext := schema.ConditionContext{Status: schema.ConditionPredicateSuccess}
 	var runErr error
 	// fail accumulates a child error and flips the condition status so that
@@ -396,7 +397,7 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 		}
 		prepareCastChildStep(castStep, child, i)
 		skipPrompt := prevWasSession && child.Type == schema.TaskTypeSimulate
-		if err := runCastChildStep(ctx, castStep, child, vars, executor, skipPrompt); err != nil {
+		if err := runner.run(child, skipPrompt); err != nil {
 			fail(err)
 		}
 		prevWasSession = child.Type == castSessionStepType
@@ -414,21 +415,29 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 // prevWasSession tracking in runCastStepMode, and castSessionActions' Fn
 // wrapper, which always skips it since a live session's real shell prompt is
 // always already showing before any of its actions run).
-func runCastChildStep(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables, executor *StepExecutor, skipPrompt bool) error {
+type castChildStepRunner struct {
+	ctx      context.Context
+	castStep *schema.WorkflowStep
+	vars     *Variables
+	executor *StepExecutor
+	workflow *schema.WorkflowDefinition
+}
+
+func (r castChildStepRunner) run(child *schema.WorkflowStep, skipPrompt bool) error {
 	switch child.Type {
 	case schema.TaskTypeSimulate:
-		return runCastSimulateStep(ctx, castStep, child, vars, skipPrompt)
+		return runCastSimulateStep(r.ctx, r.castStep, child, r.vars, skipPrompt)
 	case castSessionStepType:
-		return runCastSessionBlock(ctx, castStep, child, vars)
+		return runCastSessionBlock(r.ctx, r.castStep, child, r.vars, r.workflow)
 	default:
-		if _, err := executor.Execute(ctx, child); err != nil {
+		if _, err := r.executor.Execute(r.ctx, child); err != nil {
 			return err
 		}
 		delay, err := castStepPauseDelay(child)
 		if err != nil {
 			return err
 		}
-		return sleepCastInput(ctx, delay)
+		return sleepCastInput(r.ctx, delay)
 	}
 }
 
@@ -440,7 +449,7 @@ func runCastChildStep(ctx context.Context, castStep, child *schema.WorkflowStep,
 // actions, converted via the same castSessionActions used by top-level
 // session mode. WorkingDirectory is inherited earlier, by
 // prepareCastChildStep, before this runs.
-func runCastSessionBlock(ctx context.Context, castStep, block *schema.WorkflowStep, vars *Variables) error {
+func runCastSessionBlock(ctx context.Context, castStep, block *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
 	inheritCastSessionBlockDefaults(castStep, block)
 	writeRate, err := parseDurationDefault(block.WriteRate, 40*time.Millisecond)
 	if err != nil {
@@ -465,7 +474,7 @@ func runCastSessionBlock(ctx context.Context, castStep, block *schema.WorkflowSt
 		Height:      block.Height,
 		WriteRate:   writeRate,
 		KeyInterval: keyInterval,
-		Actions:     castSessionActions(ctx, block, vars, nil),
+		Actions:     castSessionActions(ctx, block, vars, workflow),
 	})
 }
 
@@ -608,6 +617,7 @@ func castSessionActions(ctx context.Context, castStep *schema.WorkflowStep, vars
 	if workflow != nil {
 		executor.SetWorkflow(workflow)
 	}
+	runner := castChildStepRunner{ctx: ctx, castStep: castStep, vars: vars, executor: executor, workflow: workflow}
 	actions := make([]asciicast.SessionAction, 0, len(steps))
 	for i := range steps {
 		child := &steps[i]
@@ -627,13 +637,16 @@ func castSessionActions(ctx context.Context, castStep *schema.WorkflowStep, vars
 		}
 		prepareCastChildStep(castStep, child, i)
 		actions = append(actions, asciicast.SessionAction{
-			Type: child.Type,
+			// RunSession dispatches callbacks only for simulate actions. The
+			// original child type remains available to runCastChildStep through
+			// this closure, while the session dispatcher invokes it correctly.
+			Type: schema.TaskTypeSimulate,
 			// A live session's real shell prompt is always already visible
 			// before any scripted action runs (even the very first one --
 			// the freshly spawned shell shows its own prompt immediately),
 			// so a simulate action mixed into a session must never draw its
 			// own prompt on top of it.
-			Fn: func() error { return runCastChildStep(ctx, castStep, child, vars, executor, true) },
+			Fn: func() error { return runner.run(child, true) },
 		})
 	}
 	return actions

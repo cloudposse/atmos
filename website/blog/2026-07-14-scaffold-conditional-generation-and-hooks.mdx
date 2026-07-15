@@ -56,9 +56,10 @@ spec:
       type: confirm
       default: true
 
-    - name: vendor_source
-      label: Vendor source repository
+    - name: vendor_version
+      label: Vendor component version
       type: input
+      default: "1.536.0"
       when: "answers.enable_vendoring == true"
 
   files:
@@ -83,11 +84,11 @@ Try the conditional-prompt/conditional-file combination above for real, straight
 no local clone needed:
 
 ```shell
-# vendor_source is asked, vendor.yaml is generated
+# vendor_version is asked, and vendor.yaml is generated with a pinned source
 atmos scaffold generate github.com/cloudposse/atmos.git//examples/scaffolding ./my-project \
-  --set enable_vendoring=true --set vendor_source=github.com/acme/terraform-modules.git
+  --set enable_vendoring=true --set vendor_version=1.536.0
 
-# vendor_source is never asked, vendor.yaml is never generated
+# vendor_version is never asked, vendor.yaml is never generated
 atmos scaffold generate github.com/cloudposse/atmos.git//examples/scaffolding ./my-project \
   --set enable_vendoring=false
 ```

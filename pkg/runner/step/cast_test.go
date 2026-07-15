@@ -1664,6 +1664,25 @@ func TestCastSessionActionsSimulateChildGetsCallback(t *testing.T) {
 	}
 }
 
+func TestCastSessionActionsExecChildGetsSimulateCallback(t *testing.T) {
+	castStep := &schema.WorkflowStep{
+		Steps: []schema.WorkflowStep{{
+			Name:    "plan",
+			Type:    schema.TaskTypeAtmos,
+			Command: "terraform plan",
+			Output:  string(OutputModeNone),
+			Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+		}},
+	}
+	actions := castSessionActions(context.Background(), castStep, NewVariables(), nil)
+	if len(actions) != 1 {
+		t.Fatalf("action count = %d", len(actions))
+	}
+	if actions[0].Type != schema.TaskTypeSimulate || actions[0].Fn == nil {
+		t.Fatalf("expected an executable child to become a simulate callback, got %#v", actions[0])
+	}
+}
+
 // TestSessionPromptDefault covers the three-tier fallback
 // applySessionPromptEnv relies on: a child-level SimulatePrompt beats the
 // cast step's own, which beats the built-in "> "/"command" default.
@@ -1908,14 +1927,15 @@ func TestRunCastChildStepReturnsPauseDelayError(t *testing.T) {
 		t.Fatalf("initialize io: %v", err)
 	}
 	executor := NewStepExecutorWithVars(NewVariables())
-	err := runCastChildStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
+	runner := castChildStepRunner{ctx: context.Background(), castStep: &schema.WorkflowStep{}, vars: NewVariables(), executor: executor}
+	err := runner.run(&schema.WorkflowStep{
 		Name:     "child",
 		Type:     schema.TaskTypeAtmos,
 		Output:   string(OutputModeNone),
 		Command:  "terraform plan",
 		Env:      map[string]string{"_ATMOS_STEP_FAKE": "ok"},
 		Interval: "bad-duration",
-	}, NewVariables(), executor, false)
+	}, false)
 	if err == nil {
 		t.Fatal("expected an error parsing an invalid pause delay")
 	}
@@ -2146,6 +2166,51 @@ func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
 	}
 }
 
+func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "session-exec.cast")
+
+	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:  "demo",
+		Type:  schema.TaskTypeCast,
+		Mode:  "session",
+		Shell: shell,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{Type: "write", Text: "printf ready", Rate: "0"},
+			{Type: "key", Key: "enter"},
+			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{
+				Name:    "plan",
+				Type:    schema.TaskTypeAtmos,
+				Command: "terraform plan",
+				Output:  string(OutputModeRaw),
+				Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+			},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute session-mode cast with real child: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast file: %v", err)
+	}
+	if !strings.Contains(castOutputText(t, content), "fake-atmos-output") {
+		t.Fatalf("expected real child output in cast")
+	}
+}
+
 // TestCastHandlerNestedSessionStepFallsThroughToRealExecution is an
 // end-to-end proof of the steps-mode `type: session` child: the cast step
 // itself defaults to mode: steps (no top-level `mode: session` at all), the
@@ -2205,6 +2270,47 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 	}
 	if !strings.Contains(text, "fake-atmos-output") {
 		t.Fatalf("expected the real atmos step's output after the session block, got %q", text)
+	}
+}
+
+func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "nested-session-workflow.cast")
+
+	_, err = (&CastHandler{}).ExecuteWithWorkflow(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{{
+			Type:  castSessionStepType,
+			Shell: shell,
+			Steps: []schema.WorkflowStep{
+				{Type: "write", Text: "printf ready", Rate: "0"},
+				{Type: "key", Key: "enter"},
+				{Type: "wait", Text: "ready", Timeout: "2s"},
+				{Name: "workflow-child", Type: schema.TaskTypeShell, Command: "printf workflow-child"},
+			},
+		}},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: string(OutputModeRaw)})
+	if err != nil {
+		t.Fatalf("execute nested session with workflow context: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast file: %v", err)
+	}
+	if !strings.Contains(castOutputText(t, content), "workflow-child") {
+		t.Fatalf("expected nested child output inherited from the workflow in cast")
 	}
 }
 

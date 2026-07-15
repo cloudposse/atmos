@@ -762,7 +762,13 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	// coerce boolean-typed fields (confirm/bool/boolean) to native bools so
 	// When conditions and templates see the same type regardless of whether
 	// the value came from a flag, an interactive prompt, or a YAML default.
-	config.CoerceFieldValueTypes(scaffoldConfig, mergedValues)
+	if err := config.CoerceFieldValueTypes(scaffoldConfig, mergedValues); err != nil {
+		return nil, nil, errUtils.Build(err).
+			WithExplanation("Boolean scaffold fields must be set to true or false").
+			WithHint("Pass a valid value with --set <field>=true or --set <field>=false").
+			WithExitCode(2).
+			Err()
+	}
 
 	// Prompt the user to edit the configuration values unless --use-defaults is specified
 	// This allows them to review and modify values from command line, config, or defaults

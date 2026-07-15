@@ -111,7 +111,7 @@ commands:
           - type: key
             key: enter
           - type: wait
-            text: "Vendor source repository"
+            text: "Vendor component version"
             timeout: 10s
           - type: pause
             duration: 350ms
@@ -172,7 +172,7 @@ commands:
               "Terraform version",
               "Default AWS region",
               "Enable component vendoring",
-              "Vendor source repository",
+              "Vendor component version",
           ]:
               if needle not in plain:
                   raise SystemExit(f"scaffolding generate-example cast missing {needle!r}")

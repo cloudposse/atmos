@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -231,6 +234,68 @@ spec:
 	if _, statErr := os.Stat(filepath.Join(tempDir, "prod.yaml")); !os.IsNotExist(statErr) {
 		t.Errorf("expected prod.yaml to be skipped (not in selected environments), stat err: %v", statErr)
 	}
+}
+
+func TestExecuteWithSetupRejectsInvalidBooleanCommandValue(t *testing.T) {
+	ui := createTestUI(t)
+	embedsConfig := &templates.Configuration{
+		Name: "test-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-template
+spec:
+  fields:
+    - name: enable_feature
+      type: confirm
+      default: false
+`, Permissions: 0o644},
+			{Path: "README.md", Content: "test", Permissions: 0o644},
+		},
+	}
+
+	err := ui.executeWithSetup(
+		embedsConfig,
+		t.TempDir(),
+		false,
+		false,
+		true,
+		"",
+		map[string]interface{}{"enable_feature": "not-a-bool"},
+		[]string{"{{", "}}"},
+	)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "enable_feature")
+}
+
+func TestScaffoldingExampleGeneratesPinnedVendorManifest(t *testing.T) {
+	ui := createTestUI(t)
+	exampleDir := filepath.Join("..", "..", "..", "examples", "scaffolding")
+	embedsConfig, err := templates.LoadConfigurationFromDir("example", exampleDir)
+	require.NoError(t, err)
+
+	targetDir := t.TempDir()
+	err = ui.executeWithSetup(
+		embedsConfig,
+		targetDir,
+		false,
+		false,
+		true,
+		"",
+		map[string]interface{}{
+			"enable_vendoring": "true",
+			"vendor_version":   "1.536.0",
+		},
+		[]string{"{{", "}}"},
+	)
+	require.NoError(t, err)
+
+	vendorManifest, err := os.ReadFile(filepath.Join(targetDir, "vendor.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(vendorManifest), "modules/s3-bucket?ref=1.536.0")
+	assert.Contains(t, string(vendorManifest), "version: \"1.536.0\"")
+	assert.Contains(t, string(vendorManifest), "components/terraform/s3-bucket")
 }
 
 // hookMarkerHandler records the resolved content of every step it executes,

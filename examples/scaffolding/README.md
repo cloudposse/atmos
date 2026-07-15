@@ -9,7 +9,7 @@ Learn more in the [Scaffold Command Documentation](https://atmos.tools/cli/comma
 - Scaffold template configuration with `scaffold.yaml`
 - Interactive prompts for customizing generated projects
 - Template files with Go templating support
-- **Conditional prompts** — `vendor_source` is only asked `when:`
+- **Conditional prompts** — `vendor_version` is only asked `when:`
   `enable_vendoring` was answered `true`
 - **Conditional file generation** — `vendor.yaml` is only generated `when:`
   `enable_vendoring` is `true`, and is skipped entirely otherwise
@@ -23,10 +23,10 @@ atmos scaffold list
 # Generate a new project from a template
 atmos scaffold generate example ./my-project
 
-# Generate with custom values, including the conditional vendor_source prompt
-atmos scaffold generate example ./my-project --set project_name=my-app --set enable_vendoring=true --set vendor_source=github.com/acme/terraform-modules.git
+# Generate with a pinned component version
+atmos scaffold generate example ./my-project --set project_name=my-app --set enable_vendoring=true --set vendor_version=1.536.0
 
-# Skip vendoring entirely — vendor_source is never asked and vendor.yaml is never generated
+# Skip vendoring entirely — vendor_version is never asked and vendor.yaml is never generated
 atmos scaffold generate example ./my-project --set enable_vendoring=false
 ```
 

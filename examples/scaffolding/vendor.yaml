@@ -8,10 +8,10 @@ spec:
   imports: []
 
   sources:
-    - component: "example"
-      source: "{{ .Config.vendor_source }}//components/terraform/example?ref=main"
-      version: "main"
+    - component: "s3-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/s3-bucket?ref={{ .Config.vendor_version }}"
+      version: "{{ .Config.vendor_version }}"
       targets:
-        - "components/terraform/example"
+        - "components/terraform/s3-bucket"
       tags:
-        - example
+        - storage

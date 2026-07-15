@@ -165,7 +165,7 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           assert_colored(text, "# bootstrap a brand-new Atmos project")
-          assert_colored(text, "_defaults.yaml")
+          assert_colored(text, "stacks/_defaults.yaml — shared configuration imported by every")
           assert_colored(text, "All stacks validated successfully")
           assert_colored(text, "# prove it: deploy every selected environment for real")
           for needle in [

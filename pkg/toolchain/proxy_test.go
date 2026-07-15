@@ -68,6 +68,53 @@ func TestSyncProxiesRejectsUnsafeAndUnmanagedNames(t *testing.T) {
 	require.Error(t, SyncProxies(config))
 }
 
+func TestSyncProxiesRefreshesManagedLinkAfterExecutableReplacement(t *testing.T) {
+	tempDir := t.TempDir()
+	firstTarget := filepath.Join(tempDir, "atmos-first")
+	secondTarget := filepath.Join(tempDir, "atmos-second")
+	require.NoError(t, os.WriteFile(firstTarget, []byte("first"), 0o755))
+	require.NoError(t, os.WriteFile(secondTarget, []byte("second"), 0o755))
+
+	currentTarget := firstTarget
+	originalProxyExecutable := proxyExecutable
+	proxyExecutable = func() (string, error) { return currentTarget, nil }
+	t.Cleanup(func() { proxyExecutable = originalProxyExecutable })
+
+	config := &schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		InstallPath: filepath.Join(tempDir, "tools"),
+		Proxies: map[string]schema.ToolchainProxy{
+			"ls": {Tool: "coreutils"},
+		},
+	}}
+	require.NoError(t, SyncProxies(config))
+
+	currentTarget = secondTarget
+	require.NoError(t, SyncProxies(config))
+
+	link := filepath.Join(ProxyDir(config), proxyFilename("ls"))
+	info, err := os.Lstat(link)
+	require.NoError(t, err)
+	pointsToCurrent, err := proxyTargetsExecutable(info, link, secondTarget)
+	require.NoError(t, err)
+	require.True(t, pointsToCurrent)
+	_, err = os.Stat(proxyMetadataPath(ProxyDir(config)))
+	require.NoError(t, err)
+}
+
+func TestSyncProxiesRejectsCaseInsensitiveReservedName(t *testing.T) {
+	config := &schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		InstallPath: t.TempDir(),
+		Proxies: map[string]schema.ToolchainProxy{
+			"Atmos": {Tool: "coreutils"},
+		},
+	}}
+	require.ErrorContains(t, SyncProxies(config), "reserved")
+}
+
+func TestRunProxyRejectsNilConfig(t *testing.T) {
+	require.ErrorContains(t, RunProxy(nil, "ls", nil), "requires configuration")
+}
+
 func TestProxyExportsAreStableAndShellSafe(t *testing.T) {
 	env := ProxyEnvironment{
 		Path:         "/tools/bin/proxy",

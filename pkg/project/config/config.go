@@ -12,6 +12,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,6 +54,8 @@ const dirPermissions = 0o755
 
 // filePermissions is the file mode for writing the project record.
 const filePermissions = 0o644
+
+var errInvalidBooleanFieldValue = errors.New("invalid boolean field value")
 
 // ScaffoldConfigDir is the directory name for user scaffold configuration.
 const ScaffoldConfigDir = ".atmos"
@@ -394,10 +397,10 @@ func isBooleanFieldType(fieldType string) bool {
 // value like "false" stays the truthy non-empty string "false" for both Go
 // template interpolation and When condition evaluation (e.g. `answers.x ==
 // true` never matches a string). Values that aren't strings (YAML defaults,
-// or bools already returned by an interactive confirm prompt) and values
-// that fail to parse are left untouched so downstream validation can surface
-// a clear error instead of this silently swallowing a typo.
-func CoerceFieldValueTypes(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) {
+// or bools already returned by an interactive confirm prompt) are left
+// untouched. Invalid external boolean values return an error rather than
+// silently changing the result of a conditional expression.
+func CoerceFieldValueTypes(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) error {
 	defer perf.Track(nil, "config.CoerceFieldValueTypes")()
 
 	for i := range scaffoldConfig.Spec.Fields {
@@ -409,10 +412,13 @@ func CoerceFieldValueTypes(scaffoldConfig *ScaffoldConfig, values map[string]int
 		if !ok {
 			continue
 		}
-		if parsed, err := strconv.ParseBool(raw); err == nil {
-			values[field.Name] = parsed
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return fmt.Errorf("%w for field %q: %q", errInvalidBooleanFieldValue, field.Name, raw)
 		}
+		values[field.Name] = parsed
 	}
+	return nil
 }
 
 // GetConfigPath returns the path where the config directory should be stored based on the user's home directory and returns an error if the user home directory cannot be determined.
