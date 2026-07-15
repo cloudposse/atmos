@@ -43,8 +43,9 @@ commands use the same vendoring layout as `atmos vendor pull`.
 ### Migrating from the legacy GitHub Action
 
 The `cloudposse/github-action-atmos-component-updater` GitHub Action is deprecated. Use the
-native [vendored dependency management](/vendor/updates) commands,
-`atmos vendor update` and `atmos vendor diff`, instead. The legacy Action documentation
+native package-management commands,
+[`atmos vendor update`](/cli/commands/vendor/vendor-update) and
+[`atmos vendor diff`](/cli/commands/vendor/vendor-diff), instead. The legacy Action documentation
 remains available as a [deprecated reference](/deprecated/github-actions/component-updater).
 
 ## How to Use It
@@ -69,7 +70,6 @@ atmos vendor diff --component vpc --from 1.0.0 --to 2.0.0 --diff-file variables.
 
 ## Get Involved
 
-Read the [Vendored Dependency Management](/vendor/updates),
-[`vendor diff`](/cli/commands/vendor/vendor-diff), and
+Read the [Vendoring](/vendor/) overview, [`vendor diff`](/cli/commands/vendor/vendor-diff), and
 [`vendor update`](/cli/commands/vendor/vendor-update) documentation for the full reference. To
 share feedback or request an improvement, [open an issue](https://github.com/cloudposse/atmos/issues).

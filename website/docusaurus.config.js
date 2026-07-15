@@ -96,7 +96,7 @@ const config = {
                     {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
                     // Vendored dependency management moved out of GitHub Actions integrations.
-                    {from: '/integrations/github-actions/component-updater', to: '/vendor/updates'},
+                    {from: '/integrations/github-actions/component-updater', to: '/cli/commands/vendor/vendor-update'},
                     {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
