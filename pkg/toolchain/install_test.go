@@ -3,10 +3,12 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,6 +25,19 @@ func newTestSpinner() *bspinner.Model {
 func newTestProgressBar() *progress.Model {
 	m := progress.New()
 	return &m
+}
+
+func TestRightAlignInstallProgress(t *testing.T) {
+	t.Run("shows downloaded and total bytes at the terminal edge", func(t *testing.T) {
+		line := rightAlignInstallProgress("⣾ Installing owner/tool@v1.0.0", 85*1024*1024, 100*1024*1024, 80)
+		assert.True(t, strings.HasSuffix(line, "85.0 MB/100.0 MB"))
+		assert.Equal(t, 80, lipgloss.Width(line))
+	})
+
+	t.Run("does not wrap a narrow terminal", func(t *testing.T) {
+		left := "⣾ Installing owner/tool@v1.0.0"
+		assert.Equal(t, left, rightAlignInstallProgress(left, 85*1024*1024, 100*1024*1024, len(left)))
+	})
 }
 
 func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
@@ -641,6 +656,12 @@ func TestInstallMultipleTools_InvalidSpecs(t *testing.T) {
 	// Test with all invalid specs - should return nil (no valid tools to install).
 	err := installMultipleTools([]string{"invalid-spec-no-version", "another-bad-spec"}, false)
 	assert.NoError(t, err)
+}
+
+func TestRunInstallBatchWithOptionsRejectsInvalidConcurrency(t *testing.T) {
+	err := RunInstallBatchWithOptions([]string{"terraform@1.0.0", "helm@3.0.0"}, BatchInstallOptions{MaxConcurrency: -1})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max concurrency")
 }
 
 // TestSpinnerModel tests the spinnerModel Bubble Tea model.

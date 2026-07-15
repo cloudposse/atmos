@@ -1,9 +1,12 @@
 package toolchain
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -34,6 +37,7 @@ func init() {
 	installParser = flags.NewStandardParser(
 		flags.WithBoolFlag("reinstall", "", false, "Reinstall even if already installed"),
 		flags.WithBoolFlag("default", "", false, "Set as default version in .tool-versions"),
+		flags.WithIntFlag("max-concurrency", "", 0, "Maximum number of tools to install concurrently (default 4)"),
 		flags.WithEnvVars("reinstall", "ATMOS_TOOLCHAIN_REINSTALL"),
 		flags.WithEnvVars("default", "ATMOS_TOOLCHAIN_DEFAULT"),
 	)
@@ -56,10 +60,17 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	reinstall := v.GetBool("reinstall")
 	defaultVersion := v.GetBool("default")
+	maxConcurrency, err := resolveInstallMaxConcurrency(cmd)
+	if err != nil {
+		return err
+	}
 
 	// No args: install from .tool-versions file.
 	if len(args) == 0 {
-		return toolchain.RunInstall("", defaultVersion, reinstall, true, true)
+		if defaultVersion {
+			ui.Warning("--default flag is ignored when installing multiple tools")
+		}
+		return toolchain.RunInstallFromToolVersions(reinstall, true, maxConcurrency)
 	}
 
 	// Single tool: use single-tool flow.
@@ -72,7 +83,24 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	if defaultVersion {
 		ui.Warning("--default flag is ignored when installing multiple tools")
 	}
-	return toolchain.RunInstallBatch(args, reinstall)
+	return toolchain.RunInstallBatchWithOptions(args, toolchain.BatchInstallOptions{
+		Reinstall:      reinstall,
+		MaxConcurrency: maxConcurrency,
+	})
+}
+
+func resolveInstallMaxConcurrency(cmd *cobra.Command) (int, error) {
+	maxConcurrency := toolchain.DefaultInstallMaxConcurrency
+	if config := toolchain.GetAtmosConfig(); config != nil && viper.IsSet("toolchain.max_concurrency") {
+		maxConcurrency = config.Toolchain.MaxConcurrency
+	}
+	if cmd.Flags().Changed("max-concurrency") {
+		maxConcurrency, _ = cmd.Flags().GetInt("max-concurrency")
+	}
+	if maxConcurrency < 1 {
+		return 0, fmt.Errorf("%w: --max-concurrency and toolchain.max_concurrency must be at least 1", errUtils.ErrInvalidFlagValue)
+	}
+	return maxConcurrency, nil
 }
 
 // InstallCommandProvider implements the CommandProvider interface.

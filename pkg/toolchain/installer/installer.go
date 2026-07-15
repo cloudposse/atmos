@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/filelock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	github "github.com/cloudposse/atmos/pkg/github"
@@ -167,6 +168,7 @@ type Installer struct {
 	verificationPolicy verification.Policy
 	useLockFile        bool
 	lockFilePath       string
+	downloadProgress   func(downloaded, total int64)
 }
 
 // RegistryFactory creates registry instances. This allows dependency injection.
@@ -192,6 +194,16 @@ func WithCacheDir(cacheDir string) Option {
 
 	return func(i *Installer) {
 		i.cacheDir = cacheDir
+	}
+}
+
+// WithDownloadProgress reports bytes received while an asset is downloaded.
+// A total value below zero means the server did not provide Content-Length.
+func WithDownloadProgress(progress func(downloaded, total int64)) Option {
+	defer perf.Track(nil, "installer.WithDownloadProgress")()
+
+	return func(i *Installer) {
+		i.downloadProgress = progress
 	}
 }
 
@@ -306,12 +318,30 @@ func NewInstallerWithResolver(resolver ToolResolver, binDir string) *Installer {
 func (i *Installer) Install(owner, repo, version string) (string, error) {
 	defer perf.Track(nil, "installer.Install")()
 
-	// Get tool from registry
-	tool, err := i.FindTool(owner, repo, version)
-	if err != nil {
-		return "", err // Error already enriched in findTool
+	// The complete check/extract/replace transaction for one installed version
+	// must be exclusive across Atmos processes. The stable sibling lock survives
+	// the atomic replacements performed by the extractor.
+	versionDir := filepath.Join(i.binDir, owner, repo, version)
+	if err := os.MkdirAll(filepath.Dir(versionDir), defaultMkdirPermissions); err != nil {
+		return "", fmt.Errorf("%w: failed to create installation parent directory: %w", ErrFileOperation, err)
 	}
-	return i.installFromTool(tool, version)
+	lock := filelock.New(versionDir + ".lock")
+	var binaryPath string
+	err := lock.WithExclusive(context.Background(), func() error {
+		// Get tool from registry while the target is protected: registry metadata
+		// can choose different entrypoints for the same installed version.
+		tool, findErr := i.FindTool(owner, repo, version)
+		if findErr != nil {
+			return findErr
+		}
+		var installErr error
+		binaryPath, installErr = i.installFromTool(tool, version)
+		return installErr
+	})
+	if err != nil {
+		return "", err
+	}
+	return binaryPath, nil
 }
 
 // Helper to handle the rest of the install logic.
@@ -837,42 +867,29 @@ func (i *Installer) GetBinaryPaths(owner, repo, version string) []string {
 func (i *Installer) Uninstall(owner, repo, version string) error {
 	defer perf.Track(nil, "toolchain.Installer.Uninstall")()
 
-	// Try to find the binary by searching
-	binaryPath, err := i.FindBinaryPath(owner, repo, version)
-	if err != nil {
-		return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
-	}
-
-	// Get the version directory to remove. A onedir (multi-file) package's
-	// resolved binary lives nested inside a preserved .pkg tree (see the sidecar
-	// manifest in onedir.go), so walk up to the directory that actually holds
-	// the manifest/tree; a flat install's binary already lives directly in its
-	// version dir, so this is a no-op there.
-	binaryDir := versionDirFromBinaryPath(i.binDir, binaryPath)
-
-	// Remove the entire version directory, including any preserved onedir tree
-	// and manifest, so nothing is orphaned.
-	if err := os.RemoveAll(binaryDir); err != nil {
-		return fmt.Errorf("%w: failed to remove %s: %w", ErrFileOperation, binaryDir, err)
-	}
-
-	// Try to remove parent directories if they're empty
-	parentDir := filepath.Dir(binaryDir)
-	for {
-		if err := os.Remove(parentDir); err != nil {
-			// Stop when we can't remove a directory (likely not empty)
-			break
+	versionDir := filepath.Join(i.binDir, owner, repo, version)
+	lock := filelock.New(versionDir + ".lock")
+	return lock.WithExclusive(context.Background(), func() error {
+		binaryPath, err := i.FindBinaryPath(owner, repo, version)
+		if err != nil {
+			return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
 		}
-		parentDir = filepath.Dir(parentDir)
 
-		// Stop if we've reached the root of the bin directory
-		if parentDir == i.binDir || parentDir == "." {
-			break
+		binaryDir := versionDirFromBinaryPath(i.binDir, binaryPath)
+		if err := os.RemoveAll(binaryDir); err != nil {
+			return fmt.Errorf("%w: failed to remove %s: %w", ErrFileOperation, binaryDir, err)
 		}
-	}
 
-	log.Debug("Successfully uninstalled tool", logFieldOwner, owner, logFieldRepo, repo, "version", version)
-	return nil
+		for parentDir := filepath.Dir(binaryDir); parentDir != i.binDir && parentDir != "."; parentDir = filepath.Dir(parentDir) {
+			if os.Remove(parentDir) != nil {
+				break
+			}
+		}
+
+		log.Debug("Successfully uninstalled tool", logFieldOwner, owner, logFieldRepo, repo, "version", version)
+		//nolint:nilerr // Parent-directory cleanup is deliberately best-effort after uninstall succeeds.
+		return nil
+	})
 }
 
 // FindBinaryPath searches for a binary with the given owner, repo, and version.

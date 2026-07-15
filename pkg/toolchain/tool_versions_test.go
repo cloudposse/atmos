@@ -2,11 +2,30 @@ package toolchain
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAddToolToVersionsConcurrentUpdatesPreserveAllTools(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".tool-versions")
+	var wg sync.WaitGroup
+	for _, spec := range [][2]string{{"hashicorp/terraform", "1.0.0"}, {"helm/helm", "3.0.0"}} {
+		wg.Add(1)
+		go func(tool, version string) {
+			defer wg.Done()
+			require.NoError(t, AddToolToVersions(path, tool, version))
+		}(spec[0], spec[1])
+	}
+	wg.Wait()
+
+	versions, err := LoadToolVersions(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.0.0"}, versions.Tools["hashicorp/terraform"])
+	assert.Equal(t, []string{"3.0.0"}, versions.Tools["helm/helm"])
+}
 
 func TestAddToolToVersionsDuplicateCheck(t *testing.T) {
 	tempDir := t.TempDir()

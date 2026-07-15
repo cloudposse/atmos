@@ -86,6 +86,22 @@ func TestWriteResponseToCache(t *testing.T) {
 	})
 }
 
+func TestWriteResponseToCacheWithProgress(t *testing.T) {
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "cached-file.txt")
+	content := []byte("test content for progress")
+
+	var updates [][2]int64
+	_, err := writeResponseToCacheWithProgress(bytes.NewReader(content), cachePath, int64(len(content)), func(downloaded, total int64) {
+		updates = append(updates, [2]int64{downloaded, total})
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, updates)
+	assert.Equal(t, [2]int64{0, int64(len(content))}, updates[0])
+	assert.Equal(t, [2]int64{int64(len(content)), int64(len(content))}, updates[len(updates)-1])
+}
+
 func TestBuildDownloadError(t *testing.T) {
 	tests := []struct {
 		name       string

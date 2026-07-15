@@ -59,6 +59,7 @@ demos/audio/
 
 # Tool version managers
 .tool-versions
+**/.tool-versions.lock
 !examples/toolchain/.tool-versions
 !examples/mcp-for-ai-coding-assistants/.tool-versions
 

@@ -1,16 +1,20 @@
 package toolchain
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
-	defaultFileWritePermissions = 0o644
+	defaultFileWritePermissions      = 0o644
+	toolVersionsDirectoryPermissions = 0o755
 )
 
 // ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default).
@@ -52,7 +56,12 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 // SaveToolVersions saves a ToolVersions struct to a .tool-versions file (asdf-compatible).
 func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 	defer perf.Track(nil, "toolchain.SaveToolVersions")()
+	return withToolVersionsLock(filePath, func() error {
+		return saveToolVersionsUnlocked(filePath, toolVersions)
+	})
+}
 
+func saveToolVersionsUnlocked(filePath string, toolVersions *ToolVersions) error {
 	if toolVersions == nil || toolVersions.Tools == nil {
 		return fmt.Errorf("%w: toolVersions or toolVersions.Tools is nil", ErrInvalidToolSpec)
 	}
@@ -151,33 +160,33 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 	if version == "" {
 		return fmt.Errorf("%w: cannot add tool '%s' without a version", ErrInvalidToolSpec, tool)
 	}
-	// Load existing tool versions
-	toolVersions, err := LoadToolVersions(filePath)
-	if err != nil {
-		// If file doesn't exist, create a new one
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to load existing .tool-versions: %w", err)
+	return withToolVersionsLock(filePath, func() error {
+		// Load existing tool versions while holding the lock so separate Atmos
+		// processes cannot lose each other's additions.
+		toolVersions, err := LoadToolVersions(filePath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to load existing .tool-versions: %w", err)
+			}
+			toolVersions = &ToolVersions{Tools: make(map[string][]string)}
 		}
-		toolVersions = &ToolVersions{
-			Tools: make(map[string][]string),
+
+		installer := NewInstaller()
+		resolver := installer.GetResolver()
+		if wouldCreateDuplicate(toolVersions, tool, version, resolver) {
+			return nil
 		}
+
+		AddVersionToTool(toolVersions, tool, version, asDefault)
+		return saveToolVersionsUnlocked(filePath, toolVersions)
+	})
+}
+
+func withToolVersionsLock(filePath string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
+		return fmt.Errorf("create .tool-versions directory: %w", err)
 	}
-
-	// Create an installer to use its resolver
-	installer := NewInstaller()
-	resolver := installer.GetResolver()
-
-	// Check if this would create a duplicate with an aliased version
-	if wouldCreateDuplicate(toolVersions, tool, version, resolver) {
-		// Skip adding this entry as it would create a duplicate
-		return nil
-	}
-
-	// Add or update the tool
-	AddVersionToTool(toolVersions, tool, version, asDefault)
-
-	// Save back to file
-	return SaveToolVersions(filePath, toolVersions)
+	return filelock.New(filePath+".lock").WithExclusive(context.Background(), fn)
 }
 
 // wouldCreateDuplicate checks if adding a tool/version combination would create a duplicate
@@ -338,15 +347,12 @@ func ParseToolVersionArg(arg string) (string, string, error) {
 func RemoveToolFromVersions(filePath, tool, version string) error {
 	defer perf.Track(nil, "toolchain.RemoveToolFromVersions")()
 
-	// Load existing tool versions
-	toolVersions, err := LoadToolVersions(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to load .tool-versions: %w", err)
-	}
-
-	// Remove the tool entirely
-	delete(toolVersions.Tools, tool)
-
-	// Save back to file
-	return SaveToolVersions(filePath, toolVersions)
+	return withToolVersionsLock(filePath, func() error {
+		toolVersions, err := LoadToolVersions(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to load .tool-versions: %w", err)
+		}
+		delete(toolVersions.Tools, tool)
+		return saveToolVersionsUnlocked(filePath, toolVersions)
+	})
 }
