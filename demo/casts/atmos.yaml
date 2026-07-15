@@ -27,6 +27,11 @@ commands:
         path: "../../.context/cast-fixtures/emulator-aws"
         reset: true
       - type: workdir
+        name: backend-provisioning-fixture
+        source: "../../examples/backend-provisioning"
+        path: "../../.context/cast-fixtures/backend-provisioning"
+        reset: true
+      - type: workdir
         name: quick-start-simple-fixture
         source: "../../examples/quick-start-simple"
         path: "../../.context/cast-fixtures/quick-start-simple"
