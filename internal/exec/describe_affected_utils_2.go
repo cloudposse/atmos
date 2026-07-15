@@ -590,13 +590,14 @@ func addDependentsToAffected(
 	onlyInStack string,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) error {
 	// Resolve all stacks once and build a reverse dependency index — these are the expensive
 	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
 	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
 	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
 	// O(stacks × components) scan per affected item.
-	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+	stacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,
 		onlyInStack,
 		nil,
@@ -609,6 +610,7 @@ func addDependentsToAffected(
 		skip,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return err
@@ -804,16 +806,6 @@ func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Depen
 			if includedInDeps {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// isComponentInStackAffected checks if a component in a stack is in the affected list, recursively.
-func isComponentInStackAffected(affectedList []schema.Affected, stackSlug string) bool {
-	for i := range affectedList {
-		if affectedList[i].StackSlug == stackSlug {
-			return true
 		}
 	}
 	return false

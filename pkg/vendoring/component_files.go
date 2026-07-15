@@ -81,5 +81,6 @@ const ComponentManifestVersionPath = "spec.source.version"
 func SetComponentManifestVersion(file, ver string) error {
 	defer perf.Track(nil, "vendoring.SetComponentManifestVersion")()
 
-	return atmosyaml.SetFileWithType(file, ComponentManifestVersionPath, ver, atmosyaml.TypeString)
+	_, err := atmosyaml.SetFileWithType(file, ComponentManifestVersionPath, ver, atmosyaml.TypeString)
+	return err
 }

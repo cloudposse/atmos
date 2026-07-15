@@ -249,6 +249,30 @@ func WithTypeFlag(options *[]flags.Option) {
 	)
 }
 
+// WithTagsFlag adds a tags filter flag (comma-separated, matches any).
+// Used by: components.
+func WithTagsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithTagsFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("tags", "", "", "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithEnvVars("tags", "ATMOS_COMPONENT_TAGS"),
+	)
+}
+
+// WithLabelsFlag adds a labels filter flag (comma-separated key=value pairs, matches all).
+// Used by: components.
+func WithLabelsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithLabelsFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithEnvVars("labels", "ATMOS_COMPONENT_LABELS"),
+	)
+}
+
 // WithComponentFlag adds component filter flag for filtering stacks by component.
 // Used by: stacks.
 func WithComponentFlag(options *[]flags.Option) {
@@ -336,6 +360,36 @@ func WithProcessFunctionsFlag(options *[]flags.Option) {
 		*options,
 		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+	)
+}
+
+// WithErrorModeFlag adds the --error-mode flag controlling how recoverable YAML-function
+// failures (e.g. a Terraform backend that has not been provisioned yet) are handled during
+// processing. Named to match this codebase's existing --failure-mode convention (see
+// cmd/terraform/{plan,apply,destroy,deploy}.go) rather than introducing a second
+// "-mode"-suffixed flag naming style.
+//
+//	warn (default): substitute (computed) for the unresolved value, and print one summary
+//	    warning at the end of the command if anything was degraded.
+//	silent: same substitution as warn, but no summary warning is printed. Full detail is
+//	    still available via --logs-level=Debug in either mode.
+//	strict: fail immediately, matching this feature's original (pre-default-flip) behavior.
+//
+// The Go-level default is intentionally "" (not "warn"): an unset flag/env value must be
+// distinguishable from an explicit choice so exec.ResolveErrorMode can fall back to
+// atmos.yaml's `list.error_mode` before finally defaulting to "warn". Callers must call
+// exec.ResolveErrorMode(v.GetString("error-mode"), atmosConfig.List.ErrorMode) after loading
+// atmosConfig.
+//
+// Used by: stacks, components, settings.
+func WithErrorModeFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithErrorModeFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("error-mode", "", "", "How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): warn (degrade + summary, default), silent (degrade, no summary), or strict (fail immediately). Defaults to atmos.yaml's list.error_mode, or warn"),
+		flags.WithEnvVars("error-mode", "ATMOS_LIST_ERROR_MODE"),
+		flags.WithValidValues("error-mode", "strict", "warn", "silent"),
 	)
 }
 

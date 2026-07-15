@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -19,6 +20,12 @@ import (
 type UnsetMarker struct {
 	IsUnset bool
 }
+
+// DegradationWarning describes one YAML function value that could not be resolved and
+// was substituted with degradation.AtmosComputedValue under a lenient (warn) processing
+// pass. See ProcessCustomYamlTagsLenient. Alias kept so existing internal/exec code and
+// callers don't need to change; degradation.Warning is the canonical type.
+type DegradationWarning = degradation.Warning
 
 func ProcessCustomYamlTags(
 	atmosConfig *schema.AtmosConfiguration,
@@ -42,7 +49,35 @@ func ProcessCustomYamlTags(
 	// so the context is empty when the top-level walk returns. Callers that need a
 	// hard reset (e.g., test isolation) can call ClearResolutionContext explicitly.
 	resolutionCtx := GetOrCreateResolutionContext()
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, nil)
+}
+
+// ProcessCustomYamlTagsLenient behaves like ProcessCustomYamlTags, except that when a
+// per-value YAML function error is classified recoverable (see isRecoverableTerraformError;
+// currently a Terraform backend/state that has not been provisioned yet), it substitutes
+// degradation.AtmosComputedValue{} for that value, invokes onWarning with details, and
+// continues processing sibling keys and the rest of the tree instead of failing the whole call.
+//
+// Non-recoverable errors (auth failures, malformed YAML, misconfiguration, etc.) still fail
+// the whole call, exactly like ProcessCustomYamlTags — this deliberately does not blanket-catch
+// every error. A nil onWarning is allowed; degraded values are then substituted silently.
+//
+//nolint:revive // argument-limit: mirrors ProcessCustomYamlTags's 5 args plus the degradation callback.
+func ProcessCustomYamlTagsLenient(
+	atmosConfig *schema.AtmosConfiguration,
+	input schema.AtmosSectionMapType,
+	currentStack string,
+	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
+	onWarning func(DegradationWarning),
+) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsLenient")()
+	if onWarning == nil {
+		onWarning = func(DegradationWarning) {}
+	}
+
+	resolutionCtx := GetOrCreateResolutionContext()
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, onWarning)
 }
 
 func ProcessCustomYamlTagsWithContext(
@@ -55,7 +90,7 @@ func ProcessCustomYamlTagsWithContext(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsWithContext")()
 
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, nil)
 }
 
 func processNodes(
@@ -65,9 +100,14 @@ func processNodes(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (map[string]any, error) {
-	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo)
+	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo, nil)
 }
 
+// processNodesWithContext walks data and resolves every YAML function it finds. When
+// onWarning is non-nil, per-value errors classified recoverable by isRecoverableTerraformError
+// are tolerated: the value becomes degradation.AtmosComputedValue{}, onWarning is invoked
+// with details, and the walk continues. All other errors — and every error when onWarning
+// is nil — still abort the whole call, matching the original strict behavior.
 func processNodesWithContext(
 	atmosConfig *schema.AtmosConfiguration,
 	data map[string]any,
@@ -75,6 +115,7 @@ func processNodesWithContext(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
+	onWarning func(DegradationWarning),
 ) (map[string]any, error) {
 	newMap := make(map[string]any)
 	var firstErr error
@@ -90,6 +131,19 @@ func processNodesWithContext(
 		case string:
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
+				if onWarning != nil && isRecoverableTerraformError(err) {
+					component := ""
+					if stackInfo != nil {
+						component = stackInfo.Component
+					}
+					onWarning(DegradationWarning{
+						Stack:     currentStack,
+						Component: component,
+						Function:  v,
+						Reason:    err.Error(),
+					})
+					return degradation.AtmosComputedValue{}
+				}
 				log.Debug(
 					"Error processing YAML function",
 					"value", v,
@@ -365,6 +419,32 @@ func processSimpleTags(
 			return nil, true, err
 		}
 		return res, true, nil
+	}
+	// !tags/!labels family - no arguments; check the longer .keys/.values
+	// suffixes before the bare !labels match.
+	if exactTagSkipped(input, u.AtmosYamlFuncTags, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncTags && !skipFunc(skip, u.AtmosYamlFuncTags) {
+		return processTagTags(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabelsKeys, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabelsKeys && !skipFunc(skip, u.AtmosYamlFuncLabelsKeys) {
+		return processTagLabelsKeys(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabelsValues, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabelsValues && !skipFunc(skip, u.AtmosYamlFuncLabelsValues) {
+		return processTagLabelsValues(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabels, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabels && !skipFunc(skip, u.AtmosYamlFuncLabels) {
+		return processTagLabels(atmosConfig, input, stackInfo), true, nil
 	}
 	return nil, false, nil
 }

@@ -42,6 +42,12 @@
     },
     "diagnostics": {
       "$ref": "#/definitions/diagnostics"
+    },
+    "list": {
+      "$ref": "#/definitions/list"
+    },
+    "describe": {
+      "$ref": "#/definitions/describe"
     }
   },
   "additionalProperties": true,
@@ -820,6 +826,40 @@
           "required": []
         }
       ]
+    },
+    "list": {
+      "title": "list",
+      "description": "Configuration for the `list` commands (list stacks, list components, list settings, list affected).",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "error_mode": {
+          "type": "string",
+          "description": "Project-wide default for the list commands' --error-mode flag: how to handle a recoverable per-value YAML function error (e.g. a Terraform backend/state that could not be resolved). Overridden by an explicit --error-mode flag or the ATMOS_LIST_ERROR_MODE env var.",
+          "enum": [
+            "strict",
+            "warn",
+            "silent"
+          ]
+        }
+      }
+    },
+    "describe": {
+      "title": "describe",
+      "description": "Configuration for the `describe` commands (describe stacks, describe affected, describe dependents).",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "error_mode": {
+          "type": "string",
+          "description": "Project-wide default for the describe commands' --error-mode flag: how to handle a recoverable per-value YAML function error (e.g. a Terraform backend/state that could not be resolved). Overridden by an explicit --error-mode flag or the ATMOS_DESCRIBE_ERROR_MODE env var.",
+          "enum": [
+            "strict",
+            "warn",
+            "silent"
+          ]
+        }
+      }
     },
     "diagnostics": {
       "title": "diagnostics",

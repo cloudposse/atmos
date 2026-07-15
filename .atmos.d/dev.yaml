@@ -132,7 +132,7 @@ commands:
             steps:
               - type: spin
                 title: Generating NOTICE from Go dependency licenses
-                command: ./scripts/generate-notice.sh
+                command: cd "$(git rev-parse --show-toplevel)" && ./scripts/generate-notice.sh
                 timeout: 10m
               - type: toast
                 level: success

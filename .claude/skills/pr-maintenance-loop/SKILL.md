@@ -88,7 +88,8 @@ This is the literal text re-enqueued every cycle via `/loop 60m`:
   invocable directly for a one-shot run without a recurring loop.
 - **[`say` skill](../say/SKILL.md)** — audible human-attention nudges; see `fix-all` for the
   trigger list.
-- **[`pull-request` skill](../pull-request/SKILL.md)** — the human-attended PR workflow (labels,
-  blog posts, signing setup).
+- **[`pull-request` skill](../pull-request/SKILL.md)** — owns the label decision tree `fix-all`
+  applies autonomously each cycle, plus the still human-attended parts of the PR workflow (blog
+  posts, signing setup).
 - `.claude/settings.json` — the permissions allowlist that enforces `fix-all`'s hard prohibitions
   when it runs unattended from this loop.

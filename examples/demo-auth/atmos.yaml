@@ -39,16 +39,21 @@ auth:
     oidc:
       kind: github/oidc
       region: us-east-1
+      # Tags are plain, user-defined labels — used by `--tags` on
+      # `atmos auth list|login|logout` to filter/select providers and identities.
+      tags: [ci, github]
       spec:
         audience: sts.us-east-1.amazonaws.com
     idp-acme-saml:
       kind: aws/saml
       url: https://mock
       region: us-east-1
+      tags: [enterprise, saml]
     idp-acme-sso:
       kind: aws/iam-identity-center
       start_url: https://mock
       region: us-east-1
+      tags: [enterprise, sso]
 
   identities:
     # Used in tests
@@ -58,6 +63,7 @@ auth:
         provider: oidc
       principal:
         assume_role: arn:aws:iam::111111111111:role/ExampleRole
+      tags: [ci, automation]
 
     # Example identities mapping to providers
     saml:
@@ -66,6 +72,7 @@ auth:
         provider: idp-acme-saml
       principal:
         assume_role: arn:aws:iam::111111111111:role/ExampleRole
+      tags: [enterprise]
 
     sso:
       kind: aws/assume-role
@@ -73,9 +80,11 @@ auth:
         provider: idp-acme-sso
       principal:
         assume_role: arn:aws:iam::111111111111:role/ExampleRole
+      tags: [enterprise]
 
     superuser:
       enabled: false
       kind: aws/user
       credentials:
         region: us-east-1
+      tags: [break-glass]
