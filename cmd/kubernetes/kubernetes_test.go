@@ -69,6 +69,9 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, applyCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("output-dir"))
 	assert.Nil(t, applyCmd.Flag("split"))
+	assert.NotNil(t, applyCmd.ValidArgsFunction)
+	require.NoError(t, applyCmd.Args(applyCmd, nil), "the missing component must reach the interactive prompt flow")
+	require.Error(t, applyCmd.Args(applyCmd, []string{"app", "extra"}))
 
 	validateCmd := newOperationCommand("validate", "Validate")
 	assert.NotNil(t, validateCmd.Flag("server"), "expected validate to register --server")

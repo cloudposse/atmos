@@ -12,7 +12,7 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "**/*"
+    - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{ .vars.stage }}"
@@ -21,8 +21,8 @@ logs:
   file: "/dev/stderr"
   level: Info
 
-# A single aws/emulator identity binds every component to the local sandbox.
-# `atmos emulator up aws -s <stack>` starts the emulator; both the Terraform
+# A single aws/emulator identity binds every component to the `local/aws` sandbox.
+# `atmos emulator up aws -s local` starts the emulator; both the Terraform
 # provider-config contributor AND the `atmos terraform backend` provisioner
 # resolve this identity's live endpoint automatically — no providers.tf, no
 # endpoint configuration, no hand-rolled docker-compose.
@@ -30,7 +30,7 @@ auth:
   identities:
     local-aws:
       kind: aws/emulator
-      emulator: aws
+      emulator: local/aws
       default: true
 
 # Custom CLI commands
@@ -42,16 +42,14 @@ commands:
       # dev - full backend lifecycle. `list`/`describe` are excluded: both are wired up on
       # the CLI (flags, --stack) but their underlying provisioner logic is still a stub
       # ("not yet implemented") as of this writing — see the README for details.
-      - atmos emulator up aws -s dev
+      - atmos emulator up aws -s local
       - atmos terraform backend create demo -s dev
       - atmos terraform backend update demo -s dev
       - atmos terraform backend delete demo -s dev --force
-      - atmos emulator down aws -s dev
       # staging - prove --stack correctly targets a second, independent stack.
-      - atmos emulator up aws -s staging
       - atmos terraform backend create demo -s staging
       - atmos terraform backend delete demo -s staging --force
-      - atmos emulator down aws -s staging
+      - atmos emulator down aws -s local
 
   - name: "terraform"
     commands:

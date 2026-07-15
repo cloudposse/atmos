@@ -52,7 +52,7 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
-	stacks, err := ExecuteDescribeStacks(
+	stacks, err := ExecuteDescribeStacksWithMocks(
 		&atmosConfig,
 		info.Stack,
 		nil, // all components
@@ -64,6 +64,7 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		false,
 		info.Skip,
 		authManager,
+		info.UseMocks,
 	)
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)

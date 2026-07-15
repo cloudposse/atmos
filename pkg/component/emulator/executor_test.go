@@ -499,6 +499,7 @@ func TestStatusDot(t *testing.T) {
 		{name: "unhealthy is muted", status: "Up (unhealthy)", want: styles.Muted.Render(dot)},
 		{name: "exited is muted", status: "Exited (0)", want: styles.Muted.Render(dot)},
 		{name: "dead is muted", status: "Dead", want: styles.Muted.Render(dot)},
+		{name: "not running is muted", status: "not running", want: styles.Muted.Render(dot)},
 		{name: "unknown is muted", status: "created", want: styles.Muted.Render(dot)},
 		{name: "empty is muted", status: "", want: styles.Muted.Render(dot)},
 	}

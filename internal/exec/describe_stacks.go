@@ -235,7 +235,26 @@ func ExecuteDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 ) (map[string]any, error) {
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, DescribeStacksErrorOptions{})
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, false, DescribeStacksErrorOptions{})
+}
+
+// ExecuteDescribeStacksWithMocks processes stacks with Terraform lookup mocks enabled.
+// It is used by Terraform's multi-component plan path; callers must opt in explicitly.
+func ExecuteDescribeStacksWithMocks(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	useMocks bool,
+) (map[string]any, error) {
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, DescribeStacksErrorOptions{})
 }
 
 // ExecuteDescribeStacksWithAuthDisabled processes stack manifests with auth explicitly disabled.
@@ -257,7 +276,27 @@ func ExecuteDescribeStacksWithAuthDisabled(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithAuthDisabled")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, DescribeStacksErrorOptions{})
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, DescribeStacksErrorOptions{})
+}
+
+// ExecuteDescribeStacksWithAuthDisabledAndMocks is the auth-disabled variant used
+// by affected Terraform plan execution when --use-mocks is selected.
+func ExecuteDescribeStacksWithAuthDisabledAndMocks(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	useMocks bool,
+) (map[string]any, error) {
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, useMocks, DescribeStacksErrorOptions{})
 }
 
 // ExecuteDescribeStacksWithOptions is ExecuteDescribeStacksWithAuthDisabled plus opt-in
@@ -285,7 +324,7 @@ func ExecuteDescribeStacksWithOptions(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithOptions")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, errOptions)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, errOptions)
 }
 
 //nolint:revive // Internal wrapper preserves the existing ExecuteDescribeStacks call shape.
@@ -302,6 +341,7 @@ func executeDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	useMocks bool,
 	errOptions DescribeStacksErrorOptions,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
@@ -320,6 +360,7 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	processor.useMocks = useMocks
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
 	}

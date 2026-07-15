@@ -6,6 +6,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
+// componentPromptParsers owns the positional parser for each lifecycle verb.
+// Each parser is command-scoped because StandardParser retains the Cobra command
+// it parses, including inherited flags such as --stack.
+var componentPromptParsers = map[*cobra.Command]*flags.StandardParser{}
+
 // newVerbCmd builds an emulator subcommand that takes a required `component`
 // positional argument and dispatches to the emulator component provider. The
 // positional-args validator is separator-aware: pass-through args after "--"
@@ -22,14 +27,22 @@ func newVerbCmd(name, short, long string) *cobra.Command {
 
 	argsBuilder := flags.NewPositionalArgsBuilder()
 	argsBuilder.AddArg(&flags.PositionalArgSpec{
-		Name:        "component",
-		Description: "Emulator component",
-		Required:    true,
-		TargetField: "Component",
+		Name:           "component",
+		Description:    "Emulator component",
+		Required:       true,
+		TargetField:    "Component",
+		CompletionFunc: componentArgCompletion,
+		PromptTitle:    "Choose an emulator component",
 	})
-	_, validator, usage := argsBuilder.Build()
+	specs, validator, usage := argsBuilder.Build()
 	cmd.Use = name + " " + usage
-	cmd.Args = validator
+
+	parser := flags.NewStandardParser(
+		flags.WithPositionalArgPrompt("component", "Choose an emulator component", componentArgCompletion),
+	)
+	parser.SetPositionalArgs(specs, validator, usage)
+	parser.RegisterFlags(cmd)
+	componentPromptParsers[cmd] = parser
 
 	return cmd
 }

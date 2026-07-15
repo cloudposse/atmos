@@ -1,15 +1,16 @@
 package emulator
 
 import (
+	"context"
 	"sort"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
-	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -42,7 +43,7 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, _ string) ([]string,
 			return stacks, cobra.ShellCompDirectiveNoFileComp
 		}
 	}
-	stacks, err := stackNamesForCompletion(&atmosConfig)
+	stacks, err := emulatorStackNames(&atmosConfig)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -50,10 +51,17 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, _ string) ([]string,
 }
 
 func emulatorStackNamesForComponent(atmosConfig *schema.AtmosConfiguration, component string) ([]string, error) {
+	return emulatorStackNames(atmosConfig, component)
+}
+
+// emulatorStackNames lists only stacks that configure an emulator. When a
+// component is given, results are narrowed to that component; when it is empty,
+// it powers the initial stack prompt before a component has been selected.
+func emulatorStackNames(atmosConfig *schema.AtmosConfiguration, component ...string) ([]string, error) {
 	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig,
 		"",
-		[]string{component},
+		component,
 		[]string{cfg.EmulatorComponentType},
 		nil,
 		false,
@@ -82,8 +90,10 @@ func emulatorStackNamesForComponent(atmosConfig *schema.AtmosConfiguration, comp
 		if !ok {
 			continue
 		}
-		if _, ok := emulators[component]; !ok {
-			continue
+		if len(component) > 0 {
+			if _, ok := emulators[component[0]]; !ok {
+				continue
+			}
 		}
 		name, ok := stackNameForCompletion(atmosConfig, stackFileName, stackMap)
 		if ok {
@@ -189,7 +199,7 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	components, err := l.FilterAndListComponents(stack, stacksMap)
+	components, err := component.ListAllComponents(context.Background(), cfg.EmulatorComponentType, stacksMap)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

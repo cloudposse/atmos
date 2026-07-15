@@ -89,9 +89,11 @@ func TestEmulatorSubcommandsHaveRunEAndValidator(t *testing.T) {
 		seen[c.Name()] = true
 		require.NotNil(t, c.RunE, "subcommand %q should have a RunE", c.Name())
 		require.NotNil(t, c.Args, "subcommand %q should have a positional validator", c.Name())
-		// Each verb requires exactly one component positional argument.
-		require.Error(t, c.Args(c, []string{}), "subcommand %q should require a component", c.Name())
+		// Prompt-aware validation lets RunE ask for a missing component before
+		// the parser enforces the required argument.
+		require.NoError(t, c.Args(c, []string{}), "subcommand %q should defer a missing component to the prompt flow", c.Name())
 		require.NoError(t, c.Args(c, []string{"aws"}), "subcommand %q should accept one component", c.Name())
+		require.Error(t, c.Args(c, []string{"aws", "extra"}), "subcommand %q should reject extra positional arguments", c.Name())
 	}
 	for name := range wantSubcommands {
 		assert.True(t, seen[name], "expected subcommand %q to be registered", name)

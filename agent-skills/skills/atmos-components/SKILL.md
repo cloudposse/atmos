@@ -428,13 +428,25 @@ import:
 Components can access outputs from other components using the `remote-state` module or YAML functions:
 
 ```yaml
-# Using YAML function
+# Using YAML functions (state access is the fastest option)
 components:
   terraform:
     eks-cluster:
       vars:
-        vpc_id: !terraform.output vpc vpc_id
-        subnet_ids: !terraform.output vpc private_subnet_ids
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids
+```
+
+For a cold `terraform plan --all`, upstream state may not exist yet even though component
+dependencies establish deployment order. Put a provider-valid fallback in the YQ expression; the
+real state value supersedes it after the upstream component deploys:
+
+```yaml
+components:
+  terraform:
+    eks-cluster:
+      vars:
+        vpc_id: !terraform.state vpc '.vpc_id // "vpc-mock"'
 ```
 
 For the Terraform-side approach, use the `remote-state` module:

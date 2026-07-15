@@ -769,6 +769,11 @@
                 }
               }
             },
+            "mocks": {
+              "type": "object",
+              "description": "Literal Terraform output values used by !terraform.state and !terraform.output when --use-mocks is set.",
+              "additionalProperties": true
+            },
             "env": {
               "$ref": "#/definitions/env"
             },

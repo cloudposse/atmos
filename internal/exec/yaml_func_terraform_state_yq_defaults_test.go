@@ -156,6 +156,69 @@ func TestHasYqDefault(t *testing.T) {
 	}
 }
 
+func TestParseTerraformStateArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           string
+		currentStack   string
+		wantComponent  string
+		wantStack      string
+		wantExpression string
+	}{
+		{
+			name:           "legacy component and output",
+			args:           "kms-key key_arn",
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: "key_arn",
+		},
+		{
+			name:           "legacy component stack and output",
+			args:           "kms-key plat-ue2-prod key_arn",
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-prod",
+			wantExpression: "key_arn",
+		},
+		{
+			name:           "single quoted expression with a default",
+			args:           `kms-key '.key_arn // "mock-value"'`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+		{
+			name:           "whole YAML value quoted before parsing",
+			args:           `kms-key .key_arn // "mock-value"`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+		{
+			name:           "stack with single quoted expression and a default",
+			args:           `kms-key plat-ue2-prod '.key_arn // "mock-value"'`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-prod",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			component, stack, expression, err := parseTerraformStateArgs(tt.args, tt.currentStack)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantComponent, component)
+			assert.Equal(t, tt.wantStack, stack)
+			assert.Equal(t, tt.wantExpression, expression)
+		})
+	}
+}
+
 // TestTerraformState_YqDefaultWhenBackendReturnsNil verifies that YQ default
 // values work when the backend returns nil (component not provisioned).
 // The mock returns the ErrTerraformStateNotProvisioned sentinel error to simulate

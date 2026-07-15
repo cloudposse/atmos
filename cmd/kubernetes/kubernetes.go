@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -90,17 +92,40 @@ func (p *CommandProvider) IsExperimental() bool {
 }
 
 func newOperationCommand(name string, short string) *cobra.Command {
+	var parser *flags.StandardParser
 	cmd := &cobra.Command{
 		Use:   name + " [component]",
-		Args:  validateOperationArgs,
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runOperation(cmd, name, args)
+			parsed, err := parser.Parse(context.Background(), args)
+			if err != nil {
+				return err
+			}
+			return runOperation(cmd, name, parsed.GetPositionalArgs())
 		},
 	}
 
-	// Register operation-specific flags through the standard parser for CLI consistency.
-	flags.NewStandardParser(operationFlagOptions(name)...).RegisterFlags(cmd)
+	options := operationFlagOptions(name)
+	options = append(options, flags.WithConditionalPositionalArgPrompt(
+		"component",
+		"Choose a Kubernetes component",
+		componentArgCompletion,
+		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
+	))
+	parser = flags.NewStandardParser(options...)
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:           "component",
+		Description:    "Kubernetes component",
+		Required:       true,
+		TargetField:    "Component",
+		CompletionFunc: componentArgCompletion,
+		PromptTitle:    "Choose a Kubernetes component",
+	})
+	specs, _, usage := argsBuilder.Build()
+	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
+	parser.RegisterFlags(cmd)
+	cmd.ValidArgsFunction = componentArgCompletion
 
 	return cmd
 }
@@ -148,6 +173,37 @@ func operationFlagOptions(name string) []flags.Option {
 	}
 
 	return options
+}
+
+func hasSelectionFlags(cmd *cobra.Command) bool {
+	all, _ := cmd.Flags().GetBool(flagAll)
+	affected, _ := cmd.Flags().GetBool(flagAffected)
+	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
+	labelsFlag, _ := cmd.Flags().GetString("labels")
+	return all || affected || len(tagsFlag) > 0 || labelsFlag != ""
+}
+
+// componentArgCompletion returns names for native Kubernetes components,
+// optionally limited to the selected stack.
+func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	info := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.KubernetesComponentType}, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	components, err := component.ListAllComponents(context.Background(), cfg.KubernetesComponentType, stacksMap)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return components, cobra.ShellCompDirectiveNoFileComp
 }
 
 func validateOperationArgs(cmd *cobra.Command, args []string) error {

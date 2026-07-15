@@ -21,5 +21,5 @@ components:
             queue_url: .queue_url
       vars:
         name: events
-        # Read the SNS topic ARN straight from the sns-topic component's Terraform state.
-        topic_arn: !terraform.state sns-topic ".topic_arn // ""pending"""
+        # Real state supersedes this deterministic plan-time placeholder.
+        topic_arn: !terraform.state sns-topic '.topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"'

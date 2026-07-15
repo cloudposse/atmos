@@ -174,7 +174,6 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	if err := emulatorParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
 		return err
 	}
-	info := initConfigAndStacksInfo(cmd, subCommand, args)
 	if requiresStack(subCommand) {
 		parsed, err := emulatorParser.Parse(context.Background(), args)
 		if err != nil {
@@ -183,9 +182,24 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 		// Interactive selections only live in the parsed result. Carry the
 		// value forward explicitly rather than mutating global Viper state.
 		if parsed.Stack != "" {
-			info.Stack = parsed.Stack
+			if stackFlag := cmd.Flag("stack"); stackFlag != nil {
+				if err := stackFlag.Value.Set(parsed.Stack); err != nil {
+					return err
+				}
+			}
 		}
 	}
+	if parser, ok := componentPromptParsers[cmd]; ok {
+		parsed, err := parser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+		positional, _ := flags.SplitArgsAtDash(cmd, args)
+		if len(positional) == 0 && len(parsed.GetPositionalArgs()) > 0 {
+			args = append([]string{parsed.Component}, args...)
+		}
+	}
+	info := initConfigAndStacksInfo(cmd, subCommand, args)
 	provider := component.MustGetProvider(cfg.EmulatorComponentType)
 	return provider.Execute(&component.ExecutionContext{
 		ComponentType:       cfg.EmulatorComponentType,

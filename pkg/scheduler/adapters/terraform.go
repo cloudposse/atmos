@@ -193,6 +193,9 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 	finalizeTerraformCIResults(opts.Info, result, timings)
 	if result.Err != nil {
+		if skipped := skippedResultCount(result); skipped > 0 {
+			ui.Warningf("%d component(s) skipped after an earlier failure", skipped)
+		}
 		return result.Err
 	}
 
@@ -203,6 +206,19 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
+}
+
+func skippedResultCount(result *scheduler.AggregateResult) int {
+	if result == nil {
+		return 0
+	}
+	count := 0
+	for _, nodeResult := range result.Results {
+		if nodeResult.Status == scheduler.StatusSkipped {
+			count++
+		}
+	}
+	return count
 }
 
 // BuildTerraformGraph builds a Terraform component graph from described stacks.

@@ -30,13 +30,11 @@ components:
             required: true
       vars:
         name: app
-        # Every coordinate is read straight from the upstream component's Terraform
-        # state, so there are no hand-derived ARNs/names that can drift from what was
-        # actually deployed (and nothing AWS-account- or endpoint-specific is hardcoded).
-        kms_key_arn: !terraform.state kms-key ".key_arn // ""pending"""
-        bucket_id: !terraform.state s3-bucket ".bucket_id // ""pending"""
-        table_name: !terraform.state dynamodb-table ".table_name // ""pending"""
-        topic_arn: !terraform.state sns-topic ".topic_arn // ""pending"""
-        queue_url: !terraform.state sqs-queue ".queue_url // ""pending"""
+        # Real upstream state supersedes these deterministic plan-time placeholders.
+        kms_key_arn: !terraform.state kms-key '.key_arn // "arn:aws:kms:{{ .vars.region }}:000000000000:key/00000000-0000-0000-0000-000000000000"'
+        bucket_id: !terraform.state s3-bucket '.bucket_id // "mock-assets"'
+        table_name: !terraform.state dynamodb-table '.table_name // "mock-state"'
+        topic_arn: !terraform.state sns-topic '.topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"'
+        queue_url: !terraform.state sqs-queue '.queue_url // "http://localhost:4566/000000000000/mock-events"'
         api_key: !secret API_KEY
         db_password: !secret DB_CONFIG | path ".password"

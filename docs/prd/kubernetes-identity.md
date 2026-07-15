@@ -73,7 +73,7 @@ auth:
     # 3) Harvested from a running emulator (k3s/k3d/kind).
     local-k8s:
       kind: kubernetes/emulator
-      emulator: k3s
+      emulator: local/k3s
 ```
 
 - **`kubernetes/kubeconfig`** — read an existing kubeconfig (file path or inline data), minify to the

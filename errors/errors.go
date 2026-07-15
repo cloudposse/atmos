@@ -503,6 +503,7 @@ var (
 	// Emulator errors.
 	ErrUnknownEmulatorDriver       = errors.New("unknown emulator driver")
 	ErrEmulatorNotRunning          = errors.New("emulator is not running")
+	ErrEmulatorAmbiguous           = errors.New("emulator identity is ambiguous")
 	ErrEmulatorTargetMismatch      = errors.New("emulator target does not match")
 	ErrEmulatorConfigInvalid       = errors.New("emulator configuration invalid")
 	ErrEmulatorResolverUnavailable = errors.New("emulator resolver is not available")

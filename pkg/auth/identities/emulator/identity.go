@@ -49,7 +49,6 @@ type Identity struct {
 	realm    string
 	config   *schema.Identity
 	resolver types.EmulatorResolver
-	stack    string
 }
 
 // New creates a new emulator identity for the given kind.
@@ -77,10 +76,6 @@ func (i *Identity) SetRealm(realm string) { i.realm = realm }
 // SetEmulatorResolver injects the process-wide emulator resolver. Part of the
 // emulatorResolverReceiver interface the auth manager duck-types against.
 func (i *Identity) SetEmulatorResolver(resolver types.EmulatorResolver) { i.resolver = resolver }
-
-// SetStack injects the stack the command runs in, used to scope the bare emulator
-// name to a concrete address. Part of the emulatorResolverReceiver interface.
-func (i *Identity) SetStack(stack string) { i.stack = stack }
 
 // Kind returns the identity kind.
 func (i *Identity) Kind() string {
@@ -165,7 +160,7 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 			errUtils.ErrEmulatorResolverUnavailable, i.Name(), i.config.Emulator)
 	}
 
-	env, kubeconfig, err := i.resolver.ResolveEmulator(ctx, i.stack, i.config.Emulator)
+	env, kubeconfig, err := i.resolver.ResolveEmulator(ctx, i.config.Emulator)
 	if err != nil {
 		return nil, fmt.Errorf("resolve emulator %q for identity %q: %w", i.config.Emulator, i.Name(), err)
 	}
@@ -211,21 +206,15 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 }
 
 // resolveEmulatorEnvForContext resolves the bound emulator's env profile for
-// populating the in-process auth context. It returns (nil, nil) when no stack is
-// available to scope the emulator instance — auth flows that don't actually need the
-// in-process context still work (the AuthContext is simply left unpopulated). A
-// resolver failure (e.g. emulator not running) is surfaced rather than swallowed, so
-// in-process consumers get a clear error here instead of failing later against the
-// real cloud with a confusing credentials error.
+// populating the in-process auth context. A resolver failure (e.g. emulator not
+// running) is surfaced rather than swallowed, so in-process consumers get a clear
+// error here instead of failing later against the real cloud with a confusing
+// credentials error.
 func (i *Identity) resolveEmulatorEnvForContext(ctx context.Context, params *types.PostAuthenticateParams) (map[string]string, error) {
-	stack := i.stack
-	if params.StackInfo != nil && params.StackInfo.Stack != "" {
-		stack = params.StackInfo.Stack
-	}
-	if stack == "" {
+	if params == nil || i.resolver == nil || i.config == nil {
 		return nil, nil
 	}
-	env, _, err := i.resolver.ResolveEmulator(ctx, stack, i.config.Emulator)
+	env, _, err := i.resolver.ResolveEmulator(ctx, i.config.Emulator)
 	if err != nil {
 		return nil, fmt.Errorf("resolve emulator %q for identity %q: %w", i.config.Emulator, i.Name(), err)
 	}

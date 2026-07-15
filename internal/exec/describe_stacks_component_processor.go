@@ -72,6 +72,7 @@ type describeStacksProcessor struct {
 	processTemplates     bool
 	processYamlFunctions bool
 	authDisabled         bool
+	useMocks             bool
 	includeEmptyStacks   bool
 	skip                 []string
 	authManager          auth.AuthManager
@@ -389,6 +390,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 	info.Context = resolvedContext
 	info.AuthDisabled = p.authDisabled
+	info.UseMocks = p.useMocks
 
 	// Filter: skip this component if it does not belong to the requested stack.
 	// Done before resolveComponentAuthManager (below) so out-of-scope components don't trigger a
@@ -445,6 +447,14 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	componentSection[componentInfoKey] = componentInfo
 	info.ComponentSection[componentInfoKey] = componentInfo
 
+	// Mocks are literal fixture data. Do not render templates or resolve YAML
+	// functions within them; doing so could reach the real dependency that the
+	// mock is intended to replace.
+	literalMocks, hasLiteralMocks := componentSection[cfg.MocksSectionName]
+	if hasLiteralMocks {
+		delete(componentSection, cfg.MocksSectionName)
+	}
+
 	// Process Go templates.
 	if p.processTemplates {
 		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings)
@@ -470,6 +480,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if err != nil {
 			return err
 		}
+	}
+	if hasLiteralMocks {
+		componentSection[cfg.MocksSectionName] = literalMocks
+		info.ComponentSection[cfg.MocksSectionName] = literalMocks
 	}
 
 	// Write the (optionally filtered) sections into the result map.

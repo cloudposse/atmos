@@ -33,6 +33,7 @@ type parserConfig struct {
 type flagPromptConfig struct {
 	PromptTitle    string         // Title for the interactive selector
 	CompletionFunc CompletionFunc // Function to get available options
+	ShouldPrompt   func(*ParsedConfig) bool
 }
 
 // WithStringFlag adds a string flag to the parser configuration.
@@ -426,6 +427,24 @@ func WithOptionalValuePrompt(flagName, promptTitle string, completionFunc Comple
 func WithPositionalArgPrompt(argName, promptTitle string, completionFunc CompletionFunc) Option {
 	defer perf.Track(nil, "flags.WithPositionalArgPrompt")()
 
+	return WithConditionalPositionalArgPrompt(argName, promptTitle, completionFunc, nil)
+}
+
+// WithConditionalPositionalArgPrompt enables interactive prompting for a missing
+// positional argument only when shouldPrompt returns true. Cobra still defers a
+// missing prompted argument to Parse; the command's normal positional validator
+// runs after this optional prompt has completed.
+//
+// This is useful for commands where a positional component is required for a
+// single-target operation but intentionally omitted for a bulk mode such as
+// --all or --affected.
+func WithConditionalPositionalArgPrompt(
+	argName, promptTitle string,
+	completionFunc CompletionFunc,
+	shouldPrompt func(*ParsedConfig) bool,
+) Option {
+	defer perf.Track(nil, "flags.WithConditionalPositionalArgPrompt")()
+
 	return func(cfg *parserConfig) {
 		if cfg.positionalPrompts == nil {
 			cfg.positionalPrompts = make(map[string]*flagPromptConfig)
@@ -433,6 +452,7 @@ func WithPositionalArgPrompt(argName, promptTitle string, completionFunc Complet
 		cfg.positionalPrompts[argName] = &flagPromptConfig{
 			PromptTitle:    promptTitle,
 			CompletionFunc: completionFunc,
+			ShouldPrompt:   shouldPrompt,
 		}
 	}
 }

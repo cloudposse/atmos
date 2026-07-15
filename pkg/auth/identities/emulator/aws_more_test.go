@@ -39,7 +39,6 @@ func TestPostAuthenticate_AWSRegionFallsBackToDefault(t *testing.T) {
 // surfaces from setAWSAuthContext rather than being swallowed.
 func TestPostAuthenticate_AWSResolverErrorPropagates(t *testing.T) {
 	id := newAWSIdentity(t)
-	id.SetStack("dev")
 	id.SetEmulatorResolver(&fakeResolver{err: errUtils.ErrEmulatorNotRunning})
 
 	ac := &schema.AuthContext{}

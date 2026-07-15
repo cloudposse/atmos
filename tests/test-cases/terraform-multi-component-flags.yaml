@@ -2,6 +2,48 @@
 # These tests verify that multi-component flags execute without prompting for component selection
 # Related to: PR #1976 - Fix --all flag prompting for component (issue #1945)
 tests:
+  # Quick starts must be able to describe their complete graph before any Terraform state exists.
+  - name: "quick-start-simple terraform plan --all dry-run"
+    enabled: true
+    tty: false
+    description: "Verify the simple quick start supports an aggregate credential-free plan"
+    workdir: "../examples/quick-start-simple"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--all"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would plan"
+        - "station"
+        - "dry run"
+
+  - name: "quick-start-advanced terraform plan --all dry-run"
+    enabled: true
+    tty: false
+    description: "Verify provider-shaped state defaults make the advanced graph plan without credentials"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--all"
+      - "-s"
+      - "plat-ue2-dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would plan"
+        - "kms-key"
+        - "app-config"
+        - "dry run"
+
   # Test --all flag with dry-run (no actual terraform execution)
   - name: "terraform plan --all executes without prompting"
     enabled: true

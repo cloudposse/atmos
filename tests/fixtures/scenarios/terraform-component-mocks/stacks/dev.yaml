@@ -1,0 +1,19 @@
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      mocks:
+        vpc_id: vpc-local
+        private_subnet_ids: [subnet-a, subnet-b]
+        network:
+          cidr: 10.0.0.0/16
+        literal_template: '{{ .Environment }}'
+        nullable_output: null
+
+    app:
+      metadata:
+        component: app
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids

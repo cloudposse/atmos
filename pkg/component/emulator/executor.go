@@ -453,20 +453,20 @@ func renderEmulatorList(statuses []emu.Status, stack string) {
 
 	if !terminal.New().IsTTY(terminal.Stdout) {
 		for _, s := range statuses {
-			ui.Writef("%s\t%s\t%s\t%s\t%s\n", s.Name, s.Stack, shortImage(s.Image), s.Status, displayID(s.ID))
+			ui.Writef("%s\t%s\t%s\t%s\n", emulatorInstanceAddress(s.Stack, s.Name), shortImage(s.Image), s.Status, displayID(s.ID))
 		}
 		return
 	}
 
 	styles := theme.GetCurrentStyles()
-	header := []string{"", "NAME", "STACK", "IMAGE", "CONTAINER ID"}
+	header := []string{"", "INSTANCE", "IMAGE", "STATUS", "CONTAINER ID"}
 	rows := make([][]string, 0, len(statuses))
 	for _, s := range statuses {
 		rows = append(rows, []string{
 			statusDot(s.Status, styles),
-			s.Name,
-			s.Stack,
+			emulatorInstanceAddress(s.Stack, s.Name),
 			shortImage(s.Image),
+			s.Status,
 			displayID(s.ID),
 		})
 	}
@@ -484,12 +484,7 @@ func displayID(id string) string {
 // running (green) or not (muted).
 func statusDot(status string, styles *theme.StyleSet) string {
 	const dot = "●"
-	s := strings.ToLower(status)
-	// Check negative states first so "unhealthy" is not matched by the "healthy" substring below.
-	if strings.Contains(s, "unhealthy") || strings.Contains(s, "exited") || strings.Contains(s, "dead") {
-		return styles.Muted.Render(dot)
-	}
-	if strings.Contains(s, "up") || strings.Contains(s, "running") || strings.Contains(s, "healthy") {
+	if container.IsContainerRunning(status) {
 		return styles.Success.Render(dot)
 	}
 	return styles.Muted.Render(dot)

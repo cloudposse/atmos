@@ -58,36 +58,17 @@ func processTagTerraformStateWithContext(
 		return nil, err
 	}
 
-	var component string
-	var stack string
-	var output string
-
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
+	component, stack, output, err := parseTerraformStateArgs(str, currentStack)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
-		stack = currentStack
-		output = strings.TrimSpace(parts[1])
+	if stack == currentStack {
 		log.Debug(
 			"Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
-	default:
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// Check for circular dependencies if resolution context is provided.
@@ -106,6 +87,10 @@ func processTagTerraformStateWithContext(
 
 		// Defer pop to ensure we clean up even if there's an error.
 		defer resolutionCtx.Pop(atmosConfig)
+	}
+
+	if value, mocked, mockErr := resolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
+		return value, mockErr
 	}
 
 	// Extract authContext and authManager from stackInfo if available.
@@ -141,4 +126,74 @@ func processTagTerraformStateWithContext(
 	}
 
 	return value, nil
+}
+
+// parseTerraformStateArgs parses a terraform.state function invocation. It preserves the legacy
+// CSV-style quoting parser, then accepts an unquoted YQ expression containing whitespace. The
+// latter is what YAML supplies for whole-value quoted functions, for example:
+//
+//	kms_key_arn: !terraform.state kms-key '.key_arn // "mock-value"'
+func parseTerraformStateArgs(args string, currentStack string) (component string, stack string, output string, err error) {
+	parts, splitErr := u.SplitStringByDelimiter(args, ' ')
+	if splitErr == nil {
+		switch len(parts) {
+		case 3:
+			return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), strings.TrimSpace(parts[2]), nil
+		case 2:
+			return strings.TrimSpace(parts[0]), currentStack, strings.TrimSpace(parts[1]), nil
+		}
+	}
+
+	args = strings.TrimSpace(args)
+	componentEnd := strings.IndexAny(args, " \t\n\r")
+	if componentEnd <= 0 {
+		return "", "", "", errUtils.ErrYamlFuncInvalidArguments
+	}
+
+	component = args[:componentEnd]
+	remainder := strings.TrimLeft(args[componentEnd:], " \t\n\r")
+	if remainder == "" {
+		return "", "", "", errUtils.ErrYamlFuncInvalidArguments
+	}
+
+	// A YQ expression begins with one of these characters. Treat the complete remainder as
+	// the output expression so whitespace in `//` fallbacks and pipes remains intact.
+	if isTerraformStateExpressionStart(remainder[0]) {
+		return component, currentStack, trimTerraformStateExpressionQuotes(remainder), nil
+	}
+
+	stackEnd := strings.IndexAny(remainder, " \t\n\r")
+	if stackEnd <= 0 {
+		return component, currentStack, remainder, nil
+	}
+
+	stack = remainder[:stackEnd]
+	output = strings.TrimLeft(remainder[stackEnd:], " \t\n\r")
+	if output == "" {
+		return "", "", "", errUtils.ErrYamlFuncInvalidArguments
+	}
+
+	return component, stack, trimTerraformStateExpressionQuotes(output), nil
+}
+
+func isTerraformStateExpressionStart(char byte) bool {
+	switch char {
+	case '.', '|', '[', '{', '"', '\'':
+		return true
+	default:
+		return false
+	}
+}
+
+func trimTerraformStateExpressionQuotes(expression string) string {
+	expression = strings.TrimSpace(expression)
+	if len(expression) < 2 {
+		return expression
+	}
+
+	if expression[0] == '\'' && expression[len(expression)-1] == '\'' {
+		return expression[1 : len(expression)-1]
+	}
+
+	return expression
 }

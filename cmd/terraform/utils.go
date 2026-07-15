@@ -68,10 +68,32 @@ var multiComponentFlagNames = []string{"all", "affected", "components", "query",
 // before.terraform.test) operate on the chosen target instead of an empty one. With
 // explicit args or in non-interactive contexts it is a no-op beyond the normal hook run.
 func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
+	if err := validateTerraformMockFlags(cmd_); err != nil {
+		return err
+	}
 	if err := preResolveInteractiveSelection(cmd_, args); err != nil {
 		return err
 	}
 	return runHooks(event, cmd_, args)
+}
+
+// validateTerraformMockFlags rejects an invalid mock invocation before hook or
+// stack resolution. RunE repeats this validation for commands without hooks and
+// for values supplied through environment variables.
+func validateTerraformMockFlags(cmd_ *cobra.Command) error {
+	if cmd_ == nil || cmd_.Flags().Lookup("use-mocks") == nil {
+		return nil
+	}
+
+	useMocks, err := cmd_.Flags().GetBool("use-mocks")
+	if err != nil || !useMocks {
+		return err
+	}
+	processFunctions, err := cmd_.Flags().GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+	return validateTerraformMockOptions(cmd_.Name(), useMocks, processFunctions)
 }
 
 // preResolveInteractiveSelection prompts for a missing component/stack up front (when
@@ -396,6 +418,7 @@ type terraformNodeHooks struct {
 func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.Before")()
 
+	injectLastAuthContext(info)
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
@@ -408,6 +431,7 @@ func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndSta
 func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.After")()
 
+	injectLastAuthContext(info)
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
@@ -424,6 +448,21 @@ func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStac
 		n.runCIHooksForNode(&atmosConfig, info, output, execErr)
 	}
 	return hookErr
+}
+
+// injectLastAuthContext makes the credentials and endpoint selected for the
+// aggregate command available to its per-component hooks. The executor has
+// already authenticated before it creates the node info; without this bridge,
+// after hooks that read Terraform state start a fresh unauthenticated output
+// process (notably losing an emulator's S3 endpoint).
+func injectLastAuthContext(info *schema.ConfigAndStacksInfo) {
+	if info == nil || info.AuthContext != nil {
+		return
+	}
+	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
+		info.AuthContext = authCtx
+		info.AuthManager = authMgr
+	}
 }
 
 // runUserHooksForNode resolves and runs this node's user-defined hooks for a
@@ -726,6 +765,7 @@ func terraformRun(parentCmd, actualCmd *cobra.Command, args []string) error {
 func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
 	info.ProcessTemplates = opts.ProcessTemplates
 	info.ProcessFunctions = opts.ProcessFunctions
+	info.UseMocks = opts.UseMocks
 	info.Skip = opts.Skip
 	info.Components = opts.Components
 	info.Tags = opts.Tags
@@ -782,6 +822,10 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions, shellOpts ...e.ShellCommandOption) error {
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
+
+	if err := validateTerraformMockOptions(subCommand, opts.UseMocks, opts.ProcessFunctions); err != nil {
+		return err
+	}
 
 	// Validate Atmos config first to provide specific error messages.
 	if err := internal.ValidateAtmosConfig(); err != nil {
@@ -873,6 +917,19 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+func validateTerraformMockOptions(subCommand string, useMocks, processFunctions bool) error {
+	if !useMocks {
+		return nil
+	}
+	if !processFunctions {
+		return fmt.Errorf("%w: --use-mocks requires --process-functions=true", errUtils.ErrInvalidFlagValue)
+	}
+	if subCommand != "plan" {
+		return fmt.Errorf("%w: --use-mocks is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue)
+	}
+	return nil
 }
 
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy

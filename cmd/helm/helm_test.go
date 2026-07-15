@@ -43,6 +43,9 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.NotNil(t, applyCmd.Flag("target"))
 	assert.Nil(t, applyCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("split"))
+	assert.NotNil(t, applyCmd.ValidArgsFunction)
+	require.NoError(t, applyCmd.Args(applyCmd, nil), "the missing component must reach the interactive prompt flow")
+	require.Error(t, applyCmd.Args(applyCmd, []string{"app", "extra"}))
 
 	// template does not get --target; apply/deploy do.
 	assert.Nil(t, templateCmd.Flag("target"))

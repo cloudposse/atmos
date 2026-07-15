@@ -66,13 +66,14 @@ func TestComponentArgCompletion_NoProjectDegradesGracefully(t *testing.T) {
 }
 
 func TestStackFlagCompletion_ListsStacks(t *testing.T) {
-	// Run from the example project dir so config discovery finds its atmos.yaml.
+	// The initial stack prompt must show only stacks that actually configure an
+	// emulator, even before the user has selected a component.
 	t.Chdir(exampleProjectPath(t))
 	withViperBasePath(t, "")
 
 	stacks, directive := stackFlagCompletion(&cobra.Command{Use: "emulator"}, nil, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	assert.Contains(t, stacks, "dev")
+	assert.Equal(t, []string{"local"}, stacks)
 }
 
 func TestStackFlagCompletion_FiltersForEmulatorComponent(t *testing.T) {
@@ -81,7 +82,7 @@ func TestStackFlagCompletion_FiltersForEmulatorComponent(t *testing.T) {
 
 	stacks, directive := stackFlagCompletion(&cobra.Command{Use: "up"}, []string{"aws"}, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	assert.ElementsMatch(t, []string{"dev", "staging", "prod"}, stacks)
+	assert.Equal(t, []string{"local"}, stacks)
 }
 
 func TestComponentArgCompletion_ResolvesProjectPipeline(t *testing.T) {

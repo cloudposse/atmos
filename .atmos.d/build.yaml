@@ -2,12 +2,7 @@ commands:
   - name: build
     description: Build and documentation commands for Atmos development
     default: binary
-    # No working_directory here (unlike other custom commands): this command
-    # bootstraps the very first build using a pinned, possibly-older atmos
-    # release (see .github/workflows/version-tracker.yaml's
-    # ATMOS_BOOTSTRAP_VERSION), so it must not depend on YAML tags newer than
-    # that pin (e.g. !repo-root). Each step below resolves the repo root
-    # itself via `git rev-parse --show-toplevel` instead.
+    working_directory: !git.root
     env: &build_env
       - key: GOTOOLCHAIN
         value: auto
@@ -26,7 +21,9 @@ commands:
       - type: toast
         level: info
         content: Building Atmos...
-      - &build_binary_step |
+      - &build_binary_step
+        type: shell
+        command: |
           set -eu
           sh scripts/build-atmos.sh "${ATMOS_BUILD_TARGET:-default}" "${ATMOS_BUILD_VERSION:-test}"
       - &build_success_step

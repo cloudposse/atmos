@@ -165,6 +165,31 @@ func TestManifestSchema_TerraformTestFixturesHookShape(t *testing.T) {
 	}
 }
 
+func TestManifestSchema_TerraformComponentMocks(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":      loadEmbeddedSchemaBytes(t),
+		"website":       loadWebsiteSchemaBytes(t),
+		"fixture":       loadFixtureSchemaBytes(t),
+		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"stack-config":  loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts literal output map", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, terraformMocksManifest(map[string]any{
+				"id":       "vpc-local",
+				"subnets":  []any{"subnet-a", "subnet-b"},
+				"network":  map[string]any{"cidr": "10.0.0.0/16"},
+				"nullable": nil,
+			}))
+		})
+
+		t.Run(schemaName+"/rejects non-map mocks", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, terraformMocksManifest("not-a-map"))
+		})
+	}
+}
+
 func workflowManifestWithWhen(condition any) map[string]any {
 	return workflowManifestWithStep(map[string]any{
 		"command": "echo ok",
@@ -234,6 +259,18 @@ func terraformTestFixturesManifest() map[string]any {
 							"fixture_vpc_id": "vpc-123",
 						},
 					},
+				},
+			},
+		},
+	}
+}
+
+func terraformMocksManifest(mocks any) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"mocks": mocks,
 				},
 			},
 		},

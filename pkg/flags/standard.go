@@ -1011,6 +1011,9 @@ func (p *StandardFlagParser) promptForMissingPositionalArgs(result *ParsedConfig
 		if !hasPrompt {
 			continue // No prompt configured for this arg.
 		}
+		if promptConfig.ShouldPrompt != nil && !promptConfig.ShouldPrompt(result) {
+			continue
+		}
 
 		// Prompt for missing positional argument.
 		selectedValue, err := PromptForPositionalArg(

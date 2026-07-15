@@ -204,14 +204,11 @@ func NewAuthManager(
 		if receiver, ok := identity.(credentialStoreReceiver); ok {
 			receiver.SetCredentialStore(m.credentialStore)
 		}
-		// Inject the emulator resolver and the current stack into identities that
-		// target an emulator (kind: <target>/emulator), so they can resolve the
-		// running emulator's connection profile at auth time.
+		// Inject the emulator resolver into identities that target an emulator
+		// (kind: <target>/emulator), so they can resolve the running emulator's
+		// project-scoped connection profile at auth time.
 		if receiver, ok := identity.(emulatorResolverReceiver); ok {
 			receiver.SetEmulatorResolver(defaultEmulatorResolver)
-			if m.stackInfo != nil {
-				receiver.SetStack(m.stackInfo.Stack)
-			}
 		}
 	}
 

@@ -1067,7 +1067,7 @@ func TestExecuteTerraformFailsFastByDefault(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, []string{"a-fail@dev"}, executed)
 	require.Contains(t, err.Error(), "planned failure")
-	require.Contains(t, err.Error(), "fail-fast after a-fail-dev failed")
+	require.NotContains(t, err.Error(), "fail-fast after a-fail-dev failed")
 }
 
 func TestExecuteTerraformKeepGoingRunsIndependentNodes(t *testing.T) {
@@ -1094,7 +1094,7 @@ func TestExecuteTerraformKeepGoingRunsIndependentNodes(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, []string{"a-fail@dev", "c-independent@dev"}, executed)
 	require.Contains(t, err.Error(), "planned failure")
-	require.Contains(t, err.Error(), "dependency a-fail-dev failed")
+	require.NotContains(t, err.Error(), "dependency a-fail-dev failed")
 }
 
 func TestExecuteTerraformRejectsConflictingFailureModes(t *testing.T) {
@@ -1396,7 +1396,8 @@ func TestExecuteTerraformDestroyFailureBlocksPrerequisites(t *testing.T) {
 
 	require.Error(t, err)
 	require.Equal(t, []string{"app@dev"}, executed)
-	require.Contains(t, err.Error(), "dependency app-dev failed")
+	require.Contains(t, err.Error(), "destroy failed")
+	require.NotContains(t, err.Error(), "dependency app-dev failed")
 }
 
 func TestExecuteTerraformPassesSchedulerContextToExecutor(t *testing.T) {

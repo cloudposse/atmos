@@ -388,18 +388,32 @@ func skipBlocked(failedID string, states map[string]nodeState, results map[strin
 }
 
 func aggregateError(results []Result) error {
-	errs := make([]error, 0)
+	failed := make([]error, 0)
+	skipped := make([]error, 0)
 	for _, result := range results {
 		if result.Status == StatusSucceeded {
 			continue
 		}
-		if result.Err != nil {
-			errs = append(errs, result.Err)
+		err := result.Err
+		if err == nil {
+			err = nonSuccessResultError(result)
+		}
+		if result.Status == StatusSkipped {
+			skipped = append(skipped, err)
 			continue
 		}
-		errs = append(errs, nonSuccessResultError(result))
+		failed = append(failed, err)
 	}
-	return stdErrors.Join(errs...)
+
+	// Skipped nodes are consequences of a failure, not independent failures.
+	// Returning each skip cause produces one identical fail-fast message per
+	// pending DAG node and buries the actionable component error. Preserve those
+	// details on AggregateResult.Results, but surface them only when every
+	// non-success result was an explicit skip.
+	if len(failed) > 0 {
+		return stdErrors.Join(failed...)
+	}
+	return stdErrors.Join(skipped...)
 }
 
 func orderedResults(orderedIDs []string, results map[string]Result) []Result {

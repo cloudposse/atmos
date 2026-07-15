@@ -38,6 +38,5 @@ components:
         # dev/staging set `force_destroy: true` for easy teardown; prod keeps it `false`
         # and the OPA policy requires `versioning_enabled: true` in prod.
         versioning_enabled: true
-        # Read the KMS key ARN straight from the kms-key component's Terraform state,
-        # so it always matches the key that was actually deployed.
-        kms_key_arn: !terraform.state kms-key ".key_arn // ""pending"""
+        # Real state supersedes this deterministic plan-time placeholder.
+        kms_key_arn: !terraform.state kms-key '.key_arn // "arn:aws:kms:{{ .vars.region }}:000000000000:key/00000000-0000-0000-0000-000000000000"'

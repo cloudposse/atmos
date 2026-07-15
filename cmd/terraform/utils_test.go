@@ -116,6 +116,34 @@ func TestCheckTerraformFlags(t *testing.T) {
 	}
 }
 
+func TestTerraformRunWithOptionsMockGuards(t *testing.T) {
+	parent := &cobra.Command{Use: "terraform"}
+
+	err := terraformRunWithOptions(parent, &cobra.Command{Use: "apply"}, nil, &TerraformRunOptions{
+		ProcessFunctions: true,
+		UseMocks:         true,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
+
+	err = terraformRunWithOptions(parent, &cobra.Command{Use: "plan"}, nil, &TerraformRunOptions{
+		ProcessFunctions: false,
+		UseMocks:         true,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "requires --process-functions=true")
+}
+
+func TestValidateTerraformMockFlagsBeforeHooks(t *testing.T) {
+	cmd := &cobra.Command{Use: "apply"}
+	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+
+	err := validateTerraformMockFlags(cmd)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
+}
+
 // TestTerraformIdentityFlagHandling tests the identity flag handling in terraformRun.
 // Regression test for: https://github.com/cloudposse/atmos/issues/XXXX
 // Ensures that when --identity flag is NOT provided, the code doesn't try to
