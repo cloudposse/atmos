@@ -255,13 +255,13 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
 
   <FeatureCard
     icon={<RiRefreshLine />}
-    title="Automatic Component Updates"
-    tagline="Stay current without the toil"
-    description="The Component Updater GitHub Action monitors your vendored components and automatically creates pull requests when updates are available. Review changes, run tests, and merge when ready."
+    title="Native Component Updates"
+    tagline="Stay current without hand-editing pins"
+    description="The native Component Updater discovers eligible vendored-component releases, shows the upstream diff, updates version pins without rewriting YAML, and can pull the updated sources."
     benefits={[
-      "Zero manual tracking — updates come to you",
-      "Controlled upgrades — review and test before merging",
-      "Stay current with security patches and fixes"
+      "Discover eligible updates from version constraints",
+      "Review upstream changes before updating",
+      "Preserve comments, anchors, and templates in vendor manifests"
     ]}
     docLink="/integrations/github-actions/component-updater"
   />
