@@ -6,6 +6,8 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 We're excited to introduce **automatic backend provisioning** in Atmos, a feature that solves the Terraform bootstrap problem. No more manual S3 bucket creation, no more chicken-and-egg workarounds—Atmos provisions your state backend automatically with secure defaults, making it fully compatible with Terraform-managed infrastructure.
 
 <!--truncate-->
@@ -152,6 +154,12 @@ atmos terraform apply vpc --stack dev  # Only runs if provisioning succeeded
 ```
 
 Provisioning failures return non-zero exit codes, ensuring CI/CD pipelines fail fast.
+
+Here's the full `create` / `update` / `delete` lifecycle running end-to-end against a local sandbox — no AWS account required:
+
+<CastPlayer src="/casts/examples/backend-provisioning/lifecycle.cast" title="atmos terraform backend lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/backend-provisioning)
 
 ## Extensible Architecture
 
