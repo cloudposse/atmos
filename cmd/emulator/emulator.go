@@ -1,6 +1,8 @@
 package emulator
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -30,6 +32,8 @@ const (
 	flagEphemeral = "ephemeral"
 	// The flagForce is the `reset` flag that skips the confirmation prompt.
 	flagForce = "force"
+	// The flagRuntime bypasses project configuration for list/ps diagnostics.
+	flagRuntime = "runtime"
 )
 
 // emulatorCmd is the base command for all emulator subcommands.
@@ -49,7 +53,10 @@ process and is discovered by labels derived from the canonical component instanc
 }
 
 func init() {
-	emulatorParser = flags.NewStandardParser(WithEmulatorFlags())
+	emulatorParser = flags.NewStandardParser(
+		WithEmulatorFlags(),
+		flags.WithCompletionPrompt("stack", "Choose a stack", stackFlagCompletion),
+	)
 	emulatorParser.Registry().SetCompletionFunc("stack", stackFlagCompletion)
 	emulatorParser.RegisterPersistentFlags(emulatorCmd)
 	if err := emulatorParser.BindToViper(viper.GetViper()); err != nil {
@@ -164,7 +171,21 @@ func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []strin
 // runVerb is the shared dispatch for all emulator subcommands: it builds the
 // execution info and delegates to the registered emulator component provider.
 func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
+	if err := emulatorParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+		return err
+	}
 	info := initConfigAndStacksInfo(cmd, subCommand, args)
+	if requiresStack(subCommand) {
+		parsed, err := emulatorParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+		// Interactive selections only live in the parsed result. Carry the
+		// value forward explicitly rather than mutating global Viper state.
+		if parsed.Stack != "" {
+			info.Stack = parsed.Stack
+		}
+	}
 	provider := component.MustGetProvider(cfg.EmulatorComponentType)
 	return provider.Execute(&component.ExecutionContext{
 		ComponentType:       cfg.EmulatorComponentType,
@@ -176,6 +197,15 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 		Args:                info.AdditionalArgsAndFlags,
 		Flags:               verbFlags(cmd),
 	})
+}
+
+func requiresStack(subCommand string) bool {
+	switch subCommand {
+	case "up", "down", "reset", "logs", "exec":
+		return true
+	default:
+		return false
+	}
 }
 
 // verbFlags reads the subcommand-specific flags (`--ephemeral` on up, `--force`
@@ -193,6 +223,9 @@ func verbFlags(cmd *cobra.Command) map[string]any {
 		if err := resetParser.BindFlagsToViper(cmd, v); err == nil {
 			flagsMap[flagForce] = v.GetBool(flagForce)
 		}
+	}
+	if runtimeFlag := cmd.Flag(flagRuntime); runtimeFlag != nil && runtimeFlag.Value.String() == "true" {
+		flagsMap[flagRuntime] = true
 	}
 	return flagsMap
 }

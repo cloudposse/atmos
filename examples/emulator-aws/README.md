@@ -30,7 +30,7 @@ Start the sandbox, apply, then tear everything down (a container runtime — Doc
 is the only prerequisite):
 
 ```shell
-atmos emulator up aws -s dev          # start the local sandbox for the `dev` stack
+atmos emulator up aws                 # choose the local stack interactively (or pass -s dev)
 atmos terraform apply demo -s dev     # provision the S3 bucket against the emulator
 atmos terraform output demo -s dev    # inspect outputs
 
@@ -38,7 +38,12 @@ atmos terraform destroy demo -s dev   # remove the resources
 atmos emulator down aws -s dev        # stop and remove the sandbox container
 ```
 
-Other lifecycle verbs: `atmos emulator ps aws -s dev` (status) and `atmos emulator logs aws -s dev`.
+`atmos emulator list` inventories every AWS emulator component configured by this
+example (including instances that have not been started); `atmos emulator ps` shows
+the running subset. Add `-s dev` to scope either command. For raw container-runtime
+diagnostics, including stale containers from other projects, use `--runtime`.
+
+Other lifecycle verbs include `atmos emulator logs aws -s dev`.
 
 The `atmos test` custom command runs the full apply/destroy lifecycle across the `dev`,
 `staging`, and `prod` stacks.

@@ -79,7 +79,7 @@ func TestEmulatorCommandStructure(t *testing.T) {
 
 func TestEmulatorSubcommandsHaveRunEAndValidator(t *testing.T) {
 	wantSubcommands := map[string]bool{
-		"up": true, "down": true, "reset": true, "ps": true, "logs": true, "exec": true,
+		"up": true, "down": true, "reset": true, "logs": true, "exec": true,
 	}
 	seen := map[string]bool{}
 	for _, c := range emulatorCmd.Commands() {
@@ -95,6 +95,14 @@ func TestEmulatorSubcommandsHaveRunEAndValidator(t *testing.T) {
 	}
 	for name := range wantSubcommands {
 		assert.True(t, seen[name], "expected subcommand %q to be registered", name)
+	}
+}
+
+func TestEmulatorInspectionVerbsTakeNoComponent(t *testing.T) {
+	for _, c := range []*cobra.Command{listCmd, psCmd} {
+		require.NoError(t, c.Args(c, []string{}), "%s should not require a component", c.Name())
+		require.Error(t, c.Args(c, []string{"aws"}), "%s should reject a component", c.Name())
+		require.NotNil(t, c.Flags().Lookup(flagRuntime), "%s should support --runtime", c.Name())
 	}
 }
 
@@ -131,6 +139,10 @@ func TestVerbFlags_MapsEphemeralAndForce(t *testing.T) {
 	t.Cleanup(func() { _ = resetCmd.Flags().Set("force", "false") })
 	gotReset := verbFlags(resetCmd)
 	assert.Equal(t, true, gotReset["force"])
+
+	require.NoError(t, listCmd.Flags().Set(flagRuntime, "true"))
+	t.Cleanup(func() { _ = listCmd.Flags().Set(flagRuntime, "false") })
+	assert.Equal(t, true, verbFlags(listCmd)[flagRuntime])
 }
 
 func TestBuildConfigAndStacksInfo_FlagMapping(t *testing.T) {

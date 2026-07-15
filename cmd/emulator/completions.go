@@ -26,19 +26,72 @@ func globalInfoForCompletion(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	}
 }
 
-// stackFlagCompletion provides completion values for the --stack flag.
-func stackFlagCompletion(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+// stackFlagCompletion provides completion values for the --stack flag. When a
+// lifecycle command already has an emulator component argument, limit choices
+// to stacks that configure that exact emulator.
+func stackFlagCompletion(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "emulator.stackFlagCompletion")()
 
 	atmosConfig, err := cfg.InitCliConfig(globalInfoForCompletion(cmd), true)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
+	if len(args) > 0 && args[0] != "" {
+		stacks, err := emulatorStackNamesForComponent(&atmosConfig, args[0])
+		if err == nil {
+			return stacks, cobra.ShellCompDirectiveNoFileComp
+		}
+	}
 	stacks, err := stackNamesForCompletion(&atmosConfig)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return stacks, cobra.ShellCompDirectiveNoFileComp
+}
+
+func emulatorStackNamesForComponent(atmosConfig *schema.AtmosConfiguration, component string) ([]string, error) {
+	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+		atmosConfig,
+		"",
+		[]string{component},
+		[]string{cfg.EmulatorComponentType},
+		nil,
+		false,
+		false,
+		false,
+		false,
+		nil,
+		nil,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	stacks := make([]string, 0, len(stacksMap))
+	for stackFileName, rawStack := range stacksMap {
+		stackMap, ok := rawStack.(map[string]any)
+		if !ok {
+			continue
+		}
+		components, ok := stackMap[cfg.ComponentsSectionName].(map[string]any)
+		if !ok {
+			continue
+		}
+		emulators, ok := components[cfg.EmulatorComponentType].(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, ok := emulators[component]; !ok {
+			continue
+		}
+		name, ok := stackNameForCompletion(atmosConfig, stackFileName, stackMap)
+		if ok {
+			stacks = append(stacks, name)
+		}
+	}
+	sort.Strings(stacks)
+	return stacks, nil
 }
 
 func stackNamesForCompletion(atmosConfig *schema.AtmosConfiguration) ([]string, error) {
@@ -143,16 +196,16 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 	return components, cobra.ShellCompDirectiveNoFileComp
 }
 
-// RegisterEmulatorCompletions registers completion functions for the emulator
-// command. Every subcommand takes a component argument.
+// RegisterEmulatorCompletions registers component completion for lifecycle
+// subcommands. The list and ps inventory commands take no component argument.
 func RegisterEmulatorCompletions(cmd *cobra.Command) {
 	defer perf.Track(nil, "emulator.RegisterEmulatorCompletions")()
 
 	for _, subCmd := range cmd.Commands() {
-		// `list` takes no component positional; leave its arg completion unset so
+		// Inspection verbs take no component positional; leave their arg completion unset so
 		// it doesn't suggest components. The --stack flag completion still applies
 		// (registered on the persistent flag).
-		if subCmd.Name() == "list" {
+		if subCmd.Name() == "list" || subCmd.Name() == "ps" {
 			continue
 		}
 		subCmd.ValidArgsFunction = componentArgCompletion

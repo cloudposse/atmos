@@ -334,29 +334,28 @@ func TestExecutePs_ListsStatuses(t *testing.T) {
 		{Name: "aws", Image: "floci/aws:latest", Status: "running", ID: "abc"},
 		{Name: "gcp", Image: "floci/gcp:latest", Status: "running", ID: "def"},
 	}}
-	stubPrepare(t, validSection(), nil, mgr)
+	stubListSeams(t, mgr)
 
-	require.NoError(t, ExecutePs(context.Background(), baseInfo()))
+	require.NoError(t, ExecutePs(context.Background(), baseInfo(), true))
 	assert.Equal(t, "dev", mgr.gotStack)
 }
 
 func TestExecutePs_Empty(t *testing.T) {
 	mgr := &fakeManager{psStatuses: nil}
-	stubPrepare(t, validSection(), nil, mgr)
-	require.NoError(t, ExecutePs(context.Background(), baseInfo()))
+	stubListSeams(t, mgr)
+	require.NoError(t, ExecutePs(context.Background(), baseInfo(), true))
 }
 
 func TestExecutePs_Error(t *testing.T) {
 	mgr := &fakeManager{psErr: errBoom}
-	stubPrepare(t, validSection(), nil, mgr)
-	err := ExecutePs(context.Background(), baseInfo())
+	stubListSeams(t, mgr)
+	err := ExecutePs(context.Background(), baseInfo(), true)
 	require.ErrorIs(t, err, errBoom)
 	assert.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
 }
 
-// stubListSeams installs the seams ExecuteList consults directly (it bypasses
-// prepare(), so only initCliConfig and newManager are needed). All seams are
-// restored on cleanup.
+// stubListSeams installs the seams inspection commands consult directly. All
+// existing tests below exercise the explicit raw-runtime diagnostic mode.
 func stubListSeams(t *testing.T, mgr *fakeManager) {
 	t.Helper()
 
@@ -374,6 +373,64 @@ func stubListSeams(t *testing.T, mgr *fakeManager) {
 	newManager = func(_ string, _ bool) emulatorManager { return mgr }
 }
 
+func stubConfiguredListSeams(t *testing.T, mgr *fakeManager, stacks map[string]any) {
+	t.Helper()
+	stubListSeams(t, mgr)
+	origDescribe := describeEmulatorStacks
+	t.Cleanup(func() { describeEmulatorStacks = origDescribe })
+	describeEmulatorStacks = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ []string,
+		_ []string,
+		_ []string,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ auth.AuthManager,
+		_ bool,
+	) (map[string]any, error) {
+		return stacks, nil
+	}
+}
+
+func configuredAWSStack() map[string]any {
+	return map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"emulator": map[string]any{
+					"aws": map[string]any{"driver": "floci/aws"},
+				},
+			},
+		},
+	}
+}
+
+func TestEmulatorStatuses_ConfigScopedInventory(t *testing.T) {
+	mgr := &fakeManager{psStatuses: []emu.Status{
+		{Name: "aws", Stack: "dev", Image: "runtime/aws:latest", Status: "running", ID: "aws-id"},
+		{Name: "gcp", Stack: "dev", Image: "floci/gcp:latest", Status: "running", ID: "gcp-id"},
+	}}
+	stubConfiguredListSeams(t, mgr, configuredAWSStack())
+
+	statuses, err := emulatorStatuses(context.Background(), baseInfo(), false)
+	require.NoError(t, err)
+	require.Equal(t, []emu.Status{{Name: "aws", Stack: "dev", Image: "runtime/aws:latest", Status: "running", ID: "aws-id"}}, statuses)
+	assert.Empty(t, mgr.gotStack, "configured inventory joins against one unscoped runtime query")
+}
+
+func TestEmulatorStatuses_RuntimeEscapeHatch(t *testing.T) {
+	mgr := &fakeManager{psStatuses: []emu.Status{{Name: "gcp", Stack: "dev", Image: "floci/gcp:latest", Status: "running", ID: "gcp-id"}}}
+	stubListSeams(t, mgr)
+
+	statuses, err := emulatorStatuses(context.Background(), baseInfo(), true)
+	require.NoError(t, err)
+	require.Equal(t, mgr.psStatuses, statuses)
+	assert.Equal(t, "dev", mgr.gotStack, "runtime mode keeps the requested runtime stack filter")
+}
+
 func TestExecuteList_ListsStatuses(t *testing.T) {
 	mgr := &fakeManager{psStatuses: []emu.Status{
 		{Name: "aws", Stack: "dev", Image: "docker.io/floci/floci@sha256:abcdef", Status: "running", ID: "628b3ae8a73c92b361"},
@@ -381,7 +438,7 @@ func TestExecuteList_ListsStatuses(t *testing.T) {
 	}}
 	stubListSeams(t, mgr)
 
-	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
+	require.NoError(t, ExecuteList(context.Background(), baseInfo(), true))
 	assert.Equal(t, "dev", mgr.gotStack)
 }
 
@@ -392,20 +449,20 @@ func TestExecuteList_AllStacksWhenStackEmpty(t *testing.T) {
 	stubListSeams(t, mgr)
 
 	info := &schema.ConfigAndStacksInfo{} // no stack set.
-	require.NoError(t, ExecuteList(context.Background(), info))
+	require.NoError(t, ExecuteList(context.Background(), info, true))
 	assert.Empty(t, mgr.gotStack, "empty stack is passed through so Ps lists all stacks")
 }
 
 func TestExecuteList_Empty(t *testing.T) {
 	mgr := &fakeManager{psStatuses: nil}
 	stubListSeams(t, mgr)
-	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
+	require.NoError(t, ExecuteList(context.Background(), baseInfo(), true))
 }
 
 func TestExecuteList_Error(t *testing.T) {
 	mgr := &fakeManager{psErr: errBoom}
 	stubListSeams(t, mgr)
-	err := ExecuteList(context.Background(), baseInfo())
+	err := ExecuteList(context.Background(), baseInfo(), true)
 	require.ErrorIs(t, err, errBoom)
 	assert.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
 }
@@ -467,7 +524,7 @@ func TestExecuteList_TTYStyledTable(t *testing.T) {
 	}}
 	stubListSeams(t, mgr)
 
-	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
+	require.NoError(t, ExecuteList(context.Background(), baseInfo(), true))
 	assert.Equal(t, "dev", mgr.gotStack)
 }
 
@@ -479,7 +536,50 @@ func TestExecuteList_TTYEmptyWithStack(t *testing.T) {
 
 	mgr := &fakeManager{psStatuses: nil}
 	stubListSeams(t, mgr)
-	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
+	require.NoError(t, ExecuteList(context.Background(), baseInfo(), true))
+}
+
+func TestConfiguredEmulatorsFromStacks(t *testing.T) {
+	instances, err := configuredEmulatorsFromStacks(map[string]any{
+		"prod": map[string]any{
+			"components": map[string]any{
+				"emulator": map[string]any{
+					"aws": map[string]any{"driver": "floci/aws"},
+				},
+			},
+		},
+		"dev": map[string]any{
+			"components": map[string]any{
+				"emulator": map[string]any{
+					"abstract": map[string]any{"metadata": map[string]any{"type": "abstract"}},
+					"aws":      map[string]any{"driver": "floci/aws"},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []configuredEmulator{
+		{Name: "aws", Stack: "dev", Image: "floci/floci:latest"},
+		{Name: "aws", Stack: "prod", Image: "floci/floci:latest"},
+	}, instances)
+}
+
+func TestJoinConfiguredStatusesExcludesUnconfiguredContainers(t *testing.T) {
+	statuses := joinConfiguredStatuses(
+		[]configuredEmulator{{Name: "aws", Stack: "dev", Image: "configured/aws:latest"}},
+		[]emu.Status{
+			{Name: "aws", Stack: "dev", Image: "runtime/aws:latest", Status: "running", ID: "aws-id"},
+			{Name: "gcp", Stack: "dev", Image: "floci/gcp:latest", Status: "running", ID: "gcp-id"},
+		},
+	)
+	require.Equal(t, []emu.Status{{Name: "aws", Stack: "dev", Image: "runtime/aws:latest", Status: "running", ID: "aws-id"}}, statuses)
+
+	missing := joinConfiguredStatuses(
+		[]configuredEmulator{{Name: "aws", Stack: "dev", Image: "configured/aws:latest"}},
+		nil,
+	)
+	require.Equal(t, []emu.Status{{Name: "aws", Stack: "dev", Image: "configured/aws:latest", Status: "not running"}}, missing)
+	assert.Empty(t, filterRunning(missing))
 }
 
 func TestExecuteLogs_Success(t *testing.T) {

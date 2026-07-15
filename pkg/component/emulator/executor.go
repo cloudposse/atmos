@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -13,6 +14,7 @@ import (
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/container"
 	emu "github.com/cloudposse/atmos/pkg/emulator"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -28,6 +30,7 @@ var (
 	setupComponentAuthForCLI = e.SetupComponentAuthForCLI
 	processStacks            = e.ProcessStacks
 	initCliConfig            = cfg.InitCliConfig
+	describeEmulatorStacks   = e.ExecuteDescribeStacksWithAuthDisabled
 	// The newManager seam constructs the emulator manager so the
 	// container-runtime-backed manager can be replaced with a fake in tests.
 	newManager = func(runtimePref string, autoStart bool) emulatorManager {
@@ -241,43 +244,26 @@ func defaultConfirmReset(message string) (bool, error) {
 	return confirm, nil
 }
 
-// ExecutePs lists running emulators in the component's stack.
-func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+// ExecutePs lists running configured emulators, or raw runtime emulators when
+// runtimeOnly is explicitly requested for diagnostics.
+func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnly bool) error {
 	defer perf.Track(nil, "componentemulator.ExecutePs")()
 
-	r, err := prepare(info)
-	if err != nil {
-		return err
-	}
-	statuses, err := r.manager().Ps(ctx, r.stack)
+	statuses, err := emulatorStatuses(ctx, info, runtimeOnly)
 	if err != nil {
 		return fmt.Errorf("%w: ps: %w", errUtils.ErrComponentExecutionFailed, err)
 	}
-	if len(statuses) == 0 {
-		ui.Infof("no emulators running in stack %s", r.stack)
-		return nil
-	}
-	for _, status := range statuses {
-		ui.Writef("%s\t%s\t%s\t%s\n", status.Name, status.Container, status.Image, status.Status)
-	}
+	renderEmulatorList(filterRunning(statuses), info.Stack)
 	return nil
 }
 
-// ExecuteList lists emulators in a clean, theme-aware table with a status dot.
-// Unlike ExecutePs it does not require a component: it builds the manager from
-// the container-runtime config alone and lists every emulator discovered by
-// label (scoped to info.Stack when `--stack` is set, otherwise all stacks).
-func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+// ExecuteList lists configured emulators in a clean, theme-aware table with a
+// status dot. RuntimeOnly is an explicit diagnostic escape hatch that lists
+// raw runtime containers instead of component instances.
+func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnly bool) error {
 	defer perf.Track(nil, "componentemulator.ExecuteList")()
 
-	info.ComponentType = cfg.EmulatorComponentType
-	atmosConfig, err := initCliConfig(*info, true)
-	if err != nil {
-		return err
-	}
-
-	manager := newManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider), false)
-	statuses, err := manager.Ps(ctx, info.Stack)
+	statuses, err := emulatorStatuses(ctx, info, runtimeOnly)
 	if err != nil {
 		return fmt.Errorf("%w: list: %w", errUtils.ErrComponentExecutionFailed, err)
 	}
@@ -286,22 +272,188 @@ func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
+// configuredEmulator is the source-of-truth component instance used by list and
+// ps. A container can enrich this row, but cannot create one.
+type configuredEmulator struct {
+	Name  string
+	Stack string
+	Image string
+}
+
+// emulatorStatuses returns configured component rows by default. The runtime
+// path intentionally preserves the old container-discovery behavior behind the
+// explicit --runtime command flag.
+func emulatorStatuses(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnly bool) ([]emu.Status, error) {
+	info.ComponentType = cfg.EmulatorComponentType
+	atmosConfig, err := initCliConfig(*info, true)
+	if err != nil {
+		return nil, err
+	}
+
+	manager := newManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider), false)
+	if runtimeOnly {
+		return manager.Ps(ctx, info.Stack)
+	}
+
+	configured, err := configuredEmulators(&atmosConfig, info.Stack)
+	if err != nil {
+		return nil, err
+	}
+	if len(configured) == 0 {
+		return []emu.Status{}, nil
+	}
+
+	// Discover every local emulator container once, then only join exact
+	// component addresses from this project's resolved stack configuration.
+	runtimeStatuses, err := manager.Ps(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	return joinConfiguredStatuses(configured, runtimeStatuses), nil
+}
+
+func configuredEmulators(atmosConfig *schema.AtmosConfiguration, stack string) ([]configuredEmulator, error) {
+	stacksMap, err := describeEmulatorStacks(
+		atmosConfig,
+		stack,
+		nil,
+		[]string{cfg.EmulatorComponentType},
+		nil,
+		false,
+		true,
+		true,
+		false,
+		nil,
+		nil,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return configuredEmulatorsFromStacks(stacksMap)
+}
+
+func configuredEmulatorsFromStacks(stacksMap map[string]any) ([]configuredEmulator, error) {
+	instances := make([]configuredEmulator, 0)
+	for stackName, rawStack := range stacksMap {
+		stackInstances, err := configuredEmulatorsForStack(stackName, rawStack)
+		if err != nil {
+			return nil, err
+		}
+		instances = append(instances, stackInstances...)
+	}
+	sort.Slice(instances, func(i, j int) bool {
+		if instances[i].Stack == instances[j].Stack {
+			return instances[i].Name < instances[j].Name
+		}
+		return instances[i].Stack < instances[j].Stack
+	})
+	return instances, nil
+}
+
+func configuredEmulatorsForStack(stackName string, rawStack any) ([]configuredEmulator, error) {
+	stackSection, ok := rawStack.(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	components, ok := stackSection[cfg.ComponentsSectionName].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	emulators, ok := components[cfg.EmulatorComponentType].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+
+	instances := make([]configuredEmulator, 0, len(emulators))
+	for name, rawComponent := range emulators {
+		instance, ok, err := configuredEmulatorFromSection(stackName, name, rawComponent)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			instances = append(instances, instance)
+		}
+	}
+	return instances, nil
+}
+
+func configuredEmulatorFromSection(stackName, name string, rawComponent any) (configuredEmulator, bool, error) {
+	section, ok := rawComponent.(map[string]any)
+	if !ok || isAbstractSection(section) {
+		return configuredEmulator{}, false, nil
+	}
+	spec, err := emu.FromComponentSection(section)
+	if err != nil {
+		return configuredEmulator{}, false, fmt.Errorf("decode emulator %s/emulator/%s: %w", stackName, name, err)
+	}
+	if err := spec.Validate(); err != nil {
+		return configuredEmulator{}, false, fmt.Errorf("validate emulator %s/emulator/%s: %w", stackName, name, err)
+	}
+	image, err := spec.Image()
+	if err != nil {
+		return configuredEmulator{}, false, fmt.Errorf("resolve image for emulator %s/emulator/%s: %w", stackName, name, err)
+	}
+	return configuredEmulator{Name: name, Stack: stackName, Image: image}, true, nil
+}
+
+func joinConfiguredStatuses(configured []configuredEmulator, runtimeStatuses []emu.Status) []emu.Status {
+	runtimeByInstance := make(map[string]emu.Status, len(runtimeStatuses))
+	for _, status := range runtimeStatuses {
+		runtimeByInstance[emulatorInstanceKey(status.Stack, status.Name)] = status
+	}
+
+	statuses := make([]emu.Status, 0, len(configured))
+	for _, instance := range configured {
+		status, ok := runtimeByInstance[emulatorInstanceKey(instance.Stack, instance.Name)]
+		if !ok {
+			statuses = append(statuses, emu.Status{
+				Name:   instance.Name,
+				Stack:  instance.Stack,
+				Image:  instance.Image,
+				Status: "not running",
+			})
+			continue
+		}
+		if status.Image == "" {
+			status.Image = instance.Image
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses
+}
+
+func emulatorInstanceKey(stack, name string) string {
+	return stack + "\x00" + name
+}
+
+func filterRunning(statuses []emu.Status) []emu.Status {
+	running := make([]emu.Status, 0, len(statuses))
+	for _, status := range statuses {
+		if container.IsContainerRunning(status.Status) {
+			running = append(running, status)
+		}
+	}
+	return running
+}
+
 // renderEmulatorList prints the emulator statuses. In a TTY it renders the shared
 // styled list table with a colored status dot; otherwise it emits a plain,
 // tab-separated row per emulator so the output stays pipeable.
 func renderEmulatorList(statuses []emu.Status, stack string) {
 	if len(statuses) == 0 {
 		if stack != "" {
-			ui.Infof("No emulators running in stack %s.", stack)
+			ui.Infof("No emulators found in stack %s.", stack)
 		} else {
-			ui.Info("No emulators running.")
+			ui.Info("No emulators found.")
 		}
 		return
 	}
 
 	if !terminal.New().IsTTY(terminal.Stdout) {
 		for _, s := range statuses {
-			ui.Writef("%s\t%s\t%s\t%s\t%s\n", s.Name, s.Stack, shortImage(s.Image), s.Status, shortID(s.ID))
+			ui.Writef("%s\t%s\t%s\t%s\t%s\n", s.Name, s.Stack, shortImage(s.Image), s.Status, displayID(s.ID))
 		}
 		return
 	}
@@ -315,10 +467,17 @@ func renderEmulatorList(statuses []emu.Status, stack string) {
 			s.Name,
 			s.Stack,
 			shortImage(s.Image),
-			shortID(s.ID),
+			displayID(s.ID),
 		})
 	}
 	ui.Write(format.CreateStyledTable(header, rows))
+}
+
+func displayID(id string) string {
+	if strings.TrimSpace(id) == "" {
+		return ""
+	}
+	return shortID(id)
 }
 
 // statusDot renders a colored ● indicating whether the emulator container is
