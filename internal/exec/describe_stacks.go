@@ -4,14 +4,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// ErrInvalidErrorMode is retained as an exec-level alias for callers while the shared
+// sentinel lives in the errors package.
+var ErrInvalidErrorMode = errUtils.ErrInvalidErrorMode
 
 // componentInfoKey is the key used for component info in stack sections.
 const componentInfoKey = "component_info"
@@ -33,6 +39,7 @@ type DescribeStacksArgs struct {
 	Format               string
 	File                 string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	ErrorMode            string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -56,6 +63,8 @@ type describeStacksExec struct {
 		includeEmptyStacks bool,
 		skip []string,
 		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) (map[string]any, error)
 }
 
@@ -66,13 +75,15 @@ func NewDescribeStacksExec() DescribeStacksExec {
 		pageCreator:           pager.New(),
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		printOrWriteToFile:    printOrWriteToFile,
-		executeDescribeStacks: ExecuteDescribeStacks,
+		executeDescribeStacks: ExecuteDescribeStacksWithOptions,
 	}
 }
 
 // Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
 	defer perf.Track(atmosConfig, "exec.DescribeStacksExec.Execute")()
+
+	errOptions, collector := ErrorOptionsFromMode(args.ErrorMode)
 
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
@@ -86,6 +97,8 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		args.IncludeEmptyStacks,
 		args.Skip,
 		args.AuthManager,
+		false,
+		errOptions,
 	)
 	if err != nil {
 		return err
@@ -102,7 +115,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		res = finalStacksMap
 	}
 
-	return viewWithScroll(&viewWithScrollProps{
+	if err := viewWithScroll(&viewWithScrollProps{
 		pageCreator:           d.pageCreator,
 		isTTYSupportForStdout: d.isTTYSupportForStdout,
 		printOrWriteToFile:    d.printOrWriteToFile,
@@ -111,7 +124,101 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		format:                args.Format,
 		file:                  args.File,
 		res:                   res,
-	})
+	}); err != nil {
+		return err
+	}
+
+	PrintErrorModeSummary(args.ErrorMode, collector)
+	return nil
+}
+
+// OnErrorMode selects how ExecuteDescribeStacksWithOptions handles a recoverable per-value
+// YAML function error (e.g. a Terraform backend that has not been provisioned yet).
+type OnErrorMode string
+
+const (
+	// OnErrorStrict fails the whole describe-stacks call on the first error. This is the
+	// zero value and matches the historical behavior of ExecuteDescribeStacks /
+	// ExecuteDescribeStacksWithAuthDisabled.
+	OnErrorStrict OnErrorMode = "strict"
+	// OnErrorWarn substitutes degradation.AtmosComputedValue{} for an unresolved value
+	// classified recoverable, reports it via DescribeStacksErrorOptions.OnWarning, and
+	// continues processing the rest of the component/stack instead of aborting.
+	OnErrorWarn OnErrorMode = "warn"
+)
+
+// DescribeStacksErrorOptions configures how ExecuteDescribeStacksWithOptions handles
+// recoverable per-value YAML function errors. The zero value is OnErrorStrict, matching
+// ExecuteDescribeStacks's historical fail-fast behavior.
+type DescribeStacksErrorOptions struct {
+	OnError   OnErrorMode
+	OnWarning func(DegradationWarning)
+}
+
+// ResolveErrorMode determines the effective --error-mode value using the documented
+// configuration precedence (CLI flags → ENV vars → config files → defaults, see CLAUDE.md):
+// flagValue (already CLI-flag/env-var resolved by the caller's flag parser) wins if
+// non-empty; otherwise settingValue (the caller's own atmos.yaml default — e.g.
+// atmosConfig.List.ErrorMode for list commands, atmosConfig.Describe.ErrorMode for describe
+// commands) is used if set; otherwise "warn".
+//
+// The error_mode setting is deliberately scoped per command family rather than shared off
+// one global setting: `list` and `describe` are independent command groups that may want independent
+// defaults (e.g. strict in CI-driven `describe`, warn in interactive `list`). Callers pass
+// in their own section's value rather than this function reaching into a shared field, so
+// that code paths shared between families (e.g. `list affected` / `describe affected`) can
+// still resolve against the correct section at the call site.
+//
+// Callers must register their --error-mode pflag/StandardParser default as "" (not "warn")
+// so an unset flag/env is distinguishable here from an explicit choice.
+func ResolveErrorMode(flagValue, settingValue string) string {
+	defer perf.Track(nil, "exec.ResolveErrorMode")()
+
+	if flagValue != "" {
+		return flagValue
+	}
+	if settingValue != "" {
+		return settingValue
+	}
+	return string(OnErrorWarn)
+}
+
+// ErrorOptionsFromMode is the canonical conversion from a CLI --error-mode flag value
+// ("strict", "warn", or "silent") to DescribeStacksErrorOptions, plus the
+// degradation.Collector backing its OnWarning callback. The returned Collector is nil for
+// "strict" (or any other unrecognized value), since nothing is ever degraded in that mode.
+//
+// "warn" and "silent" both enable lenient substitution via the same Collector.Add
+// callback; they differ only in whether the caller ends up printing a summary — silent
+// mode intentionally never does (see PrintErrorModeSummary), so no end-of-command warning
+// is shown, while full detail remains available via --logs-level=Debug in both modes.
+//
+// Every command exposing --error-mode (list stacks/components/settings, describe stacks,
+// describe affected, list affected, describe dependents) shares this one implementation.
+// A single Collector must be reused across every ExecuteDescribeStacksWithOptions call
+// within one command invocation (e.g. describe affected's HEAD-side and BASE-side calls)
+// so the end-of-command summary reports one combined count, not one per call site.
+func ErrorOptionsFromMode(errorMode string) (DescribeStacksErrorOptions, *degradation.Collector) {
+	defer perf.Track(nil, "exec.ErrorOptionsFromMode")()
+
+	if errorMode != string(OnErrorWarn) && errorMode != "silent" {
+		return DescribeStacksErrorOptions{}, nil
+	}
+	collector := &degradation.Collector{}
+	return DescribeStacksErrorOptions{
+		OnError:   OnErrorWarn,
+		OnWarning: collector.Add,
+	}, collector
+}
+
+// PrintErrorModeSummary prints the collector's end-of-command summary only when errorMode
+// is "warn". Safe to call with a nil collector (e.g. when errorMode is "strict"/"silent").
+func PrintErrorModeSummary(errorMode string, collector *degradation.Collector) {
+	defer perf.Track(nil, "exec.PrintErrorModeSummary")()
+
+	if errorMode == string(OnErrorWarn) && collector != nil {
+		collector.Summary()
+	}
 }
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
@@ -128,7 +235,7 @@ func ExecuteDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 ) (map[string]any, error) {
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, DescribeStacksErrorOptions{})
 }
 
 // ExecuteDescribeStacksWithAuthDisabled processes stack manifests with auth explicitly disabled.
@@ -150,7 +257,35 @@ func ExecuteDescribeStacksWithAuthDisabled(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithAuthDisabled")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, DescribeStacksErrorOptions{})
+}
+
+// ExecuteDescribeStacksWithOptions is ExecuteDescribeStacksWithAuthDisabled plus opt-in
+// graceful degradation for recoverable per-value YAML function errors (see
+// DescribeStacksErrorOptions). Existing callers of ExecuteDescribeStacks /
+// ExecuteDescribeStacksWithAuthDisabled are unaffected — they implicitly pass
+// DescribeStacksErrorOptions{} (OnErrorStrict), which reproduces the original behavior
+// exactly.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacksWithAuthDisabled with one added options parameter.
+func ExecuteDescribeStacksWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithOptions")()
+
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, errOptions)
 }
 
 //nolint:revive // Internal wrapper preserves the existing ExecuteDescribeStacks call shape.
@@ -167,6 +302,7 @@ func executeDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
@@ -184,6 +320,9 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	if errOptions.OnError == OnErrorWarn {
+		processor.withDegradation(errOptions.OnWarning)
+	}
 
 	for stackFileName, stackSection := range stacksMap {
 		stackMap, ok := stackSection.(map[string]any)
