@@ -6,6 +6,11 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: shell
+        name: reset-generated-projects
+        working_directory: "../../.context/cast-fixtures/scaffolding"
+        output: none
+        command: rm -rf ../my-quick-app ../my-project
       - type: cast
         name: generate-example
         working_directory: "../../.context/cast-fixtures/scaffolding"
@@ -55,7 +60,7 @@ commands:
           - type: key
             key: enter
           - type: write
-            text: "atmos scaffold generate example ./my-quick-app --set project_name=my-app --defaults"
+            text: "atmos scaffold generate example ../my-quick-app --set project_name=my-app --defaults"
           - type: key
             key: enter
           - type: wait
@@ -68,7 +73,7 @@ commands:
           - type: key
             key: enter
           - type: write
-            text: "atmos scaffold generate example"
+            text: "atmos scaffold generate example ../my-project"
           - type: key
             key: enter
           - type: wait
@@ -107,13 +112,6 @@ commands:
             key: enter
           - type: wait
             text: "Vendor source repository"
-            timeout: 10s
-          - type: pause
-            duration: 350ms
-          - type: key
-            key: enter
-          - type: wait
-            text: "Target directory"
             timeout: 10s
           - type: pause
             duration: 350ms
@@ -175,7 +173,6 @@ commands:
               "Default AWS region",
               "Enable component vendoring",
               "Vendor source repository",
-              "Target directory",
           ]:
               if needle not in plain:
                   raise SystemExit(f"scaffolding generate-example cast missing {needle!r}")

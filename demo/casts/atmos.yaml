@@ -4,7 +4,7 @@ toolchain:
   proxies:
     ls:
       tool: coreutils
-      args: [ls]
+      args: [ls, --color=always]
 
 commands:
   - name: casts
