@@ -30,6 +30,7 @@ func executeDescribeAffected(
 	excludeLocked bool,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -44,7 +45,7 @@ func executeDescribeAffected(
 	log.Debug("Current", "HEAD", localRepoHead)
 	log.Debug("Current", "BASE", remoteRepoHead)
 
-	currentStacks, err := ExecuteDescribeStacksWithAuthDisabled(
+	currentStacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,
 		stack,
 		nil,
@@ -57,6 +58,7 @@ func executeDescribeAffected(
 		skip,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -150,7 +152,7 @@ func executeDescribeAffected(
 	}
 	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
 
-	remoteStacks, err := ExecuteDescribeStacksWithAuthDisabled(
+	remoteStacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,
 		stack,
 		nil,
@@ -163,6 +165,7 @@ func executeDescribeAffected(
 		skip,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		// If the BASE cannot be processed (e.g. greenfield: no atmos.yaml or stack configs in BASE,

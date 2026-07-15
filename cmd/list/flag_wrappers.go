@@ -363,6 +363,36 @@ func WithProcessFunctionsFlag(options *[]flags.Option) {
 	)
 }
 
+// WithErrorModeFlag adds the --error-mode flag controlling how recoverable YAML-function
+// failures (e.g. a Terraform backend that has not been provisioned yet) are handled during
+// processing. Named to match this codebase's existing --failure-mode convention (see
+// cmd/terraform/{plan,apply,destroy,deploy}.go) rather than introducing a second
+// "-mode"-suffixed flag naming style.
+//
+//	warn (default): substitute (computed) for the unresolved value, and print one summary
+//	    warning at the end of the command if anything was degraded.
+//	silent: same substitution as warn, but no summary warning is printed. Full detail is
+//	    still available via --logs-level=Debug in either mode.
+//	strict: fail immediately, matching this feature's original (pre-default-flip) behavior.
+//
+// The Go-level default is intentionally "" (not "warn"): an unset flag/env value must be
+// distinguishable from an explicit choice so exec.ResolveErrorMode can fall back to
+// atmos.yaml's `list.error_mode` before finally defaulting to "warn". Callers must call
+// exec.ResolveErrorMode(v.GetString("error-mode"), atmosConfig.List.ErrorMode) after loading
+// atmosConfig.
+//
+// Used by: stacks, components, settings.
+func WithErrorModeFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithErrorModeFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("error-mode", "", "", "How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): warn (degrade + summary, default), silent (degrade, no summary), or strict (fail immediately). Defaults to atmos.yaml's list.error_mode, or warn"),
+		flags.WithEnvVars("error-mode", "ATMOS_LIST_ERROR_MODE"),
+		flags.WithValidValues("error-mode", "strict", "warn", "silent"),
+	)
+}
+
 // WithUploadFlag adds upload to Pro API flag.
 // Used by: instances.
 func WithUploadFlag(options *[]flags.Option) {
