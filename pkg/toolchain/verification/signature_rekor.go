@@ -48,6 +48,10 @@ var transportFlakeMarkers = []string{
 	"stream error: stream ID",
 	"connection reset by peer",
 	"TLS handshake timeout",
+	// macOS Security.framework can report this while cosign fetches a remote
+	// certificate sidecar. It is a transport/trust-store operation that happens
+	// before any signature verdict, so retrying it cannot mask bad evidence.
+	"SecPolicyCreateSSL error",
 	"i/o timeout",
 	"unexpected EOF",
 }
