@@ -56,6 +56,65 @@ func TestDescribeStacksRunnable(t *testing.T) {
 	assert.NoError(t, err, "describeStacksCmd should execute without error")
 }
 
+// TestDescribeStacksRunnable_InvalidErrorMode covers the dispatch call site inside
+// getRunnableDescribeStacksCmd that invokes validateErrorMode once --error-mode has
+// been resolved against atmos.yaml's describe.error_mode: an invalid resolved value
+// must short-circuit before the describe-stacks executor ever runs.
+//
+// The getRunnableDescribeStacksCmdProps.setCliArgsForDescribeStackCli field is not actually
+// used by the dispatch closure (it calls the package-level setCliArgsForDescribeStackCli
+// function directly against cmd.Flags(), not g.setCliArgsForDescribeStackCli), so the
+// invalid value must be forced directly onto the shared describeStacksCmd's real
+// --error-mode flag rather than injected via props. NewTestKit only snapshots RootCmd's
+// own flags, not subcommand flags, so the flag is restored manually via t.Cleanup to
+// avoid leaking state into other tests.
+func TestDescribeStacksRunnable_InvalidErrorMode(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Reset Viper to clear any environment variable bindings from previous tests.
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "")
+	t.Setenv("IDENTITY", "")
+
+	errorModeFlag := describeStacksCmd.Flags().Lookup("error-mode")
+	assert.NotNil(t, errorModeFlag, "error-mode flag must be registered on describeStacksCmd")
+	origValue := errorModeFlag.Value.String()
+	origChanged := errorModeFlag.Changed
+	t.Cleanup(func() {
+		_ = errorModeFlag.Value.Set(origValue)
+		errorModeFlag.Changed = origChanged
+	})
+	assert.NoError(t, errorModeFlag.Value.Set("bogus"))
+	errorModeFlag.Changed = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeStacksExec(ctrl)
+	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Times(0)
+
+	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(atmosConfig *schema.AtmosConfiguration) error {
+			return nil
+		},
+		func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
+			return nil
+		},
+		mockExec,
+	})
+
+	err := run(describeStacksCmd, []string{})
+
+	assert.ErrorIs(t, err, exec.ErrInvalidErrorMode, "invalid error-mode should be rejected before executing")
+}
+
 func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -109,6 +168,19 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 				ProcessYamlFunctions: true,
 			},
 		},
+		{
+			name: "Set error-mode explicitly",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Set("error-mode", "strict")
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format:               "yaml",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				ErrorMode:            "strict",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -129,6 +201,7 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			fs.Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 			fs.Bool("include-empty-stacks", false, "Include stacks with no components in the output")
 			fs.StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
+			fs.String("error-mode", "", "How to handle recoverable errors")
 
 			// Set flags as specified in the test case
 			tt.setFlags(fs)
@@ -170,6 +243,27 @@ func TestSetCliArgs_ComponentTypes_StringSlice(t *testing.T) {
 	err = setCliArgsForDescribeStackCli(fs, args)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"terraform", "helmfile"}, args.ComponentTypes)
+}
+
+func TestSetCliArgs_InvalidErrorMode(t *testing.T) {
+	_ = NewTestKit(t)
+
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.String("error-mode", "", "How to handle recoverable errors")
+
+	err := fs.Parse([]string{"--error-mode=bogus"})
+	assert.NoError(t, err)
+
+	// setCliArgsForDescribeStackCli only maps flags into the struct; validation happens
+	// later in getRunnableDescribeStacksCmd via validateErrorMode, once --error-mode has
+	// been resolved against atmos.yaml's describe.error_mode.
+	args := &exec.DescribeStacksArgs{}
+	err = setCliArgsForDescribeStackCli(fs, args)
+	assert.NoError(t, err)
+	assert.Equal(t, "bogus", args.ErrorMode)
+
+	err = validateErrorMode(args)
+	assert.ErrorIs(t, err, exec.ErrInvalidErrorMode)
 }
 
 func TestDescribeStacksCmd_Error(t *testing.T) {
