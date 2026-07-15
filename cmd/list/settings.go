@@ -173,7 +173,7 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {
 			displayNoSettingsFoundMessage(componentFilter)
-			return "", nil, nil
+			return "", collector, nil
 		}
 		return "", nil, err
 	}

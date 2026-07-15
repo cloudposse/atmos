@@ -88,6 +88,33 @@ func TestProcessCustomYamlTagsLenient_RecoverableError_Warn(t *testing.T) {
 	assert.Contains(t, warnings[0].Reason, "terraform state not provisioned")
 }
 
+// TestProcessCustomYamlTagsLenient_RecoverableError_NilCallback verifies that the
+// lenient entry point remains lenient when the caller does not need warning details.
+func TestProcessCustomYamlTagsLenient_RecoverableError_NilCallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	mockStateGetter.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned))
+
+	result, err := ProcessCustomYamlTagsLenient(
+		atmosConfig,
+		schema.AtmosSectionMapType{"bucket": `!terraform.state vpc test-stack bucket_name`},
+		"test-stack", nil, &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}, nil,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, degradation.AtmosComputedValue{}, result["bucket"])
+}
+
 // TestProcessCustomYamlTagsLenient_NonRecoverableError_StillFails verifies that lenient
 // mode does not blanket-catch every error: a non-recoverable error (e.g. a real API
 // failure) still aborts the call, proving the classifier gate rather than a blind catch.

@@ -32,24 +32,21 @@ Requires the --force flag for safety. The backend must be empty
 			return err
 		}
 
-		// Prefer the CLI-supplied value (getCommandFlagString/Bool) over Viper: Viper's
-		// precedence gives an explicit Set() call priority over a bound pflag, so a caller
-		// that pre-seeds Viper (e.g. from config defaults) can otherwise shadow the flag the
-		// user just passed. Component comes from result since it may have been filled in by
-		// the interactive prompt. force isn't a StandardOptions field, so it's read here too.
-		stack := getCommandFlagString(cmd, "stack")
-		if stack == "" {
-			stack = v.GetString("stack")
-		}
-		identity := getCommandFlagString(cmd, "identity")
-		if identity == "" {
-			identity = v.GetString("identity")
-		}
+		// Component comes from result since it may have been filled in by the interactive
+		// prompt. force isn't a StandardOptions field, so it's read here too.
 		force, forceProvided := getCommandFlagBool(cmd, "force")
 		if !forceProvided {
 			force = v.GetBool("force")
 		}
 
+		stack := result.Stack
+		if stack == "" {
+			stack = getCommandFlagStack(cmd)
+		}
+		if stack == "" {
+			stack = v.GetString("stack")
+		}
+		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
 		return executeDeleteCommandWithValues(result.Component, stack, identity, force)
 	},
 }

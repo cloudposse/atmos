@@ -1,10 +1,10 @@
 package exec
 
 import (
-	"errors"
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,9 +15,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ErrInvalidErrorMode is returned when a --error-mode flag value is not one of
-// "strict", "warn", or "silent".
-var ErrInvalidErrorMode = errors.New("invalid error mode")
+// ErrInvalidErrorMode is retained as an exec-level alias for callers while the shared
+// sentinel lives in the errors package.
+var ErrInvalidErrorMode = errUtils.ErrInvalidErrorMode
 
 // componentInfoKey is the key used for component info in stack sections.
 const componentInfoKey = "component_info"
@@ -216,7 +216,7 @@ func ErrorOptionsFromMode(errorMode string) (DescribeStacksErrorOptions, *degrad
 func PrintErrorModeSummary(errorMode string, collector *degradation.Collector) {
 	defer perf.Track(nil, "exec.PrintErrorModeSummary")()
 
-	if errorMode == string(OnErrorWarn) {
+	if errorMode == string(OnErrorWarn) && collector != nil {
 		collector.Summary()
 	}
 }

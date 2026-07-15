@@ -744,7 +744,13 @@ func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError(t *testing.T
 	)
 
 	require.NoError(t, err)
-	assert.Len(t, warnings, 1)
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "dev", warnings[0].Stack)
+	// The describe-stacks fixture resolves this function outside a component section,
+	// so the component field is intentionally empty while the function still identifies vpc.
+	assert.Empty(t, warnings[0].Component)
+	assert.Contains(t, warnings[0].Function, "!terraform.state")
+	assert.Contains(t, warnings[0].Reason, "terraform state not provisioned")
 	assert.NotEmpty(t, result)
 }
 
@@ -779,6 +785,7 @@ func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError_Strict(t *te
 	)
 
 	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 }
 
 // TestExecuteDescribeStacks_NonMapStackEntry exercises the type-guard at lines 150-153 in

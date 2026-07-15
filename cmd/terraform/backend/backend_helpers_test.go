@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -73,17 +74,28 @@ func TestInitConfigAndAuth_SucceedsWithNoAuthConfigured(t *testing.T) {
 }
 
 func TestInitConfigAndAuth_FailsWhenAuthConfiguredButIdentityMissing(t *testing.T) {
-	// Same fixture (no auth configured), but pass an explicit identity name. Since
-	// authConfig still has zero identities configured, resolveIdentityName returns
-	// the identity as-is, and CreateAndAuthenticateManagerWithAtmosConfigForStack
-	// then hits the ErrAuthNotConfigured branch.
-	t.Chdir(filepath.Join("..", "..", "..", "tests", "fixtures", "scenarios", "atmos-overrides-section"))
+	// Use the same stack fixture through a temporary atmos.yaml that declares one
+	// configured identity. This ensures the test reaches the unknown-identity branch
+	// instead of accidentally asserting ErrAuthNotConfigured for an empty auth section.
+	fixture, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "scenarios", "atmos-overrides-section"))
+	require.NoError(t, err)
+	config, err := os.ReadFile(filepath.Join(fixture, "atmos.yaml"))
+	require.NoError(t, err)
+	config = append(config, []byte(`
+auth:
+  identities:
+    configured:
+      kind: aws/user
+`)...)
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.CopyFS("stacks", os.DirFS(filepath.Join(fixture, "stacks"))))
+	require.NoError(t, os.WriteFile("atmos.yaml", config, 0o600))
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	atmosConfig, authContext, err := InitConfigAndAuth("c1", "dev", "nonexistent-identity")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
+	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 	assert.Nil(t, atmosConfig)
 	assert.Nil(t, authContext)
 }

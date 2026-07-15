@@ -1,12 +1,15 @@
 package list
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestDescribeStacksErrorOptions(t *testing.T) {
@@ -52,12 +55,21 @@ func TestDescribeStacksErrorOptions(t *testing.T) {
 
 func TestPrintErrorModeSummary(t *testing.T) {
 	t.Run("warn prints when the collector has warnings", func(t *testing.T) {
+		ioCtx, err := iolib.NewContext()
+		require.NoError(t, err)
+		// Initialize the package formatter once for this output assertion. PushUIWriter
+		// captures only this test's UI stream and restores the previous sink on return.
+		ui.InitFormatter(ioCtx)
+		var output bytes.Buffer
+		restore := iolib.PushUIWriter(&output)
+		defer restore()
+
 		_, collector := describeStacksErrorOptions("warn")
 		collector.Add(e.DegradationWarning{Stack: "dev", Component: "vpc", Function: "!terraform.state vpc dev bucket", Reason: "terraform state not provisioned"})
 
-		// Must not panic; the actual UI output isn't asserted here (ui.Warningf writes to
-		// the process's real stderr formatter), only that this call path is safe.
 		printErrorModeSummary("warn", collector)
+		assert.Contains(t, output.String(), "1 value(s) could not be determined")
+		assert.Contains(t, output.String(), "--error-mode=strict")
 	})
 
 	t.Run("silent never prints even with warnings collected", func(t *testing.T) {

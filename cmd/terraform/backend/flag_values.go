@@ -6,22 +6,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// getCommandFlagString reads a flag's value directly off the command, preferring the CLI-
-// supplied value (Changed==true) over Viper. This is needed because Viper's precedence gives
-// an explicit viper.Set() call priority over a bound pflag, so callers that pre-seed Viper
-// (e.g. from config defaults) can otherwise shadow a value the user just passed on the CLI.
-func getCommandFlagString(cmd *cobra.Command, name string) string {
-	if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
+// getCommandFlagStack is used only as a compatibility fallback for tests and callers that
+// invoke RunE directly without Cobra first parsing the command's flag set. Normal execution
+// obtains parsed values from StandardParser. Identity never uses this path.
+func getCommandFlagStack(cmd *cobra.Command) string {
+	if flag := cmd.Flags().Lookup("stack"); flag != nil && flag.Changed {
 		return flag.Value.String()
 	}
-	if flag := cmd.InheritedFlags().Lookup(name); flag != nil && flag.Changed {
+	if flag := cmd.InheritedFlags().Lookup("stack"); flag != nil && flag.Changed {
 		return flag.Value.String()
 	}
 	return ""
 }
 
-// getCommandFlagBool is the boolean counterpart to getCommandFlagString. The second return
-// value reports whether the flag was explicitly changed on the CLI.
+// getCommandFlagBool reads the force flag, whose value is not part of StandardOptions. The
+// second return value reports whether the flag was explicitly changed on the CLI.
 func getCommandFlagBool(cmd *cobra.Command, name string) (bool, bool) {
 	if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
 		value, err := strconv.ParseBool(flag.Value.String())

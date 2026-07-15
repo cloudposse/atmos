@@ -32,19 +32,14 @@ versioning, encryption, and public access blocking to match secure defaults.`,
 			return err
 		}
 
-		// Prefer the CLI-supplied value (getCommandFlagString) over Viper: Viper's precedence
-		// gives an explicit Set() call priority over a bound pflag, so a caller that pre-seeds
-		// Viper (e.g. from config defaults) can otherwise shadow the flag the user just passed.
-		// Component comes from result since it may have been filled in by the interactive prompt.
-		stack := getCommandFlagString(cmd, "stack")
+		stack := result.Stack
+		if stack == "" {
+			stack = getCommandFlagStack(cmd)
+		}
 		if stack == "" {
 			stack = v.GetString("stack")
 		}
-		identity := getCommandFlagString(cmd, "identity")
-		if identity == "" {
-			identity = v.GetString("identity")
-		}
-
+		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
 		return executeProvisionCommandWithValues(result.Component, stack, identity)
 	},
 }

@@ -34,7 +34,5 @@ func describeStacksErrorOptions(errorMode string) (e.DescribeStacksErrorOptions,
 // printErrorModeSummary prints the collector's end-of-command summary only when errorMode
 // is "warn". Safe to call with a nil collector (e.g. when errorMode is "strict"/"silent").
 func printErrorModeSummary(errorMode string, collector *degradation.Collector) {
-	if errorMode == "warn" {
-		collector.Summary()
-	}
+	e.PrintErrorModeSummary(errorMode, collector)
 }

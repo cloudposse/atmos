@@ -72,6 +72,9 @@ func ProcessCustomYamlTagsLenient(
 	onWarning func(DegradationWarning),
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsLenient")()
+	if onWarning == nil {
+		onWarning = func(DegradationWarning) {}
+	}
 
 	resolutionCtx := GetOrCreateResolutionContext()
 	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, onWarning)

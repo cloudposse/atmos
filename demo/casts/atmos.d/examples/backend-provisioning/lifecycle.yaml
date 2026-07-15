@@ -82,11 +82,11 @@ commands:
           path = Path("../../website/static/casts/examples/backend-provisioning/lifecycle.cast")
           text = path.read_text()
           text = re.sub(
-              r"(?:mirror\\.gcr\\.io/)?floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2",
+              r"(?:mirror\.gcr\.io/)?floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2",
               "floci/floci:1.5.23",
               text,
           )
-          text = re.sub(r"(?<=atmos-dev-emulator-aws\\t)c88ec20bf221(?=\\trunning)", "floci/floci:1.5.23", text)
+          text = re.sub(r"(?<=atmos-dev-emulator-aws\t)c88ec20bf221(?=\trunning)", "floci/floci:1.5.23", text)
           path.write_text(text)
           import os, sys
           sys.path.insert(0, os.getcwd())
