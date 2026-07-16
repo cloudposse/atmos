@@ -49,8 +49,10 @@ own ` + "`" + `schemas.config` + "`" + ` entry to override or disable it.
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
-		checkAtmosConfig()
+		// Check Atmos configuration. Schema validation does not require a
+		// stacks directory — atmos.yaml (and its fragments) must be validatable
+		// in repositories that only carry CLI configuration.
+		checkAtmosConfig(WithStackValidation(false))
 
 		schema := ""
 		key := ""

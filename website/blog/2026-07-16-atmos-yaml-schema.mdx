@@ -57,6 +57,8 @@ For editor auto-completion and inline validation, add one comment to the top of 
 base_path: "./"
 ```
 
+The schema reaches every surface where you touch `atmos.yaml`: the experimental Atmos LSP server (`atmos lsp start`) now reports schema violations as inline diagnostics with line positions, and AI assistants connected through the Atmos MCP server get a new `atmos_validate_schema` tool alongside `atmos_validate_stacks`.
+
 The floating URL above always tracks the latest release. Every release also publishes an immutable, version-pinned snapshot at `https://atmos.tools/schemas/atmos/atmos-config/<atmos-version>/atmos-config.json`, and a `schemas.config` entry in `atmos.yaml` lets you pin validation to a reviewed schema version or point it at your own:
 
 ```yaml

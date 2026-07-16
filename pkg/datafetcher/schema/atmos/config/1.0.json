@@ -3116,6 +3116,9 @@
               "type": "array"
             },
             {
+              "type": "object"
+            },
+            {
               "type": "null"
             },
             {
@@ -10856,6 +10859,9 @@
           "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "boolean"
             },
             {
               "type": "null"

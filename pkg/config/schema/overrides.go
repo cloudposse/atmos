@@ -145,26 +145,40 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 		})
 	}
 
-	// Task fields whose custom unmarshaler or weakly-typed decoding (see
-	// schema.Task.UnmarshalYAML and its WeaklyTypedInput mapstructure config)
-	// accepts more shapes than the Go field declares:
-	//   - output/prompt: scalar or structured object.
-	//   - default: string, boolean, or number (depends on the step type).
-	//   - padding/margin: "1 2" string or bare integer shorthand.
-	taskAlternatives := map[string][]*jsonschema.Schema{
-		"output":  {{Type: typeObject}},
-		"prompt":  {{Type: typeObject}},
-		"default": {{Type: typeBoolean}, {Type: typeNumber}},
-		"padding": {{Type: typeInteger}},
-		"margin":  {{Type: typeInteger}},
+	// Definition properties whose decode hooks or weakly-typed decoding (see
+	// schema.Task.UnmarshalYAML, commandEnvMapDecodeHook, Terminal.IsPagerEnabled)
+	// accept more shapes than the Go field declares.
+	propertyAlternatives := map[string]map[string][]*jsonschema.Schema{
+		"Task": {
+			// output/prompt: scalar or structured object.
+			"output": {{Type: typeObject}},
+			"prompt": {{Type: typeObject}},
+			// default: string, boolean, or number (depends on the step type).
+			"default": {{Type: typeBoolean}, {Type: typeNumber}},
+			// padding/margin: "1 2" string or bare integer shorthand.
+			"padding": {{Type: typeInteger}},
+			"margin":  {{Type: typeInteger}},
+		},
+		"Command": {
+			// env accepts the map form ({KEY: value}) in addition to the list
+			// of {key, value} entries (commandEnvMapDecodeHook).
+			"env": {{Type: typeObject}},
+		},
+		"Terminal": {
+			// pager is a string flag ("less", "on", "false"); booleans are
+			// accepted and coerced (Terminal.IsPagerEnabled).
+			"pager": {{Type: typeBoolean}},
+		},
 	}
-	task, ok := root.Definitions["Task"]
-	if !ok || task.Properties == nil {
-		return
-	}
-	for name, alternatives := range taskAlternatives {
-		if existing, found := task.Properties.Get(name); found && existing != nil {
-			task.Properties.Set(name, anyOfWith(existing, alternatives...))
+	for defName, alternativesByProperty := range propertyAlternatives {
+		def, ok := root.Definitions[defName]
+		if !ok || def.Properties == nil {
+			continue
+		}
+		for name, alternatives := range alternativesByProperty {
+			if existing, found := def.Properties.Get(name); found && existing != nil {
+				def.Properties.Set(name, anyOfWith(existing, alternatives...))
+			}
 		}
 	}
 }
@@ -312,6 +326,9 @@ func wrapped(s *jsonschema.Schema) *jsonschema.Schema {
 		if !anyOfAcceptsNull(s.AnyOf) {
 			s.AnyOf = append(s.AnyOf, &jsonschema.Schema{Type: typeNull})
 		}
+		if !anyOfAcceptsYamlFunction(s.AnyOf) {
+			s.AnyOf = append(s.AnyOf, &jsonschema.Schema{Ref: "#/$defs/" + yamlFunctionDef})
+		}
 		return s
 	case s.Ref == "" && s.Type == "" || s.Type == typeNull:
 		return s
@@ -361,6 +378,24 @@ func arrayItemsAcceptString(items *jsonschema.Schema) bool {
 func anyOfAcceptsNull(branches []*jsonschema.Schema) bool {
 	for _, branch := range branches {
 		if branch != nil && branch.Type == typeNull {
+			return true
+		}
+	}
+	return false
+}
+
+// anyOfAcceptsYamlFunction reports whether one of the branches already admits
+// the authored string form of a YAML function invocation (an unconstrained
+// string branch, or the yamlFunction reference itself).
+func anyOfAcceptsYamlFunction(branches []*jsonschema.Schema) bool {
+	for _, branch := range branches {
+		if branch == nil {
+			continue
+		}
+		if branch.Ref == "#/$defs/"+yamlFunctionDef {
+			return true
+		}
+		if branch.Type == typeString && !rejectsYamlFunctionString(branch) {
 			return true
 		}
 	}

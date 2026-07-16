@@ -26,9 +26,11 @@ func TestGeneratedSchemaCompiles(t *testing.T) {
 }
 
 // TestGeneratedSchemaAcceptsRealConfigs is the over-strictness backstop: every
-// atmos.yaml in examples/ — plus profile and atmos.d fragments — must validate
-// against the generated schema through the same engine `atmos validate schema`
-// uses (which stringifies YAML function tags like `!include`).
+// atmos.yaml in examples/ and demo/ — plus profile and atmos.d fragments, and
+// this repository's own root atmos.yaml and .atmos.d — must validate against
+// the generated schema through the same engine `atmos validate schema` uses
+// (which stringifies YAML function tags like `!include`). The tests/fixtures
+// tree is deliberately excluded: it contains intentionally invalid configs.
 func TestGeneratedSchemaAcceptsRealConfigs(t *testing.T) {
 	files := corpusFiles(t)
 	require.Positive(t, len(files), "no atmos.yaml corpus files found under examples/; the corpus scan is misconfigured")
@@ -46,30 +48,38 @@ func TestGeneratedSchemaAcceptsRealConfigs(t *testing.T) {
 	}
 }
 
-// corpusFiles returns every atmos.yaml/atmos.yml under examples/, plus profile
-// and atmos.d fragments (which are partial atmos.yaml documents and must
-// validate standalone). Paths are absolute so the scan is CWD-independent.
+// corpusFiles returns every atmos.yaml/atmos.yml under examples/ and demo/,
+// plus profile and atmos.d fragments (which are partial atmos.yaml documents
+// and must validate standalone), plus the repository's own root atmos.yaml and
+// .atmos.d fragments. Paths are absolute so the scan is CWD-independent.
 func corpusFiles(t *testing.T) []string {
 	t.Helper()
 
 	repoRoot, err := RepoRoot()
 	require.NoError(t, err)
-	examplesDir := filepath.Join(repoRoot, "examples")
 
-	var files []string
-	err = filepath.WalkDir(examplesDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
+	files := []string{filepath.Join(repoRoot, "atmos.yaml")}
+	for _, dir := range []string{"examples", "demo", ".atmos.d"} {
+		err = filepath.WalkDir(filepath.Join(repoRoot, dir), func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			if dir == ".atmos.d" {
+				if strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml") {
+					files = append(files, path)
+				}
+				return nil
+			}
+			if isCorpusFile(path, entry.Name()) {
+				files = append(files, path)
+			}
 			return nil
-		}
-		if isCorpusFile(path, entry.Name()) {
-			files = append(files, path)
-		}
-		return nil
-	})
-	require.NoError(t, err)
+		})
+		require.NoError(t, err)
+	}
 	return files
 }
 
