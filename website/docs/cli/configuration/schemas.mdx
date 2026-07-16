@@ -84,6 +84,22 @@ stacks/schemas/
 
 The [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) validates Atmos stack manifests and provides auto-completion in supported editors.
 
+### Floating vs. Pinned Schema URLs
+
+The published schema is available at two kinds of URLs:
+
+- **Floating** — `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` always reflects the schema shipped by the latest Atmos release. Use this (the default) when you want validation to automatically pick up new manifest fields as you upgrade Atmos.
+- **Pinned** — `https://atmos.tools/schemas/atmos/atmos-manifest/<atmos-version>/atmos-manifest.json` (e.g. `.../atmos-manifest/1.219.0/atmos-manifest.json`) is an immutable snapshot of the schema exactly as it shipped with that Atmos release. Use this when you want to upgrade the `atmos` binary without silently absorbing new schema fields — pin `schemas.atmos.manifest` to the version you've reviewed, and only bump it deliberately when you're ready to adopt newer manifest fields.
+
+```yaml title="atmos.yaml"
+schemas:
+  atmos:
+    # Pin to a specific Atmos release's schema instead of tracking the latest.
+    manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.219.0/atmos-manifest.json"
+```
+
+A pinned URL only exists for versions released after this feature shipped; earlier releases only have the floating `1.0` path.
+
 ### IDE Auto-Completion and Validation
 
 In supported editors like [JetBrains IDEs](https://www.jetbrains.com/), [Microsoft Visual Studio](https://visualstudio.microsoft.com/), or [Visual Studio Code](https://code.visualstudio.com/), the schema can offer auto-completion and validation to ensure that Atmos stack manifests are correct.
