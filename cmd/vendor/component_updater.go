@@ -22,7 +22,10 @@ import (
 
 //nolint:revive // This mirrors the existing update command's independent selector inputs.
 func runVendorUpdate(v *viper.Viper, componentType string, tags []string, typeChanged bool, components []string, group string, check bool) (*vendoring.UpdateReport, error) {
-	if group != "" {
+	// A nil selection means a direct --group invocation needs discovery. A
+	// non-nil selection was already narrowed by the --pull-request discovery
+	// pass and must not be rediscovered or widened.
+	if group != "" && components == nil {
 		discovery, err := runRepoWideUpdate(v, repoWideUpdateParams{typeChanged: typeChanged, componentType: componentType, tags: tags, check: true})
 		if err != nil {
 			return nil, err
@@ -31,6 +34,13 @@ func runVendorUpdate(v *viper.Viper, componentType string, tags []string, typeCh
 		if check {
 			return filterReport(discovery, components), nil
 		}
+		if len(components) == 0 {
+			return &vendoring.UpdateReport{}, nil
+		}
+	}
+	if group != "" && len(components) == 0 {
+		// Never let an empty group selection fall through to an unscoped update.
+		return &vendoring.UpdateReport{}, nil
 	}
 	if len(components) == 0 {
 		return runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
@@ -56,6 +66,9 @@ func runVendorUpdate(v *viper.Viper, componentType string, tags []string, typeCh
 }
 
 func normalizeComponentSelectors(components []string) []string {
+	if components == nil {
+		return nil
+	}
 	result := make([]string, 0, len(components))
 	for _, component := range components {
 		component = strings.TrimSpace(component)
@@ -233,7 +246,7 @@ func publishComponentUpdate(ctx context.Context, v *viper.Viper, scope, branch s
 		return nil, "", err
 	}
 
-	owner, repository, err := atmosgit.GitHubRepository(ctx, currentWorkdir, "origin")
+	owner, repository, err := gitHubRepository(ctx, currentWorkdir, "origin")
 	if err != nil {
 		return nil, "", err
 	}
@@ -312,14 +325,18 @@ func renderVendorUpdateResult(report *vendoring.UpdateReport, check bool, v *vip
 	renderUpdateReport(report, check, v.GetBool("outdated"), v.GetBool("archived"))
 }
 
-func renderComponentUpdaterJSON(result *updater.Result, format string) {
+func renderComponentUpdaterJSON(result *updater.Result, format string) error {
 	if format != "json" {
-		return
+		return nil
 	}
-	_ = data.WriteJSON(result)
+	return data.WriteJSON(result)
 }
 
 const (
 	componentSelectionHashLength = 12
-	currentWorkdir               = "."
+)
+
+var (
+	currentWorkdir   = "."
+	gitHubRepository = atmosgit.GitHubRepository
 )

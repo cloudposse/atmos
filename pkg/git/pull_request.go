@@ -24,6 +24,7 @@ type PullRequestOptions struct {
 	Assignees  []string
 }
 
+// PullRequestResult represents the outcome of pull request reconciliation.
 type PullRequestResult struct {
 	Number  int    `json:"number"`
 	URL     string `json:"url"`
@@ -36,6 +37,7 @@ type PullRequestPublisher interface {
 	Reconcile(ctx context.Context, options *PullRequestOptions) (*PullRequestResult, error)
 }
 
+// PullRequestPublisherFactory creates a pull request publisher.
 type PullRequestPublisherFactory func() (PullRequestPublisher, error)
 
 var (
@@ -43,12 +45,14 @@ var (
 	pullRequestPublishers   = map[string]PullRequestPublisherFactory{}
 )
 
+// RegisterPullRequestPublisher registers a named pull request publisher factory.
 func RegisterPullRequestPublisher(name string, factory PullRequestPublisherFactory) {
 	pullRequestPublishersMu.Lock()
 	defer pullRequestPublishersMu.Unlock()
 	pullRequestPublishers[name] = factory
 }
 
+// NewPullRequestPublisher creates the registered pull request publisher named name.
 func NewPullRequestPublisher(name string) (PullRequestPublisher, error) {
 	pullRequestPublishersMu.RLock()
 	factory, ok := pullRequestPublishers[name]
@@ -59,6 +63,7 @@ func NewPullRequestPublisher(name string) (PullRequestPublisher, error) {
 	return factory()
 }
 
+// RegisteredPullRequestPublishers returns registered publisher names in sorted order.
 func RegisteredPullRequestPublishers() []string {
 	pullRequestPublishersMu.RLock()
 	defer pullRequestPublishersMu.RUnlock()

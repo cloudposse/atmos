@@ -1,6 +1,18 @@
 # Migrate from `cloudposse/github-action-atmos-component-updater`
 
-Replace the legacy updater action with a scheduled workflow that checks out the repository and runs:
+Replace the legacy updater action with a scheduled workflow that checks out the repository, installs Atmos, and runs:
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+  - name: Install Atmos
+    run: |
+      curl -fsSL https://atmos.tools/install.sh | bash
+      echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+  - run: atmos vendor update --pull-request
+```
+
+The native invocation is:
 
 ```sh
 atmos vendor update --pull-request

@@ -57,11 +57,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Install Atmos
+        run: |
+          curl -fsSL https://atmos.tools/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: atmos vendor update --pull-request
         env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
 ```
 
-The workflow is checkout plus Atmos only. Migrate legacy options and roll out groups progressively using [from-component-updater.md](../../agent-skills/skills/atmos-migration/references/from-component-updater.md).
+The workflow uses checkout plus native Atmos installation and Atmos itself; no third-party action performs updating, committing, pushing, or PR publishing. Migrate legacy options and roll out groups progressively using [from-component-updater.md](../../agent-skills/skills/atmos-migration/references/from-component-updater.md).
 
 ## Test plan
 

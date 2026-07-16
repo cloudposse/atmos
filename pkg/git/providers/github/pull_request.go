@@ -14,12 +14,14 @@ import (
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 )
 
+// ProviderName identifies the GitHub pull request publisher.
 const ProviderName = "github"
 
 type client interface {
 	GitHub() *gh.Client
 }
 
+// Provider reconciles pull requests through GitHub's REST API.
 type Provider struct {
 	newClient func() (client, error)
 }
@@ -30,6 +32,7 @@ func init() {
 	})
 }
 
+// New creates a GitHub pull request provider using the configured CI token.
 func New() *Provider {
 	return &Provider{newClient: func() (client, error) { return githubci.NewClient() }}
 }
@@ -40,6 +43,8 @@ func NewWithClientFactory(factory func() (client, error)) *Provider {
 	return &Provider{newClient: factory}
 }
 
+// Reconcile creates or updates a pull request and applies configured metadata.
+//
 //nolint:cyclop,revive // Reconciliation keeps its forge API calls together at the provider boundary.
 func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
 	if options == nil {

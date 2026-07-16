@@ -9,17 +9,20 @@ type VendorUpdateConfig struct {
 	Groups    map[string]VendorUpdateGroupConfig `yaml:"groups,omitempty" json:"groups,omitempty" mapstructure:"groups"`
 }
 
+// VendorUpdateExecutionConfig configures the execution mode for vendor updates.
 type VendorUpdateExecutionConfig struct {
 	// Mode is "current" (the default) or "worktree".
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" validate:"omitempty,oneof=current worktree"`
 }
 
+// VendorUpdateBatchingConfig configures the batching strategy for vendor updates.
 type VendorUpdateBatchingConfig struct {
 	// Mode is "scope" (the default) or "component". Component batching requires
 	// execution.mode=worktree because every component receives an isolated branch.
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" validate:"omitempty,oneof=scope component"`
 }
 
+// VendorUpdateGroupConfig selects components for a named vendor update group.
 type VendorUpdateGroupConfig struct {
 	Include []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`
 	Exclude []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
@@ -31,6 +34,7 @@ type VendorCIConfig struct {
 	Summary     VendorSummaryConfig     `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
 }
 
+// VendorPullRequestConfig configures pull request publishing for vendor CI.
 type VendorPullRequestConfig struct {
 	Provider     string   `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider" validate:"omitempty,oneof=github"`
 	BaseBranch   string   `yaml:"base_branch,omitempty" json:"base_branch,omitempty" mapstructure:"base_branch"`
@@ -43,6 +47,7 @@ type VendorPullRequestConfig struct {
 	Assignees    []string `yaml:"assignees,omitempty" json:"assignees,omitempty" mapstructure:"assignees"`
 }
 
+// VendorSummaryConfig configures CI summary output for vendor updates.
 type VendorSummaryConfig struct {
 	// Enabled defaults to true when omitted. The command treats false as an
 	// explicit opt-out only when the summary map is present in configuration.

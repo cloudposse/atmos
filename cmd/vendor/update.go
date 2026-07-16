@@ -100,7 +100,10 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			if discovery.UpdatedCount() == 0 {
 				result.Updates, result.Updated = discovery.Results, 0
 				renderVendorUpdateResult(discovery, true, v, format)
-				renderComponentUpdaterJSON(&result, format)
+				if err := renderComponentUpdaterJSON(&result, format); err != nil {
+					result.Status, result.Failure = "failed", err.Error()
+					return err
+				}
 				return nil
 			}
 			if group != "" {
@@ -117,8 +120,7 @@ comments, anchors, and templates. Use --check for a dry run.`,
 		report, err = runVendorUpdate(v, componentType, tags, typeChanged, selected, group, check)
 
 		if report != nil {
-			result.Updates, result.Updated = report.Results, report.UpdatedCount()
-			result.Status = "updated"
+			applyComponentUpdaterReport(&result, report)
 			renderVendorUpdateResult(report, check, v, format)
 		}
 		if err != nil {
@@ -146,9 +148,21 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			result.Commit = commit
 			result.PullRequest = pr
 		}
-		renderComponentUpdaterJSON(&result, format)
+		if err := renderComponentUpdaterJSON(&result, format); err != nil {
+			result.Status, result.Failure = "failed", err.Error()
+			return err
+		}
 		return nil
 	},
+}
+
+func applyComponentUpdaterReport(result *updater.Result, report *vendoring.UpdateReport) {
+	result.Updates, result.Updated = report.Results, report.UpdatedCount()
+	if result.Updated > 0 {
+		result.Status = "updated"
+		return
+	}
+	result.Status = "no_updates"
 }
 
 // repoWideUpdateParams bundles runRepoWideUpdate's inputs (an Options-pattern struct, since the
