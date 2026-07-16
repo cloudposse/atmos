@@ -56,6 +56,7 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 		if _, statErr := os.Stat(cachePath); statErr == nil {
 			if cachedAssetMatchesURL(cachePath, url) {
 				log.Debug("Using cached asset", filenameKey, filename)
+				i.reportCachedDownloadProgress(cachePath)
 				assetPath = cachePath
 				return nil
 			}
@@ -74,6 +75,20 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 		return "", err
 	}
 	return assetPath, nil
+}
+
+// reportCachedDownloadProgress keeps the interactive renderer informative
+// after a cache hit. Verification can take much longer than download, so the
+// last known asset size must remain visible while the tool is being verified.
+func (i *Installer) reportCachedDownloadProgress(cachePath string) {
+	if i.downloadProgress == nil {
+		return
+	}
+	info, err := os.Stat(cachePath)
+	if err != nil {
+		return
+	}
+	i.downloadProgress(info.Size(), info.Size())
 }
 
 func cachedAssetMatchesURL(cachePath, url string) bool {

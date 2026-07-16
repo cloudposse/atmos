@@ -57,6 +57,13 @@ const (
 	// Fallback cosign verifier bootstrap version for transient GitHub latest-release lookup failures.
 	// renovate: datasource=github-releases depName=sigstore/cosign.
 	defaultCosignVerifierVersion = "v3.0.6"
+	// LegacyCosignVerifierVersion is retained for release metadata that supplies
+	// a certificate and detached signature instead of a Sigstore bundle. Cosign
+	// v3 deprecates those flags and its Rekor lookup can reject otherwise-valid
+	// legacy evidence; v2.6.1 verifies that evidence without the deprecated
+	// path. New bundle-based metadata continues to use the current verifier.
+	// renovate: datasource=github-releases depName=sigstore/cosign.
+	legacyCosignVerifierVersion = "v2.6.1"
 )
 
 // EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
@@ -429,7 +436,12 @@ type verifierCommandRunner struct {
 func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...string) error {
 	defer perf.Track(nil, "installer.verifierCommandRunner.Run")()
 
-	if path, err := exec.LookPath(name); err == nil {
+	legacyVersion := legacyVerifierVersion(name, args)
+	// Do not route legacy certificate/signature verification through a
+	// user- or Atmos-provided Cosign v3 found on PATH: v3 deprecated this path
+	// and its Rekor client can reject valid legacy evidence. Bootstrap the
+	// compatible v2 verifier below instead.
+	if path, err := exec.LookPath(name); err == nil && legacyVersion == "" {
 		return runVerifierCommand(ctx, path, args...)
 	}
 	if r.policy.VerifierInstall != verification.VerifierInstallAuto {
@@ -445,27 +457,91 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 		Signatures:      verification.PolicyDisabled, // Avoid circularity: verifying cosign's signature would itself need cosign.
 		VerifierInstall: verification.VerifierInstallPathOnly,
 	}
-	version, err := bootstrap.resolveVerifierInstallVersion(owner, repo)
-	if err != nil {
-		return fmt.Errorf("%w: resolve verifier %s version: %w", verification.ErrVerifierCommandRequired, name, err)
+	version := legacyVersion
+	if version == "" {
+		version, err := bootstrap.resolveVerifierInstallVersion(owner, repo)
+		if err != nil {
+			return fmt.Errorf("%w: resolve verifier %s version: %w", verification.ErrVerifierCommandRequired, name, err)
+		}
+		return r.runBootstrapVerifier(ctx, &verifierBootstrapRequest{name: name, version: version, owner: owner, repo: repo, installer: bootstrap, args: args})
 	}
-	binaryPath, err := bootstrap.Install(owner, repo, version)
+	return r.runBootstrapVerifier(ctx, &verifierBootstrapRequest{name: name, version: version, owner: owner, repo: repo, installer: bootstrap, args: args})
+}
+
+type verifierBootstrapRequest struct {
+	name      string
+	version   string
+	owner     string
+	repo      string
+	installer Installer
+	args      []string
+}
+
+func (r verifierCommandRunner) runBootstrapVerifier(ctx context.Context, request *verifierBootstrapRequest) error {
+	// Keeping installation and invocation in one helper makes it explicit that
+	// latest and pinned compatibility versions follow the same execution path.
+	binaryPath, err := request.installer.Install(request.owner, request.repo, request.version)
 	if err != nil {
-		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, name, err)
+		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, request.name, err)
 	}
-	if r.policy.VerifierTrust != verification.VerifierTrustDisabled {
-		if trustErr := trustVerifierBinaryFunc(binaryPath); trustErr != nil {
-			log.Warn("Could not mark downloaded verifier binary as locally trusted; the next command may fail",
-				"path", binaryPath, "error", trustErr)
+	return runTrustedVerifier(ctx, binaryPath, r.policy, func() error {
+		return runVerifierCommand(ctx, binaryPath, request.args...)
+	})
+}
+
+// legacyVerifierVersion returns a compatible bootstrap version only for
+// signature formats that Cosign v3 has deprecated. The flags are intentionally
+// detected by shape, not URL: Atmos materializes remote sidecars before
+// running Cosign, so their values are local paths by this point.
+func legacyVerifierVersion(name string, args []string) string {
+	if name != "cosign" {
+		return ""
+	}
+	var certificate, signature bool
+	for i := 0; i+1 < len(args); i++ {
+		switch args[i] {
+		case "--certificate":
+			certificate = true
+		case "--signature":
+			signature = true
 		}
 	}
-	return runVerifierCommand(ctx, binaryPath, args...)
+	if certificate && signature {
+		return legacyCosignVerifierVersion
+	}
+	return ""
 }
 
 // trustVerifierBinaryFunc indirects trustVerifierBinary so tests can observe
 // and override the platform-specific trust step without depending on
 // darwin-only behavior.
 var trustVerifierBinaryFunc = trustVerifierBinary
+
+// runTrustedVerifier serializes bootstrap verifier execution. Trust repair is
+// performed at most once per installed binary: repeatedly re-signing a shared
+// executable makes macOS re-evaluate it and can itself interrupt a running
+// verifier. The persistent sibling lock and marker coordinate independent
+// Atmos processes using the same cache.
+func runTrustedVerifier(ctx context.Context, binaryPath string, policy verification.Policy, run func() error) error {
+	return filelock.New(binaryPath+".run.lock").WithExclusive(ctx, func() error {
+		trustMarkerPath := binaryPath + ".trusted"
+		if policy.VerifierTrust != verification.VerifierTrustDisabled && !fileExists(trustMarkerPath) {
+			if trustErr := trustVerifierBinaryFunc(binaryPath); trustErr != nil {
+				log.Warn("Could not mark downloaded verifier binary as locally trusted; the next command may fail",
+					"path", binaryPath, "error", trustErr)
+			} else if markerErr := os.WriteFile(trustMarkerPath, nil, defaultFileWritePermissions); markerErr != nil {
+				log.Warn("Could not record local verifier trust state; it will be retried before the next command",
+					"path", binaryPath, "error", markerErr)
+			}
+		}
+		return run()
+	})
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
 	var lookupErrs []error

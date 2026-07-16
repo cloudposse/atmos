@@ -538,6 +538,7 @@ type downloadProgress struct {
 type activeInstall struct {
 	toolInfo
 	downloadProgress
+	phase string
 }
 
 // batchRenderer is the sole writer for a parallel batch. It keeps the existing
@@ -566,7 +567,7 @@ func newBatchRenderer(total int) *batchRenderer {
 
 func (r *batchRenderer) start(tool toolInfo) {
 	r.clear()
-	r.active = append(r.active, activeInstall{toolInfo: tool, downloadProgress: downloadProgress{total: -1}})
+	r.active = append(r.active, activeInstall{toolInfo: tool, downloadProgress: downloadProgress{total: -1}, phase: "Downloading"})
 	r.render()
 }
 
@@ -587,6 +588,9 @@ func (r *batchRenderer) updateProgress(tool toolInfo, download downloadProgress)
 	for i := range r.active {
 		if r.active[i].toolInfo == tool {
 			r.active[i].downloadProgress = download
+			if download.total > 0 && download.downloaded >= download.total {
+				r.active[i].phase = "Verifying"
+			}
 			return
 		}
 	}
@@ -618,7 +622,7 @@ func (r *batchRenderer) clear() {
 
 func (r *batchRenderer) render() {
 	for _, active := range r.active {
-		left := fmt.Sprintf("%s Installing %s/%s@%s", r.spinner.View(), active.owner, active.repo, active.version)
+		left := fmt.Sprintf("%s %s %s/%s@%s", r.spinner.View(), active.phase, active.owner, active.repo, active.version)
 		ui.Writef("%s\n", rightAlignInstallProgress(left, active.downloaded, active.total, getTerminalWidth()))
 		r.renderedLines++
 	}

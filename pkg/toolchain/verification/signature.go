@@ -106,14 +106,20 @@ func runCosignWithRetry(ctx context.Context, req *Request, args []string) error 
 
 func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.CosignConfig, result *Result) ([]string, func(), error) {
 	args := []string{"verify-blob"}
+	var optionCleanup func()
 	if len(cfg.Opts) > 0 {
 		rendered, err := renderArgs(cfg.Opts, req)
+		if err != nil {
+			return nil, nil, err
+		}
+		rendered, optionCleanup, err = v.downloadCosignOptionSidecars(ctx, req, rendered)
 		if err != nil {
 			return nil, nil, err
 		}
 		args = append(args, rendered...)
 	}
 	sidecars, cleanup, err := v.downloadCosignSidecars(ctx, req, cfg)
+	cleanup = combineCleanups(optionCleanup, cleanup)
 	if err == nil {
 		args = append(args, sidecars...)
 		if len(args) == 1 {
@@ -122,10 +128,72 @@ func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.C
 		return args, cleanup, nil
 	}
 	if req.Policy.Signatures != PolicyRequired {
+		cleanup()
 		result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("cosign sidecar unavailable: %v", err))
-		return nil, cleanup, nil
+		return nil, nil, nil
 	}
-	return nil, cleanup, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+	cleanup()
+	return nil, nil, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+}
+
+// cosignURLSidecarFlags are legacy Cosign flags whose URL values are fetched
+// by Cosign itself. Downloading them through Atmos instead keeps retries,
+// authentication, and macOS transport behavior under our control.
+var cosignURLSidecarFlags = map[string]struct{}{
+	"--signature":   {},
+	"--certificate": {},
+	"--key":         {},
+	"--bundle":      {},
+}
+
+func (v *Verifier) downloadCosignOptionSidecars(ctx context.Context, req *Request, args []string) ([]string, func(), error) {
+	if !hasRemoteCertificateSignaturePair(args) {
+		return args, func() {}, nil
+	}
+	paths := make([]string, 0)
+	for i := 0; i+1 < len(args); i++ {
+		if _, ok := cosignURLSidecarFlags[args[i]]; !ok || !isHTTPURL(args[i+1]) {
+			continue
+		}
+		path, err := v.downloadTempSidecar(ctx, req, args[i+1])
+		if err != nil {
+			for _, downloadedPath := range paths {
+				_ = os.Remove(downloadedPath)
+			}
+			return nil, nil, err
+		}
+		paths = append(paths, path)
+		args[i+1] = path
+		i++
+	}
+	return args, func() {
+		for _, path := range paths {
+			_ = os.Remove(path)
+		}
+	}, nil
+}
+
+func hasRemoteCertificateSignaturePair(args []string) bool {
+	var certificate, signature bool
+	for i := 0; i+1 < len(args); i++ {
+		switch args[i] {
+		case "--certificate":
+			certificate = isHTTPURL(args[i+1])
+		case "--signature":
+			signature = isHTTPURL(args[i+1])
+		}
+	}
+	return certificate && signature
+}
+
+func combineCleanups(cleanups ...func()) func() {
+	return func() {
+		for _, cleanup := range cleanups {
+			if cleanup != nil {
+				cleanup()
+			}
+		}
+	}
 }
 
 func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.SLSAProvenance, result *Result) error {

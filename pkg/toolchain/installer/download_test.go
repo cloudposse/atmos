@@ -217,13 +217,18 @@ func TestDownloadAsset_CacheBehavior(t *testing.T) {
 		url := "https://github.com/owner/repo/releases/download/v1.0.0/" + cachedFilename
 		require.NoError(t, os.WriteFile(cacheSourceURLPath(cachedPath), []byte(url+"\n"), 0o644))
 
+		var progress [][2]int64
 		installer := &Installer{
 			cacheDir: cacheDir,
+			downloadProgress: func(downloaded, total int64) {
+				progress = append(progress, [2]int64{downloaded, total})
+			},
 		}
 
 		result, err := installer.downloadAsset(url)
 		assert.NoError(t, err)
 		assert.Equal(t, cachedPath, result)
+		assert.Equal(t, [][2]int64{{int64(len("cached content")), int64(len("cached content"))}}, progress)
 
 		// Verify we got the cached content (not a download).
 		content, err := os.ReadFile(result)

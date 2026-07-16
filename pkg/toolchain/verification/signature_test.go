@@ -88,19 +88,18 @@ func TestVerifyCosignCommandFromOptsUsesEffectiveGitHubReleaseVersion(t *testing
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,
 		},
+		Downloader: fakeDownloader{
+			"https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.pem": []byte("pem"),
+			"https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.sig": []byte("sig"),
+		},
 		Runner: runner,
 	})
 
 	require.NoError(t, err)
 	require.Len(t, runner.calls, 1)
-	assert.Equal(t, []string{
-		"verify-blob",
-		"--certificate",
-		"https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.pem",
-		"--signature",
-		"https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.sig",
-		writeAssetPathPlaceholder(runner.calls[0].args),
-	}, normalizeLastArg(runner.calls[0].args))
+	assert.Equal(t, []string{"verify-blob", "--certificate", "--signature"}, []string{runner.calls[0].args[0], runner.calls[0].args[1], runner.calls[0].args[3]})
+	assert.NotEqual(t, "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.pem", runner.calls[0].args[2])
+	assert.NotEqual(t, "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.sig", runner.calls[0].args[4])
 }
 
 func TestVerifyCosignCommandFromOptsUsesEffectiveHTTPVersionSegment(t *testing.T) {
@@ -125,19 +124,18 @@ func TestVerifyCosignCommandFromOptsUsesEffectiveHTTPVersionSegment(t *testing.T
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,
 		},
+		Downloader: fakeDownloader{
+			"https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.sig":  []byte("sig"),
+			"https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.cert": []byte("cert"),
+		},
 		Runner: runner,
 	})
 
 	require.NoError(t, err)
 	require.Len(t, runner.calls, 1)
-	assert.Equal(t, []string{
-		"verify-blob",
-		"--signature",
-		"https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.sig",
-		"--certificate",
-		"https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.cert",
-		writeAssetPathPlaceholder(runner.calls[0].args),
-	}, normalizeLastArg(runner.calls[0].args))
+	assert.Equal(t, []string{"verify-blob", "--signature", "--certificate"}, []string{runner.calls[0].args[0], runner.calls[0].args[1], runner.calls[0].args[3]})
+	assert.NotEqual(t, "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.sig", runner.calls[0].args[2])
+	assert.NotEqual(t, "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.cert", runner.calls[0].args[4])
 }
 
 func TestVerifySignatureCommands(t *testing.T) {

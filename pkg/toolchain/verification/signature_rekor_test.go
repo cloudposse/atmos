@@ -90,6 +90,7 @@ func TestClassifyCosignError(t *testing.T) {
 		{name: "cosign --certificate fetch 504 is retryable", err: errors.New(certFetch504), wantWrapped: true},
 		{name: "cosign --signature fetch 503 is retryable", err: errors.New(sigFetch503), wantWrapped: true},
 		{name: "macOS certificate-sidecar TLS failure is retryable", err: errors.New(macOSCertificateFetchTLSFailure), wantWrapped: true},
+		{name: "macOS terminated cosign process is retryable", err: errors.New("cosign [verify-blob ...]: signal: killed"), wantWrapped: true},
 		{name: "cosign --certificate fetch 404 is NOT retryable", err: errors.New(certFetch404), wantWrapped: false},
 		{name: "connection reset is retryable", err: transportErr("read tcp 10.0.0.1:443: connection reset by peer"), wantWrapped: true},
 		{name: "TLS handshake timeout is retryable", err: transportErr("net/http: TLS handshake timeout"), wantWrapped: true},

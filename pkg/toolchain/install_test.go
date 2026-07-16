@@ -40,6 +40,15 @@ func TestRightAlignInstallProgress(t *testing.T) {
 	})
 }
 
+func TestBatchRendererMarksCompletedDownloadAsVerifying(t *testing.T) {
+	tool := toolInfo{owner: "owner", repo: "tool", version: "v1.0.0"}
+	renderer := &batchRenderer{active: []activeInstall{{toolInfo: tool, phase: "Downloading"}}}
+
+	renderer.updateProgress(tool, downloadProgress{downloaded: 100, total: 100})
+
+	assert.Equal(t, "Verifying", renderer.active[0].phase)
+}
+
 func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
