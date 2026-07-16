@@ -627,12 +627,17 @@ func (d *TerraformDispatcher) runAfterNodeHooks(ctx context.Context, nodeInfo *s
 }
 
 func terraformExecutionError(node *dependency.Node, result TerraformExecutionResult, err error) error {
-	baseErr := fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
+	cause := fmt.Errorf("component=%s stack=%s: %w", node.Component, node.Stack, err)
 	detail := terraformFailureOutputDetail(result)
-	if detail == "" {
-		return baseErr
+	if detail != "" {
+		cause = fmt.Errorf("%w\n\nterraform output:\n```text\n%s\n```", cause, detail)
 	}
-	return fmt.Errorf("%w\n\nterraform output:\n```text\n%s\n```", baseErr, detail)
+	return errUtils.Build(errUtils.ErrTerraformExecFailed).
+		WithCause(cause).
+		WithExplanationf("Terraform execution failed for component %q in stack %q.", node.Component, node.Stack).
+		WithContext("component", node.Component).
+		WithContext("stack", node.Stack).
+		Err()
 }
 
 func terraformFailureOutputDetail(result TerraformExecutionResult) string {
@@ -738,7 +743,12 @@ func addTerraformDependencies(
 	componentSection map[string]any,
 ) error {
 	fromID := terraformNodeID(componentName, stackName)
-	for _, dep := range terraformDependencies(componentSection) {
+	dependencies, err := terraformDependencies(componentSection)
+	if err != nil {
+		return fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
+	}
+	for dependencyIndex := range dependencies {
+		dep := &dependencies[dependencyIndex]
 		if !dep.IsComponentDependency() {
 			continue
 		}
@@ -765,31 +775,56 @@ func addTerraformDependencies(
 }
 
 // terraformDependencies extracts modern or legacy dependency declarations from a component.
-func terraformDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	if depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any); ok {
-		if _, hasComponents := depsSection["components"]; hasComponents {
-			var deps schema.Dependencies
-			if err := mapstructure.Decode(depsSection, &deps); err == nil && len(deps.Components) > 0 {
-				return deps.Components
-			}
-		}
+func terraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
+	dependencies, found, err := modernTerraformDependencies(componentSection)
+	if err != nil || found {
+		return dependencies, err
 	}
 
+	return legacyTerraformDependencies(componentSection)
+}
+
+func modernTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, bool, error) {
+	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
+	if !ok {
+		return nil, false, nil
+	}
+	if _, hasComponents := depsSection["components"]; !hasComponents {
+		return nil, false, nil
+	}
+
+	var deps schema.Dependencies
+	if err := mapstructure.Decode(depsSection, &deps); err != nil {
+		return nil, false, err
+	}
+	if len(deps.Components) == 0 {
+		return nil, false, nil
+	}
+	if err := deps.Normalize(); err != nil {
+		return nil, true, err
+	}
+	return deps.Components, true, nil
+}
+
+func legacyTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	if dependsOn, ok := settingsSection["depends_on"]; ok {
 		deps := parseLegacyDependsOn(dependsOn)
 		if len(deps) > 0 {
 			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
-			return deps
+			return deps, nil
 		}
 	}
 
 	var settings schema.Settings
-	if err := mapstructure.Decode(settingsSection, &settings); err != nil || len(settings.DependsOn) == 0 {
-		return nil
+	if err := mapstructure.Decode(settingsSection, &settings); err != nil {
+		return nil, err
+	}
+	if len(settings.DependsOn) == 0 {
+		return nil, nil
 	}
 
 	log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
@@ -805,7 +840,7 @@ func terraformDependencies(componentSection map[string]any) []schema.ComponentDe
 			Stage:       ctx.Stage,
 		})
 	}
-	return deps
+	return deps, nil
 }
 
 // parseLegacyDependsOn normalizes settings.depends_on into component dependencies.

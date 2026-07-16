@@ -65,6 +65,9 @@ atmos emulator up aws -s local
 # Lint every stack manifest.
 atmos validate stacks
 
+# One-time setup on macOS/Windows: trust the local Terraform registry-cache proxy.
+atmos terraform cache trust
+
 # Seed the required app-config secrets.
 atmos secret set API_KEY=sk-quickstart-example -s plat-ue2-dev -c app-config
 atmos secret set 'DB_CONFIG={"username":"app","password":"s3cr3t"}' -s plat-ue2-dev -c app-config

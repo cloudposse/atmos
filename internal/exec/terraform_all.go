@@ -12,6 +12,7 @@ import (
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -34,8 +35,14 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		return errUtils.ErrComponentWithAllFlagConflict
 	}
 
+	var atmosConfig schema.AtmosConfiguration
+	var stacks map[string]any
+	preflight := spinner.New("Loading stack configuration and resolving templates")
+	preflight.Start()
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
+		preflight.Error("Failed to load Terraform stack configuration")
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
 
@@ -44,15 +51,18 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 	// Create auth manager so YAML functions (e.g. !terraform.state) can use authenticated
 	// credentials when ExecuteDescribeStacks processes stack configurations under --all.
 	// Mirrors the behavior added for --query/--components in ExecuteTerraformQuery (#2081).
+	preflight.Update("Resolving Terraform identity")
 	authManager, err := createQueryAuthManager(info, &atmosConfig)
 	if err != nil {
+		preflight.Error("Failed to resolve Terraform identity")
 		return err
 	}
 	if authManager != nil {
 		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
-	stacks, err := ExecuteDescribeStacksWithMocks(
+	preflight.Update("Resolving Terraform component instances, secrets, and state references")
+	stacks, err = ExecuteDescribeStacksWithMocks(
 		&atmosConfig,
 		info.Stack,
 		nil, // all components
@@ -67,8 +77,10 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		info.UseMocks,
 	)
 	if err != nil {
+		preflight.Error("Failed to resolve Terraform component instances")
 		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
 	}
+	preflight.Success("Resolved Terraform stacks and dependencies")
 
 	if info.SubCommand == "destroy" {
 		ui.Info("Processing components in reverse dependency order for destroy")

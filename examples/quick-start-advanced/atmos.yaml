@@ -52,6 +52,11 @@ components:
     platforms:
       - darwin_arm64
       - linux_amd64
+    # Cache provider and module registry downloads behind Atmos's local registry
+    # proxy. The first init warms the cache; repeated plans avoid re-downloading
+    # the same artifacts.
+    cache:
+      enabled: true
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "components/terraform"

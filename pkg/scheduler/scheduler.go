@@ -411,9 +411,19 @@ func aggregateError(results []Result) error {
 	// details on AggregateResult.Results, but surface them only when every
 	// non-success result was an explicit skip.
 	if len(failed) > 0 {
-		return stdErrors.Join(failed...)
+		return joinErrors(failed)
 	}
-	return stdErrors.Join(skipped...)
+	return joinErrors(skipped)
+}
+
+// joinErrors preserves the original error when there is only one result. In
+// particular, ErrorBuilder metadata (explanations and hints) can be rendered
+// by the CLI only when the enriched error itself reaches the formatter.
+func joinErrors(errs []error) error {
+	if len(errs) == 1 {
+		return errs[0]
+	}
+	return stdErrors.Join(errs...)
 }
 
 func orderedResults(orderedIDs []string, results map[string]Result) []Result {

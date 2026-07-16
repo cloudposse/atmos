@@ -466,6 +466,34 @@ func TestBuildTerraformGraphPrefersDependenciesComponentsOverSettingsDependsOn(t
 	require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
 }
 
+func TestBuildTerraformGraphSupportsCanonicalAndLegacyComponentDependencyNames(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"canonical": terraformAdapterComponent("selected", nil, nil),
+					"legacy":    terraformAdapterComponent("selected", nil, nil),
+					"app": terraformAdapterComponent(
+						"selected",
+						[]any{
+							map[string]any{"name": "canonical"},
+							map[string]any{"component": "legacy"},
+						},
+						nil,
+					),
+				},
+			},
+		},
+	}
+
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode("app-dev")
+	require.True(t, ok)
+	require.ElementsMatch(t, []string{"canonical-dev", "legacy-dev"}, app.Dependencies)
+}
+
 func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -733,6 +761,25 @@ func TestTerraformExecutionErrorIncludesCapturedOutputDetail(t *testing.T) {
 	require.Contains(t, err.Error(), "```text")
 	require.Contains(t, err.Error(), "Error acquiring the state lock")
 	require.Contains(t, err.Error(), "gs://nxtfwd-tf-state/clickhouse-keeper-vm/fuecoco-stg.tflock")
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	require.Contains(t, formatted, "Terraform execution failed for component \"clickhouse-keeper-vm\" in stack \"fuecoco-stg\"")
+}
+
+func TestTerraformExecutionErrorPreservesStructuredCauseDetails(t *testing.T) {
+	cause := errUtils.Build(errUtils.ErrCacheCertUntrusted).
+		WithExplanation("The local registry cache certificate has not been trusted.").
+		WithHint("Run `atmos terraform cache trust`, then retry the command.").
+		Err()
+
+	err := terraformExecutionError(
+		&dependency.Node{Component: "dynamodb-table", Stack: "plat-ue2-dev"},
+		TerraformExecutionResult{},
+		cause,
+	)
+
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	require.Contains(t, formatted, "The local registry cache certificate has not been trusted.")
+	require.Contains(t, formatted, "atmos terraform cache trust")
 }
 
 func TestTerraformOutputConfiguration(t *testing.T) {
