@@ -2,7 +2,7 @@ commands:
   - name: build
     description: Build and documentation commands for Atmos development
     default: binary
-    working_directory: !git.root
+    working_directory: !repo-root .
     env: &build_env
       - key: GOTOOLCHAIN
         value: auto
@@ -37,11 +37,12 @@ commands:
     commands:
       - name: deps
         description: Download Go module dependencies, retrying on transient network failures
+        working_directory: !repo-root .
         env:
           - key: GOTOOLCHAIN
             value: auto
         steps:
-          - command: cd "$(git rev-parse --show-toplevel)" && go mod download
+          - command: go mod download
             type: shell
             retry:
               max_attempts: 5
@@ -51,6 +52,7 @@ commands:
 
       - name: binary
         description: Build the Atmos binary
+        working_directory: !repo-root .
         env: *build_env
         flags:
           - name: target
@@ -69,6 +71,7 @@ commands:
 
       - name: version
         description: Print the version from an already-built Atmos binary
+        working_directory: !repo-root .
         env:
           - key: ATMOS_BUILD_TARGET
             value: "{{ .Flags.target }}"
@@ -79,7 +82,6 @@ commands:
         steps:
           - |
             set -eu
-            cd "$(git rev-parse --show-toplevel)"
 
             target="${ATMOS_BUILD_TARGET:-default}"
 
@@ -100,12 +102,12 @@ commands:
 
       - name: readme
         description: Regenerate README.md from README.yaml
+        working_directory: !repo-root .
         env:
           - key: GOTOOLCHAIN
             value: auto
         steps:
           - |
             set -eu
-            cd "$(git rev-parse --show-toplevel)"
             atmos build
             ./build/atmos docs generate readme
