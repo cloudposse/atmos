@@ -429,6 +429,11 @@ func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndSta
 		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
 		return nil // Config errors surface on the real execution path, not here.
 	}
+	// Each graph node initializes its own configuration. Reinstall the store auth
+	// resolver from the node's authenticated context before running hooks so
+	// identity-aware store hooks (for example, after-apply output publishing)
+	// do not fall back to ambient credentials.
+	injectHookStoreAuthResolver(&atmosConfig, info)
 	return n.runUserHooksForNode(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess})
 }
 
@@ -442,6 +447,9 @@ func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStac
 		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
 		return nil
 	}
+	// See Before: cfg.InitCliConfig creates a fresh store registry for every
+	// scheduler node, so its resolver must be restored before after-hooks use it.
+	injectHookStoreAuthResolver(&atmosConfig, info)
 
 	outcome := h.Outcome{Status: h.RunSuccess}
 	if execErr != nil {
