@@ -328,8 +328,13 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			Manager:      m,
 			Realm:        m.realm.Value,
 		}); err != nil {
-			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
+			// Keep structured details and hints from the identity error. Emulator
+			// identities use those hints to tell the user how to start the selected
+			// emulator when it is not running.
+			wrappedErr := errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithCause(err).
+				WithExplanation("Post-authentication failed.").
+				Err()
 			return nil, wrappedErr
 		}
 

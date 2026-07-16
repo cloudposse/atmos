@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -48,15 +49,31 @@ func resolveEmulatorProfile(ctx context.Context, reference string) (emu.Profile,
 	if err != nil {
 		return emu.Profile{}, err
 	}
+
+	// A qualified reference is an exact configured component address. Resolve it
+	// before consulting the runtime so an absent component is not misreported as
+	// a stopped emulator.
+	var configured *resolved
+	if ref.Stack != "" {
+		info := schema.ConfigAndStacksInfo{Stack: ref.Stack, ComponentFromArg: ref.Name, ComponentType: cfg.EmulatorComponentType}
+		configured, err = prepare(&info)
+		if err != nil {
+			if errors.Is(err, errUtils.ErrInvalidComponent) {
+				return emu.Profile{}, emulatorNotConfiguredError(ref)
+			}
+			return emu.Profile{}, err
+		}
+	}
+
 	atmosConfig, err := initCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return emu.Profile{}, err
 	}
 
-	manager := newManager(
-		strings.TrimSpace(atmosConfig.Container.Runtime.Provider),
-		atmosConfig.Container.Runtime.AutoStart,
-	)
+	manager := newManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider), atmosConfig.Container.Runtime.AutoStart)
+	if configured != nil {
+		manager = configured.manager()
+	}
 	statuses, err := manager.Ps(ctx, "")
 	if err != nil {
 		return emu.Profile{}, err
@@ -81,10 +98,13 @@ func resolveEmulatorProfile(ctx context.Context, reference string) (emu.Profile,
 		)
 	}
 
-	info := schema.ConfigAndStacksInfo{Stack: matches[0].Stack, ComponentFromArg: ref.Name, ComponentType: cfg.EmulatorComponentType}
-	r, err := prepare(&info)
-	if err != nil {
-		return emu.Profile{}, err
+	r := configured
+	if r == nil {
+		info := schema.ConfigAndStacksInfo{Stack: matches[0].Stack, ComponentFromArg: ref.Name, ComponentType: cfg.EmulatorComponentType}
+		r, err = prepare(&info)
+		if err != nil {
+			return emu.Profile{}, err
+		}
 	}
 
 	_, profile, err := r.manager().Resolve(ctx, &r.spec, matches[0].Stack, ref.Name)
@@ -92,6 +112,22 @@ func resolveEmulatorProfile(ctx context.Context, reference string) (emu.Profile,
 		return emu.Profile{}, err
 	}
 	return profile, nil
+}
+
+func emulatorNotConfiguredError(ref emulatorReference) error {
+	builder := errUtils.Build(errUtils.ErrEmulatorNotConfigured).
+		WithTitle("Emulator not configured").
+		WithCausef("emulator %q is not configured", ref.String())
+
+	if ref.Stack != "" {
+		return builder.
+			WithHintf("Configure emulator %q in stack %q before starting it.", ref.Name, ref.Stack).
+			Err()
+	}
+
+	return builder.
+		WithHint("Run `atmos emulator list` to find configured emulator instances.").
+		Err()
 }
 
 func emulatorNotRunningError(ref emulatorReference) error {

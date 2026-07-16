@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	emu "github.com/cloudposse/atmos/pkg/emulator"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -53,6 +54,19 @@ func TestResolveEmulator_QualifiedInstanceIgnoresStoppedMatches(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
 	assert.Contains(t, err.Error(), "local/aws")
 	assert.Contains(t, cockroachErrors.GetAllHints(err), "Start it with `atmos emulator up aws -s local`.")
+}
+
+func TestResolveEmulator_QualifiedInstanceNotConfigured(t *testing.T) {
+	stubPrepare(t, validSection(), nil, &fakeManager{})
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		return info, errUtils.ErrInvalidComponent
+	}
+
+	_, _, err := emulatorResolver{}.ResolveEmulator(context.Background(), "local/aws")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotConfigured)
+	assert.Contains(t, err.Error(), "local/aws")
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Configure emulator \"aws\" in stack \"local\" before starting it.")
 }
 
 func TestResolveEmulator_BareNameIsAmbiguousAcrossStacks(t *testing.T) {

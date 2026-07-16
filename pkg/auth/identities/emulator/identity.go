@@ -162,7 +162,7 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 
 	env, kubeconfig, err := i.resolver.ResolveEmulator(ctx, i.config.Emulator)
 	if err != nil {
-		return nil, fmt.Errorf("resolve emulator %q for identity %q: %w", i.config.Emulator, i.Name(), err)
+		return nil, wrapResolverError(i, err)
 	}
 
 	for k, v := range env {
@@ -216,9 +216,19 @@ func (i *Identity) resolveEmulatorEnvForContext(ctx context.Context, params *typ
 	}
 	env, _, err := i.resolver.ResolveEmulator(ctx, i.config.Emulator)
 	if err != nil {
-		return nil, fmt.Errorf("resolve emulator %q for identity %q: %w", i.config.Emulator, i.Name(), err)
+		return nil, wrapResolverError(i, err)
 	}
 	return env, nil
+}
+
+// wrapResolverError adds the identity context without discarding the resolver's
+// structured details and hints. In particular, the component emulator resolver
+// provides the command needed to start a stopped emulator.
+func wrapResolverError(i *Identity, cause error) error {
+	return errUtils.Build(errUtils.ErrEmulatorResolutionFailed).
+		WithCause(cause).
+		WithExplanationf("Could not resolve emulator %q for identity %q.", i.config.Emulator, i.Name()).
+		Err()
 }
 
 // Logout removes the harvested kubeconfig file (best-effort). No-op for cloud targets.

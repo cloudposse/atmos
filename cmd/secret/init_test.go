@@ -2,11 +2,14 @@ package secret
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/secrets/providers"
 )
@@ -79,6 +82,64 @@ func TestRunSecretInit_DryRun(t *testing.T) {
 
 	// Dry-run reports but never writes.
 	assert.Empty(t, svc.setCalls)
+}
+
+func TestRunSecretInit_InputFile(t *testing.T) {
+	_, stderr := setupIOCapture(t)
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{
+		{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: false},
+		{Declaration: secrets.Declaration{Name: "DB_CONFIG"}, Initialized: false},
+	}
+	svc.declared["API_KEY"] = true
+	svc.declared["DB_CONFIG"] = true
+	installService(t, svc, nil)
+
+	path := filepath.Join(t.TempDir(), ".env.local")
+	require.NoError(t, os.WriteFile(path, []byte("# local development\nAPI_KEY=from-file # comment\nUNDECLARED=ignored\n"), 0o600))
+
+	err := runSecretSubcommand(t, "init", "--input", path, "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+	require.Len(t, svc.setCalls, 1)
+	assert.Equal(t, "API_KEY", svc.setCalls[0].name)
+	assert.Equal(t, "from-file", svc.setCalls[0].value)
+	assert.Contains(t, stderr.String(), "Skipping undeclared input key UNDECLARED")
+}
+
+func TestRunSecretInit_InputFileStrictRejectsUndeclaredKey(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: false}}
+	svc.declared["API_KEY"] = true
+	installService(t, svc, nil)
+
+	path := filepath.Join(t.TempDir(), ".env.local")
+	require.NoError(t, os.WriteFile(path, []byte("API_KEY=from-file\nTYPO=value\n"), 0o600))
+
+	err := runSecretSubcommand(t, "init", "--input", path, "--mode", "strict", "--stack", "dev", "--component", "api")
+	require.ErrorIs(t, err, errUtils.ErrValidationFailed)
+	assert.Empty(t, svc.setCalls, "strict validation must fail before writing any values")
+}
+
+func TestReadInitInput_RedirectedStdin(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	originalStdin := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() {
+		_ = r.Close()
+		os.Stdin = originalStdin
+	})
+	originalIsTTY := initStdinIsTTY
+	initStdinIsTTY = func() bool { return false }
+	t.Cleanup(func() { initStdinIsTTY = originalIsTTY })
+
+	_, err = w.WriteString("# comment\nAPI_KEY=from-stdin\n")
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	values, err := readInitInput("")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"API_KEY": "from-stdin"}, values)
 }
 
 func TestRunSecretInit_PromptError(t *testing.T) {

@@ -21,7 +21,120 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 )
+
+func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
+	originalStart := startTerraformCacheForExecution
+	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+	setup := &tfcache.Setup{}
+	starts := 0
+	closes := 0
+	startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+		starts++
+		return setup, func() { closes++ }, nil
+	}
+
+	var executed int
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed++
+			require.True(t, execution.Info.TerraformCacheExternal)
+			require.Same(t, setup, execution.Info.TerraformCache)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 3, executed)
+	require.Equal(t, 1, starts)
+	require.Equal(t, 1, closes)
+}
+
+func TestExecuteTerraformClosesSharedRegistryCacheOnFailureAndCancellation(t *testing.T) {
+	tests := []struct {
+		name     string
+		context  func() context.Context
+		executor TerraformExecutor
+	}{
+		{
+			name:    "component failure",
+			context: context.Background,
+			executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+				return TerraformExecutionResult{}, errors.New("plan failed")
+			},
+		},
+		{
+			name: "canceled scheduler context",
+			context: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+			executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+				t.Fatal("canceled scheduler must not execute a component")
+				return TerraformExecutionResult{}, nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalStart := startTerraformCacheForExecution
+			t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+			starts := 0
+			closes := 0
+			startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+				starts++
+				return &tfcache.Setup{}, func() { closes++ }, nil
+			}
+
+			err := ExecuteTerraform(tt.context(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"},
+				Stacks:      terraformAdapterTestStacks(),
+				Executor:    tt.executor,
+			})
+
+			require.Error(t, err)
+			require.Equal(t, 1, starts)
+			require.Equal(t, 1, closes)
+		})
+	}
+}
+
+func TestExecuteTerraformDoesNotStartRegistryCacheForEmptySelection(t *testing.T) {
+	originalStart := startTerraformCacheForExecution
+	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+	starts := 0
+	startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+		starts++
+		return &tfcache.Setup{}, func() {}, nil
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"},
+		Stacks:      map[string]any{},
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+			t.Fatal("empty selection must not execute a component")
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Zero(t, starts)
+}
 
 func TestExecuteTerraformAllUsesGraphBackedSequentialOrder(t *testing.T) {
 	stacks := terraformAdapterTestStacks()

@@ -68,9 +68,9 @@ atmos validate stacks
 # One-time setup on macOS/Windows: trust the local Terraform registry-cache proxy.
 atmos terraform cache trust
 
-# Seed the required app-config secrets.
-atmos secret set API_KEY=sk-quickstart-example -s plat-ue2-dev -c app-config
-atmos secret set 'DB_CONFIG={"username":"app","password":"s3cr3t"}' -s plat-ue2-dev -c app-config
+# Seed the required app-config secrets from the gitignored local dotenv file.
+# `secret init` also accepts the file through stdin: `atmos secret init < .env.local ...`.
+atmos secret init --input .env.local -s plat-ue2-dev -c app-config
 
 # Plan every component before state exists. `--use-mocks` resolves Terraform lookup
 # functions from literal, component-owned mocks instead of the cold remote state. Exit code 2

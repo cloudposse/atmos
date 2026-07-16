@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -43,6 +44,10 @@ const logKeyComponent = "component"
 // verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
 // --verify-plan=false).
 const verifyPlanFlagName = "verify-plan"
+
+// multiComponentPlaceholder satisfies the legacy compound-subcommand parser while
+// fleet options are applied immediately afterward. It never reaches Terraform.
+const multiComponentPlaceholder = "__atmos_multi_component__"
 
 // ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
 const ciHookConfigInitFailedMsg = "CI hook config init failed"
@@ -733,13 +738,28 @@ func executeSingleComponent(info *schema.ConfigAndStacksInfo, shellOpts ...e.She
 // to terraformRun with the parent command, which then follows the standard terraform
 // execution pipeline (ProcessCommandLineArgs → ExecuteTerraform).
 func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string) *cobra.Command {
+	return newTerraformPassthroughSubcommandWithParsers(parent, name, short)
+}
+
+// newTerraformPassthroughSubcommandWithParsers creates a passthrough command
+// with any parent-specific Atmos flag parsers required by the leaf command.
+func newTerraformPassthroughSubcommandWithParsers(parent *cobra.Command, name, short string, parsers ...*flags.StandardParser) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                name + " [component] -s [stack]",
 		Short:              short,
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(leaf *cobra.Command, args []string) error {
 			argsForParent := append([]string{name}, args...)
-			return terraformRun(terraformCmd, parent, argsForParent)
+
+			// Cobra consumes inherited Atmos flags (such as --all and --affected)
+			// on this leaf command. Bind those flags from the leaf before delegating
+			// to the parent command's Terraform execution path, otherwise the
+			// multi-component options are silently lost.
+			opts, err := parseTerraformRunOptions(leaf, parsers...)
+			if err != nil {
+				return err
+			}
+			return terraformRunWithOptions(terraformCmd, parent, argsForParent, opts)
 		},
 	}
 	RegisterTerraformCompletions(cmd)
@@ -749,16 +769,35 @@ func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string
 // terraformRun is for simple subcommands without their own parsers.
 // It binds terraformParser and delegates to terraformRunWithOptions.
 func terraformRun(parentCmd, actualCmd *cobra.Command, args []string) error {
-	v := viper.GetViper()
-	if err := terraformParser.BindFlagsToViper(actualCmd, v); err != nil {
-		return err
-	}
-
-	opts, err := ParseTerraformRunOptions(v)
+	opts, err := parseTerraformRunOptions(actualCmd)
 	if err != nil {
 		return err
 	}
 	return terraformRunWithOptions(parentCmd, actualCmd, args, opts)
+}
+
+// parseTerraformRunOptions binds the flags from the command Cobra executed and
+// returns the shared Terraform run options. Compound Terraform commands must
+// use their leaf command here because Cobra parses inherited flags on that leaf.
+func parseTerraformRunOptions(cmd *cobra.Command, parsers ...*flags.StandardParser) (*TerraformRunOptions, error) {
+	v := viper.GetViper()
+	if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+		return nil, err
+	}
+	for _, parser := range parsers {
+		if parser == nil {
+			continue
+		}
+		if err := parser.BindFlagsToViper(cmd, v); err != nil {
+			return nil, err
+		}
+	}
+
+	opts, err := ParseTerraformRunOptions(v)
+	if err != nil {
+		return nil, err
+	}
+	return opts, nil
 }
 
 // applyOptionsToInfo transfers parsed options to the info struct.
@@ -835,9 +874,22 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Build info from args. SeparatedArgs are terraform pass-through flags.
 	separatedArgs := compat.GetSeparated()
 	argsWithSubCommand := append([]string{subCommand}, args...)
-	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, separatedArgs)
+	argsForProcessing := argsWithSubCommand
+	insertedMultiComponentPlaceholder := false
+	if (opts.All || opts.Affected || opts.Query != "" || len(opts.Components) > 0 || len(opts.Tags) > 0 || len(opts.Labels) > 0) &&
+		isCompoundTerraformCommandWithoutComponent(argsWithSubCommand) {
+		// ProcessCommandLineArgs predates fleet execution and requires a component
+		// for compound commands (for example, `providers lock`). Supply a private
+		// placeholder only for parsing, then clear it before validation and routing.
+		argsForProcessing = append(append([]string{}, argsWithSubCommand...), multiComponentPlaceholder)
+		insertedMultiComponentPlaceholder = true
+	}
+	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsForProcessing, separatedArgs)
 	if err != nil {
 		return err
+	}
+	if insertedMultiComponentPlaceholder {
+		info.ComponentFromArg = ""
 	}
 
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
@@ -917,6 +969,18 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+func isCompoundTerraformCommandWithoutComponent(args []string) bool {
+	if len(args) != 2 {
+		return false
+	}
+	switch args[0] {
+	case "providers", "state", "workspace":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateTerraformMockOptions(subCommand string, useMocks, processFunctions bool) error {

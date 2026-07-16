@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -39,6 +40,10 @@ const (
 	terraformSubCommandDestroy = "destroy"
 	terraformSubCommandInit    = "init"
 )
+
+// startTerraformCacheForExecution is a seam for testing the bulk execution
+// lifecycle without binding a real loopback proxy.
+var startTerraformCacheForExecution = tfcache.StartForExecution
 
 const (
 	terraformFailureModeFailFast  = "fail-fast"
@@ -171,6 +176,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return err
 	}
 
+	closeCache, err := startSharedTerraformCache(ctx, opts.AtmosConfig, opts.Info)
+	if err != nil {
+		return err
+	}
+	defer closeCache()
+
 	dispatcher := &TerraformDispatcher{
 		atmosConfig:        opts.AtmosConfig,
 		info:               opts.Info,
@@ -206,6 +217,24 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
+}
+
+// startSharedTerraformCache starts one registry cache proxy for the complete
+// graph-backed invocation. The scheduler copies info for each node, so marking the
+// parent as externally managed makes every worker reuse the same Setup and prevents
+// ExecuteTerraform from starting and reporting a separate proxy per component.
+func startSharedTerraformCache(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (func(), error) {
+	if info.TerraformCacheExternal {
+		return func() {}, nil
+	}
+
+	setup, cleanup, err := startTerraformCacheForExecution(ctx, atmosConfig)
+	if err != nil {
+		return func() {}, err
+	}
+	info.TerraformCache = setup
+	info.TerraformCacheExternal = true
+	return cleanup, nil
 }
 
 func skippedResultCount(result *scheduler.AggregateResult) int {

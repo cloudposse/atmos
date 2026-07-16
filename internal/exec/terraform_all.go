@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -78,7 +80,7 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 	)
 	if err != nil {
 		preflight.Error("Failed to resolve Terraform component instances")
-		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
+		return terraformPreflightDescribeError(err)
 	}
 	preflight.Success("Resolved Terraform stacks and dependencies")
 
@@ -94,6 +96,25 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		Stacks:      stacks,
 		Executor:    executeTerraformQueryComponent,
 	})
+}
+
+// terraformPreflightDescribeError preserves structured errors from stack resolution
+// and explains why graph Terraform commands stop before the scheduler starts.
+func terraformPreflightDescribeError(cause error) error {
+	builder := errUtils.Build(errUtils.ErrExecuteDescribeStacks).
+		WithTitle("Terraform preflight failed").
+		WithCause(cause)
+
+	if errors.Is(cause, secrets.ErrSecretMissing) {
+		return builder.
+			WithExplanation("A required `!secret` could not be resolved before Terraform started.").
+			WithHint("Initialize the reported secret, then rerun the Terraform command.").
+			Err()
+	}
+
+	return builder.
+		WithExplanation("Terraform component instances could not be resolved before Terraform started.").
+		Err()
 }
 
 // buildTerraformDependencyGraph builds the complete dependency graph from stacks.

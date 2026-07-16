@@ -99,6 +99,12 @@ func runSecretSubcommand(t *testing.T, args ...string) error {
 	t.Helper()
 
 	resetSecretFlags(t)
+	// The test runner's stdin is an open pipe. Treat it as a TTY for ordinary
+	// command tests so `secret init` does not wait for ambient test-harness input.
+	// Tests exercising redirected input override this seam explicitly.
+	origInitStdinIsTTY := initStdinIsTTY
+	initStdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { initStdinIsTTY = origInitStdinIsTTY })
 	secretCmd.SetArgs(args)
 	t.Cleanup(func() { secretCmd.SetArgs(nil) })
 	return secretCmd.Execute()

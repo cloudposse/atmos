@@ -44,6 +44,28 @@ tests:
         - "app-config"
         - "dry run"
 
+  - name: "quick-start-advanced terraform providers lock --all dry-run"
+    enabled: true
+    tty: false
+    description: "Verify provider-lock fleet execution preserves --all on the nested providers lock command"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "providers"
+      - "lock"
+      - "--all"
+      - "-s"
+      - "plat-ue2-dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would providers lock"
+        - "kms-key"
+        - "app-config"
+        - "dry run"
+
   # Test --all flag with dry-run (no actual terraform execution)
   - name: "terraform plan --all executes without prompting"
     enabled: true

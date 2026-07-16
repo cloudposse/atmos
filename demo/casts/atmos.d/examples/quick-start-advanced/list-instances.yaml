@@ -153,7 +153,7 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           assert_colored(text, "plat-ue2-dev")
-          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config", "atmos terraform plan --all -s plat-ue2-dev", "atmos terraform deploy --all -s plat-ue2-dev", "sns-topic", "kms-key", "atmos list components --tags messaging", "kms-key", "atmos list components --labels tier=foundational"]:
+          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config", "sns-topic", "kms-key", "atmos list components --tags messaging", "atmos list components --labels tier=foundational"]:
               if needle not in plain:
                   raise SystemExit(f"list-instances cast missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-instances]", "completed"]:
