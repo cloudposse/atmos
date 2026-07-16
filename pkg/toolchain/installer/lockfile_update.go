@@ -37,7 +37,7 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(i.lockFilePath), defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("create installer lockfile directory: %w", err)
+		return fmt.Errorf("%w: mkdir %s: %w", ErrLockfileIO, filepath.Dir(i.lockFilePath), err)
 	}
 	lock := filelock.New(i.lockFilePath + ".lock")
 	return lock.WithExclusive(context.Background(), func() error {

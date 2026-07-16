@@ -197,8 +197,12 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 	defer perf.Track(nil, "toolchain.InstallSingleTool")()
 
-	installer := NewInstaller()
+	return installSingleToolWithInstaller(NewInstaller(), owner, repo, version, opts)
+}
 
+// installSingleToolWithInstaller preserves the complete single-install lifecycle
+// while allowing concurrent batches to retain their worker-specific callbacks.
+func installSingleToolWithInstaller(installer *Installer, owner, repo, version string, opts InstallOptions) error {
 	// Start spinner immediately before any potentially slow operations.
 	spinner := &spinnerControl{showingSpinner: opts.ShowProgressBar}
 	message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
@@ -335,18 +339,7 @@ func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, reinstal
 	if err == nil && !reinstallFlag {
 		return resultSkipped, nil
 	}
-	// Concurrent batches provide their own parent-owned renderer. Install with
-	// this worker's configured Installer so its download-progress callback is
-	// retained; InstallSingleTool would create a second Installer and silently
-	// drop those events.
-	if !showProgress {
-		if _, err := installer.Install(tool.owner, tool.repo, tool.version); err != nil {
-			return resultFailed, err
-		}
-		return resultInstalled, nil
-	}
-
-	err = InstallSingleTool(tool.owner, tool.repo, tool.version, InstallOptions{
+	err = installSingleToolWithInstaller(installer, tool.owner, tool.repo, tool.version, InstallOptions{
 		IsLatest:           tool.version == "latest",
 		ShowProgressBar:    showProgress,
 		ShowInstallDetails: false, // Batch mode - showProgress handles the simple message.
@@ -705,7 +698,10 @@ func runBatchInstallWorker(jobs <-chan toolInfo, events chan<- batchEvent, reins
 	for tool := range jobs {
 		events <- batchEvent{tool: tool, started: true}
 		installer := NewInstaller(WithDownloadProgress(func(downloaded, total int64) {
-			events <- batchEvent{tool: tool, progress: &downloadProgress{downloaded: downloaded, total: total}}
+			select {
+			case events <- batchEvent{tool: tool, progress: &downloadProgress{downloaded: downloaded, total: total}}:
+			default:
+			}
 		}))
 		result, err := installOrSkipToolWithProgress(installer, tool, reinstallFlag, false, false)
 		events <- batchEvent{tool: tool, result: result, err: err}
@@ -739,9 +735,7 @@ func (d *batchDisplay) start(tool toolInfo) {
 
 func (d *batchDisplay) update(tool toolInfo, download downloadProgress) {
 	if d.renderer != nil {
-		d.renderer.clear()
 		d.renderer.updateProgress(tool, download)
-		d.renderer.render()
 	}
 }
 

@@ -944,6 +944,9 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 	defer perf.Track(nil, "toolchain.Installer.Uninstall")()
 
 	versionDir := filepath.Join(i.binDir, owner, repo, version)
+	if err := os.MkdirAll(filepath.Dir(versionDir), defaultMkdirPermissions); err != nil {
+		return fmt.Errorf("%w: failed to create uninstall parent directory: %w", ErrFileOperation, err)
+	}
 	lock := filelock.New(versionDir + ".lock")
 	return lock.WithExclusive(context.Background(), func() error {
 		binaryPath, err := i.FindBinaryPath(owner, repo, version)

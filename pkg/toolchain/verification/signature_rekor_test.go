@@ -286,6 +286,9 @@ func TestVerifyCosignRetriesViaPublicAPI(t *testing.T) {
 		Version:   "1.0.0",
 		AssetURL:  "https://example.com/tool.tar.gz",
 		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/tool.tar.gz.sig": []byte("sig"),
+		},
 		Policy: Policy{
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,

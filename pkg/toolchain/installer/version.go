@@ -44,17 +44,25 @@ func (i *Installer) ReadLatestFile(owner, repo string) (string, error) {
 	defer perf.Track(nil, "toolchain.Installer.ReadLatestFile")()
 
 	latestFilePath := filepath.Join(i.binDir, owner, repo, "latest")
+	if err := os.MkdirAll(filepath.Dir(latestFilePath), defaultMkdirPermissions); err != nil {
+		return "", fmt.Errorf("%w: failed to create latest directory: %w", ErrFileOperation, err)
+	}
 
-	data, err := os.ReadFile(latestFilePath)
+	var version string
+	err := filelock.New(latestFilePath+".lock").WithShared(context.Background(), func() error {
+		data, err := os.ReadFile(latestFilePath)
+		if err != nil {
+			return fmt.Errorf("%w: failed to read latest file: %w", ErrFileOperation, err)
+		}
+		version = strings.TrimSpace(string(data))
+		if version == "" {
+			return fmt.Errorf("%w: latest file is empty", ErrFileOperation)
+		}
+		return nil
+	})
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to read latest file: %w", ErrFileOperation, err)
+		return "", err
 	}
-
-	version := strings.TrimSpace(string(data))
-	if version == "" {
-		return "", fmt.Errorf("%w: latest file is empty", ErrFileOperation)
-	}
-
 	return version, nil
 }
 

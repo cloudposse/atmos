@@ -1,6 +1,8 @@
 package toolchain
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -65,10 +67,10 @@ var toolchainCmd = &cobra.Command{
 		// `atmos toolchain` use .tools while automatic command dependencies used
 		// the XDG cache default, so the two paths could disagree about what was
 		// installed.
-		if v.IsSet("toolchain.tool-versions-env") || cmd.Flags().Changed(flagToolVersions) {
+		if _, envSet := os.LookupEnv("ATMOS_TOOL_VERSIONS"); envSet || cmd.Flags().Changed(flagToolVersions) {
 			atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
 		}
-		if v.IsSet("toolchain.path-env") || cmd.Flags().Changed(flagToolchainPath) {
+		if _, envSet := os.LookupEnv("ATMOS_TOOLCHAIN_PATH"); envSet || cmd.Flags().Changed(flagToolchainPath) {
 			path := v.GetString("toolchain.path")
 			atmosCfg.Toolchain.InstallPath = path
 			atmosCfg.Toolchain.ToolsDir = path
@@ -119,8 +121,6 @@ func init() {
 	if err := v.BindPFlag("toolchain.path", toolchainCmd.PersistentFlags().Lookup(flagToolchainPath)); err != nil {
 		panic(err)
 	}
-	bindToolchainEnvironment(v)
-
 	// Add all subcommands.
 	toolchainCmd.AddCommand(addCmd)
 	toolchainCmd.AddCommand(cleanCmd)
@@ -142,15 +142,6 @@ func init() {
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
 	internal.Register(&ToolchainCommandProvider{})
-}
-
-func bindToolchainEnvironment(v *viper.Viper) {
-	if err := v.BindEnv("toolchain.tool-versions-env", "ATMOS_TOOL_VERSIONS"); err != nil {
-		panic(err)
-	}
-	if err := v.BindEnv("toolchain.path-env", "ATMOS_TOOLCHAIN_PATH"); err != nil {
-		panic(err)
-	}
 }
 
 // ToolchainCommandProvider implements the CommandProvider interface.

@@ -25,7 +25,7 @@ func TestInstallerLockFileConcurrentUpdatesPreserveAllTools(t *testing.T) {
 		go func(name string) {
 			defer wg.Done()
 			installer := &Installer{useLockFile: true, lockFilePath: lockPath}
-			require.NoError(t, installer.updateLockFile(&registry.Tool{RepoOwner: "owner", RepoName: name}, "1.0.0", "https://example.com/"+name, &verification.Result{Checksum: name}))
+			assert.NoError(t, installer.updateLockFile(&registry.Tool{RepoOwner: "owner", RepoName: name}, "1.0.0", "https://example.com/"+name, &verification.Result{Checksum: name}))
 		}(name)
 	}
 	wg.Wait()

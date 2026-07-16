@@ -114,7 +114,7 @@ func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.C
 		}
 		rendered, optionCleanup, err = v.downloadCosignOptionSidecars(ctx, req, rendered)
 		if err != nil {
-			return nil, nil, err
+			return handleCosignSidecarError(req.Policy, result, optionCleanup, err)
 		}
 		args = append(args, rendered...)
 	}
@@ -127,12 +127,17 @@ func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.C
 		}
 		return args, cleanup, nil
 	}
-	if req.Policy.Signatures != PolicyRequired {
+	return handleCosignSidecarError(req.Policy, result, cleanup, err)
+}
+
+func handleCosignSidecarError(policy Policy, result *Result, cleanup func(), err error) ([]string, func(), error) {
+	if cleanup != nil {
 		cleanup()
+	}
+	if policy.Signatures != PolicyRequired {
 		result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("cosign sidecar unavailable: %v", err))
 		return nil, nil, nil
 	}
-	cleanup()
 	return nil, nil, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
 }
 
@@ -147,9 +152,6 @@ var cosignURLSidecarFlags = map[string]struct{}{
 }
 
 func (v *Verifier) downloadCosignOptionSidecars(ctx context.Context, req *Request, args []string) ([]string, func(), error) {
-	if !hasRemoteCertificateSignaturePair(args) {
-		return args, func() {}, nil
-	}
 	paths := make([]string, 0)
 	for i := 0; i+1 < len(args); i++ {
 		if _, ok := cosignURLSidecarFlags[args[i]]; !ok || !isHTTPURL(args[i+1]) {
@@ -171,19 +173,6 @@ func (v *Verifier) downloadCosignOptionSidecars(ctx context.Context, req *Reques
 			_ = os.Remove(path)
 		}
 	}, nil
-}
-
-func hasRemoteCertificateSignaturePair(args []string) bool {
-	var certificate, signature bool
-	for i := 0; i+1 < len(args); i++ {
-		switch args[i] {
-		case "--certificate":
-			certificate = isHTTPURL(args[i+1])
-		case "--signature":
-			signature = isHTTPURL(args[i+1])
-		}
-	}
-	return certificate && signature
 }
 
 func combineCleanups(cleanups ...func()) func() {

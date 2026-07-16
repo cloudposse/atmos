@@ -16,7 +16,7 @@ func TestAddToolToVersionsConcurrentUpdatesPreserveAllTools(t *testing.T) {
 		wg.Add(1)
 		go func(tool, version string) {
 			defer wg.Done()
-			require.NoError(t, AddToolToVersions(path, tool, version))
+			assert.NoError(t, AddToolToVersions(path, tool, version))
 		}(spec[0], spec[1])
 	}
 	wg.Wait()

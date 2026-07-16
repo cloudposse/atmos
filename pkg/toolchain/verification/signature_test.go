@@ -29,6 +29,7 @@ func (r *fakeRunner) Run(_ context.Context, name string, args ...string) error {
 
 func TestVerifyCosignCommandFromOpts(t *testing.T) {
 	runner := &fakeRunner{}
+	assetPath := writeAsset(t, []byte("hello"))
 	result, err := (&Verifier{}).Verify(context.Background(), Request{
 		Tool: &registry.Tool{
 			RepoOwner: "owner",
@@ -44,7 +45,10 @@ func TestVerifyCosignCommandFromOpts(t *testing.T) {
 		},
 		Version:   "1.0.0",
 		AssetURL:  "https://example.com/tool.tar.gz",
-		AssetPath: writeAsset(t, []byte("hello")),
+		AssetPath: assetPath,
+		Downloader: fakeDownloader{
+			"https://example.com/tool.tar.gz.sig": []byte("sig"),
+		},
 		Policy: Policy{
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,
@@ -55,19 +59,16 @@ func TestVerifyCosignCommandFromOpts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, runner.calls, 1)
 	assert.Equal(t, "cosign", runner.calls[0].name)
-	assert.Equal(t, []string{
-		"verify-blob",
-		"--signature",
-		"https://example.com/tool.tar.gz.sig",
-		"--certificate-identity",
-		"https://github.com/owner/tool/.github/workflows/release.yaml@refs/tags/1.0.0",
-		writeAssetPathPlaceholder(runner.calls[0].args),
-	}, normalizeLastArg(runner.calls[0].args))
+	assert.Equal(t, []string{"verify-blob", "--signature", "--certificate-identity"}, []string{runner.calls[0].args[0], runner.calls[0].args[1], runner.calls[0].args[3]})
+	assert.NotEqual(t, "https://example.com/tool.tar.gz.sig", runner.calls[0].args[2])
+	assert.Equal(t, "https://github.com/owner/tool/.github/workflows/release.yaml@refs/tags/1.0.0", runner.calls[0].args[4])
+	assert.Equal(t, assetPath, runner.calls[0].args[len(runner.calls[0].args)-1])
 	assert.Contains(t, result.SignatureMethods, "cosign")
 }
 
 func TestVerifyCosignCommandFromOptsUsesEffectiveGitHubReleaseVersion(t *testing.T) {
 	runner := &fakeRunner{}
+	assetPath := writeAsset(t, []byte("hello"))
 	_, err := (&Verifier{}).Verify(context.Background(), Request{
 		Tool: &registry.Tool{
 			RepoOwner: "owner",
@@ -83,7 +84,7 @@ func TestVerifyCosignCommandFromOptsUsesEffectiveGitHubReleaseVersion(t *testing
 		},
 		Version:   "1.0.0",
 		AssetURL:  "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz",
-		AssetPath: writeAsset(t, []byte("hello")),
+		AssetPath: assetPath,
 		Policy: Policy{
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,
@@ -100,10 +101,12 @@ func TestVerifyCosignCommandFromOptsUsesEffectiveGitHubReleaseVersion(t *testing
 	assert.Equal(t, []string{"verify-blob", "--certificate", "--signature"}, []string{runner.calls[0].args[0], runner.calls[0].args[1], runner.calls[0].args[3]})
 	assert.NotEqual(t, "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.pem", runner.calls[0].args[2])
 	assert.NotEqual(t, "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.sig", runner.calls[0].args[4])
+	assert.Equal(t, assetPath, runner.calls[0].args[len(runner.calls[0].args)-1])
 }
 
 func TestVerifyCosignCommandFromOptsUsesEffectiveHTTPVersionSegment(t *testing.T) {
 	runner := &fakeRunner{}
+	assetPath := writeAsset(t, []byte("hello"))
 	_, err := (&Verifier{}).Verify(context.Background(), Request{
 		Tool: &registry.Tool{
 			RepoOwner: "kubernetes",
@@ -119,7 +122,7 @@ func TestVerifyCosignCommandFromOptsUsesEffectiveHTTPVersionSegment(t *testing.T
 		},
 		Version:   "1.31.4",
 		AssetURL:  "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl",
-		AssetPath: writeAsset(t, []byte("hello")),
+		AssetPath: assetPath,
 		Policy: Policy{
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,
@@ -136,6 +139,7 @@ func TestVerifyCosignCommandFromOptsUsesEffectiveHTTPVersionSegment(t *testing.T
 	assert.Equal(t, []string{"verify-blob", "--signature", "--certificate"}, []string{runner.calls[0].args[0], runner.calls[0].args[1], runner.calls[0].args[3]})
 	assert.NotEqual(t, "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.sig", runner.calls[0].args[2])
 	assert.NotEqual(t, "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.cert", runner.calls[0].args[4])
+	assert.Equal(t, assetPath, runner.calls[0].args[len(runner.calls[0].args)-1])
 }
 
 func TestVerifySignatureCommands(t *testing.T) {
@@ -291,6 +295,51 @@ func TestVerifyCosignRequiredUnavailableSidecar(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, ErrSignatureRequired)
+}
+
+func TestVerifyCosignOptsUnavailableSidecarUsesPolicy(t *testing.T) {
+	tests := []struct {
+		name      string
+		policy    string
+		wantError error
+		wantSkip  bool
+	}{
+		{name: "when available skips", policy: PolicyWhenAvailable, wantSkip: true},
+		{name: "required returns classified error", policy: PolicyRequired, wantError: ErrSignatureRequired},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := &fakeRunner{}
+			result, err := (&Verifier{}).Verify(context.Background(), Request{
+				Tool: &registry.Tool{
+					RepoOwner: "owner",
+					RepoName:  "tool",
+					Cosign: registry.CosignConfig{
+						Opts: []string{"--bundle", "https://example.com/missing.bundle"},
+					},
+				},
+				Version:   "1.0.0",
+				AssetURL:  "https://example.com/tool.tar.gz",
+				AssetPath: writeAsset(t, []byte("hello")),
+				Downloader: fakeDownloader{
+					"https://example.com/other.bundle": []byte("not used"),
+				},
+				Policy: Policy{Checksums: PolicyDisabled, Signatures: tt.policy},
+				Runner: runner,
+			})
+
+			if tt.wantError != nil {
+				require.ErrorIs(t, err, tt.wantError)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Empty(t, runner.calls)
+			if tt.wantSkip {
+				assert.True(t, hasSkipReasonContaining(result.SkippedReasons, "cosign sidecar unavailable"))
+			}
+		})
+	}
 }
 
 func TestVerifyGitHubAttestationSkipsHTTP404WhenAvailable(t *testing.T) {
@@ -473,6 +522,9 @@ func TestVerifyCosignOptsSkipsHTTP404WhenAvailable(t *testing.T) {
 		Version:   "1.0.0",
 		AssetURL:  "https://example.com/tool.tar.gz",
 		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/tool.tar.gz.sig": []byte("sig"),
+		},
 		Policy: Policy{
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,
@@ -498,6 +550,9 @@ func TestVerifySignatureInvalidEvidenceStillFailsWhenAvailable(t *testing.T) {
 		Version:   "1.0.0",
 		AssetURL:  "https://example.com/tool.tar.gz",
 		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/tool.sig": []byte("sig"),
+		},
 		Policy: Policy{
 			Checksums:  PolicyDisabled,
 			Signatures: PolicyWhenAvailable,
@@ -635,14 +690,6 @@ func TestDownloadTempSidecar(t *testing.T) {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("sig"), data)
-}
-
-func normalizeLastArg(args []string) []string {
-	out := append([]string(nil), args...)
-	if len(out) > 0 {
-		out[len(out)-1] = writeAssetPathPlaceholder(args)
-	}
-	return out
 }
 
 func writeAssetPathPlaceholder(_ []string) string {

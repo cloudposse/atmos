@@ -26,6 +26,16 @@ type ToolVersions struct {
 func LoadToolVersions(filePath string) (*ToolVersions, error) {
 	defer perf.Track(nil, "toolchain.LoadToolVersions")()
 
+	var toolVersions *ToolVersions
+	err := withToolVersionsSharedLock(filePath, func() error {
+		var err error
+		toolVersions, err = loadToolVersionsUnlocked(filePath)
+		return err
+	})
+	return toolVersions, err
+}
+
+func loadToolVersionsUnlocked(filePath string) (*ToolVersions, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -163,7 +173,7 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 	return withToolVersionsLock(filePath, func() error {
 		// Load existing tool versions while holding the lock so separate Atmos
 		// processes cannot lose each other's additions.
-		toolVersions, err := LoadToolVersions(filePath)
+		toolVersions, err := loadToolVersionsUnlocked(filePath)
 		if err != nil {
 			if !os.IsNotExist(err) {
 				return fmt.Errorf("failed to load existing .tool-versions: %w", err)
@@ -187,6 +197,13 @@ func withToolVersionsLock(filePath string, fn func() error) error {
 		return fmt.Errorf("create .tool-versions directory: %w", err)
 	}
 	return filelock.New(filePath+".lock").WithExclusive(context.Background(), fn)
+}
+
+func withToolVersionsSharedLock(filePath string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
+		return fmt.Errorf("create .tool-versions directory: %w", err)
+	}
+	return filelock.New(filePath+".lock").WithShared(context.Background(), fn)
 }
 
 // wouldCreateDuplicate checks if adding a tool/version combination would create a duplicate
