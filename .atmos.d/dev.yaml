@@ -196,3 +196,24 @@ commands:
                   else
                     go test ./tests -v -count=1 -timeout 40m -run "$filter" -regenerate-snapshots
                   fi
+
+          - name: schema
+            description: Regenerate the atmos-manifest JSON Schema website copy from the embedded schema
+            # No working_directory here (see the "notices" command above for why).
+            env:
+              <<: *go_auto_env
+              # go run . builds the whole atmos binary graph, which pulls in cgo-linked
+              # hardware-security-key deps (e.g. github.com/bearsh/hid) that need system
+              # libudev headers most CI runners don't have. atmos itself always builds
+              # with CGO disabled (see .goreleaser.yml, scripts/build-atmos.sh), so match
+              # that here too.
+              CGO_ENABLED: "0"
+              SCHEMA_OUTPUT: website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+            steps:
+              - type: spin
+                title: Generating atmos-manifest schema
+                command: go run . stack schema {{ .env.SCHEMA_OUTPUT }}
+                timeout: 2m
+              - type: toast
+                level: success
+                content: atmos-manifest schema regenerated at {{ .env.SCHEMA_OUTPUT }}.

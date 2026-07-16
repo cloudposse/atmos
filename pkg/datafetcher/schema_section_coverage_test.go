@@ -5,8 +5,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,10 +18,13 @@ import (
 // validate — the new capability. Historically that step was forgotten (e.g. `secrets`, and a
 // partial `auth`). These tests fail the build when a new `*SectionName` constant is added
 // without (a) classifying it and (b) modeling it in the manifest schema.
+//
+// The embedded schema (pkg/datafetcher/schema/atmos/manifest/1.0.json) is the single source of
+// truth for the atmos-manifest JSON Schema. The website copy served at atmos.tools is generated
+// from it at build time (see `atmos stack schema`) and is not checked separately here.
 
 const (
 	constsRelPath        = "../config/const.go"
-	websiteSchemaRelPath = "../../website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 	embeddedSchemaSource = "atmos://schema/atmos/manifest/1.0"
 )
 
@@ -112,31 +113,20 @@ var nonManifestSections = map[string]struct{}{
 	"emulator":           {}, // Component-type key; emulator components are authored under `components.emulator.<name>` and modeled via the components schema, not as a standalone top-level section.
 }
 
-// knownSchemaGaps tracks sections that SHOULD be in a schema but currently are not. Each key is
-// "<schema>:<level>:<section>". This is deliberate, reviewed technical debt — NOT an escape hatch
-// for new sections. New sections must be modeled in the schema, not added here.
+// knownSchemaGaps tracks sections that SHOULD be in the manifest schema but currently are not.
+// Each key is "topLevel:<section>" or "component:<section>". This is deliberate, reviewed
+// technical debt — NOT an escape hatch for new sections. New sections must be modeled in the
+// schema, not added here.
 //
 // TODO(schema-reconciliation): close these gaps and delete the entries.
-//   - website lacks top-level `name`, `ansible`, and global `auth`.
-//   - the embedded schema (pkg/datafetcher/schema/...) lags the website copy on `dependencies`,
-//     `generate`, `provision`, `source`, `ansible`, and global `auth`.
-//   - native Helm is not yet modeled in either schema: top-level `helm` (default config for helm
-//     components, peer of `helmfile`/`kubernetes`) and the `helm_component_manifest` definition
-//     are missing. Tracked until the native-Helm manifest schema lands.
+//   - top-level `ansible` and global `auth` are not yet modeled (only component-level auth is).
+//   - native Helm is not yet modeled: top-level `helm` (default config for helm components, peer
+//     of `helmfile`/`kubernetes`) and the `helm_component_manifest` definition are missing.
+//     Tracked until the native-Helm manifest schema lands.
 var knownSchemaGaps = map[string]struct{}{
-	"website:topLevel:name":           {},
-	"website:topLevel:ansible":        {},
-	"website:topLevel:auth":           {},
-	"website:topLevel:helm":           {},
-	"embedded:topLevel:helm":          {},
-	"embedded:topLevel:ansible":       {},
-	"embedded:topLevel:auth":          {},
-	"embedded:topLevel:generate":      {},
-	"embedded:topLevel:dependencies":  {},
-	"embedded:component:generate":     {},
-	"embedded:component:dependencies": {},
-	"embedded:component:provision":    {},
-	"embedded:component:source":       {},
+	"topLevel:ansible": {},
+	"topLevel:auth":    {},
+	"topLevel:helm":    {},
 }
 
 // componentManifestDefs are the per-component-type manifest definitions whose `properties` model
@@ -168,48 +158,43 @@ func TestEverySectionConstantIsClassified(t *testing.T) {
 	}
 }
 
-// TestSchemaCoversAllSections asserts every manifest section is modeled in both the canonical
-// (website) and embedded manifest schemas at its declared level, except for tracked knownSchemaGaps.
+// TestSchemaCoversAllSections asserts every manifest section is modeled in the embedded manifest
+// schema (the single source of truth; the website copy is generated from it) at its declared
+// level, except for tracked knownSchemaGaps.
 func TestSchemaCoversAllSections(t *testing.T) {
-	schemas := map[string]map[string]any{
-		"website":  loadWebsiteSchema(t),
-		"embedded": loadEmbeddedSchema(t),
-	}
+	schema := loadEmbeddedSchema(t)
+	topLevel := topLevelProps(t, schema)
+	component := componentProps(t, schema)
 
-	for schemaName, schema := range schemas {
-		topLevel := topLevelProps(t, schema)
-		component := componentProps(t, schema)
-
-		for value, scope := range manifestSections {
-			if scope.topLevel {
-				assertCovered(t, topLevel, schemaName, "topLevel", value)
-			}
-			if scope.component {
-				assertCovered(t, component, schemaName, "component", value)
-			}
+	for value, scope := range manifestSections {
+		if scope.topLevel {
+			assertCovered(t, topLevel, "topLevel", value)
+		}
+		if scope.component {
+			assertCovered(t, component, "component", value)
 		}
 	}
 }
 
 // assertCovered checks that a section property exists in the given property set, unless the
-// (schema, level, section) tuple is a tracked known gap. A section listed as a known gap that is
-// actually present fails too — so closing a gap forces removing its allowlist entry.
-func assertCovered(t *testing.T, props map[string]struct{}, schemaName, level, section string) {
+// (level, section) tuple is a tracked known gap. A section listed as a known gap that is actually
+// present fails too — so closing a gap forces removing its allowlist entry.
+func assertCovered(t *testing.T, props map[string]struct{}, level, section string) {
 	t.Helper()
 	_, present := props[section]
-	gapKey := schemaName + ":" + level + ":" + section
+	gapKey := level + ":" + section
 	_, isGap := knownSchemaGaps[gapKey]
 
 	if isGap {
 		require.Falsef(t, present,
-			"%q is present in the %s schema at %s level but is still listed in knownSchemaGaps — remove the %q entry",
-			section, schemaName, level, gapKey)
+			"%q is present in the manifest schema at %s level but is still listed in knownSchemaGaps — remove the %q entry",
+			section, level, gapKey)
 		return
 	}
 	require.Truef(t, present,
-		"section %q is missing from the %s manifest schema at %s level.\n"+
-			"Add a %q property to the schema (see how `auth`/`secrets` are wired), or — only if this is reviewed, intentional debt — add %q to knownSchemaGaps.",
-		section, schemaName, level, section, gapKey)
+		"section %q is missing from the manifest schema at %s level.\n"+
+			"Add a %q property to pkg/datafetcher/schema/atmos/manifest/1.0.json (see how `auth`/`secrets` are wired), or — only if this is reviewed, intentional debt — add %q to knownSchemaGaps.",
+		section, level, section, gapKey)
 }
 
 // parseSectionConstants AST-parses pkg/config/const.go and returns a map of constant name to its
@@ -252,7 +237,8 @@ func collectSectionConst(spec ast.Spec, out map[string]string) {
 	}
 }
 
-// loadEmbeddedSchema returns the parsed embedded manifest schema (used by `atmos validate stacks`).
+// loadEmbeddedSchema returns the parsed embedded manifest schema (used by `atmos validate stacks`
+// and generated into the website copy served at atmos.tools).
 func loadEmbeddedSchema(t *testing.T) map[string]any {
 	t.Helper()
 	data, err := (&atmosFetcher{}).FetchData(embeddedSchemaSource)
@@ -262,17 +248,7 @@ func loadEmbeddedSchema(t *testing.T) map[string]any {
 	return schema
 }
 
-// loadWebsiteSchema returns the parsed canonical manifest schema served at atmos.tools.
-func loadWebsiteSchema(t *testing.T) map[string]any {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Clean(websiteSchemaRelPath))
-	require.NoErrorf(t, err, "failed to read website manifest schema at %s", websiteSchemaRelPath)
-	var schema map[string]any
-	require.NoError(t, json.Unmarshal(data, &schema), "failed to parse website manifest schema")
-	return schema
-}
-
-// topLevelProps returns the set of top-level property names declared in a manifest schema.
+// topLevelProps returns the set of top-level property names declared in the manifest schema.
 func topLevelProps(t *testing.T, schema map[string]any) map[string]struct{} {
 	t.Helper()
 	props, ok := schema["properties"].(map[string]any)
