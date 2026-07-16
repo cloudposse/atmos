@@ -43,7 +43,7 @@ atmos validate schema
 ✓ All schemas validated successfully
 ```
 
-To validate just the CLI configuration, `atmos config validate` is a shorthand alias for `atmos validate schema config`, and exits non-zero on violations — handy for CI and pre-commit hooks.
+To validate just the CLI configuration, `atmos config validate` is a shorthand alias for `atmos validate schema config`, and exits non-zero on violations — handy for CI and pre-commit hooks. Symmetrically, `atmos stack validate` now aliases `atmos validate stacks`. Validation is also fast in large repositories: file matching no longer walks the whole tree for plain file names, so results stream immediately.
 
 Print the schema for the exact Atmos version you're running with the new [`atmos config schema`](/cli/commands/config/config-schema) command — a sibling of `atmos stack schema`:
 
