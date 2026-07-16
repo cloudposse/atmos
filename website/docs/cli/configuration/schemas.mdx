@@ -167,6 +167,7 @@ Out of the box, [`atmos validate schema`](/cli/commands/validate/schema) validat
 ```shell
 atmos validate schema           # validates atmos.yaml, atmos.d/**, profiles/** (and everything in `schemas`)
 atmos validate schema config    # validates only the atmos.yaml schema entry
+atmos config validate           # alias for `atmos validate schema config`
 ```
 
 Fragments and profiles are partial configurations; the schema requires no specific fields, so they validate standalone.

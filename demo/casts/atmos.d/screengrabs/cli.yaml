@@ -201,6 +201,7 @@ commands:
           atmos config format --help
           atmos config list --help
           atmos config schema --help
+          atmos config validate --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
@@ -568,6 +569,7 @@ commands:
           atmos config format --help
           atmos config list --help
           atmos config schema --help
+          atmos config validate --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help

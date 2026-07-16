@@ -37,6 +37,7 @@ func init() {
 	configCmd.AddCommand(configListCmd)
 	configCmd.AddCommand(configFormatCmd)
 	configCmd.AddCommand(configSchemaCmd)
+	configCmd.AddCommand(configValidateCmd)
 
 	internal.Register(&CommandProvider{})
 }

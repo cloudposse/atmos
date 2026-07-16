@@ -25,6 +25,7 @@ atmos config delete <path>
 atmos config list [path-pattern] [--format <format>]
 atmos config format
 atmos config schema [output-path]
+atmos config validate
 ```
 
 By default these commands target the `atmos.yaml` (or `.atmos.yaml`) in the current
@@ -38,6 +39,7 @@ directory or git root. Use the global `--config` flag to target a specific file.
 - [`atmos config list`](/cli/commands/config/config-list) — list editable setting paths.
 - [`atmos config format`](/cli/commands/config/config-format) — format the active `atmos.yaml` file.
 - [`atmos config schema`](/cli/commands/config/config-schema) — print the JSON Schema for `atmos.yaml`.
+- [`atmos config validate`](/cli/commands/config/config-validate) — validate `atmos.yaml` against its JSON Schema.
 
 ## Examples
 
