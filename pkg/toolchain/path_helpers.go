@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ToolPath represents a tool with its version and path.
@@ -59,6 +60,29 @@ func entrypointDirs(binaryPaths []string, relativeFlag bool) []string {
 		dirs = append(dirs, dir)
 	}
 	return dirs
+}
+
+// EntrypointDirsForVersion returns the directories that must be on PATH to expose
+// an installed tool version's entrypoints, using the same onedir-aware resolution
+// as `atmos toolchain env`. For a onedir (multi-file) package it returns each
+// directory holding a resolved manifest entrypoint (e.g. the nested .pkg/.../bin);
+// for a flat install it returns the single version directory. It returns one entry
+// per resolved entrypoint (callers deduplicate), and nil when the tool version is
+// not installed, letting the caller fall back to a bare version-dir guess for
+// backward compatibility.
+//
+// When relativeFlag is true the directories are relative to the locator's bin
+// dir; otherwise they are absolute (the common case for building a subprocess
+// PATH).
+func EntrypointDirsForVersion(locator InstallLocator, owner, repo, version string, relativeFlag bool) []string {
+	defer perf.Track(nil, "toolchain.EntrypointDirsForVersion")()
+
+	binaryPath, err := locator.FindBinaryPath(owner, repo, version)
+	if err != nil {
+		// Tool not installed (or unusual layout): let the caller decide the fallback.
+		return nil
+	}
+	return entrypointDirs(entrypointBinaryPaths(locator, owner, repo, version, binaryPath), relativeFlag)
 }
 
 // appendUniqueDirs appends dirs not already in seen to pathEntries.
