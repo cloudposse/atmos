@@ -182,21 +182,6 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 	}
 }
 
-// inRepoManifestSchemaPath returns the absolute path to the in-repo Atmos manifest
-// JSON Schema (the same file CI passes via `--schemas-atmos-manifest`), resolved
-// source-file-relative so it is CWD-independent.
-func inRepoManifestSchemaPath(t *testing.T) string {
-	t.Helper()
-	_, callerFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller(0) must succeed")
-	p := filepath.Join(filepath.Dir(callerFile), "..", "..",
-		"website", "static", "schemas", "atmos", "atmos-manifest", "1.0", "atmos-manifest.json")
-	abs, err := filepath.Abs(p)
-	require.NoError(t, err, "cannot resolve schema path")
-	require.FileExists(t, abs, "in-repo manifest schema must exist")
-	return abs
-}
-
 // TestValidateStacksSchemaValidationHasTeeth guards against the JSON Schema validation
 // in `atmos validate stacks` silently becoming a no-op (which would let CI stay green
 // while validating nothing). It is the negative-path counterpart to the CI `[validate]`
@@ -207,8 +192,6 @@ func inRepoManifestSchemaPath(t *testing.T) string {
 // which requires `settings.templates` to be an object. The failure must therefore come
 // specifically from JSON Schema validation — not from the structural parser.
 func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
-	schemaPath := inRepoManifestSchemaPath(t)
-
 	const validManifest = "vars:\n  stage: dev\n" +
 		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
 	const invalidManifest = "vars:\n  stage: dev\n" +
@@ -216,9 +199,11 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
 
 	// validate builds a fresh, isolated temp project for the given manifest and runs
-	// `atmos validate stacks` against it with the in-repo schema. A fresh directory per
-	// call sidesteps Atmos's per-path manifest memoization, so reusing this helper for
-	// both the valid and invalid manifest is sound.
+	// `atmos validate stacks` against it with the default embedded schema (no
+	// `schemas.atmos.manifest` override — the same schema `atmos validate stacks` uses
+	// for any user who hasn't configured one). A fresh directory per call sidesteps
+	// Atmos's per-path manifest memoization, so reusing this helper for both the valid
+	// and invalid manifest is sound.
 	validate := func(manifest string) error {
 		dir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
@@ -231,7 +216,6 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 		t.Chdir(dir)
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		require.NoError(t, err)
-		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: schemaPath})
 		return ValidateStacks(&atmosConfig)
 	}
 
@@ -262,7 +246,6 @@ func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
 	t.Chdir(dir)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
-	atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: inRepoManifestSchemaPath(t)})
 
 	err = ValidateStacks(&atmosConfig)
 	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
