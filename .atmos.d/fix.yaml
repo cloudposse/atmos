@@ -46,11 +46,10 @@ commands:
     commands:
       - name: symlinks
         description: Verify that every Git-tracked symbolic link resolves
+        working_directory: !repo-root .
         steps:
           - type: shell
-            # Keep this bootstrap-compatible: CI first loads custom commands with
-            # the pinned Atmos 1.222.0 release, which predates the !repo-root tag.
-            command: cd "$(git rev-parse --show-toplevel)" && scripts/check-symlinks.sh
+            command: scripts/check-symlinks.sh
 
       - name: sync
         description: |
