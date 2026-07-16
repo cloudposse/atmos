@@ -11,7 +11,7 @@ components:
     # Component 1: Provides mock outputs for other components to reference
     # This simulates a component that has already been deployed and has outputs
     source-component:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       settings:
@@ -43,7 +43,7 @@ components:
 
     # Component 2: Tests basic !template functionality with hardcoded JSON strings
     test-basic-template:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       vars:
@@ -79,7 +79,7 @@ components:
 
     # Component 3: Tests !template with Go template expressions
     test-template-with-expressions:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       vars:
@@ -101,7 +101,7 @@ components:
     # Component 4: Tests !template combined with atmos.Component() function
     # This is the primary use case documented in the official docs
     test-template-with-atmos-component:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       vars:
@@ -129,7 +129,7 @@ components:
 
     # Component 5: Tests !template in lists (multiple !template calls in a list)
     test-template-in-lists:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       vars:
@@ -154,7 +154,7 @@ components:
 
     # Component 6: Tests !template in maps (multiple !template values in a map)
     test-template-in-maps:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       vars:
@@ -177,7 +177,7 @@ components:
 
     # Component 7: Tests edge cases and error handling
     test-template-edge-cases:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       vars:
@@ -208,7 +208,7 @@ components:
     # Component 8: Real-world use case simulation
     # Simulates the documented use case: getting outputs from deployed components
     test-real-world-scenario:
-      command: tofu
+      command: terraform
       metadata:
         component: mock
       vars:
