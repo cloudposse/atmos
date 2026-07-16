@@ -406,16 +406,196 @@ func TestFileWriter(t *testing.T) {
 		assert.Equal(t, 0o600, int(writer.fileMode))
 	})
 
-	t.Run("WriteJSON creates correct path", func(t *testing.T) {
-		// This is a smoke test - actual file writing is tested in integration tests.
+	t.Run("WriteHCL creates correct path", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		writer := NewFileWriter()
 
-		data := map[string]any{"test": "data"}
-		err := writer.WriteJSON(tmpDir, "test.json", data)
+		data := map[string]any{"region": "us-east-1", "environment": "prod"}
+		err := writer.WriteHCL(tmpDir, "test.tf", data)
 
 		require.NoError(t, err)
 		// Verify file exists.
-		assert.FileExists(t, filepath.Join(tmpDir, "test.json"))
+		assert.FileExists(t, filepath.Join(tmpDir, "test.tf"))
 	})
+
+	t.Run("WriteHCL error for nonexistent directory", func(t *testing.T) {
+		writer := NewFileWriter()
+		err := writer.WriteHCL("/nonexistent/path/does/not/exist", "test.tf", map[string]any{"key": "value"})
+		assert.Error(t, err)
+	})
+}
+
+func TestGenerate_ValidationError(t *testing.T) {
+	_ = GetRegistry() // ensure registryOnce.Do has been called before we replace registry
+	originalRegistry := registry
+	defer func() { registry = originalRegistry }()
+
+	registry = &GeneratorRegistry{
+		generators: map[string]Generator{
+			"validate-fail": &testGenerator{
+				name:           "validate-fail",
+				shouldGenerate: true,
+				validateErr:    errors.New("validation failed"),
+			},
+		},
+	}
+
+	ctx := &GeneratorContext{WorkingDir: t.TempDir()}
+	writer := NewMockWriter()
+
+	err := Generate(context.Background(), "validate-fail", ctx, writer)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrValidationFailed))
+}
+
+func TestGenerate_GenerationError(t *testing.T) {
+	_ = GetRegistry() // ensure registryOnce.Do has been called before we replace registry
+	originalRegistry := registry
+	defer func() { registry = originalRegistry }()
+
+	registry = &GeneratorRegistry{
+		generators: map[string]Generator{
+			"gen-fail": &testGenerator{
+				name:           "gen-fail",
+				shouldGenerate: true,
+				generateErr:    errors.New("generation failed"),
+			},
+		},
+	}
+
+	ctx := &GeneratorContext{WorkingDir: t.TempDir()}
+	writer := NewMockWriter()
+
+	err := Generate(context.Background(), "gen-fail", ctx, writer)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrGenerationFailed))
+}
+
+func TestGenerate_ShouldNotGenerate(t *testing.T) {
+	_ = GetRegistry() // ensure registryOnce.Do has been called before we replace registry
+	originalRegistry := registry
+	defer func() { registry = originalRegistry }()
+
+	registry = &GeneratorRegistry{
+		generators: map[string]Generator{
+			"skip-gen": &testGenerator{
+				name:           "skip-gen",
+				filename:       "skip.tf.json",
+				shouldGenerate: false,
+				content:        map[string]any{"skip": true},
+			},
+		},
+	}
+
+	ctx := &GeneratorContext{WorkingDir: t.TempDir()}
+	writer := NewMockWriter()
+
+	err := Generate(context.Background(), "skip-gen", ctx, writer)
+	require.NoError(t, err)
+	assert.Empty(t, writer.Written)
+}
+
+func TestGenerate_NilContent(t *testing.T) {
+	_ = GetRegistry() // ensure registryOnce.Do has been called before we replace registry
+	originalRegistry := registry
+	defer func() { registry = originalRegistry }()
+
+	registry = &GeneratorRegistry{
+		generators: map[string]Generator{
+			"nil-content": &testGenerator{
+				name:           "nil-content",
+				filename:       "nil.tf.json",
+				shouldGenerate: true,
+				content:        nil,
+			},
+		},
+	}
+
+	ctx := &GeneratorContext{WorkingDir: t.TempDir()}
+	writer := NewMockWriter()
+
+	err := Generate(context.Background(), "nil-content", ctx, writer)
+	require.NoError(t, err)
+	assert.Empty(t, writer.Written)
+}
+
+func TestGenerate_CustomFilename(t *testing.T) {
+	_ = GetRegistry() // ensure registryOnce.Do has been called before we replace registry
+	originalRegistry := registry
+	defer func() { registry = originalRegistry }()
+
+	registry = &GeneratorRegistry{
+		generators: map[string]Generator{
+			"custom-file": &testGenerator{
+				name:           "custom-file",
+				filename:       "default.tf.json",
+				shouldGenerate: true,
+				content:        map[string]any{"key": "value"},
+			},
+		},
+	}
+
+	ctx := &GeneratorContext{
+		WorkingDir:     t.TempDir(),
+		CustomFilename: "custom.tf.json",
+	}
+	writer := NewMockWriter()
+
+	err := Generate(context.Background(), "custom-file", ctx, writer)
+	require.NoError(t, err)
+	// Should have written to the custom filename, not the default.
+	_, hasCustom := writer.GetWritten(ctx.WorkingDir, "custom.tf.json")
+	assert.True(t, hasCustom, "expected content written to custom filename")
+	_, hasDefault := writer.GetWritten(ctx.WorkingDir, "default.tf.json")
+	assert.False(t, hasDefault, "expected no content written to default filename")
+}
+
+func TestGenerate_WriteError(t *testing.T) {
+	_ = GetRegistry() // ensure registryOnce.Do has been called before we replace registry
+	originalRegistry := registry
+	defer func() { registry = originalRegistry }()
+
+	registry = &GeneratorRegistry{
+		generators: map[string]Generator{
+			"write-fail": &testGenerator{
+				name:           "write-fail",
+				filename:       "write-fail.tf.json",
+				shouldGenerate: true,
+				content:        map[string]any{"key": "value"},
+			},
+		},
+	}
+
+	ctx := &GeneratorContext{WorkingDir: t.TempDir()}
+	writer := NewMockWriter()
+	writer.WriteErr = errors.New("write failed")
+
+	err := Generate(context.Background(), "write-fail", ctx, writer)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrWriteFailed))
+}
+
+func TestGenerateAll_WriteError(t *testing.T) {
+	_ = GetRegistry() // ensure registryOnce.Do has been called before we replace registry
+	originalRegistry := registry
+	defer func() { registry = originalRegistry }()
+
+	registry = &GeneratorRegistry{
+		generators: map[string]Generator{
+			"write-fail": &testGenerator{
+				name:           "write-fail",
+				filename:       "write-fail.tf.json",
+				shouldGenerate: true,
+				content:        map[string]any{"key": "value"},
+			},
+		},
+	}
+
+	ctx := &GeneratorContext{WorkingDir: t.TempDir()}
+	writer := NewMockWriter()
+	writer.WriteErr = errors.New("write failed")
+
+	err := GenerateAll(context.Background(), ctx, writer)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrWriteFailed))
 }
