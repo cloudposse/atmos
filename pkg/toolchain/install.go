@@ -335,6 +335,16 @@ func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, reinstal
 	if err == nil && !reinstallFlag {
 		return resultSkipped, nil
 	}
+	// Concurrent batches provide their own parent-owned renderer. Install with
+	// this worker's configured Installer so its download-progress callback is
+	// retained; InstallSingleTool would create a second Installer and silently
+	// drop those events.
+	if !showProgress {
+		if _, err := installer.Install(tool.owner, tool.repo, tool.version); err != nil {
+			return resultFailed, err
+		}
+		return resultInstalled, nil
+	}
 
 	err = InstallSingleTool(tool.owner, tool.repo, tool.version, InstallOptions{
 		IsLatest:           tool.version == "latest",
