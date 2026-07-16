@@ -10,7 +10,7 @@ on:
     - cron: "35 0 * * *"
 
 env:
-  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
 
 jobs:
   cache-warmup:

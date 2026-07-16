@@ -31,7 +31,7 @@ permissions:
   pull-requests: read
 
 env:
-  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"

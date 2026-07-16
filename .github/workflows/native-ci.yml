@@ -30,7 +30,7 @@ permissions:
   statuses: write
 
 env:
-  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   ATMOS_NATIVE_CI_WORKDIR: tests/fixtures/scenarios/native-ci-e2e
   ATMOS_VERSION_CHECK_ENABLED: "false"
   NATIVE_CI_TRIVY_VERSION: "0.70.0"
