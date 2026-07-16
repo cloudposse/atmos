@@ -905,16 +905,15 @@ jobs:
       # Atmos manifest JSON Schema, resolves imports, and detects duplicate components —
       # and it understands Atmos YAML tags natively (`!terraform.state`, `!store`, `!secret`).
       #
-      # `--schemas-atmos-manifest` points at the in-repo schema this PR ships (rather than the
-      # published schema at atmos.tools, which only updates after merge + site deploy), so a PR
-      # can add a schema field and use it in an example at the same time. This overrides any
-      # per-example `schemas.atmos.manifest` config. Atmos ignores the `# yaml-language-server:
+      # No `--schemas-atmos-manifest` override is needed: the `atmos` binary under test is built
+      # from this PR's source, so when an example doesn't set `schemas.atmos.manifest` (the
+      # common case — see examples/*/atmos.yaml), `atmos validate stacks` falls back to the
+      # schema embedded in that same binary (pkg/datafetcher/schema/atmos/manifest/1.0.json),
+      # which already reflects this PR's schema changes. Atmos ignores the `# yaml-language-server:
       # $schema` modeline, so the committed files keep their public URL for users who copy them.
       - name: Validate stacks
         working-directory: examples/${{ matrix.demo-folder }}
-        run: |
-          atmos validate stacks \
-            --schemas-atmos-manifest "${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+        run: atmos validate stacks
 
   # run container step tests against a local registry (build -> push -> run)
   # Docker is available directly on the runner (see the k3s job), and a
