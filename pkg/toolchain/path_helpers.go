@@ -71,9 +71,10 @@ func entrypointDirs(binaryPaths []string, relativeFlag bool) []string {
 // not installed, letting the caller fall back to a bare version-dir guess for
 // backward compatibility.
 //
-// When relativeFlag is true the directories are relative to the locator's bin
-// dir; otherwise they are absolute (the common case for building a subprocess
-// PATH).
+// When relativeFlag is true the locator-provided path form is preserved (paths
+// are not absolutized, so they stay relative only when the locator's bin dir is
+// relative); when false the directories are absolutized — the common case for
+// building a subprocess PATH.
 func EntrypointDirsForVersion(locator InstallLocator, owner, repo, version string, relativeFlag bool) []string {
 	defer perf.Track(nil, "toolchain.EntrypointDirsForVersion")()
 

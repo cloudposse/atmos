@@ -1789,3 +1789,29 @@ func TestBuildToolchainPATH_Onedir(t *testing.T) {
 	require.NoError(t, err, "kubectl must still be resolvable on the built PATH")
 	assert.Equal(t, kubectlBinPath, resolvedKubectl)
 }
+
+// TestBuildToolchainPATH_EmptyPATHNoTrailingSeparator verifies that when the
+// current PATH is empty, the built PATH does not end with a list separator and
+// contains no empty component. A trailing separator is interpreted as "." by
+// exec lookups, which would allow running a binary from the working directory.
+func TestBuildToolchainPATH_EmptyPATHNoTrailingSeparator(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{InstallPath: t.TempDir()},
+	}
+
+	// terraform is not installed here, so it falls back to the bare version dir;
+	// the point is that `paths` is non-empty while the current PATH is empty.
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, result)
+	assert.NotEqual(t, string(os.PathListSeparator), result[len(result)-1:],
+		"built PATH must not end with a list separator")
+	for _, entry := range strings.Split(result, string(os.PathListSeparator)) {
+		assert.NotEmpty(t, entry, "built PATH must not contain an empty component")
+	}
+}

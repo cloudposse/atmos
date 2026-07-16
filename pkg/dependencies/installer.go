@@ -589,8 +589,13 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 		return currentPath, nil
 	}
 
-	newPath := strings.Join(append(paths, currentPath), string(os.PathListSeparator))
-	return newPath, nil
+	// Append currentPath only when non-empty: a trailing list separator is
+	// interpreted as "." by exec lookups, which would run binaries from the
+	// working directory.
+	if currentPath != "" {
+		paths = append(paths, currentPath)
+	}
+	return strings.Join(paths, string(os.PathListSeparator)), nil
 }
 
 // collectToolchainDirs resolves the deduplicated, absolute PATH directories for a
