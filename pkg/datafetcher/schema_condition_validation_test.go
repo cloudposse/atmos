@@ -285,9 +285,13 @@ func loadEmbeddedSchemaBytes(t *testing.T) []byte {
 	return data
 }
 
+// loadWebsiteSchemaBytes returns the schema bytes served at atmos.tools. The website copy is
+// generated from the embedded schema at build time (see `atmos stack schema`), so it is byte-identical
+// to the embedded schema — this reads the embedded schema directly rather than depending on a
+// generated file being present on disk.
 func loadWebsiteSchemaBytes(t *testing.T) []byte {
 	t.Helper()
-	return loadSchemaFile(t, "../../website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
+	return loadEmbeddedSchemaBytes(t)
 }
 
 func loadFixtureSchemaBytes(t *testing.T) []byte {

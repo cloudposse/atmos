@@ -1,4 +1,5 @@
 base_path: "./"
+
 # https://pkg.go.dev/text/template
 templates:
   settings:

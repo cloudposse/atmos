@@ -68,7 +68,7 @@ atmos validate stacks
 # One-time setup on macOS/Windows: trust the local Terraform registry-cache proxy.
 atmos terraform cache trust
 
-# Seed the required app-config secrets from the gitignored local dotenv file.
+# Seed the required app-config secrets from the committed demo dotenv file.
 # `secret init` also accepts the file through stdin: `atmos secret init < .env.local ...`.
 atmos secret init --input .env.local -s plat-ue2-dev -c app-config
 
