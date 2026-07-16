@@ -18,6 +18,50 @@ import (
 
 var ErrInvalidYAML = fmt.Errorf("invalid YAML")
 
+const (
+	// The well-known `schemas:` key that validates atmos.yaml (and its
+	// fragments) against the embedded schema generated from the Atmos
+	// configuration structs (see pkg/config/schema). It is seeded by default so
+	// `atmos validate schema` covers atmos.yaml with zero configuration; a
+	// `schemas.config` entry in atmos.yaml overrides it.
+	builtinConfigSchemaKey = "config"
+
+	// The embedded generated atmos.yaml JSON Schema — the same document
+	// `atmos config schema` prints.
+	configSchemaSource = "atmos://schema/atmos/config/1.0"
+)
+
+// builtinConfigSchemaMatches returns the project-local files the config loader
+// reads: atmos.yaml (including hidden variants), atmos.d fragments, and
+// project-local profile directories. Profile files and atmos.d fragments are
+// partial configs; the schema has no required fields, so they validate
+// standalone. Fragment directories are optional and the glob matcher fails hard
+// on missing directories, so only existing ones are included.
+func builtinConfigSchemaMatches() []string {
+	matches := []string{
+		"atmos.yaml",
+		"atmos.yml",
+		".atmos.yaml",
+		".atmos.yml",
+	}
+	fragmentDirs := []string{
+		"atmos.d",
+		".atmos.d",
+		"profiles",
+		filepath.Join(".atmos", "profiles"),
+	}
+	for _, dir := range fragmentDirs {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			matches = append(
+				matches,
+				filepath.Join(dir, "**", "*.yaml"),
+				filepath.Join(dir, "**", "*.yml"),
+			)
+		}
+	}
+	return matches
+}
+
 type ErrInvalidPattern struct {
 	Pattern string
 	err     error
@@ -75,10 +119,24 @@ func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string
 	return err
 }
 
+// schemaKeys returns the configured `schemas:` keys plus the built-in config
+// key when the user has not overridden it, so atmos.yaml is validated by
+// default.
+func (av *atmosValidatorExecutor) schemaKeys() []string {
+	keys := make([]string, 0, len(av.atmosConfig.Schemas)+1)
+	for k := range av.atmosConfig.Schemas {
+		keys = append(keys, k)
+	}
+	if _, configured := av.atmosConfig.Schemas[builtinConfigSchemaKey]; !configured {
+		keys = append(keys, builtinConfigSchemaKey)
+	}
+	return keys
+}
+
 func (av *atmosValidatorExecutor) buildValidationSchema(sourceKey, customSchema string) (map[string][]string, error) {
 	validationSchemaWithFiles := make(map[string][]string)
 	log.Debug("Building validation schema with files", "sourceKey", sourceKey, "customSchema", customSchema, "schemas", av.atmosConfig.Schemas)
-	for k := range av.atmosConfig.Schemas {
+	for _, k := range av.schemaKeys() {
 		if av.shouldSkipSchema(k, sourceKey) {
 			log.Debug("Skipping schema", "key", k, "sourceKey", sourceKey)
 			continue
@@ -111,6 +169,8 @@ func (av *atmosValidatorExecutor) prepareSchemaValue(k, sourceKey, customSchema 
 		value.Schema = customSchema
 	}
 	switch {
+	case value.Schema == "" && value.Manifest == "" && k == builtinConfigSchemaKey:
+		value.Schema = configSchemaSource
 	case value.Schema == "" && value.Manifest == "":
 		value.Schema = fmt.Sprintf("atmos://schema/%s/manifest/1.0", k)
 	case value.Schema == "" && value.Manifest != "":
@@ -118,8 +178,8 @@ func (av *atmosValidatorExecutor) prepareSchemaValue(k, sourceKey, customSchema 
 	case customSchema != "":
 		value.Schema = customSchema
 	}
-	if len(value.Matches) == 0 && sourceKey == "atmos" {
-		value.Matches = []string{"atmos.yaml", "atmos.yml"}
+	if len(value.Matches) == 0 && k == builtinConfigSchemaKey {
+		value.Matches = builtinConfigSchemaMatches()
 	}
 
 	return value

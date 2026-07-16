@@ -315,7 +315,7 @@ require (
 	github.com/iancoleman/orderedmap v0.3.0 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/invopop/jsonschema v0.13.0 // indirect; Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates.
+	github.com/invopop/jsonschema v0.13.0 // Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates. Also used by the pkg/config/schema generator; a bump that changes output will trip the atmos.yaml schema drift test - regenerate deliberately.
 	github.com/itchyny/gojq v0.12.19 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect

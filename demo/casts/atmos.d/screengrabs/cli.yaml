@@ -200,6 +200,7 @@ commands:
           atmos config delete --help
           atmos config format --help
           atmos config list --help
+          atmos config schema --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
@@ -566,6 +567,7 @@ commands:
           atmos config delete --help
           atmos config format --help
           atmos config list --help
+          atmos config schema --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help

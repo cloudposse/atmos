@@ -40,6 +40,11 @@ For every schema entry:
 
 This command helps ensure that configuration files follow a defined structure
 and are compliant with expected formats, reducing configuration drift and runtime errors.
+
+Out of the box, a built-in ` + "`" + `config` + "`" + ` entry validates atmos.yaml — plus atmos.d
+and project-local profile fragments — against the schema generated from the Atmos
+configuration code (the same document ` + "`" + `atmos config schema` + "`" + ` prints). Define your
+own ` + "`" + `schemas.config` + "`" + ` entry to override or disable it.
 `,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),

@@ -1,0 +1,72 @@
+---
+slug: atmos-yaml-schema
+title: "atmos.yaml Gets a JSON Schema That Can't Go Stale"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Editing `atmos.yaml` has always been a matter of trust. Misspell a key, indent a section one level too deep, or put a string where a map belongs, and nothing tells you — unknown keys are silently ignored, and you discover the mistake only when Atmos doesn't behave the way you expected. Stack manifests solved this with a published JSON Schema and editor auto-completion, but the CLI configuration itself — a surface that has grown far larger than stack manifests — had no schema at all. Now it does: a schema generated from the very code that reads the configuration, validated by default, published with every release, and wired into your editor with one comment line.
+
+<!--truncate-->
+
+## The Problem
+
+Your `atmos.yaml` is the control plane for everything Atmos does — stacks, components, commands, auth, toolchains, integrations. It's also the file where mistakes hide best:
+
+- A typo like `worfklows:` is ignored without a warning, and the real setting silently keeps its default.
+- Nothing in your editor tells you what keys exist, what type they expect, or what they mean.
+- Configuration is spread across `atmos.yaml`, `atmos.d/` fragments, and [profiles](/cli/configuration/profiles) — partial files that no hand-written schema handled.
+- Hand-maintained schemas rot. Every release adds configuration options, and a schema updated by memory falls behind the moment someone forgets.
+
+## The Fix
+
+Atmos now ships a complete JSON Schema for `atmos.yaml` — and it's generated from the configuration code itself, on every change, enforced by CI. If a release adds a configuration option, the schema already models it. There is no separate document to remember to update, so it cannot drift from what Atmos actually reads.
+
+The schema understands how real Atmos configurations are written:
+
+- **YAML functions are first-class.** Where a section expects a map, the schema also accepts `!include shared.yaml`, `!env`, `!exec`, and every other function `atmos.yaml` supports — so dynamic configs validate cleanly.
+- **Fragments validate standalone.** No field is required, so `atmos.d/` files and profile fragments — which each carry only a slice of the configuration — pass on their own.
+- **Descriptions come from the source.** Hover documentation in your editor is sourced from the same documentation the code carries.
+
+## How to Use It
+
+Validation now happens out of the box. With no configuration at all, `atmos validate schema` checks `atmos.yaml`, `atmos.d/` fragments, and project-local profiles:
+
+```shell
+atmos validate schema
+```
+
+```text
+✓ Validated atmos.yaml
+✓ Validated atmos.d/logs.yaml
+✓ Validated profiles/dev/settings.yaml
+✓ All schemas validated successfully
+```
+
+Print the schema for the exact Atmos version you're running with the new [`atmos config schema`](/cli/commands/config/config-schema) command — a sibling of `atmos stack schema`:
+
+```shell
+atmos config schema                     # print to stdout
+atmos config schema atmos-config.json   # write to a file
+```
+
+For editor auto-completion and inline validation, add one comment to the top of `atmos.yaml`:
+
+```yaml
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-config/1.0/atmos-config.json
+base_path: "./"
+```
+
+The floating URL above always tracks the latest release. Every release also publishes an immutable, version-pinned snapshot at `https://atmos.tools/schemas/atmos/atmos-config/<atmos-version>/atmos-config.json`, and a `schemas.config` entry in `atmos.yaml` lets you pin validation to a reviewed schema version or point it at your own:
+
+```yaml
+schemas:
+  config:
+    schema: "https://atmos.tools/schemas/atmos/atmos-config/1.219.0/atmos-config.json"
+```
+
+See [CLI Configuration Schemas](/cli/configuration/schemas) for the full reference.
+
+## Get Involved
+
+Try `atmos validate schema` on your project and add the modeline to your `atmos.yaml`. If the schema rejects a configuration that Atmos accepts — or your editor's completions are missing something — [open an issue](https://github.com/cloudposse/atmos/issues); the generator makes those fixes one small change away. Join us in the [Cloud Posse community](https://cloudposse.com/slack/) to share feedback.

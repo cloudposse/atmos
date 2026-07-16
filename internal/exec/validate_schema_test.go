@@ -104,30 +104,68 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		yamlSource    string
-		customSchema  string
+		sourceKey     string
+		schemas       map[string]any
 		mockSetup     func(*validator.MockValidator, *downloader.MockFileDownloader, *filematch.MockFileMatcher)
 		expectedError error
 	}{
 		{
-			name:         "successful validation",
-			yamlSource:   "atmos.yaml",
-			customSchema: "atmos://schema",
+			name: "successful validation",
+			schemas: map[string]any{
+				"something": schema.SchemaRegistry{Schema: "atmos://schema", Matches: []string{"atmos.yaml"}},
+			},
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
 				fmi.EXPECT().MatchFiles([]string{"atmos.yaml"}).Return([]string{"atmos.yaml"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
+				// The built-in config entry is seeded alongside configured schemas.
+				fmi.EXPECT().MatchFiles(builtinConfigSchemaMatches()).Return([]string{}, nil)
 			},
 			expectedError: nil,
 		},
 		{
-			name:         "validation errors",
-			yamlSource:   "atmos.yaml",
-			customSchema: "atmos://schema",
+			name: "validation errors",
+			schemas: map[string]any{
+				"something": schema.SchemaRegistry{Schema: "atmos://schema", Matches: []string{"atmos.yaml"}},
+			},
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
 				fmi.EXPECT().MatchFiles([]string{"atmos.yaml"}).Return([]string{"atmos.yaml"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
+				fmi.EXPECT().MatchFiles(builtinConfigSchemaMatches()).Return([]string{}, nil)
 			},
 			expectedError: ErrInvalidYAML,
+		},
+		{
+			name:    "built-in config entry validates atmos.yaml by default",
+			schemas: nil,
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
+				fmi.EXPECT().MatchFiles(builtinConfigSchemaMatches()).Return([]string{"atmos.yaml", ".atmos.d/extra.yaml"}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, ".atmos.d/extra.yaml").Return([]gojsonschema.ResultError{}, nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name:      "source key config targets only the built-in entry",
+			sourceKey: "config",
+			schemas: map[string]any{
+				"something": schema.SchemaRegistry{Schema: "atmos://schema", Matches: []string{"atmos.yaml"}},
+			},
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
+				fmi.EXPECT().MatchFiles(builtinConfigSchemaMatches()).Return([]string{"atmos.yaml"}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name: "user-configured config entry overrides the built-in defaults",
+			schemas: map[string]any{
+				"config": schema.SchemaRegistry{Schema: "https://example.com/custom.json", Matches: []string{"conf/atmos.yaml"}},
+			},
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
+				fmi.EXPECT().MatchFiles([]string{"conf/atmos.yaml"}).Return([]string{"conf/atmos.yaml"}, nil)
+				mv.EXPECT().ValidateYAMLSchema("https://example.com/custom.json", "conf/atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
+			},
+			expectedError: nil,
 		},
 	}
 
@@ -142,17 +180,10 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 				validator:      mockValidator,
 				fileDownloader: mockFileDownloader,
 				fileMatcher:    mockFileMatcher,
-				atmosConfig: &schema.AtmosConfiguration{
-					Schemas: map[string]interface{}{
-						"something": schema.SchemaRegistry{
-							Schema:  tt.customSchema,
-							Matches: []string{tt.yamlSource},
-						},
-					},
-				},
+				atmosConfig:    &schema.AtmosConfiguration{Schemas: tt.schemas},
 			}
 
-			err := av.ExecuteAtmosValidateSchemaCmd("", "")
+			err := av.ExecuteAtmosValidateSchemaCmd(tt.sourceKey, "")
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedError)
@@ -161,6 +192,37 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidateAtmosYamlEndToEnd validates a real atmos.yaml fixture against the
+// embedded generated schema through the full validator stack (data fetcher +
+// gojsonschema), proving the atmos:// source and the 2020-12 document work with
+// the shipping validation engine.
+func TestValidateAtmosYamlEndToEnd(t *testing.T) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	fixture := filepath.Join(cwd, "..", "..", "examples", "demo-stacks", "atmos.yaml")
+	require.FileExists(t, fixture)
+
+	yamlValidator := validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{})
+
+	validationErrors, err := yamlValidator.ValidateYAMLSchema("atmos://schema/atmos/config/1.0", fixture)
+	require.NoError(t, err)
+	assert.Empty(t, validationErrors, "examples/demo-stacks/atmos.yaml must validate against the embedded config schema")
+}
+
+// TestValidateAtmosYamlEndToEndRejectsInvalid confirms the embedded schema
+// actually catches type errors (the negative path for the recovery above).
+func TestValidateAtmosYamlEndToEndRejectsInvalid(t *testing.T) {
+	dir := t.TempDir()
+	invalid := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(invalid, []byte("logs:\n  level: 42\n  file: [not, a, string]\n"), 0o644))
+
+	yamlValidator := validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{})
+
+	validationErrors, err := yamlValidator.ValidateYAMLSchema("atmos://schema/atmos/config/1.0", invalid)
+	require.NoError(t, err)
+	assert.NotEmpty(t, validationErrors, "a mistyped logs section must fail validation against the embedded config schema")
 }
 
 // TestDisplayPath verifies user-facing validation output never leaks
