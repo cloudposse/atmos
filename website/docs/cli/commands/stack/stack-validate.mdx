@@ -1,0 +1,43 @@
+---
+title: atmos stack validate
+sidebar_label: validate
+sidebar_class_name: command
+id: stack-validate
+description: Validate stack manifests against the atmos-manifest JSON Schema.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Validate all stack manifest configurations against the atmos-manifest JSON Schema —
+the same one [`atmos stack schema`](/cli/commands/stack/stack-schema) prints. This is
+an alias for [`atmos validate stacks`](/cli/commands/validate/stacks).
+</Intro>
+
+<CastPlayer title="atmos stack validate --help" src="/casts/screengrabs/atmos-stack-validate--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack validate
+```
+
+## Examples
+
+```shell
+# Validate all stack manifests.
+atmos stack validate
+
+# Equivalent long form.
+atmos validate stacks
+
+# Validate against a custom schema.
+atmos stack validate --schemas-atmos-manifest schemas/atmos-manifest.json
+```
+
+## Flags
+
+<dl>
+  <dt>`--schemas-atmos-manifest` <em>(optional)</em></dt>
+  <dd>Path or URL of a JSON Schema to validate stack manifests against, overriding the embedded schema and any `schemas.atmos.manifest` setting.</dd>
+</dl>
