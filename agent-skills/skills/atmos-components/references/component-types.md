@@ -42,6 +42,29 @@ components:
 
 Atmos generates `backend.tf.json` and `providers_override.tf.json` in the component directory before running Terraform commands. These generated files should be added to `.gitignore`.
 
+## Component Versioning
+
+Keep multiple component versions side by side when a gradual migration is needed:
+
+```text
+components/terraform/vpc/
+  v1/
+  v2/
+```
+
+Set `metadata.name` to preserve the workspace key while `metadata.component` selects the physical version:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        name: vpc
+        component: vpc/v2
+```
+
+Alternatively, use `atmos vendor pull` to pin a remote component version; see the `atmos-vendoring` skill.
+
 ### Helmfile Components
 
 Used for deploying Helm charts to Kubernetes clusters via `helmfile`.

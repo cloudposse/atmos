@@ -463,35 +463,6 @@ module "vpc" {
 
 This reads the VPC component's Terraform outputs from the same or a different stack.
 
-## Component Versioning Patterns
-
-### Folder-Based Versioning
-
-Maintain multiple versions of a component side by side:
-
-```text
-components/
-  terraform/
-    vpc/
-      v1/
-        main.tf
-      v2/
-        main.tf
-```
-
-```yaml
-components:
-  terraform:
-    vpc:
-      metadata:
-        name: vpc           # Stable workspace key prefix
-        component: vpc/v2   # Physical version path
-```
-
-### Vendor-Based Versioning
-
-Use `atmos vendor pull` to pin specific upstream versions. See the atmos-vendoring skill for details.
-
 ## Best Practices
 
 1. **One concern per component**: Each component should provision a single logical piece of infrastructure (VPC, EKS cluster, database). Do not combine resources with different lifecycles.
@@ -508,5 +479,5 @@ atmos describe component vpc -s plat-ue2-prod
 
 ## References
 
-- [references/component-types.md](references/component-types.md) -- Detailed reference on component types, metadata fields, abstract components, inheritance chains
+- [references/component-types.md](references/component-types.md) -- Detailed reference on component types, metadata fields, abstract components, inheritance chains, and versioning
 - [references/examples.md](references/examples.md) -- Concrete configuration examples for VPC, EKS, S3, IAM patterns
