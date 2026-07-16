@@ -14,6 +14,12 @@ components:
       command: terraform
       metadata:
         component: mock
+      # The template tests consume the mock settings.outputs below. A static
+      # backend prevents atmos.Component from running terraform init merely to
+      # retrieve unrelated state.
+      remote_state_backend_type: static
+      remote_state_backend:
+        static: {}
       settings:
         # Mock outputs that other components will reference
         outputs:
