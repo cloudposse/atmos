@@ -37,6 +37,32 @@ type initTarget struct {
 	statuses  []secrets.Status
 }
 
+// initSummary reports the outcome for every selected secret declaration.
+type initSummary struct {
+	initialized int
+	rotated     int
+	unaffected  int
+}
+
+func (s *initSummary) add(outcome initOutcome) {
+	switch outcome {
+	case initOutcomeInitialized:
+		s.initialized++
+	case initOutcomeRotated:
+		s.rotated++
+	default:
+		s.unaffected++
+	}
+}
+
+type initOutcome int
+
+const (
+	initOutcomeUnaffected initOutcome = iota
+	initOutcomeInitialized
+	initOutcomeRotated
+)
+
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Provision (and rotate) declared secrets, from prompts or dotenv input.",
@@ -166,11 +192,11 @@ func initSingleScope(scope secretScope, opts initOptions) error {
 	if err := offerKeygen(svc, opts.dryRun); err != nil {
 		return err
 	}
-	n, err := rotateSecretStatuses(svc, statuses, scope.Stack, nil, opts)
+	summary, err := rotateSecretStatuses(svc, statuses, scope.Stack, nil, opts)
 	if err != nil {
 		return err
 	}
-	reportInit(n, opts.dryRun)
+	reportInit(summary, opts.dryRun)
 	return nil
 }
 
@@ -237,38 +263,40 @@ func initEntries(facet secretScope, entries []scopeEntry, opts initOptions, prog
 	progress.Success(fmt.Sprintf("Ready to initialize secrets for %d component instance(s)", len(targets)))
 
 	seenStackScoped := make(map[string]bool)
-	total := 0
+	var total initSummary
 	for _, target := range targets {
 		svc := target.svc
 		if err := offerKeygen(svc, opts.dryRun); err != nil {
 			return err
 		}
-		n, rotateErr := rotateSecretStatuses(svc, target.statuses, target.stack, seenStackScoped, opts)
+		summary, rotateErr := rotateSecretStatuses(svc, target.statuses, target.stack, seenStackScoped, opts)
 		if rotateErr != nil {
 			return rotateErr
 		}
-		total += n
+		total.initialized += summary.initialized
+		total.rotated += summary.rotated
+		total.unaffected += summary.unaffected
 	}
 	reportInit(total, opts.dryRun)
 	return nil
 }
 
 // reportInit prints the final summary for an init run.
-func reportInit(count int, dryRun bool) {
+func reportInit(summary initSummary, dryRun bool) {
 	if dryRun {
-		ui.Infof("Dry run: %d secret(s) would be initialized or rotated", count)
+		ui.Infof("Dry run: %d secret(s) would be initialized, %d rotated, %d unaffected", summary.initialized, summary.rotated, summary.unaffected)
 		return
 	}
-	ui.Successf("Initialized or rotated %d secret(s)", count)
+	ui.Successf("Initialized %d secret(s), rotated %d, %d unaffected", summary.initialized, summary.rotated, summary.unaffected)
 }
 
 // rotateSecretStatuses walks already-checked declared secrets and provisions each: missing secrets
 // are prompted and set; already-initialized secrets prompt to update (rotate) or skip unless --force
 // rotates them all. In dry-run mode it only reports. When seen is non-nil (whole-stack mode),
-// stack-scoped secrets are processed once per (stack, name). Returns the count handled. Separating
+// stack-scoped secrets are processed once per (stack, name). Returns the outcome summary. Separating
 // the status check lets multi-scope initialization report backend verification progress before writes.
-func rotateSecretStatuses(svc secretService, statuses []secrets.Status, stackName string, seen map[string]bool, opts initOptions) (int, error) {
-	count := 0
+func rotateSecretStatuses(svc secretService, statuses []secrets.Status, stackName string, seen map[string]bool, opts initOptions) (initSummary, error) {
+	var summary initSummary
 	for i := range statuses {
 		st := &statuses[i]
 
@@ -281,15 +309,13 @@ func rotateSecretStatuses(svc secretService, statuses []secrets.Status, stackNam
 			seen[key] = true
 		}
 
-		handled, err := provisionSecret(svc, st, opts)
+		outcome, err := provisionSecret(svc, st, opts)
 		if err != nil {
-			return count, err
+			return summary, err
 		}
-		if handled {
-			count++
-		}
+		summary.add(outcome)
 	}
-	return count, nil
+	return summary, nil
 }
 
 // validateInitInput resolves input keys across every selected service before writes start. Default
@@ -328,30 +354,30 @@ func validateInitInput(services []secretService, values map[string]string, mode 
 
 // provisionSecret provisions a single declared secret: in dry-run it only reports; an already-set
 // secret prompts to update (rotate) or skip unless force; otherwise it prompts for a value and
-// stores it. Returns whether the secret was handled (and should be counted).
+// stores it. Returns whether it was initialized, rotated, or left unaffected.
 //
 //nolint:revive // This keeps the prompt, dry-run, and dotenv initialization paths together.
-func provisionSecret(svc secretService, st *secrets.Status, opts initOptions) (bool, error) {
+func provisionSecret(svc secretService, st *secrets.Status, opts initOptions) (initOutcome, error) {
 	value, hasValue := opts.values[st.Declaration.Name]
 	if opts.values != nil && !hasValue {
-		return false, nil
+		return initOutcomeUnaffected, nil
 	}
 	if opts.dryRun {
 		ui.Infof("Would %s `%s` (%s)", initVerb(st.Initialized), st.Declaration.Name, backendLabel(&st.Declaration))
-		return true, nil
+		return initOutcomeForStatus(st.Initialized), nil
 	}
 
 	// Already set → offer update/skip unless force rotates everything.
 	if st.Initialized && !opts.force {
 		if opts.values != nil {
-			return false, nil
+			return initOutcomeUnaffected, nil
 		}
 		confirmed, confirmErr := confirmActionFn(fmt.Sprintf("Secret `%s` is already set. Update (rotate) it?", st.Declaration.Name))
 		if confirmErr != nil {
-			return false, confirmErr
+			return initOutcomeUnaffected, confirmErr
 		}
 		if !confirmed {
-			return false, nil
+			return initOutcomeUnaffected, nil
 		}
 	}
 
@@ -360,13 +386,20 @@ func provisionSecret(svc secretService, st *secrets.Status, opts initOptions) (b
 		var promptErr error
 		value, promptErr = promptForValueFn()
 		if promptErr != nil {
-			return false, promptErr
+			return initOutcomeUnaffected, promptErr
 		}
 	}
 	if err := svc.Set(st.Declaration.Name, value); err != nil {
-		return false, err
+		return initOutcomeUnaffected, err
 	}
-	return true, nil
+	return initOutcomeForStatus(st.Initialized), nil
+}
+
+func initOutcomeForStatus(initialized bool) initOutcome {
+	if initialized {
+		return initOutcomeRotated
+	}
+	return initOutcomeInitialized
 }
 
 // initVerb returns the dry-run verb for a secret based on whether it is already initialized.

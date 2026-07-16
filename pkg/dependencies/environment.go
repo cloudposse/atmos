@@ -5,6 +5,7 @@ import (
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -259,7 +260,8 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 	// Resolve every dependency to an absolute binary path.
 	resolveBinaryPaths(env, cfg, deps)
 
-	// Build augmented PATH.
+	// Build the legacy augmented PATH as a fallback and retain its error
+	// contract for callers/tests that inject a builder.
 	buildPATH := cfg.buildPATH
 	if buildPATH == nil {
 		buildPATH = BuildToolchainPATH
@@ -268,11 +270,9 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to build toolchain PATH: %w", err)
 	}
-	if toolchainPATH != getPathFromEnv() {
-		env.path = toolchainPATH
-	}
-
-	// Extract unique toolchain bin dirs from resolved paths for PrependToPath().
+	// Extract unique toolchain bin dirs from resolved paths. This must use the
+	// actual entrypoint directories: onedir packages keep executables below a
+	// preserved .pkg tree, not at the version directory root.
 	seen := make(map[string]bool)
 	for _, p := range env.resolved {
 		dir := filepath.Dir(p)
@@ -280,6 +280,13 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 			seen[dir] = true
 			env.dirs = append(env.dirs, dir)
 		}
+	}
+	sort.Strings(env.dirs)
+
+	if len(env.dirs) > 0 {
+		env.path = env.PrependToPath(getPathFromEnv())
+	} else if toolchainPATH != getPathFromEnv() {
+		env.path = toolchainPATH
 	}
 
 	return env, nil

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // restoreViperKey snapshots a single Viper key and restores it after the test.
@@ -208,6 +209,19 @@ func TestInitConfigAndStacksInfo_ComponentThenDashCommand(t *testing.T) {
 	info := initConfigAndStacksInfo(c, "exec", c.Flags().Args())
 	assert.Equal(t, "aws", info.ComponentFromArg)
 	assert.Equal(t, []string{"ls", "-la"}, info.AdditionalArgsAndFlags)
+}
+
+func TestRunVerbParsesOnlyArgsBeforeDash(t *testing.T) {
+	// Cobra retains pass-through arguments in Args(), including flags for the
+	// command inside the emulator. The emulator parsers must never see those.
+	c := &cobra.Command{Use: "exec"}
+	c.Flags().String("stack", "", "")
+	require.NoError(t, c.ParseFlags([]string{"aws", "--", "kubectl", "-n", "demo"}))
+
+	positional, separated := flags.SplitArgsAtDash(c, c.Flags().Args())
+
+	assert.Equal(t, []string{"aws"}, positional)
+	assert.Equal(t, []string{"kubectl", "-n", "demo"}, separated)
 }
 
 func TestInitConfigAndStacksInfo_ExtraPositionalArgs(t *testing.T) {

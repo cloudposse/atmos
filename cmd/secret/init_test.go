@@ -84,6 +84,14 @@ func TestRunSecretInit_DryRun(t *testing.T) {
 	assert.Empty(t, svc.setCalls)
 }
 
+func TestReportInit_DistinguishesOutcomes(t *testing.T) {
+	_, stderr := setupIOCapture(t)
+
+	reportInit(initSummary{initialized: 1, rotated: 2, unaffected: 3}, false)
+
+	assert.Contains(t, stderr.String(), "Initialized 1 secret(s), rotated 2, 3 unaffected")
+}
+
 func TestRunSecretInit_InputFile(t *testing.T) {
 	_, stderr := setupIOCapture(t)
 	svc := newFakeSecretService()

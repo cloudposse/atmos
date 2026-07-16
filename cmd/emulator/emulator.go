@@ -174,8 +174,12 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	if err := emulatorParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
 		return err
 	}
+	// Cobra leaves pass-through arguments after `--` in args. Parse only the
+	// command-owned portion so flags for the command executed by `emulator exec`
+	// (for example, `kubectl -n demo`) are never interpreted as Atmos flags.
+	positional, _ := flags.SplitArgsAtDash(cmd, args)
 	if requiresStack(subCommand) {
-		parsed, err := emulatorParser.Parse(context.Background(), args)
+		parsed, err := emulatorParser.Parse(context.Background(), positional)
 		if err != nil {
 			return err
 		}
@@ -190,11 +194,10 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 		}
 	}
 	if parser, ok := componentPromptParsers[cmd]; ok {
-		parsed, err := parser.Parse(context.Background(), args)
+		parsed, err := parser.Parse(context.Background(), positional)
 		if err != nil {
 			return err
 		}
-		positional, _ := flags.SplitArgsAtDash(cmd, args)
 		if len(positional) == 0 && len(parsed.GetPositionalArgs()) > 0 {
 			args = append([]string{parsed.Component}, args...)
 		}

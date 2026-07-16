@@ -5,6 +5,7 @@ import (
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -200,6 +201,7 @@ func TestForWorkflow_EmptyDef(t *testing.T) {
 func TestForWorkflow_WithToolVersions(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
+	t.Setenv("PATH", "/usr/bin")
 	t.Chdir(tempDir)
 
 	// Create a .tool-versions file.
@@ -221,16 +223,17 @@ func TestForWorkflow_WithToolVersions(t *testing.T) {
 	mockProv := NewMockToolProvisioner(ctrl)
 
 	expectedBinPath := filepath.Join(tempDir, "bin", "hashicorp", "terraform", "1.11.4", "terraform")
-	expectedPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
+	legacyPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
+	expectedPATH := filepath.Dir(expectedBinPath) + string(os.PathListSeparator) + "/usr/bin"
 
 	mockProv.EXPECT().EnsureTools(map[string]string{"terraform": "1.11.4"}).Return(nil)
 	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil)
 	mockProv.EXPECT().FindBinaryPath("hashicorp", "terraform", "1.11.4").Return(expectedBinPath, nil)
-	mockProv.EXPECT().BuildPATH(atmosConfig, map[string]string{"terraform": "1.11.4"}).Return(expectedPATH, nil)
+	mockProv.EXPECT().BuildPATH(atmosConfig, map[string]string{"terraform": "1.11.4"}).Return(legacyPATH, nil)
 
 	tenv, err := ForWorkflow(atmosConfig, &schema.WorkflowDefinition{}, withProvisioner(mockProv))
 	require.NoError(t, err)
-	assert.Equal(t, expectedPATH, tenv.PATH(), "PATH should equal the mocked value")
+	assert.Equal(t, expectedPATH, tenv.PATH(), "PATH should use the resolved executable directory")
 	assert.Equal(t, expectedBinPath, tenv.Resolve("terraform"), "terraform should resolve to the mocked binary path")
 }
 
@@ -250,7 +253,8 @@ func TestNewEnvironment_EnsureToolsFailure(t *testing.T) {
 
 	deps := map[string]string{"terraform": "1.10.0"}
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error {
 			return errors.New("install failed")
 		}),
@@ -276,7 +280,8 @@ func TestNewEnvironment_BuildPATHFailure(t *testing.T) {
 
 	deps := map[string]string{"terraform": "1.10.0"}
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(tool string) (string, string, error) {
 			return "hashicorp", "terraform", nil
@@ -297,6 +302,7 @@ func TestNewEnvironment_BuildPATHFailure(t *testing.T) {
 // TestNewEnvironment_SuccessfulResolution tests the happy path with injected mocks.
 func TestNewEnvironment_SuccessfulResolution(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Setenv("PATH", "/usr/bin")
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: tempDir,
 		Toolchain: schema.Toolchain{
@@ -312,9 +318,10 @@ func TestNewEnvironment_SuccessfulResolution(t *testing.T) {
 		"tofu":      "1.8.0",
 	}
 
-	expectedPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
+	legacyPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(tool string) (string, string, error) {
 			switch tool {
@@ -337,27 +344,35 @@ func TestNewEnvironment_SuccessfulResolution(t *testing.T) {
 			}
 		}),
 		withBuildPATH(func(_ *schema.AtmosConfiguration, _ map[string]string) (string, error) {
-			return expectedPATH, nil
+			return legacyPATH, nil
 		}),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, env)
 
 	// Verify resolved map has entries keyed by binary basename.
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		filepath.Join(tempDir, "bin", "hashicorp", "terraform", "1.10.0", "terraform"),
 		env.resolved["terraform"],
 	)
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		filepath.Join(tempDir, "bin", "opentofu", "opentofu", "1.8.0", "tofu"),
 		env.resolved["tofu"],
 	)
 
 	// Verify PATH.
+	expectedPATH := strings.Join([]string{
+		filepath.Join(tempDir, "bin", "hashicorp", "terraform", "1.10.0"),
+		filepath.Join(tempDir, "bin", "opentofu", "opentofu", "1.8.0"),
+		"/usr/bin",
+	}, string(os.PathListSeparator))
 	assert.Equal(t, expectedPATH, env.path)
 
 	// Verify Resolve uses the resolved map.
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		filepath.Join(tempDir, "bin", "opentofu", "opentofu", "1.8.0", "tofu"),
 		env.Resolve("tofu"),
 	)
@@ -384,7 +399,8 @@ func TestNewEnvironment_ResolveError(t *testing.T) {
 	deps := map[string]string{"unknown-tool": "1.0.0"}
 	expectedPATH := "/some/path"
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(_ string) (string, string, error) {
 			return "", "", errors.New("unknown tool")
@@ -418,7 +434,8 @@ func TestNewEnvironment_FindBinaryPathError(t *testing.T) {
 	deps := map[string]string{"terraform": "1.10.0"}
 	expectedPATH := "/some/path"
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(_ string) (string, string, error) {
 			return "hashicorp", "terraform", nil

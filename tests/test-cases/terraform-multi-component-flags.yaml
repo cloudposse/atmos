@@ -35,6 +35,7 @@ tests:
       - "--all"
       - "-s"
       - "plat-ue2-dev"
+      - "--identity=false"
       - "--dry-run"
     expect:
       exit_code: 0
@@ -44,26 +45,24 @@ tests:
         - "app-config"
         - "dry run"
 
-  - name: "quick-start-advanced terraform providers lock --all dry-run"
+  - name: "terraform providers lock --all dry-run"
     enabled: true
     tty: false
-    description: "Verify provider-lock fleet execution preserves --all on the nested providers lock command"
-    workdir: "../examples/quick-start-advanced"
+    description: "Verify provider-lock fleet execution preserves --all on the nested providers lock command without external secret dependencies"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
     command: "atmos"
     args:
       - "terraform"
       - "providers"
       - "lock"
       - "--all"
-      - "-s"
-      - "plat-ue2-dev"
       - "--dry-run"
     expect:
       exit_code: 0
       stderr:
         - "Would providers lock"
-        - "kms-key"
-        - "app-config"
+        - "vpc"
+        - "eks/cluster"
         - "dry run"
 
   # Test --all flag with dry-run (no actual terraform execution)
