@@ -13,17 +13,28 @@ import (
 	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 var initParser *flags.StandardParser
 
 var initStdinIsTTY = func() bool { return terminal.New().IsTTY(terminal.Stdin) }
 
+const initPreparationFailed = "Secret initialization preparation failed"
+
 type initOptions struct {
 	force  bool
 	dryRun bool
 	values map[string]string
 	mode   string
+}
+
+// initTarget is one resolved component instance and its preflight secret status.
+type initTarget struct {
+	stack     string
+	component string
+	svc       secretService
+	statuses  []secrets.Status
 }
 
 var initCmd = &cobra.Command{
@@ -139,17 +150,23 @@ func parseInitScope(cmd *cobra.Command, args []string, all bool) (secretScope, e
 
 // initSingleScope provisions/rotates the declared secrets for one (stack, component) instance.
 func initSingleScope(scope secretScope, opts initOptions) error {
+	progress := spinner.New(fmt.Sprintf("Preparing secrets for %s/%s", scope.Stack, scope.Component))
+	progress.Start()
 	svc, err := loadServiceFn(scope)
 	if err != nil {
+		progress.Error(initPreparationFailed)
 		return err
 	}
+	progress.Update(fmt.Sprintf("Checking existing secret status for %s/%s", scope.Stack, scope.Component))
+	statuses := svc.Status(true)
+	progress.Success(fmt.Sprintf("Ready to initialize secrets for %s/%s", scope.Stack, scope.Component))
 	if err := validateInitInput([]secretService{svc}, opts.values, opts.mode); err != nil {
 		return err
 	}
 	if err := offerKeygen(svc, opts.dryRun); err != nil {
 		return err
 	}
-	n, err := rotateDeclaredSecrets(svc, scope.Stack, nil, opts)
+	n, err := rotateSecretStatuses(svc, statuses, scope.Stack, nil, opts)
 	if err != nil {
 		return err
 	}
@@ -161,41 +178,47 @@ func initSingleScope(scope secretScope, opts initOptions) error {
 // plus each instance's instance-scoped secrets. Stack-scoped secrets are de-duplicated across
 // instances so they are only prompted once.
 func initWholeStack(facet secretScope, opts initOptions) error {
+	progress := spinner.New(fmt.Sprintf("Discovering declared secrets in stack %s", facet.Stack))
+	progress.Start()
 	entries, _, err := enumerateScopesFn(secretScope{Stack: facet.Stack, Identity: facet.Identity})
 	if err != nil {
+		progress.Error(initPreparationFailed)
 		return err
 	}
-	return initEntries(facet, entries, opts)
+	return initEntries(facet, entries, opts, progress)
 }
 
 // initAllScopes provisions every declared secret instance across every stack.
 func initAllScopes(facet secretScope, opts initOptions) error {
+	progress := spinner.New("Discovering declared secrets across all stacks")
+	progress.Start()
 	entries, _, err := enumerateScopesFn(secretScope{Identity: facet.Identity})
 	if err != nil {
+		progress.Error(initPreparationFailed)
 		return err
 	}
-	return initEntries(facet, entries, opts)
+	return initEntries(facet, entries, opts, progress)
 }
 
-func initEntries(facet secretScope, entries []scopeEntry, opts initOptions) error {
+func initEntries(facet secretScope, entries []scopeEntry, opts initOptions, progress *spinner.Spinner) error {
 	if len(entries) == 0 {
+		progress.Success("No declared secrets found")
 		ui.Info(emptyListMessage(facet))
 		return nil
 	}
 
-	type initTarget struct {
-		stack string
-		svc   secretService
-	}
 	targets := make([]initTarget, 0, len(entries))
-	for _, entry := range entries {
+	for index, entry := range entries {
+		progress.Update(fmt.Sprintf("Preparing secret backend for %s/%s (%d/%d)", entry.Stack, entry.Component, index+1, len(entries)))
 		scope := secretScope{Stack: entry.Stack, Component: entry.Component, Identity: facet.Identity}
 		svc, loadErr := loadServiceFn(scope)
 		if loadErr != nil {
+			progress.Error(initPreparationFailed)
 			return loadErr
 		}
-		targets = append(targets, initTarget{stack: entry.Stack, svc: svc})
+		targets = append(targets, initTarget{stack: entry.Stack, component: entry.Component, svc: svc})
 	}
+	progress.Success(fmt.Sprintf("Discovered %d component instance(s) with declared secrets", len(targets)))
 	services := make([]secretService, 0, len(targets))
 	for _, target := range targets {
 		services = append(services, target.svc)
@@ -204,6 +227,15 @@ func initEntries(facet secretScope, entries []scopeEntry, opts initOptions) erro
 		return err
 	}
 
+	progress = spinner.New("Checking existing secret status")
+	progress.Start()
+	for index := range targets {
+		target := &targets[index]
+		progress.Update(fmt.Sprintf("Checking existing secret status for %s/%s (%d/%d)", target.stack, target.component, index+1, len(targets)))
+		target.statuses = target.svc.Status(true)
+	}
+	progress.Success(fmt.Sprintf("Ready to initialize secrets for %d component instance(s)", len(targets)))
+
 	seenStackScoped := make(map[string]bool)
 	total := 0
 	for _, target := range targets {
@@ -211,7 +243,7 @@ func initEntries(facet secretScope, entries []scopeEntry, opts initOptions) erro
 		if err := offerKeygen(svc, opts.dryRun); err != nil {
 			return err
 		}
-		n, rotateErr := rotateDeclaredSecrets(svc, target.stack, seenStackScoped, opts)
+		n, rotateErr := rotateSecretStatuses(svc, target.statuses, target.stack, seenStackScoped, opts)
 		if rotateErr != nil {
 			return rotateErr
 		}
@@ -230,14 +262,12 @@ func reportInit(count int, dryRun bool) {
 	ui.Successf("Initialized or rotated %d secret(s)", count)
 }
 
-// rotateDeclaredSecrets walks the declared secrets for a service and provisions each: missing
-// secrets are prompted and set; already-initialized secrets prompt to update (rotate) or skip
-// unless --force rotates them all. In dry-run mode it only reports. When seen is non-nil (whole-
-// stack mode), stack-scoped secrets are processed once per (stack, name). Returns the count handled.
-func rotateDeclaredSecrets(svc secretService, stackName string, seen map[string]bool, opts initOptions) (int, error) {
-	// init provisions secrets, so it needs an authoritative initialized/not-initialized answer
-	// from every backend (verify=true). Local backends (e.g. SOPS) stay credential-free.
-	statuses := svc.Status(true)
+// rotateSecretStatuses walks already-checked declared secrets and provisions each: missing secrets
+// are prompted and set; already-initialized secrets prompt to update (rotate) or skip unless --force
+// rotates them all. In dry-run mode it only reports. When seen is non-nil (whole-stack mode),
+// stack-scoped secrets are processed once per (stack, name). Returns the count handled. Separating
+// the status check lets multi-scope initialization report backend verification progress before writes.
+func rotateSecretStatuses(svc secretService, statuses []secrets.Status, stackName string, seen map[string]bool, opts initOptions) (int, error) {
 	count := 0
 	for i := range statuses {
 		st := &statuses[i]
