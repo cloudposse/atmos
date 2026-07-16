@@ -204,6 +204,7 @@ commands:
           atmos stack set --help
           atmos stack delete --help
           atmos stack format --help
+          atmos stack schema --help
           atmos stack config --help
           atmos stack config get --help
           atmos stack config set --help
@@ -574,6 +575,7 @@ commands:
           atmos stack set --help
           atmos stack delete --help
           atmos stack format --help
+          atmos stack schema --help
           atmos stack config --help
           atmos stack config get --help
           atmos stack config set --help

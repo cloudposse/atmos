@@ -64,3 +64,47 @@ atmos toolchain install
         Reinstall even if already installed
     </dd>
 </dl>
+
+## How Tools Are Installed on Disk
+
+Atmos installs each tool under a version-specific directory
+(`<install_path>/bin/<owner>/<repo>/<version>/`) and adapts the on-disk layout to
+the shape of the downloaded archive:
+
+- **Single-binary tools** (for example `jq`, `terraform`, `kubectl`) are placed
+  directly in the version directory as a flat executable.
+- **Multi-file ("onedir") tools** (for example `aws/aws-cli` and `nodejs/node`)
+  ship a binary together with runtime siblings — a bundled language runtime,
+  shared libraries, or `node_modules`. For these, Atmos preserves the complete
+  extracted archive under a `.pkg` subdirectory and records each registry
+  entrypoint's real path (such as `aws`, `node`, `npm`, `npx`) in a small sidecar
+  manifest. This keeps each executable next to the files it needs at runtime,
+  matching how the upstream `aqua` CLI installs the same packages.
+
+Atmos does not create symlinks to expose these entrypoints — a design choice
+used consistently across Atmos's install/provisioning code. `which`
+resolves directly to the real, nested path (for example
+`.../24.18.0/.pkg/node-v24.18.0-darwin-arm64/bin/node`), and
+[`atmos toolchain env`](/cli/commands/toolchain/env),
+[`exec`](/cli/commands/toolchain/exec), and
+[`which`](/cli/commands/toolchain/which) all resolve it the same way — including
+every command a multi-command package exposes, whose directories are all added
+to `PATH`. Because exposure needs no symlink, this works identically on macOS,
+Linux, and Windows with no elevated privileges or Developer Mode required.
+
+The only symlinks a onedir install may contain are ones the upstream archive
+itself ships (for example Node's `npm`, which the archive links relatively as
+`../lib/node_modules/...` on Unix). Atmos recreates each such link inside the
+preserved `.pkg` tree after extraction, through a single validated step, so the
+tool functions identically to how it would if installed from its original
+archive; the links are never created by Atmos's exposure logic. Each link is
+reproduced with the archive's **original relative target**, so it resolves
+relative to the link's own directory and works regardless of whether the
+install path is absolute or relative (such as `.tools`). The link's resolved
+target is still validated to stay inside the `.pkg` tree.
+
+On Windows, where creating a symlink normally requires Developer Mode or
+elevated privilege, an archive's own **file** symlink is reproduced as a hard
+link (or a copy if hard-linking is unavailable), so packages that ship such
+links still install without elevation. Archives that ship **directory**
+symlinks remain unsupported on Windows without the required privilege.

@@ -38,6 +38,11 @@ demos/audio/
 # syncs to S3/CDN (`atmos demo publish`); the site references the remote URL.
 /website/static/img/demos/
 
+# Generated atmos-manifest JSON Schema (served at atmos.tools). Generated from the embedded
+# schema (pkg/datafetcher/schema/atmos/manifest/1.0.json) by `atmos dev generate schema` /
+# `go run ./tools/gen-schema` — never hand-edit or commit this file.
+/website/static/schemas/atmos/atmos-manifest/
+
 # Module directory
 .terraform
 **/.workdir/

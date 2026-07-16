@@ -1,0 +1,83 @@
+---
+slug: append-yaml-function
+title: "New !append YAML Function to Extend Inherited Lists"
+date: 2026-06-08T12:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports the `!append` YAML function, which **adds items to an inherited list**
+during stack merging instead of replacing it — giving you per-field control over list
+merging without changing any global setting.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos configuration is layered: stacks inherit from imports, and later layers merge over
+earlier ones. By default, when two layers define the same list, the later one **replaces**
+it entirely:
+
+```yaml
+# base.yaml -> eks.settings.depends_on: [vpc, iam-role]
+
+components:
+  terraform:
+    eks:
+      settings:
+        # This REPLACES the inherited list — vpc and iam-role are lost.
+        depends_on:
+          - rds
+          - elasticache
+```
+
+Your only options were to re-declare the full inherited list in every override (brittle —
+the base and override drift apart) or flip the global `list_merge_strategy` to `append`,
+which changes merge behavior for **every** list in your configuration.
+
+## The Solution
+
+The `!append` function appends to the inherited list for just that one field:
+
+```yaml
+import:
+  - base   # eks.settings.depends_on: [vpc, iam-role]
+
+components:
+  terraform:
+    eks:
+      settings:
+        depends_on: !append
+          - rds
+          - elasticache
+        # Result: [vpc, iam-role, rds, elasticache]
+```
+
+Base items come first, appended items follow, and every other list keeps its normal
+behavior.
+
+## Use Cases
+
+- **Dependencies** — add `depends_on` items without restating the base ones.
+- **Security groups** — layer environment-specific rules onto a shared base.
+- **IAM policies** — extend base policy statements.
+- **Tags/labels** — add extra tags while preserving organizational defaults.
+- **EKS node groups** — extend a base cluster with additional node pools.
+
+## How It Works
+
+`!append` is unusual among YAML functions because it influences the **merge**, not value
+resolution. During parsing, an `!append`-tagged list is wrapped with append metadata (in
+both `atmos.yaml` and stack manifests); during merging, Atmos detects the wrapper and
+concatenates the list onto the inherited value. It appends exactly once regardless of the
+global `list_merge_strategy` (`replace`, `append`, or `merge`), and works with any list
+item type — strings, numbers, or maps.
+
+It pairs naturally with [`!unset`](/functions/yaml/unset): `!append` adds to inherited
+lists, `!unset` removes inherited keys — together giving fine-grained control over what
+inheritance brings in.
+
+## Get Started
+
+The `!append` function is available now. See the [documentation](/functions/yaml/append)
+for more examples, and browse the full set of [Atmos YAML functions](/functions/yaml).

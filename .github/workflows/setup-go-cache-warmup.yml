@@ -10,7 +10,7 @@ on:
     - cron: "35 0 * * *"
 
 env:
-  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   # Use pipe fallback so transient proxy.golang.org 5xx errors during
   # `go mod download` fall back to direct module fetches.
   GOPROXY: "https://proxy.golang.org|direct"

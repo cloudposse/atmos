@@ -538,8 +538,14 @@ func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper
 func (p *StandardFlagParser) parseFlags(args []string, result *ParsedConfig) (*pflag.FlagSet, error) {
 	defer perf.Track(nil, "flags.StandardFlagParser.parseFlags")()
 
-	// Early return: no command or no args.
-	if p.cmd == nil || len(args) == 0 {
+	// Early return: parser has no bound command (e.g. RegisterFlags/RegisterPersistentFlags
+	// was never called). Without p.cmd we cannot build a combined FlagSet.
+	//
+	// Do NOT also early-return on len(args) == 0: commands with zero leftover positional
+	// args (Args: cobra.NoArgs, or an optional/prompted positional arg left empty) still
+	// need bindChangedFlagsToViper below to run, otherwise CLI-supplied flag values (e.g.
+	// --stack) never reach Viper and Parse() silently returns their defaults.
+	if p.cmd == nil {
 		result.PositionalArgs = args
 		result.SeparatedArgs = []string{}
 		return nil, nil
