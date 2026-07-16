@@ -1,0 +1,82 @@
+---
+slug: dotenv-include-support
+title: "Dotenv Files with !include"
+date: 2026-06-14T12:00:00.000Z
+authors: [atmos]
+tags: [feature, dx]
+---
+
+Atmos now supports using dotenv files directly with the `!include` YAML function.
+
+<!--truncate-->
+
+## Explicit Dotenv Loading
+
+You can load a dotenv file directly into the CLI `env` section:
+
+```yaml
+env: !include .env
+```
+
+Use a YAML merge key when you want to include dotenv values and also define inline overrides. The `<<` key is YAML's merge-key syntax, the same YAML mechanism commonly used with anchors and aliases:
+
+```yaml
+env:
+  <<: !include .env
+  AWS_REGION: us-east-2
+```
+
+If `.env` contains:
+
+```dotenv
+AWS_REGION=us-east-1
+AWS_SDK_LOAD_CONFIG=true
+```
+
+Atmos parses the file as dotenv data and merges it into `env`. Values written directly in `atmos.yaml` win, so `AWS_REGION` resolves to `us-east-2` in the example above.
+
+You can also layer multiple dotenv files:
+
+```yaml
+env:
+  <<:
+    - !include .env.local
+    - !include .env
+  AWS_REGION: us-east-2
+```
+
+YAML merge sequence precedence is earlier item wins. In the example above, `.env.local` has higher precedence than `.env`, so `.env.local` overrides `.env`. Inline keys in `env` still override all included dotenv values.
+
+Local dotenv paths follow the existing `!include` resolution rules. Use `./` or `../` for paths relative to the YAML file containing the include; bare local paths such as `.env` follow Atmos' normal current/base-path lookup for includes. Absolute paths are honored.
+
+## Supported Filenames
+
+Atmos parses these filenames as dotenv files when they are used with `!include`:
+
+- `.env`
+- `.env.local`, `.env.production`, and other `.env.*` files
+- `foo.env` and other files ending exactly in `.env`
+
+Use `!include.raw` when you want the raw file contents instead.
+
+## Pin a Profile Per Project
+
+Because `ATMOS_`-prefixed variables in the `env` section configure Atmos itself, you can use a dotenv file to **pin a [profile](/cli/configuration/profiles) per project**. Drop an `ATMOS_PROFILE` into `.env`, include it in your base `atmos.yaml`, and every command in the project uses that profile automatically:
+
+```dotenv
+# .env
+ATMOS_PROFILE=dev
+```
+
+```yaml
+# atmos.yaml
+env: !include .env
+```
+
+No `--profile` flag, no exported variable — just `atmos terraform plan vpc -s dev`. Atmos promotes the `ATMOS_*` values into its own environment before it resolves the active profile. An exported `ATMOS_PROFILE` (or `--profile`) still wins, so ad-hoc overrides like `ATMOS_PROFILE=ci atmos …` keep working. This is a great way to make sure everyone on a team — and CI — runs with the same defaults for a given repository.
+
+## No Implicit Loading
+
+Atmos does not automatically load dotenv files, and it does not load or execute `.envrc`. This keeps dotenv support explicit in `atmos.yaml` and avoids shell-execution semantics.
+
+See the [`env` configuration documentation](/cli/configuration/env) for examples.
