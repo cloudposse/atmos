@@ -119,5 +119,7 @@ func addGoComments(r *jsonschema.Reflector, repoRoot string) error {
 	defer func() {
 		_ = os.Chdir(cwd)
 	}()
-	return r.AddGoComments(modulePath, "pkg")
+	// WithFullComment keeps complete type doc comments instead of go/doc
+	// synopses, which truncate at abbreviations like "e.g.".
+	return r.AddGoComments(modulePath, "pkg", jsonschema.WithFullComment())
 }

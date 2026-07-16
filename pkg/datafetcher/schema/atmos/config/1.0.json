@@ -886,7 +886,7 @@
         }
       },
       "type": "object",
-      "description": "AISkillConfig contains configuration for a custom AI skill."
+      "description": "AISkillConfig contains configuration for a custom AI skill.\nSkills follow the Agent Skills open standard (https://agentskills.io)."
     },
     "AIToolSettings": {
       "properties": {
@@ -1339,7 +1339,7 @@
         }
       },
       "type": "object",
-      "description": "AWSSecurityTagMapping configures the tag keys used for finding-to-code mapping."
+      "description": "AWSSecurityTagMapping configures the tag keys used for finding-to-code mapping.\nOnly two tags are needed: one for the stack name and one for the component name.\nThese are configurable so organizations can use their own tagging standards."
     },
     "AWSSettings": {
       "properties": {
@@ -2165,7 +2165,7 @@
         }
       },
       "type": "object",
-      "description": "CIAnnotationsConfig configures inline annotations for scanner-hook findings."
+      "description": "CIAnnotationsConfig configures inline annotations for scanner-hook findings.\nGitHub: workflow `::error`/`::warning` commands shown inline on the PR diff.\nThis is the \"non-CodeQL\" path — it needs no GitHub Advanced Security.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Default is true when omitted; effective only when the\nglobal ci.enabled is true."
     },
     "CICacheConfig": {
       "properties": {
@@ -2283,7 +2283,7 @@
         }
       },
       "type": "object",
-      "description": "CICacheConfig configures the CI build cache, which restores a well-known cache directory (the toolchain install path and anything else under the XDG cache root) at Atmos startup and saves it at exit, using the active CI provider's cache store (e.g."
+      "description": "CICacheConfig configures the CI build cache, which restores a well-known\ncache directory (the toolchain install path and anything else under the XDG\ncache root) at Atmos startup and saves it at exit, using the active CI\nprovider's cache store (e.g. the GitHub Actions cache). All operations are\nno-ops when no cache-capable CI provider is detected (i.e. outside CI).\n\nA fixed set of Atmos's own auth session-cache subdirectories (AWS SSO\ntokens, Azure device-code tokens, AWS webflow refresh tokens, provisioned\nidentity metadata) is always excluded from the cache, regardless of Paths.\nSee docs/prd/native-ci/framework/ci-cache.md#default-excluded-auth-paths."
     },
     "CIChecksConfig": {
       "properties": {
@@ -2326,7 +2326,7 @@
         }
       },
       "type": "object",
-      "description": "CIChecksConfig configures CI commit status checks."
+      "description": "CIChecksConfig configures CI commit status checks.\nGitHub: Commit Status API, GitLab: Commit Status API."
     },
     "CIChecksStatusesConfig": {
       "properties": {
@@ -2388,7 +2388,7 @@
         }
       },
       "type": "object",
-      "description": "CIChecksStatusesConfig configures which per-operation commit statuses are created."
+      "description": "CIChecksStatusesConfig configures which per-operation commit statuses are created.\nAll fields default to true when nil (not set)."
     },
     "CICommentsConfig": {
       "properties": {
@@ -2428,7 +2428,7 @@
         }
       },
       "type": "object",
-      "description": "CICommentsConfig configures PR/MR comment integration."
+      "description": "CICommentsConfig configures PR/MR comment integration.\nGitHub: PR comments, GitLab: MR notes.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Default is true when omitted; see `isCommentsEnabled`."
     },
     "CIConfig": {
       "properties": {
@@ -2578,7 +2578,7 @@
         }
       },
       "type": "object",
-      "description": "CIConfig contains CI/CD integration configuration."
+      "description": "CIConfig contains CI/CD integration configuration.\nUses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers."
     },
     "CIGroupsConfig": {
       "properties": {
@@ -2594,7 +2594,7 @@
         }
       },
       "type": "object",
-      "description": "CIGroupsConfig configures collapsible CI log groups."
+      "description": "CIGroupsConfig configures collapsible CI log groups. On GitHub Actions this\nemits the `::group::\u003cname\u003e` / `::endgroup::` workflow commands that fold a\nregion of the run log into a named, expandable section.\n\nMode selects the grouping granularity (mutually exclusive — CI providers do\nnot support nested groups):\n\n  - \"auto\" (default when omitted): the finest granularity that applies to\n    each command — one group per workflow/custom-command step, and one group\n    per phase (init/plan/apply) of a terraform/helmfile/packer invocation.\n  - \"invocation\": one group around each whole top-level `atmos \u003ccommand\u003e`\n    run; finer step/phase grouping is suppressed.\n  - \"off\": no grouping.\n\nEffective only when the global ci.enabled is true and a grouping-capable CI\nprovider is detected."
     },
     "CIOutputConfig": {
       "properties": {
@@ -2640,7 +2640,7 @@
         }
       },
       "type": "object",
-      "description": "CIOutputConfig configures CI output variables for downstream jobs."
+      "description": "CIOutputConfig configures CI output variables for downstream jobs.\nGitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts."
     },
     "CIResultsConfig": {
       "properties": {
@@ -2659,7 +2659,7 @@
         }
       },
       "type": "object",
-      "description": "CIResultsConfig configures uploading scanner-hook findings (SARIF) to the CI provider's security-findings store."
+      "description": "CIResultsConfig configures uploading scanner-hook findings (SARIF) to the\nCI provider's security-findings store. GitHub: Code Scanning / the Security\ntab, which requires GitHub Advanced Security on private repos and a token\nwith the `security_events` write scope.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Default is false when omitted (opt-in, since it has\nside effects and extra requirements); effective only when ci.enabled is true."
     },
     "CISummaryConfig": {
       "properties": {
@@ -2689,7 +2689,7 @@
         }
       },
       "type": "object",
-      "description": "CISummaryConfig configures CI job summary output."
+      "description": "CISummaryConfig configures CI job summary output.\nGitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts."
     },
     "CITemplatesConfig": {
       "properties": {
@@ -3370,7 +3370,7 @@
         }
       },
       "type": "object",
-      "description": "CommandComponent defines a custom component type for a command."
+      "description": "CommandComponent defines a custom component type for a command.\nWhen specified, the command can access component configuration via {{ .Component.* }} templates."
     },
     "CommandComponentConfig": {
       "properties": {
@@ -3574,7 +3574,7 @@
         }
       },
       "type": "object",
-      "description": "ComponentDependency represents a single dependency entry."
+      "description": "ComponentDependency represents a single dependency entry. It supports two\nsurfaces simultaneously:\n\n  - The canonical (recommended) shape uses `name` for the component instance\n    name and an optional `kind` for cross-type dependencies (helmfile, packer,\n    plugin). Path-based dependencies should be declared using the sibling\n    keys `dependencies.files` / `dependencies.folders` rather than entries\n    here.\n\n  - The legacy shape uses `component` (instead of `name`) and supports\n    `kind: file` / `kind: folder` with `path:` to declare path-based\n    dependencies inline. This shape continues to parse for backward\n    compatibility with stack configurations from Atmos \u003c v1.211.0.\n\nUse the helpers IsFileDependency / IsFolderDependency / IsComponentDependency\nto discriminate; do not branch on `Kind` directly."
     },
     "Components": {
       "properties": {
@@ -3716,7 +3716,7 @@
         }
       },
       "type": "object",
-      "description": "Composition declares a named multi-service system."
+      "description": "Composition declares a named multi-service system. Components join a\ncomposition via their first-class `composition:` field. The `Services` list is\na closed contract for membership (declaring membership in an unlisted service\nis an error) but open for fulfillment (a declared service with no component in\na given stack is allowed)."
     },
     "Config": {
       "properties": {
@@ -3894,7 +3894,7 @@
         }
       },
       "type": "object",
-      "description": "ContainerConfig is the top-level `container:` namespace for global container behavior."
+      "description": "ContainerConfig is the top-level `container:` namespace for global container\nbehavior. It is the forward-compatible home for settings shared by the\n`type: container` workflow steps and the upcoming `container` component kind /\n`atmos container` command."
     },
     "ContainerMount": {
       "properties": {
@@ -4142,7 +4142,7 @@
         }
       },
       "type": "object",
-      "description": "Dependencies declares required tools and component dependencies."
+      "description": "Dependencies declares required tools and component dependencies.\n\nThe canonical (v2) input surface has four sibling keys: `tools`,\n`components`, `files`, `folders`. The legacy v1 surface (which still\nparses) puts file/folder entries inside `components[]` discriminated by\n`kind: file` / `kind: folder`. After unmarshaling from a stack manifest,\ncallers MUST invoke Normalize so both surfaces are reconciled into a\nsingle internal representation: `Components` ends up holding every\ndependency entry (component, file, and folder kinds), which is what the\ndownstream describe-affected / describe-dependents pipelines consume."
     },
     "Describe": {
       "properties": {
@@ -4756,7 +4756,7 @@
         }
       },
       "type": "object",
-      "description": "GitAuthConfig selects the Atmos Auth identity for a repository."
+      "description": "GitAuthConfig selects the Atmos Auth identity for a repository.\nIntegrations are never referenced by name; they attach via identity links."
     },
     "GitAuthorConfig": {
       "properties": {
@@ -4946,7 +4946,7 @@
         }
       },
       "type": "object",
-      "description": "GitConfig is the top-level `git` section in atmos.yaml."
+      "description": "GitConfig is the top-level `git` section in atmos.yaml.\nGit is a foundational Atmos capability (peer to Toolchain, Auth, and Hooks);\nsee docs/prd/git-ops.md."
     },
     "GitHookEntry": {
       "properties": {
@@ -5217,7 +5217,7 @@
         }
       },
       "type": "object",
-      "description": "GitSTSSettings contains global defaults for the github/sts auth integration."
+      "description": "GitSTSSettings contains global defaults for the github/sts auth integration.\nPer-integration spec fields override these."
     },
     "GithubOIDCSettings": {
       "properties": {
@@ -5303,7 +5303,7 @@
         }
       },
       "type": "object",
-      "description": "HTTPExpect defines success criteria for an http step."
+      "description": "HTTPExpect defines success criteria for an http step.\nWhen unset, any 2xx response is considered a success."
     },
     "Helm": {
       "properties": {
@@ -5401,7 +5401,7 @@
         }
       },
       "type": "object",
-      "description": "Helm defines configuration for native Helm components."
+      "description": "Helm defines configuration for native Helm components.\nHelm components render and deploy Helm charts (local, remote-repo, or OCI)\nusing the Helm Go SDK, and can deliver rendered manifests to provision targets."
     },
     "HelmRepository": {
       "properties": {
@@ -5931,7 +5931,7 @@
         }
       },
       "type": "object",
-      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS)."
+      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS).\nIntegrations derive credentials from identities for service-specific access."
     },
     "IntegrationSpec": {
       "properties": {
@@ -6081,7 +6081,7 @@
         }
       },
       "type": "object",
-      "description": "IntegrationVia defines how an integration connects to an identity or provider."
+      "description": "IntegrationVia defines how an integration connects to an identity or provider.\nExactly one of Identity or Provider must be set. Provider binding is useful when\nthe provider itself yields usable credentials (e.g., atmos/pro session JWT) and a\npassthrough identity would otherwise be redundant."
     },
     "Integrations": {
       "properties": {
@@ -6532,7 +6532,7 @@
         }
       },
       "type": "object",
-      "description": "MCPRoutingConfig configures the two-pass routing that selects which MCP servers are relevant to a user's question before starting them."
+      "description": "MCPRoutingConfig configures the two-pass routing that selects which MCP servers\nare relevant to a user's question before starting them.\nRouting uses the same AI provider and model configured under ai.default_provider."
     },
     "MCPServerConfig": {
       "properties": {
@@ -6697,7 +6697,7 @@
         }
       },
       "type": "object",
-      "description": "MCPServerConfig represents an external MCP server configured in atmos.yaml under mcp.servers."
+      "description": "MCPServerConfig represents an external MCP server configured in atmos.yaml\nunder mcp.servers. The core fields (command, args, env) follow the standard\nMCP server configuration format used by Claude Code, Codex CLI, and Gemini CLI.\nAtmos-specific extensions (description, auto_start, timeout, identity)\nprovide additional functionality."
     },
     "MCPSettings": {
       "properties": {
@@ -6755,7 +6755,7 @@
         }
       },
       "type": "object",
-      "description": "MCPSettings contains configuration for the MCP (Model Context Protocol) server and external MCP server connections."
+      "description": "MCPSettings contains configuration for the MCP (Model Context Protocol) server\nand external MCP server connections."
     },
     "MarkdownSettings": {
       "properties": {
@@ -8093,7 +8093,7 @@
         }
       },
       "type": "object",
-      "description": "ProvisionTarget is a delivery destination for a rendered artifact, selected by its kind (e.g."
+      "description": "ProvisionTarget is a delivery destination for a rendered artifact, selected by\nits kind (e.g. \"git\", \"kubernetes\"). Kind-specific fields below are interpreted\nby the registered target provisioner for that kind."
     },
     "ProvisionTargetAuth": {
       "properties": {
@@ -8330,7 +8330,7 @@
         }
       },
       "type": "object",
-      "description": "RetryConfig represents the retry configuration."
+      "description": "RetryConfig represents the retry configuration.\nPointer types are used to distinguish between \"not specified\" (nil) and \"explicitly set to zero\".\n- nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).\n- Explicitly setting a value to zero is invalid and will cause a validation error."
     },
     "SchemaRegistry": {
       "properties": {
@@ -8456,7 +8456,7 @@
         }
       },
       "type": "object",
-      "description": "SecretsConfig is the top-level `secrets:` block in atmos.yaml."
+      "description": "SecretsConfig is the top-level `secrets:` block in atmos.yaml. It holds non-store\nsecret backends (track 2), such as SOPS encrypted files. Store-backed secret backends\n(track 1) are configured as regular `stores:` entries with `secret: true` instead."
     },
     "SentryConfig": {
       "properties": {
@@ -8688,7 +8688,7 @@
         }
       },
       "type": "object",
-      "description": "ShowConfig configures automatic display features for workflows."
+      "description": "ShowConfig configures automatic display features for workflows.\nAll fields use *bool to enable tri-state logic: nil (inherit), true, false.\nThis allows step-level settings to override workflow-level defaults via deep merge."
     },
     "SimulatePrompt": {
       "properties": {
@@ -10500,7 +10500,7 @@
         }
       },
       "type": "object",
-      "description": "Task represents a unit of work that can be executed."
+      "description": "Task represents a unit of work that can be executed.\nThis type unifies workflow steps and custom command steps,\nsupporting both simple string syntax and structured syntax."
     },
     "Tasks": {
       "items": {
@@ -10518,7 +10518,7 @@
         ]
       },
       "type": "array",
-      "description": "Tasks is a slice of Task that supports flexible YAML unmarshaling."
+      "description": "Tasks is a slice of Task that supports flexible YAML unmarshaling.\nIt can parse both simple string syntax and structured syntax:\n\nSimple syntax:\n\n\tsteps:\n\t  - \"echo hello\"\n\t  - \"echo world\"\n\nStructured syntax:\n\n\tsteps:\n\t  - name: greet\n\t    command: echo hello\n\t    timeout: 30s\n\nMixed syntax:\n\n\tsteps:\n\t  - \"echo simple\"\n\t  - name: complex\n\t    command: echo structured\n\t    timeout: 5m"
     },
     "TelemetrySettings": {
       "properties": {
@@ -11447,7 +11447,7 @@
         }
       },
       "type": "object",
-      "description": "TerraformCacheConfig configures the Terraform registry cache."
+      "description": "TerraformCacheConfig configures the Terraform registry cache. The cache is\nexecution-environment (runner) configuration — where/how a machine caches\nregistry content — not stack data."
     },
     "TerraformCacheMirror": {
       "properties": {
@@ -11467,7 +11467,7 @@
         }
       },
       "type": "object",
-      "description": "TerraformCacheMirror configures eager, multi-platform pre-seeding of the cache using `terraform/tofu providers mirror`."
+      "description": "TerraformCacheMirror configures eager, multi-platform pre-seeding of the cache\nusing `terraform/tofu providers mirror`. The mirror writes the canonical\nfilesystem_mirror layout the lazy proxy already serves, so the same cache\ndirectory works lazily (proxy), eagerly (mirror), and offline (filesystem_mirror).\n\nThe target platforms live at components.terraform.platforms (a project-level\nproperty shared with the automatic post-init `providers lock`), not here."
     },
     "TerraformDocsReadmeSettings": {
       "properties": {
@@ -11636,7 +11636,7 @@
         }
       },
       "type": "object",
-      "description": "TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native CLI configuration (HCL)."
+      "description": "TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native\nCLI configuration (HCL). Only `enabled` is typed; all remaining keys are captured\nverbatim in Config and rendered as CLI-config directives (provider_installation,\nhost, credentials, plugin_cache_dir, ...), so new directives require no Atmos\nschema change."
     },
     "Toolchain": {
       "properties": {
@@ -11960,7 +11960,7 @@
         }
       },
       "type": "object",
-      "description": "TopLevelListConfig holds command-specific list configurations."
+      "description": "TopLevelListConfig holds command-specific list configurations.\nThis is a top-level configuration that separates settings for different list commands."
     },
     "Validate": {
       "properties": {
@@ -12313,7 +12313,7 @@
         }
       },
       "type": "object",
-      "description": "VersionConstraint configures version constraint validation for Atmos."
+      "description": "VersionConstraint configures version constraint validation for Atmos.\nWhen specified, Atmos validates that the current version satisfies the constraint\nbefore executing any command."
     },
     "VersionEntry": {
       "properties": {
@@ -12541,7 +12541,7 @@
         }
       },
       "type": "object",
-      "description": "VersionFileRule maps a file manager to the paths it maintains, so a single `atmos version track apply` sweeps every version-managed file."
+      "description": "VersionFileRule maps a file manager to the paths it maintains, so a single\n`atmos version track apply` sweeps every version-managed file."
     },
     "VersionGroup": {
       "properties": {
@@ -13317,7 +13317,7 @@
         }
       },
       "type": "object",
-      "description": "WorkflowContainer configures a workflow-level container-backed sandbox or a step-level container override."
+      "description": "WorkflowContainer configures a workflow-level container-backed sandbox or a\nstep-level container override. A YAML value of `false` disables inheritance."
     },
     "WorkflowStep": {
       "properties": {
