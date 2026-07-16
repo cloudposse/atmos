@@ -1064,6 +1064,27 @@ func TestPrepareStepEnvironment_WithWorkflowEnv(t *testing.T) {
 	assert.Contains(t, env, "WORKFLOW_VAR=workflow-value")
 }
 
+func TestPrepareStepEnvironment_PreservesToolchainPathWithWorkflowPathOverride(t *testing.T) {
+	separator := string(os.PathListSeparator)
+	systemPath := strings.Join([]string{"/usr/local/bin", "/usr/bin"}, separator)
+	baseEnv := []string{
+		"PATH=" + systemPath,
+		"PATH=" + strings.Join([]string{"/toolchain/bat", systemPath}, separator),
+	}
+	workflowEnv := map[string]string{
+		"PATH": strings.Join([]string{"/workspace/.context/bin", systemPath}, separator),
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil)
+
+	require.NoError(t, err)
+	assert.Contains(t, env, "PATH="+strings.Join([]string{
+		"/workspace/.context/bin",
+		"/toolchain/bat",
+		systemPath,
+	}, separator))
+}
+
 // TestPrepareStepEnvironment_WithStepEnv tests prepareStepEnvironment with step-level env.
 func TestPrepareStepEnvironment_WithStepEnv(t *testing.T) {
 	baseEnv := []string{"BASE_VAR=base-value"}
