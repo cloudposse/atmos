@@ -281,7 +281,9 @@ func TestPreprocessArgs_NoArgs(t *testing.T) {
 	t.Cleanup(func() { os.Args = originalArgs })
 
 	os.Args = []string{"atmos"}
-	assert.Nil(t, preprocessArgs())
+	args, err := preprocessArgs()
+	assert.NoError(t, err)
+	assert.Nil(t, args)
 }
 
 func TestSetupLogger_TraceLevel(t *testing.T) {

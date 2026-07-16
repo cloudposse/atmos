@@ -1805,7 +1805,17 @@ func Execute() error {
 			return err
 		}
 
+		err = internal.ConfigureCommandAliases(atmosConfig.CommandAliases)
+		if err != nil {
+			return err
+		}
+
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = internal.ConfigureCommandAliases(nil)
 		if err != nil {
 			return err
 		}
@@ -1816,7 +1826,10 @@ func Execute() error {
 
 	// Preprocess args before Cobra parses.
 	// This orchestrates multiple preprocessing steps in the correct order.
-	effectiveArgs := preprocessArgs()
+	effectiveArgs, err := preprocessArgs()
+	if err != nil {
+		return err
+	}
 
 	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
 	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
@@ -1897,32 +1910,41 @@ func unknownSubcommand(err error) (string, bool) {
 
 // preprocessArgs runs all argument preprocessing before Cobra parses.
 // This orchestrates multiple preprocessing steps in the correct order:
-//  1. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
-//  2. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
-func preprocessArgs() []string {
+//  1. Command aliases: Rewrites configured alias prefixes before command lookup
+//  2. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
+//  3. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
+func preprocessArgs() ([]string, error) {
 	osArgs := os.Args[1:]
 	if len(osArgs) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
+	// Step 1: Expand configured command aliases before Cobra command lookup.
+	var err error
+	osArgs, err = internal.ExpandCommandAliases(osArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
 	// This rewrites --identity value → --identity=value before Cobra parses.
 	processedArgs := preprocessNoOptDefValFlags(osArgs)
 
-	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
+	// Step 3: Preprocess compatibility flags (external tool syntax like -var).
 	// This separates Atmos flags from pass-through flags.
 	// Note: This may call RootCmd.SetArgs() if there are compat flags.
 	atmosArgs, hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
 	if hasCompatFlags {
-		return atmosArgs
+		return atmosArgs, nil
 	}
 
-	// If no compat flags were processed but NoOptDefVal changed the args,
-	// we need to set the processed args for Cobra to use.
-	if !slicesEqual(processedArgs, osArgs) {
+	// If no compat flags were processed but alias expansion or NoOptDefVal changed the args,
+	// we need to set the processed args for Cobra to use. Compare against the original
+	// os.Args (not the post-alias osArgs) so expanded aliases are not dropped.
+	if !slicesEqual(processedArgs, os.Args[1:]) {
 		RootCmd.SetArgs(processedArgs)
 	}
-	return processedArgs
+	return processedArgs, nil
 }
 
 func preprocessHelpTopicArgs() {

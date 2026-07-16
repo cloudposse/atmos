@@ -59,6 +59,15 @@ repos:
         files: ^(CLAUDE\.md|\.conductor/.*/CLAUDE\.md)$
         pass_filenames: false
 
+      - id: signed-commits
+        name: Check pushed commits are signed
+        description: Reject pushes containing unsigned or invalidly signed commits
+        entry: scripts/check-signed-commits.sh
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+
 
   # General file hygiene
   # NOTE: trailing-whitespace, end-of-file-fixer, and check-added-large-files hardcode

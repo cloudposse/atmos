@@ -35,6 +35,11 @@ aliases:
   # Aliases for Atmos custom commands
   ls: list stacks
   lc: list components
+
+  # Command-path aliases can add default flags
+  terraform: terraform --identity=false
+  "terraform apply": terraform apply -auto-approve
+  "describe component": describe component --process-functions=false
 ```
 </File>
 
@@ -73,6 +78,37 @@ For example:
 |---------------|---------------|
 | `atmos up <component> -s <stack>` | `atmos terraform apply <component> -s <stack>` |
 | `atmos dc <component> -s <stack>` | `atmos describe component <component> -s <stack>` |
+
+## Command Path Aliases
+
+Aliases are expanded before command parsing. The longest matching command path wins, so aliases can
+target subcommands as well as top-level commands. Quote multi-word alias keys in YAML:
+
+```yaml
+aliases:
+  "terraform apply": terraform apply -auto-approve
+```
+
+Running `atmos terraform apply vpc -s dev` is expanded to:
+
+```console
+atmos terraform apply -auto-approve vpc -s dev
+```
+
+Same-name aliases work like shell aliases and can set command defaults:
+
+```yaml
+aliases:
+  terraform: terraform --identity=false
+```
+
+User-provided command line flags still win because they appear later in the expanded argument list:
+
+```console
+atmos terraform plan --identity=true
+# expands to:
+atmos terraform --identity=false plan --identity=true
+```
 
 ## Common Aliases
 

@@ -19,6 +19,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -164,6 +165,11 @@ func processCommandAliases(
 
 	for k, v := range aliases {
 		alias := strings.TrimSpace(k)
+		aliasParts, err := shell.Fields(alias, nil)
+		if err != nil || len(aliasParts) != 1 {
+			continue
+		}
+		alias = aliasParts[0]
 
 		if existing, exist := existingTopLevelCommands[alias]; exist && topLevel {
 			if !isCustomCommand(existing) {
@@ -207,7 +213,8 @@ func processCommandAliases(
 					// Build command arguments: split aliasCmd into parts and append filteredArgs.
 					// Use direct process execution instead of shell to avoid path escaping
 					// issues on Windows where backslashes in paths are misinterpreted.
-					cmdArgs := strings.Fields(aliasCmd)
+					cmdArgs, err := shell.Fields(aliasCmd, nil)
+					errUtils.CheckErrorPrintAndExit(err, "", "")
 					cmdArgs = append(cmdArgs, filteredArgs...)
 
 					execCmd := exec.Command(execPath, cmdArgs...)
