@@ -239,7 +239,9 @@ jobs:
 
       - name: Verify Terraform example syntax
         if: matrix.flavor.target == 'linux'
-        run: scripts/check-terraform-example-syntax.sh
+        run: |
+          bash scripts/test-check-terraform-example-syntax.sh
+          scripts/check-terraform-example-syntax.sh
 
       - name: Terraform registry cache acceptance test
         timeout-minutes: 25

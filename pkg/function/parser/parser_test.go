@@ -51,6 +51,16 @@ func TestParseTerraformErrors(t *testing.T) {
 	assert.Equal(t, Position{Offset: 15, Line: 1, Column: 16}, parseErr.Position)
 }
 
+func TestParseTerraformRejectsUnterminatedQuotedExpression(t *testing.T) {
+	_, err := ParseTerraform(`vpc ".output // unterminated`)
+	require.Error(t, err)
+
+	var parseErr *Error
+	require.ErrorAs(t, err, &parseErr)
+	assert.Equal(t, "unterminated quoted value", parseErr.Message)
+	assert.Equal(t, Position{Offset: 4, Line: 1, Column: 5}, parseErr.Position)
+}
+
 func TestParseTerraformTaggedBlockScalars(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -174,6 +184,15 @@ func TestParseStoreGet(t *testing.T) {
 	require.Error(t, err)
 	_, err = ParseStoreGet("ssm key | unknown value")
 	require.Error(t, err)
+}
+
+func TestParseStoreRejectsMissingOptionValue(t *testing.T) {
+	_, err := ParseStore("ssm vpc id | default")
+	require.Error(t, err)
+
+	var parseErr *Error
+	require.ErrorAs(t, err, &parseErr)
+	assert.Equal(t, "expected option value", parseErr.Message)
 }
 
 func TestParserHelpers(t *testing.T) {

@@ -92,7 +92,9 @@ commands:
         description: Verify Terraform examples do not use legacy CSV quote escaping
         steps:
           - type: shell
-            command: scripts/check-terraform-example-syntax.sh
+            command: |
+              bash scripts/test-check-terraform-example-syntax.sh
+              scripts/check-terraform-example-syntax.sh
 
       - name: acc-coverage
         description: Run acceptance tests and generate an HTML coverage report
