@@ -105,6 +105,8 @@ func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schem
 }
 
 // executeTerraformQueryComponent runs one scheduled Terraform component and captures optional output.
+// Per-node lifecycle hooks (user + CI, before and after) are handled one layer up by
+// TerraformDispatcher.Dispatch via info.NodeHooks — this function stays hook-unaware.
 func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecution) (scheduleradapters.TerraformExecutionResult, error) {
 	info := execution.Info
 	opts := []ShellCommandOption{WithProcessContext(execution.Context)}
@@ -117,20 +119,13 @@ func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecuti
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	if info.PerComponentHook != nil || execution.CaptureOutput {
+	if execution.CaptureOutput {
 		opts = append(opts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
 	}
 
 	execErr := ExecuteTerraform(info, opts...)
-	result := scheduleradapters.TerraformExecutionResult{
+	return scheduleradapters.TerraformExecutionResult{
 		Stdout: stdoutBuf.String(),
 		Stderr: stderrBuf.String(),
-	}
-	if info.PerComponentHook == nil {
-		return result, execErr
-	}
-
-	compInfo := info
-	info.PerComponentHook(&compInfo, result.CombinedOutput(), execErr)
-	return result, execErr
+	}, execErr
 }

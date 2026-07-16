@@ -1,6 +1,7 @@
 package list
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -197,6 +198,38 @@ func TestListStacksWithOptions_CoverageIntegration(t *testing.T) {
 
 	require.NoError(t, listStacksWithOptions(cmd, []string{}, opts),
 		"complete fixture should list stacks cleanly")
+}
+
+// TestListStacksWithOptions_NoStacksYet exercises `listStacksWithOptions` against a
+// brand-new project with no stack manifests at all (no stacks/ directory). It must
+// report a friendly "No stacks found" message instead of the raw config error
+// ("failed to find import") that `cfg.InitCliConfig` returns for zero glob matches.
+func TestListStacksWithOptions_NoStacksYet(t *testing.T) {
+	initExecutorTestIO(t)
+
+	tmpDir := t.TempDir()
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	atmosYaml := `
+base_path: "` + filepath.ToSlash(tmpDir) + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+components:
+  terraform:
+    base_path: components/terraform
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Chdir(tmpDir)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	opts := &StacksOptions{Format: "json"}
+
+	require.NoError(t, listStacksWithOptions(cmd, []string{}, opts),
+		"a project with no stacks yet should report a friendly message, not an error")
 }
 
 // TestListStacksWithOptions_TreeFormat exercises the tree-format branch

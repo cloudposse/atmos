@@ -4,6 +4,9 @@ components:
       metadata:
         component: sns-topic
         description: "SNS topic for application events."
+        tags: [messaging]
+        labels:
+          tier: application
       # https://atmos.tools/stacks/dependencies/components
       dependencies:
         components:

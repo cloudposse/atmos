@@ -431,57 +431,41 @@ func (e *wrappedError) Unwrap() error {
 	return e.err
 }
 
-func TestVersionFallbackLogic(t *testing.T) {
-	t.Run("adds v prefix when missing", func(t *testing.T) {
-		version := "1.0.0"
-		prefix := VersionPrefix // "v".
-		var fallbackVersion string
-		if strings.HasPrefix(version, prefix) {
-			fallbackVersion = strings.TrimPrefix(version, prefix)
-		} else {
-			fallbackVersion = prefix + version
-		}
-		assert.Equal(t, "v1.0.0", fallbackVersion)
-	})
+// TestTryFallbackVersion_ReturnsEffectiveVersion verifies that when the bare
+// version 404s but the prefix-toggled version downloads, the fallback reports the
+// EFFECTIVE (downloaded) version. Callers use it to render files[].src so
+// extraction matches the archive's directory names (the root cause of #2744,
+// nodejs/node, where the pinned "24.18.0" must resolve to "v24.18.0").
+func TestTryFallbackVersion_ReturnsEffectiveVersion(t *testing.T) {
+	t.Run("adds v prefix and returns effective version", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "tool-v1.0.0.tar.gz") {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("archive-bytes"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer ts.Close()
 
-	t.Run("removes v prefix when present", func(t *testing.T) {
-		version := "v1.0.0"
-		prefix := VersionPrefix // "v".
-		var fallbackVersion string
-		if strings.HasPrefix(version, prefix) {
-			fallbackVersion = strings.TrimPrefix(version, prefix)
-		} else {
-			fallbackVersion = prefix + version
+		inst := &Installer{cacheDir: t.TempDir()}
+		// No VersionPrefix: {{.Version}} is used verbatim, so the fallback toggles
+		// "1.0.0" -> "v1.0.0" (the standard "v" prefix).
+		tool := &registry.Tool{
+			Type:      "http",
+			RepoOwner: "test",
+			RepoName:  "tool",
+			Asset:     ts.URL + "/tool-{{.Version}}.tar.gz",
 		}
-		assert.Equal(t, "1.0.0", fallbackVersion)
-	})
 
-	// REGRESSION TEST: jq uses version_prefix "jq-". The fallback must use the
-	// tool's prefix, not the hardcoded "v". Previously, version "jq-1.8.1" would
-	// get "v" prepended resulting in "vjq-1.8.1".
-	t.Run("custom prefix jq- strips correctly", func(t *testing.T) {
-		version := "jq-1.8.1"
-		prefix := "jq-" // tool.VersionPrefix.
-		var fallbackVersion string
-		if strings.HasPrefix(version, prefix) {
-			fallbackVersion = strings.TrimPrefix(version, prefix)
-		} else {
-			fallbackVersion = prefix + version
-		}
-		assert.Equal(t, "1.8.1", fallbackVersion,
-			"jq-1.8.1 with prefix jq- should strip to 1.8.1, not prepend v to get vjq-1.8.1")
-	})
-
-	t.Run("custom prefix jq- adds when missing", func(t *testing.T) {
-		version := "1.8.1"
-		prefix := "jq-" // tool.VersionPrefix.
-		var fallbackVersion string
-		if strings.HasPrefix(version, prefix) {
-			fallbackVersion = strings.TrimPrefix(version, prefix)
-		} else {
-			fallbackVersion = prefix + version
-		}
-		assert.Equal(t, "jq-1.8.1", fallbackVersion)
+		result, err := inst.tryFallbackVersion(
+			tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404,
+		)
+		require.NoError(t, err)
+		assert.NotEmpty(t, result.assetPath)
+		assert.Equal(t, ts.URL+"/tool-v1.0.0.tar.gz", result.effectiveURL)
+		assert.Equal(t, "v1.0.0", result.effectiveVersion,
+			"effective version must carry the prefix that actually downloaded")
 	})
 }
 
@@ -615,10 +599,12 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		result, effectiveURL, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", url)
+		result, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", url)
 		assert.NoError(t, err)
-		assert.Equal(t, assetFile, result)
-		assert.Equal(t, url, effectiveURL)
+		assert.Equal(t, assetFile, result.assetPath)
+		assert.Equal(t, url, result.effectiveURL)
+		// First attempt succeeded, so the effective version is the requested one.
+		assert.Equal(t, "1.0.0", result.effectiveVersion)
 	})
 
 	t.Run("returns non-404 errors without fallback", func(t *testing.T) {
@@ -643,7 +629,7 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		_, _, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/asset.tar.gz")
+		_, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/asset.tar.gz")
 		assert.Error(t, err)
 		// Non-404 error should be returned directly, not trigger fallback.
 		assert.NotErrorIs(t, err, ErrHTTP404)
@@ -674,7 +660,7 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		_, _, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz")
+		_, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz")
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, ErrHTTP404)
 		assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
@@ -707,7 +693,7 @@ func TestTryFallbackVersion(t *testing.T) {
 
 		// Version "1.0.0" without prefix → fallback adds "v" → "v1.0.0".
 		// BuildAssetURL with "v1.0.0" and prefix "v" → Version="v1.0.0" → /tool-v1.0.0.tar.gz.
-		_, _, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
+		_, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
 		// Verify the fallback URL was actually requested.
 		assert.Contains(t, requestedPaths, "/tool-v1.0.0.tar.gz",
@@ -738,7 +724,7 @@ func TestTryFallbackVersion(t *testing.T) {
 		// Version "v1.0.0" with prefix → fallback strips to "1.0.0".
 		// Both produce SemVer="1.0.0", but the fallback IS attempted because
 		// the version strings differ ("v1.0.0" != "1.0.0").
-		_, _, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
+		_, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
 		// Verify the fallback attempted the request (SemVer is "1.0.0" for both).
 		assert.Contains(t, requestedPaths, "/tool-1.0.0.tar.gz",

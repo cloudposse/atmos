@@ -334,7 +334,8 @@ func extractHelmComponentSection(componentMap map[string]any) map[string]any {
 func supportsComponentHooks(componentType string) bool {
 	return componentType == cfg.TerraformComponentType ||
 		componentType == cfg.KubernetesComponentType ||
-		componentType == cfg.HelmComponentType
+		componentType == cfg.HelmComponentType ||
+		componentType == cfg.HelmfileComponentType
 }
 
 func supportsGenerate(componentType string) bool {

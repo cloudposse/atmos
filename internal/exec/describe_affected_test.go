@@ -128,15 +128,15 @@ func TestDescribeAffected(t *testing.T) {
 		return false
 	}
 
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -145,7 +145,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -638,6 +638,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		"",
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -781,6 +782,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		"",
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -976,6 +978,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.,
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1089,6 +1092,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.,
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1140,6 +1144,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		onlyInStack,
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 
@@ -1897,6 +1902,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 		skip []string, excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
@@ -1907,7 +1913,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 			},
 		}, nil, nil, "", nil
 	}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -2069,6 +2075,7 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		"",
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err, "addDependentsToAffected should not crash on deleted components")
 

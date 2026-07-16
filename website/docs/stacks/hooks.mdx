@@ -481,6 +481,22 @@ hooks:
     with: { component: aws, action: down }
 ```
 
+Another common pairing is the [`archive` step type](/workflows/steps/type/archive)
+on `before.terraform.*` events — rebuild a Lambda-style `handler.zip` fresh
+before every plan/apply/destroy, replacing a Terragrunt-style `before_hook`
+shell-out to `zip`:
+
+```yaml
+hooks:
+  package:
+    kind: step
+    type: archive
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+    with:
+      source: src/
+      destination: handler.zip
+```
+
 <dl>
   <dt>`type`</dt>
   <dd>The step type to run — any registered workflow/custom-command step type. A typo fails the **preflight** check before Terraform runs.</dd>

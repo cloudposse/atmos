@@ -51,6 +51,13 @@ atmos helm template --all -s plat-ue2-dev
 atmos helm template --affected --base origin/main
 ```
 
+Render components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos helm template --all --tags production,tier-1
+atmos helm template --affected --labels cost-center=platform
+```
+
 `--output` and `--output-dir` are only supported when rendering one component.
 
 ## Flags
@@ -76,6 +83,12 @@ atmos helm template --affected --base origin/main
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent Helm components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
 </dl>
 
 :::note

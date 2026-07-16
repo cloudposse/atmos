@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# The emulator is a stack-scoped component. `atmos emulator up aws -s <stack>`
+# starts (or reuses) it; the `local-aws` identity in atmos.yaml resolves its live
+# endpoint, and both the Terraform provider-config contributor AND the
+# `atmos terraform backend` provisioner read that same endpoint automatically.
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: us-east-1
+      container:
+        # Pull Floci from Google's Docker Hub mirror to avoid Docker Hub rate
+        # limits/timeouts in CI, and pin the image to the known-good release the
+        # test suite verifies (1.5.23). Keep this digest in sync with
+        # tests/floci_containers_test.go.
+        image: mirror.gcr.io/floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2

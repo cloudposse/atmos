@@ -274,7 +274,7 @@ type WorkflowStep struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source for workdir provisioning; string or source map.
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only).
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -377,6 +377,21 @@ type WorkflowStep struct {
 	// Emulator step fields.
 	Component string `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"` // Emulator component name to operate on (emulator step type).
 	Ephemeral bool   `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty" mapstructure:"ephemeral"` // Run the emulator without persistence for this step (emulator step type).
+
+	// Archive step fields (type: archive). Action reuses the container step's
+	// Action field (create | extract | update | replace); Source reuses the
+	// workdir step's Source field (archive requires it to be a string path).
+	Format      string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
+	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Pack: archive file to write. Extract: directory to extract into.
+	Subpath     string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`             // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
+	Include     []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`             // Glob(s); keep only matching files.
+	Exclude     []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`             // Glob(s); drop matching files, evaluated before include.
+	// Mtime controls the modification-time metadata stamped into each archive entry
+	// (not the source files on disk, not the archive file's own OS-level mtime):
+	// filesystem (default, same as omitting the field) | epoch (one shared timestamp
+	// for the whole archive) | git (per-entry timestamps). epoch/git also normalize
+	// permission bits. See docs/prd/archive-step.md.
+	Mtime string `yaml:"mtime,omitempty" json:"mtime,omitempty" mapstructure:"mtime"`
 
 	// JUnit step fields.
 	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Glob(s) of JUnit XML files to summarize/annotate (junit step type).
