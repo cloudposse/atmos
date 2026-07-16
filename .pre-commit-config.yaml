@@ -59,6 +59,14 @@ repos:
         files: ^(CLAUDE\.md|\.conductor/.*/CLAUDE\.md)$
         pass_filenames: false
 
+      - id: tracked-symlinks-check
+        name: Verify tracked symlinks
+        description: Ensure every Git-tracked symbolic link resolves
+        entry: scripts/check-symlinks.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
 
   # General file hygiene
   # NOTE: trailing-whitespace, end-of-file-fixer, and check-added-large-files hardcode
