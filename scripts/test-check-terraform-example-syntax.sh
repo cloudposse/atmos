@@ -22,7 +22,10 @@ printf '%s\n' 'value: !terraform.output vpc .id // "fallback"' > "$repo/stacks/c
 stage
 run_guard
 
-printf '%s\n' 'value: !terraform.output vpc ".id // ""fallback"""' > "$repo/stacks/legacy.yaml"
+terraform_output='!terraform.output'
+terraform_state='!terraform.state'
+legacy_expression='".id // ""fallback"""'
+printf 'value: %s vpc %s\n' "$terraform_output" "$legacy_expression" > "$repo/stacks/legacy.yaml"
 stage
 if run_guard; then
   echo "expected legacy Terraform syntax to fail" >&2
@@ -31,9 +34,9 @@ fi
 rm "$repo/stacks/legacy.yaml"
 
 mkdir -p "$repo/pkg/function/parser" "$repo/internal/exec" "$repo/agent-skills/skills/atmos-modernization"
-printf '%s\n' 'legacy: !terraform.output vpc ".id // ""fallback"""' > "$repo/pkg/function/parser/parser_test.go"
-printf '%s\n' 'legacy: !terraform.state vpc dev ".id // ""fallback"""' > "$repo/internal/exec/yaml_func_terraform_state_yq_defaults_test.go"
-printf '%s\n' 'legacy: !terraform.output vpc ".id // ""fallback"""' > "$repo/agent-skills/skills/atmos-modernization/SKILL.md"
+printf 'legacy: %s vpc %s\n' "$terraform_output" "$legacy_expression" > "$repo/pkg/function/parser/parser_test.go"
+printf 'legacy: %s vpc dev %s\n' "$terraform_state" "$legacy_expression" > "$repo/internal/exec/yaml_func_terraform_state_yq_defaults_test.go"
+printf 'legacy: %s vpc %s\n' "$terraform_output" "$legacy_expression" > "$repo/agent-skills/skills/atmos-modernization/SKILL.md"
 stage
 run_guard
 
