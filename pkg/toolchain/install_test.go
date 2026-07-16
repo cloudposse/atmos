@@ -28,16 +28,40 @@ func newTestProgressBar() *progress.Model {
 }
 
 func TestRightAlignInstallProgress(t *testing.T) {
-	t.Run("shows downloaded and total bytes at the terminal edge", func(t *testing.T) {
-		line := rightAlignInstallProgress("⣾ Installing owner/tool@v1.0.0", 85*1024*1024, 100*1024*1024, 80)
-		assert.True(t, strings.HasSuffix(line, "85.0 MB/100.0 MB"))
-		assert.Equal(t, 80, lipgloss.Width(line))
-	})
+	left := "⣾ Installing owner/tool@v1.0.0"
+	tests := []struct {
+		name       string
+		downloaded int64
+		total      int64
+		width      int
+		assertLine func(t *testing.T, line string)
+	}{
+		{
+			name:       "shows downloaded and total bytes at the terminal edge",
+			downloaded: 85 * 1024 * 1024,
+			total:      100 * 1024 * 1024,
+			width:      80,
+			assertLine: func(t *testing.T, line string) {
+				assert.True(t, strings.HasSuffix(line, "85.0 MB/100.0 MB"))
+				assert.Equal(t, 80, lipgloss.Width(line))
+			},
+		},
+		{
+			name:       "does not wrap a narrow terminal",
+			downloaded: 85 * 1024 * 1024,
+			total:      100 * 1024 * 1024,
+			width:      len(left),
+			assertLine: func(t *testing.T, line string) {
+				assert.Equal(t, left, line)
+			},
+		},
+	}
 
-	t.Run("does not wrap a narrow terminal", func(t *testing.T) {
-		left := "⣾ Installing owner/tool@v1.0.0"
-		assert.Equal(t, left, rightAlignInstallProgress(left, 85*1024*1024, 100*1024*1024, len(left)))
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertLine(t, rightAlignInstallProgress(left, tt.downloaded, tt.total, tt.width))
+		})
+	}
 }
 
 func TestBatchRendererMarksCompletedDownloadAsVerifying(t *testing.T) {
