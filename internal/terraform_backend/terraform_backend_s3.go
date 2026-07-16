@@ -28,6 +28,10 @@ import (
 const maxRetryCount = 2
 
 const (
+	// defaultS3WorkspaceKeyPrefix is the S3 backend default used by Terraform and
+	// OpenTofu for named workspaces when workspace_key_prefix is omitted.
+	defaultS3WorkspaceKeyPrefix = "env:"
+
 	// sseCustomerKeyLength is the expected length of a base64-encoded 32-byte AES-256 key.
 	sseCustomerKeyLength = 44
 	// sseCustomerKeyAlgorithm is the encryption algorithm for SSE-C.
@@ -231,11 +235,20 @@ func ReadTerraformBackendS3Internal(
 		// Default workspace: state is stored directly at the key path.
 		tfStateFilePath = key
 	} else {
+		// Terraform/OpenTofu default workspace_key_prefix to "env:". Preserve an
+		// explicitly configured empty prefix, which stores named workspaces under
+		// <workspace>/<key>, but use the backend default when the attribute is
+		// omitted entirely.
+		workspaceKeyPrefix, configured := (*backend)["workspace_key_prefix"].(string)
+		if !configured {
+			workspaceKeyPrefix = defaultS3WorkspaceKeyPrefix
+		}
+
 		// Named workspace: state is stored at workspace_key_prefix/workspace/key.
 		// S3 paths always use forward slashes, so path.Join is appropriate here.
 		//nolint:forbidigo // S3 paths require forward slashes regardless of OS
 		tfStateFilePath = path.Join(
-			GetBackendAttribute(backend, "workspace_key_prefix"),
+			workspaceKeyPrefix,
 			workspace,
 			key,
 		)
