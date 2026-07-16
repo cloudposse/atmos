@@ -1,0 +1,93 @@
+---
+slug: ordered-steps-hooks
+title: "Run Ordered Steps in Lifecycle Hooks"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-01T12:00:00.000Z
+---
+
+Atmos lifecycle hooks can now run an ordered list of steps with `kind: steps`.
+Use it when one lifecycle event needs sequencing but the orchestration should
+stay local to the component being operated on.
+
+<!--truncate-->
+
+## What Changed
+
+`kind: step` runs one registered step type as a lifecycle hook. `kind: steps`
+runs several registered step types in order:
+
+```yaml
+hooks:
+  test-fixtures-up:
+    events: [before.terraform.test]
+    kind: steps
+    on_failure: fail
+    with:
+      - type: emulator
+        component: aws
+        stack: fixtures
+        action: up
+
+      - type: atmos
+        command: terraform apply vpc -s fixtures -auto-approve
+```
+
+The hook envelope stays the same: `events`, `when`, `on_failure`, `retry`, and
+`env` are still hook-level controls. The ordered payload lives under `with:`,
+the same conventional payload key used by `kind: step`.
+
+## Why This Matters
+
+Some test fixtures need real lifecycle ordering. For example, a component test
+may need a local AWS emulator before it can provision a VPC fixture, and the
+fixture must be destroyed after the test even if the test fails.
+
+Before `kind: steps`, the choices were awkward:
+
+- split the lifecycle across multiple hooks and rely on unordered map iteration,
+- move component-specific fixture setup into a custom command or workflow, or
+- fall back to a helper script.
+
+`kind: steps` keeps the fixture lifecycle declarative and component-local:
+
+```yaml
+hooks:
+  test-fixtures-up:
+    events: [before.terraform.test]
+    kind: steps
+    on_failure: fail
+    with:
+      - type: emulator
+        component: aws
+        stack: fixtures
+        action: up
+      - type: atmos
+        command: terraform apply vpc -s fixtures -auto-approve
+
+  test-fixtures-down:
+    events: [after.terraform.test]
+    when: always
+    kind: steps
+    with:
+      - type: atmos
+        command: terraform destroy vpc -s fixtures -auto-approve
+      - type: emulator
+        component: aws
+        stack: fixtures
+        action: down
+```
+
+Steps run in list order. If a step fails, Atmos stops the list and applies the
+hook's `on_failure` policy. A hook-level `retry` retries the whole ordered list.
+
+For Terraform tests, Atmos still owns the normal component preparation. It
+generates the tested component varfile from the selected stack and can pass a
+second generated test varfile from `test.vars`. Because `test.vars` resolves
+after `before.terraform.test` hooks run, it can use `!terraform.state` to pass
+fixture outputs into Terraform test without scripts.
+
+## Learn More
+
+See the [Hooks reference](/stacks/hooks#kind-steps-run-ordered-steps) for the
+full `kind: steps` syntax.

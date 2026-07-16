@@ -660,6 +660,27 @@ jobs:
           cache: false
           go-version-file: "go.mod"
 
+      - name: Download Go dependencies
+        shell: bash
+        run: |
+          # This job compiles directly from a cold module cache instead of using
+          # the build job's dependency step. Retry transient hosted-runner DNS
+          # and network failures here so they do not appear as test failures.
+          delay=5
+          for attempt in {1..5}; do
+            if go mod download; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              exit 1
+            fi
+
+            echo "go mod download failed (attempt $attempt/5); retrying in ${delay}s"
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+
       - name: Run Kubernetes end-to-end tests
         env:
           GOCACHE: ${{ runner.temp }}/go-build
