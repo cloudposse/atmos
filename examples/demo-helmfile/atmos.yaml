@@ -1,10 +1,5 @@
 base_path: "./"
 
-schemas:
-  atmos:
-    manifest: "schemas/atmos-manifest.json"
-
-
 templates:
   settings:
     enabled: true
