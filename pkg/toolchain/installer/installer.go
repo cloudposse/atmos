@@ -943,6 +943,14 @@ func (i *Installer) GetBinaryPaths(owner, repo, version string) []string {
 func (i *Installer) Uninstall(owner, repo, version string) error {
 	defer perf.Track(nil, "toolchain.Installer.Uninstall")()
 
+	if version == "latest" {
+		actualVersion, err := i.ReadLatestFile(owner, repo)
+		if err != nil {
+			return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
+		}
+		version = actualVersion
+	}
+
 	versionDir := filepath.Join(i.binDir, owner, repo, version)
 	if err := os.MkdirAll(filepath.Dir(versionDir), defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("%w: failed to create uninstall parent directory: %w", ErrFileOperation, err)

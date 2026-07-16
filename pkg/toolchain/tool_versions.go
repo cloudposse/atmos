@@ -365,7 +365,7 @@ func RemoveToolFromVersions(filePath, tool, version string) error {
 	defer perf.Track(nil, "toolchain.RemoveToolFromVersions")()
 
 	return withToolVersionsLock(filePath, func() error {
-		toolVersions, err := LoadToolVersions(filePath)
+		toolVersions, err := loadToolVersionsUnlocked(filePath)
 		if err != nil {
 			return fmt.Errorf("failed to load .tool-versions: %w", err)
 		}
