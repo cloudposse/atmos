@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"path"
 	"strings"
@@ -85,23 +86,32 @@ func GitHubRepository(ctx context.Context, workdir, remote string) (string, stri
 	if remote == "" {
 		remote = "origin"
 	}
-	url, err := gitOutput(ctx, workdir, "remote", "get-url", remote)
+	remoteURL, err := gitOutput(ctx, workdir, "remote", "get-url", remote)
 	if err != nil {
 		return "", "", err
 	}
-	url = strings.TrimSuffix(strings.TrimSpace(url), ".git")
-	idx := strings.Index(url, "github.com")
-	if idx < 0 {
-		return "", "", fmt.Errorf("%w: GitHub PR publishing requires a github.com remote, got %q", errUtils.ErrComponentUpdaterConfig, url)
+	remoteURL = strings.TrimSuffix(strings.TrimSpace(remoteURL), ".git")
+	repoPath, ok := githubRepositoryPath(remoteURL)
+	if !ok {
+		return "", "", fmt.Errorf("%w: GitHub PR publishing requires a github.com remote, got %q", errUtils.ErrComponentUpdaterConfig, remoteURL)
 	}
-	repoPath := strings.TrimPrefix(url[idx+len("github.com"):], ":")
-	repoPath = strings.TrimPrefix(repoPath, "/")
 	owner, repo := path.Split(repoPath)
 	owner = strings.TrimSuffix(owner, "/")
 	if owner == "" || repo == "" || strings.Contains(owner, "/") {
-		return "", "", fmt.Errorf("%w: unable to parse GitHub remote %q", errUtils.ErrComponentUpdaterConfig, url)
+		return "", "", fmt.Errorf("%w: unable to parse GitHub remote %q", errUtils.ErrComponentUpdaterConfig, remoteURL)
 	}
 	return owner, repo, nil
+}
+
+func githubRepositoryPath(remoteURL string) (string, bool) {
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		return strings.TrimPrefix(remoteURL, "git@github.com:"), true
+	}
+	parsed, err := url.Parse(remoteURL)
+	if err != nil || !strings.EqualFold(parsed.Hostname(), "github.com") {
+		return "", false
+	}
+	return strings.TrimPrefix(parsed.Path, "/"), true
 }
 
 func gitRun(ctx context.Context, workdir string, args ...string) error {

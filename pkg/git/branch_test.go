@@ -95,6 +95,10 @@ func TestDefaultBranchAndGitHubRepository(t *testing.T) {
 	_, _, err = GitHubRepository(context.Background(), workdir, "origin")
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
 
+	runGitCommand(t, workdir, "remote", "set-url", "origin", "https://example.com/github.com/cloudposse/atmos.git")
+	_, _, err = GitHubRepository(context.Background(), workdir, "origin")
+	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
+
 	runGitCommand(t, workdir, "remote", "set-url", "origin", "https://github.com/cloudposse/")
 	_, _, err = GitHubRepository(context.Background(), workdir, "origin")
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
