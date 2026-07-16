@@ -1,8 +1,8 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
@@ -35,7 +35,8 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	parsed, err := fnparser.ParseStoreGet(str)
 	if err != nil {
 		log.Error(invalidYamlFuncMsg, function, input, "error", err)
-		if strings.Contains(err.Error(), "expected option value") {
+		var parseErr *fnparser.Error
+		if errors.As(err, &parseErr) && parseErr.Message == "expected option value" {
 			return fmt.Sprintf("invalid parameters after pipe: %s", input)
 		}
 		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)

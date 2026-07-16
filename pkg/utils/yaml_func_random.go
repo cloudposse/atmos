@@ -44,7 +44,7 @@ func ProcessTagRandom(input string) (int, error) {
 
 	parsed, err := parser.ParseRandom(str)
 	if err != nil {
-		return 0, fmt.Errorf("%w: invalid number of arguments. The function accepts 0, 1, or 2 arguments: %s", ErrInvalidAtmosYAMLFunction, input)
+		return 0, fmt.Errorf("%w: %w: %s", ErrInvalidAtmosYAMLFunction, err, input)
 	}
 	parts := parsed.Values
 

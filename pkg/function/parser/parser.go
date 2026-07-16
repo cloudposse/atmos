@@ -384,7 +384,7 @@ func parseOptions(input string, tokens []token, firstOption int) (string, option
 		if keyword != "default" && keyword != "query" {
 			return "", options{}, parseError(tokens[index+1], "expected default or query option")
 		}
-		if index+2 >= len(tokens) {
+		if index+2 >= len(tokens) || tokens[index+2].typeName == tokenPipe {
 			return "", options{}, parseError(tokens[index+1], "expected option value")
 		}
 		next := nextOption(tokens, index+2)
@@ -393,7 +393,7 @@ func parseOptions(input string, tokens []token, firstOption int) (string, option
 		}
 		end := optionEnd(tokens, index+2)
 		value := unquote(strings.TrimSpace(input[tokens[index+2].position.Offset:end]))
-		if value == "" {
+		if keyword != "default" && value == "" {
 			return "", options{}, parseError(tokens[index+2], "option value must not be empty")
 		}
 		if keyword == "default" {

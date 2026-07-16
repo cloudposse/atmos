@@ -176,11 +176,18 @@ func TestParseStoreGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "disabled", *actual.Default)
 
+	actual, err = ParseStoreGet(`ssm app-key | default ""`)
+	require.NoError(t, err)
+	require.NotNil(t, actual.Default)
+	assert.Equal(t, "", *actual.Default)
+
 	_, err = ParseStoreGet("ssm")
 	require.Error(t, err)
 	_, err = ParseStoreGet("")
 	require.Error(t, err)
 	_, err = ParseStoreGet("ssm key | query")
+	require.Error(t, err)
+	_, err = ParseStoreGet("ssm key | default | query .value")
 	require.Error(t, err)
 	_, err = ParseStoreGet("ssm key | unknown value")
 	require.Error(t, err)

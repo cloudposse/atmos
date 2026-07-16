@@ -39,7 +39,7 @@ func ProcessTagEnv(
 
 	parsed, err := parser.ParseEnv(str)
 	if err != nil {
-		e := fmt.Errorf("%w: %s", ErrInvalidAtmosYAMLFunction, input)
+		e := fmt.Errorf("%w: %w: %s", ErrInvalidAtmosYAMLFunction, err, input)
 		return "", e
 	}
 
