@@ -23,10 +23,10 @@ tests:
         - "station"
         - "dry run"
 
-  - name: "quick-start-advanced terraform plan --all dry-run"
+  - name: "quick-start-advanced terraform plan --all dry-run fails before scheduling when its emulator is unavailable"
     enabled: true
     tty: false
-    description: "Verify provider-shaped state defaults make the advanced graph plan without credentials"
+    description: "Verify graph preflight reports the unavailable required-secret backend before any Terraform component runs"
     workdir: "../examples/quick-start-advanced"
     command: "atmos"
     args:
@@ -38,12 +38,10 @@ tests:
       - "--identity=false"
       - "--dry-run"
     expect:
-      exit_code: 0
+      exit_code: 1
       stderr:
-        - "Would plan"
-        - "kms-key"
-        - "app-config"
-        - "dry run"
+        - "Terraform preflight failed"
+        - "emulator \"local/aws\" is not running"
 
   - name: "terraform providers lock --all dry-run"
     enabled: true

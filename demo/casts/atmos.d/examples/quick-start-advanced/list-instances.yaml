@@ -123,8 +123,10 @@ commands:
           sys.path.insert(0, os.getcwd())
           from cast_checks import sanitize_paths
 
-          repo = Path("..", "..").resolve()
           out = Path("../../website/static/casts/examples/quick-start-advanced/list-instances.cast")
+          # Script steps may inherit a fixture working directory. Derive the repo
+          # root from the output location instead of assuming cwd is demo/casts.
+          repo = next(parent.parent for parent in out.resolve().parents if parent.name == "website")
           out.write_text(sanitize_paths(out.read_text(), repo))
       - type: shell
         name: teardown

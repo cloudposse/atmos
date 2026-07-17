@@ -81,6 +81,13 @@ def sanitize_paths(text, repo_root):
     roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
     for root in sorted(roots, key=len, reverse=True):
         text = text.replace(root, placeholder)
+
+    # CI records from GitHub-hosted runners can resolve the fixture through a
+    # workspace path that is not the repository root passed above. The raw
+    # asciicast JSON can also contain terminal escapes immediately after this
+    # prefix, so replace the stable runner repository prefix directly.
+    github_runner_repo = re.compile(r"/home/[^/\\\s]+/work/[^/\\\s]+/[^/\\\s]+")
+    text = github_runner_repo.sub(placeholder, text)
     return text
 
 
