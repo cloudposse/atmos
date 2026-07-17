@@ -15,6 +15,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 var describeComponentErrorModeParser *flags.StandardParser
@@ -128,11 +129,13 @@ type resolveAuthManagerParams struct {
 	processYamlFunctions bool
 }
 
-// resolveAuthManager creates an AuthManager only when identity is explicitly requested.
-// Describe-component is an inspection command: YAML functions can use ambient credentials
-// or degrade according to --error-mode without triggering an eager login.
+// resolveAuthManager creates an AuthManager when identity is explicitly requested or when
+// enabled YAML functions can read an identity-backed store. The latter manager is deliberately
+// unauthenticated: the store resolver authenticates its configured identity only if the store
+// is actually read, preserving describe component's non-eager inspection behavior.
 func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
-	if !p.identityExplicit {
+	needsStoreAuth := p.processYamlFunctions && hasIdentityBackedStore(p.atmosConfig)
+	if !p.identityExplicit && !needsStoreAuth {
 		return nil, nil
 	}
 
@@ -160,7 +163,30 @@ func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 		}
 	}
 
+	if !p.identityExplicit {
+		return auth.CreateManagerWithAtmosConfigForStack(mergedAuthConfig, p.atmosConfig, p.stack)
+	}
+
 	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig, p.stack)
+}
+
+// hasIdentityBackedStore reports whether a configured store requires Atmos identity
+// resolution. Stores without an identity retain their ambient SDK credential behavior.
+func hasIdentityBackedStore(atmosConfig *schema.AtmosConfiguration) bool {
+	if atmosConfig == nil {
+		return false
+	}
+
+	for name, storeConfig := range atmosConfig.StoresConfig {
+		if storeConfig.Identity == "" {
+			continue
+		}
+		if _, ok := atmosConfig.Stores[name].(store.IdentityAwareStore); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func getRunnableDescribeComponentCmd(

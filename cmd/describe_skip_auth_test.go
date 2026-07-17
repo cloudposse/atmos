@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // atmosConfigWithBrokenDefaultIdentity returns an AtmosConfiguration with a default
@@ -512,6 +513,50 @@ func TestDescribeComponent_SkipsImplicitAuthWhenFunctionsEnabled(t *testing.T) {
 
 	err := run(testCmd, []string{"test-component"})
 	assert.NoError(t, err, "default identity must not be authenticated merely to describe a component")
+}
+
+// TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication verifies that an
+// identity-backed !store receives an auth manager without eagerly authenticating its identity.
+// The resolver authenticates only when the YAML function accesses the store.
+func TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	config := schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"store-identity": {
+					Kind: "aws/user",
+					Credentials: map[string]interface{}{
+						"access_key_id":     "test",
+						"secret_access_key": "test",
+					},
+				},
+			},
+		},
+		StoresConfig: store.StoresConfig{"outputs/ssm": {Identity: "store-identity"}},
+	}
+	ssmStore, err := store.NewSSMStore(store.SSMStoreOptions{Region: "us-east-1"}, "store-identity")
+	require.NoError(t, err)
+	config.Stores = store.StoreRegistry{"outputs/ssm": ssmStore}
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			assert.NotNil(t, params.AuthManager, "identity-backed stores need a resolver-backed auth manager")
+			assert.True(t, params.ProcessYamlFunctions)
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, config))
+
+	err = run(testCmd, []string{"test-component"})
+	assert.NoError(t, err)
 }
 
 // TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
