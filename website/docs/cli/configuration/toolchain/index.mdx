@@ -34,6 +34,9 @@ toolchain:
 
   # Directory where tools are installed (relative or absolute)
   install_path: ".tools"
+
+  # Maximum simultaneous tool installs (default: 4)
+  max_concurrency: 4
 ```
 </File>
 
@@ -64,6 +67,14 @@ toolchain:
   <dt>`tools_dir`</dt>
   <dd>
     Alternative name for `install_path`. Use `install_path` for consistency.
+  </dd>
+
+  <dt>`max_concurrency`</dt>
+  <dd>
+    Maximum number of independent tool installs that may run at the same time.
+    - Default: `4`
+    - Must be a positive integer; values lower than `1` are rejected
+    - Applies to explicit multi-tool installs and installs from `.tool-versions`
   </dd>
 </dl>
 
@@ -144,6 +155,7 @@ toolchain:
   # Basic settings
   file_path: ".tool-versions"
   install_path: ".tools"
+  max_concurrency: 4
 
   # Tool name aliases
   aliases:
@@ -180,6 +192,12 @@ Configure toolchain behavior via environment variables:
   <dt>`ATMOS_TOOLCHAIN_INSTALL_PATH`</dt>
   <dd>Override the tool installation directory</dd>
 
+  <dt>`ATMOS_TOOLCHAIN_MAX_CONCURRENCY`</dt>
+  <dd>
+    Override the maximum number of simultaneous tool installs. Supply a
+    positive integer; values lower than `1` are rejected.
+  </dd>
+
   <dt>`ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`</dt>
   <dd>
     GitHub personal access token for:
@@ -193,10 +211,12 @@ Configure toolchain behavior via environment variables:
 
 Configuration is resolved in this order (highest to lowest priority):
 
-1. **CLI flags**: `atmos toolchain install --install-path=/custom/path`
-2. **Environment variables**: `ATMOS_TOOLCHAIN_INSTALL_PATH=/custom/path`
-3. **Configuration file**: `toolchain.install_path` in `atmos.yaml`
-4. **Defaults**: `.tools` for install_path, `.tool-versions` for file_path
+For install concurrency, the resolved value is:
+
+1. **CLI flag**: `atmos toolchain install --max-concurrency 8`
+2. **Environment variable**: `ATMOS_TOOLCHAIN_MAX_CONCURRENCY=6`
+3. **Configuration file**: `toolchain.max_concurrency` in `atmos.yaml`
+4. **Default**: `4`
 
 ## Related Documentation
 

@@ -19,16 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Check for vhs label
         id: labeled
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          labels=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" | jq -r '.[].name')
+          labels=$(jq -r '.pull_request.labels[]?.name' "$GITHUB_EVENT_PATH")
           if [[ $labels =~ "vhs" ]]; then
             echo "labeled=true" >> $GITHUB_OUTPUT
           else
@@ -38,8 +35,8 @@ jobs:
       - name: Get modified .tape files
         id: tapes
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           IS_LABELED: ${{ steps.labeled.outputs.labeled }}
         run: |
           # Landing-page tapes (demo/landing/**) are rendered by landing-demos.yaml,
@@ -47,7 +44,7 @@ jobs:
           if [[ "$IS_LABELED" == "true" ]]; then
             files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)
           else
-            files=$(gh pr diff --name-only "$PR_NUMBER" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
+            files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
           fi
           # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
           # split; collapse to a single space-separated line.
