@@ -84,9 +84,10 @@ def sanitize_paths(text, repo_root):
         for root in sorted(roots, key=len, reverse=True):
             value = value.replace(root, placeholder)
 
-        # GitHub-hosted runners can resolve the fixture through a workspace
-        # path that differs from the repository root passed above.
-        return re.sub(r"/home/[^/\s]+/work/[^/\s]+/[^/\s]+", placeholder, value)
+        # GitHub-hosted runners can also emit fixture, cache, and temporary
+        # paths outside the repository root. None are meaningful in a
+        # committed cast, so redact every Linux home-directory path.
+        return re.sub(r"/home/[^\s\x1b]+", "/absolute/path/to/external", value)
 
     # Cast files are newline-delimited JSON. Decode output events before
     # replacing paths so escaped JSON slashes ("\\/home\\/runner\\/...") do not
