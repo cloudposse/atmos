@@ -16,6 +16,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
@@ -45,25 +46,49 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 	filename := parts[len(parts)-1]
 	cachePath := filepath.Join(i.cacheDir, filename)
 
-	// Check if already cached.
-	if _, err := os.Stat(cachePath); err == nil {
-		if cachedAssetMatchesURL(cachePath, url) {
-			log.Debug("Using cached asset", filenameKey, filename)
-			return cachePath, nil
+	// Asset filenames are not globally unique, and source metadata is stored in
+	// a companion file. Protect the cache hit check and both writes as one
+	// transaction so concurrent processes cannot pair an asset with another
+	// URL's metadata.
+	lock := filelock.New(cachePath + ".lock")
+	var assetPath string
+	err := lock.WithExclusive(context.Background(), func() error {
+		if _, statErr := os.Stat(cachePath); statErr == nil {
+			if cachedAssetMatchesURL(cachePath, url) {
+				log.Debug("Using cached asset", filenameKey, filename)
+				i.reportCachedDownloadProgress(cachePath)
+				assetPath = cachePath
+				return nil
+			}
+			log.Debug("Ignoring cached asset from a different URL", filenameKey, filename)
 		}
-		log.Debug("Ignoring cached asset from a different URL", filenameKey, filename)
-	}
 
-	// Download the file using authenticated HTTP client.
-	log.Debug("Downloading asset", filenameKey, filename)
-	assetPath, err := downloadToCache(url, cachePath)
+		log.Debug("Downloading asset", filenameKey, filename)
+		var downloadErr error
+		assetPath, downloadErr = downloadToCacheWithProgress(url, cachePath, i.downloadProgress)
+		if downloadErr != nil {
+			return downloadErr
+		}
+		return writeCacheSourceURL(cachePath, url)
+	})
 	if err != nil {
 		return "", err
 	}
-	if err := writeCacheSourceURL(cachePath, url); err != nil {
-		return "", err
-	}
 	return assetPath, nil
+}
+
+// reportCachedDownloadProgress keeps the interactive renderer informative
+// after a cache hit. Verification can take much longer than download, so the
+// last known asset size must remain visible while the tool is being verified.
+func (i *Installer) reportCachedDownloadProgress(cachePath string) {
+	if i.downloadProgress == nil {
+		return
+	}
+	info, err := os.Stat(cachePath)
+	if err != nil {
+		return
+	}
+	i.downloadProgress(info.Size(), info.Size())
 }
 
 func cachedAssetMatchesURL(cachePath, url string) bool {
@@ -87,6 +112,10 @@ func cacheSourceURLPath(cachePath string) string {
 
 // downloadToCache downloads a URL to the specified cache path.
 func downloadToCache(url, cachePath string) (string, error) {
+	return downloadToCacheWithProgress(url, cachePath, nil)
+}
+
+func downloadToCacheWithProgress(url, cachePath string, progress func(downloaded, total int64)) (string, error) {
 	defer perf.Track(nil, "downloadToCache")()
 
 	maxAttempts := downloadRetryMaxAttempts
@@ -108,7 +137,7 @@ func downloadToCache(url, cachePath string) (string, error) {
 		func() error {
 			attempts++
 			var downloadErr error
-			result, downloadErr = downloadToCacheOnce(url, cachePath)
+			result, downloadErr = downloadToCacheOnceWithProgress(url, cachePath, progress)
 			if downloadErr != nil {
 				lastErr = downloadErr
 			}
@@ -125,7 +154,7 @@ func downloadToCache(url, cachePath string) (string, error) {
 	return result, nil
 }
 
-func downloadToCacheOnce(url, cachePath string) (string, error) {
+func downloadToCacheOnceWithProgress(url, cachePath string, progress func(downloaded, total int64)) (string, error) {
 	client := httpClient.NewDefaultClient(
 		httpClient.WithGitHubToken(github.GetGitHubToken()),
 	)
@@ -155,7 +184,7 @@ func downloadToCacheOnce(url, cachePath string) (string, error) {
 		return "", buildDownloadError(url, resp.StatusCode)
 	}
 
-	return writeResponseToCache(resp.Body, cachePath)
+	return writeResponseToCacheWithProgress(resp.Body, cachePath, resp.ContentLength, progress)
 }
 
 func isRetryableDownloadError(err error) bool {
@@ -167,10 +196,19 @@ func isRetryableDownloadError(err error) bool {
 
 // writeResponseToCache reads the response body and writes it atomically to cache.
 func writeResponseToCache(body io.Reader, cachePath string) (string, error) {
+	return writeResponseToCacheWithProgress(body, cachePath, -1, nil)
+}
+
+func writeResponseToCacheWithProgress(body io.Reader, cachePath string, total int64, progress func(downloaded, total int64)) (string, error) {
 	defer perf.Track(nil, "writeResponseToCache")()
 
 	var buf bytes.Buffer
-	_, err := io.Copy(&buf, body)
+	reader := body
+	if progress != nil {
+		progress(0, total)
+		reader = io.TeeReader(body, &downloadProgressWriter{total: total, report: progress})
+	}
+	_, err := io.Copy(&buf, reader)
 	if err != nil {
 		return "", errors.Join(
 			errUtils.ErrDownloadRetryable,
@@ -184,6 +222,20 @@ func writeResponseToCache(body io.Reader, cachePath string) (string, error) {
 	}
 
 	return cachePath, nil
+}
+
+type downloadProgressWriter struct {
+	downloaded int64
+	total      int64
+	report     func(downloaded, total int64)
+}
+
+func (w *downloadProgressWriter) Write(data []byte) (int, error) {
+	defer perf.Track(nil, "installer.downloadProgressWriter.Write")()
+
+	w.downloaded += int64(len(data))
+	w.report(w.downloaded, w.total)
+	return len(data), nil
 }
 
 type downloadHTTPStatusError struct {
@@ -329,15 +381,19 @@ func isRetryableHTTPStatus(statusCode int) bool {
 }
 
 // downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if 404.
-func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (string, string, error) {
+// It returns the downloaded asset path, the effective URL, and the effective
+// version that actually downloaded (which may carry a version prefix the caller
+// did not request, e.g. nodejs "v24.18.0"). The effective version must be used
+// to render files[].src so extraction matches the archive's directory names.
+func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (assetPath, effectiveURL, effectiveVersion string, err error) {
 	defer perf.Track(nil, "Installer.downloadAssetWithVersionFallback")()
 
-	assetPath, err := i.downloadAsset(assetURL)
+	assetPath, err = i.downloadAsset(assetURL)
 	if err == nil {
-		return assetPath, assetURL, nil
+		return assetPath, assetURL, version, nil
 	}
 	if !isHTTP404(err) {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	return i.tryFallbackVersion(tool, version, assetURL, err)
@@ -345,7 +401,9 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 
 // tryFallbackVersion attempts download with an alternative version prefix.
 // Uses the tool's VersionPrefix if set, otherwise falls back to the standard "v" prefix.
-func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (string, string, error) {
+// On success it returns the fallback version so callers can render archive paths
+// (files[].src) with the same prefix that produced the working download.
+func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (assetPath, effectiveURL, effectiveVersion string, err error) {
 	defer perf.Track(nil, "Installer.tryFallbackVersion")()
 
 	// Use tool-specific prefix (e.g., "jq-") if available, otherwise use standard "v".
@@ -362,26 +420,26 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 	}
 
 	if fallbackVersion == version {
-		return "", "", originalErr
+		return "", "", "", originalErr
 	}
 
 	fallbackURL, buildErr := i.BuildAssetURL(tool, fallbackVersion)
 	if buildErr != nil {
-		return "", "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
+		return "", "", "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
 	}
 
 	log.Debug("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
-	assetPath, err := i.downloadAsset(fallbackURL)
+	assetPath, err = i.downloadAsset(fallbackURL)
 	if err == nil {
-		return assetPath, fallbackURL, nil
+		return assetPath, fallbackURL, fallbackVersion, nil
 	}
 	if !isHTTP404(err) {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	// Both URLs failed - create a user-friendly error message.
 	// Don't nest ErrHTTPRequest again since the inner error already contains it.
-	return "", "", buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
+	return "", "", "", buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
 }
 
 // buildDownloadNotFoundError creates a user-friendly error for when both URL attempts fail.

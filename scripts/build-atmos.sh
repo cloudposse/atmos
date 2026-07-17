@@ -1,11 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
-# Run from the repo (or worktree) root regardless of the caller's cwd. Resolved
-# via git rather than atmos's !repo-root YAML tag so this script has no
-# dependency on the atmos version invoking it -- the "build" custom command is
-# also used to self-host the very first build with an older bootstrap binary
-# that may predate newer YAML tags.
+# Run from the repo (or worktree) root regardless of the caller's cwd. This is
+# a standalone script as well as an Atmos custom-command entrypoint, so it
+# resolves its own working directory.
 cd "$(git rev-parse --show-toplevel)"
 
 target="${1:-${ATMOS_BUILD_TARGET:-default}}"

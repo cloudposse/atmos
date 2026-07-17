@@ -31,7 +31,7 @@ permissions:
   pull-requests: read
 
 env:
-  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
@@ -403,6 +403,7 @@ jobs:
         demo-folder:
           - emulator-aws
           - terraform-tests
+          - backend-provisioning
 
     timeout-minutes: 30
     steps:
@@ -653,6 +654,27 @@ jobs:
           cache: false
           go-version-file: "go.mod"
 
+      - name: Download Go dependencies
+        shell: bash
+        run: |
+          # This job compiles directly from a cold module cache instead of using
+          # the build job's dependency step. Retry transient hosted-runner DNS
+          # and network failures here so they do not appear as test failures.
+          delay=5
+          for attempt in {1..5}; do
+            if go mod download; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              exit 1
+            fi
+
+            echo "go mod download failed (attempt $attempt/5); retrying in ${delay}s"
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+
       - name: Run Kubernetes end-to-end tests
         env:
           GOCACHE: ${{ runner.temp }}/go-build
@@ -841,6 +863,7 @@ jobs:
         uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
         with:
           github_token: ${{ github.token }}
+          tflint_version: v0.58.1
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
           flags: >-
             --enable-rule=terraform_unused_declarations
@@ -862,6 +885,7 @@ jobs:
           - demo-context
           - emulator-aws
           - terraform-tests
+          - backend-provisioning
           - demo-stacks
           - quick-start-simple
           # Examples below use runtime Atmos YAML functions (`!terraform.state`, `!store`,
@@ -897,16 +921,15 @@ jobs:
       # Atmos manifest JSON Schema, resolves imports, and detects duplicate components —
       # and it understands Atmos YAML tags natively (`!terraform.state`, `!store`, `!secret`).
       #
-      # `--schemas-atmos-manifest` points at the in-repo schema this PR ships (rather than the
-      # published schema at atmos.tools, which only updates after merge + site deploy), so a PR
-      # can add a schema field and use it in an example at the same time. This overrides any
-      # per-example `schemas.atmos.manifest` config. Atmos ignores the `# yaml-language-server:
+      # No `--schemas-atmos-manifest` override is needed: the `atmos` binary under test is built
+      # from this PR's source, so when an example doesn't set `schemas.atmos.manifest` (the
+      # common case — see examples/*/atmos.yaml), `atmos validate stacks` falls back to the
+      # schema embedded in that same binary (pkg/datafetcher/schema/atmos/manifest/1.0.json),
+      # which already reflects this PR's schema changes. Atmos ignores the `# yaml-language-server:
       # $schema` modeline, so the committed files keep their public URL for users who copy them.
       - name: Validate stacks
         working-directory: examples/${{ matrix.demo-folder }}
-        run: |
-          atmos validate stacks \
-            --schemas-atmos-manifest "${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+        run: atmos validate stacks
 
   # run container step tests against a local registry (build -> push -> run)
   # Docker is available directly on the runner (see the k3s job), and a

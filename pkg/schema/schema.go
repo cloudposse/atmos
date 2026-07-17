@@ -33,6 +33,12 @@ type DescribeAffected struct {
 type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	Affected DescribeAffected `yaml:"affected,omitempty" json:"affected,omitempty" mapstructure:"affected"`
+	// ErrorMode is the project-wide default for the `describe` commands' (`describe stacks`,
+	// `describe affected`, `describe dependents`) `--error-mode` flag: how to handle a
+	// recoverable per-value YAML function error (e.g. a Terraform backend that has not been
+	// provisioned yet). Values: "strict", "warn" (default), "silent". An explicit --error-mode
+	// flag or ATMOS_DESCRIBE_ERROR_MODE env var overrides this.
+	ErrorMode string `yaml:"error_mode,omitempty" json:"error_mode,omitempty" mapstructure:"error_mode"`
 }
 
 // ProfilesConfig defines configuration for the profiles system.
@@ -341,6 +347,7 @@ type EditorConfig struct {
 // Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
 	InstallPath     string                 `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	MaxConcurrency  int                    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
 	FilePath        string                 `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
 	ToolsDir        string                 `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
 	VersionsFile    string                 `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
@@ -1972,4 +1979,11 @@ type TopLevelListConfig struct {
 
 	// Stacks configures the "atmos list stacks" command output.
 	Stacks ListConfig `yaml:"stacks,omitempty" json:"stacks,omitempty" mapstructure:"stacks"`
+
+	// ErrorMode is the project-wide default for the `list` commands' (`list stacks`,
+	// `list components`, `list settings`, `list affected`) `--error-mode` flag: how to handle
+	// a recoverable per-value YAML function error (e.g. a Terraform backend that has not been
+	// provisioned yet). Values: "strict", "warn" (default), "silent". An explicit --error-mode
+	// flag or ATMOS_LIST_ERROR_MODE env var overrides this.
+	ErrorMode string `yaml:"error_mode,omitempty" json:"error_mode,omitempty" mapstructure:"error_mode"`
 }
