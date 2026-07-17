@@ -559,9 +559,10 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 
 	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
-	// Replace with a generic placeholder.
-	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
-	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+	// Its rendered padding also depends on that value's display width, so normalize
+	// both the value and the padding before the provenance comment.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+[ \t]*`)
+	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user ")
 
 	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.

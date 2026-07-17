@@ -172,7 +172,7 @@ vars:                                             # ○ [2] catalog/terraform/vp
       Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
     atmos_manifest: orgs/cp/tenant1/dev/us-east-2 # ○ [4] orgs/cp/_defaults.yaml:13
     atmos_stack: tenant1-ue2-dev                  # ○ [4] orgs/cp/_defaults.yaml:12
-    provisioned_by_user: user                     # ○ [4] orgs/cp/_defaults.yaml:18
+    provisioned_by_user: user # ○ [4] orgs/cp/_defaults.yaml:18
     region: us-east-2                             # ○ [4] orgs/cp/_defaults.yaml:23
     spacelift_stack: <no value>                   # ○ [4] orgs/cp/_defaults.yaml:21
     terraform_component: top-level-component1     # ○ [4] orgs/cp/_defaults.yaml:15

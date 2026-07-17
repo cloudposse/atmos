@@ -127,6 +127,19 @@ func TestSanitizeOutputPreservesLineEndings(t *testing.T) {
 	}
 }
 
+func TestSanitizeOutputNormalizesProvisionedByUserPadding(t *testing.T) {
+	input := "provisioned_by_user: runner                   # \u25cb [4] stacks/defaults.yaml:18\n"
+	want := "provisioned_by_user: user # \u25cb [4] stacks/defaults.yaml:18\n"
+
+	got, err := sanitizeOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeOutput() error = %v", err)
+	}
+	if got != want {
+		t.Errorf("sanitizeOutput() mismatch:\nExpected: %q\nGot:      %q", want, got)
+	}
+}
+
 // TestSnapshotComparisonSymmetry verifies that the write path and read path
 // use the same normalization, so comparisons are symmetric.
 func TestSnapshotComparisonSymmetry(t *testing.T) {
