@@ -145,6 +145,7 @@ func TestValidationTaskErrorsAndApplicabilityFailures(t *testing.T) {
 	require.NoError(t, os.WriteFile(".github", []byte("not a directory"), 0o600))
 	_, err = githubActionsValidationApplicable()
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), ".github is not a directory")
 }
 
 func TestValidateCommandHelpDescribesAggregateValidation(t *testing.T) {

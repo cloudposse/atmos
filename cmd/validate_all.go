@@ -161,6 +161,13 @@ func editorConfigValidationApplicable() (bool, error) {
 }
 
 func githubActionsValidationApplicable() (bool, error) {
+	// Windows reports a child of a regular file as not found, whereas Unix
+	// reports ENOTDIR. Validate the parent explicitly so a malformed `.github`
+	// path is never mistaken for an absent optional workflows directory.
+	if info, err := os.Stat(".github"); err == nil && !info.IsDir() {
+		return false, fmt.Errorf("%w: inspect GitHub Actions workflows: .github is not a directory", errUtils.ErrValidationFailed)
+	}
+
 	entries, err := os.ReadDir(filepath.Join(".github", "workflows"))
 	if os.IsNotExist(err) {
 		return false, nil
