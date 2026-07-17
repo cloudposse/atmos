@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -29,12 +30,14 @@ import (
 
 // MockLayer implements v1.Layer for testing.
 type MockLayer struct {
-	digestVal        v1.Hash
-	sizeVal          int64
-	uncompressedErr  error
-	compressedErr    error
-	mediaTypeVal     types.MediaType
-	uncompressedData []byte
+	digestVal         v1.Hash
+	sizeVal           int64
+	uncompressedErr   error
+	compressedErr     error
+	mediaTypeVal      types.MediaType
+	uncompressedData  []byte
+	uncompressedErrs  []error
+	uncompressedCalls int
 }
 
 func (m *MockLayer) Digest() (v1.Hash, error) {
@@ -50,6 +53,11 @@ func (m *MockLayer) Compressed() (io.ReadCloser, error) {
 }
 
 func (m *MockLayer) Uncompressed() (io.ReadCloser, error) {
+	call := m.uncompressedCalls
+	m.uncompressedCalls++
+	if call < len(m.uncompressedErrs) && m.uncompressedErrs[call] != nil {
+		return nil, m.uncompressedErrs[call]
+	}
 	if m.uncompressedErr != nil {
 		return nil, m.uncompressedErr
 	}
@@ -92,6 +100,72 @@ func TestProcessLayer_DecompressionError(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrLayerDecompression), "Expected ErrLayerDecompression, got: %v", err)
 	assert.Contains(t, err.Error(), "layer decompression")
+}
+
+func TestProcessLayerWithRetry_TransientErrorEventuallySucceeds(t *testing.T) {
+	dest := t.TempDir()
+	tarBuf := writeTestTar(t, map[string]string{"main.tf": "# recovered download\n"})
+	mockLayer := &MockLayer{
+		digestVal:        v1.Hash{Algorithm: "sha256", Hex: "retry123"},
+		uncompressedErrs: []error{&net.OpError{Op: "read", Err: errors.New("connection reset")}},
+		uncompressedData: tarBuf.Bytes(),
+	}
+
+	err := processLayerWithRetry(context.Background(), mockLayer, 0, dest, testOCILayerRetryConfig())
+	require.NoError(t, err)
+	assert.Equal(t, 2, mockLayer.uncompressedCalls)
+
+	content, err := os.ReadFile(filepath.Join(dest, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# recovered download\n", string(content))
+}
+
+func TestProcessLayerWithRetry_DoesNotRetryNonNetworkFailure(t *testing.T) {
+	mockLayer := &MockLayer{
+		digestVal:       v1.Hash{Algorithm: "sha256", Hex: "invalid123"},
+		uncompressedErr: errors.New("invalid gzip header"),
+	}
+
+	err := processLayerWithRetry(context.Background(), mockLayer, 0, t.TempDir(), testOCILayerRetryConfig())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLayerDecompression)
+	assert.Equal(t, 1, mockLayer.uncompressedCalls)
+}
+
+func TestProcessLayerWithRetry_DoesNotRetryAuthenticationFailure(t *testing.T) {
+	mockLayer := &MockLayer{
+		digestVal:       v1.Hash{Algorithm: "sha256", Hex: "auth123"},
+		uncompressedErr: &transport.Error{StatusCode: 403},
+	}
+
+	err := processLayerWithRetry(context.Background(), mockLayer, 0, t.TempDir(), testOCILayerRetryConfig())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLayerDecompression)
+	assert.Equal(t, 1, mockLayer.uncompressedCalls)
+}
+
+func TestProcessLayerWithRetry_DoesNotRetryExpiredContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mockLayer := &MockLayer{
+		digestVal:       v1.Hash{Algorithm: "sha256", Hex: "cancelled123"},
+		uncompressedErr: &net.OpError{Op: "read", Err: errors.New("connection reset")},
+	}
+
+	err := processLayerWithRetry(ctx, mockLayer, 0, t.TempDir(), testOCILayerRetryConfig())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLayerDecompression)
+	assert.Equal(t, 1, mockLayer.uncompressedCalls)
+}
+
+func testOCILayerRetryConfig() *schema.RetryConfig {
+	maxAttempts := ociLayerRetryMaxAttempts
+	initialDelay := time.Duration(0)
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+	}
 }
 
 // TestProcessLayer_ZipMediaType tests that a layer declaring the OpenTofu
