@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,16 @@ func TestVerifierTool(t *testing.T) {
 			assert.Equal(t, tt.wantOK, ok)
 		})
 	}
+}
+
+func TestLegacyVerifierVersion(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, legacyCosignVerifierVersion, legacyVerifierVersion("cosign", []string{
+		"verify-blob", "--certificate", "/tmp/cert.pem", "--signature", "/tmp/signature.sig",
+	}))
+	assert.Empty(t, legacyVerifierVersion("cosign", []string{"verify-blob", "--bundle", "/tmp/evidence.json"}))
+	assert.Empty(t, legacyVerifierVersion("minisign", []string{"--certificate", "/tmp/cert.pem", "--signature", "/tmp/signature.sig"}))
 }
 
 func TestVerifierCommandRunnerRequiresPathWhenAutoInstallDisabled(t *testing.T) {
@@ -308,6 +319,58 @@ func TestVerifierCommandRunnerSkipsTrustStepWhenDisabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, callCount, "trust step must not run when VerifierTrust is disabled")
+}
+
+func TestRunTrustedVerifierSerializesTrustAndExecution(t *testing.T) {
+	previousTrustFunc := trustVerifierBinaryFunc
+	t.Cleanup(func() { trustVerifierBinaryFunc = previousTrustFunc })
+
+	var mu sync.Mutex
+	active := 0
+	maxActive := 0
+	trustCalls := 0
+	enter := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		active++
+		if active > maxActive {
+			maxActive = active
+		}
+	}
+	exit := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		active--
+	}
+	trustVerifierBinaryFunc = func(string) error {
+		mu.Lock()
+		trustCalls++
+		mu.Unlock()
+		enter()
+		time.Sleep(25 * time.Millisecond)
+		exit()
+		return nil
+	}
+
+	path := filepath.Join(t.TempDir(), "cosign")
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			errs <- runTrustedVerifier(context.Background(), path, verification.Policy{
+				VerifierTrust: verification.VerifierTrustAuto,
+			}, func() error {
+				enter()
+				time.Sleep(25 * time.Millisecond)
+				exit()
+				return nil
+			})
+		}()
+	}
+	for range 2 {
+		require.NoError(t, <-errs)
+	}
+	assert.Equal(t, 1, maxActive, "shared verifier trust and execution must not overlap")
+	assert.Equal(t, 1, trustCalls, "trust repair must not mutate the same verifier before every invocation")
 }
 
 func TestVerifierCommandRunnerAutoInstallFallsBackToPinnedCosignWhenLatestLookupFails(t *testing.T) {

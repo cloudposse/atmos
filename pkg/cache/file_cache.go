@@ -20,7 +20,7 @@ const (
 	DefaultFilePerm = 0o644
 )
 
-// FileCache provides atomic file-based caching with platform-specific locking.
+// FileCache provides atomic file-based caching with cross-process locking.
 // It stores cached content in an XDG-compliant cache directory.
 type FileCache struct {
 	baseDir      string
