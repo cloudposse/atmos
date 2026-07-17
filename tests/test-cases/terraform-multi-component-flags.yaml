@@ -41,7 +41,7 @@ tests:
       exit_code: 1
       stderr:
         - "Terraform preflight failed"
-        - "emulator \"local/aws\" is not running"
+        - "failed to resolve emulator"
 
   - name: "terraform providers lock --all dry-run"
     enabled: true

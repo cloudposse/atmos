@@ -79,16 +79,37 @@ def sanitize_paths(text, repo_root):
     roots = {str(repo_root), os.path.realpath(str(repo_root))}
     # macOS: cwd-derived paths may carry the /private prefix for /tmp and /var.
     roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
-    for root in sorted(roots, key=len, reverse=True):
-        text = text.replace(root, placeholder)
 
-    # CI records from GitHub-hosted runners can resolve the fixture through a
-    # workspace path that is not the repository root passed above. The raw
-    # asciicast JSON can also contain terminal escapes immediately after this
-    # prefix, so replace the stable runner repository prefix directly.
-    github_runner_repo = re.compile(r"/home/[^/\\\s]+/work/[^/\\\s]+/[^/\\\s]+")
-    text = github_runner_repo.sub(placeholder, text)
-    return text
+    def sanitize_value(value):
+        for root in sorted(roots, key=len, reverse=True):
+            value = value.replace(root, placeholder)
+
+        # GitHub-hosted runners can resolve the fixture through a workspace
+        # path that differs from the repository root passed above.
+        return re.sub(r"/home/[^/\s]+/work/[^/\s]+/[^/\s]+", placeholder, value)
+
+    # Cast files are newline-delimited JSON. Decode output events before
+    # replacing paths so escaped JSON slashes ("\\/home\\/runner\\/...") do not
+    # bypass the sanitizer.
+    sanitized_lines = []
+    decoded_cast = False
+    try:
+        for line in text.splitlines(keepends=True):
+            newline = "\n" if line.endswith("\n") else ""
+            event = json.loads(line)
+            if isinstance(event, list) and len(event) >= 3 and event[1] in ("o", "e") and isinstance(event[2], str):
+                decoded_cast = True
+                sanitized = sanitize_value(event[2])
+                if sanitized != event[2]:
+                    event[2] = sanitized
+                    line = json.dumps(event, separators=(",", ":")) + newline
+            sanitized_lines.append(line)
+    except (json.JSONDecodeError, TypeError):
+        decoded_cast = False
+
+    if decoded_cast:
+        return "".join(sanitized_lines)
+    return sanitize_value(text)
 
 
 def assert_no_error_output(text):
