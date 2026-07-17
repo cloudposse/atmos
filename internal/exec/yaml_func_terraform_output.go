@@ -2,9 +2,8 @@ package exec
 
 import (
 	"fmt"
-	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -73,32 +72,20 @@ func processTagTerraformOutputWithContext(
 	var stack string
 	var output string
 
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
+	parsed, err := fnparser.ParseTerraform(str)
 	if err != nil {
 		return nil, err
 	}
-
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	component = parsed.Component
+	stack = parsed.Stack
+	output = parsed.Expression
+	if stack == "" {
 		stack = currentStack
-		output = strings.TrimSpace(parts[1])
 		log.Debug(
 			"Executing Atmos YAML function with component and output parameters; using current stack",
 			log.FieldFunction, input,
 			"stack", currentStack,
 		)
-	default:
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// Track dependency and get cleanup function.

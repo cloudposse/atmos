@@ -3,7 +3,9 @@ package utils
 import (
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcessTagRandom(t *testing.T) {
@@ -68,7 +70,7 @@ func TestProcessTagRandom(t *testing.T) {
 			name:        "too many arguments",
 			input:       "!random 1024 65535 extra",
 			wantErr:     true,
-			errContains: "invalid number of arguments",
+			errContains: "random function accepts 0, 1, or 2 arguments",
 		},
 		{
 			name:        "invalid max value with one argument",
@@ -120,6 +122,16 @@ func TestProcessTagRandom(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProcessTagRandomWrapsParserError(t *testing.T) {
+	_, err := ProcessTagRandom(`!random "unterminated`)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidAtmosYAMLFunction)
+
+	var parseErr *parser.Error
+	require.ErrorAs(t, err, &parseErr)
+	assert.Equal(t, "unterminated quoted value", parseErr.Message)
 }
 
 // TestProcessTagRandomDistribution verifies that the random function produces different values.

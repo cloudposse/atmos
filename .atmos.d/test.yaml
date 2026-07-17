@@ -81,6 +81,21 @@ commands:
           - type: atmos
             command: test acceptance --cover
 
+      - name: parser-coverage
+        description: Verify function parser coverage is at least 90%
+        env: *go_auto_env
+        steps:
+          - type: shell
+            command: scripts/check-function-parser-coverage.sh
+
+      - name: terraform-example-syntax
+        description: Verify Terraform examples do not use legacy CSV quote escaping
+        steps:
+          - type: shell
+            command: |
+              bash scripts/test-check-terraform-example-syntax.sh
+              scripts/check-terraform-example-syntax.sh
+
       - name: acc-coverage
         description: Run acceptance tests and generate an HTML coverage report
         env: *go_auto_env
