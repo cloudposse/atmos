@@ -160,7 +160,7 @@ func TestHasYqDefault(t *testing.T) {
 // values work when the backend returns nil (component not provisioned).
 // The mock returns the ErrTerraformStateNotProvisioned sentinel error to simulate
 // the real behavior when a component is not provisioned.
-func TestTerraformState_YqDefaultWhenBackendReturnsNil(t *testing.T) {
+func TestTerraformState_LegacyCSVCompatibility(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -194,9 +194,7 @@ func TestTerraformState_YqDefaultWhenBackendReturnsNil(t *testing.T) {
 		Return(nil, fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)).
 		Times(1)
 
-	// Input using YAML-style double quotes for escaping (like the fixture files).
-	// In YAML: !terraform.state vpc test-stack ".bucket_name // ""default-bucket"""
-	// The CSV parser handles the outer quotes and unescapes inner double quotes.
+	// Compatibility-only fixture: legacy CSV escaping remains supported at runtime.
 	input := schema.AtmosSectionMapType{
 		"bucket": `!terraform.state vpc test-stack ".bucket_name // ""default-bucket"""`,
 	}
@@ -243,7 +241,7 @@ func TestTerraformState_APIErrorReturnsError(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": `!terraform.state vpc test-stack ".bucket_name // ""default-bucket"""`,
+		"bucket": `!terraform.state vpc test-stack .bucket_name // "default-bucket"`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -287,7 +285,7 @@ func TestTerraformState_YqDefaultWithListFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"subnets": `!terraform.state vpc test-stack ".subnets // [""subnet-1"", ""subnet-2""]"`,
+		"subnets": `!terraform.state vpc test-stack .subnets // ["subnet-1", "subnet-2"]`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -375,7 +373,7 @@ func TestTerraformState_OutputNotFoundWithDefaultUsesDefault(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"value": `!terraform.state vpc test-stack ".missing_output // ""fallback-value"""`,
+		"value": `!terraform.state vpc test-stack .missing_output // "fallback-value"`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -419,7 +417,7 @@ func TestTerraformState_YqDefaultWithMapFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"tags": `!terraform.state config test-stack ".tags // {""env"": ""dev"", ""team"": ""platform""}"`,
+		"tags": `!terraform.state config test-stack .tags // {"env": "dev", "team": "platform"}`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -464,7 +462,7 @@ func TestTerraformState_YqDefaultWithNumericFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"replicas": `!terraform.state app test-stack ".replicas // 3"`,
+		"replicas": `!terraform.state app test-stack .replicas // 3`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -508,7 +506,7 @@ func TestTerraformState_YqDefaultWithEmptyListFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"security_groups": `!terraform.state vpc test-stack ".security_groups // []"`,
+		"security_groups": `!terraform.state vpc test-stack .security_groups // []`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
