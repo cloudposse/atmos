@@ -44,7 +44,7 @@ import:                                           # ○ [3] orgs/cp/tenant1/_def
   - orgs/cp/tenant1/_defaults                     # ○ [2] orgs/cp/tenant1/dev/_defaults.yaml:5
   - orgs/cp/tenant1/dev/_defaults                 # ● [1] orgs/cp/tenant1/dev/us-east-2.yaml:5
 providers:                                        # ○ [2] catalog/terraform/vpc.yaml:52
-  context:                                        # ● [1] orgs/cp/tenant1/dev/us-east-2.yaml:0
+  context:                                        # ● [1] orgs/cp/tenant1/dev/us-east-2.yaml
     delimiter: '-'                                # ○ [4] orgs/cp/_defaults.yaml:62
     enabled: true                                 # ○ [4] orgs/cp/_defaults.yaml:61
     properties:                                   # ○ [4] orgs/cp/_defaults.yaml:64

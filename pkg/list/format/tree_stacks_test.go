@@ -108,6 +108,16 @@ func TestRenderStacksTree_NoSpacerAfterLastStack(t *testing.T) {
 	}
 }
 
+func TestRenderStacksTree_AppendsTrailingNewlineForPromptSpacing(t *testing.T) {
+	output := RenderStacksTree(map[string][]*listtree.ImportNode{
+		"stack-a": {{Path: "imports/a"}},
+	}, false)
+
+	if !strings.HasSuffix(output, treeNewline) {
+		t.Error("expected renderer output with a trailing newline for prompt spacing")
+	}
+}
+
 func TestRenderStacksTree_EmptyInput(t *testing.T) {
 	stacksWithImports := map[string][]*listtree.ImportNode{}
 

@@ -277,6 +277,16 @@ func TestFormatProvenanceCommentWithStackFile_NoColor(t *testing.T) {
 			},
 			expected: "# ∴ [1] orgs/acme/dev.yaml:20",
 		},
+		{
+			name: "unknown line omits source line suffix",
+			entry: &m.ProvenanceEntry{
+				File:  "stacks/orgs/acme/dev.yaml",
+				Line:  0,
+				Depth: 1,
+				Type:  m.ProvenanceTypeInline,
+			},
+			expected: "# ● [1] orgs/acme/dev.yaml",
+		},
 	}
 
 	for _, tt := range tests {

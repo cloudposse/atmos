@@ -5,7 +5,9 @@ Generate an execution plan, which shows what actions Terraform will take to reac
 
 This command shows what Terraform will do when you run 'apply'. It helps you verify changes before making them to your infrastructure.
 
-For complete Terraform/OpenTofu documentation, see: https://developer.hashicorp.com/terraform/cli/commands/plan https://opentofu.org/docs/cli/commands/plan
+For complete Terraform/OpenTofu documentation, see:
+https://developer.hashicorp.com/terraform/cli/commands/plan
+https://opentofu.org/docs/cli/commands/plan
 
 USAGE
 

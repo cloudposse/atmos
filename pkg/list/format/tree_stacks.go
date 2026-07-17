@@ -25,6 +25,8 @@ func RenderStacksTree(stacksWithImports map[string][]*listtree.ImportNode, showI
 	treeOutput := root.String()
 	cleanedOutput := cleanupSpacerMarkers(treeOutput, []string{spacerMarker})
 
+	// Keep one trailing newline here; callers use data.Writeln, which adds a
+	// second newline and leaves a deliberate blank line before the shell prompt.
 	return header + strings.TrimRight(cleanedOutput, treeNewline) + treeNewline
 }
 

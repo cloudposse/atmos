@@ -107,6 +107,9 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, useColor boo
 	file := shortenFilePath(entry.File)
 
 	if !useColor {
+		if entry.Line <= 0 {
+			return fmt.Sprintf("# %s [%d] %s", symbol, entry.Depth, file)
+		}
 		return fmt.Sprintf("# %s [%d] %s:%d", symbol, entry.Depth, file, entry.Line)
 	}
 
@@ -128,13 +131,15 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, useColor boo
 
 	// Build: "# symbol [depth] file:line" with colored depth.
 	comment := fmt.Sprintf(
-		"%s %s %s %s:%d",
+		"%s %s %s %s",
 		grayStyle.Render("#"),
 		grayStyle.Render(symbol),
 		depthStyle.Render(fmt.Sprintf("[%d]", entry.Depth)),
 		grayStyle.Render(file),
-		entry.Line,
 	)
+	if entry.Line > 0 {
+		comment += fmt.Sprintf(":%d", entry.Line)
+	}
 
 	return comment
 }

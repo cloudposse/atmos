@@ -37,6 +37,8 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 	treeOutput := root.String()
 	cleanedOutput := cleanupSpacerMarkers(treeOutput, []string{spacerMarker, componentSpacerMarker})
 
+	// Keep one trailing newline here; callers use data.Writeln, which adds a
+	// second newline and leaves a deliberate blank line before the shell prompt.
 	return header + strings.TrimRight(cleanedOutput, treeNewline) + treeNewline
 }
 
