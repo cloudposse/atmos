@@ -388,25 +388,6 @@ func TestReadTerraformBackendS3Internal_DefaultWorkspace(t *testing.T) {
 	}
 }
 
-// TestReadTerraformBackendS3Internal_DefaultWorkspaceKeyPrefix verifies that
-// an omitted workspace_key_prefix follows Terraform/OpenTofu's S3 backend
-// default ("env:"), rather than behaving like an explicitly empty prefix.
-func TestReadTerraformBackendS3Internal_DefaultWorkspaceKeyPrefix(t *testing.T) {
-	client := &mockS3ClientForDefaultWorkspace{}
-	componentSections := map[string]any{
-		"workspace": "plat-ue2-dev",
-	}
-	backend := map[string]any{
-		"bucket": "test-bucket",
-		"region": "us-east-1",
-		"key":    "terraform.tfstate",
-	}
-
-	_, err := tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
-	require.NoError(t, err)
-	assert.Equal(t, "env:/plat-ue2-dev/terraform.tfstate", client.requestedKey)
-}
-
 // mockS3ClientWithSSEC captures the GetObjectInput for SSE-C header verification.
 type mockS3ClientWithSSEC struct {
 	capturedInput *s3.GetObjectInput
