@@ -112,6 +112,13 @@ func WithCacheDir(cacheDir string) Option {
 	return installer.WithCacheDir(cacheDir)
 }
 
+// WithDownloadProgress reports bytes received while an asset is downloaded.
+func WithDownloadProgress(progress func(downloaded, total int64)) Option {
+	defer perf.Track(nil, "toolchain.WithDownloadProgress")()
+
+	return installer.WithDownloadProgress(progress)
+}
+
 // WithResolver sets the tool resolver.
 func WithResolver(resolver ToolResolver) Option {
 	defer perf.Track(nil, "toolchain.WithResolver")()
