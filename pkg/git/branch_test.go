@@ -84,8 +84,18 @@ func TestDefaultBranchAndGitHubRepository(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "main", branch)
 
+	// An empty remote must default to "origin", same as passing it explicitly.
+	branch, err = DefaultBranch(context.Background(), workdir, "")
+	require.NoError(t, err)
+	assert.Equal(t, "main", branch)
+
 	runGitCommand(t, workdir, "remote", "set-url", "origin", "git@github.com:cloudposse/atmos.git")
 	owner, repository, err := GitHubRepository(context.Background(), workdir, "origin")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", owner)
+	assert.Equal(t, "atmos", repository)
+
+	owner, repository, err = GitHubRepository(context.Background(), workdir, "")
 	require.NoError(t, err)
 	assert.Equal(t, "cloudposse", owner)
 	assert.Equal(t, "atmos", repository)
@@ -107,6 +117,56 @@ func TestDefaultBranchAndGitHubRepository(t *testing.T) {
 	runGitCommand(t, workdir, "remote", "set-url", "origin", "https://github.com/cloudposse/")
 	_, _, err = GitHubRepository(context.Background(), workdir, "origin")
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
+}
+
+func TestPrepareBranchFetchBaseFailure(t *testing.T) {
+	workdir := newGitRemote(t)
+	err := PrepareBranch(context.Background(), PrepareBranchOptions{Workdir: workdir, Remote: "nonexistent-remote", Base: "main", Branch: "updates"})
+	assert.Error(t, err)
+}
+
+// TestPrepareBranchCheckoutFailures forces a git ref-update failure by
+// pre-creating the ref's lock file: git's atomic ref update refuses to
+// proceed while a sibling ".lock" file already exists, so this deterministic
+// technique (used by git's own test suite) reproduces "checkout -B" failing
+// without needing a real concurrent writer.
+func TestPrepareBranchCheckoutFailures(t *testing.T) {
+	t.Run("new branch from base", func(t *testing.T) {
+		workdir := newGitRemote(t)
+		lockPath := filepath.Join(workdir, ".git", "refs", "heads", "updates.lock")
+		require.NoError(t, os.WriteFile(lockPath, []byte(""), 0o644))
+
+		err := PrepareBranch(context.Background(), PrepareBranchOptions{Workdir: workdir, Base: "main", Branch: "updates"})
+		assert.Error(t, err)
+	})
+
+	t.Run("existing remote branch", func(t *testing.T) {
+		workdir := newGitRemote(t)
+		runGitCommand(t, workdir, "checkout", "-b", "feature")
+		require.NoError(t, os.WriteFile(filepath.Join(workdir, "feature.txt"), []byte("remote feature\n"), 0o644))
+		runGitCommand(t, workdir, "add", "feature.txt")
+		runGitCommand(t, workdir, "commit", "-m", "feature")
+		runGitCommand(t, workdir, "push", "-u", "origin", "feature")
+		runGitCommand(t, workdir, "checkout", "main")
+
+		lockPath := filepath.Join(workdir, ".git", "refs", "heads", "feature.lock")
+		require.NoError(t, os.WriteFile(lockPath, []byte(""), 0o644))
+
+		err := PrepareBranch(context.Background(), PrepareBranchOptions{Workdir: workdir, Base: "main", Branch: "feature"})
+		assert.Error(t, err)
+	})
+}
+
+func TestDefaultBranchLsRemoteFailure(t *testing.T) {
+	workdir := newGitRemote(t)
+	_, err := DefaultBranch(context.Background(), workdir, "nonexistent-remote")
+	assert.Error(t, err)
+}
+
+func TestGitHubRepositoryRemoteGetURLFailure(t *testing.T) {
+	workdir := newGitRemote(t)
+	_, _, err := GitHubRepository(context.Background(), workdir, "nonexistent-remote")
+	assert.Error(t, err)
 }
 
 func TestDefaultBranchRejectsRemoteWithoutAdvertisedHead(t *testing.T) {

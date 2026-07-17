@@ -14,8 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	githubprovider "github.com/cloudposse/atmos/pkg/git/providers/github"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
@@ -38,10 +40,14 @@ type componentUpdaterLister struct {
 
 type componentUpdaterPublisher struct {
 	options *atmosgit.PullRequestOptions
+	err     error
 }
 
 func (p *componentUpdaterPublisher) Reconcile(_ context.Context, options *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
 	p.options = options
+	if p.err != nil {
+		return nil, p.err
+	}
 	return &atmosgit.PullRequestResult{Number: 42, URL: "https://github.com/acme/repo/pull/42", Created: true}, nil
 }
 
@@ -120,6 +126,34 @@ spec:
 	require.NoError(t, err)
 	assert.Equal(t, 1, report.UpdatedCount())
 	assert.Equal(t, 3, lister.calls, "group discovery occurs once and selected mutation runs once")
+}
+
+func TestRunVendorUpdateGroupCheckIsDryRun(t *testing.T) {
+	manifest := filepath.Join(t.TempDir(), "vendor.yaml")
+	require.NoError(t, os.WriteFile(manifest, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-vpc
+      version: 1.0.0
+      targets: [components/terraform/vpc]
+`), 0o644))
+
+	lister := &componentUpdaterLister{tags: []string{"1.0.0", "1.1.0"}}
+	previous := version.DefaultLister
+	version.DefaultLister = lister
+	t.Cleanup(func() { version.DefaultLister = previous })
+
+	v := viper.New()
+	v.Set("file", manifest)
+	v.Set("vendor.update.groups.platform.include", []string{"vpc"})
+	report, err := runVendorUpdate(v, "terraform", nil, false, nil, "platform", true)
+	require.NoError(t, err)
+	require.Len(t, report.Results, 1)
+	assert.Equal(t, "vpc", report.Results[0].Component)
+	assert.Equal(t, vendoring.StatusUpdated, report.Results[0].Status)
+	assert.Equal(t, 1, lister.calls, "a --group --check dry run must stop after discovery and never mutate")
 }
 
 func TestRunVendorUpdateReturnsNoOpForGroupWithoutUpdates(t *testing.T) {
@@ -242,6 +276,235 @@ func TestPublishComponentUpdateCommitsPushesAndReconciles(t *testing.T) {
 	assert.Empty(t, commit)
 }
 
+// newComponentUpdaterGitFixture stands up a bare remote plus a cloned workdir
+// with an initial "vendor.yaml" commit already pushed to "main", the same
+// shape TestPrepareComponentUpdateBranch and
+// TestPublishComponentUpdateCommitsPushesAndReconciles each set up inline.
+func newComponentUpdaterGitFixture(t *testing.T) (remote, workdir string) {
+	t.Helper()
+	root := t.TempDir()
+	remote = filepath.Join(root, "remote.git")
+	workdir = filepath.Join(root, "workdir")
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		output, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v failed: %s", args, output)
+	}
+	run(root, "init", "--bare", remote)
+	run(remote, "symbolic-ref", "HEAD", "refs/heads/main")
+	run(root, "clone", remote, workdir)
+	run(workdir, "config", "user.name", "Atmos Test")
+	run(workdir, "config", "user.email", "atmos-test@example.com")
+	run(workdir, "config", "commit.gpgSign", "false")
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("before\n"), 0o644))
+	run(workdir, "add", "vendor.yaml")
+	run(workdir, "commit", "-m", "base")
+	run(workdir, "branch", "-M", "main")
+	run(workdir, "push", "-u", "origin", "main")
+	return remote, workdir
+}
+
+func TestPrepareComponentUpdateBranchResolvesDefaultBase(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+
+	previous := currentWorkdir
+	currentWorkdir = workdir
+	t.Cleanup(func() { currentWorkdir = previous })
+
+	// vendor.ci.pull_request.base_branch is intentionally left unset so
+	// prepareComponentUpdateBranch must resolve it via atmosgit.DefaultBranch.
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), viper.New(), "all")
+	require.NoError(t, err)
+	assert.Equal(t, "main", base)
+	assert.Equal(t, "atmos/component-updater/all", branch)
+}
+
+func TestPrepareComponentUpdateBranchDefaultBranchError(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+	cmd := exec.Command("git", "remote", "remove", "origin")
+	cmd.Dir = workdir
+	require.NoError(t, cmd.Run())
+
+	previous := currentWorkdir
+	currentWorkdir = workdir
+	t.Cleanup(func() { currentWorkdir = previous })
+
+	_, _, err := prepareComponentUpdateBranch(context.Background(), viper.New(), "all")
+	assert.Error(t, err)
+}
+
+func TestPrepareComponentUpdateBranchPrepareBranchError(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "dirty.txt"), []byte("dirty\n"), 0o644))
+
+	previous := currentWorkdir
+	currentWorkdir = workdir
+	t.Cleanup(func() { currentWorkdir = previous })
+
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	_, _, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterDirtyWorktree)
+}
+
+func TestPublishComponentUpdatePushError(t *testing.T) {
+	remote, workdir := newComponentUpdaterGitFixture(t)
+
+	previous := currentWorkdir
+	currentWorkdir = workdir
+	t.Cleanup(func() { currentWorkdir = previous })
+
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	// Break the remote after branch prep (which needs it) but before publish's push.
+	require.NoError(t, os.RemoveAll(remote))
+
+	publication := componentUpdatePublication{scope: "all", branch: branch, base: base, report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	_, _, err = publishComponentUpdate(context.Background(), v, publication)
+	assert.Error(t, err)
+}
+
+func TestPublishComponentUpdateGitHubRepositoryError(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+
+	previousWorkdir := currentWorkdir
+	currentWorkdir = workdir
+	previousRepository := gitHubRepository
+	gitHubRepository = func(context.Context, string, string) (string, string, error) { return "", "", assert.AnError }
+	t.Cleanup(func() {
+		currentWorkdir = previousWorkdir
+		gitHubRepository = previousRepository
+	})
+
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	publication := componentUpdatePublication{scope: "all", branch: branch, base: base, report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	_, _, err = publishComponentUpdate(context.Background(), v, publication)
+	assert.ErrorIs(t, err, assert.AnError)
+}
+
+// TestPublishComponentUpdateDefaultsProviderAndLabels proves the "github"
+// provider and "component-update" label defaults both apply when
+// vendor.ci.pull_request.provider/labels are left unset. It temporarily
+// swaps the real "github" pull-request publisher registration for a fake so
+// no live API call is made, restoring it afterward.
+func TestPublishComponentUpdateDefaultsProviderAndLabels(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+
+	previousWorkdir := currentWorkdir
+	currentWorkdir = workdir
+	previousRepository := gitHubRepository
+	gitHubRepository = func(context.Context, string, string) (string, string, error) { return "acme", "repo", nil }
+	t.Cleanup(func() {
+		currentWorkdir = previousWorkdir
+		gitHubRepository = previousRepository
+		atmosgit.RegisterPullRequestPublisher(githubprovider.ProviderName, func() (atmosgit.PullRequestPublisher, error) { return githubprovider.New(), nil })
+	})
+
+	publisher := &componentUpdaterPublisher{}
+	atmosgit.RegisterPullRequestPublisher(githubprovider.ProviderName, func() (atmosgit.PullRequestPublisher, error) { return publisher, nil })
+
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	// vendor.ci.pull_request.provider and .labels are intentionally left unset.
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	publication := componentUpdatePublication{scope: "all", branch: branch, base: base, report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	_, _, err = publishComponentUpdate(context.Background(), v, publication)
+	require.NoError(t, err)
+	require.NotNil(t, publisher.options)
+	assert.Equal(t, []string{"component-update"}, publisher.options.Labels)
+}
+
+func TestPublishComponentUpdateUnknownProviderError(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+
+	previousWorkdir := currentWorkdir
+	currentWorkdir = workdir
+	previousRepository := gitHubRepository
+	gitHubRepository = func(context.Context, string, string) (string, string, error) { return "acme", "repo", nil }
+	t.Cleanup(func() {
+		currentWorkdir = previousWorkdir
+		gitHubRepository = previousRepository
+	})
+
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	v.Set("vendor.ci.pull_request.provider", "nonexistent-provider")
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	publication := componentUpdatePublication{scope: "all", branch: branch, base: base, report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	_, _, err = publishComponentUpdate(context.Background(), v, publication)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent-provider")
+}
+
+func TestPublishComponentUpdateReconcileError(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+
+	previousWorkdir := currentWorkdir
+	currentWorkdir = workdir
+	previousRepository := gitHubRepository
+	gitHubRepository = func(context.Context, string, string) (string, string, error) { return "acme", "repo", nil }
+	t.Cleanup(func() {
+		currentWorkdir = previousWorkdir
+		gitHubRepository = previousRepository
+	})
+
+	publisher := &componentUpdaterPublisher{err: assert.AnError}
+	publisherName := t.Name()
+	atmosgit.RegisterPullRequestPublisher(publisherName, func() (atmosgit.PullRequestPublisher, error) { return publisher, nil })
+
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	v.Set("vendor.ci.pull_request.provider", publisherName)
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	publication := componentUpdatePublication{scope: "all", branch: branch, base: base, report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	_, _, err = publishComponentUpdate(context.Background(), v, publication)
+	assert.ErrorIs(t, err, assert.AnError)
+}
+
+func TestPublishComponentUpdateInvalidTemplateError(t *testing.T) {
+	_, workdir := newComponentUpdaterGitFixture(t)
+
+	previousWorkdir := currentWorkdir
+	currentWorkdir = workdir
+	previousRepository := gitHubRepository
+	gitHubRepository = func(context.Context, string, string) (string, string, error) { return "acme", "repo", nil }
+	t.Cleanup(func() {
+		currentWorkdir = previousWorkdir
+		gitHubRepository = previousRepository
+	})
+
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	v.Set("vendor.ci.pull_request.title", "{{")
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	publication := componentUpdatePublication{scope: "all", branch: branch, base: base, report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	_, _, err = publishComponentUpdate(context.Background(), v, publication)
+	require.Error(t, err)
+}
+
 func TestValidateUpdateInvocation(t *testing.T) {
 	newCommand := func() *cobra.Command {
 		cmd := &cobra.Command{}
@@ -271,6 +534,11 @@ func TestValidateUpdateInvocation(t *testing.T) {
 			v.Set("format", "table")
 			v.Set("vendor.update.batching.mode", "invalid")
 		}, wantError: "batching.mode"},
+		{name: "component batching not available in this release", configure: func(v *viper.Viper, _ *cobra.Command) {
+			v.Set("format", "table")
+			v.Set("vendor.update.execution.mode", "worktree")
+			v.Set("vendor.update.batching.mode", "component")
+		}, wantError: "not available in this release"},
 		{name: "invalid template", configure: func(v *viper.Viper, _ *cobra.Command) {
 			v.Set("format", "table")
 			v.Set("vendor.ci.pull_request.title", "{{")
@@ -289,6 +557,21 @@ func TestValidateUpdateInvocation(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantError)
 		})
 	}
+}
+
+func TestValidateUpdateInvocationPullRequestCheckIsDryRun(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("check", false, "")
+	require.NoError(t, cmd.Flags().Set("check", "true"))
+
+	v := viper.New()
+	v.Set("format", "table")
+	v.Set("check", true)
+	// An invalid template must NOT surface here: a dry-run PR request never
+	// renders (or validates) PR templates, since it will never publish.
+	v.Set("vendor.ci.pull_request.title", "{{")
+
+	assert.NoError(t, validateUpdateInvocation(v, cmd, updateInvocation{PullRequest: true}))
 }
 
 func TestApplyComponentUpdaterReport(t *testing.T) {
@@ -345,6 +628,79 @@ spec:
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
 	assert.Contains(t, stdout.String(), `"status": "no_updates"`)
 	assert.NotContains(t, stdout.String(), `"branch":`)
+}
+
+func TestVendorUpdateCommandSurfacesValidationError(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	resetCommandFlags(t, vendorUpdateCmd)
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: mock
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: [components/terraform/mock]
+`)
+	_ = captureVendorStdout(t)
+	require.NoError(t, vendorUpdateCmd.Flags().Set("file", file))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("all", "true"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("group", "platform"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("format", "json"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all cannot")
+}
+
+func TestVendorUpdateSummaryRespectsEnabledFlag(t *testing.T) {
+	tests := []struct {
+		name        string
+		enabled     bool
+		wantWritten bool
+	}{
+		{name: "enabled by default", enabled: true, wantWritten: true},
+		{name: "disabled", enabled: false, wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			resetCommandFlags(t, vendorUpdateCmd)
+			file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: mock
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: [components/terraform/mock]
+`)
+			_ = captureVendorStdout(t)
+			require.NoError(t, vendorUpdateCmd.Flags().Set("file", file))
+			require.NoError(t, vendorUpdateCmd.Flags().Set("check", "true"))
+			require.NoError(t, vendorUpdateCmd.Flags().Set("format", "json"))
+
+			summaryPath := filepath.Join(t.TempDir(), "summary.md")
+			t.Setenv("GITHUB_ACTIONS", "true")
+			t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
+			viper.GetViper().Set("vendor.ci.summary.enabled", tt.enabled)
+
+			require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
+
+			content, readErr := os.ReadFile(summaryPath)
+			if tt.wantWritten {
+				require.NoError(t, readErr)
+				assert.NotEmpty(t, content)
+				return
+			}
+			if readErr == nil {
+				assert.Empty(t, content, "summary must not be written when vendor.ci.summary.enabled=false")
+			}
+		})
+	}
 }
 
 func TestRenderComponentUpdaterJSON(t *testing.T) {
