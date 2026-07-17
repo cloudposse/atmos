@@ -11964,6 +11964,17 @@
     },
     "Validate": {
       "properties": {
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Format is the project-wide default for human validation output. Individual\nvalidators may provide a more specific setting (for example\nvalidate.editorconfig.format)."
+        },
         "editorconfig": {
           "anyOf": [
             {
