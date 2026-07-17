@@ -431,6 +431,49 @@ func TestEmulatorStatuses_RuntimeEscapeHatch(t *testing.T) {
 	assert.Equal(t, "dev", mgr.gotStack, "runtime mode keeps the requested runtime stack filter")
 }
 
+func TestEmulatorStatuses_ConfiguredErrors(t *testing.T) {
+	t.Run("configuration initialization", func(t *testing.T) {
+		stubListSeams(t, &fakeManager{})
+		initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, errBoom
+		}
+
+		_, err := emulatorStatuses(context.Background(), baseInfo(), false)
+		require.ErrorIs(t, err, errBoom)
+	})
+
+	t.Run("configured stack discovery", func(t *testing.T) {
+		stubConfiguredListSeams(t, &fakeManager{}, nil)
+		describeEmulatorStacks = func(
+			_ *schema.AtmosConfiguration,
+			_ string,
+			_ []string,
+			_ []string,
+			_ []string,
+			_ bool,
+			_ bool,
+			_ bool,
+			_ bool,
+			_ []string,
+			_ auth.AuthManager,
+			_ bool,
+		) (map[string]any, error) {
+			return nil, errBoom
+		}
+
+		_, err := emulatorStatuses(context.Background(), baseInfo(), false)
+		require.ErrorIs(t, err, errBoom)
+	})
+
+	t.Run("runtime lookup", func(t *testing.T) {
+		mgr := &fakeManager{psErr: errBoom}
+		stubConfiguredListSeams(t, mgr, configuredAWSStack())
+
+		_, err := emulatorStatuses(context.Background(), baseInfo(), false)
+		require.ErrorIs(t, err, errBoom)
+	})
+}
+
 func TestExecuteList_ListsStatuses(t *testing.T) {
 	mgr := &fakeManager{psStatuses: []emu.Status{
 		{Name: "aws", Stack: "dev", Image: "docker.io/floci/floci@sha256:abcdef", Status: "running", ID: "628b3ae8a73c92b361"},
@@ -565,6 +608,34 @@ func TestConfiguredEmulatorsFromStacks(t *testing.T) {
 	}, instances)
 }
 
+func TestConfiguredEmulatorsIgnoreNonComponentSections(t *testing.T) {
+	instances, err := configuredEmulatorsFromStacks(map[string]any{
+		"not-a-stack":   "unexpected",
+		"no-components": map[string]any{},
+		"no-emulators": map[string]any{
+			"components": map[string]any{},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, instances)
+}
+
+func TestConfiguredEmulatorFromSectionRejectsMalformedSpec(t *testing.T) {
+	instance, ok, err := configuredEmulatorFromSection("dev", "abstract", map[string]any{
+		"metadata": map[string]any{"type": "abstract"},
+	})
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Empty(t, instance)
+
+	_, ok, err = configuredEmulatorFromSection("dev", "bad", map[string]any{
+		"driver":    "floci/aws",
+		"container": "not-a-map",
+	})
+	require.Error(t, err)
+	assert.False(t, ok)
+}
+
 func TestJoinConfiguredStatusesExcludesUnconfiguredContainers(t *testing.T) {
 	statuses := joinConfiguredStatuses(
 		[]configuredEmulator{{Name: "aws", Stack: "dev", Image: "configured/aws:latest"}},
@@ -581,6 +652,20 @@ func TestJoinConfiguredStatusesExcludesUnconfiguredContainers(t *testing.T) {
 	)
 	require.Equal(t, []emu.Status{{Name: "aws", Stack: "dev", Image: "configured/aws:latest", Status: "not running"}}, missing)
 	assert.Empty(t, filterRunning(missing))
+}
+
+func TestJoinConfiguredStatusesUsesConfiguredImageAndFiltersRunning(t *testing.T) {
+	statuses := joinConfiguredStatuses(
+		[]configuredEmulator{{Name: "aws", Stack: "dev", Image: "configured/aws:latest"}},
+		[]emu.Status{{Name: "aws", Stack: "dev", Status: "running"}},
+	)
+	require.Equal(t, []emu.Status{{Name: "aws", Stack: "dev", Image: "configured/aws:latest", Status: "running"}}, statuses)
+	assert.Equal(t, statuses, filterRunning(append(statuses, emu.Status{Name: "stopped", Status: "exited"})))
+}
+
+func TestDisplayID(t *testing.T) {
+	assert.Empty(t, displayID("  "))
+	assert.Equal(t, shortID("1234567890abcdef"), displayID("1234567890abcdef"))
 }
 
 func TestExecuteLogs_Success(t *testing.T) {
