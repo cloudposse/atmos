@@ -34,6 +34,9 @@ atmos toolchain install hashicorp/terraform@1.5.0
 atmos toolchain install opentofu@1.6.0 tflint@0.50.0 kubectl@1.29.0
 atmos toolchain install terraform helm kubectl tflint
 
+# Limit this batch to two concurrent installs
+atmos toolchain install --max-concurrency 2 opentofu@1.6.0 tflint@0.50.0 kubectl@1.29.0
+
 # Install all tools from .tool-versions file
 atmos toolchain install
 ```
@@ -63,7 +66,35 @@ atmos toolchain install
     <dd>
         Reinstall even if already installed
     </dd>
+
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of tools to install concurrently. The default is `4`.
+        Use a positive integer; values lower than `1` are rejected. This option
+        applies when installing multiple explicit tools or all tools from
+        `.tool-versions`.
+    </dd>
 </dl>
+
+## Parallel Install Configuration
+
+Independent tools in a batch install run concurrently, while Atmos coordinates
+shared downloads, extraction directories, version files, and lockfiles safely.
+Set a project default in `atmos.yaml`, or override it for a single command:
+
+```yaml
+toolchain:
+  max_concurrency: 4
+```
+
+```shell
+ATMOS_TOOLCHAIN_MAX_CONCURRENCY=6 atmos toolchain install
+atmos toolchain install --max-concurrency 8
+```
+
+Concurrency is resolved in this order: `--max-concurrency`,
+`ATMOS_TOOLCHAIN_MAX_CONCURRENCY`, `toolchain.max_concurrency`, then the
+default of `4`.
 
 ## How Tools Are Installed on Disk
 

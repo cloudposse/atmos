@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
@@ -34,30 +36,36 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 	if !i.useLockFile || i.lockFilePath == "" || result == nil || result.Checksum == "" {
 		return nil
 	}
-	lf, err := loadInstallerLockFile(i.lockFilePath)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("load installer lockfile: %w", err)
+	if err := os.MkdirAll(filepath.Dir(i.lockFilePath), defaultMkdirPermissions); err != nil {
+		return fmt.Errorf("%w: mkdir %s: %w", ErrLockfileIO, filepath.Dir(i.lockFilePath), err)
+	}
+	lock := filelock.New(i.lockFilePath + ".lock")
+	return lock.WithExclusive(context.Background(), func() error {
+		lf, err := loadInstallerLockFile(i.lockFilePath)
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("load installer lockfile: %w", err)
+			}
+			lf = newInstallerLockFile()
 		}
-		lf = newInstallerLockFile()
-	}
-	toolName := tool.RepoOwner + "/" + tool.RepoName
-	entry := lf.getOrCreateTool(toolName)
-	entry.Version = version
-	entry.Source = tool.Registry
-	entry.BinaryName = tool.BinaryName
-	platform := runtime.GOOS + "_" + runtime.GOARCH
-	entry.Platforms[platform] = &installerLockPlatform{
-		URL:               assetURL,
-		Checksum:          result.Checksum,
-		Size:              result.AssetSize,
-		ChecksumAlgorithm: result.ChecksumAlgorithm,
-		Verification:      result.SignatureMethods,
-	}
-	if err := saveInstallerLockFile(i.lockFilePath, lf); err != nil {
-		return fmt.Errorf("save installer lockfile: %w", err)
-	}
-	return nil
+		toolName := tool.RepoOwner + "/" + tool.RepoName
+		entry := lf.getOrCreateTool(toolName)
+		entry.Version = version
+		entry.Source = tool.Registry
+		entry.BinaryName = tool.BinaryName
+		platform := runtime.GOOS + "_" + runtime.GOARCH
+		entry.Platforms[platform] = &installerLockPlatform{
+			URL:               assetURL,
+			Checksum:          result.Checksum,
+			Size:              result.AssetSize,
+			ChecksumAlgorithm: result.ChecksumAlgorithm,
+			Verification:      result.SignatureMethods,
+		}
+		if err := saveInstallerLockFile(i.lockFilePath, lf); err != nil {
+			return fmt.Errorf("save installer lockfile: %w", err)
+		}
+		return nil
+	})
 }
 
 type installerLockFile struct {

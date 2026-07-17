@@ -19,7 +19,9 @@ async function attemptFetch(headers, timeoutMs) {
       const errorMsg = token
         ? `GitHub API responded with ${response.status} (authenticated request)`
         : `GitHub API responded with ${response.status} - likely rate limited. Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable.`;
-      throw new Error(errorMsg);
+      const error = new Error(errorMsg);
+      error.status = response.status;
+      throw error;
     }
 
     const release = await response.json();
@@ -27,6 +29,16 @@ async function attemptFetch(headers, timeoutMs) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isRetryableError(error) {
+  const errorCode = error.code || error.cause?.code;
+  return error.status === 429 ||
+    (error.status >= 500 && error.status < 600) ||
+    errorCode === 'UND_ERR_CONNECT_TIMEOUT' ||
+    error.name === 'AbortError' ||
+    errorCode === 'ENOTFOUND' ||
+    errorCode === 'ECONNRESET';
 }
 
 async function fetchLatestRelease() {
@@ -51,11 +63,7 @@ async function fetchLatestRelease() {
       return await attemptFetch(headers, timeoutMs);
     } catch (error) {
       lastError = error;
-      const errorCode = error.code || error.cause?.code;
-      const isRetryable = errorCode === 'UND_ERR_CONNECT_TIMEOUT' ||
-                          error.name === 'AbortError' ||
-                          errorCode === 'ENOTFOUND' ||
-                          errorCode === 'ECONNRESET';
+      const isRetryable = isRetryableError(error);
 
       if (isRetryable && attempt < maxRetries) {
         const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
@@ -79,11 +87,11 @@ async function fetchLatestRelease() {
     message += '\nConsider setting GITHUB_TOKEN to avoid rate limits.';
   }
 
-  // In dev mode, use placeholder so local development isn't blocked.
-  // In production (CI/build), always fail to surface errors.
-  if (isDev) {
+  // Release metadata is optional. A transient GitHub outage must not block a
+  // documentation build that can safely use the generic "latest" link.
+  if (isDev || isRetryableError(lastError)) {
     console.warn(`[fetch-latest-release] ${message}`);
-    console.warn(`[fetch-latest-release] Using placeholder 'latest' for development.`);
+    console.warn(`[fetch-latest-release] Using fallback 'latest'.`);
     return 'latest';
   }
 
