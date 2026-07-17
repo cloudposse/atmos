@@ -1150,6 +1150,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/go-inf/inf/blob/v0.9.1/LICENSE
 
+  - gopkg.in/op/go-logging.v1
+    License: BSD-3-Clause
+    URL: https://github.com/op/go-logging/blob/b2cb9fa56473/LICENSE
+
   - gopkg.in/warnings.v0
     License: BSD-2-Clause
     URL: https://github.com/go-warnings/warnings/blob/v0.1.2/LICENSE
@@ -1966,7 +1970,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mikefarah/yq/v4/pkg/yqlib
     License: MIT
-    URL: https://github.com/mikefarah/yq/blob/v4.53.2/LICENSE
+    URL: https://github.com/mikefarah/yq/blob/v4.52.4/LICENSE
 
   - github.com/minamijoyo/hcledit/editor
     License: MIT
