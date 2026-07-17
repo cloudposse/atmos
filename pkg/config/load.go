@@ -27,6 +27,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -2396,11 +2397,11 @@ func mergeDotenvIncludeCaseMap(configFile, path, includeValue string, mergedCase
 }
 
 func parseDotenvIncludeFile(includeValue string) (string, bool) {
-	parts, err := u.SplitStringByDelimiter(includeValue, ' ')
-	if err != nil || len(parts) == 0 {
+	parsed, err := parser.ParseInclude(includeValue)
+	if err != nil {
 		return "", false
 	}
-	includeFile := strings.TrimSpace(parts[0])
+	includeFile := parsed.Path
 	if includeFile == "" {
 		return "", false
 	}

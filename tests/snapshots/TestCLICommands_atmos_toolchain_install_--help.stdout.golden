@@ -31,11 +31,13 @@ EXAMPLES
 
 FLAGS
 
-      --default    Set as default version in .tool-versions
+      --default              Set as default version in .tool-versions
 
-  -h, --help       help for install
+  -h, --help                 help for install
 
-      --reinstall  Reinstall even if already installed
+      --max-concurrency int  Maximum number of tools to install concurrently (default 4)
+
+      --reinstall            Reinstall even if already installed
 
 
 
