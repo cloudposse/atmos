@@ -351,6 +351,7 @@ type EditorConfig struct {
 // Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
 	InstallPath     string                 `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	MaxConcurrency  int                    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
 	FilePath        string                 `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
 	ToolsDir        string                 `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
 	VersionsFile    string                 `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
