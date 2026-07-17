@@ -89,7 +89,7 @@ func TestReportInit_DistinguishesOutcomes(t *testing.T) {
 
 	reportInit(initSummary{initialized: 1, rotated: 2, unaffected: 3}, false)
 
-	assert.Contains(t, stderr.String(), "Initialized 1 secret(s), rotated 2, 3 unaffected")
+	assert.Contains(t, stripANSI(stderr.String()), "Initialized 1 secret(s), rotated 2, 3 unaffected")
 }
 
 func TestRunSecretInit_InputFile(t *testing.T) {
@@ -111,7 +111,7 @@ func TestRunSecretInit_InputFile(t *testing.T) {
 	require.Len(t, svc.setCalls, 1)
 	assert.Equal(t, "API_KEY", svc.setCalls[0].name)
 	assert.Equal(t, "from-file", svc.setCalls[0].value)
-	assert.Contains(t, stderr.String(), "Skipping undeclared input key UNDECLARED")
+	assert.Contains(t, stripANSI(stderr.String()), "Skipping undeclared input key UNDECLARED")
 }
 
 func TestRunSecretInit_InputFileStrictRejectsUndeclaredKey(t *testing.T) {
