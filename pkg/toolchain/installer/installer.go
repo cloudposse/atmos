@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/filelock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	github "github.com/cloudposse/atmos/pkg/github"
@@ -56,6 +57,13 @@ const (
 	// Fallback cosign verifier bootstrap version for transient GitHub latest-release lookup failures.
 	// renovate: datasource=github-releases depName=sigstore/cosign.
 	defaultCosignVerifierVersion = "v3.0.6"
+	// LegacyCosignVerifierVersion is retained for release metadata that supplies
+	// a certificate and detached signature instead of a Sigstore bundle. Cosign
+	// v3 deprecates those flags and its Rekor lookup can reject otherwise-valid
+	// legacy evidence; v2.6.1 verifies that evidence without the deprecated
+	// path. New bundle-based metadata continues to use the current verifier.
+	// renovate: datasource=github-releases depName=sigstore/cosign.
+	legacyCosignVerifierVersion = "v2.6.1"
 )
 
 // EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
@@ -167,6 +175,7 @@ type Installer struct {
 	verificationPolicy verification.Policy
 	useLockFile        bool
 	lockFilePath       string
+	downloadProgress   func(downloaded, total int64)
 }
 
 // RegistryFactory creates registry instances. This allows dependency injection.
@@ -192,6 +201,16 @@ func WithCacheDir(cacheDir string) Option {
 
 	return func(i *Installer) {
 		i.cacheDir = cacheDir
+	}
+}
+
+// WithDownloadProgress reports bytes received while an asset is downloaded.
+// A total value below zero means the server did not provide Content-Length.
+func WithDownloadProgress(progress func(downloaded, total int64)) Option {
+	defer perf.Track(nil, "installer.WithDownloadProgress")()
+
+	return func(i *Installer) {
+		i.downloadProgress = progress
 	}
 }
 
@@ -306,12 +325,30 @@ func NewInstallerWithResolver(resolver ToolResolver, binDir string) *Installer {
 func (i *Installer) Install(owner, repo, version string) (string, error) {
 	defer perf.Track(nil, "installer.Install")()
 
-	// Get tool from registry
-	tool, err := i.FindTool(owner, repo, version)
-	if err != nil {
-		return "", err // Error already enriched in findTool
+	// The complete check/extract/replace transaction for one installed version
+	// must be exclusive across Atmos processes. The stable sibling lock survives
+	// the atomic replacements performed by the extractor.
+	versionDir := filepath.Join(i.binDir, owner, repo, version)
+	if err := os.MkdirAll(filepath.Dir(versionDir), defaultMkdirPermissions); err != nil {
+		return "", fmt.Errorf("%w: failed to create installation parent directory: %w", ErrFileOperation, err)
 	}
-	return i.installFromTool(tool, version)
+	lock := filelock.New(versionDir + ".lock")
+	var binaryPath string
+	err := lock.WithExclusive(context.Background(), func() error {
+		// Get tool from registry while the target is protected: registry metadata
+		// can choose different entrypoints for the same installed version.
+		tool, findErr := i.FindTool(owner, repo, version)
+		if findErr != nil {
+			return findErr
+		}
+		var installErr error
+		binaryPath, installErr = i.installFromTool(tool, version)
+		return installErr
+	})
+	if err != nil {
+		return "", err
+	}
+	return binaryPath, nil
 }
 
 // Helper to handle the rest of the install logic.
@@ -399,7 +436,12 @@ type verifierCommandRunner struct {
 func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...string) error {
 	defer perf.Track(nil, "installer.verifierCommandRunner.Run")()
 
-	if path, err := exec.LookPath(name); err == nil {
+	legacyVersion := legacyVerifierVersion(name, args)
+	// Do not route legacy certificate/signature verification through a
+	// user- or Atmos-provided Cosign v3 found on PATH: v3 deprecated this path
+	// and its Rekor client can reject valid legacy evidence. Bootstrap the
+	// compatible v2 verifier below instead.
+	if path, err := exec.LookPath(name); err == nil && legacyVersion == "" {
 		return runVerifierCommand(ctx, path, args...)
 	}
 	if r.policy.VerifierInstall != verification.VerifierInstallAuto {
@@ -415,27 +457,91 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 		Signatures:      verification.PolicyDisabled, // Avoid circularity: verifying cosign's signature would itself need cosign.
 		VerifierInstall: verification.VerifierInstallPathOnly,
 	}
-	version, err := bootstrap.resolveVerifierInstallVersion(owner, repo)
-	if err != nil {
-		return fmt.Errorf("%w: resolve verifier %s version: %w", verification.ErrVerifierCommandRequired, name, err)
+	version := legacyVersion
+	if version == "" {
+		version, err := bootstrap.resolveVerifierInstallVersion(owner, repo)
+		if err != nil {
+			return fmt.Errorf("%w: resolve verifier %s version: %w", verification.ErrVerifierCommandRequired, name, err)
+		}
+		return r.runBootstrapVerifier(ctx, &verifierBootstrapRequest{name: name, version: version, owner: owner, repo: repo, installer: bootstrap, args: args})
 	}
-	binaryPath, err := bootstrap.Install(owner, repo, version)
+	return r.runBootstrapVerifier(ctx, &verifierBootstrapRequest{name: name, version: version, owner: owner, repo: repo, installer: bootstrap, args: args})
+}
+
+type verifierBootstrapRequest struct {
+	name      string
+	version   string
+	owner     string
+	repo      string
+	installer Installer
+	args      []string
+}
+
+func (r verifierCommandRunner) runBootstrapVerifier(ctx context.Context, request *verifierBootstrapRequest) error {
+	// Keeping installation and invocation in one helper makes it explicit that
+	// latest and pinned compatibility versions follow the same execution path.
+	binaryPath, err := request.installer.Install(request.owner, request.repo, request.version)
 	if err != nil {
-		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, name, err)
+		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, request.name, err)
 	}
-	if r.policy.VerifierTrust != verification.VerifierTrustDisabled {
-		if trustErr := trustVerifierBinaryFunc(binaryPath); trustErr != nil {
-			log.Warn("Could not mark downloaded verifier binary as locally trusted; the next command may fail",
-				"path", binaryPath, "error", trustErr)
+	return runTrustedVerifier(ctx, binaryPath, r.policy, func() error {
+		return runVerifierCommand(ctx, binaryPath, request.args...)
+	})
+}
+
+// legacyVerifierVersion returns a compatible bootstrap version only for
+// signature formats that Cosign v3 has deprecated. The flags are intentionally
+// detected by shape, not URL: Atmos materializes remote sidecars before
+// running Cosign, so their values are local paths by this point.
+func legacyVerifierVersion(name string, args []string) string {
+	if name != "cosign" {
+		return ""
+	}
+	var certificate, signature bool
+	for i := 0; i+1 < len(args); i++ {
+		switch args[i] {
+		case "--certificate":
+			certificate = true
+		case "--signature":
+			signature = true
 		}
 	}
-	return runVerifierCommand(ctx, binaryPath, args...)
+	if certificate && signature {
+		return legacyCosignVerifierVersion
+	}
+	return ""
 }
 
 // trustVerifierBinaryFunc indirects trustVerifierBinary so tests can observe
 // and override the platform-specific trust step without depending on
 // darwin-only behavior.
 var trustVerifierBinaryFunc = trustVerifierBinary
+
+// runTrustedVerifier serializes bootstrap verifier execution. Trust repair is
+// performed at most once per installed binary: repeatedly re-signing a shared
+// executable makes macOS re-evaluate it and can itself interrupt a running
+// verifier. The persistent sibling lock and marker coordinate independent
+// Atmos processes using the same cache.
+func runTrustedVerifier(ctx context.Context, binaryPath string, policy verification.Policy, run func() error) error {
+	return filelock.New(binaryPath+".run.lock").WithExclusive(ctx, func() error {
+		trustMarkerPath := binaryPath + ".trusted"
+		if policy.VerifierTrust != verification.VerifierTrustDisabled && !fileExists(trustMarkerPath) {
+			if trustErr := trustVerifierBinaryFunc(binaryPath); trustErr != nil {
+				log.Warn("Could not mark downloaded verifier binary as locally trusted; the next command may fail",
+					"path", binaryPath, "error", trustErr)
+			} else if markerErr := os.WriteFile(trustMarkerPath, nil, defaultFileWritePermissions); markerErr != nil {
+				log.Warn("Could not record local verifier trust state; it will be retried before the next command",
+					"path", binaryPath, "error", markerErr)
+			}
+		}
+		return run()
+	})
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
 	var lookupErrs []error
@@ -837,42 +943,40 @@ func (i *Installer) GetBinaryPaths(owner, repo, version string) []string {
 func (i *Installer) Uninstall(owner, repo, version string) error {
 	defer perf.Track(nil, "toolchain.Installer.Uninstall")()
 
-	// Try to find the binary by searching
-	binaryPath, err := i.FindBinaryPath(owner, repo, version)
-	if err != nil {
-		return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
-	}
-
-	// Get the version directory to remove. A onedir (multi-file) package's
-	// resolved binary lives nested inside a preserved .pkg tree (see the sidecar
-	// manifest in onedir.go), so walk up to the directory that actually holds
-	// the manifest/tree; a flat install's binary already lives directly in its
-	// version dir, so this is a no-op there.
-	binaryDir := versionDirFromBinaryPath(i.binDir, binaryPath)
-
-	// Remove the entire version directory, including any preserved onedir tree
-	// and manifest, so nothing is orphaned.
-	if err := os.RemoveAll(binaryDir); err != nil {
-		return fmt.Errorf("%w: failed to remove %s: %w", ErrFileOperation, binaryDir, err)
-	}
-
-	// Try to remove parent directories if they're empty
-	parentDir := filepath.Dir(binaryDir)
-	for {
-		if err := os.Remove(parentDir); err != nil {
-			// Stop when we can't remove a directory (likely not empty)
-			break
+	if version == "latest" {
+		actualVersion, err := i.ReadLatestFile(owner, repo)
+		if err != nil {
+			return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
 		}
-		parentDir = filepath.Dir(parentDir)
-
-		// Stop if we've reached the root of the bin directory
-		if parentDir == i.binDir || parentDir == "." {
-			break
-		}
+		version = actualVersion
 	}
 
-	log.Debug("Successfully uninstalled tool", logFieldOwner, owner, logFieldRepo, repo, "version", version)
-	return nil
+	versionDir := filepath.Join(i.binDir, owner, repo, version)
+	if err := os.MkdirAll(filepath.Dir(versionDir), defaultMkdirPermissions); err != nil {
+		return fmt.Errorf("%w: failed to create uninstall parent directory: %w", ErrFileOperation, err)
+	}
+	lock := filelock.New(versionDir + ".lock")
+	return lock.WithExclusive(context.Background(), func() error {
+		binaryPath, err := i.FindBinaryPath(owner, repo, version)
+		if err != nil {
+			return fmt.Errorf("%w: tool %s/%s@%s is not installed", ErrToolNotFound, owner, repo, version)
+		}
+
+		binaryDir := versionDirFromBinaryPath(i.binDir, binaryPath)
+		if err := os.RemoveAll(binaryDir); err != nil {
+			return fmt.Errorf("%w: failed to remove %s: %w", ErrFileOperation, binaryDir, err)
+		}
+
+		for parentDir := filepath.Dir(binaryDir); parentDir != i.binDir && parentDir != "."; parentDir = filepath.Dir(parentDir) {
+			if os.Remove(parentDir) != nil {
+				break
+			}
+		}
+
+		log.Debug("Successfully uninstalled tool", logFieldOwner, owner, logFieldRepo, repo, "version", version)
+		//nolint:nilerr // Parent-directory cleanup is deliberately best-effort after uninstall succeeds.
+		return nil
+	})
 }
 
 // FindBinaryPath searches for a binary with the given owner, repo, and version.
