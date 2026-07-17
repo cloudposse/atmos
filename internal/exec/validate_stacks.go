@@ -184,7 +184,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 
 	// First pass: identify all imported files
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		_, importsConfig, _, _, _, _, _, _ := ProcessYAMLConfigFile(
+		firstPassResult, err := ProcessYAMLConfigFile(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -200,11 +200,16 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			map[string]any{},
 			atmosManifestJsonSchemaFilePath,
 		)
+		// The first pass is best-effort import discovery; processing errors are
+		// reported by the second pass.
+		if err != nil {
+			continue
+		}
 
 		// Track all imported files
-		for importPath := range importsConfig {
+		for importPath := range firstPassResult.ImportsConfig {
 			importedFiles[importPath] = true
-			allImportsConfig[importPath] = importsConfig[importPath]
+			allImportsConfig[importPath] = firstPassResult.ImportsConfig[importPath]
 		}
 	}
 
@@ -228,7 +233,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		// Create a new merge context to track import chain for better error messages
 		mergeContext := m.NewMergeContext()
 
-		stackConfig, importsConfig, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+		processingResult, _, err := ProcessYAMLConfigFileWithContext(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -259,12 +264,12 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 				atmosConfig.PackerDirAbsolutePath,
 				atmosConfig.AnsibleDirAbsolutePath,
 				filePath,
-				stackConfig,
+				processingResult.DeepMergedConfig,
 				false,
 				true,
 				"",
 				map[string]map[string][]string{},
-				importsConfig,
+				processingResult.ImportsConfig,
 				false,
 			)
 			if err != nil {

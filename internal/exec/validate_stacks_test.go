@@ -91,7 +91,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	importsConfig := make(map[string]map[string]any)
 
 	// Process the YAML config file that imports conflicting configurations
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	_, err := ProcessYAMLConfigFile(
 		atmosConfig,
 		basePath,
 		filePath,

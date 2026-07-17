@@ -1130,7 +1130,7 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 		},
 	}
 
-	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1146,6 +1146,8 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 		nil,
 		"",
 	)
+	require.NoError(t, err)
+	stackConfigMap := processingResult.StackConfig
 
 	assert.Nil(t, err)
 	assert.Equal(t, 3, len(stackConfigMap))
@@ -1178,7 +1180,7 @@ func TestProcessYAMLConfigFileIgnoreMissingFiles(t *testing.T) {
 		},
 	}
 
-	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1194,6 +1196,8 @@ func TestProcessYAMLConfigFileIgnoreMissingFiles(t *testing.T) {
 		nil,
 		"",
 	)
+	require.NoError(t, err)
+	stackConfigMap := processingResult.StackConfig
 
 	assert.Nil(t, err)
 	assert.Equal(t, 0, len(stackConfigMap))
@@ -1217,7 +1221,7 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1261,7 +1265,7 @@ func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1298,7 +1302,7 @@ func TestProcessYAMLConfigFile_InvalidTemplateInImportPath(t *testing.T) {
 	// through YAML parsing unchanged and eventually reaches IsGolangTemplate.
 	atmosConfig := schema.AtmosConfiguration{}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1339,7 +1343,7 @@ func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
 		},
 	}
 
-	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1355,6 +1359,8 @@ func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
 		nil,
 		"",
 	)
+	require.NoError(t, err)
+	stackConfigMap := processingResult.StackConfig
 
 	assert.Nil(t, err)
 	assert.Equal(t, 0, len(stackConfigMap))
@@ -1378,7 +1384,7 @@ func TestProcessYAMLConfigFileInvalidManifest(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1416,7 +1422,7 @@ func TestProcessYAMLConfigFileInvalidImportTemplate(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1455,7 +1461,7 @@ func TestProcessYAMLConfigFileInvalidValidationSchemaPath(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1494,7 +1500,7 @@ func TestProcessYAMLConfigFileInvalidManifestSchema(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1532,7 +1538,7 @@ func TestProcessYAMLConfigFileInvalidGlobalOverridesSection(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1570,7 +1576,7 @@ func TestProcessYAMLConfigFileInvalidImportEnum(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1608,7 +1614,7 @@ func TestProcessYAMLConfigFileInvalidHelmfileOverridesSection(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1647,7 +1653,7 @@ func TestProcessYAMLConfigFileInvalidHelmfileUnknownOptionSchema(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	_, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1679,7 +1685,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 		},
 	}
 
-	deepMergedStackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		manifest,
@@ -1695,6 +1701,9 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 		nil,
 		"",
 	)
+	require.NoError(t, err)
+	deepMergedStackConfig := processingResult.DeepMergedConfig
+	importsConfig := processingResult.ImportsConfig
 	assert.Nil(t, err)
 
 	config, err := ProcessStackConfig(
@@ -2060,7 +2069,7 @@ func TestHierarchicalImports_ImportOrderPreservation(t *testing.T) {
 	}
 
 	// Process the stack manifest with all hierarchical imports
-	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -2076,12 +2085,8 @@ func TestHierarchicalImports_ImportOrderPreservation(t *testing.T) {
 		nil,
 		"",
 	)
-	_ = importsConfig
-	_ = stackConfigMap
-	_ = terraformInline
-	_ = terraformImports
-	_ = helmfileInline
-	_ = helmOverridesImports
+	require.NoError(t, err)
+	deepMergedConfig := processingResult.DeepMergedConfig
 
 	require.NoError(t, err)
 	require.NotNil(t, deepMergedConfig)
@@ -2151,7 +2156,7 @@ func TestHierarchicalImports_GlobPatternOrdering(t *testing.T) {
 		},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -2167,12 +2172,8 @@ func TestHierarchicalImports_GlobPatternOrdering(t *testing.T) {
 		nil,
 		"",
 	)
-	_ = importsConfig
-	_ = stackConfigMap
-	_ = terraformInline
-	_ = terraformImports
-	_ = helmfileInline
-	_ = helmOverridesImports
+	require.NoError(t, err)
+	deepMergedConfig := processingResult.DeepMergedConfig
 
 	require.NoError(t, err)
 
@@ -2214,7 +2215,7 @@ func TestHierarchicalImports_ProdStack(t *testing.T) {
 		},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -2230,12 +2231,8 @@ func TestHierarchicalImports_ProdStack(t *testing.T) {
 		nil,
 		"",
 	)
-	_ = importsConfig
-	_ = stackConfigMap
-	_ = terraformInline
-	_ = terraformImports
-	_ = helmfileInline
-	_ = helmOverridesImports
+	require.NoError(t, err)
+	deepMergedConfig := processingResult.DeepMergedConfig
 
 	require.NoError(t, err)
 
@@ -2282,7 +2279,7 @@ func TestHierarchicalImports_ComponentConfiguration(t *testing.T) {
 		},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmOverridesImports, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -2298,12 +2295,8 @@ func TestHierarchicalImports_ComponentConfiguration(t *testing.T) {
 		nil,
 		"",
 	)
-	_ = importsConfig
-	_ = stackConfigMap
-	_ = terraformInline
-	_ = terraformImports
-	_ = helmfileInline
-	_ = helmOverridesImports
+	require.NoError(t, err)
+	deepMergedConfig := processingResult.DeepMergedConfig
 
 	require.NoError(t, err)
 
@@ -2450,7 +2443,7 @@ func TestGetCachedCompiledSchema(t *testing.T) {
 		},
 	}
 
-	deepMergedStackConfig, importsConfig, stackConfigMap, terraformInline, _, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -2466,6 +2459,11 @@ func TestGetCachedCompiledSchema(t *testing.T) {
 		nil,
 		schemaPath,
 	)
+	require.NoError(t, err)
+	deepMergedStackConfig := processingResult.DeepMergedConfig
+	importsConfig := processingResult.ImportsConfig
+	stackConfigMap := processingResult.StackConfig
+	terraformInline := processingResult.TerraformOverridesInline
 	assert.NoError(t, err, "ProcessYAMLConfigFile should succeed with schema validation")
 	assert.NotNil(t, deepMergedStackConfig, "deepMergedStackConfig should not be nil")
 	assert.NotNil(t, importsConfig, "importsConfig should not be nil")
@@ -3301,7 +3299,7 @@ vars:
 		Stacks: schema.Stacks{BasePath: "stacks"},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmfileImports, mergeContext, err := ProcessYAMLConfigFileWithContext(
+	processingResult, mergeContext, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		filepath.Join(tempDir, "stacks"),
 		localStackPath,
@@ -3319,6 +3317,13 @@ vars:
 		nil,
 	)
 	require.NoError(t, err)
+	deepMergedConfig := processingResult.DeepMergedConfig
+	importsConfig := processingResult.ImportsConfig
+	stackConfigMap := processingResult.StackConfig
+	terraformInline := processingResult.TerraformOverridesInline
+	terraformImports := processingResult.TerraformOverridesImports
+	helmfileInline := processingResult.HelmfileOverridesInline
+	helmfileImports := processingResult.HelmfileOverridesImports
 	assert.NotNil(t, stackConfigMap)
 	assert.NotNil(t, terraformInline)
 	assert.NotNil(t, terraformImports)
@@ -3752,7 +3757,7 @@ vars:
 	// Process with no external context (nil) — file-extracted context only.
 	// Template processing will fail on {{ .atmos_component }} because it's not in context.
 	// The fallback should return raw content preserving ALL templates for later processing.
-	deepMergedConfig, importsConfig, stackConfigMap, tfInline, tfImports, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		tmpDir,
 		filePath,
@@ -3768,6 +3773,12 @@ vars:
 		nil,
 		"",
 	)
+	require.NoError(t, err)
+	deepMergedConfig := processingResult.DeepMergedConfig
+	importsConfig := processingResult.ImportsConfig
+	stackConfigMap := processingResult.StackConfig
+	tfInline := processingResult.TerraformOverridesInline
+	tfImports := processingResult.TerraformOverridesImports
 
 	require.NoError(t, err, "Should not fail — fallback to raw content when only file-extracted context")
 	require.NotNil(t, deepMergedConfig)
@@ -3814,7 +3825,7 @@ settings:
 	externalContext := map[string]any{
 		"some_key": "some_value",
 	}
-	result, importsConfig, stackCfg, tfInline, tfImports, _, _, err := ProcessYAMLConfigFile(
+	_, err = ProcessYAMLConfigFile(
 		&atmosConfig,
 		tmpDir,
 		filePath,
@@ -3830,12 +3841,6 @@ settings:
 		nil,
 		"",
 	)
-	_ = result
-	_ = importsConfig
-	_ = stackCfg
-	_ = tfInline
-	_ = tfImports
-
 	require.Error(t, err, "Should return error when external context is provided and template fails")
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidStackManifest))
 }
@@ -3867,7 +3872,7 @@ env:
 		},
 	}
 
-	deepMergedConfig, importsConfig, stackConfigMap, tfInline, tfImports, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		tmpDir,
 		filePath,
@@ -3883,6 +3888,12 @@ env:
 		nil,
 		"",
 	)
+	require.NoError(t, err)
+	deepMergedConfig := processingResult.DeepMergedConfig
+	importsConfig := processingResult.ImportsConfig
+	stackConfigMap := processingResult.StackConfig
+	tfInline := processingResult.TerraformOverridesInline
+	tfImports := processingResult.TerraformOverridesImports
 	_, _, _ = importsConfig, stackConfigMap, tfInline // Unused return values.
 	_ = tfImports
 
@@ -3998,7 +4009,7 @@ func TestAtmosProTemplateRegression(t *testing.T) {
 	// In 1.204, this worked because templates weren't processed during import for non-.tmpl files.
 	// In 1.205, the locals feature inadvertently triggers template processing because it adds
 	// settings/vars/env to the context, making len(context) > 0.
-	deepMergedConfig, importsConfig, stackConfigMap, tfInline, tfImports, hfInline, hfImports, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -4014,19 +4025,11 @@ func TestAtmosProTemplateRegression(t *testing.T) {
 		nil,
 		"",
 	)
-
 	// The test should pass - templates like {{ .atmos_component }} should NOT be processed
 	// during import when no external context is provided.
 	require.NoError(t, err, "Processing should not fail - templates should be deferred until component processing")
-	require.NotNil(t, deepMergedConfig)
-
-	// Suppress unused variable warnings - these are returned by ProcessYAMLConfigFile but not needed for this test.
-	_ = importsConfig
-	_ = stackConfigMap
-	_ = tfInline
-	_ = tfImports
-	_ = hfInline
-	_ = hfImports
+	require.NotNil(t, processingResult)
+	deepMergedConfig := processingResult.DeepMergedConfig
 
 	// Verify the settings.pro section exists and contains unprocessed template strings.
 	settings, ok := deepMergedConfig["settings"].(map[string]any)
@@ -4397,7 +4400,7 @@ func processImportTemplateFixture(t *testing.T, atmosConfig *schema.AtmosConfigu
 	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "import-template-context", "stacks")
 	filePath := filepath.Join(stacksBasePath, "deploy", manifest)
 
-	deepMerged, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	processingResult, err := ProcessYAMLConfigFile(
 		atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -4413,7 +4416,10 @@ func processImportTemplateFixture(t *testing.T, atmosConfig *schema.AtmosConfigu
 		nil,
 		"",
 	)
-	return deepMerged, err
+	if err != nil {
+		return nil, err
+	}
+	return processingResult.DeepMergedConfig, nil
 }
 
 // serviceCatalogVersion extracts components.terraform.service.vars.catalog_version
