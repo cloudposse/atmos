@@ -11650,6 +11650,19 @@
             }
           ]
         },
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "file_path": {
           "anyOf": [
             {
