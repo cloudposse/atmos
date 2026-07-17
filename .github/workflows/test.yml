@@ -862,6 +862,7 @@ jobs:
         uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
         with:
           github_token: ${{ github.token }}
+          tflint_version: v0.58.1
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
           flags: >-
             --enable-rule=terraform_unused_declarations
