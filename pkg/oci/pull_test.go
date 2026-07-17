@@ -154,8 +154,8 @@ func TestProcessLayerWithRetry_DoesNotRetryExpiredContext(t *testing.T) {
 
 	err := processLayerWithRetry(ctx, mockLayer, 0, t.TempDir(), testOCILayerRetryConfig())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrLayerDecompression)
-	assert.Equal(t, 1, mockLayer.uncompressedCalls)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 0, mockLayer.uncompressedCalls)
 }
 
 func testOCILayerRetryConfig() *schema.RetryConfig {

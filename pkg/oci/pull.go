@@ -119,7 +119,10 @@ func processImageWithFS(ctx context.Context, atmosConfig *schema.AtmosConfigurat
 
 	for i, layer := range layers {
 		if err := processLayerWithRetry(ctx, layer, i, destDir, defaultOCILayerRetryConfig()); err != nil {
-			return fmt.Errorf("%w %d: %s", errUtils.ErrProcessLayer, i, err)
+			return errors.Join(
+				errUtils.ErrProcessLayer,
+				fmt.Errorf("layer %d: %w", i, err),
+			)
 		}
 	}
 
@@ -257,6 +260,10 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 // layer stream. Archive extraction failures are deliberately not retried: they
 // may reflect invalid image content and can leave partial files in destDir.
 func processLayerWithRetry(ctx context.Context, layer v1.Layer, index int, destDir string, retryConfig *schema.RetryConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	attempts := 0
 	err := retry.WithPredicate(ctx, retryConfig, func() error {
 		attempts++
