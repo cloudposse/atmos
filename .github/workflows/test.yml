@@ -233,6 +233,16 @@ jobs:
         run: |
           atmos build deps
 
+      - name: Verify function parser coverage
+        if: matrix.flavor.target == 'linux'
+        run: scripts/check-function-parser-coverage.sh
+
+      - name: Verify Terraform example syntax
+        if: matrix.flavor.target == 'linux'
+        run: |
+          bash scripts/test-check-terraform-example-syntax.sh
+          scripts/check-terraform-example-syntax.sh
+
       - name: Terraform registry cache acceptance test
         timeout-minutes: 25
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)

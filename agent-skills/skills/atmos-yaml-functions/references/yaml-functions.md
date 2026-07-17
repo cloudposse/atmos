@@ -41,9 +41,9 @@ vpc_id: !terraform.state vpc {{ .stack }} vpc_id
 first_subnet: !terraform.state vpc .private_subnet_ids[0]
 username: !terraform.state config .config_map.username
 # Default value for unprovisioned components
-vpc_id: !terraform.state vpc ".vpc_id // ""default"""
+vpc_id: !terraform.state vpc .vpc_id // "default"
 # YQ string concatenation
-url: !terraform.state aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+url: !terraform.state 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
 # Bracket notation for keys with special characters
 key: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
@@ -82,9 +82,9 @@ vpc_id: !terraform.output vpc {{ .stack }} vpc_id
 first_subnet: !terraform.output vpc .private_subnet_ids[0]
 username: !terraform.output config .config_map.username
 # Default value for unprovisioned components
-vpc_id: !terraform.output vpc ".vpc_id // ""fallback-id"""
+vpc_id: !terraform.output vpc .vpc_id // "fallback-id"
 # YQ string concatenation
-url: !terraform.output aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+url: !terraform.output 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
 # Bracket notation for keys with special characters
 key: !terraform.output security '.users["github-dependabot"].access_key_id'
 ```
@@ -554,10 +554,10 @@ Several YAML functions accept YQ expressions for querying complex data:
 !terraform.output config .config_map.username
 
 # Default values (// operator)
-!terraform.output vpc ".vpc_id // ""fallback"""
+!terraform.output vpc .vpc_id // "fallback"
 
 # String concatenation
-!terraform.output db ".hostname | ""jdbc://"" + . + "":5432"""
+!terraform.output 'db .hostname | "jdbc://" + . + ":5432"'
 
 # Bracket notation for special characters
 !terraform.output security '.users["github-dependabot"].key'
@@ -565,7 +565,7 @@ Several YAML functions accept YQ expressions for querying complex data:
 
 ### Quoting Rules
 
-- Wrap the entire YQ expression in single quotes when it contains double quotes
+- Use a single-quoted YAML scalar when an expression contains readable JSON or YQ string literals
 - Use double quotes inside brackets for string keys
-- Escape double quotes inside YQ with two double quotes: `""value""`
-- Escape single quotes by doubling: `''`
+- Compact JSON such as `{"key":"value"}` may be a plain scalar; JSON containing `: ` needs YAML quoting
+- Double a single quote only when it appears inside a single-quoted YAML scalar
