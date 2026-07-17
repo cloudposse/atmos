@@ -105,12 +105,13 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, useColor boo
 	}
 
 	file := shortenFilePath(entry.File)
+	fileStr := file
+	if entry.Line > 0 {
+		fileStr = fmt.Sprintf("%s:%d", file, entry.Line)
+	}
 
 	if !useColor {
-		if entry.Line <= 0 {
-			return fmt.Sprintf("# %s [%d] %s", symbol, entry.Depth, file)
-		}
-		return fmt.Sprintf("# %s [%d] %s:%d", symbol, entry.Depth, file, entry.Line)
+		return fmt.Sprintf("# %s [%d] %s", symbol, entry.Depth, fileStr)
 	}
 
 	// Color code the depth based on inheritance level.
@@ -135,11 +136,8 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, useColor boo
 		grayStyle.Render("#"),
 		grayStyle.Render(symbol),
 		depthStyle.Render(fmt.Sprintf("[%d]", entry.Depth)),
-		grayStyle.Render(file),
+		grayStyle.Render(fileStr),
 	)
-	if entry.Line > 0 {
-		comment += fmt.Sprintf(":%d", entry.Line)
-	}
 
 	return comment
 }

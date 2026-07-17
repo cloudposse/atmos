@@ -3,7 +3,8 @@
 
 [EXPERIMENTAL]
 
-Execute a command with the authenticated identity's environment variables set. Use -- to separate Atmos flags from the command and its arguments.
+Execute a command with the authenticated identity's environment variables set.
+Use -- to separate Atmos flags from the command and its arguments.
 
 USAGE
 

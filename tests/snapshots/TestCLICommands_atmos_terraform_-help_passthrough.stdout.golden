@@ -1,6 +1,7 @@
 Usage: terraform [global options] <subcommand> [args]
 
-The available commands for execution are listed below. The primary workflow commands are given first, followed by less common or more advanced commands.
+The available commands for execution are listed below.
+The primary workflow commands are given first, followed by less common or more advanced commands.
 
 Main commands:
   init          Prepare your working directory for other commands

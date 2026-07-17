@@ -1724,7 +1724,7 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
 		return false
 	}
-	if looksLikeDataLine(trimmed) || looksLikeDataLine(nextTrimmed) {
+	if looksLikeDataLine(trimmed) || strings.HasPrefix(nextTrimmed, "export ") {
 		return false
 	}
 	// A renderer can wrap prose at the terminal width, but it must not turn
