@@ -1,14 +1,19 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
+	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/outputformat"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
+	validateReport "github.com/cloudposse/atmos/pkg/validation"
 )
 
 // TestParseConfigPaths tests the pure parseConfigPaths function.
@@ -71,11 +76,11 @@ func TestParseConfigPaths(t *testing.T) {
 // Integration test coverage exists in validate-editorconfig.yaml.
 func TestInitConfig(t *testing.T) {
 	// Call function with no assertions - test passes if no panic occurs.
-	initializeConfig(editorConfigCmd)
+	require.NoError(t, initializeConfig(editorConfigCmd))
 }
 
-// TestRunMainLogicDryRun tests the dry-run path in runMainLogic.
-func TestRunMainLogicDryRun(t *testing.T) {
+// TestRunEditorConfigDryRun tests the dry-run path in runEditorConfig.
+func TestRunEditorConfigDryRun(t *testing.T) {
 	// Save original state.
 	originalConfig := currentConfig
 	originalCliConfig := cliConfig
@@ -91,8 +96,8 @@ func TestRunMainLogicDryRun(t *testing.T) {
 	cliConfig = config.Config{DryRun: true}
 
 	// This should not panic and should list files (if any match).
-	// In dry-run mode, runMainLogic just lists files without validation.
-	runMainLogic()
+	// In dry-run mode, runEditorConfig just lists files without validation.
+	require.NoError(t, runEditorConfig(editorConfigCmd))
 }
 
 // TestCheckVersion tests the version checking logic.
@@ -147,11 +152,13 @@ func TestReplaceAtmosConfigInConfig(t *testing.T) {
 	originalTmpExclude := tmpExclude
 	originalInitEditorConfig := initEditorConfig
 	originalCliConfig := cliConfig
+	originalEditorConfigSARIF := editorConfigSARIF
 	defer func() {
 		configFilePaths = originalConfigFilePaths
 		tmpExclude = originalTmpExclude
 		initEditorConfig = originalInitEditorConfig
 		cliConfig = originalCliConfig
+		editorConfigSARIF = originalEditorConfigSARIF
 	}()
 
 	tests := []struct {
@@ -278,8 +285,99 @@ func TestReplaceAtmosConfigInConfig(t *testing.T) {
 				tt.setup(cmd)
 			}
 
-			replaceAtmosConfigInConfig(cmd, tt.atmosConfig)
+			require.NoError(t, replaceAtmosConfigInConfig(cmd, tt.atmosConfig))
 			tt.validate(t)
 		})
 	}
+}
+
+func TestConfigureEditorConfigFormat(t *testing.T) {
+	original := cliConfig
+	t.Cleanup(func() { cliConfig = original })
+
+	for _, format := range []string{"default", "gcc", "codeclimate", "github-actions"} {
+		t.Run(format, func(t *testing.T) {
+			isSARIF, err := configureEditorConfigFormat(format)
+			require.NoError(t, err)
+			assert.False(t, isSARIF)
+		})
+	}
+	isSARIF, err := configureEditorConfigFormat("sarif")
+	require.NoError(t, err)
+	assert.True(t, isSARIF)
+	isSARIF, err = configureEditorConfigFormat("rich")
+	require.NoError(t, err)
+	assert.False(t, isSARIF)
+	assert.True(t, editorConfigRich)
+	_, err = configureEditorConfigFormat("xml")
+	assert.Error(t, err)
+}
+
+func TestRequestedEditorConfigFormatPrecedence(t *testing.T) {
+	originalFormat := format
+	t.Cleanup(func() { format = originalFormat })
+	config := schema.AtmosConfiguration{Validate: schema.Validate{EditorConfig: schema.EditorConfig{Format: "gcc"}}}
+	cmd := &cobra.Command{}
+	addPersistentFlags(cmd)
+
+	t.Setenv("ATMOS_VALIDATE_FORMAT", "sarif")
+	assert.Equal(t, "sarif", requestedEditorConfigFormat(cmd, config))
+	format = "codeclimate"
+	require.NoError(t, cmd.Flags().Set("format", format))
+	assert.Equal(t, "codeclimate", requestedEditorConfigFormat(cmd, config))
+}
+
+func TestEmitEditorConfigCI(t *testing.T) {
+	originalConfig := atmosConfig
+	originalCLIConfig := cliConfig
+	originalAnnotate := editorConfigAnnotate
+	originalReportSARIF := editorConfigReportSARIF
+	t.Cleanup(func() {
+		atmosConfig = originalConfig
+		cliConfig = originalCLIConfig
+		editorConfigAnnotate = originalAnnotate
+		editorConfigReportSARIF = originalReportSARIF
+	})
+
+	resultUploads := true
+	atmosConfig = schema.AtmosConfiguration{CI: schema.CIConfig{
+		Enabled: true,
+		Results: schema.CIResultsConfig{Enabled: &resultUploads},
+	}}
+	cliConfig.Format = outputformat.Default
+	var annotations []ci.Annotation
+	var uploads []ci.SARIFReport
+	editorConfigAnnotate = func(items []ci.Annotation) error {
+		annotations = append(annotations, items...)
+		return nil
+	}
+	editorConfigReportSARIF = func(_ context.Context, report ci.SARIFReport) error {
+		uploads = append(uploads, report)
+		return nil
+	}
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("ci", false, "")
+	require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+	emitEditorConfigCI(cmd, validateReport.Report{Diagnostics: []validateReport.Diagnostic{{
+		RuleID: "editorconfig", Severity: validateReport.SeverityError,
+		Message: "wrong indentation", File: "context.tf", Line: 4,
+	}}})
+	require.Len(t, annotations, 1)
+	assert.Equal(t, 4, annotations[0].StartLine)
+	require.Len(t, uploads, 1)
+	assert.Equal(t, "validate-editorconfig", uploads[0].Category)
+	var document struct {
+		Version string `json:"version"`
+		Runs    []struct {
+			Results []struct {
+				RuleID string `json:"ruleId"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	require.NoError(t, json.Unmarshal(uploads[0].Body, &document))
+	assert.Equal(t, "2.1.0", document.Version)
+	require.Len(t, document.Runs, 1)
+	require.Len(t, document.Runs[0].Results, 1)
+	assert.Equal(t, "editorconfig", document.Runs[0].Results[0].RuleID)
 }

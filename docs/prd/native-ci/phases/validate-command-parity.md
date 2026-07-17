@@ -43,11 +43,18 @@ but today a user only sees this in local CLI text output or a CI log dump.
 1. All four `validate` subcommands support `--ci` (annotations + SARIF
    auto-upload when a CI provider is detected and `ci.enabled: true`) and
    `--format=sarif` (plain SARIF 2.1.0 file/stdout output, independent of CI).
+   `validate editorconfig` retains all vendored values (`default`, `gcc`,
+   `codeclimate`, and `github-actions`) and adds `sarif` as an Atmos-owned
+   renderer.
 2. `validate schema` and `validate stacks` annotations/SARIF results carry a
    real line + column, not just a file path.
 3. Zero behavior change to the default text-mode output of any command.
 4. Reuse existing framework primitives (`pkg/ci`, `pkg/provenance`) — no parallel
    infrastructure.
+5. Every validation entry point also supports Atmos-owned `--format=rich`, a
+   human-readable source-context renderer. The aggregate `atmos validate`
+   command renders failing validators as separate rich blocks; `validate.format:
+   rich` supplies the shared persistent default.
 
 ## Non-Goals
 
@@ -75,39 +82,67 @@ but today a user only sees this in local CLI text output or a CI log dump.
 `gojsonschema.ResultError.Field()` gives a dotted path (e.g.
 `components.terraform.vpc.vars.cidr`) but no position.
 
-Rather than write a new `yaml.Node`-walking indexer, reuse
-`pkg/provenance/yaml_parser.go`'s `buildYAMLPathMap` (already parses a single
-YAML document into a line→path map, with existing test coverage in
-`yaml_parser_arrays_test.go`/`yaml_parser_multiline_test.go`/`yaml_indent_test.go`).
-Add an exported entry point:
+**Verified live against real fixtures — two different JSON-Schema libraries are
+in play, not one.** `validate schema` uses `gojsonschema` (dotted `Field()`,
+no leading slash). `validate stacks`' manifest check
+(`internal/exec/stack_processor_utils.go:1073-1130`) uses
+`github.com/santhosh-tekuri/jsonschema` instead — confirmed by actually
+triggering it: `atmos --chdir tests/fixtures/scenarios/invalid-manifest-schema
+validate stacks` (a fixture added during this investigation — well-formed
+`components:` map, wrong-typed `name` field) prints a raw JSON dump,
+`{"valid":false,"errors":[{"keywordLocation":"/properties/name/type",
+"instanceLocation":"/name","error":"expected string, but got number"}]}` — a
+JSON-Pointer `instanceLocation`, not a `gojsonschema`-shaped message.
 
+Don't write a new `yaml.Node`-walking indexer or reuse `pkg/provenance`'s
+text-based parser — a better tool already exists and is already wired one
+line above the point that needs it: `pkg/utils/yaml_position.go`.
 ```go
-// pkg/provenance
-func LookupPosition(yamlContent []byte, path string) (line, column int, ok bool)
+type Position struct{ Line, Column int } // 1-indexed
+type PositionMap map[string]Position     // JSONPath-style key -> Position
+func ExtractYAMLPositions(node *yaml.Node, enabled bool) PositionMap
+func GetYAMLPosition(positions PositionMap, path string) Position
 ```
+It walks a `yaml.Node` tree directly and joins paths via the same
+`utils.AppendJSONPathKey`/`AppendJSONPathIndex` helpers `pkg/provenance` uses.
+`stack_processor_utils.go:1031` already calls
+`u.UnmarshalYAMLFromFileWithPositions[...]`, returning exactly this
+`PositionMap`, immediately before the `compiledSchema.Validate(dataFromJson)`
+call at line 1120 that produces the `instanceLocation`-bearing errors — the
+position data this plan needs already exists in scope at the point of failure.
 
-And wrap `gojsonschema` results:
+One catch, resolved: that function's own doc comment says "If
+`atmosConfig.TrackProvenance` is false, returns an empty position map" — gated
+today behind an unrelated, performance-motivated global flag. Don't flip that
+global default (it's used elsewhere on the hot describe/deploy path); instead,
+unconditionally enable position tracking for the duration of any `validate`
+command's run — validate commands don't care about the performance cost
+`TrackProvenance` was gated to avoid.
 
-```go
-// pkg/validator/schema_validator.go
-type ValidationError struct {
-    gojsonschema.ResultError
-    Line, Column int // 0 = unknown, falls back to file-level annotation
-}
-func ValidateYAMLSchema(schema, sourceFile string) ([]ValidationError, error)
-func ValidateYAMLContent(schema string, yamlContent []byte) ([]ValidationError, error)
-```
+Concrete plan:
+1. **`validate stacks`** (santhosh-tekuri path): after
+   `compiledSchema.Validate(dataFromJson)` fails, call
+   `utils.ExtractYAMLPositions(node, true)` for a `PositionMap`; write a small
+   JSON-Pointer → `AppendJSONPathKey`/`AppendJSONPathIndex`-format converter
+   (strip leading `/`, split on unescaped `/`, unescape `~1`→`/` and `~0`→`~`
+   per RFC 6901); look up each `instanceLocation` via `utils.GetYAMLPosition`.
+2. **`validate schema`** (gojsonschema path): same
+   `utils.ExtractYAMLPositions`/`GetYAMLPosition` machinery — no new parser,
+   no `pkg/provenance` dependency.
+   ```go
+   // pkg/validator/schema_validator.go
+   type ValidationError struct {
+       gojsonschema.ResultError
+       Line, Column int // 0 = unknown, falls back to file-level annotation
+   }
+   func ValidateYAMLSchema(schema, sourceFile string) ([]ValidationError, error)
+   func ValidateYAMLContent(schema string, yamlContent []byte) ([]ValidationError, error)
+   ```
 
-**First task, before any wiring**: verify `YAMLLineInfo.Path`'s join format
-(`pathSeparator = "."`, array indices via `utils.AppendJSONPathIndex` as
-`parent[i]`) exactly matches `gojsonschema.Field()`'s join format. A mismatch
+**First task, before any wiring**: verify `gojsonschema.Field()`'s exact join
+format matches `AppendJSONPathKey`/`AppendJSONPathIndex`'s (dot-separated
+keys, `parent[i]` index format, no separator before the bracket) — a mismatch
 silently produces `Line=0` for every array-nested error.
-
-`internal/exec/validate_stacks.go`'s manifest-schema path doesn't call
-`pkg/validator` directly — it goes through `ProcessYAMLConfigFile`/
-`ProcessStackConfig` and collapses straight to a joined string. This needs
-tracing and updating to preserve `ValidationError`, mirroring the `validate
-schema` approach.
 
 We deliberately do **not** reach for `pkg/merge`'s cross-file provenance
 tracking (`ProvenanceEntry{File, Line, Column}` — wired only into
@@ -116,6 +151,73 @@ tracking (`ProvenanceEntry{File, Line, Column}` — wired only into
 `internal/exec/validate_schema.go:printValidation` loops
 `ValidateYAMLSchema(schema, file)` per file), so there's no merged value whose
 source needs cross-file attribution.
+
+**Live-tested finding, now precisely confirmed with three dedicated
+fixtures — corrects an earlier, less precise version of this finding.**
+Three separate, purpose-built scenarios (added during this investigation)
+each isolate one failure category cleanly:
+
+- `tests/fixtures/scenarios/invalid-manifest-schema/` (two files, `dev.yaml`
+  + `staging.yaml`, each with a different JSON-Schema violation): **schema
+  violations already aggregate correctly across files today** — both files'
+  errors are reported together in one run. This corrects the earlier draft of
+  this finding, which conflated this with the case below. One real,
+  independent UX issue this surfaced: `staging.yaml`'s single mistake
+  (`settings.templates` given as a string instead of an object) produces
+  **7 near-duplicate bullets** for one conceptual error, because the schema's
+  `oneOf`/`anyOf` construct reports every failed candidate branch
+  individually (`"expected string, but got object"` right next to
+  `"expected object, but got string"` for the same location). Worth
+  deduplicating/collapsing oneOf branches in the `Diagnostic` model (PR 2) —
+  keep only the most specific leaf per `instanceLocation`, or the deepest
+  `keywordLocation`.
+- `tests/fixtures/scenarios/invalid-stack-yaml-syntax/` (two files: `dev.yaml`
+  has a raw YAML syntax error — an unterminated quoted string — and
+  `staging.yaml` is otherwise perfectly valid): a raw parse failure **aborts
+  the entire `validate stacks` run**, not just that one file — `staging.yaml`
+  is never reached or mentioned at all, confirmed by testing both files
+  present together. This is the real, more severe version of the earlier
+  "fail-fast" finding: it's not "stops at the first bad file and reports nothing
+  after," it's "one unparseable file blanks out every other file's
+  diagnostics, valid or not." Fixing this (parse failures should produce one
+  file-level `Diagnostic` and let the run continue to other files) is now
+  confirmed as necessary, not just suspected.
+- `tests/fixtures/scenarios/invalid-config-schema/` (pre-existing fixture,
+  atmos.yaml with `base_path: 12345` and `stacks.base_path: ["invalid",
+  "array"]`): this is a **third, structurally distinct failure category** —
+  it fails during Viper/mapstructure config *decoding*, which happens for
+  every Atmos command unconditionally, before `validate config`'s own
+  gojsonschema check ever runs. Confirmed live: `atmos --chdir
+  tests/fixtures/scenarios/invalid-config-schema validate config` never
+  reaches `validate config`'s own logic at all — the CLI's own bootstrap
+  fails first, the same way `atmos version` or any other command would
+  against this same broken atmos.yaml. This is structurally different from
+  stack manifests (parsed into a loosely-typed map, decode essentially never
+  fails, so type mismatches surface cleanly as gojsonschema errors) —
+  atmos.yaml's config schema is generated directly from strongly-typed Go
+  structs, so most realistic type-violations manifest as decode errors, not
+  schema errors. A genuine "atmos.yaml passes decode but fails schema" case
+  would need something Go's type system can't express but JSON-Schema can
+  (e.g. `additionalProperties: false` on a free-form map, a `pattern`
+  constraint, an enum) — none were found at first pass; worth a deeper look
+  during PR 3, but don't force a synthetic fixture for it if none exists
+  naturally.
+
+Also still true from the earlier draft: a separate, ad-hoc Go structural
+check in `pkg/component/resolver.go:292` (`"invalid components section..."`)
+fires for certain malformations *instead of* reaching the JSON-Schema
+validator at all — not JSON-Schema-based, no line/column by construction. A
+third `Diagnostic` source alongside the two JSON-Schema libraries, needing
+its own small position lookup (via `utils.ExtractYAMLPositions` against the
+`components` key).
+
+**Revised per-file/per-run contract for PR 1** (per user direction: stage
+the check, don't just show the first error): per file, produce at most one
+syntax-level `Diagnostic` (parse failure) OR proceed to schema validation and
+collect *all* violations for that file (deduplicated across `oneOf`
+branches); across a directory, one file's parse failure must not suppress
+every other file's diagnostics — continue processing remaining files and
+report all of them together in the final `Report`.
 
 ### Shared diagnostics model (PR 2)
 
@@ -184,15 +286,21 @@ Two distinct decisions, both needed, easy to conflate:
 
 ### Per-command wiring (PRs 3–6)
 
-All four commands add, via `pkg/flags` (matching `cmd/terraform/plan.go`):
+`validate component`, `validate stacks`, and `validate schema` add, via
+`pkg/flags` (matching `cmd/terraform/plan.go`):
 ```go
 flags.WithStringFlag("format", "", "text", "Output format: text, sarif"),
 flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (annotations, SARIF upload)"),
 flags.WithEnvVars("format", "ATMOS_VALIDATE_FORMAT"),
 flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 ```
-Exception: `validate editorconfig` keeps its own `--format` (`default`/`gcc`,
-unrelated semantics) — gets `--ci` only.
+
+`validate editorconfig` keeps its existing `--format` flag and expands its
+accepted values to `default|gcc|codeclimate|github-actions|sarif`; it also adds the same `--ci` flag and
+environment-variable wiring. `default` and `gcc` continue through the vendored
+editorconfig-checker renderer unchanged. `sarif` is an Atmos-owned renderer:
+do not pass it to the vendored library, whose output-format contract remains
+`default|gcc|codeclimate|github-actions`.
 
 - **`validate component`**: `ValidateWithJsonSchema`/`ValidateWithOpa`/
   `ValidateWithOpaLegacy` (`internal/exec/validate_utils.go:36/83/175`) return
@@ -206,6 +314,9 @@ unrelated semantics) — gets `--ci` only.
   Line/Column from PR 1) into an accumulated `*validate.Report`.
 - **`validate editorconfig`**: adapt the vendored checker's
   `[]er.ValidationErrors` (already has file+line) into `[]validate.Diagnostic`.
+  Render that one report as Atmos SARIF for `--format=sarif`; in `--ci` mode,
+  use the same diagnostics for line-anchored annotations and the gated SARIF
+  upload. Preserve the upstream `default` and `gcc` renderers byte-for-byte.
 
 ### Documentation (PR 7-equivalent, folded into per-command PRs or its own pass)
 
@@ -213,21 +324,56 @@ Update `website/docs/cli/commands/validate/{validate-component,validate-stacks,
 validate-schema,validate-editorconfig,usage}.mdx` and the `stack validate` alias
 doc page with new `--format`/`--ci` flag entries and CI-integration examples
 (e.g. `atmos validate schema --format=sarif > results.sarif` piped into
-`github/codeql-action/upload-sarif`). Build via `cd website && npm run build`.
+`github/codeql-action/upload-sarif`). Document editorconfig's
+all EditorConfig format values explicitly, including that `--ci` writes
+file-and-line annotations and uploads SARIF only when `ci.results.enabled` is
+set. Build via
+`cd website && npm run build`.
+
+### E2E workflow coverage (PR 3/4, alongside the Go tests)
+
+`.github/workflows/native-ci.yml` + `tests/fixtures/scenarios/native-ci-e2e/`
+already establishes the pattern for visually exercising native CI features
+against a real PR: the fixture's own README is explicit that "generic
+`format: sarif` coverage belongs in Go tests, not in this visual E2E workflow"
+— that E2E is reserved for real, end-to-end annotation/Code-Scanning behavior,
+the same way `terraform-plan`/`terraform-apply` there exercise real
+checkov/trivy scanner hooks against intentionally-insecure Terraform, not a
+synthetic SARIF fixture.
+
+`validate` needs the same treatment once `--ci`/`--format=sarif` exist (not
+before — nothing to exercise yet): a new `[native ci] validate` job in
+`native-ci.yml`, running `atmos validate stacks --ci` (and/or `validate
+schema --ci`) against a fixture with a genuine, isolated JSON-Schema
+violation — mirroring `tests/fixtures/scenarios/invalid-manifest-schema/`
+(added during this investigation: a minimal scenario with a well-formed
+`components:` map but a wrong-typed `name` field, isolated from the other
+`invalid-stacks/` fixture's mixed failure types so it actually reaches the
+`santhosh-tekuri/jsonschema` path instead of failing fast on an unrelated
+YAML syntax error first) — and asserting the resulting Code Scanning
+annotation shows up on the PR diff at the right file/line. Add this job to
+`native-ci.yml`'s `paths:` trigger alongside the existing `pkg/ci/**`/
+`pkg/hooks/**` entries once it exists. Land this as part of PR 3 or PR 4
+(whichever ships `--ci` first), not deferred to the docs-only PR 7.
 
 ## Files Changed (planned)
 
 | File | Change | Status |
 |------|--------|--------|
-| `pkg/provenance/yaml_parser.go` | Export `LookupPosition` | Planned |
-| `pkg/validator/schema_validator.go` | `ValidationError` type with Line/Column | Planned |
-| `internal/exec/validate_stacks.go` | Preserve position through manifest-schema path; return `*validate.Report` | Planned |
-| `pkg/validate/diagnostic.go` | New: `Diagnostic`, `Severity`, `Report` | Planned |
-| `pkg/validate/sarif.go` | New: SARIF 2.1.0 encoder | Planned |
+| `tests/fixtures/scenarios/invalid-manifest-schema/` | New: two isolated JSON-Schema-violation fixtures (`dev.yaml`, `staging.yaml`) — confirmed these already aggregate correctly | Done |
+| `tests/fixtures/scenarios/invalid-stack-yaml-syntax/` | New: raw YAML syntax error (`dev.yaml`) alongside an otherwise-valid file (`staging.yaml`) — confirmed the syntax error currently suppresses the valid file's result too, not just its own | Done |
+| `pkg/utils/yaml_position.go` | Reuse as-is (`ExtractYAMLPositions`/`PositionMap`/`GetYAMLPosition`) — no changes needed | N/A |
+| `internal/exec/stack_processor_utils.go` | Line/column via `formatManifestSchemaValidationErrors`+`jsonPointerToPositionKey` (done, ad hoc — see below); still needed: dedupe `oneOf` cascades, and stop one file's parse failure from suppressing every other file's diagnostics | Partially done |
+| `pkg/validator/schema_validator.go` | `ValidationError` type with Line/Column via `pkg/utils/yaml_position.go` | Planned |
+| `pkg/component/resolver.go` | Third `Diagnostic` source (ad-hoc "components must be a map" check) — needs its own small position lookup | Planned |
+| `internal/exec/validate_stacks.go` | Stage YAML-parse check before schema check per file; return `*validate.Report` | Planned |
+| `pkg/validation/diagnostic.go` | New: `Diagnostic`, `Severity`, `Report` | Planned |
+| `pkg/validation/sarif.go` | New: SARIF 2.1.0 encoder | Planned |
 | `pkg/ci/mode.go` (or similar) | New: `ModeEnabled`, `HooksEnabled` | Planned |
 | `cmd/terraform/utils.go` | `terraformCIModeEnabled` → thin wrapper over `ci.ModeEnabled` | Planned |
 | `internal/exec/validate_utils.go` | `ValidateWithJsonSchema`/`ValidateWithOpa*` return violation detail | Planned |
-| `cmd/validate_schema.go`, `cmd/validate_stacks.go`, `cmd/validate_component.go`, `cmd/validate_editorconfig.go`, `cmd/stack/validate.go` | `--format`/`--ci` flags + dispatch | Planned |
+| `.github/workflows/native-ci.yml` | New `[native ci] validate` job (PR 3/4) | Planned |
+| `cmd/validate_schema.go`, `cmd/validate_stacks.go`, `cmd/validate_component.go`, `cmd/validate_editorconfig.go`, `cmd/stack/validate.go` | `--format`/`--ci` flags + dispatch; editorconfig supports all existing vendored formats plus `sarif` | Planned |
 | `website/docs/cli/commands/validate/*.mdx` | Flag docs + CI examples | Planned |
 
 ## Verification
@@ -235,8 +381,14 @@ doc page with new `--format`/`--ci` flag entries and CI-integration examples
 - `go build ./... && atmos test` after each PR.
 - `atmos validate schema --format=sarif` against this repo's own `atmos.yaml` →
   valid SARIF 2.1.0.
+- `atmos validate editorconfig --format=gcc` preserves the existing GCC output;
+  `atmos validate editorconfig --format=sarif` emits valid SARIF 2.1.0 from the
+  same file-and-line diagnostics.
 - `GITHUB_ACTIONS=true GITHUB_REPOSITORY=... atmos validate stacks --ci` against
   a stack with a known bad manifest → `::error file=...,line=...::` on stderr,
   gated correctly by `ci.enabled`.
+- `GITHUB_ACTIONS=true GITHUB_REPOSITORY=... atmos validate editorconfig --ci`
+  against a known formatting violation → file-and-line annotation plus gated
+  SARIF upload, both derived from the same diagnostic report.
 - `atmos test --full` before opening each PR; `atmos lint --changed` before every
   commit.

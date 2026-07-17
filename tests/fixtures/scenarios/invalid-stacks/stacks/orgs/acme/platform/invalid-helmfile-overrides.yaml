@@ -4,4 +4,4 @@ vars:
   stage: invalid-helmfile-overrides
 
 helmfile:
-  overrides: []
+  unknown_option: true

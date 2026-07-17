@@ -13,7 +13,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/validation"
 	"github.com/cloudposse/atmos/pkg/validator"
+	"gopkg.in/yaml.v3"
 )
 
 var ErrInvalidYAML = fmt.Errorf("invalid YAML")
@@ -117,6 +120,52 @@ func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string
 	)
 
 	return err
+}
+
+// ValidateAtmosSchemaReport collects schema findings without writing terminal
+// output. It is used by the rich renderer; the established spinner/log path
+// above remains the default text behavior.
+func (av *atmosValidatorExecutor) ValidateAtmosSchemaReport(sourceKey string, customSchema string) (validation.Report, error) {
+	schemas, err := av.buildValidationSchema(sourceKey, customSchema)
+	if err != nil {
+		return validation.Report{}, err
+	}
+	report := validation.Report{}
+	for schemaSource, files := range schemas {
+		for _, file := range files {
+			errors, validateErr := av.validator.ValidateYAMLSchema(schemaSource, file)
+			if validateErr != nil {
+				return validation.Report{}, validateErr
+			}
+			report.FilesChecked++
+			positions := schemaFilePositions(file)
+			for _, resultError := range errors {
+				position := u.GetYAMLPosition(positions, resultError.Field())
+				report.Diagnostics = append(report.Diagnostics, validation.Diagnostic{
+					Source:   "schema",
+					RuleID:   resultError.Type(),
+					Severity: validation.SeverityError,
+					Message:  resultError.Description(),
+					File:     displayPath(file),
+					Line:     position.Line,
+					Column:   position.Column,
+				})
+			}
+		}
+	}
+	return report, nil
+}
+
+func schemaFilePositions(file string) u.PositionMap {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	var node yaml.Node
+	if err := yaml.Unmarshal(content, &node); err != nil {
+		return nil
+	}
+	return u.ExtractYAMLPositions(&node, true)
 }
 
 // schemaKeys returns the configured `schemas:` keys plus the built-in config

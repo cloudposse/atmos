@@ -1552,9 +1552,9 @@ func TestProcessYAMLConfigFileInvalidGlobalOverridesSection(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestProcessYAMLConfigFileInvalidTerraformOverridesSection(t *testing.T) {
+func TestProcessYAMLConfigFileInvalidImportEnum(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
-	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/invalid-terraform-overrides.yaml"
+	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/invalid-import-enum.yaml"
 
 	atmosConfig := schema.AtmosConfiguration{
 		Templates: schema.Templates{

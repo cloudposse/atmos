@@ -220,9 +220,15 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 	}
 
 	// Negative: a schema-invalid manifest must be rejected by JSON Schema validation.
+	// Assert on the specific type-mismatch JSON Schema reports (not just any
+	// failure) — the ad-hoc structural parser (e.g. "invalid vars section",
+	// "invalid components section") never produces this message, so its
+	// presence proves the failure came from schema validation.
 	err := validate(invalidManifest)
 	require.Error(t, err, "schema-invalid manifest must fail validation")
-	require.Contains(t, err.Error(), "JSON Schema validation",
+	require.Contains(t, err.Error(), "settings.templates",
+		"failure must come from JSON Schema validation, not the structural parser")
+	require.Contains(t, err.Error(), "expected object, but got string",
 		"failure must come from JSON Schema validation, not the structural parser")
 
 	// Positive control: a valid manifest must pass — proving the failure above is the

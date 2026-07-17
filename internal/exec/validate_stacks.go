@@ -72,6 +72,17 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 // ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ValidateStacks")()
+	// A project can use Atmos strictly for CLI configuration, components, or
+	// workflows and legitimately have no stacks directory. Validation is a
+	// no-op in that case; a missing imported manifest is still reported later
+	// once a stack base directory exists and manifests are discovered.
+	if atmosConfig.StacksBaseAbsolutePath != "" {
+		if _, err := os.Stat(atmosConfig.StacksBaseAbsolutePath); os.IsNotExist(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+	}
 
 	var validationErrorMessages []string
 

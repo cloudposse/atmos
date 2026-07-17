@@ -325,6 +325,10 @@ func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string 
 }
 
 type Validate struct {
+	// Format is the project-wide default for human validation output. Individual
+	// validators may provide a more specific setting (for example
+	// validate.editorconfig.format).
+	Format       string       `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format" validate:"omitempty,oneof=text rich"`
 	EditorConfig EditorConfig `yaml:"editorconfig,omitempty" json:"editorconfig,omitempty" mapstructure:"editorconfig"`
 }
 

@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"errors"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.
@@ -49,38 +50,61 @@ own ` + "`" + `schemas.config` + "`" + ` entry to override or disable it.
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration. Schema validation does not require a
-		// stacks directory — atmos.yaml (and its fragments) must be validatable
-		// in repositories that only carry CLI configuration.
-		checkAtmosConfig(WithStackValidation(false))
-
-		schema := ""
-		key := ""
-		if len(args) > 0 {
-			key = args[0] // Use provided argument
-		}
-
-		if cmd.Flags().Changed("schemas-atmos-manifest") {
-			schema, _ = cmd.Flags().GetString("schemas-atmos-manifest")
-		}
-
-		if key == "" && schema != "" {
-			log.Error("key not provided for the schema to be used")
-			errUtils.OsExit(1)
-		}
-
-		if err := exec.NewAtmosValidatorExecutor(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
-			if errors.Is(err, exec.ErrInvalidYAML) {
-				errUtils.OsExit(1)
-			}
-			return err
-		}
-
-		return nil
+		return runValidateSchema(cmd, args)
 	},
+}
+
+// runValidateSchema executes schema validation without terminating the process.
+// It can therefore be composed by aggregate validators.
+func runValidateSchema(cmd *cobra.Command, args []string) error {
+	// Schema validation does not require a stacks directory — atmos.yaml (and its
+	// fragments) must be validatable in repositories that only carry CLI configuration.
+	if err := checkAtmosConfigE(WithStackValidation(false)); err != nil {
+		return err
+	}
+
+	schema := ""
+	key := ""
+	if len(args) > 0 {
+		key = args[0]
+	}
+
+	if cmd.Flags().Changed("schemas-atmos-manifest") {
+		schema, _ = cmd.Flags().GetString("schemas-atmos-manifest")
+	}
+
+	if key == "" && schema != "" {
+		return errUtils.ErrValidationFailed
+	}
+
+	executor := exec.NewAtmosValidatorExecutor(&atmosConfig)
+	format, err := validationFormat(cmd)
+	if err != nil {
+		return err
+	}
+	if format != validateFormatRich {
+		return executor.ExecuteAtmosValidateSchemaCmd(key, schema)
+	}
+	report, err := executor.ValidateAtmosSchemaReport(key, schema)
+	if err != nil {
+		return err
+	}
+	if !report.HasErrors() {
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), "✓ All YAML schemas validated successfully")
+		return err
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), validation.Rich(report, validation.DefaultRichOptions(root))); err != nil {
+		return err
+	}
+	return errUtils.ExitCodeError{Code: 1, Silent: true}
 }
 
 func init() {
 	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
+	addValidationFormatFlag(ValidateSchemaCmd)
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }

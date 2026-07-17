@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
@@ -40,6 +41,12 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return "", "", err
+	}
+	if outputFormat, formatErr := cmd.Flags().GetString("format"); formatErr == nil && strings.EqualFold(outputFormat, "rich") {
+		// Provenance is enabled only for the rich invocation. It lets the command
+		// map JSON Schema fields back to the effective stack value without
+		// changing normal component-validation cost or behavior.
+		atmosConfig.TrackProvenance = true
 	}
 
 	if len(args) != 1 {

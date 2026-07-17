@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -11,41 +12,44 @@ import (
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/utils"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/validation"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	validateReport "github.com/cloudposse/atmos/pkg/validation"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
 var (
 	// defaultConfigFileNames determines the file names where the config is located
-	defaultConfigFileNames = []string{".editorconfig", ".editorconfig-checker.json", ".ecrc"}
-	initEditorConfig       bool
-	currentConfig          *config.Config
-	cliConfig              config.Config
-	configFilePaths        []string
-	tmpExclude             string
-	format                 string
+	defaultConfigFileNames  = []string{".editorconfig", ".editorconfig-checker.json", ".ecrc"}
+	initEditorConfig        bool
+	currentConfig           *config.Config
+	cliConfig               config.Config
+	configFilePaths         []string
+	tmpExclude              string
+	format                  string
+	editorConfigSARIF       bool
+	editorConfigRich        bool
+	editorConfigAnnotate    = ci.Annotate
+	editorConfigReportSARIF = ci.ReportSARIF
 )
 
 var editorConfigCmd *cobra.Command = &cobra.Command{
 	Use:   "editorconfig",
 	Short: "Validate all files against the EditorConfig",
 	Long:  "Validate all files against the project's EditorConfig rules",
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		initializeConfig(cmd)
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
 			showUsageAndExit(cmd, args)
 		}
-		runMainLogic()
-		return nil
+		return runEditorConfig(cmd)
 	},
 }
 
@@ -62,18 +66,26 @@ func parseConfigPaths(cmd *cobra.Command) []string {
 }
 
 // initializeConfig breaks the initialization cycle by separating the config setup.
-func initializeConfig(cmd *cobra.Command) {
-	replaceAtmosConfigInConfig(cmd, atmosConfig)
+func initializeConfig(cmd *cobra.Command) error {
+	editorConfigSARIF = false
+	editorConfigRich = false
+	configFilePaths = nil
+	if err := replaceAtmosConfigInConfig(cmd, atmosConfig); err != nil {
+		return err
+	}
 
-	configFilePaths = parseConfigPaths(cmd)
-	configPaths := configFilePaths
+	configPaths := parseConfigPaths(cmd)
+	if !cmd.Flags().Changed("config") && len(configFilePaths) > 0 {
+		configPaths = configFilePaths
+	}
+	configFilePaths = configPaths
 
 	currentConfig = config.NewConfig(configPaths)
 
 	if initEditorConfig {
 		err := currentConfig.Save(version.Version)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return err
 		}
 	}
 
@@ -86,9 +98,11 @@ func initializeConfig(cmd *cobra.Command) {
 	}
 
 	currentConfig.Merge(cliConfig)
+
+	return nil
 }
 
-func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) {
+func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) error {
 	if !cmd.Flags().Changed("config") && len(atmosConfig.Validate.EditorConfig.ConfigFilePaths) > 0 {
 		configFilePaths = atmosConfig.Validate.EditorConfig.ConfigFilePaths
 	}
@@ -104,18 +118,13 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("dry-run") && atmosConfig.Validate.EditorConfig.DryRun {
 		cliConfig.DryRun = atmosConfig.Validate.EditorConfig.DryRun
 	}
-	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
-		format := outputformat.OutputFormat(atmosConfig.Validate.EditorConfig.Format)
-		if ok := format.IsValid(); !ok {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
+	requestedFormat := requestedEditorConfigFormat(cmd, atmosConfig)
+	if requestedFormat != "" {
+		isSARIF, err := configureEditorConfigFormat(requestedFormat)
+		if err != nil {
+			return err
 		}
-		cliConfig.Format = format
-	} else if cmd.Flags().Changed("format") {
-		format := outputformat.OutputFormat(format)
-		if ok := format.IsValid(); !ok {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
-		}
-		cliConfig.Format = format
+		editorConfigSARIF = isSARIF
 	}
 	// Set verbose mode if log level is Trace
 	traceFromConfig := !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == u.LogLevelTrace
@@ -153,26 +162,114 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("disable-max-line-length") && atmosConfig.Validate.EditorConfig.DisableMaxLineLength {
 		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.DisableMaxLineLength
 	}
+
+	return nil
 }
 
-// runMainLogic contains the main logic.
-func runMainLogic() {
+func requestedEditorConfigFormat(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) string {
+	if aggregateValidationFormat != "" {
+		return aggregateValidationFormat
+	}
+	if cmd.Flags().Changed("format") {
+		return format
+	}
+	if value := os.Getenv("ATMOS_VALIDATE_FORMAT"); value != "" {
+		return value
+	}
+	if value := atmosConfig.Validate.EditorConfig.Format; value != "" {
+		return value
+	}
+	return atmosConfig.Validate.Format
+}
+
+func configureEditorConfigFormat(value string) (bool, error) {
+	editorConfigRich = false
+	if strings.EqualFold(value, "sarif") {
+		// The vendored checker does not know SARIF. Keep its config on a valid
+		// value while Atmos renders the collected diagnostics itself.
+		cliConfig.Format = outputformat.Default
+		return true, nil
+	}
+	if strings.EqualFold(value, "rich") {
+		// Rich is also Atmos-owned so it never reaches the vendored renderer.
+		cliConfig.Format = outputformat.Default
+		editorConfigRich = true
+		return false, nil
+	}
+
+	upstreamFormat := outputformat.OutputFormat(value)
+	if !upstreamFormat.IsValid() {
+		return false, fmt.Errorf("%v is not a valid format choose from the following: %v, sarif, rich", value, outputformat.GetArgumentChoiceText())
+	}
+	cliConfig.Format = upstreamFormat
+	return false, nil
+}
+
+// runEditorConfig executes EditorConfig validation without terminating the process.
+// It can therefore be composed by aggregate validators.
+func runEditorConfig(cmd *cobra.Command) error {
+	if err := initializeConfig(cmd); err != nil {
+		return err
+	}
+
 	config := *currentConfig
 	log.Debug(config.String())
 	log.Debug("Excluding", "regex", config.GetExcludesAsRegularExpression())
 
 	if err := checkVersion(config); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 
 	// Dry-run mode - just list files without spinner.
 	if config.DryRun {
 		filePaths, err := files.GetFiles(config)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 		for _, file := range filePaths {
 			log.Info(file)
 		}
-		return
+		return nil
+	}
+
+	if editorConfigSARIF || editorConfigRich {
+		validationErrors, err := validateEditorConfig(config)
+		if err != nil && len(validationErrors) == 0 {
+			ui.Error(fmt.Sprintf("Validation failed: %v", err))
+			return err
+		}
+		report := editorConfigDiagnostics(validationErrors)
+		emitEditorConfigCI(cmd, report)
+		if editorConfigRich {
+			root, rootErr := os.Getwd()
+			if rootErr != nil {
+				return rootErr
+			}
+			output := validateReport.Rich(report, validateReport.DefaultRichOptions(root))
+			if output != "" {
+				if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), output); writeErr != nil {
+					return writeErr
+				}
+			} else if err == nil {
+				if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), "✓ EditorConfig validation passed"); writeErr != nil {
+					return writeErr
+				}
+			}
+		} else {
+			body, marshalErr := report.SARIF()
+			if marshalErr != nil {
+				ui.Error(fmt.Sprintf("Failed to render SARIF: %v", marshalErr))
+				return marshalErr
+			}
+			if _, writeErr := cmd.OutOrStdout().Write(body); writeErr != nil {
+				ui.Error(fmt.Sprintf("Failed to write SARIF: %v", writeErr))
+				return writeErr
+			}
+		}
+		if editorConfigRich && err != nil {
+			return errUtils.ExitCodeError{Code: 1, Silent: true}
+		}
+		return err
 	}
 
 	var filePaths []string
@@ -182,10 +279,10 @@ func runMainLogic() {
 		"Validating EditorConfig...",
 		"EditorConfig validation passed",
 		func() error {
-			var err error
-			filePaths, err = files.GetFiles(config)
-			if err != nil {
-				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, err)
+			var validationErr error
+			filePaths, validationErr = files.GetFiles(config)
+			if validationErr != nil {
+				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, validationErr)
 			}
 			validationErrors = validation.ProcessValidation(filePaths, config)
 			log.Debug("Files checked", "count", len(filePaths))
@@ -195,13 +292,77 @@ func runMainLogic() {
 			return nil
 		},
 	)
+	report := editorConfigDiagnostics(validationErrors)
+	emitEditorConfigCI(cmd, report)
 	if err != nil {
 		if len(validationErrors) > 0 {
 			er.PrintErrors(validationErrors, config)
 		} else {
 			ui.Error(fmt.Sprintf("Validation failed: %v", err))
 		}
-		errUtils.Exit(1)
+		return err
+	}
+
+	return nil
+}
+
+func validateEditorConfig(config config.Config) ([]er.ValidationErrors, error) {
+	filePaths, err := files.GetFiles(config)
+	if err != nil {
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, err)
+	}
+	validationErrors := validation.ProcessValidation(filePaths, config)
+	log.Debug("Files checked", "count", len(filePaths))
+	if er.GetErrorCount(validationErrors) != 0 {
+		return validationErrors, errUtils.ErrEditorConfigValidationFailed
+	}
+	return validationErrors, nil
+}
+
+func editorConfigDiagnostics(validationErrors []er.ValidationErrors) validateReport.Report {
+	diagnostics := make([]validateReport.Diagnostic, 0, er.GetErrorCount(validationErrors))
+	for _, fileErrors := range validationErrors {
+		path := fileErrors.FilePath
+		if relativePath, err := files.GetRelativePath(path); err == nil {
+			path = relativePath
+		}
+		for _, validationError := range fileErrors.Errors {
+			line := validationError.LineNumber
+			if line < 0 {
+				line = 0
+			}
+			diagnostics = append(diagnostics, validateReport.Diagnostic{
+				Source:   "editorconfig",
+				RuleID:   "editorconfig",
+				Severity: validateReport.SeverityError,
+				Message:  validationError.Message.Error(),
+				File:     path,
+				Line:     line,
+				EndLine:  line + validationError.AdditionalIdenticalErrorCount,
+			})
+		}
+	}
+	return validateReport.Report{Diagnostics: diagnostics}
+}
+
+func emitEditorConfigCI(cmd *cobra.Command, report validateReport.Report) {
+	if !ci.ModeEnabled(cmd) {
+		return
+	}
+	if ci.AnnotationsEnabled(&atmosConfig) && cliConfig.Format != outputformat.GithubActions {
+		if err := editorConfigAnnotate(report.ToAnnotations()); err != nil {
+			log.Debug("Failed to emit EditorConfig CI annotations", "error", err)
+		}
+	}
+	if ci.ResultsEnabled(&atmosConfig) {
+		body, err := report.SARIF()
+		if err != nil {
+			log.Debug("Failed to render EditorConfig SARIF for CI upload", "error", err)
+			return
+		}
+		if err := editorConfigReportSARIF(cmd.Context(), ci.SARIFReport{Body: body, Category: "validate-editorconfig"}); err != nil {
+			log.Debug("Failed to upload EditorConfig SARIF", "error", err)
+		}
 	}
 }
 
@@ -225,7 +386,8 @@ func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&cliConfig.IgnoreDefaults, "ignore-defaults", false, "Ignore default excludes")
 	cmd.PersistentFlags().BoolVar(&cliConfig.DryRun, "dry-run", false, "Show which files would be checked")
 	cmd.PersistentFlags().BoolVar(&cliConfig.ShowVersion, "version", false, "Print the version number")
-	cmd.PersistentFlags().StringVar(&format, "format", "default", "Specify the output format: default, gcc")
+	cmd.PersistentFlags().StringVar(&format, "format", "default", "Specify the output format: default, gcc, codeclimate, github-actions, sarif, rich")
+	cmd.PersistentFlags().Bool("ci", false, "Enable CI mode for automated pipelines (annotations, SARIF upload)")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.TrimTrailingWhitespace, "disable-trim-trailing-whitespace", false, "Disable trailing whitespace check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.EndOfLine, "disable-end-of-line", false, "Disable end-of-line check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.InsertFinalNewline, "disable-insert-final-newline", false, "Disable final newline check")
@@ -237,6 +399,12 @@ func addPersistentFlags(cmd *cobra.Command) {
 func init() {
 	// Add flags
 	addPersistentFlags(editorConfigCmd)
+	if err := viper.BindPFlag("ci", editorConfigCmd.PersistentFlags().Lookup("ci")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindEnv("ci", "ATMOS_CI", "CI"); err != nil {
+		panic(err)
+	}
 	// Add command
 	validateCmd.AddCommand(editorConfigCmd)
 }

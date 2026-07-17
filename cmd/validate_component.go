@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -9,6 +13,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 // ComponentResolver handles resolving component paths to component names.
@@ -107,6 +112,10 @@ var validateComponentCmd = &cobra.Command{
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
+		outputFormat, err := validationFormat(cmd)
+		if err != nil {
+			return err
+		}
 
 		// Handle path-based component resolution
 		if len(args) > 0 {
@@ -125,8 +134,22 @@ var validateComponentCmd = &cobra.Command{
 			args[0] = resolvedComponent
 		}
 
-		_, _, err := e.ExecuteValidateComponentCmd(cmd, args)
+		_, _, err = e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
+			if outputFormat == validateFormatRich {
+				root, rootErr := os.Getwd()
+				if rootErr != nil {
+					return rootErr
+				}
+				report := e.ComponentValidationReport(args[0], err)
+				if len(report.Diagnostics) == 1 && report.Diagnostics[0].File == "" {
+					report.Diagnostics[0].File = componentStackSource(cmd, args, root)
+				}
+				if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), validation.Rich(report, validation.DefaultRichOptions(root))); writeErr != nil {
+					return writeErr
+				}
+				return errUtils.ExitCodeError{Code: 1, Silent: true}
+			}
 			return err
 		}
 
@@ -142,6 +165,7 @@ func init() {
 	validateComponentCmd.PersistentFlags().String("schema-type", "", "Validate the specified component configuration in the given stack using the provided schema file path and schema type (`jsonschema` or `opa`).")
 	validateComponentCmd.PersistentFlags().StringSlice("module-paths", nil, "Specify the paths to OPA policy modules or catalogs used for validating the component configuration in the given stack.")
 	validateComponentCmd.PersistentFlags().Int("timeout", 0, "Validation timeout in seconds")
+	addValidationFormatFlag(validateComponentCmd)
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
@@ -149,4 +173,27 @@ func init() {
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)
+}
+
+// componentStackSource supplies a stable file-level anchor until the component
+// validator exposes field-level source provenance. It prefers an exact stack
+// manifest name and deliberately leaves the line unknown rather than guessing.
+func componentStackSource(cmd *cobra.Command, args []string, root string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	stack, _ := cmd.Flags().GetString("stack")
+	if stack == "" {
+		return ""
+	}
+	for _, extension := range []string{".yaml", ".yml"} {
+		candidate := filepath.Join(atmosConfig.StacksBaseAbsolutePath, stack+extension)
+		if _, err := os.Stat(candidate); err == nil {
+			if relative, relErr := filepath.Rel(root, candidate); relErr == nil {
+				return relative
+			}
+			return candidate
+		}
+	}
+	return ""
 }

@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"hash/fnv"
@@ -863,6 +862,166 @@ type importFileResult struct {
 	err                          error
 }
 
+// jsonPointerToPositionKey converts a JSON Pointer (RFC 6901, e.g.
+// "/components/terraform/0/vars") as returned by
+// jsonschema.BasicError.InstanceLocation into the dot/bracket path format
+// u.PositionMap keys use (built via u.AppendJSONPathKey/AppendJSONPathIndex),
+// so a position lookup by path succeeds.
+func jsonPointerToPositionKey(pointer string) string {
+	if pointer == "" {
+		return ""
+	}
+	segments := strings.Split(strings.TrimPrefix(pointer, "/"), "/")
+	path := ""
+	for _, seg := range segments {
+		seg = strings.ReplaceAll(seg, "~1", "/")
+		seg = strings.ReplaceAll(seg, "~0", "~")
+		if idx, err := strconv.Atoi(seg); err == nil {
+			path = u.AppendJSONPathIndex(path, idx)
+			continue
+		}
+		path = u.AppendJSONPathKey(path, seg)
+	}
+	return path
+}
+
+// isSchemaBranchWrapperMessage reports whether a jsonschema.BasicError.Error
+// is a structural "one of these sub-schemas should have matched" wrapper
+// (from oneOf/anyOf/$ref indirection) rather than an actionable leaf
+// violation. oneOf/anyOf constructs report every failed candidate branch, so
+// a single mistake (e.g. a wrong type) can otherwise produce many redundant
+// lines at the same location; dropping wrapper messages keeps only the
+// specific ones (e.g. "expected object, but got string").
+func isSchemaBranchWrapperMessage(msg string) bool {
+	return strings.HasPrefix(msg, "doesn't validate with") ||
+		msg == "oneOf failed" ||
+		msg == "anyOf failed"
+}
+
+// formatManifestSchemaValidationErrors renders a jsonschema.ValidationError as
+// a Markdown list of GCC-style diagnostic lines ("file:line:col: error:
+// path: message" per item), matching the convention `atmos validate
+// editorconfig --format=gcc` already uses, instead of a raw BasicOutput JSON
+// dump. BasicOutput's first entry is always a generic "doesn't validate with
+// <schema>" wrapper around the whole document (empty KeywordLocation);
+// wrapper entries throughout (including nested oneOf/anyOf branch failures)
+// are dropped in favor of the specific leaf violations.
+//
+// Markdown list syntax (not plain lines) is deliberate: the CLI's error box
+// renders this as CommonMark, which treats a lone "\n" between plain
+// paragraph text as a soft break (collapsed to a space) rather than a line
+// break -- only list items reliably keep one diagnostic per rendered line.
+// The leading "\n" pushes every item, including the first, onto its own
+// line rather than running into the box's own "Error:" label inline.
+func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema.ValidationError, positions u.PositionMap) string {
+	type typeAlternatives struct {
+		path        string
+		position    u.Position
+		got         string
+		expected    []string
+		expectedSet map[string]struct{}
+	}
+	type item struct {
+		path     string
+		position u.Position
+		message  string
+		types    *typeAlternatives
+	}
+
+	items := make([]item, 0)
+	alternatives := make(map[string]*typeAlternatives)
+	for _, basicErr := range e.BasicOutput().Errors {
+		if basicErr.KeywordLocation == "" || isSchemaBranchWrapperMessage(basicErr.Error) {
+			continue
+		}
+		path := jsonPointerToPositionKey(basicErr.InstanceLocation)
+		if path == "" {
+			path = "(root)"
+		}
+		pos := u.GetYAMLPosition(positions, jsonPointerToPositionKey(basicErr.InstanceLocation))
+		if expected, got, ok := schemaTypeAlternative(basicErr.Error); ok {
+			key := path + "\x00" + got
+			alternative := alternatives[key]
+			if alternative == nil {
+				alternative = &typeAlternatives{
+					path: path, position: pos, got: got,
+					expectedSet: make(map[string]struct{}),
+				}
+				alternatives[key] = alternative
+				items = append(items, item{types: alternative})
+			}
+			if _, seen := alternative.expectedSet[expected]; !seen {
+				alternative.expectedSet[expected] = struct{}{}
+				alternative.expected = append(alternative.expected, expected)
+			}
+			continue
+		}
+		items = append(items, item{path: path, position: pos, message: basicErr.Error})
+	}
+	if len(items) == 0 {
+		return fmt.Sprintf("\n- %s: error: %s", relativeFilePath, e.Error())
+	}
+	hasDescendant := func(current int, path string) bool {
+		for index, candidate := range items {
+			if index == current {
+				continue
+			}
+			candidatePath := candidate.path
+			if candidate.types != nil {
+				candidatePath = candidate.types.path
+			}
+			if strings.HasPrefix(candidatePath, path+".") || strings.HasPrefix(candidatePath, path+"[") {
+				return true
+			}
+		}
+		return false
+	}
+	hasSpecificFinding := func(current int, path string) bool {
+		for index, candidate := range items {
+			if index != current && candidate.types == nil && candidate.path == path {
+				return true
+			}
+		}
+		return false
+	}
+	rendered := make([]string, 0, len(items))
+	for index, item := range items {
+		if item.types != nil {
+			// A type mismatch from a sibling oneOf branch is only a cascade when
+			// another branch explains the same value (for example, a string that
+			// misses the !include pattern) or identifies a more-specific child
+			// finding. Keep the type diagnostic when every branch failed only on
+			// type, since then it is the actionable error.
+			if hasSpecificFinding(index, item.types.path) || hasDescendant(index, item.types.path) {
+				continue
+			}
+			message := fmt.Sprintf("expected %s, but got %s", strings.Join(item.types.expected, " or "), item.types.got)
+			rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.types.position.Line, item.types.position.Column, item.types.path, message))
+			continue
+		}
+		rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.position.Line, item.position.Column, item.path, item.message))
+	}
+	return "\n" + strings.Join(rendered, "\n")
+}
+
+// schemaTypeAlternative identifies equivalent oneOf type branches. A value
+// such as an array can fail both `type: object` and `type: string`; rendering
+// each branch separately adds noise without adding an actionable finding.
+func schemaTypeAlternative(message string) (expected string, got string, ok bool) {
+	const (
+		prefix = "expected "
+		marker = ", but got "
+	)
+	if !strings.HasPrefix(message, prefix) {
+		return "", "", false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(message, prefix), marker, 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
 // processYAMLConfigFileWithContextInternal is the internal recursive implementation.
 //
 //nolint:gocognit,revive,cyclop,funlen,nestif
@@ -1120,11 +1279,21 @@ func processYAMLConfigFileWithContextInternal(
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
 			switch e := err.(type) {
 			case *jsonschema.ValidationError:
-				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
-				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+				// Position lookup is best-effort: re-parse the manifest content
+				// into a yaml.Node here (independent of the `positions` above,
+				// which is only populated when atmosConfig.TrackProvenance is
+				// on) so line/column are always available for a validation
+				// failure, regardless of that unrelated global setting.
+				var manifestNode yaml.Node
+				var errorPositions u.PositionMap
+				if yaml.Unmarshal([]byte(stackManifestTemplatesProcessed), &manifestNode) == nil {
+					errorPositions = u.ExtractYAMLPositions(&manifestNode, true)
 				}
-				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+				// GCC-style lines already carry the file path per violation, so
+				// no outer "validation error in the file '%s'" wrapper sentence
+				// is needed here (unlike the setup-error cases below, which are
+				// each a single, file-level problem).
+				return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(formatManifestSchemaValidationErrors(relativeFilePath, e, errorPositions))
 			default:
 				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
