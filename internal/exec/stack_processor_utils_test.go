@@ -1628,6 +1628,46 @@ func TestProcessYAMLConfigFileInvalidHelmfileOverridesSection(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestProcessYAMLConfigFileInvalidHelmfileUnknownOptionSchema(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
+	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/invalid-helmfile-unknown-option.yaml"
+	atmosManifestJSONSchemaFilePath := "../../tests/fixtures/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		atmosManifestJSONSchemaFilePath,
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown_option")
+}
+
 func TestProcessStackConfigProviderSection(t *testing.T) {
 	basePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-providers-section")
 	stacksBasePath := filepath.Join(basePath, "stacks")
