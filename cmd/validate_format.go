@@ -44,5 +44,8 @@ func validationFormat(cmd *cobra.Command) (string, error) {
 }
 
 func addValidationFormatFlag(cmd *cobra.Command) {
-	cmd.PersistentFlags().String("format", "", "Output format: text, rich")
+	// Register on the local flag set: every caller is a leaf command, and both
+	// validationFormat and the aggregate runner read through cmd.Flags(), which
+	// only includes persistent flags after cobra merges them during execution.
+	cmd.Flags().String("format", "", "Output format: text, rich")
 }

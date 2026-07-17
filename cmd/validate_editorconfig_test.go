@@ -319,6 +319,9 @@ func TestRequestedEditorConfigFormatPrecedence(t *testing.T) {
 	config := schema.AtmosConfiguration{Validate: schema.Validate{EditorConfig: schema.EditorConfig{Format: "gcc"}}}
 	cmd := &cobra.Command{}
 	addPersistentFlags(cmd)
+	// Merge persistent flags into cmd.Flags() the way cobra does during
+	// execution, so Set/Changed below see the format flag.
+	require.NoError(t, cmd.ParseFlags(nil))
 
 	t.Setenv("ATMOS_VALIDATE_FORMAT", "sarif")
 	assert.Equal(t, "sarif", requestedEditorConfigFormat(cmd, config))

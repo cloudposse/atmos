@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -123,15 +122,14 @@ func TestValidationApplicability(t *testing.T) {
 func TestValidateCommandHelpDescribesAggregateValidation(t *testing.T) {
 	_ = NewTestKit(t)
 
-	var output bytes.Buffer
-	validateCmd.SetOut(&output)
-	validateCmd.SetErr(&output)
-	require.NoError(t, validateCmd.Help())
-
+	// Do not call validateCmd.Help() here: the inherited rootHelpFunc treats a
+	// help invocation without --help in os.Args as an incorrect usage and
+	// exits the process, which would kill the whole test binary. The command's
+	// Long text is what the help renderer displays, so assert on it directly.
 	assert.NotNil(t, validateCmd.RunE)
-	assert.Contains(t, output.String(), "Without a subcommand")
-	assert.Contains(t, output.String(), "EditorConfig")
-	assert.Contains(t, output.String(), "GitHub Actions workflows")
+	assert.Contains(t, validateCmd.Long, "Without a subcommand")
+	assert.Contains(t, validateCmd.Long, "EditorConfig")
+	assert.Contains(t, validateCmd.Long, "GitHub Actions workflows")
 }
 
 func TestValidateCommandRunsAllApplicableProjectValidators(t *testing.T) {
@@ -147,7 +145,7 @@ func TestValidateCommandRunsAllApplicableProjectValidators(t *testing.T) {
 
 	projectDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "stacks"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "atmos.yaml"), []byte("base_path: .\nstacks:\n  base_path: stacks\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "atmos.yaml"), []byte("base_path: .\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*\"\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "stacks", "dev.yaml"), []byte("vars:\n  stage: dev\n"), 0o600))
 	require.NoError(t, os.Chdir(projectDir))
 
