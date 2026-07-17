@@ -102,13 +102,37 @@ commands:
           - type: simulate
             text: "cd my-project"
           - type: simulate
-            text: "# only the environments you selected were generated"
+            text: "# inspect the project that was just generated"
           - type: simulate
-            text: &ls_cmd "ls stacks/"
+            text: &list_stacks_cmd "atmos list stacks"
           - type: shell
             name: list-stacks
             working_directory: &project_dir "../../.context/cast-fixtures/init/my-project"
-            command: *ls_cmd
+            command: *list_stacks_cmd
+          - type: simulate
+            text: "# the greeting component was generated for each selected environment"
+          - type: simulate
+            text: &list_instances_cmd "atmos list instances"
+          - type: shell
+            name: list-instances
+            working_directory: *project_dir
+            command: *list_instances_cmd
+          - type: simulate
+            text: "# the component catalog summarizes the generated Terraform component"
+          - type: simulate
+            text: &list_components_cmd "atmos list components"
+          - type: shell
+            name: list-components
+            working_directory: *project_dir
+            command: *list_components_cmd
+          - type: simulate
+            text: "# tree mode makes the generated stack hierarchy easy to scan"
+          - type: simulate
+            text: &list_stacks_tree_cmd "atmos list stacks --format=tree"
+          - type: shell
+            name: list-stacks-tree
+            working_directory: *project_dir
+            command: *list_stacks_tree_cmd
           - type: simulate
             text: "# the generated project is immediately valid, no manual wiring needed"
           - type: simulate
@@ -180,15 +204,19 @@ commands:
               # explicitly marked skipped -- that's the conditional-generation
               # feature being demonstrated, not a leak. What must never
               # appear is stacks/prod.yaml actually being created (checked
-              # below via the `ls stacks/` output, which lists only
-              # _defaults.yaml, dev.yaml, and staging.yaml).
+              # below via the generated stack and instance listings).
               "stacks/prod.yaml (skipped)",
               "Generated 12 files.",
-              "# only the environments you selected were generated",
-              # ls runs via type: shell (no PTY), so it lists one file per
-              # line (its normal non-tty behavior) rather than in
-              # terminal-width-aware columns.
-              "ls stacks/\n_defaults.yaml\ndev.yaml\nstaging.yaml",
+              "# inspect the project that was just generated",
+              "atmos list stacks",
+              "atmos list instances",
+              "atmos list components",
+              "Component",
+              "greeting",
+              "terraform",
+              "atmos list stacks --format=tree",
+              "Stacks",
+              "# tree mode makes the generated stack hierarchy easy to scan",
               "All stacks validated successfully",
               "# prove it: deploy every selected environment for real, right here",
               "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
