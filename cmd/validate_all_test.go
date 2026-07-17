@@ -82,16 +82,13 @@ func TestRunValidationTasksContinuesAndSummarizes(t *testing.T) {
 func TestValidationApplicability(t *testing.T) {
 	_ = NewTestKit(t)
 
-	originalWorkingDirectory, err := os.Getwd()
-	require.NoError(t, err)
 	originalAtmosConfig := atmosConfig
 	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(originalWorkingDirectory))
 		atmosConfig = originalAtmosConfig
 	})
 
 	projectDir := t.TempDir()
-	require.NoError(t, os.Chdir(projectDir))
+	t.Chdir(projectDir)
 	atmosConfig = schema.AtmosConfiguration{}
 
 	t.Run("skips absent optional project validators", func(t *testing.T) {
@@ -135,11 +132,8 @@ func TestValidateCommandHelpDescribesAggregateValidation(t *testing.T) {
 func TestValidateCommandRunsAllApplicableProjectValidators(t *testing.T) {
 	_ = NewTestKit(t)
 
-	originalWorkingDirectory, err := os.Getwd()
-	require.NoError(t, err)
 	originalAtmosConfig := atmosConfig
 	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(originalWorkingDirectory))
 		atmosConfig = originalAtmosConfig
 	})
 
@@ -147,8 +141,9 @@ func TestValidateCommandRunsAllApplicableProjectValidators(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "stacks"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "atmos.yaml"), []byte("base_path: .\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*\"\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "stacks", "dev.yaml"), []byte("vars:\n  stage: dev\n"), 0o600))
-	require.NoError(t, os.Chdir(projectDir))
+	t.Chdir(projectDir)
 
+	var err error
 	atmosConfig, err = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 	require.NoError(t, validateCmd.RunE(validateCmd, nil))

@@ -79,13 +79,19 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 			RuleID:   ruleID,
 			Severity: validation.SeverityError,
 			Message:  lintErr.Message,
-			File:     lintErr.Filepath,
+			File:     repositoryPath(lintErr.Filepath),
 			Line:     lintErr.Line,
 			Column:   lintErr.Column,
 		})
 	}
 	report.RenderedDiagnostics = strings.TrimSpace(renderedDiagnostics.String())
 	return report, nil
+}
+
+// repositoryPath converts an OS-native path into the slash-separated form used
+// by GitHub Actions annotations and repository-relative diagnostics.
+func repositoryPath(path string) string {
+	return strings.ReplaceAll(path, "\\", "/")
 }
 
 func workflowFileCount(dir string) (int, error) {

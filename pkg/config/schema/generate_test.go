@@ -96,6 +96,20 @@ func TestGenerateExtractsDocCommentsAsDescriptions(t *testing.T) {
 		"Go doc comments must flow into schema descriptions")
 }
 
+func TestNormalizeCommentMapPaths(t *testing.T) {
+	comments := map[string]string{
+		"github.com/cloudposse/atmos/pkg\\schema.ProfilesConfig":          "type comment",
+		"github.com/cloudposse/atmos/pkg\\schema.ProfilesConfig.BasePath": "field comment",
+	}
+
+	normalizeCommentMapPaths(comments)
+
+	assert.Equal(t, "type comment", comments["github.com/cloudposse/atmos/pkg/schema.ProfilesConfig"])
+	assert.Equal(t, "field comment", comments["github.com/cloudposse/atmos/pkg/schema.ProfilesConfig.BasePath"])
+	assert.NotContains(t, comments, "github.com/cloudposse/atmos/pkg\\schema.ProfilesConfig")
+	assert.NotContains(t, comments, "github.com/cloudposse/atmos/pkg\\schema.ProfilesConfig.BasePath")
+}
+
 func TestGenerateModelsSchemasSectionPolymorphism(t *testing.T) {
 	defs := definitions(t)
 	assert.Contains(t, defs, "SchemaRegistry")

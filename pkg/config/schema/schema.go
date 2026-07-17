@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/invopop/jsonschema"
 
@@ -121,5 +122,26 @@ func addGoComments(r *jsonschema.Reflector, repoRoot string) error {
 	}()
 	// WithFullComment keeps complete type doc comments instead of go/doc
 	// synopses, which truncate at abbreviations like "e.g.".
-	return r.AddGoComments(modulePath, "pkg", jsonschema.WithFullComment())
+	if err := r.AddGoComments(modulePath, "pkg", jsonschema.WithFullComment()); err != nil {
+		return err
+	}
+	normalizeCommentMapPaths(r.CommentMap)
+	return nil
+}
+
+// normalizeCommentMapPaths converts the filesystem separators emitted by
+// jsonschema.AddGoComments into Go import-path separators. On Windows the
+// dependency walks pkg using backslashes, while reflected types always use
+// slash-separated import paths.
+func normalizeCommentMapPaths(comments map[string]string) {
+	for key, comment := range comments {
+		normalized := strings.ReplaceAll(key, "\\", "/")
+		if normalized == key {
+			continue
+		}
+		if _, exists := comments[normalized]; !exists {
+			comments[normalized] = comment
+		}
+		delete(comments, key)
+	}
 }

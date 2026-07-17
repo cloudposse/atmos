@@ -110,7 +110,12 @@ func TestValidatorRequiresWorkflowDirectory(t *testing.T) {
 
 	_, err := (Validator{}).Validate(context.Background(), civalidate.Request{Root: root})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), ".github/workflows")
+	assert.Contains(t, err.Error(), filepath.Join(".github", "workflows"))
+}
+
+func TestRepositoryPath(t *testing.T) {
+	assert.Equal(t, ".github/workflows/invalid.yml", repositoryPath(".github\\workflows\\invalid.yml"))
+	assert.Equal(t, ".github/workflows/invalid.yml", repositoryPath(".github/workflows/invalid.yml"))
 }
 
 func actionlintTestRepository(t *testing.T) string {
