@@ -21,5 +21,6 @@ components:
             queue_url: .queue_url
       vars:
         name: events
-        # Real state supersedes this deterministic plan-time placeholder.
-        topic_arn: !terraform.state sns-topic '.topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"'
+        # Real state supersedes this deterministic plan-time placeholder
+        # (a provider-valid mock ARN so a cold `terraform plan --all` succeeds).
+        topic_arn: !terraform.state sns-topic .topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"

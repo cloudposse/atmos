@@ -78,12 +78,11 @@ vars:
   first_subnet: !terraform.state vpc .private_subnet_ids[0]
   db_host: !terraform.state config .config_map.username
 
-  # Default values for a component with no state yet. Quote the complete YQ
-  # expression with single quotes so whitespace and its inner double quotes stay intact.
-  vpc_id: !terraform.state vpc '.vpc_id // "default-vpc"'
+  # Default values for unprovisioned components
+  vpc_id: !terraform.state vpc .vpc_id // "default-vpc"
 
   # YQ string concatenation
-  url: !terraform.state aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+  url: !terraform.state 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
 
   # Bracket notation for keys with special characters
   key: !terraform.state security '.users["github-dependabot"].access_key_id'

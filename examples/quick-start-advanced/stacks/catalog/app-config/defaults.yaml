@@ -30,11 +30,12 @@ components:
             required: true
       vars:
         name: app
-        # Real upstream state supersedes these deterministic plan-time placeholders.
-        kms_key_arn: !terraform.state kms-key '.key_arn // "arn:aws:kms:{{ .vars.region }}:000000000000:key/00000000-0000-0000-0000-000000000000"'
-        bucket_id: !terraform.state s3-bucket '.bucket_id // "mock-assets"'
-        table_name: !terraform.state dynamodb-table '.table_name // "mock-state"'
-        topic_arn: !terraform.state sns-topic '.topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"'
-        queue_url: !terraform.state sqs-queue '.queue_url // "http://localhost:4566/000000000000/mock-events"'
+        # Real upstream state supersedes these deterministic plan-time placeholders
+        # (provider-valid mock values so a cold `terraform plan --all` succeeds).
+        kms_key_arn: !terraform.state kms-key .key_arn // "arn:aws:kms:{{ .vars.region }}:000000000000:key/00000000-0000-0000-0000-000000000000"
+        bucket_id: !terraform.state s3-bucket .bucket_id // "mock-assets"
+        table_name: !terraform.state dynamodb-table .table_name // "mock-state"
+        topic_arn: !terraform.state sns-topic .topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"
+        queue_url: !terraform.state sqs-queue .queue_url // "http://localhost:4566/000000000000/mock-events"
         api_key: !secret API_KEY
         db_password: !secret DB_CONFIG | path ".password"

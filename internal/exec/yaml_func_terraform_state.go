@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -58,12 +59,19 @@ func processTagTerraformStateWithContext(
 		return nil, err
 	}
 
-	component, stack, output, err := parseTerraformStateArgs(str, currentStack)
-	if err != nil {
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
-	}
+	var component string
+	var stack string
+	var output string
 
-	if stack == currentStack {
+	parsed, err := fnparser.ParseTerraform(str)
+	if err != nil {
+		return nil, err
+	}
+	component = parsed.Component
+	stack = parsed.Stack
+	output = parsed.Expression
+	if stack == "" {
+		stack = currentStack
 		log.Debug(
 			"Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
@@ -126,74 +134,4 @@ func processTagTerraformStateWithContext(
 	}
 
 	return value, nil
-}
-
-// parseTerraformStateArgs parses a terraform.state function invocation. It preserves the legacy
-// CSV-style quoting parser, then accepts an unquoted YQ expression containing whitespace. The
-// latter is what YAML supplies for whole-value quoted functions, for example:
-//
-//	kms_key_arn: !terraform.state kms-key '.key_arn // "mock-value"'
-func parseTerraformStateArgs(args string, currentStack string) (component string, stack string, output string, err error) {
-	parts, splitErr := u.SplitStringByDelimiter(args, ' ')
-	if splitErr == nil {
-		switch len(parts) {
-		case 3:
-			return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), strings.TrimSpace(parts[2]), nil
-		case 2:
-			return strings.TrimSpace(parts[0]), currentStack, strings.TrimSpace(parts[1]), nil
-		}
-	}
-
-	args = strings.TrimSpace(args)
-	componentEnd := strings.IndexAny(args, " \t\n\r")
-	if componentEnd <= 0 {
-		return "", "", "", errUtils.ErrYamlFuncInvalidArguments
-	}
-
-	component = args[:componentEnd]
-	remainder := strings.TrimLeft(args[componentEnd:], " \t\n\r")
-	if remainder == "" {
-		return "", "", "", errUtils.ErrYamlFuncInvalidArguments
-	}
-
-	// A YQ expression begins with one of these characters. Treat the complete remainder as
-	// the output expression so whitespace in `//` fallbacks and pipes remains intact.
-	if isTerraformStateExpressionStart(remainder[0]) {
-		return component, currentStack, trimTerraformStateExpressionQuotes(remainder), nil
-	}
-
-	stackEnd := strings.IndexAny(remainder, " \t\n\r")
-	if stackEnd <= 0 {
-		return component, currentStack, remainder, nil
-	}
-
-	stack = remainder[:stackEnd]
-	output = strings.TrimLeft(remainder[stackEnd:], " \t\n\r")
-	if output == "" {
-		return "", "", "", errUtils.ErrYamlFuncInvalidArguments
-	}
-
-	return component, stack, trimTerraformStateExpressionQuotes(output), nil
-}
-
-func isTerraformStateExpressionStart(char byte) bool {
-	switch char {
-	case '.', '|', '[', '{', '"', '\'':
-		return true
-	default:
-		return false
-	}
-}
-
-func trimTerraformStateExpressionQuotes(expression string) string {
-	expression = strings.TrimSpace(expression)
-	if len(expression) < 2 {
-		return expression
-	}
-
-	if expression[0] == '\'' && expression[len(expression)-1] == '\'' {
-		return expression[1 : len(expression)-1]
-	}
-
-	return expression
 }
