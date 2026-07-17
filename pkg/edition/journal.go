@@ -98,7 +98,7 @@ var journal = []Entry{
 		Old:         "table",
 		New:         "tree",
 		Description: "Stack listings render the import hierarchy as a tree by default instead of a flat table.",
-		Ref:         "https://atmos.tools/changelog/editions",
+		Ref:         "https://atmos.tools/changelog/config-editions",
 	},
 	{
 		Date:        "2026-07-16",
@@ -107,7 +107,7 @@ var journal = []Entry{
 		Old:         "table",
 		New:         "tree",
 		Description: "Instance listings render as a tree by default instead of a flat table.",
-		Ref:         "https://atmos.tools/changelog/editions",
+		Ref:         "https://atmos.tools/changelog/config-editions",
 	},
 	{
 		Date:        "2026-07-13",
@@ -152,7 +152,7 @@ var journal = []Entry{
 		Old:         "full",
 		New:         "schema",
 		Description: "Component descriptions show only stack-manifest sections; set the filter to full for computed internals.",
-		Ref:         "https://atmos.tools/changelog/editions",
+		Ref:         "https://atmos.tools/changelog/config-editions",
 	},
 	{
 		Date:        "2026-07-16",
@@ -161,7 +161,7 @@ var journal = []Entry{
 		Old:         false,
 		New:         true,
 		Description: "Component descriptions include provenance annotations (which stack file set each value) by default.",
-		Ref:         "https://atmos.tools/changelog/editions",
+		Ref:         "https://atmos.tools/changelog/config-editions",
 	},
 	{
 		Date:        "2026-02-10",

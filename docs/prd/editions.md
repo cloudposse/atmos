@@ -54,10 +54,10 @@ The journal ships with 12 entries reaching back to February 2025 (source of trut
 | 2026-07-06 | `settings.terminal.help.filter` | `false` | `true` | [#2696](https://github.com/cloudposse/atmos/pull/2696) |
 | 2026-07-13 | `describe.error_mode` | `strict` | `warn` | [changelog/list-describe-graceful-degradation](https://atmos.tools/changelog/list-describe-graceful-degradation) |
 | 2026-07-13 | `list.error_mode` | `strict` | `warn` | [changelog/list-describe-graceful-degradation](https://atmos.tools/changelog/list-describe-graceful-degradation) |
-| 2026-07-17 | `describe.component.filter` | `full` | `schema` | this PR ([changelog/editions](https://atmos.tools/changelog/editions)) |
-| 2026-07-16 | `describe.provenance` | `false` | `true` | this PR ([changelog/editions](https://atmos.tools/changelog/editions)) |
-| 2026-07-16 | `list.instances.format` | `"table"` | `"tree"` | this PR ([changelog/editions](https://atmos.tools/changelog/editions)) |
-| 2026-07-16 | `stacks.list.format` | `"table"` | `"tree"` | this PR ([changelog/editions](https://atmos.tools/changelog/editions)) |
+| 2026-07-17 | `describe.component.filter` | `full` | `schema` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
+| 2026-07-16 | `describe.provenance` | `false` | `true` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
+| 2026-07-16 | `list.instances.format` | `"table"` | `"tree"` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
+| 2026-07-16 | `stacks.list.format` | `"table"` | `"tree"` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
 
 The four `2026-07-16` and de-shadowed `logs.level` defaults become newly effective for
 un-pinned projects in this PR: log level `Info` → `Warning`, provenance annotations on by

@@ -1,6 +1,6 @@
 ---
-slug: editions
-title: "Editions: Pin Your Defaults to a Date So Upgrades Never Surprise You"
+slug: config-editions
+title: "Config Editions: Pin Your Defaults to a Date So Upgrades Never Surprise You"
 date: 2026-07-16T12:00:00.000Z
 authors: [osterman]
 tags: [feature, experimental]
@@ -49,6 +49,15 @@ Editions ship alongside a batch of default changes, and projects without a pin p
 - **Component descriptions show only what stack manifests define.** The output of `atmos describe component` is now scoped to the sections a stack manifest can declare — vars, settings, env, backend, metadata, and friends — instead of every internal field Atmos computes along the way. Set `describe.component.filter: full` (or `ATMOS_DESCRIBE_COMPONENT_FILTER=full`) to see everything again; queries with `--query` always run against the full data.
 
 Every one of these changes is journaled, so a single pin — any date before the change you want to avoid — rolls it back.
+
+## Fixed Along the Way
+
+Building the journal meant auditing every layer where a default can live, and that audit surfaced real bugs. All of them are fixed in this release:
+
+- Terminal output was artificially clamped in several places. Tables capped columns at fixed widths even on wide terminals, bare help output stopped at 120 columns, and a startup race could freeze the detected width at 78 columns. Rendering now uses the full detected terminal width everywhere, and `settings.terminal.max_width` acts only as an explicit, opt-in ceiling — unlimited by default.
+- Table cells wrap cleanly at column boundaries instead of overflowing the terminal edge mid-word, narrow columns keep their content on one line before wide columns take the remaining space, and the description column aligns exactly with its header (markdown rendering had smuggled in a leading space that survived trimming because it was wrapped in color codes).
+- The authentication provider and identity tables sized their columns at compile time and truncated URLs at 32 characters regardless of terminal width; they now size to content.
+- Three defaults had silently drifted between configuration layers, so the declared default never took effect — the Helmfile EKS integration, the pager, and the log level each said one thing in one layer and another thing in the layer that actually won. The layers now agree, the declared values are finally real, and each transition is journaled so a pin restores the old behavior.
 
 ## How to Use It
 
