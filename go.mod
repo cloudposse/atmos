@@ -27,6 +27,7 @@ require (
 	github.com/adrg/xdg v0.5.3
 	github.com/agiledragon/gomonkey/v2 v2.14.0
 	github.com/alecthomas/chroma/v2 v2.24.1
+	github.com/alecthomas/participle/v2 v2.1.4
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/anthropics/anthropic-sdk-go v1.43.0
 	github.com/arsham/figurine v1.3.0
@@ -178,7 +179,6 @@ require (
 	github.com/a8m/envsubst v1.4.3 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
-	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/apparentlymart/go-cidr v1.1.1 // indirect
