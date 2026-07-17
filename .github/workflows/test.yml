@@ -31,7 +31,7 @@ permissions:
   pull-requests: read
 
 env:
-  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
@@ -649,6 +649,27 @@ jobs:
         with:
           cache: false
           go-version-file: "go.mod"
+
+      - name: Download Go dependencies
+        shell: bash
+        run: |
+          # This job compiles directly from a cold module cache instead of using
+          # the build job's dependency step. Retry transient hosted-runner DNS
+          # and network failures here so they do not appear as test failures.
+          delay=5
+          for attempt in {1..5}; do
+            if go mod download; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              exit 1
+            fi
+
+            echo "go mod download failed (attempt $attempt/5); retrying in ${delay}s"
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
 
       - name: Run Kubernetes end-to-end tests
         env:
