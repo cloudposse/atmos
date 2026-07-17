@@ -15,18 +15,22 @@ commands:
           atmos --logs-level=Off emulator down aws -s dev || true
           rm -rf my-landing-zone || true
       - type: shell
+        name: warm-up-generate
+        working_directory: *scaffolds_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos scaffold generate ./aws/landing-zone ./my-landing-zone --set project_name=my-landing-zone --no-git --defaults
+      - type: shell
         name: warm-up-workspaces
         # Terraform prints a "workspace doesn't exist, created" banner the
         # first time it initializes a workspace against a fresh S3 backend;
         # cast_checks treats that banner as error-adjacent noise. Apply and
         # destroy every component once here (hidden) so the workspaces
         # already exist by the time the recorded steps apply for real.
-        working_directory: *scaffolds_fixture
+        working_directory: &landing_zone_dir "../../.context/cast-fixtures/scaffolds/my-landing-zone"
         env: !include cast-defaults.yaml .env.recording
         output: none
         command: |
-          atmos scaffold generate ./aws/landing-zone ./my-landing-zone --set project_name=my-landing-zone --no-git --defaults
-          cd my-landing-zone
           atmos emulator up aws -s dev --ephemeral
           # kms must exist before its dependents' !terraform.state lookups can
           # resolve, so bootstrap it once on its own; apply --all can then
@@ -59,14 +63,12 @@ commands:
             interval: 900ms
             command: *scaffold_generate_cmd
           - type: simulate
-            text: "cd my-landing-zone"
-          - type: simulate
             text: "# start the local AWS emulator, no real account needed"
           - type: simulate
             text: &emulator_up_cmd atmos emulator up aws -s dev --ephemeral
           - type: shell
             name: emulator-up
-            working_directory: &landing_zone_dir "../../.context/cast-fixtures/scaffolds/my-landing-zone"
+            working_directory: *landing_zone_dir
             duration: 450ms
             interval: 750ms
             command: *emulator_up_cmd
@@ -170,7 +172,7 @@ commands:
           ]:
               if needle not in plain:
                   raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "No valid credential sources", "[scaffold-generate]", "[emulator-up]", "[apply-all]", "[terraform-output]", "[emulator-down]"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "No valid credential sources", "[scaffold-generate]", "[emulator-up]", "[apply-all]", "[terraform-output]", "[emulator-down]", "cd my-landing-zone", "--chdir"]:
               if bad in plain:
                   raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast contains {bad!r}")
           assert_no_error_output(text)
