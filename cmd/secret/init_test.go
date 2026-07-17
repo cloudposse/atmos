@@ -128,6 +128,18 @@ func TestRunSecretInit_InputFileStrictRejectsUndeclaredKey(t *testing.T) {
 	assert.Empty(t, svc.setCalls, "strict validation must fail before writing any values")
 }
 
+func TestRunSecretInit_AllScopeValidation(t *testing.T) {
+	t.Run("all cannot be combined with stack", func(t *testing.T) {
+		err := runSecretSubcommand(t, "init", "--all", "--stack", "dev")
+		require.ErrorIs(t, err, errUtils.ErrValidationFailed)
+	})
+
+	t.Run("all cannot be combined with component", func(t *testing.T) {
+		err := runSecretSubcommand(t, "init", "--all", "--component", "api")
+		require.ErrorIs(t, err, errUtils.ErrValidationFailed)
+	})
+}
+
 func TestReadInitInput_RedirectedStdin(t *testing.T) {
 	r, w, err := os.Pipe()
 	require.NoError(t, err)

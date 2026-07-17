@@ -144,6 +144,46 @@ func TestValidateTerraformMockFlagsBeforeHooks(t *testing.T) {
 	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
 }
 
+func TestValidateTerraformMockFlags(t *testing.T) {
+	tests := []struct {
+		name             string
+		command          *cobra.Command
+		useMocks         bool
+		processFunctions bool
+		wantErr          string
+	}{
+		{name: "nil command"},
+		{name: "command without mock flag", command: &cobra.Command{Use: "plan"}},
+		{name: "mocks disabled", command: &cobra.Command{Use: "apply"}, processFunctions: true},
+		{name: "mocks require function processing", command: &cobra.Command{Use: "plan"}, useMocks: true, wantErr: "requires --process-functions=true"},
+		{name: "mocks require plan", command: &cobra.Command{Use: "apply"}, useMocks: true, processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "valid mock plan", command: &cobra.Command{Use: "plan"}, useMocks: true, processFunctions: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.command != nil && tt.name != "command without mock flag" {
+				tt.command.Flags().Bool("use-mocks", tt.useMocks, "")
+				tt.command.Flags().Bool("process-functions", tt.processFunctions, "")
+			}
+
+			err := validateTerraformMockFlags(tt.command)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestValidateTerraformMockOptions(t *testing.T) {
+	assert.NoError(t, validateTerraformMockOptions("apply", false, false))
+	assert.ErrorContains(t, validateTerraformMockOptions("plan", true, false), "requires --process-functions=true")
+	assert.ErrorContains(t, validateTerraformMockOptions("apply", true, true), "supported only by `atmos terraform plan`")
+	assert.NoError(t, validateTerraformMockOptions("plan", true, true))
+}
+
 // TestTerraformIdentityFlagHandling tests the identity flag handling in terraformRun.
 // Regression test for: https://github.com/cloudposse/atmos/issues/XXXX
 // Ensures that when --identity flag is NOT provided, the code doesn't try to

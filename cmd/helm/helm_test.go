@@ -61,6 +61,26 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, templateCmd.Flag("from-manifest"))
 }
 
+func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
+	for _, flag := range []string{"all", "affected", "tags", "labels"} {
+		t.Run(flag, func(t *testing.T) {
+			cmd := newOperationCommand("apply", "Apply")
+			assert.False(t, hasSelectionFlags(cmd))
+			if flag == "all" || flag == "affected" {
+				require.NoError(t, cmd.Flags().Set(flag, "true"))
+			} else {
+				require.NoError(t, cmd.Flags().Set(flag, "value"))
+			}
+			assert.True(t, hasSelectionFlags(cmd))
+		})
+	}
+
+	cmd := newOperationCommand("apply", "Apply")
+	components, directive := componentArgCompletion(cmd, []string{"already-provided"}, "")
+	assert.Nil(t, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
 func TestGetOperationFlagsIncludesDiffFlags(t *testing.T) {
 	cmd := configuredOperationCommand(t, "diff", map[string]string{
 		"against":       "target:prod",
