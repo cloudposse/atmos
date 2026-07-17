@@ -956,7 +956,7 @@ func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema
 			}
 			continue
 		}
-		items = append(items, item{path: path, position: pos, message: basicErr.Error})
+		items = append(items, item{path: path, position: pos, message: manifestSchemaErrorMessage(basicErr.Error)})
 	}
 	if len(items) == 0 {
 		return fmt.Sprintf("\n- %s: error: %s", relativeFilePath, e.Error())
@@ -1002,6 +1002,15 @@ func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema
 		rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.position.Line, item.position.Column, item.path, item.message))
 	}
 	return "\n" + strings.Join(rendered, "\n")
+}
+
+// manifestSchemaErrorMessage replaces implementation-detail regex failures
+// with guidance that matches the stack manifest's YAML syntax.
+func manifestSchemaErrorMessage(message string) string {
+	if message == "does not match pattern '^!include'" {
+		return "file references must use the !include YAML tag"
+	}
+	return message
 }
 
 // schemaTypeAlternative identifies equivalent oneOf type branches. A value

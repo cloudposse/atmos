@@ -4501,3 +4501,12 @@ func TestProcessYAMLConfigFile_TemplatedImportPath_NestedPropagation(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "v1", serviceCatalogVersion(t, deepMerged))
 }
+
+func TestManifestSchemaErrorMessage(t *testing.T) {
+	assert.Equal(
+		t,
+		"file references must use the !include YAML tag",
+		manifestSchemaErrorMessage("does not match pattern '^!include'"),
+	)
+	assert.Equal(t, "does not match pattern '^component'", manifestSchemaErrorMessage("does not match pattern '^component'"))
+}
