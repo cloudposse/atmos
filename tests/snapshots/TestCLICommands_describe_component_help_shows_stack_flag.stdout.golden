@@ -1,8 +1,7 @@
 
 👽 test darwin/arm64
 
-Display the configuration details for a specific Atmos component within a
-designated Atmos stack, including its dependencies, settings, and overrides.
+Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.
 
 USAGE
 
@@ -45,6 +44,11 @@ EXAMPLES
 
 FLAGS
 
+      --error-mode string  How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): warn
+                           (degrade + summary, default), silent (degrade, no summary), or strict (fail
+                           immediately). Defaults to atmos.yaml's describe.error_mode, or warn. Can also be set
+                           via the ATMOS_DESCRIBE_ERROR_MODE environment variable
+
       --file string        Write the result to the file
 
   -f, --format string      The output format (default yaml)
@@ -57,7 +61,8 @@ FLAGS
       --process-templates  Enable/disable Go template processing in Atmos stack manifests when executing the command
                            (default true)
 
-      --provenance         Enable provenance tracking to show where configuration values originated
+      --provenance         Show where configuration values originated (enabled by default; disable with --
+                           provenance=false or describe.provenance in atmos.yaml)
 
       --skip strings       Skip executing a YAML function in the Atmos stack manifests when executing the command
 
@@ -81,6 +86,8 @@ GLOBAL FLAGS
       --config strings                       Paths to configuration files (comma-separated or repeated flag)
 
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
+
+      --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
 
       --force-color                          Force color output even when not a TTY (useful for screenshots)
 

@@ -139,6 +139,8 @@ GLOBAL FLAGS
 
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
+      --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
+
       --force-color                          Force color output even when not a TTY (useful for screenshots)
 
       --force-tty                            Force TTY mode with sane defaults when terminal detection fails (useful

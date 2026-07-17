@@ -1,9 +1,13 @@
-]11;?\[6n]10;?\[6n]11;?\[6n]11;?\[6n
- [1;38;5;72mComponent    [0m  [1;38;5;72mStack  [0m 
-[90m───────────────[0m[90m─────────[0m
- mock/disabled  nonprod 
- mock/drift     nonprod 
- mock/drift     prod    
- mock/nodrift   nonprod 
- mock/nodrift   prod    
+]11;?\[6n]10;?\[6n]11;?\[6n]11;?\[6n[48;5;63m [0m[1;38;5;231;48;5;63mComponent Instances[0m[48;5;63m [0m
+[38;5;59m│[0m
+[38;5;59m├──[0m[38;5;231mnonprod[0m
+[38;5;59m│  [0m[38;5;59m├──[0m[38;5;38mmock[0m[38;5;59m (components/terraform/mock)[0m
+[38;5;59m│  [0m[38;5;59m├──[0m[38;5;38mmock/disabled[0m[38;5;59m (components/terraform/mock)[0m
+[38;5;59m│  [0m[38;5;59m├──[0m[38;5;38mmock/drift[0m[38;5;59m (components/terraform/mock)[0m
+[38;5;59m│  [0m[38;5;59m└──[0m[38;5;38mmock/nodrift[0m[38;5;59m (components/terraform/mock)[0m
+[38;5;59m│[0m
+[38;5;59m└──[0m[38;5;231mprod[0m
+[38;5;59m   [0m[38;5;59m├──[0m[38;5;38mmock[0m[38;5;59m (components/terraform/mock)[0m
+[38;5;59m   [0m[38;5;59m├──[0m[38;5;38mmock/drift[0m[38;5;59m (components/terraform/mock)[0m
+[38;5;59m   [0m[38;5;59m└──[0m[38;5;38mmock/nodrift[0m[38;5;59m (components/terraform/mock)[0m
 

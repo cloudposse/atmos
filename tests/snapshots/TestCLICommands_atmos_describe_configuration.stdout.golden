@@ -54,6 +54,11 @@ stacks:
     - '**/_defaults.yaml'
   name_pattern: '{dev}'
   name_template: ""
+  list:
+    format: tree
+    columns: []
+  inherit:
+    metadata: true
 logs:
   file: /dev/stderr
   level: Debug
@@ -90,6 +95,8 @@ settings:
       wrap: false
     color: true
     no_color: false
+    help:
+      filter: true
   experimental: warn
   inject_github_token: true
   inject_bitbucket_token: true
@@ -102,6 +109,11 @@ settings:
     endpoint: https://us.i.posthog.com
     token: phc_TEST_TOKEN_PLACEHOLDER
     logging: false
+describe:
+  error_mode: warn
+  provenance: true
+  component:
+    filter: schema
 initialized: true
 basePathAbsolute: /absolute/path/to/repo
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks
@@ -128,4 +140,9 @@ auth:
   realm: <hash>
   providers: {}
   identities: {}
+list:
+  instances:
+    format: tree
+    columns: []
+  error_mode: warn
 

@@ -194,6 +194,9 @@ tests:
     # Repointed off quick-start-advanced (which now uses runtime YAML functions needing a
     # live emulator); the provenance fixture resolves fully offline.
     workdir: "fixtures/scenarios/provenance"
+    env:
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
+      ATMOS_DESCRIBE_PROVENANCE: "false"
     command: "atmos"
     args:
       - "describe"

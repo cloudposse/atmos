@@ -23,7 +23,7 @@ components:
         auto_provision_workdir_for_outputs: true
     helmfile:
         base_path: ""
-        use_eks: true
+        use_eks: false
         kubeconfig_path: ""
         helm_aws_profile_pattern: ""
         cluster_name_pattern: ""
@@ -53,6 +53,11 @@ stacks:
     excluded_paths: []
     name_pattern: '{stage}'
     name_template: ""
+    list:
+        format: tree
+        columns: []
+    inherit:
+        metadata: true
 logs:
     file: /dev/stderr
     level: Info
@@ -76,6 +81,8 @@ settings:
         color: true
         no_color: false
         tab_width: 4
+        help:
+            filter: true
     experimental: warn
     inject_github_token: true
     inject_bitbucket_token: true
@@ -88,6 +95,11 @@ settings:
         endpoint: https://us.i.posthog.com
         token: phc_TEST_TOKEN_PLACEHOLDER
         logging: false
+describe:
+    error_mode: warn
+    provenance: true
+    component:
+        filter: schema
 initialized: true
 basePathAbsolute: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks
@@ -112,4 +124,9 @@ auth:
     realm: <hash>
     providers: {}
     identities: {}
+list:
+    instances:
+        format: tree
+        columns: []
+    error_mode: warn
 

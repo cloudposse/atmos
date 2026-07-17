@@ -1,15 +1,11 @@
 
 👽 test linux/amd64
 
-Generate an execution plan, which shows what actions Terraform will take to
-reach the desired state of the configuration.
+Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.
 
-This command shows what Terraform will do when you run 'apply'. It helps you
-verify changes before making them to your infrastructure.
+This command shows what Terraform will do when you run 'apply'. It helps you verify changes before making them to your infrastructure.
 
-For complete Terraform/OpenTofu documentation, see:
-https://developer.hashicorp.com/terraform/cli/commands/plan
-https://opentofu.org/docs/cli/commands/plan
+For complete Terraform/OpenTofu documentation, see: https://developer.hashicorp.com/terraform/cli/commands/plan https://opentofu.org/docs/cli/commands/plan
 
 USAGE
 
