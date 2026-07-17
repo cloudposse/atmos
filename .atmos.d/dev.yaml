@@ -59,14 +59,23 @@ commands:
 
       - name: shell
         description: Start a development shell with build/ first on PATH
+        # Custom commands install only explicitly declared dependencies. Keep
+        # this in sync with the development tool pins in .tool-versions so a
+        # fresh `atmos dev shell` is immediately usable after cache cleanup.
+        dependencies:
+          tools:
+            hashicorp/terraform: 1.15.6
+            opentofu/opentofu: 1.12.2
+            peteretelej/tree: v1.3.0
+            sharkdp/bat: v0.26.1
+            tofu: v1.11.6
+        working_directory: !repo-root .
         steps:
           - type: exec
             command: |
               set -eu
-              root="$(git rev-parse --show-toplevel)"
-              cd "$root"
               export ATMOS_DEV_SHELL=1
-              export PATH="$root/build:$PATH"
+              export PATH="$PWD/build:$PATH"
               exec "${SHELL:-/bin/sh}"
 
       - name: validate
@@ -123,16 +132,12 @@ commands:
         commands:
           - name: notices
             description: Regenerate NOTICE from Go dependency licenses
-            # No working_directory here: scripts/generate-notice.sh already
-            # resolves the repo root itself via its own script path. Avoiding
-            # the !repo-root tag also keeps this file parseable by the older
-            # bootstrap atmos binary used to self-host CI's first build (see
-            # .atmos.d/build.yaml for the same constraint).
+            working_directory: !repo-root .
             env: *go_auto_env
             steps:
               - type: spin
                 title: Generating NOTICE from Go dependency licenses
-                command: cd "$(git rev-parse --show-toplevel)" && ./scripts/generate-notice.sh
+                command: ./scripts/generate-notice.sh
                 timeout: 10m
               - type: toast
                 level: success
@@ -147,8 +152,7 @@ commands:
 
           - name: snapshots
             description: Regenerate CLI golden snapshots
-            # No working_directory here (see the "notices" command above for
-            # why): cd's to the repo root inline in the step below instead.
+            working_directory: !repo-root .
             env:
               - key: GOTOOLCHAIN
                 value: auto
@@ -167,7 +171,6 @@ commands:
               - type: shell
                 command: |
                   set -eu
-                  cd "$(git rev-parse --show-toplevel)"
                   filter="${ATMOS_SNAPSHOT_FILTER:-}"
 
                   selected=0
@@ -186,3 +189,24 @@ commands:
                   else
                     go test ./tests -v -count=1 -timeout 40m -run "$filter" -regenerate-snapshots
                   fi
+
+          - name: schema
+            description: Regenerate the atmos-manifest JSON Schema website copy from the embedded schema
+            working_directory: !repo-root .
+            env:
+              <<: *go_auto_env
+              # go run . builds the whole atmos binary graph, which pulls in cgo-linked
+              # hardware-security-key deps (e.g. github.com/bearsh/hid) that need system
+              # libudev headers most CI runners don't have. atmos itself always builds
+              # with CGO disabled (see .goreleaser.yml, scripts/build-atmos.sh), so match
+              # that here too.
+              CGO_ENABLED: "0"
+              SCHEMA_OUTPUT: website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+            steps:
+              - type: spin
+                title: Generating atmos-manifest schema
+                command: go run . stack schema {{ .env.SCHEMA_OUTPUT }}
+                timeout: 2m
+              - type: toast
+                level: success
+                content: atmos-manifest schema regenerated at {{ .env.SCHEMA_OUTPUT }}.
