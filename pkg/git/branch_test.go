@@ -46,9 +46,12 @@ func newGitRemote(t *testing.T) string {
 func TestPrepareBranchCreatesAndReusesFeatureBranch(t *testing.T) {
 	workdir := newGitRemote(t)
 	ctx := context.Background()
+	baseSHA := strings.TrimSpace(runGitCommand(t, workdir, "rev-parse", "main"))
 
 	require.NoError(t, PrepareBranch(ctx, PrepareBranchOptions{Workdir: workdir, Base: "main", Branch: "atmos/component-updater/all"}))
 	assert.Equal(t, "atmos/component-updater/all", strings.TrimSpace(runGitCommand(t, workdir, "branch", "--show-current")))
+	assert.Equal(t, baseSHA, strings.TrimSpace(runGitCommand(t, workdir, "rev-parse", "main")))
+	assert.Equal(t, baseSHA, strings.TrimSpace(runGitCommand(t, workdir, "rev-parse", "origin/main")))
 
 	require.NoError(t, os.WriteFile(filepath.Join(workdir, "feature.txt"), []byte("remote feature\n"), 0o644))
 	runGitCommand(t, workdir, "add", "feature.txt")
@@ -59,6 +62,8 @@ func TestPrepareBranchCreatesAndReusesFeatureBranch(t *testing.T) {
 	require.NoError(t, PrepareBranch(ctx, PrepareBranchOptions{Workdir: workdir, Remote: "origin", Base: "main", Branch: "atmos/component-updater/all"}))
 	_, err := os.Stat(filepath.Join(workdir, "feature.txt"))
 	require.NoError(t, err, "an existing remote feature branch must be reused")
+	assert.Equal(t, baseSHA, strings.TrimSpace(runGitCommand(t, workdir, "rev-parse", "main")))
+	assert.Equal(t, baseSHA, strings.TrimSpace(runGitCommand(t, workdir, "rev-parse", "origin/main")))
 }
 
 func TestPrepareBranchRejectsUnsafeInputs(t *testing.T) {

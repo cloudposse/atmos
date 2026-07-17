@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // PrepareBranchOptions describes a safe feature-branch checkout. It never
@@ -26,6 +27,8 @@ type PrepareBranchOptions struct {
 //
 //nolint:revive // The safety checks are intentionally linear and explicit.
 func PrepareBranch(ctx context.Context, opts PrepareBranchOptions) error {
+	defer perf.Track(nil, "git.PrepareBranch")()
+
 	if opts.Remote == "" {
 		opts.Remote = "origin"
 	}
@@ -64,6 +67,8 @@ func PrepareBranch(ctx context.Context, opts PrepareBranchOptions) error {
 // DefaultBranch resolves the remote's advertised default branch without
 // assuming main or master.
 func DefaultBranch(ctx context.Context, workdir, remote string) (string, error) {
+	defer perf.Track(nil, "git.DefaultBranch")()
+
 	if remote == "" {
 		remote = "origin"
 	}
@@ -83,6 +88,8 @@ func DefaultBranch(ctx context.Context, workdir, remote string) (string, error) 
 // GitHubRepository parses an origin URL into the owner/repository pair used by
 // GitHub's API. SSH and HTTPS remote forms are supported.
 func GitHubRepository(ctx context.Context, workdir, remote string) (string, string, error) {
+	defer perf.Track(nil, "git.GitHubRepository")()
+
 	if remote == "" {
 		remote = "origin"
 	}

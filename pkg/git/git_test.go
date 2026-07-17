@@ -92,7 +92,7 @@ func requireSamePath(t *testing.T, expected, actual string) {
 func TestGitRepositoryPathsWrapsRevParseExitError(t *testing.T) {
 	tests.RequireExecutable(t, "git", "git rev-parse error classification")
 
-	_, _, _, err := gitRepositoryPaths(t.TempDir())
+	_, err := gitRepositoryPaths(t.TempDir())
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitCommandExited)

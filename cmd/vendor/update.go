@@ -30,7 +30,7 @@ var vendorUpdateCmd = &cobra.Command{
 	Long: `Check each Git-backed source in the vendor manifest for a newer version (honoring
 any per-source constraints) and update the version field in place, preserving
 comments, anchors, and templates. Use --check for a dry run.`,
-	Example: "atmos vendor update --check\natmos vendor update --component vpc\natmos vendor update --pull\natmos vendor update --pull-request",
+	Example: "atmos vendor update --check\natmos vendor update --component vpc\natmos vendor update --group platform --check\natmos vendor update --all --format json\natmos vendor update --pull\natmos vendor update --pull-request",
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.updateRunE")()
@@ -85,7 +85,10 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			v.Set("pull", true)
 		}
 
-		var report *vendoring.UpdateReport
+		var (
+			report     *vendoring.UpdateReport
+			baseBranch string
+		)
 		var err error
 
 		// Discover first for PR publication. This guarantees a no-op update does
@@ -109,12 +112,13 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			if group != "" {
 				selected = updatedComponents(discovery)
 			}
-			branch, pErr := prepareComponentUpdateBranch(cmd.Context(), v, scope)
+			branch, base, pErr := prepareComponentUpdateBranch(cmd.Context(), v, scope)
 			if pErr != nil {
 				result.Status, result.Failure = "failed", pErr.Error()
 				return pErr
 			}
 			result.Branch = branch
+			baseBranch = base
 		}
 
 		report, err = runVendorUpdate(v, componentType, tags, typeChanged, selected, group, check)
@@ -140,7 +144,7 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			}
 		}
 		if pullRequest && !check && report != nil && report.UpdatedCount() > 0 {
-			pr, commit, pErr := publishComponentUpdate(cmd.Context(), v, scope, result.Branch, report)
+			pr, commit, pErr := publishComponentUpdate(cmd.Context(), v, componentUpdatePublication{scope: scope, branch: result.Branch, base: baseBranch, report: report})
 			if pErr != nil {
 				result.Status, result.Failure = "failed", pErr.Error()
 				return pErr

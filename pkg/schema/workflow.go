@@ -428,6 +428,8 @@ type WorkflowStep struct {
 //   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
 //   - `background` : boolean async marker, or a string style color.
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
+//
+//nolint:dupl // Task and WorkflowStep need distinct receivers while decoding the same YAML shape.
 func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	type plain WorkflowStep
 	// Decode into a zero-value temp first so a reused receiver does not retain

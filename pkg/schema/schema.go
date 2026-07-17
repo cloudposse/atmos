@@ -69,7 +69,7 @@ type ConfigMetadata struct {
 	// Tags are labels for filtering and organization.
 	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 
-	// Deprecated indicates if this configuration should no longer be used.
+	// Deprecated: this configuration should no longer be used.
 	Deprecated bool `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
 }
 
@@ -1452,6 +1452,7 @@ type GCPAuthContext struct {
 	// ServiceAccountEmail is the service account being used (when impersonating).
 	ServiceAccountEmail string `json:"service_account_email,omitempty" yaml:"service_account_email,omitempty" mapstructure:"service_account_email"`
 	// AccessToken is the OAuth2 access token.
+	//nolint:gosec // This runtime context intentionally carries a token for SDK authentication.
 	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty" mapstructure:"access_token"`
 	// TokenExpiry is when the token expires.
 	TokenExpiry time.Time `json:"token_expiry,omitempty" yaml:"token_expiry,omitempty" mapstructure:"token_expiry"`

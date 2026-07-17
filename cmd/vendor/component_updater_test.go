@@ -133,8 +133,9 @@ spec:
       version: 1.1.0
       targets: [components/terraform/vpc]
 `), 0o644))
+	lister := &componentUpdaterLister{tags: []string{"1.1.0"}}
 	previous := version.DefaultLister
-	version.DefaultLister = &componentUpdaterLister{tags: []string{"1.1.0"}}
+	version.DefaultLister = lister
 	t.Cleanup(func() { version.DefaultLister = previous })
 
 	v := viper.New()
@@ -143,6 +144,7 @@ spec:
 	report, err := runVendorUpdate(v, "terraform", nil, false, nil, "platform", false)
 	require.NoError(t, err)
 	assert.Empty(t, report.Results)
+	assert.Equal(t, 1, lister.calls, "an empty group must stop after discovery")
 }
 
 func TestPrepareComponentUpdateBranch(t *testing.T) {
@@ -173,9 +175,10 @@ func TestPrepareComponentUpdateBranch(t *testing.T) {
 	v := viper.New()
 	v.Set("vendor.ci.pull_request.base_branch", "main")
 	v.Set("vendor.ci.pull_request.branch_prefix", "updates")
-	branch, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
 	require.NoError(t, err)
 	assert.Equal(t, "updates/all", branch)
+	assert.Equal(t, "main", base)
 }
 
 func TestPublishComponentUpdateCommitsPushesAndReconciles(t *testing.T) {
@@ -216,11 +219,12 @@ func TestPublishComponentUpdateCommitsPushesAndReconciles(t *testing.T) {
 	v.Set("vendor.ci.pull_request.base_branch", "main")
 	v.Set("vendor.ci.pull_request.provider", publisherName)
 	v.Set("vendor.ci.pull_request.labels", []string{"component-update"})
-	branch, err := prepareComponentUpdateBranch(context.Background(), v, "all")
+	branch, base, err := prepareComponentUpdateBranch(context.Background(), v, "all")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
 
-	pr, commit, err := publishComponentUpdate(context.Background(), v, "all", branch, &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", CurrentVersion: "1.0.0", LatestVersion: "1.1.0", Status: vendoring.StatusUpdated}}})
+	publication := componentUpdatePublication{scope: "all", branch: branch, base: base, report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", CurrentVersion: "1.0.0", LatestVersion: "1.1.0", Status: vendoring.StatusUpdated}}}}
+	pr, commit, err := publishComponentUpdate(context.Background(), v, publication)
 	require.NoError(t, err)
 	require.NotEmpty(t, commit)
 	require.NotNil(t, pr)
@@ -231,7 +235,8 @@ func TestPublishComponentUpdateCommitsPushesAndReconciles(t *testing.T) {
 	assert.Equal(t, branch, publisher.options.Head)
 	assert.Equal(t, []string{"component-update"}, publisher.options.Labels)
 
-	pr, commit, err = publishComponentUpdate(context.Background(), v, "all", branch, &vendoring.UpdateReport{})
+	publication.report = &vendoring.UpdateReport{}
+	pr, commit, err = publishComponentUpdate(context.Background(), v, publication)
 	require.NoError(t, err)
 	assert.Nil(t, pr)
 	assert.Empty(t, commit)
@@ -251,6 +256,7 @@ func TestValidateUpdateInvocation(t *testing.T) {
 		wantError  string
 	}{
 		{name: "conflicting all selector", invocation: updateInvocation{All: true, Group: "platform"}, wantError: "--all cannot"},
+		{name: "conflicting group and component selectors", invocation: updateInvocation{Group: "platform", Components: []string{"vpc"}}, wantError: "--group and --component"},
 		{name: "missing group", invocation: updateInvocation{Group: "platform"}, wantError: "is not configured"},
 		{name: "invalid format", configure: func(v *viper.Viper, _ *cobra.Command) { v.Set("format", "yaml") }, wantError: "--format"},
 		{name: "invalid execution mode", configure: func(v *viper.Viper, _ *cobra.Command) {
@@ -261,6 +267,10 @@ func TestValidateUpdateInvocation(t *testing.T) {
 			v.Set("format", "table")
 			v.Set("vendor.update.batching.mode", "component")
 		}, wantError: "requires"},
+		{name: "invalid batching mode", configure: func(v *viper.Viper, _ *cobra.Command) {
+			v.Set("format", "table")
+			v.Set("vendor.update.batching.mode", "invalid")
+		}, wantError: "batching.mode"},
 		{name: "invalid template", configure: func(v *viper.Viper, _ *cobra.Command) {
 			v.Set("format", "table")
 			v.Set("vendor.ci.pull_request.title", "{{")

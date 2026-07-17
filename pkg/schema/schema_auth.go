@@ -29,11 +29,12 @@ type KeyringConfig struct {
 
 // Provider defines an authentication provider configuration.
 type Provider struct {
-	Kind                    string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	StartURL                string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
-	URL                     string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
-	Region                  string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	Username                string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Kind     string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL string `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	URL      string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Region   string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Username string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	//nolint:gosec // Provider configuration intentionally accepts a user-supplied password.
 	Password                string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
 	Driver                  string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
 	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.

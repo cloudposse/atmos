@@ -86,8 +86,25 @@ type updateInvocation struct {
 	Components  []string
 }
 
-//nolint:cyclop,gocognit,revive // Validation is deliberately kept together before any mutation occurs.
 func validateUpdateInvocation(v *viper.Viper, cmd *cobra.Command, invocation updateInvocation) error {
+	if err := validateUpdateSelectors(v, invocation); err != nil {
+		return err
+	}
+	if err := validateUpdateConfiguration(v); err != nil {
+		return err
+	}
+	if invocation.PullRequest && cmd.Flags().Changed("check") && v.GetBool("check") {
+		// A dry run is allowed with --pull-request, but it deliberately does no
+		// branch work. The distinction is surfaced in both terminal and summary.
+		return nil
+	}
+	if invocation.PullRequest {
+		return validatePullRequestTemplates(v)
+	}
+	return nil
+}
+
+func validateUpdateSelectors(v *viper.Viper, invocation updateInvocation) error {
 	if invocation.All && (invocation.Group != "" || len(invocation.Components) > 0) {
 		return fmt.Errorf("%w: --all cannot be used with --group or --component", errUtils.ErrComponentUpdaterConfig)
 	}
@@ -100,6 +117,10 @@ func validateUpdateInvocation(v *viper.Viper, cmd *cobra.Command, invocation upd
 	if invocation.Group != "" && !v.IsSet("vendor.update.groups."+invocation.Group) {
 		return fmt.Errorf("%w: vendor.update.groups.%s is not configured", errUtils.ErrComponentUpdaterConfig, invocation.Group)
 	}
+	return nil
+}
+
+func validateUpdateConfiguration(v *viper.Viper) error {
 	mode := v.GetString("vendor.update.execution.mode")
 	if mode != "" && mode != "current" && mode != "worktree" {
 		return fmt.Errorf("%w: vendor.update.execution.mode must be current or worktree", errUtils.ErrComponentUpdaterConfig)
@@ -114,18 +135,16 @@ func validateUpdateInvocation(v *viper.Viper, cmd *cobra.Command, invocation upd
 	if batching == "component" {
 		return fmt.Errorf("%w: component batching is configured but linked-worktree publishing is not available in this release", errUtils.ErrComponentUpdaterConfig)
 	}
-	if invocation.PullRequest && cmd.Flags().Changed("check") && v.GetBool("check") {
-		// A dry run is allowed with --pull-request, but it deliberately does no
-		// branch work. The distinction is surfaced in both terminal and summary.
-		return nil
-	}
-	if invocation.PullRequest {
-		for _, text := range []string{v.GetString("vendor.ci.pull_request.title"), v.GetString("vendor.ci.pull_request.body")} {
-			if text != "" {
-				if _, err := template.New("component-updater").Funcs(templateFunctions()).Parse(text); err != nil {
-					return fmt.Errorf("%w: invalid pull request template: %w", errUtils.ErrComponentUpdaterConfig, err)
-				}
-			}
+	return nil
+}
+
+func validatePullRequestTemplates(v *viper.Viper) error {
+	for _, text := range []string{v.GetString("vendor.ci.pull_request.title"), v.GetString("vendor.ci.pull_request.body")} {
+		if text == "" {
+			continue
+		}
+		if _, err := template.New("component-updater").Funcs(templateFunctions()).Parse(text); err != nil {
+			return fmt.Errorf("%w: invalid pull request template: %w", errUtils.ErrComponentUpdaterConfig, err)
 		}
 	}
 	return nil
@@ -197,13 +216,13 @@ func updateScope(group string, components []string) string {
 	return "components-" + hex.EncodeToString(hash[:])[:componentSelectionHashLength]
 }
 
-func prepareComponentUpdateBranch(ctx context.Context, v *viper.Viper, scope string) (string, error) {
+func prepareComponentUpdateBranch(ctx context.Context, v *viper.Viper, scope string) (string, string, error) {
 	base := v.GetString("vendor.ci.pull_request.base_branch")
 	if base == "" {
 		var err error
 		base, err = atmosgit.DefaultBranch(ctx, currentWorkdir, "origin")
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 	}
 	prefix := strings.Trim(v.GetString("vendor.ci.pull_request.branch_prefix"), "/")
@@ -212,24 +231,42 @@ func prepareComponentUpdateBranch(ctx context.Context, v *viper.Viper, scope str
 	}
 	branch := prefix + "/" + scope
 	if err := atmosgit.PrepareBranch(ctx, atmosgit.PrepareBranchOptions{Workdir: currentWorkdir, Remote: "origin", Base: base, Branch: branch}); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return branch, nil
+	return branch, base, nil
 }
 
-//nolint:cyclop,funlen,revive // Publishing sequences safety-critical local Git and remote PR operations.
-func publishComponentUpdate(ctx context.Context, v *viper.Viper, scope, branch string, report *vendoring.UpdateReport) (*updater.PullRequest, string, error) {
-	provider, err := atmosgit.NewProvider("cli")
+type componentUpdatePublication struct {
+	scope  string
+	branch string
+	base   string
+	report *vendoring.UpdateReport
+}
+
+func publishComponentUpdate(ctx context.Context, v *viper.Viper, publication componentUpdatePublication) (*updater.PullRequest, string, error) {
+	commit, err := commitAndPushComponentUpdate(ctx, publication.branch)
+	if err != nil || commit == "" {
+		return nil, commit, err
+	}
+	pr, err := reconcileComponentUpdatePullRequest(ctx, v, publication)
 	if err != nil {
 		return nil, "", err
+	}
+	return pr, commit, nil
+}
+
+func commitAndPushComponentUpdate(ctx context.Context, branch string) (string, error) {
+	provider, err := atmosgit.NewProvider("cli")
+	if err != nil {
+		return "", err
 	}
 	rc := atmosgit.RepoContext{Workdir: currentWorkdir, Remote: "origin", Branch: branch}
 	status, err := provider.Status(ctx, &atmosgit.StatusOptions{RepoContext: rc})
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	if status.Clean {
-		return nil, "", nil
+		return "", nil
 	}
 	paths := make([]string, 0, len(status.Entries))
 	for _, entry := range status.Entries {
@@ -237,29 +274,25 @@ func publishComponentUpdate(ctx context.Context, v *viper.Viper, scope, branch s
 	}
 	commit, err := provider.Commit(ctx, &atmosgit.CommitOptions{RepoContext: rc, Paths: paths, Message: "chore(components): update vendored components", Author: &atmosgit.Author{Name: "atmos[bot]", Email: "atmos-bot@users.noreply.github.com"}})
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	if !commit.Committed {
-		return nil, "", nil
+		return "", nil
 	}
 	if err := provider.Push(ctx, &atmosgit.PushOptions{RepoContext: rc, Retries: 1}); err != nil {
-		return nil, "", err
+		return "", err
 	}
+	return commit.SHA, nil
+}
 
+func reconcileComponentUpdatePullRequest(ctx context.Context, v *viper.Viper, publication componentUpdatePublication) (*updater.PullRequest, error) {
 	owner, repository, err := gitHubRepository(ctx, currentWorkdir, "origin")
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	base := v.GetString("vendor.ci.pull_request.base_branch")
-	if base == "" {
-		base, err = atmosgit.DefaultBranch(ctx, currentWorkdir, "origin")
-		if err != nil {
-			return nil, "", err
-		}
-	}
-	title, body, err := renderPRTemplates(v, scope, report)
+	title, body, err := renderPRTemplates(v, publication.scope, publication.report)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	publisherName := v.GetString("vendor.ci.pull_request.provider")
 	if publisherName == "" {
@@ -267,17 +300,17 @@ func publishComponentUpdate(ctx context.Context, v *viper.Viper, scope, branch s
 	}
 	publisher, err := atmosgit.NewPullRequestPublisher(publisherName)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	labels := v.GetStringSlice("vendor.ci.pull_request.labels")
 	if len(labels) == 0 {
 		labels = []string{"component-update"}
 	}
-	pr, err := publisher.Reconcile(ctx, &atmosgit.PullRequestOptions{Owner: owner, Repository: repository, Base: base, Head: branch, Title: title, Body: body, Labels: labels, Draft: v.GetBool("vendor.ci.pull_request.draft"), Reviewers: v.GetStringSlice("vendor.ci.pull_request.reviewers"), Assignees: v.GetStringSlice("vendor.ci.pull_request.assignees")})
+	pr, err := publisher.Reconcile(ctx, &atmosgit.PullRequestOptions{Owner: owner, Repository: repository, Base: publication.base, Head: publication.branch, Title: title, Body: body, Labels: labels, Draft: v.GetBool("vendor.ci.pull_request.draft"), Reviewers: v.GetStringSlice("vendor.ci.pull_request.reviewers"), Assignees: v.GetStringSlice("vendor.ci.pull_request.assignees")})
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return &updater.PullRequest{Number: pr.Number, URL: pr.URL}, commit.SHA, nil
+	return &updater.PullRequest{Number: pr.Number, URL: pr.URL}, nil
 }
 
 func templateFunctions() template.FuncMap {

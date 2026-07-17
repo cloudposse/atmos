@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	githubci "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ProviderName identifies the GitHub pull request publisher.
@@ -47,6 +48,8 @@ func NewWithClientFactory(factory func() (client, error)) *Provider {
 //
 //nolint:cyclop,revive // Reconciliation keeps its forge API calls together at the provider boundary.
 func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
+	defer perf.Track(nil, "github.Provider.Reconcile")()
+
 	if options == nil {
 		return nil, fmt.Errorf("%w: pull request options are required", errUtils.ErrComponentUpdaterConfig)
 	}
