@@ -1,10 +1,15 @@
 package stack
 
 import (
+	"bytes"
+	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestStackValidateCmd_RegisteredUnderStack(t *testing.T) {
@@ -23,6 +28,25 @@ func TestStackValidateCmd_HasSchemaOverrideFlag(t *testing.T) {
 	// stacks`, which the shared executor reads from the command's flag set.
 	flag := stackValidateCmd.PersistentFlags().Lookup("schemas-atmos-manifest")
 	require.NotNil(t, flag, "expected the schemas-atmos-manifest flag to be defined")
+}
+
+func TestStackValidateCmdRichFormat(t *testing.T) {
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{StacksBaseAbsolutePath: filepath.Join(t.TempDir(), "missing-stacks")}
+
+	output := &bytes.Buffer{}
+	command := &cobra.Command{}
+	command.Flags().String("format", "rich", "")
+	command.SetOut(output)
+	require.NoError(t, stackValidateCmd.RunE(command, nil))
+	assert.Contains(t, output.String(), "No stack manifests found")
+
+	invalid := &cobra.Command{}
+	invalid.Flags().String("format", "xml", "")
+	err := stackValidateCmd.RunE(invalid, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected text or rich")
 }
 
 // The end-to-end behavior (delegating to `atmos validate stacks`) requires the

@@ -49,3 +49,45 @@ func TestRichSortsDiagnosticsAndClipsLongLines(t *testing.T) {
 	assert.Less(t, strings.Index(output, "a.yaml"), strings.Index(output, "z.yaml"))
 	assert.Contains(t, output, "…")
 }
+
+func TestRichHelpers(t *testing.T) {
+	root := t.TempDir()
+	assert.Equal(t, "file.yaml", richPath("", "file.yaml"))
+	assert.Equal(t, filepath.Join(root, "file.yaml"), richPath(root, "file.yaml"))
+	assert.Equal(t, filepath.Join(root, "file.yaml"), richPath(root, filepath.Join(root, "file.yaml")))
+
+	diagnostic := Diagnostic{Line: 2, Column: 4}
+	assert.Equal(t, 4, diagnosticColumn(diagnostic, "  value", 2))
+	assert.Equal(t, 4, diagnosticColumn(diagnostic, "\t  value", 1))
+	assert.Equal(t, 1, firstContentColumn(" \t "))
+
+	short, shortOffset := richClip("short", 1, 1)
+	assert.Equal(t, "short", short)
+	assert.Zero(t, shortOffset)
+	clipped, offset := richClip("abcdefghijklmnopqrstuvwxyz", 20, 25)
+	assert.Contains(t, clipped, "…")
+	assert.Positive(t, offset)
+
+	assert.Equal(t, "yellow", severityColor(SeverityWarning))
+	assert.Equal(t, "blue", severityColor(SeverityNotice))
+	assert.Equal(t, "red", severityColor(Severity("other")))
+	assert.Equal(t, "value", richStyle("value", "bold", false))
+	assert.Equal(t, "value", richStyle("value", "unknown", true))
+	assert.Equal(t, "\x1b[1mvalue\x1b[0m", richStyle("value", "bold", true))
+}
+
+func TestRichHandlesDefaultHeadersAndOutOfRangeLocations(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "example.yaml"), []byte("first\nsecond\n"), 0o600))
+	output := Rich(Report{Diagnostics: []Diagnostic{
+		{Message: "missing fields"},
+		{Severity: SeverityWarning, Message: "past end", File: "example.yaml", Line: 3},
+		{Severity: SeverityNotice, Message: "range", File: "example.yaml", Line: 2, EndLine: 1, EndColumn: 9},
+	}}, RichOptions{Root: root, Width: 0})
+
+	assert.Contains(t, output, "[validation] (unknown location)")
+	assert.Contains(t, output, "error: missing fields")
+	assert.Contains(t, output, "warning: past end")
+	assert.Contains(t, output, "notice: range")
+	assert.Contains(t, output, "2 | second")
+}

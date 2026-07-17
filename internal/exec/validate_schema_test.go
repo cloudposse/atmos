@@ -263,3 +263,87 @@ func TestDisplayPath(t *testing.T) {
 		})
 	}
 }
+
+func TestBuiltinConfigSchemaMatchesIncludesExistingOptionalDirectories(t *testing.T) {
+	project := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(project, "atmos.d"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(project, ".atmos", "profiles"), 0o700))
+	t.Chdir(project)
+
+	matches := builtinConfigSchemaMatches()
+	assert.Contains(t, matches, "atmos.yaml")
+	assert.Contains(t, matches, filepath.Join("atmos.d", "**", "*.yaml"))
+	assert.Contains(t, matches, filepath.Join(".atmos", "profiles", "**", "*.yml"))
+	assert.NotContains(t, matches, filepath.Join("profiles", "**", "*.yaml"))
+}
+
+func TestSchemaRegistryHelpers(t *testing.T) {
+	av := &atmosValidatorExecutor{atmosConfig: &schema.AtmosConfiguration{Schemas: map[string]any{
+		"custom": schema.SchemaRegistry{Manifest: "manifest.json"},
+	}}}
+	assert.ElementsMatch(t, []string{"custom", builtinConfigSchemaKey}, av.schemaKeys())
+	assert.True(t, av.shouldSkipSchema("cue", ""))
+	assert.True(t, av.shouldSkipSchema("custom", "config"))
+	assert.False(t, av.shouldSkipSchema("custom", ""))
+
+	custom := av.prepareSchemaValue("custom", "", "")
+	assert.Equal(t, "manifest.json", custom.Schema)
+	builtin := av.prepareSchemaValue(builtinConfigSchemaKey, "", "")
+	assert.Equal(t, configSchemaSource, builtin.Schema)
+	assert.Equal(t, builtinConfigSchemaMatches(), builtin.Matches)
+	override := av.prepareSchemaValue("custom", "custom", "override.json")
+	assert.Equal(t, "override.json", override.Schema)
+}
+
+func TestSchemaFilePositionsHandlesInvalidInput(t *testing.T) {
+	assert.Nil(t, schemaFilePositions(filepath.Join(t.TempDir(), "missing.yaml")))
+	invalid := filepath.Join(t.TempDir(), "invalid.yaml")
+	require.NoError(t, os.WriteFile(invalid, []byte("not: [valid"), 0o600))
+	assert.Nil(t, schemaFilePositions(invalid))
+}
+
+func TestValidateAtmosSchemaReport(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("field: value\n"), 0o600))
+
+	t.Run("collects diagnostics with source positions", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		matcher := filematch.NewMockFileMatcher(ctrl)
+		validatorMock := validator.NewMockValidator(ctrl)
+		matcher.EXPECT().MatchFiles([]string{"config.yaml"}).Return([]string{file}, nil)
+		validatorMock.EXPECT().ValidateYAMLSchema("schema.json", file).Return([]gojsonschema.ResultError{&mockResultError{
+			field: "field", errType: "invalid_type", description: "must be a string",
+		}}, nil)
+
+		av := &atmosValidatorExecutor{
+			validator: validatorMock, fileMatcher: matcher,
+			atmosConfig: &schema.AtmosConfiguration{Schemas: map[string]any{
+				"config": schema.SchemaRegistry{Schema: "schema.json", Matches: []string{"config.yaml"}},
+			}},
+		}
+		report, err := av.ValidateAtmosSchemaReport("", "")
+		require.NoError(t, err)
+		require.Len(t, report.Diagnostics, 1)
+		assert.Equal(t, 1, report.FilesChecked)
+		assert.Equal(t, "schema", report.Diagnostics[0].Source)
+		assert.Equal(t, "invalid_type", report.Diagnostics[0].RuleID)
+		assert.Equal(t, file, report.Diagnostics[0].File)
+		assert.Positive(t, report.Diagnostics[0].Line)
+	})
+
+	t.Run("returns validator errors", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		matcher := filematch.NewMockFileMatcher(ctrl)
+		validatorMock := validator.NewMockValidator(ctrl)
+		matcher.EXPECT().MatchFiles([]string{"config.yaml"}).Return([]string{file}, nil)
+		validatorMock.EXPECT().ValidateYAMLSchema("schema.json", file).Return(nil, assert.AnError)
+		av := &atmosValidatorExecutor{
+			validator: validatorMock, fileMatcher: matcher,
+			atmosConfig: &schema.AtmosConfiguration{Schemas: map[string]any{
+				"config": schema.SchemaRegistry{Schema: "schema.json", Matches: []string{"config.yaml"}},
+			}},
+		}
+		_, err := av.ValidateAtmosSchemaReport("", "")
+		assert.ErrorIs(t, err, assert.AnError)
+	})
+}

@@ -116,6 +116,37 @@ func TestValidationApplicability(t *testing.T) {
 	})
 }
 
+func TestValidationTaskErrorsAndApplicabilityFailures(t *testing.T) {
+	results, err := runValidationTasks([]validationTask{{
+		name: "schema",
+		applicable: func() (bool, error) {
+			return false, errors.New("cannot inspect schema")
+		},
+	}, {
+		name:       "stacks",
+		applicable: func() (bool, error) { return true, nil },
+		run:        func() error { return nil },
+	}})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrValidationFailed)
+	assert.Equal(t, []validationTaskResult{
+		{name: "schema", status: validationTaskFailed},
+		{name: "stacks", status: validationTaskPassed},
+	}, results)
+
+	original := atmosConfig
+	t.Cleanup(func() { atmosConfig = original })
+	project := t.TempDir()
+	t.Chdir(project)
+	atmosConfig = schema.AtmosConfiguration{Validate: schema.Validate{EditorConfig: schema.EditorConfig{ConfigFilePaths: []string{"\x00"}}}}
+	_, err = editorConfigValidationApplicable()
+	require.Error(t, err)
+
+	require.NoError(t, os.WriteFile(".github", []byte("not a directory"), 0o600))
+	_, err = githubActionsValidationApplicable()
+	require.Error(t, err)
+}
+
 func TestValidateCommandHelpDescribesAggregateValidation(t *testing.T) {
 	_ = NewTestKit(t)
 

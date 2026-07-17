@@ -1,16 +1,21 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
+	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/outputformat"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	validateReport "github.com/cloudposse/atmos/pkg/validation"
@@ -311,6 +316,77 @@ func TestConfigureEditorConfigFormat(t *testing.T) {
 	assert.True(t, editorConfigRich)
 	_, err = configureEditorConfigFormat("xml")
 	assert.Error(t, err)
+}
+
+func TestEditorConfigDiagnosticsNormalizesLocations(t *testing.T) {
+	report := editorConfigDiagnostics([]er.ValidationErrors{{
+		FilePath: "example.tf",
+		Errors: []er.ValidationError{
+			{LineNumber: -1, Message: errors.New("missing final newline")},
+			{LineNumber: 4, AdditionalIdenticalErrorCount: 2, Message: errors.New("trailing whitespace")},
+		},
+	}})
+	require.Len(t, report.Diagnostics, 2)
+	assert.Equal(t, "editorconfig", report.Diagnostics[0].Source)
+	assert.Zero(t, report.Diagnostics[0].Line)
+	assert.Equal(t, 4, report.Diagnostics[1].Line)
+	assert.Equal(t, 6, report.Diagnostics[1].EndLine)
+}
+
+func TestRunEditorConfigRichOutput(t *testing.T) {
+	originalAtmosConfig := atmosConfig
+	originalCurrentConfig := currentConfig
+	originalCLIConfig := cliConfig
+	originalPaths := configFilePaths
+	originalExclude := tmpExclude
+	originalInit := initEditorConfig
+	originalSARIF := editorConfigSARIF
+	originalRich := editorConfigRich
+	originalFormat := format
+	t.Cleanup(func() {
+		atmosConfig = originalAtmosConfig
+		currentConfig = originalCurrentConfig
+		cliConfig = originalCLIConfig
+		configFilePaths = originalPaths
+		tmpExclude = originalExclude
+		initEditorConfig = originalInit
+		editorConfigSARIF = originalSARIF
+		editorConfigRich = originalRich
+		format = originalFormat
+	})
+
+	project := t.TempDir()
+	t.Chdir(project)
+	require.NoError(t, os.WriteFile(".editorconfig", []byte("root = true\n[*]\nend_of_line = lf\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n"), 0o600))
+	require.NoError(t, os.WriteFile("valid.txt", []byte("valid\n"), 0o600))
+	atmosConfig = schema.AtmosConfiguration{}
+	cliConfig = config.Config{}
+	configFilePaths = nil
+	tmpExclude = ""
+	initEditorConfig = false
+
+	command := &cobra.Command{}
+	addPersistentFlags(command)
+	require.NoError(t, command.ParseFlags(nil))
+	require.NoError(t, command.Flags().Set("format", "rich"))
+	var output bytes.Buffer
+	command.SetOut(&output)
+
+	require.NoError(t, runEditorConfig(command))
+	assert.Contains(t, output.String(), "EditorConfig validation passed")
+
+	output.Reset()
+	require.NoError(t, os.WriteFile("invalid.txt", []byte("invalid  \n"), 0o600))
+	err := runEditorConfig(command)
+	require.Error(t, err)
+	assert.Equal(t, 1, errUtils.GetExitCode(err))
+	assert.Contains(t, output.String(), "Trailing whitespace")
+
+	output.Reset()
+	require.NoError(t, os.Remove("invalid.txt"))
+	require.NoError(t, command.Flags().Set("format", "sarif"))
+	require.NoError(t, runEditorConfig(command))
+	assert.Contains(t, output.String(), `"version": "2.1.0"`)
 }
 
 func TestRequestedEditorConfigFormatPrecedence(t *testing.T) {
