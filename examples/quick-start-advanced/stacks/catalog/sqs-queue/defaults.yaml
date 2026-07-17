@@ -22,4 +22,4 @@ components:
       vars:
         name: events
         # Read the SNS topic ARN straight from the sns-topic component's Terraform state.
-        topic_arn: !terraform.state sns-topic ".topic_arn // ""pending"""
+        topic_arn: !terraform.state sns-topic .topic_arn // "pending"
