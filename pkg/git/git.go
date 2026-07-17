@@ -482,7 +482,7 @@ func gitRepositoryPaths(path string) (repositoryPaths, error) {
 		return repositoryPaths{}, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitCommandFailed, err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(string(out)), "\r\n", "\n"), "\n")
 	if len(lines) != 3 {
 		return repositoryPaths{}, fmt.Errorf("%w: got %d lines: %q", errUtils.ErrUnexpectedGitRevParseOutput, len(lines), strings.TrimSpace(string(out)))
 	}

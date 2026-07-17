@@ -967,9 +967,12 @@ func decodeTaskOutput(input map[string]any, output any) error {
 		WeaklyTypedInput: true,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create decoder: %w", err)
 	}
-	return decoder.Decode(input)
+	if err := decoder.Decode(input); err != nil {
+		return fmt.Errorf("failed to decode task output: %w", err)
+	}
+	return nil
 }
 
 func withoutTaskMapKey(m map[string]any, key string) map[string]any {
