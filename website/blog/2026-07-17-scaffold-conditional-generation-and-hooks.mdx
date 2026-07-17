@@ -1,0 +1,85 @@
+---
+slug: scaffold-conditional-generation-and-hooks
+title: "Turn GitHub template repositories into governed platform products"
+date: 2026-07-17T12:00:00.000Z
+authors: [osterman]
+tags: [feature, dx]
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Platform teams use GitHub template repositories to make the right starting point easy to find.
+That is valuable, but GitHub’s template flow deliberately ends at a repository copy. It cannot ask
+team-specific questions, validate answers supplied by CI, generate only the files a choice requires,
+run the finishing work, or keep a safe update relationship with the golden template.
+
+Atmos makes those repositories executable platform products. A cataloged or remote Git template
+becomes a guided workflow that can adapt to the project being created, enforce its contract, and
+continue to evolve without forcing every team to fork the template forever.
+
+<!--truncate-->
+
+## The Industry Problem
+
+The usual choice is between a generic template that every team must customize by hand and a growing
+collection of near-duplicate templates for every language, environment, compliance rule, and
+deployment option. Neither scales across a business. The first produces drift; the second turns the
+platform team into maintainers of a template matrix.
+
+GitHub template repositories solve distribution, not this operating problem. They are a great
+source for a golden starting tree, but after a user clicks **Use this template**, GitHub has no
+knowledge of the choices, policies, generated files, or lifecycle work required by that new
+repository.
+
+## What Atmos Adds to a Template Repository
+
+Atmos uses a `scaffold.yaml` contract alongside the template source. It gives a platform team one
+template that can adapt without becoming a maze of shell scripts or repository variants:
+
+- **A validated input contract.** Required fields, patterns, select and multiselect options, and
+  boolean values are validated consistently for interactive answers, defaults, presets, persisted
+  values, and `--set` flags. Platform policy does not disappear when a template moves into CI.
+- **Conditional prompts and files.** A field or a file can use `when:` and the answers collected so
+  far. Ask for a vendored component version only when vendoring is enabled, and write the manifest
+  only in that case.
+- **Lifecycle hooks.** Templates can run declared work before or after generation — formatting,
+  validation, or setup — with the same condition engine used by Atmos workflows and CI hooks.
+  `--skip-hooks` provides an explicit per-invocation escape hatch.
+- **A safe evolution path.** `atmos scaffold generate --update` re-runs a template against an
+  existing project and performs a three-way merge. `--merge-strategy` lets teams choose manual,
+  ours, or theirs conflict handling instead of silently overwriting local work.
+
+Both `when:` forms use the same condition language as Atmos workflows and CI hooks, with an
+`answers` variable exposing the values collected so far. `atmos init` and `atmos scaffold generate`
+share this engine, so the same contract works for a new project and for repeatable generation inside
+an existing one.
+
+## See It Work
+
+The cast starts from a template registered in `atmos.yaml`, generates a project noninteractively,
+then runs the same template interactively. Notice that the vendoring version is asked only after
+vendoring is enabled — and that the generated `vendor.yaml` follows the same decision.
+
+<CastPlayer src="/casts/examples/scaffolding/generate-example.cast" title="atmos scaffold adaptive template" chrome controls scrubber />
+
+[View the full scaffolding example](/examples/scaffolding)
+
+## GitHub Templates Become More Valuable, Not Less
+
+Any plain Git repository works as a scaffold source, including one marked as a GitHub template
+repository. Keep GitHub’s familiar discovery and ownership model, then invoke the repository
+through Atmos — cataloged in `atmos.yaml` or by Git source, optionally pinned to a branch, tag, or
+commit with `--ref`. The result is a reusable product boundary: the template owns the platform
+contract and the consuming team supplies the appropriate answers.
+
+That pairing is especially powerful over time. GitHub’s template action gives each project a clean
+copy with no built-in route for downstream changes. Atmos can safely bring template improvements
+back through the three-way update flow, while preserving a team's intentional customization and
+making any true conflict visible. The platform can improve its paved road without asking every
+application team to start over.
+
+## Get Involved
+
+See the [Scaffold Command Documentation](/cli/commands/scaffold/generate) for the field, hook,
+remote-source, and update reference, or open an issue if your platform pattern needs a new
+capability.
