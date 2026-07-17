@@ -2,10 +2,10 @@
 
 ## Schema File Locations
 
-| File | Purpose | Embedding |
+| Schema | Purpose | Embedding |
 |------|---------|-----------|
-| `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` | Public schema for website and IDE integration | Not embedded; deployed to `atmos.tools` |
-|| `pkg/datafetcher/schema/config/global/1.0.json` | Global Atmos config schema | Embedded via `//go:embed schema/*` |
+| `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` | Public schema for website and IDE integration | Not embedded; deployed to `atmos.tools` |
+| Global config schema | Global Atmos config schema | Compiled into the Atmos binary |
 
 ## Top-Level Schema Structure
 
@@ -494,8 +494,7 @@ Related definitions: `auth_providers`, `auth_provider`, `auth_identities`, `auth
 
 ## Vendor Package Schema Structure
 
-The vendor schema (`pkg/datafetcher/schema/vendor/package/1.0.json`) is a separate schema
-for `vendor.yaml` files:
+The vendor schema is a separate embedded schema for `vendor.yaml` files:
 
 ```json
 {

@@ -14,8 +14,8 @@ apply. No `kubectl` or `kustomize` binary is required. This is distinct from Hel
 see [atmos-helm](../atmos-helm/SKILL.md) for charts, or [atmos-helmfile](../atmos-helmfile/SKILL.md)
 for Helmfile-based releases.
 
-This feature is **experimental** (`IsExperimental() == true` in `cmd/kubernetes/kubernetes.go`).
-`kubectl`/`kustomize` names describe manifest-processing *behavior*, not the CLI binaries.
+This feature is **experimental**. `kubectl`/`kustomize` names describe manifest-processing
+*behavior*, not the CLI binaries.
 
 ## Related Skills
 

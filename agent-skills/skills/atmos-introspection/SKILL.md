@@ -299,10 +299,9 @@ atmos describe component vpc -s prod -i
 
 ## CLI Help: `--help=<topic>`
 
-Every `atmos` command supports a scoped `--help=<topic>` flag (implemented per
-`docs/prd/topic-specific-cli-help.md`, Status: Implemented) so help output doesn't bury the one thing you
-need. This is the fastest way for an agent to confirm correct command syntax without reading the full flag
-reference:
+Every `atmos` command supports a scoped `--help=<topic>` flag so help output doesn't bury the one
+thing you need. This is the fastest way for an agent to confirm correct command syntax without
+reading the full flag reference:
 
 ```bash
 atmos terraform plan --help            # Default: description, usage, examples, subcommands,

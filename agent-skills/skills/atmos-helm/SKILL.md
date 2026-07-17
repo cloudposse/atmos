@@ -13,7 +13,7 @@ local, remote-repository, or OCI — through the **Helm Go SDK**, in-process. No
 binary is required. This is a different component type than `components.helmfile`; see
 [Native Helm vs. Helmfile](#native-helm-vs-helmfile) below before choosing one.
 
-This feature is **experimental** (`IsExperimental() == true` in `cmd/helm/helm.go`).
+This feature is **experimental**.
 
 ## Related Skills
 

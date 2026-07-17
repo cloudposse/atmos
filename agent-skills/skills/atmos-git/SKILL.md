@@ -85,5 +85,4 @@ credentials against untrusted code. Opt in explicitly and only with a documented
 `--allow-unsafe-fork`, `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION`, or
 `ci.allow_unsafe_fork_execution: true`; the bypass logs a prominent warning so it stays visible in
 CI logs and easy to grep for in review. Prefer `pull_request` (not `pull_request_target`) for
-workflows that clone and plan fork contributions, since `pull_request` withholds fork secrets. See
-`docs/prd/native-ci/framework/fork-pr-trust-gate.md` for the full design.
+workflows that clone and plan fork contributions, since `pull_request` withholds fork secrets.
