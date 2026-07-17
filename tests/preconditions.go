@@ -367,8 +367,7 @@ func prependCachedTestTool(binary string) {
 			return
 		}
 		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
-		binaryPath := filepath.Join(binDir, tool.Binary)
-		if _, err := os.Stat(binaryPath); err != nil {
+		if !cachedTestToolBinaryExists(binDir, tool.Binary) {
 			return
 		}
 
@@ -379,6 +378,21 @@ func prependCachedTestTool(binary string) {
 		}
 		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
 	})
+}
+
+// cachedTestToolBinaryExists reports whether the cached tool binary exists in binDir,
+// checking the bare name and, on Windows, the ".exe"-suffixed name (toolchain installs
+// write e.g. "tofu.exe" there, so statting the bare name alone always fails on Windows).
+func cachedTestToolBinaryExists(binDir, binary string) bool {
+	if _, err := os.Stat(filepath.Join(binDir, binary)); err == nil {
+		return true
+	}
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(filepath.Join(binDir, binary+".exe")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {

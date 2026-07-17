@@ -3,6 +3,7 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -45,6 +46,26 @@ func withFakeCachedTool(t *testing.T, repo, version, binary string) string {
 	cacheDir, err := os.UserCacheDir()
 	require.NoError(t, err)
 	return filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", repo, version)
+}
+
+func TestCachedTestToolBinaryExists(t *testing.T) {
+	t.Run("bare name exists", func(t *testing.T) {
+		binDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, "faketool"), []byte("fake\n"), 0o755))
+		assert.True(t, cachedTestToolBinaryExists(binDir, "faketool"))
+	})
+
+	t.Run("missing binary", func(t *testing.T) {
+		assert.False(t, cachedTestToolBinaryExists(t.TempDir(), "faketool"))
+	})
+
+	t.Run("exe-suffixed name", func(t *testing.T) {
+		binDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, "faketool.exe"), []byte("fake\n"), 0o755))
+		// Toolchain installs write "<binary>.exe" on Windows, so only there does the
+		// suffixed lookup apply; elsewhere the bare name is the only valid spelling.
+		assert.Equal(t, runtime.GOOS == "windows", cachedTestToolBinaryExists(binDir, "faketool"))
+	})
 }
 
 func TestPrependCachedTestTool(t *testing.T) {
