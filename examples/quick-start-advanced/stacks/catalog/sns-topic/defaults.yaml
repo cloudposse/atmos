@@ -22,4 +22,4 @@ components:
       vars:
         name: events
         # Read the KMS key ARN straight from the kms-key component's Terraform state.
-        kms_key_arn: !terraform.state kms-key ".key_arn // ""pending"""
+        kms_key_arn: !terraform.state kms-key .key_arn // "pending"
