@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // EnvFunction implements the env function for environment variable lookup.
@@ -36,19 +36,11 @@ func parseEnvArgs(args string) (envVarName, envVarDefault string, err error) {
 		return "", "", fmt.Errorf("%w: env function requires at least one argument", ErrInvalidArguments)
 	}
 
-	parts, err := utils.SplitStringByDelimiter(args, ' ')
+	parsed, err := parser.ParseEnv(args)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: failed to parse args %q: %w", ErrInvalidArguments, args, err)
 	}
-
-	switch len(parts) {
-	case 2:
-		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
-	case 1:
-		return strings.TrimSpace(parts[0]), "", nil
-	default:
-		return "", "", fmt.Errorf("%w: env function accepts 1 or 2 arguments, got %d", ErrInvalidArguments, len(parts))
-	}
+	return parsed.Name, parsed.Default, nil
 }
 
 // lookupEnvFromContext checks the component's env section from stack manifests.
