@@ -48,6 +48,15 @@ var transportFlakeMarkers = []string{
 	"stream error: stream ID",
 	"connection reset by peer",
 	"TLS handshake timeout",
+	// macOS Security.framework can report this while cosign fetches a remote
+	// certificate sidecar. It is a transport/trust-store operation that happens
+	// before any signature verdict, so retrying it cannot mask bad evidence.
+	"SecPolicyCreateSSL error",
+	// A macOS process can be terminated by its security subsystem before
+	// Cosign reaches a verification verdict. This is transient execution
+	// failure, not evidence that a signature is invalid; a fresh, serialized
+	// invocation (see installer.runTrustedVerifier) is safe to retry.
+	"signal: killed",
 	"i/o timeout",
 	"unexpected EOF",
 }
