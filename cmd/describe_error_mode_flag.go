@@ -17,8 +17,8 @@ const (
 )
 
 // newDescribeErrorModeParser creates a minimal StandardParser wired to only the
-// --error-mode flag shared by `describe stacks`, `describe affected`, and
-// `describe dependents`.
+// --error-mode flag shared by `describe component`, `describe stacks`,
+// `describe affected`, and `describe dependents`.
 //
 // The describe family predates the unified flag-parsing migration: every other flag
 // on these three commands is still registered via raw Cobra PersistentFlags() and

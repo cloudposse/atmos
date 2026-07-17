@@ -6,14 +6,18 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+var describeComponentErrorModeParser *flags.StandardParser
 
 // describeComponentCmd describes configuration for components.
 var describeComponentCmd = &cobra.Command{
@@ -52,6 +56,8 @@ type describeComponentFlags struct {
 	query                string
 	skip                 []string
 	provenance           bool
+	provenanceExplicit   bool
+	errorMode            string
 }
 
 // parseDescribeComponentFlags extracts all flag values from the command.
@@ -84,6 +90,8 @@ func parseDescribeComponentFlags(cmd *cobra.Command) (describeComponentFlags, er
 	if f.provenance, err = flags.GetBool("provenance"); err != nil {
 		return f, err
 	}
+	// An explicit --provenance beats the `describe.provenance` config default.
+	f.provenanceExplicit = flags.Changed("provenance")
 	return f, nil
 }
 
@@ -120,10 +128,11 @@ type resolveAuthManagerParams struct {
 	processYamlFunctions bool
 }
 
-// resolveAuthManager creates an AuthManager when YAML functions are enabled or identity
-// is explicitly requested via CLI flag.
+// resolveAuthManager creates an AuthManager only when identity is explicitly requested.
+// Describe-component is an inspection command: YAML functions can use ambient credentials
+// or degrade according to --error-mode without triggering an eager login.
 func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
-	if !p.processYamlFunctions && !p.identityExplicit {
+	if !p.identityExplicit {
 		return nil, nil
 	}
 
@@ -180,6 +189,18 @@ func getRunnableDescribeComponentCmd(
 		if err != nil {
 			return handleConfigError(err, needsPathResolution, component, f.stack)
 		}
+		if cmd.Flags().Lookup(describeErrorModeFlagName) != nil {
+			if err = resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeComponentErrorModeParser); err != nil {
+				return err
+			}
+			if f.errorMode, err = cmd.Flags().GetString(describeErrorModeFlagName); err != nil {
+				return err
+			}
+		}
+		f.errorMode = e.ResolveErrorMode(f.errorMode, atmosConfig.Describe.ErrorMode)
+		if f.errorMode != "strict" && f.errorMode != "warn" && f.errorMode != "silent" {
+			return fmt.Errorf("%w: %q", e.ErrInvalidErrorMode, f.errorMode)
+		}
 
 		component, err = resolveComponentFromPathIfNeeded(&g, &atmosConfig, component, f.stack, needsPathResolution)
 		if err != nil {
@@ -211,6 +232,8 @@ func getRunnableDescribeComponentCmd(
 			Format:               f.format,
 			File:                 f.file,
 			Provenance:           f.provenance,
+			ProvenanceExplicit:   f.provenanceExplicit,
+			ErrorMode:            f.errorMode,
 			AuthManager:          authManager,
 		})
 	}
@@ -247,7 +270,12 @@ func init() {
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
-	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
+	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Show where configuration values originated (enabled by default; disable with --provenance=false or describe.provenance in atmos.yaml)")
+	describeComponentErrorModeParser = newDescribeErrorModeParser()
+	describeComponentErrorModeParser.RegisterPersistentFlags(describeComponentCmd)
+	if err := describeComponentErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

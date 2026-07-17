@@ -114,6 +114,9 @@ atmos describe component vpc -s plat-ue2-prod --pager=more
 
 atmos describe component vpc -s tenant1-ue2-dev --provenance
 
+# Provenance annotations are on by default; disable them for plain output
+atmos describe component vpc -s tenant1-ue2-dev --provenance=false
+
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe component vpc -s tenant1-ue2-dev --identity my-aws-identity
 
@@ -189,9 +192,24 @@ atmos describe component . --stack dev --provenance
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
 
+  <dt>`describe.component.filter` <em>(atmos.yaml setting)</em></dt>
+  <dd>
+    Controls the output scope: <code>schema</code> (default) limits the output to the sections a stack manifest can define (<code>vars</code>, <code>settings</code>, <code>env</code>, <code>backend</code>, <code>metadata</code>, <code>overrides</code>, <code>providers</code>, <code>imports</code>, <code>dependencies</code>, <code>component</code>, <code>hooks</code>); <code>full</code> includes every internal field Atmos computes during processing.
+    <br/><br/>
+    <strong>Precedence</strong> (highest wins): <code>ATMOS_DESCRIBE_COMPONENT_FILTER</code> environment variable &gt; <code>describe.component.filter</code> in <code>atmos.yaml</code> &gt; default (<code>schema</code>).
+    <br/><br/>
+    Queries via <code>--query</code> always evaluate against the full data regardless of this setting. The output was unfiltered before the 2026-07-17 edition; a project pinned to an earlier <a href="/cli/configuration/edition"><code>edition</code></a> keeps the full output.
+  </dd>
+
   <dt>`--provenance` <em>(optional)</em></dt>
   <dd>
     Enable provenance tracking to show where configuration values originated.
+    <br/><br/>
+    <strong>Enabled by default.</strong> Component descriptions include provenance annotations unless disabled. Disable per-invocation with <code>--provenance=false</code>, per-environment with the <code>ATMOS_DESCRIBE_PROVENANCE</code> environment variable, or per-project with <code>describe.provenance: false</code> in <code>atmos.yaml</code>.
+    <br/><br/>
+    <strong>Precedence</strong> (highest wins): <code>--provenance</code> flag &gt; <code>ATMOS_DESCRIBE_PROVENANCE</code> environment variable &gt; <code>describe.provenance</code> in <code>atmos.yaml</code> &gt; default (<code>true</code>).
+    <br/><br/>
+    Provenance was off by default before the 2026-07-16 edition; a project pinned to an earlier <a href="/cli/configuration/edition"><code>edition</code></a> keeps it off.
     <br/><br/>
     <strong>YAML format on TTY:</strong>
     <ul>

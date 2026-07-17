@@ -494,6 +494,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			"count", len(configAndStacksInfo.ProfilesFromArg))
 	}
 
+	// Apply the edition pin (if any) as a rollback overlay on the defaults layer.
+	// This must run after every config source has merged (so the `edition:` key is
+	// visible) and before the final unmarshal; SetDefault never beats user-set values.
+	if err := applyEditionDefaults(v); err != nil {
+		return atmosConfig, err
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())
@@ -584,6 +591,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.force_color", "ATMOS_FORCE_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
 	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
+	bindEnv(v, "settings.terminal.help.filter", "ATMOS_HELP_FILTER")
 
 	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
 	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
@@ -591,6 +599,13 @@ func setEnv(v *viper.Viper) {
 
 	// Experimental feature handling
 	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
+
+	// Edition pin (date anchor for defaults; see pkg/edition).
+	bindEnv(v, "edition", "ATMOS_EDITION")
+
+	// Describe command defaults.
+	bindEnv(v, "describe.provenance", "ATMOS_DESCRIBE_PROVENANCE")
+	bindEnv(v, "describe.component.filter", "ATMOS_DESCRIBE_COMPONENT_FILTER")
 
 	// Atmos Pro settings
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
@@ -639,8 +654,17 @@ func bindEnv(v *viper.Viper, key ...string) {
 }
 
 // setDefaultConfiguration set default configuration for the viper instance.
+//
+// EDITIONS CONTRACT: this function always states the CURRENT defaults. Changing
+// any value here changes behavior for every user on upgrade, so it requires a
+// dated journal entry in pkg/edition/journal.go in the same PR (the snapshot
+// test in default_snapshot_test.go enforces this). Adding a NEW key needs no
+// journal entry — only regenerate the snapshot. Projects pinned to an earlier
+// edition get pre-change values re-applied by applyEditionDefaults.
 func setDefaultConfiguration(v *viper.Viper) {
-	v.SetDefault("components.helmfile.use_eks", true)
+	// EKS is opt-in since PR #1903 (journaled in pkg/edition; previously this
+	// SetDefault contradicted defaultCliConfig and kept the old behavior alive).
+	v.SetDefault("components.helmfile.use_eks", false)
 	v.SetDefault("components.terraform.append_user_agent",
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	// Plugin cache enabled by default for zero-config performance.
@@ -652,6 +676,9 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_bitbucket_token", true)
 	v.SetDefault("settings.inject_gitlab_token", true)
 
+	// Both logging defaults are journaled in pkg/edition (stderr since PR #1050,
+	// Warning since PR #1430). The embedded atmos.yaml must never set them — it
+	// would shadow these values and break edition rollback (test-enforced).
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Warning")
 	v.SetDefault("diagnostics.enabled", false)
@@ -663,6 +690,24 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
 	v.SetDefault("settings.terminal.speed", 0.0)
 	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
+	// Provenance annotations in `describe component` output, on by default (journaled in pkg/edition).
+	v.SetDefault("describe.provenance", true)
+	// Scope of `describe component` output: the stack-manifest ("schema") sections
+	// by default rather than every computed internal field (journaled in pkg/edition).
+	v.SetDefault("describe.component.filter", "schema")
+	// Focused bare `--help` output (no GLOBAL FLAGS section), on by default (journaled in pkg/edition).
+	v.SetDefault("settings.terminal.help.filter", true)
+	// Tree is the default output format for the list commands that showcase import
+	// hierarchies (journaled in pkg/edition; previously the renderer fell back to a table).
+	v.SetDefault("stacks.list.format", "tree")
+	v.SetDefault("list.instances.format", "tree")
+	// Graceful degradation for unresolved YAML functions in list/describe commands
+	// (journaled in pkg/edition; previously any unresolved value aborted the command).
+	v.SetDefault("list.error_mode", "warn")
+	v.SetDefault("describe.error_mode", "warn")
+	// Metadata inheritance from base components (journaled in pkg/edition; previously
+	// metadata was per-component only).
+	v.SetDefault("stacks.inherit.metadata", true)
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("cast.recording.width", 120)
 	v.SetDefault("cast.recording.height", 36)

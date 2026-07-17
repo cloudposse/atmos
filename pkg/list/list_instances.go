@@ -699,6 +699,18 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// opts.Cmd.Flags() here would bypass viper precedence.
 	upload := opts.Upload
 	formatFlag := opts.Format
+	// Apply the configured default when --format was not given (list.instances.format,
+	// tree by default — journaled in pkg/edition, so an edition pin restores the table).
+	// A defaulted tree steps aside for row-shaped flags (tree renders the import
+	// hierarchy and has no rows or columns to filter, query, or upload); only an
+	// explicit --format=tree conflicts with them.
+	if formatFlag == "" {
+		formatFlag = atmosConfig.List.Instances.Format
+		rowShapedFlags := upload || opts.FilterSpec != "" || opts.Query != "" || len(opts.ColumnsFlag) > 0
+		if formatFlag == string(format.FormatTree) && rowShapedFlags {
+			formatFlag = ""
+		}
+	}
 
 	// Handle matrix format specially - it bypasses the normal rendering pipeline.
 	if formatFlag == string(format.FormatMatrix) {

@@ -71,15 +71,24 @@ func RenderTable(
 func createProvidersTable(providers map[string]schema.Provider) (table.Model, error) {
 	defer perf.Track(nil, "list.createProvidersTable")()
 
-	columns := []table.Column{
-		{Title: "NAME", Width: providerNameWidth},
-		{Title: "KIND", Width: providerKindWidth},
-		{Title: "REGION", Width: providerRegionWidth},
-		{Title: "START URL / URL", Width: providerURLWidth},
-		{Title: "DEFAULT", Width: providerDefaultWidth},
+	// Without a TTY, keep the legacy fixed-size URL truncation so piped output stays stable.
+	urlLimit := 0
+	if !isTTYForTable() {
+		urlLimit = maxURLDisplay
 	}
 
-	rows := buildProviderRows(providers)
+	rows := buildProviderRows(providers, urlLimit)
+
+	specs := []columnSizingSpec{
+		{title: "NAME", legacy: providerNameWidth, floor: minProviderNameWidth},
+		{title: "KIND", legacy: providerKindWidth, floor: minProviderKindWidth},
+		{title: "REGION", legacy: providerRegionWidth, floor: minProviderRegionWidth},
+		{title: "START URL / URL", legacy: providerURLWidth, floor: minProviderURLWidth},
+		{title: "DEFAULT", legacy: providerDefaultWidth, floor: providerDefaultWidth},
+	}
+	// Under width pressure, shrink the most truncatable columns first: URL, then kind, then name, then region.
+	widths := computeColumnWidths(specs, rows, []int{3, 1, 0, 2})
+	columns := tableColumns(specs, widths)
 
 	t := table.New(
 		table.WithColumns(columns),
@@ -94,7 +103,10 @@ func createProvidersTable(providers map[string]schema.Provider) (table.Model, er
 }
 
 // buildProviderRows builds table rows from providers.
-func buildProviderRows(providers map[string]schema.Provider) []table.Row {
+// A positive urlLimit pre-truncates URLs to that many characters (the legacy
+// non-TTY behavior); zero or negative keeps URLs at their natural length so
+// the column can size to content.
+func buildProviderRows(providers map[string]schema.Provider, urlLimit int) []table.Row {
 	rows := make([]table.Row, 0, len(providers))
 
 	// Sort provider names for consistent output.
@@ -106,9 +118,12 @@ func buildProviderRows(providers map[string]schema.Provider) []table.Row {
 		// Determine URL to display.
 		url := emptyMarker
 		if provider.StartURL != "" {
-			url = truncateString(provider.StartURL, maxURLDisplay)
+			url = provider.StartURL
 		} else if provider.URL != "" {
-			url = truncateString(provider.URL, maxURLDisplay)
+			url = provider.URL
+		}
+		if urlLimit > 0 {
+			url = truncateString(url, urlLimit)
 		}
 
 		// Determine region.
@@ -155,17 +170,6 @@ func applyTableStyles(t *table.Model) {
 func createIdentitiesTable(authManager authTypes.AuthManager, identities map[string]schema.Identity) (table.Model, error) {
 	defer perf.Track(nil, "list.createIdentitiesTable")()
 
-	columns := []table.Column{
-		{Title: "", Width: 1}, // Status indicator column.
-		{Title: "NAME", Width: identityNameWidth},
-		{Title: "KIND", Width: identityKindWidth},
-		{Title: "VIA PROVIDER", Width: identityViaProviderWidth},
-		{Title: "VIA IDENTITY", Width: identityViaIdentityWidth},
-		{Title: "DEFAULT", Width: identityDefaultWidth},
-		{Title: "ALIAS", Width: identityAliasWidth},
-		{Title: "EXPIRES", Width: identityExpiresWidth},
-	}
-
 	rows := make([]table.Row, 0, len(identities))
 
 	// Sort identity names for consistent output.
@@ -180,6 +184,21 @@ func createIdentitiesTable(authManager authTypes.AuthManager, identities map[str
 		row := buildIdentityTableRow(authManager, &identity, name)
 		rows = append(rows, row)
 	}
+
+	specs := []columnSizingSpec{
+		{title: "", legacy: 1, floor: 1}, // Status indicator column.
+		{title: "NAME", legacy: identityNameWidth, floor: minIdentityNameWidth},
+		{title: "KIND", legacy: identityKindWidth, floor: minIdentityKindWidth},
+		{title: "VIA PROVIDER", legacy: identityViaProviderWidth, floor: minIdentityViaProviderWidth},
+		{title: "VIA IDENTITY", legacy: identityViaIdentityWidth, floor: minIdentityViaIdentityWidth},
+		{title: "DEFAULT", legacy: identityDefaultWidth, floor: identityDefaultWidth},
+		{title: "ALIAS", legacy: identityAliasWidth, floor: minIdentityAliasWidth},
+		{title: "EXPIRES", legacy: identityExpiresWidth, floor: identityExpiresWidth},
+	}
+	// Under width pressure, shrink the most truncatable columns first: kind,
+	// then alias, then via provider/identity, then name.
+	widths := computeColumnWidths(specs, rows, []int{2, 6, 3, 4, 1})
+	columns := tableColumns(specs, widths)
 
 	t := table.New(
 		table.WithColumns(columns),

@@ -201,6 +201,14 @@ func (b *GlobalOptionsBuilder) registerSettingsFlags(defaults *global.Flags) {
 		"Override settings.list_merge_strategy for this invocation. Controls how lists are merged in Atmos stack manifests (replace, append, merge)",
 	))
 	b.options = append(b.options, WithEnvVars("settings-list-merge-strategy", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY"))
+
+	b.options = append(b.options, WithStringFlag(
+		"edition",
+		"",
+		defaults.Edition,
+		"Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)",
+	))
+	b.options = append(b.options, WithEnvVars("edition", "ATMOS_EDITION"))
 }
 
 // registerSystemFlags registers system configuration flags.

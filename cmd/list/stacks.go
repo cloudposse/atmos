@@ -220,9 +220,16 @@ func initStacksConfig(
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}
 
-	// Apply format from config if not set via flag.
+	// Apply format from config if not set via flag (stacks.list.format, tree by
+	// default — journaled in pkg/edition, so an edition pin restores the table).
+	// A defaulted tree steps aside for row-shaped flags (tree renders the import
+	// hierarchy and has no rows or columns); only an explicit --format=tree
+	// conflicts with them.
 	if opts.Format == "" && atmosConfig.Stacks.List.Format != "" {
 		opts.Format = atmosConfig.Stacks.List.Format
+		if opts.Format == string(format.FormatTree) && len(opts.Columns) > 0 {
+			opts.Format = ""
+		}
 	}
 
 	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's

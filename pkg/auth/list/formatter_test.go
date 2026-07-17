@@ -478,7 +478,7 @@ func TestBuildProviderRows_WithStartURL(t *testing.T) {
 		},
 	}
 
-	rows := buildProviderRows(providers)
+	rows := buildProviderRows(providers, 0)
 
 	require.Len(t, rows, 1)
 	assert.Equal(t, "aws-sso", rows[0][0])
@@ -494,7 +494,7 @@ func TestBuildProviderRows_WithURL(t *testing.T) {
 		},
 	}
 
-	rows := buildProviderRows(providers)
+	rows := buildProviderRows(providers, 0)
 
 	require.Len(t, rows, 1)
 	assert.Equal(t, "okta", rows[0][0])
@@ -509,7 +509,7 @@ func TestBuildProviderRows_WithRegion(t *testing.T) {
 		},
 	}
 
-	rows := buildProviderRows(providers)
+	rows := buildProviderRows(providers, 0)
 
 	require.Len(t, rows, 1)
 	assert.Equal(t, "us-west-2", rows[0][2])
@@ -522,7 +522,7 @@ func TestBuildProviderRows_NoRegion(t *testing.T) {
 		},
 	}
 
-	rows := buildProviderRows(providers)
+	rows := buildProviderRows(providers, 0)
 
 	require.Len(t, rows, 1)
 	assert.Equal(t, "-", rows[0][2])
@@ -535,7 +535,7 @@ func TestBuildProviderRows_NoURL(t *testing.T) {
 		},
 	}
 
-	rows := buildProviderRows(providers)
+	rows := buildProviderRows(providers, 0)
 
 	require.Len(t, rows, 1)
 	assert.Equal(t, "-", rows[0][3])

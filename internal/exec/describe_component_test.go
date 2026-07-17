@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
@@ -198,6 +199,33 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				"printOrWriteToFile call expectation mismatch for pager setting: %s", test.pagerSetting)
 		})
 	}
+}
+
+func TestExecuteDescribeComponentCmd_ErrorModeSilentEnablesDegradation(t *testing.T) {
+	called := false
+	d := &DescribeComponentExec{
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			return nil
+		},
+		executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+			called = true
+			assert.Equal(t, OnErrorWarn, params.ErrorOptions.OnError)
+			require.NotNil(t, params.ErrorOptions.OnWarning)
+			return map[string]any{"component": params.Component}, nil
+		},
+		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component: "component-1",
+		Stack:     "nonprod",
+		Format:    "yaml",
+		ErrorMode: "silent",
+	})
+	require.NoError(t, err)
+	assert.True(t, called)
 }
 
 func TestDescribeComponentWithOverridesSection(t *testing.T) {

@@ -1734,10 +1734,10 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 }
 
 // snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
-// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
-// at the start of a rendered log line. These must never be merged into
-// adjacent markdown prose during snapshot normalization.
-var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "TRCE ", "FATA ")
+// as emitted at the start of a rendered log line. These must never be merged
+// into adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|TRCE|FATA)\s`)
 
 // snapshotToastIconPrefixes lists the canonical single-line toast icons from
 // pkg/ui/theme/icons.go. A line starting with one of these icons is always an

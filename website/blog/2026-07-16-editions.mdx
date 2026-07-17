@@ -1,0 +1,84 @@
+---
+slug: editions
+title: "Editions: Pin Your Defaults to a Date So Upgrades Never Surprise You"
+date: 2026-07-16T12:00:00.000Z
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+You upgrade a CLI tool and something changes that you never asked for. Output that used to page now scrolls past. An integration that used to run automatically now doesn't. Nothing in your configuration changed — a *default* did, somewhere in the release notes you didn't read, and now you're bisecting versions to figure out which upgrade moved the furniture. Every tool with evolving defaults forces this trade-off: either the project never improves its out-of-the-box behavior, or every upgrade is a small gamble.
+
+Atmos editions resolve that trade-off the way Rust did: defaults evolve for new projects, and existing projects opt into change on their own schedule. Pin your project to a date, and upgrading Atmos never silently changes a default again.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos ships sane defaults, and those defaults improve over time. The built-in pager default changed from on to off. The Helmfile EKS integration went from automatic to opt-in. Each of those changes made Atmos better for new projects — and each one silently altered behavior for existing projects the moment they upgraded.
+
+Until now there was no middle ground:
+
+- **Freezing the binary version** meant giving up bug fixes and new features just to keep stable behavior.
+- **Explicitly setting every default you depend on** meant knowing which defaults you depend on — which you typically discover only after one changes underneath you.
+- **Reading every release's changelog** doesn't scale, and it puts the burden on every user for every upgrade.
+
+## The Fix
+
+Every change to a previously shipped default is now journaled with the date it changed, the old and new values, and the pull request that changed it. Your project can pin itself to a date — an *edition* — and Atmos keeps the defaults as they stood on that date, no matter how new the binary is:
+
+```yaml title="atmos.yaml"
+edition: "2026-01"
+```
+
+Anchors accept a year, a month, or an exact day, and partial dates round to the *end* of the period — "the 2026 edition" includes everything shipped during 2026, matching Rust's edition semantics. The pin can also be set per-invocation with the `--edition` global flag or the `ATMOS_EDITION` environment variable (flag beats env beats config).
+
+The semantics are deliberately narrow:
+
+- **Only changed defaults roll back.** Defaults that changed after your pinned date keep their pre-change values; nothing else is touched.
+- **New features still work.** Only *changes* to previously shipped defaults are journaled — never new keys — so a feature introduced after your pin loads with its initial defaults.
+- **Your explicit configuration always wins.** A value set in `atmos.yaml` beats the pin, exactly as it beats the latest defaults.
+- **No pin, no change.** Projects without an `edition` key follow the latest defaults — and the section below lists exactly which defaults move in this release for those projects.
+
+## Defaults That Change in This Release
+
+Editions ship alongside a batch of default changes, and projects without a pin pick these up on upgrade:
+
+- **The default log level is now Warning.** This change was announced back in September 2025 ([PR #1430](https://github.com/cloudposse/atmos/pull/1430)), but a lower configuration layer kept the effective default at Info the whole time. This release removes that shadow, so for unpinned projects informational messages stop printing by default. To keep the old verbosity, pin `edition: "2025-08"` or set `logs.level: Info` explicitly.
+- **Component descriptions show provenance by default.** Running `atmos describe component` now annotates each value with the stack file that set it. Disable per-invocation with `--provenance=false`, per-environment with `ATMOS_DESCRIBE_PROVENANCE=false`, or per-project with `describe.provenance: false` in `atmos.yaml`.
+- **Stack and instance listings default to a tree.** Both `atmos list stacks` and `atmos list instances` now render the hierarchy as a tree instead of a flat table. An explicit `--format` always wins, so scripts that parsed the piped table output should pass `--format=csv` or `--format=json`.
+- **Component descriptions show only what stack manifests define.** The output of `atmos describe component` is now scoped to the sections a stack manifest can declare — vars, settings, env, backend, metadata, and friends — instead of every internal field Atmos computes along the way. Set `describe.component.filter: full` (or `ATMOS_DESCRIBE_COMPONENT_FILTER=full`) to see everything again; queries with `--query` always run against the full data.
+
+Every one of these changes is journaled, so a single pin — any date before the change you want to avoid — rolls it back.
+
+## How to Use It
+
+Browse the journal of default changes — or diff two editions to see exactly what an upgrade changes:
+
+```shell
+atmos list editions
+atmos list editions --from=2025 --to=2026
+```
+
+With only `--from`, the same command answers "what changes if I unpin?":
+
+```shell
+atmos list editions --from=2025-09
+```
+
+Pin the project, then inspect exactly what the pin does:
+
+```yaml title="atmos.yaml"
+edition: "2025-09"
+```
+
+```shell
+atmos describe edition
+```
+
+The output shows whether a pin is active, where it came from (flag, env, or config), the resolved anchor date and its granularity, and every default the pin rolls back — with the pinned value alongside the latest default you'd get by unpinning. With the example pin above, the project predates ten of the twelve journaled changes, so it keeps the pager on, the Helmfile EKS integration enabled, and the pre-2026 describe and list behavior — everything as it stood at the end of September 2025.
+
+Editions are **experimental**: with the default `settings.experimental: warn`, a pinned project prints an experimental notice, and `settings.experimental: disable` blocks the feature entirely. See the [edition configuration reference](/cli/configuration/edition) for details.
+
+## Get Involved
+
+The journal already reaches back to February 2025 — twelve entries covering everything from the log destination to listing formats and output scope — and it grows only when a shipped default actually changes. If a past default change bit you that isn't journaled yet, or you have opinions on how edition boundaries should be versioned going forward, [open an issue](https://github.com/cloudposse/atmos/issues) and tell us about it.

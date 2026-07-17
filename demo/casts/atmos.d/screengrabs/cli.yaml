@@ -92,6 +92,7 @@ commands:
           atmos describe component --help
           atmos describe config --help
           atmos describe dependents --help
+          atmos describe edition --help
           atmos describe stacks --help
           atmos describe workflows --help
           atmos docs --help
@@ -114,6 +115,7 @@ commands:
           atmos list --help
           atmos list components --help
           atmos list dependencies --help
+          atmos list editions --help
           atmos list metadata --help
           atmos list settings --help
           atmos list stacks --help
@@ -458,6 +460,7 @@ commands:
           atmos describe component --help
           atmos describe config --help
           atmos describe dependents --help
+          atmos describe edition --help
           atmos describe stacks --help
           atmos describe workflows --help
           atmos docs --help
@@ -480,6 +483,7 @@ commands:
           atmos list --help
           atmos list components --help
           atmos list dependencies --help
+          atmos list editions --help
           atmos list metadata --help
           atmos list settings --help
           atmos list stacks --help

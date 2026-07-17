@@ -199,6 +199,8 @@ func ExecuteDescribeDependents(
 			ProcessYamlFunctions: args.ProcessYamlFunctions,
 			Skip:                 args.Skip,
 			AuthManager:          args.AuthManager,
+			AuthDisabled:         args.AuthDisabled,
+			ErrorOptions:         args.ErrOptions,
 		})
 		if err != nil {
 			return nil, err

@@ -2,12 +2,11 @@ package provenance
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -159,9 +158,9 @@ func getCommentColumn() int {
 		return defaultColumn
 	}
 
-	// Get terminal width
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil || width == 0 {
+	// Get terminal width (honors settings.terminal.max_width as a ceiling).
+	width := templates.GetTerminalWidth()
+	if width <= 0 {
 		return defaultColumn
 	}
 

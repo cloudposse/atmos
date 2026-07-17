@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -317,18 +319,43 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	return nil
 }
 
+// terminalWidthLimit holds the user-configured settings.terminal.max_width
+// (0 = unset, unlimited). Registered once at startup via SetTerminalWidthLimit
+// so every width consumer (tables, help output) respects the setting uniformly.
+var terminalWidthLimit atomic.Int64
+
+// SetTerminalWidthLimit registers settings.terminal.max_width as a ceiling for
+// GetTerminalWidth. Zero or negative clears the limit (the default).
+func SetTerminalWidthLimit(limit int) {
+	terminalWidthLimit.Store(int64(limit))
+}
+
 // GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
 func GetTerminalWidth() int {
 	defaultWidth := 80
 	screenWidth := defaultWidth
+	source := "fallback"
 
 	// Detect terminal width and use it by default if available
-	if termUtils.IsTTYSupportForStdout() {
+	isTTY := termUtils.IsTTYSupportForStdout()
+	if isTTY {
 		termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
 		if err == nil && termWidth > 0 {
 			screenWidth = termWidth - 2
+			source = "detected"
 		}
 	}
+
+	// An explicitly-set settings.terminal.max_width is a user preference and
+	// acts as a ceiling only; by default the detected width is used as-is.
+	limit := int(terminalWidthLimit.Load())
+	if limit > 0 && screenWidth > limit {
+		screenWidth = limit
+		source = "max_width"
+	}
+
+	log.Debug("Terminal width resolved",
+		"width", screenWidth, "source", source, "tty", isTTY, "max_width_limit", limit)
 
 	return screenWidth
 }

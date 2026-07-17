@@ -77,6 +77,21 @@ func ProcessComponentConfig(
 	component string,
 	authManager auth.AuthManager,
 ) error {
+	return processComponentConfig(atmosConfig, configAndStacksInfo, stack, stacksMap, componentType, component, authManager)
+}
+
+// processComponentConfig processes component config sections.
+//
+//nolint:gocognit,revive,cyclop,funlen // This mirrors the long-standing ProcessComponentConfig implementation.
+func processComponentConfig(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stack string,
+	stacksMap map[string]any,
+	componentType string,
+	component string,
+	authManager auth.AuthManager,
+) error {
 	defer perf.Track(nil, "exec.ProcessComponentConfig")()
 
 	var stackSection map[string]any
@@ -465,7 +480,7 @@ func findComponentInStacks(
 		}
 
 		// Check if we've found the component in the stack.
-		err := ProcessComponentConfig(
+		err := processComponentConfig(
 			atmosConfig,
 			configAndStacksInfo,
 			stackName,
@@ -545,6 +560,41 @@ func ProcessStacks(
 	skip []string,
 	authManager auth.AuthManager,
 ) (schema.ConfigAndStacksInfo, error) {
+	return processStacks(atmosConfig, configAndStacksInfo, checkStack, processTemplates, processYamlFunctions, skip, authManager, nil)
+}
+
+// ProcessStacksWithDegradation processes stack config and substitutes recoverable
+// YAML-function failures when onWarning is provided. It is used by inspection commands
+// whose error mode is warn or silent; other callers retain strict behavior through
+// ProcessStacks.
+//
+//nolint:revive,gocritic // This extends the stable ProcessStacks API with an optional warning callback.
+func ProcessStacksWithDegradation(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
+	checkStack bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	authManager auth.AuthManager,
+	onWarning func(DegradationWarning),
+) (schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessStacksWithDegradation")()
+
+	return processStacks(atmosConfig, configAndStacksInfo, checkStack, processTemplates, processYamlFunctions, skip, authManager, onWarning)
+}
+
+//nolint:gocognit,gocritic,revive,cyclop,funlen // Existing stack-processing flow is intentionally preserved while adding error-mode handling.
+func processStacks(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
+	checkStack bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	authManager auth.AuthManager,
+	onWarning func(DegradationWarning),
+) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
 
 	// Check if stack was provided.
@@ -582,7 +632,7 @@ func ProcessStacks(
 
 	// Check and process stacks.
 	if atmosConfig.StackType == "Directory" {
-		err = ProcessComponentConfig(
+		err = processComponentConfig(
 			atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
@@ -846,7 +896,12 @@ func ProcessStacks(
 
 	// Process YAML functions in Atmos manifest sections.
 	if processYamlFunctions {
-		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
+		var componentSectionConverted schema.AtmosSectionMapType
+		if onWarning != nil {
+			componentSectionConverted, err = ProcessCustomYamlTagsLenient(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip, &configAndStacksInfo, onWarning)
+		} else {
+			componentSectionConverted, err = ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
+		}
 		if err != nil {
 			return configAndStacksInfo, err
 		}

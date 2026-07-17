@@ -122,6 +122,8 @@ const (
 	ansiEscapePrefix = "\x1b["
 	// ProfileFlagName is the name of the profile flag.
 	profileFlagName = "profile"
+	// EditionFlagName is the name of the edition flag (and the atmos.yaml key it mirrors).
+	editionFlagName = "edition"
 	// RootCommandName is the root command's Use value.
 	rootCommandName = "atmos"
 	// HelpFlagName is the standard --help flag name.
@@ -292,6 +294,14 @@ func syncGlobalFlagsToViper(cmd *cobra.Command) {
 	if cmd.Flags().Changed("identity") {
 		if identity, err := cmd.Flags().GetString("identity"); err == nil {
 			v.Set("identity", identity)
+		}
+	}
+
+	// Sync edition flag if explicitly set, so LoadConfig sees the pin
+	// before it applies edition default overrides.
+	if cmd.Flags().Changed(editionFlagName) {
+		if editionPin, err := cmd.Flags().GetString(editionFlagName); err == nil {
+			v.Set(editionFlagName, editionPin)
 		}
 	}
 }
@@ -625,6 +635,10 @@ var RootCmd = &cobra.Command{
 		// Check for experimental settings (non-command features gated by config values).
 		// This extends the experimental check above to cover settings like key_delimiter.
 		checkExperimentalSettings(&tmpConfig)
+
+		// Honor settings.terminal.max_width everywhere widths are computed
+		// (tables, help output). Zero leaves the detected width unclamped.
+		templates.SetTerminalWidthLimit(tmpConfig.Settings.Terminal.MaxWidth)
 
 		// Configure lipgloss color profile based on terminal capabilities.
 		// Forced color is intentionally honored even when stdout is non-TTY,
@@ -1052,6 +1066,9 @@ func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
 	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
 		features = append(features, "settings.yaml.key_delimiter")
 	}
+	if atmosConfig.Edition != "" {
+		features = append(features, editionFlagName)
+	}
 
 	if len(features) == 0 {
 		return
@@ -1225,7 +1242,10 @@ func formatFlagName(f *pflag.Flag) string {
 // configured (config refines, but is never required — help must lay out
 // correctly with no atmos.yaml at all).
 func getTerminalWidth() int {
-	const defaultWidth = 120 // Fang's max width
+	// Fallback ONLY when the width cannot be detected; never a ceiling. The
+	// detected terminal width is used as-is — width is unlimited by default,
+	// and an explicit settings.terminal.max_width acts as the only ceiling.
+	const defaultWidth = 120
 
 	width := castcmd.ActiveRecordingWidth()
 	if width <= 0 {
@@ -1235,11 +1255,7 @@ func getTerminalWidth() int {
 		width = defaultWidth
 	}
 
-	maxWidth := defaultWidth
-	if atmosConfig.Settings.Terminal.MaxWidth > 0 {
-		maxWidth = atmosConfig.Settings.Terminal.MaxWidth
-	}
-	if width > maxWidth {
+	if maxWidth := atmosConfig.Settings.Terminal.MaxWidth; maxWidth > 0 && width > maxWidth {
 		return maxWidth
 	}
 	return width

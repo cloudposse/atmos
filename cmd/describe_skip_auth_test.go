@@ -487,6 +487,33 @@ func TestDescribeComponent_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
 }
 
+// TestDescribeComponent_SkipsImplicitAuthWhenFunctionsEnabled verifies that an
+// inspection command can process YAML functions without first authenticating a
+// configured default identity. Function-level failures are handled later by
+// describe component's error mode.
+func TestDescribeComponent_SkipsImplicitAuthWhenFunctionsEnabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			assert.Nil(t, params.AuthManager, "AuthManager must be nil without an explicit --identity")
+			assert.True(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must remain enabled")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, atmosConfigWithBrokenDefaultIdentity()))
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err, "default identity must not be authenticated merely to describe a component")
+}
+
 // TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
 // ATMOS_IDENTITY env var does not bypass the guard for describe component.
 func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
@@ -618,9 +645,10 @@ func TestDescribeComponent_FunctionsEnabled_HappyPath(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent verifies that
-// ErrInvalidComponent from the auth probe is returned immediately.
-func TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent(t *testing.T) {
+// TestDescribeComponent_ComponentNotFound_PropagatesExecutorError verifies that a
+// describe-only invocation defers component lookup until execution, rather than
+// performing an eager auth probe.
+func TestDescribeComponent_ComponentNotFound_PropagatesExecutorError(t *testing.T) {
 	_ = NewTestKit(t)
 	clearIdentityEnvVars(t)
 
@@ -628,14 +656,10 @@ func TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent(t *testi
 	defer ctrl.Finish()
 
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
-	// Executor should NOT be called — error before execution.
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Return(errUtils.ErrInvalidComponent).Times(1)
 
 	testCmd := newTestCmdForDescribeComponent(t, true, "")
 	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
-	// Override executeDescribeComponent to return ErrInvalidComponent.
-	props.executeDescribeComponent = func(_ *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
-		return nil, errUtils.ErrInvalidComponent
-	}
 	run := getRunnableDescribeComponentCmd(props)
 
 	err := run(testCmd, []string{"nonexistent-component"})

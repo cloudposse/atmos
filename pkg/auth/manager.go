@@ -332,7 +332,6 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			Realm:        m.realm.Value,
 		}); err != nil {
 			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
 			return nil, wrappedErr
 		}
 
