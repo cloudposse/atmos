@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -83,7 +84,11 @@ func runValidateSchema(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if format != validateFormatRich {
-		return executor.ExecuteAtmosValidateSchemaCmd(key, schema)
+		err := executor.ExecuteAtmosValidateSchemaCmd(key, schema)
+		if errors.Is(err, exec.ErrInvalidYAML) {
+			errUtils.OsExit(1)
+		}
+		return err
 	}
 	report, err := executor.ValidateAtmosSchemaReport(key, schema)
 	if err != nil {

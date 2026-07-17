@@ -11,6 +11,8 @@ USAGE
 
 FLAGS
 
+      --ci                                Enable CI mode for automated pipelines (annotations, SARIF upload)
+
       --disable-end-of-line               Disable end-of-line check
 
       --disable-indent-size               Disable indent size check
@@ -27,7 +29,8 @@ FLAGS
 
       --exclude string                    Regex to exclude files from checking
 
-      --format string                     Specify the output format: default, gcc (default default)
+      --format string                     Specify the output format: default, gcc, codeclimate, github-actions, sarif,
+                                          rich (default default)
 
   -h, --help                              help for editorconfig
 

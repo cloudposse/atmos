@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -49,8 +50,23 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 		if len(args) > 0 {
 			showUsageAndExit(cmd, args)
 		}
-		return runEditorConfig(cmd)
+		return runEditorConfigCommand(cmd)
 	},
+}
+
+// runEditorConfigCommand preserves the established standalone behavior for
+// upstream-rendered formats. Aggregate validation calls runEditorConfig
+// directly so it can collect the failure without terminating the process.
+func runEditorConfigCommand(cmd *cobra.Command) error {
+	err := runEditorConfig(cmd)
+	if !errors.Is(err, errUtils.ErrEditorConfigValidationFailed) {
+		return err
+	}
+	if editorConfigSARIF || editorConfigRich {
+		return errUtils.ExitCodeError{Code: 1, Silent: true}
+	}
+	errUtils.Exit(1)
+	return nil
 }
 
 // parseConfigPaths extracts config file paths from command flags.

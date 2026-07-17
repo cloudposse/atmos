@@ -7,7 +7,7 @@ import (
 // validateCmd validates the complete project or one of its focused validation targets.
 var validateCmd = &cobra.Command{
 	Use:   "validate",
-	Short: "Validate project configurations",
+	Short: "Validate configurations against OPA policies and JSON schemas",
 	Long: `Validate the current project. Without a subcommand, Atmos validates the
 configuration schema, stack manifests, EditorConfig rules, and GitHub Actions workflows.
 Use a subcommand to run one validation target, including component JSON Schema or OPA policies.`,
