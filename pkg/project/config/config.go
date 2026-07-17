@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -55,7 +56,18 @@ const dirPermissions = 0o755
 // filePermissions is the file mode for writing the project record.
 const filePermissions = 0o644
 
-var errInvalidBooleanFieldValue = errors.New("invalid boolean field value")
+const fieldNameErrorFormat = "%w: %q"
+
+var (
+	errInvalidBooleanFieldValue = errors.New("invalid boolean field value")
+	errFieldMustBeText          = errors.New("field must be text")
+	errFieldMustBeStringOption  = errors.New("field must be a string option")
+	errFieldUnsupportedOption   = errors.New("field has unsupported option")
+	errFieldMustBeStringOptions = errors.New("field must be a list of string options")
+	errFieldMustBeBoolean       = errors.New("field must be true or false")
+	errFieldValidationFailed    = errors.New("field validation failed")
+	errInvalidFieldPattern      = errors.New("invalid field validation pattern")
+)
 
 // ScaffoldConfigDir is the directory name for user scaffold configuration.
 const ScaffoldConfigDir = ".atmos"
@@ -197,7 +209,14 @@ type Config map[string]interface{}
 func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 	defer perf.Track(nil, "config.LoadScaffoldConfigFromContent")()
 
-	return manifest.Load[ScaffoldSpec](ScaffoldKind, []byte(content))
+	scaffoldConfig, err := manifest.Load[ScaffoldSpec](ScaffoldKind, []byte(content))
+	if err != nil {
+		return nil, err
+	}
+	if err := validateFieldDefinitions(scaffoldConfig); err != nil {
+		return nil, err
+	}
+	return scaffoldConfig, nil
 }
 
 // LoadScaffoldConfigFromFile loads and validates an AtmosScaffoldConfig manifest from the specified YAML file.
@@ -208,7 +227,7 @@ func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read scaffold config: %w", err)
 	}
-	return manifest.Load[ScaffoldSpec](ScaffoldKind, data)
+	return LoadScaffoldConfigFromContent(string(data))
 }
 
 // projectRecordPath returns the path of the project record within targetPath.
@@ -380,6 +399,161 @@ func MissingRequiredValues(scaffoldConfig *ScaffoldConfig, values map[string]int
 	return missing
 }
 
+// ValidateFieldValues validates every active declared field against its
+// required, type, pattern, and option constraints. It deliberately ignores
+// undeclared values so templates can continue accepting extensibility values
+// supplied through --set.
+func ValidateFieldValues(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) error {
+	defer perf.Track(nil, "config.ValidateFieldValues")()
+
+	var missing []string
+	var invalid []string
+	for i := range scaffoldConfig.Spec.Fields {
+		field := &scaffoldConfig.Spec.Fields[i]
+		if !field.When.Evaluate(condition.Context{Answers: values}) {
+			continue
+		}
+
+		value, exists := values[field.Name]
+		if !exists || value == nil || isMissingValue(value) {
+			if field.Required {
+				missing = append(missing, field.Name)
+			}
+			continue
+		}
+
+		if err := validateFieldValue(field, value); err != nil {
+			invalid = append(invalid, err.Error())
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: %s", errUtils.ErrGeneratorFieldRequired, strings.Join(missing, ", "))
+	}
+	if len(invalid) > 0 {
+		return fmt.Errorf("%w: %s", errUtils.ErrGeneratorValidation, strings.Join(invalid, "; "))
+	}
+	return nil
+}
+
+func validateFieldDefinitions(scaffoldConfig *ScaffoldConfig) error {
+	for i := range scaffoldConfig.Spec.Fields {
+		field := &scaffoldConfig.Spec.Fields[i]
+		if field.Validation == nil || field.Validation.Pattern == "" {
+			continue
+		}
+		if !isTextFieldType(field.Type) {
+			return fmt.Errorf("%w: field %q uses validation.pattern but type %q is not text", errUtils.ErrGeneratorValidation, field.Name, field.Type)
+		}
+		if _, err := regexp.Compile(field.Validation.Pattern); err != nil {
+			return fmt.Errorf("%w: field %q has invalid validation.pattern: %w", errUtils.ErrGeneratorValidation, field.Name, err)
+		}
+	}
+	return nil
+}
+
+func isTextFieldType(fieldType string) bool {
+	switch fieldType {
+	case "input", "text", "string":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateFieldValue(field *FieldDefinition, value interface{}) error {
+	switch field.Type {
+	case "input", "text", "string":
+		text, ok := value.(string)
+		if !ok {
+			return fmt.Errorf(fieldNameErrorFormat, errFieldMustBeText, field.Name)
+		}
+		return validateTextValue(field, text)
+	case "select":
+		return validateSelectValue(field, value)
+	case "multiselect":
+		return validateMultiSelectValue(field, value)
+	case "confirm", "bool", "boolean":
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf(fieldNameErrorFormat, errFieldMustBeBoolean, field.Name)
+		}
+	}
+	return nil
+}
+
+func validateSelectValue(field *FieldDefinition, value interface{}) error {
+	selected, ok := value.(string)
+	if !ok {
+		return fmt.Errorf(fieldNameErrorFormat, errFieldMustBeStringOption, field.Name)
+	}
+	if len(field.Options) > 0 && !containsOption(field.Options, selected) {
+		return unsupportedOptionError(field.Name, selected)
+	}
+	return nil
+}
+
+func validateMultiSelectValue(field *FieldDefinition, value interface{}) error {
+	selected, ok := stringSliceValue(value)
+	if !ok {
+		return fmt.Errorf(fieldNameErrorFormat, errFieldMustBeStringOptions, field.Name)
+	}
+	for _, option := range selected {
+		if len(field.Options) > 0 && !containsOption(field.Options, option) {
+			return unsupportedOptionError(field.Name, option)
+		}
+	}
+	return nil
+}
+
+func unsupportedOptionError(fieldName, option string) error {
+	return fmt.Errorf("%w: field %q option %q", errFieldUnsupportedOption, fieldName, option)
+}
+
+func validateTextValue(field *FieldDefinition, value string) error {
+	if field.Validation == nil || field.Validation.Pattern == "" {
+		return nil
+	}
+	pattern, err := regexp.Compile(field.Validation.Pattern)
+	if err != nil {
+		return fmt.Errorf("%w for field %q: %w", errInvalidFieldPattern, field.Name, err)
+	}
+	if pattern.MatchString(value) {
+		return nil
+	}
+	if field.Validation.Message != "" {
+		return fmt.Errorf("%w for field %q: %s", errFieldValidationFailed, field.Name, field.Validation.Message)
+	}
+	return fmt.Errorf("%w for field %q: does not match validation.pattern", errFieldValidationFailed, field.Name)
+}
+
+func containsOption(options []string, value string) bool {
+	for _, option := range options {
+		if option == value {
+			return true
+		}
+	}
+	return false
+}
+
+func stringSliceValue(value interface{}) ([]string, bool) {
+	switch v := value.(type) {
+	case []string:
+		return v, true
+	case []interface{}:
+		result := make([]string, len(v))
+		for i, item := range v {
+			text, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			result[i] = text
+		}
+		return result, true
+	default:
+		return nil, false
+	}
+}
+
 // isBooleanFieldType reports whether a field's declared type represents a
 // boolean value (the confirm prompt type, or an explicit bool/boolean type).
 func isBooleanFieldType(fieldType string) bool {
@@ -414,7 +588,7 @@ func CoerceFieldValueTypes(scaffoldConfig *ScaffoldConfig, values map[string]int
 		}
 		parsed, err := strconv.ParseBool(raw)
 		if err != nil {
-			return fmt.Errorf("%w for field %q: %q", errInvalidBooleanFieldValue, field.Name, raw)
+			return fmt.Errorf("%w: %w for field %q: %q", errUtils.ErrGeneratorValidation, errInvalidBooleanFieldValue, field.Name, raw)
 		}
 		values[field.Name] = parsed
 	}
@@ -457,7 +631,7 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 	// Extract form values back to userValues
 	extractFormValues(userValues, valueGetters)
 
-	return nil
+	return ValidateFieldValues(scaffoldConfig, userValues)
 }
 
 // initializeFormValues merges default values with user-provided values, in
@@ -604,14 +778,11 @@ func createField(key string, field *FieldDefinition, values map[string]interface
 
 		if field.Required {
 			input = input.Validate(func(s string) error {
-				// Match isMissingValue/MissingRequiredValues, which both trim
-				// before checking for emptiness — otherwise a whitespace-only
-				// answer passes validation here but fails required-field
-				// checks later.
-				if strings.TrimSpace(s) == "" {
-					return fmt.Errorf("%w: %s", errUtils.ErrGeneratorFieldRequired, fieldTitle(field))
-				}
-				return nil
+				return validateInteractiveTextValue(field, s)
+			})
+		} else if field.Validation != nil && field.Validation.Pattern != "" {
+			input = input.Validate(func(s string) error {
+				return validateInteractiveTextValue(field, s)
 			})
 		}
 
@@ -639,7 +810,7 @@ func createField(key string, field *FieldDefinition, values map[string]interface
 				if s == "" {
 					return fmt.Errorf("%w: %s", errUtils.ErrGeneratorFieldRequired, fieldTitle(field))
 				}
-				return nil
+				return validateFieldValue(field, s)
 			})
 		}
 
@@ -675,7 +846,7 @@ func createField(key string, field *FieldDefinition, values map[string]interface
 				if len(s) == 0 {
 					return fmt.Errorf("%w: at least one %s", errUtils.ErrGeneratorFieldRequired, fieldTitle(field))
 				}
-				return nil
+				return validateFieldValue(field, s)
 			})
 		}
 
@@ -711,6 +882,19 @@ func createField(key string, field *FieldDefinition, values map[string]interface
 			Value(&value)
 		return input, func() interface{} { return value }
 	}
+}
+
+func validateInteractiveTextValue(field *FieldDefinition, value string) error {
+	// Match isMissingValue/ValidateFieldValues, which both trim before checking
+	// for emptiness — otherwise a whitespace-only answer passes the form but
+	// fails the canonical post-form validation.
+	if field.Required && strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%w: %s", errUtils.ErrGeneratorFieldRequired, fieldTitle(field))
+	}
+	if value == "" && !field.Required {
+		return nil
+	}
+	return validateTextValue(field, value)
 }
 
 // fieldTitle returns the display title for a field: its label when set,

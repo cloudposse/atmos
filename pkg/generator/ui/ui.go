@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // UI layout constants.
@@ -343,13 +344,17 @@ func (ui *InitUI) writeOutput(format string, args ...interface{}) {
 
 // colorSource returns a colored string for the given source value.
 func (ui *InitUI) colorSource(source string) string {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return source
+	}
 	switch source {
 	case templateTypeScaffold:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#0000FF")).Render("scaffold") // Blue
+		return styles.Command.Render("scaffold")
 	case "flag":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("flag") // Red
+		return styles.PackageName.Render("flag")
 	default:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")).Render("default") // Grey
+		return styles.Muted.Render("default")
 	}
 }
 
@@ -776,14 +781,25 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues); err != nil {
 			return nil, nil, fmt.Errorf("failed to prompt for configuration: %w", err)
 		}
-	} else if missing := config.MissingRequiredValues(scaffoldConfig, mergedValues); len(missing) > 0 {
-		// Non-interactive mode cannot prompt for missing required values:
-		// fail fast instead of generating a broken project.
-		return nil, nil, errUtils.Build(errUtils.ErrGeneratorFieldRequired).
-			WithExplanationf("Required fields have no value: `%s`", strings.Join(missing, "`, `")).
-			WithHintf("Provide values with `--set %s=<value>`", missing[0]).
-			WithHint("Or run interactively (in a terminal) to be prompted").
-			WithContext("missing_fields", strings.Join(missing, ", ")).
+	}
+
+	// Validate the final merged answers for both interactive and non-interactive
+	// generation. Prompt-level validation provides immediate feedback, while this
+	// canonical check also covers defaults, persisted values, and --set values.
+	if err := config.ValidateFieldValues(scaffoldConfig, mergedValues); err != nil {
+		if errors.Is(err, errUtils.ErrGeneratorFieldRequired) {
+			missing := config.MissingRequiredValues(scaffoldConfig, mergedValues)
+			return nil, nil, errUtils.Build(err).
+				WithExplanationf("Required fields have no value: `%s`", strings.Join(missing, "`, `")).
+				WithHintf("Provide values with `--set %s=<value>`", missing[0]).
+				WithHint("Or run interactively (in a terminal) to be prompted").
+				WithContext("missing_fields", strings.Join(missing, ", ")).
+				WithExitCode(2).
+				Err()
+		}
+		return nil, nil, errUtils.Build(err).
+			WithExplanation("Scaffold field validation failed").
+			WithHint("Correct the invalid field value or update the scaffold configuration").
 			WithExitCode(2).
 			Err()
 	}
@@ -830,6 +846,13 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Load the scaffold configuration from embedded content (don't write to target folder)
 	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrGeneratorValidation) {
+			return errUtils.Build(err).
+				WithExplanation("Scaffold configuration validation failed").
+				WithHint("Correct the invalid field definition in scaffold.yaml").
+				WithExitCode(2).
+				Err()
+		}
 		return fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
 
@@ -1079,18 +1102,18 @@ func (ui *InitUI) calculateColumnWidths(rows [][]string) columnWidths {
 // applyTableStyles applies consistent styling to the table including colors and borders.
 func applyTableStyles(t *table.Model) {
 	s := table.DefaultStyles()
-	s.Header = s.Header.
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		t.SetStyles(s)
+		return
+	}
+	s.Header = styles.TableHeader.
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#5F5FD7")). // Purple
-		BorderBottom(true).
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")) // White
+		BorderForeground(lipgloss.Color(theme.GetBorderColor())).
+		BorderBottom(true)
 
-	s.Cell = s.Cell.Foreground(lipgloss.Color("#FFFFFF")).Bold(false)
-
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("#FFFFFF")). // White
-		Background(lipgloss.Color("#000000"))  // Black
+	s.Cell = styles.TableRow
+	s.Selected = styles.Selected
 
 	t.SetStyles(s)
 }
@@ -1210,22 +1233,7 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 		table.WithHeight(len(tableRows)+1), // Set explicit height to minimize spacing
 	)
 
-	// Style the table with colors
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#5F5FD7")). // Purple
-		BorderBottom(true).
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")) // White
-	s.Cell = s.Cell.
-		Foreground(lipgloss.Color("#FFFFFF")). // White
-		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("#FFFFFF")). // White
-		Background(lipgloss.Color("#000000"))  // Black
-
-	t.SetStyles(s)
+	applyTableStyles(&t)
 
 	// Write the table to UI channel.
 	atmosui.Writeln("")

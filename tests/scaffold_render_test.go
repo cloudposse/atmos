@@ -42,6 +42,11 @@ func TestScaffoldTemplatesRenderValidateAndAvoidNamePattern(t *testing.T) {
 				"ATMOS_CLI_CONFIG_PATH": target,
 				"XDG_CACHE_HOME":        filepath.Join(t.TempDir(), ".cache"),
 			}, 2*time.Minute, "validate", "stacks")
+			readme, err := os.ReadFile(filepath.Join(target, "README.md"))
+			require.NoError(t, err)
+			projectName := strings.TrimPrefix(tc.args[1], "project_name=")
+			require.Contains(t, string(readme), "# "+projectName)
+			require.NotContains(t, string(readme), "[[ .Config.project_name ]]", "generated README must not leak scaffold template syntax")
 			assertTreeDoesNotContain(t, target, "name_pattern")
 			// `-i` is the shorthand for `--identity` on `atmos terraform`
 			// commands, not `--interactive` -- `-i false` silently disables

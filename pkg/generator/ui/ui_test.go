@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -18,6 +20,78 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
+
+func TestExecuteWithSetup_ValidationStopsGenerationBeforeSideEffects(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+	hookCalls := &[]string{}
+	runnerstep.Register(&hookMarkerHandler{
+		BaseHandler: runnerstep.NewBaseHandler("validation-blocked-hook", runnerstep.CategoryOutput, false),
+		calls:       hookCalls,
+	})
+	configuration := &templates.Configuration{
+		Name: "validation",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: validation
+spec:
+  fields:
+    - name: name
+      type: input
+      required: true
+      validation:
+        pattern: "^[a-z]+$"
+  hooks:
+    marker:
+      events: [before.scaffold.generate]
+      kind: step
+      type: validation-blocked-hook
+      with:
+        content: "hook ran"
+`, Permissions: 0o644},
+			{Path: "generated.txt", Content: "generated", Permissions: 0o644},
+		},
+		README: "# {{ .Config.name }}",
+	}
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", map[string]interface{}{"name": "INVALID"}, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrGeneratorValidation), err)
+	assert.Equal(t, 2, errUtils.GetExitCode(err))
+
+	_, fileErr := os.Stat(filepath.Join(targetDir, "generated.txt"))
+	assert.True(t, os.IsNotExist(fileErr), "validation failure must prevent generated files")
+	_, recordErr := os.Stat(filepath.Join(targetDir, ".atmos", "scaffold.yaml"))
+	assert.True(t, os.IsNotExist(recordErr), "validation failure must prevent scaffold records")
+	assert.Empty(t, *hookCalls, "validation failure must prevent hooks")
+	assert.NotContains(t, ui.output.String(), "README", "validation failure must prevent README rendering")
+}
+
+func TestExecuteWithSetup_InvalidFieldConfigurationReturnsUsageError(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+	configuration := &templates.Configuration{
+		Name: "invalid-validation",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: invalid-validation
+spec:
+  fields:
+    - name: name
+      type: input
+      validation:
+        pattern: "["
+`}},
+	}
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", nil, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrGeneratorValidation), err)
+	assert.Equal(t, 2, errUtils.GetExitCode(err))
+}
 
 // createTestUI creates a UI instance with I/O for testing.
 func createTestUI(t *testing.T) *InitUI {

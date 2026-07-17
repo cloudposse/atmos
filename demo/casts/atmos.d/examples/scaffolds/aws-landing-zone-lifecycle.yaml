@@ -172,7 +172,7 @@ commands:
           ]:
               if needle not in plain:
                   raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "No valid credential sources", "[scaffold-generate]", "[emulator-up]", "[apply-all]", "[terraform-output]", "[emulator-down]", "cd my-landing-zone", "--chdir"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "No valid credential sources", "[scaffold-generate]", "[emulator-up]", "[apply-all]", "[terraform-output]", "[emulator-down]", "[[ .Config.project_name ]]", "cd my-landing-zone", "--chdir"]:
               if bad in plain:
                   raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast contains {bad!r}")
           assert_no_error_output(text)

@@ -34,15 +34,14 @@ atmos scaffold generate ./aws/landing-zone ./my-landing-zone --set project_name=
 
 # Or generate for real
 atmos scaffold generate ./aws/landing-zone ./my-landing-zone --set project_name=my-landing-zone
-cd my-landing-zone
-atmos emulator up aws -s dev
-atmos terraform apply kms -s dev -auto-approve
-atmos terraform apply audit-trail -s dev -auto-approve
-atmos terraform apply baseline -s dev -auto-approve
-atmos terraform apply monitoring -s dev -auto-approve
-atmos terraform apply iam-baseline -s dev -auto-approve
-atmos terraform output monitoring -s dev
-atmos emulator down aws -s dev
+atmos --chdir=./my-landing-zone emulator up aws -s dev
+atmos --chdir=./my-landing-zone terraform apply kms -s dev -auto-approve
+atmos --chdir=./my-landing-zone terraform apply audit-trail -s dev -auto-approve
+atmos --chdir=./my-landing-zone terraform apply baseline -s dev -auto-approve
+atmos --chdir=./my-landing-zone terraform apply monitoring -s dev -auto-approve
+atmos --chdir=./my-landing-zone terraform apply iam-baseline -s dev -auto-approve
+atmos --chdir=./my-landing-zone terraform output monitoring -s dev
+atmos --chdir=./my-landing-zone emulator down aws -s dev
 ```
 
 The same templates are also reachable by name through the catalog once

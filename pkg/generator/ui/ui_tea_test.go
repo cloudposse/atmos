@@ -7,9 +7,12 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // TestTruncateString tests the truncateString helper function.
@@ -234,6 +237,19 @@ func TestInitUI_ColorSource(t *testing.T) {
 			// The important test is that the text content is correct
 		})
 	}
+}
+
+func TestInitUI_ColorSourceUsesActiveThemeStyles(t *testing.T) {
+	t.Setenv("ATMOS_THEME", "Dracula")
+	theme.InvalidateStyleCache()
+	t.Cleanup(theme.InvalidateStyleCache)
+
+	ui := createTestUI(t)
+	styles := theme.GetCurrentStyles()
+	require.NotNil(t, styles)
+	assert.Equal(t, styles.Command.Render("scaffold"), ui.colorSource("scaffold"))
+	assert.Equal(t, styles.PackageName.Render("flag"), ui.colorSource("flag"))
+	assert.Equal(t, styles.Muted.Render("default"), ui.colorSource("default"))
 }
 
 // TestInitUI_WriteOutput tests the output buffering.

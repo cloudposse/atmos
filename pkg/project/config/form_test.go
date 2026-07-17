@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/manifest"
 )
@@ -106,7 +107,12 @@ func TestPromptForScaffoldConfig_MixedFieldTypes(t *testing.T) {
 		},
 	}
 
-	userValues := make(map[string]interface{})
+	userValues := map[string]interface{}{
+		"name":           "project",
+		"license":        "MIT",
+		"cloud_provider": "aws",
+		"regions":        []string{"us-east-1"},
+	}
 
 	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
 	assert.NoError(t, err)
@@ -688,6 +694,7 @@ func TestCoerceFieldValueTypesRejectsUnparsableValues(t *testing.T) {
 	err := CoerceFieldValueTypes(scaffoldConfig, values)
 
 	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGeneratorValidation)
 	assert.ErrorContains(t, err, `enable_vendoring`)
 }
 
