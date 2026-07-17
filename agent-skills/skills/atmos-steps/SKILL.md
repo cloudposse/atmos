@@ -20,7 +20,9 @@ A step is a typed action with native fields. Do not treat steps as a place to
 write shell scripts by default. Prefer the Atmos field that expresses the
 operation directly:
 
-- Use `working_directory` instead of `cd`.
+- Use `working_directory` instead of `cd` for real execution. A `type: simulate` child of a
+  `mode: steps` cast may display `cd <directory>` to narrate a directory transition, but it
+  never changes the working directory of later real steps.
 - Use `env` maps instead of inline `FOO=bar command` or `export`.
 - Use `output: none` instead of redirecting to `/dev/null`.
 - Use `type: script` instead of heredoc shell snippets like `python3 - <<'PY'`.
@@ -130,8 +132,10 @@ steps:
     command: npm run docs:build
 ```
 
-Do not use `--chdir` or `cd` when a workflow, custom command, or step
-`working_directory` can express the same thing. Relative paths must be checked
+Do not use `--chdir` or `cd` for real workflow, custom-command, or step execution when
+`working_directory` can express the same thing. In a `mode: steps` cast, a display-only
+`type: simulate` `cd <directory>` is the exception: use it to keep the recorded story coherent,
+and still configure `working_directory` on every real step. Relative paths must be checked
 against the surface's base path rules.
 
 ## Output

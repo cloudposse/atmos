@@ -62,6 +62,11 @@ commands:
             duration: 550ms
             interval: 900ms
             command: *scaffold_generate_cmd
+          # This records the logical directory transition for the viewer. The
+          # real steps below still use working_directory so execution remains
+          # deterministic and does not depend on simulated terminal state.
+          - type: simulate
+            text: "cd my-landing-zone"
           - type: simulate
             text: "# start the local AWS emulator, no real account needed"
           - type: simulate
@@ -162,6 +167,7 @@ commands:
           for needle in [
               "# generate a real landing zone from the local scaffold template",
               "Generating aws-landing-zone in",
+              "cd my-landing-zone",
               "# start the local AWS emulator, no real account needed",
               "emulator aws is up",
               "# dependencies.components already orders kms first",
@@ -172,7 +178,16 @@ commands:
           ]:
               if needle not in plain:
                   raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "No valid credential sources", "[scaffold-generate]", "[emulator-up]", "[apply-all]", "[terraform-output]", "[emulator-down]", "[[ .Config.project_name ]]", "cd my-landing-zone", "--chdir"]:
+          sequence = [
+              "Generating aws-landing-zone in",
+              "cd my-landing-zone",
+              "# start the local AWS emulator, no real account needed",
+              "emulator aws is up",
+          ]
+          positions = [plain.index(needle) for needle in sequence]
+          if positions != sorted(positions):
+              raise SystemExit("scaffolds aws-landing-zone-lifecycle cast has an incoherent directory transition")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "No valid credential sources", "[scaffold-generate]", "[emulator-up]", "[apply-all]", "[terraform-output]", "[emulator-down]", "[[ .Config.project_name ]]", "--chdir"]:
               if bad in plain:
                   raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast contains {bad!r}")
           assert_no_error_output(text)
