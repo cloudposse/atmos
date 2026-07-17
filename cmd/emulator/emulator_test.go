@@ -224,6 +224,19 @@ func TestRunVerbParsesOnlyArgsBeforeDash(t *testing.T) {
 	assert.Equal(t, []string{"kubectl", "-n", "demo"}, separated)
 }
 
+func TestRequiresStack(t *testing.T) {
+	for _, subcommand := range []string{"up", "down", "reset", "logs", "exec"} {
+		assert.True(t, requiresStack(subcommand), "%s should require a component stack", subcommand)
+	}
+	assert.False(t, requiresStack("list"))
+	assert.False(t, requiresStack("ps"))
+}
+
+func TestVerbFlagsOmitsRuntimeWhenDisabled(t *testing.T) {
+	require.NoError(t, listCmd.Flags().Set(flagRuntime, "false"))
+	assert.NotContains(t, verbFlags(listCmd), flagRuntime)
+}
+
 func TestInitConfigAndStacksInfo_ExtraPositionalArgs(t *testing.T) {
 	// Positional args beyond the component are carried as additional args.
 	c := &cobra.Command{Use: "up"}
