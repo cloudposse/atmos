@@ -365,7 +365,7 @@ type WorkflowStep struct {
 	Inspect          *ContainerInspectStep   `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
 	RuntimeAutoStart bool                    `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Runtime          *ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`       // Inline per-step runtime block (e.g. runtime.host for Docker-out-of-Docker).
-	Provider         string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Provider         string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // auto, docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer      `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
 	// Emulator step fields.
