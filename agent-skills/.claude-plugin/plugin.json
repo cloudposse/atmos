@@ -1,7 +1,7 @@
 {
   "name": "atmos",
   "version": "1.0.0",
-  "description": "Atmos skills for AI coding assistants: Terraform/OpenTofu/Helmfile/Packer/Ansible orchestration, stacks, remote imports, components, containers, emulators, Native CI, Atmos Pro, Auth, GitOps, secrets, cache, hooks, shared steps, workflows, version tracks, casts, YAML functions, AI/MCP, and modernization.",
+  "description": "Atmos skills for AI coding assistants: Terraform/OpenTofu/Helmfile/Packer/Ansible orchestration, stacks, remote imports, components, immutable vendoring and Component Updater PRs, containers, emulators, Native CI, SBOM provenance, Atmos Pro, Auth, GitOps, secrets, cache, hooks, shared steps, workflows, version tracks, casts, YAML functions, AI/MCP, and modernization.",
   "author": {
     "name": "Cloud Posse",
     "url": "https://github.com/cloudposse"
@@ -9,5 +9,5 @@
   "homepage": "https://atmos.tools/ai/agent-skills",
   "repository": "https://github.com/cloudposse/atmos",
   "license": "Apache-2.0",
-  "keywords": ["atmos", "terraform", "opentofu", "infrastructure", "iac", "devops", "cloud", "ci", "ai", "mcp", "atmos-pro", "containers", "secrets", "gitops", "steps", "casts", "version-tracks"]
+  "keywords": ["atmos", "terraform", "opentofu", "infrastructure", "iac", "devops", "cloud", "ci", "sbom", "provenance", "vendoring", "component-updater", "ai", "mcp", "atmos-pro", "containers", "secrets", "gitops", "steps", "casts", "version-tracks"]
 }

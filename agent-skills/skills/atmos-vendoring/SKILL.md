@@ -1,6 +1,6 @@
 ---
 name: atmos-vendoring
-description: "Component vendoring: vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, native vendor update, vendor diff, vendor config, and reviewed local component copies"
+description: "Component vendoring: vendor.yaml and component.yaml manifests, immutable vendor.lock.yaml receipts, pulling from Git/S3/HTTP/OCI/Terraform Registry, native vendor update, clean, diff, config, and reviewed local component copies"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -13,6 +13,11 @@ references:
 For scheduled native Component Updater pull requests, scopes/groups, GitHub permissions, and CI summaries, use [references/component-updater.md](references/component-updater.md).
 
 Vendoring copies external components, stacks, and other artifacts into your repository. This gives you full control over when and how dependencies change, with visibility through `git diff`, an immutable audit trail, and the ability to apply emergency patches without waiting for upstream releases.
+
+Atmos records completed installs in the committed `vendor.lock.yaml` receipt. The receipt contains
+credential-free declared and resolved sources, immutable artifact evidence, and the ordered
+per-file materialization inventory. It applies to both centralized `vendor.yaml` sources and
+legacy `component.yaml` sources and mixins.
 
 ## Why Vendor
 
@@ -354,7 +359,22 @@ atmos vendor pull --component eks-cluster
 # Vendor by tags
 atmos vendor pull --tags networking
 atmos vendor pull --tags networking,compute
+
+# Intentionally resolve mutable declared refs and replace their lock evidence
+atmos vendor pull --refresh-lock
+
+# Remove lock-owned files, preserving locally modified files by default
+atmos vendor clean
+atmos vendor clean --component vpc
+atmos vendor clean --force
 ```
+
+`vendor pull` reconciles the receipt as well as declared version pins: matching installed files
+skip a download; missing or checksum-mismatched files are rehydrated from the recorded immutable
+identity. `--refresh-lock` is the explicit mutable-ref refresh path. `vendor clean` only removes
+lock-owned paths, reports modified-file conflicts, and requires `--force` to remove them. Do not
+hand-delete a target directory or lock entry when a scoped clean/replay can preserve overlapping
+source and mixin ownership.
 
 ## Native Vendor Update and Diff
 

@@ -79,7 +79,7 @@ var generateCmd = &cobra.Command{
 			if err := data.Writeln(string(content)); err != nil {
 				return err
 			}
-		} else if err := os.WriteFile(output, content, 0o644); err != nil { // #nosec G304 -- output is explicitly requested by the user.
+		} else if err := os.WriteFile(output, content, 0o644); err != nil { // #nosec G304,G306 -- output is explicitly requested by the user and is an SBOM intended for sharing.
 			return fmt.Errorf("write SBOM: %w", err)
 		}
 		if upload {

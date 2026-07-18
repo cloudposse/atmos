@@ -452,6 +452,28 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 		return nil, err
 	}
 	report := &CleanReport{}
+	selected, remainingOwners, err := selectCleanArtifacts(config, lock, component)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCleanArtifacts(config, selected, remainingOwners, force, report); err != nil {
+		return nil, err
+	}
+	if len(report.Conflicts) > 0 {
+		return report, nil
+	}
+	if err := removeCleanArtifacts(config, selected, remainingOwners, dryRun, report); err != nil {
+		return nil, err
+	}
+	if !dryRun {
+		if err := removeCleanArtifactsFromLock(config, lock, selected); err != nil {
+			return nil, err
+		}
+	}
+	return report, nil
+}
+
+func selectCleanArtifacts(config *schema.AtmosConfiguration, lock *LockFile, component string) (map[string]Artifact, map[string]struct{}, error) {
 	selected := map[string]Artifact{}
 	remainingOwners := map[string]struct{}{}
 	for id, artifact := range lock.Artifacts {
@@ -459,78 +481,95 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 			selected[id] = artifact
 			continue
 		}
-		for _, file := range artifact.Files {
-			path, pathErr := lockedPath(config, artifact.Target, file.Path)
-			if pathErr != nil {
-				return nil, pathErr
-			}
-			remainingOwners[path] = struct{}{}
+		if err := collectArtifactOwners(config, artifact, remainingOwners); err != nil {
+			return nil, nil, err
 		}
 	}
+	return selected, remainingOwners, nil
+}
 
-	// Validate every selected path before changing either the filesystem or the
-	// lock. This keeps a conflict from producing a partially-cleaned receipt.
+func collectArtifactOwners(config *schema.AtmosConfiguration, artifact Artifact, owners map[string]struct{}) error {
+	for _, file := range artifact.Files {
+		path, err := lockedPath(config, artifact.Target, file.Path)
+		if err != nil {
+			return err
+		}
+		owners[path] = struct{}{}
+	}
+	return nil
+}
+
+// validateCleanArtifacts validates every selected path before changing either
+// the filesystem or the lock. This keeps a conflict from producing a partial receipt.
+func validateCleanArtifacts(config *schema.AtmosConfiguration, selected map[string]Artifact, remainingOwners map[string]struct{}, force bool, report *CleanReport) error {
 	for id, artifact := range selected {
 		for _, file := range artifact.Files {
-			path, pathErr := lockedPath(config, artifact.Target, file.Path)
-			if pathErr != nil {
-				return nil, pathErr
+			path, err := lockedPath(config, artifact.Target, file.Path)
+			if err != nil {
+				return err
 			}
 			if _, shared := remainingOwners[path]; shared {
 				continue
 			}
-			info, statErr := os.Lstat(path)
-			if os.IsNotExist(statErr) {
+			info, err := os.Lstat(path)
+			if os.IsNotExist(err) {
 				continue
 			}
-			if statErr != nil {
-				return nil, fmt.Errorf("inspect lock-owned file %q: %w", path, statErr)
+			if err != nil {
+				return fmt.Errorf("inspect lock-owned file %q: %w", path, err)
 			}
 			if !force && !matches(file, path, info) {
 				report.Conflicts = append(report.Conflicts, Drift{Artifact: id, Path: path, Reason: "checksum mismatch"})
 			}
 		}
 	}
-	if len(report.Conflicts) > 0 {
-		return report, nil
-	}
+	return nil
+}
 
+func removeCleanArtifacts(config *schema.AtmosConfiguration, selected map[string]Artifact, remainingOwners map[string]struct{}, dryRun bool, report *CleanReport) error {
 	for _, artifact := range selected {
 		for _, file := range artifact.Files {
-			path, pathErr := lockedPath(config, artifact.Target, file.Path)
-			if pathErr != nil {
-				return nil, pathErr
+			path, err := lockedPath(config, artifact.Target, file.Path)
+			if err != nil {
+				return err
 			}
 			if _, shared := remainingOwners[path]; shared {
 				continue
 			}
-			if _, statErr := os.Lstat(path); os.IsNotExist(statErr) {
-				continue
-			} else if statErr != nil {
-				return nil, fmt.Errorf("inspect lock-owned file %q: %w", path, statErr)
-			}
-			if !dryRun {
-				if err := os.Remove(path); err != nil {
-					return nil, fmt.Errorf("remove lock-owned file %q: %w", path, err)
-				}
-				root, rootErr := lockTargetRoot(config, artifact.Target)
-				if rootErr != nil {
-					return nil, rootErr
-				}
-				removeEmptyParents(filepath.Dir(path), root)
+			if err := removeCleanFile(config, artifact.Target, path, dryRun); err != nil {
+				return err
 			}
 			report.Removed = append(report.Removed, path)
 		}
 	}
-	if !dryRun {
-		for id := range selected {
-			delete(lock.Artifacts, id)
-		}
-		if err := Save(config, lock); err != nil {
-			return nil, err
-		}
+	return nil
+}
+
+func removeCleanFile(config *schema.AtmosConfiguration, target, path string, dryRun bool) error {
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("inspect lock-owned file %q: %w", path, err)
 	}
-	return report, nil
+	if dryRun {
+		return nil
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("remove lock-owned file %q: %w", path, err)
+	}
+	root, err := lockTargetRoot(config, target)
+	if err != nil {
+		return err
+	}
+	removeEmptyParents(filepath.Dir(path), root)
+	return nil
+}
+
+func removeCleanArtifactsFromLock(config *schema.AtmosConfiguration, lock *LockFile, selected map[string]Artifact) error {
+	for id := range selected {
+		delete(lock.Artifacts, id)
+	}
+	return Save(config, lock)
 }
 
 // RedactSource removes URL userinfo and query parameters from a source before it

@@ -95,14 +95,8 @@ func Build(config *schema.AtmosConfiguration, includeFiles bool) (*Graph, error)
 }
 
 func BuildWithOptions(config *schema.AtmosConfiguration, options Options) (*Graph, error) {
-	if options.Mode == "" {
-		options.Mode = ModeProvenance
-	}
-	if options.Mode != ModeProvenance && options.Mode != ModeNTIA {
-		return nil, fmt.Errorf("%w: %s", errUnsupportedMode, options.Mode)
-	}
-	if options.Scope != "" && options.Scope != ScopeTerraform {
-		return nil, fmt.Errorf("%w: %s", errUnsupportedScope, options.Scope)
+	if err := normalizeOptions(&options); err != nil {
+		return nil, err
 	}
 	graph := &Graph{Subject: options.Subject}
 	if options.Subject.Name != "" {
@@ -111,17 +105,8 @@ func BuildWithOptions(config *schema.AtmosConfiguration, options Options) (*Grap
 	if err := appendVendor(graph, config, options.IncludeFiles); err != nil {
 		return nil, err
 	}
-	if options.Scope == ScopeTerraform {
-		if err := appendTerraform(graph, config); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := appendToolchain(graph, config); err != nil {
-			return nil, err
-		}
-		if err := appendVersions(graph, config); err != nil {
-			return nil, err
-		}
+	if err := appendScopeArtifacts(graph, config, options.Scope); err != nil {
+		return nil, err
 	}
 	graph.Components = dedupe(graph.Components)
 	sort.Slice(graph.Coverage, func(i, j int) bool { return graph.Coverage[i].Adapter < graph.Coverage[j].Adapter })
@@ -131,6 +116,29 @@ func BuildWithOptions(config *schema.AtmosConfiguration, options Options) (*Grap
 		}
 	}
 	return graph, nil
+}
+
+func normalizeOptions(options *Options) error {
+	if options.Mode == "" {
+		options.Mode = ModeProvenance
+	}
+	if options.Mode != ModeProvenance && options.Mode != ModeNTIA {
+		return fmt.Errorf("%w: %s", errUnsupportedMode, options.Mode)
+	}
+	if options.Scope != "" && options.Scope != ScopeTerraform {
+		return fmt.Errorf("%w: %s", errUnsupportedScope, options.Scope)
+	}
+	return nil
+}
+
+func appendScopeArtifacts(graph *Graph, config *schema.AtmosConfiguration, scope string) error {
+	if scope == ScopeTerraform {
+		return appendTerraform(graph, config)
+	}
+	if err := appendToolchain(graph, config); err != nil {
+		return err
+	}
+	return appendVersions(graph, config)
 }
 
 func subjectComponent(subject Subject) Component {
@@ -182,7 +190,7 @@ func appendJITSources(graph *Graph, config *schema.AtmosConfiguration) (bool, st
 	if config == nil || config.BasePath == "" {
 		return true, "vendor lock parsed; no JIT workdir search path", nil
 	}
-	complete, receipts := true, 0
+	state := jitSourceState{complete: true}
 	err := filepath.WalkDir(config.BasePath, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -190,42 +198,80 @@ func appendJITSources(graph *Graph, config *schema.AtmosConfiguration) (bool, st
 		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".terraform") {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || entry.Name() != workdir.MetadataFile || filepath.Base(filepath.Dir(path)) != workdir.AtmosDir {
+		if !isJITReceipt(entry, path) {
 			return nil
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		var receipt workdir.WorkdirMetadata
-		if err := json.Unmarshal(data, &receipt); err != nil {
-			return fmt.Errorf("parse JIT workdir receipt %q: %w", path, err)
-		}
-		receipts++
-		source := receipt.SourceResolved
-		if source == "" {
-			source = receipt.SourceURI
-		}
-		identity := receipt.SourceIdentity
-		if identity == "" {
-			complete = false
-			identity = "NOASSERTION"
-		}
-		target := filepath.Dir(filepath.Dir(path))
-		id := "jit:" + filepath.ToSlash(relativeToBase(config.BasePath, target))
-		graph.Components = append(graph.Components, Component{ID: id, Name: receipt.Component, Version: identity, Type: "library", Source: source, SHA256: trimSHA256(identity), Properties: map[string]string{"atmos:domain": "jit-source", "atmos:receipt": repositoryPath(config, path), "atmos:target": repositoryPath(config, target), "atmos:stack": receipt.Stack}})
-		return nil
+		return state.append(graph, config, path)
 	})
 	if err != nil {
 		return false, "failed to inspect JIT receipts", err
 	}
-	if receipts == 0 {
+	if state.receipts == 0 {
 		return true, "vendor lock parsed; no JIT receipts found", nil
 	}
-	if !complete {
+	if !state.complete {
 		return false, "one or more JIT receipts lack immutable source identity", nil
 	}
 	return true, "vendor lock and JIT receipts parsed", nil
+}
+
+type jitSourceState struct {
+	complete bool
+	receipts int
+}
+
+func isJITReceipt(entry os.DirEntry, path string) bool {
+	return !entry.IsDir() && entry.Name() == workdir.MetadataFile && filepath.Base(filepath.Dir(path)) == workdir.AtmosDir
+}
+
+func (state *jitSourceState) append(graph *Graph, config *schema.AtmosConfiguration, path string) error {
+	receipt, err := loadJITReceipt(path)
+	if err != nil {
+		return err
+	}
+	state.receipts++
+	identity := receipt.SourceIdentity
+	if identity == "" {
+		state.complete = false
+		identity = "NOASSERTION"
+	}
+	target := filepath.Dir(filepath.Dir(path))
+	graph.Components = append(graph.Components, Component{
+		ID:      "jit:" + filepath.ToSlash(relativeToBase(config.BasePath, target)),
+		Name:    receipt.Component,
+		Version: identity,
+		Type:    "library",
+		Source:  firstNonEmpty(receipt.SourceResolved, receipt.SourceURI),
+		SHA256:  trimSHA256(identity),
+		Properties: map[string]string{
+			"atmos:domain":  "jit-source",
+			"atmos:receipt": repositoryPath(config, path),
+			"atmos:target":  repositoryPath(config, target),
+			"atmos:stack":   receipt.Stack,
+		},
+	})
+	return nil
+}
+
+func loadJITReceipt(path string) (workdir.WorkdirMetadata, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return workdir.WorkdirMetadata{}, err
+	}
+	var receipt workdir.WorkdirMetadata
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		return workdir.WorkdirMetadata{}, fmt.Errorf("parse JIT workdir receipt %q: %w", path, err)
+	}
+	return receipt, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func relativeToBase(base, path string) string {

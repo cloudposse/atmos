@@ -52,6 +52,7 @@ BUILT-IN COMMANDS
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
+      sbom [command] [EXPERIMENTAL]          Generate software bills of materials from Atmos locks
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
       stack [command]                        Read and edit stack manifests for a component
       support                                Show Atmos support options
