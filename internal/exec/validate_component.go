@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -29,8 +30,56 @@ func getBasePathToUse(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.BasePath
 }
 
-// ExecuteValidateComponentCmd executes `validate component` command.
-func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
+// enableProvenanceForRichOutput sets atmosConfig.TrackProvenance when the
+// resolved output format is "rich". Provenance is enabled only for the rich
+// invocation: it lets the command map JSON Schema fields back to the
+// effective stack value without changing normal component-validation cost
+// or behavior for other formats.
+func enableProvenanceForRichOutput(atmosConfig *schema.AtmosConfiguration, outputFormat string) {
+	if strings.EqualFold(strings.TrimSpace(outputFormat), "rich") {
+		atmosConfig.TrackProvenance = true
+	}
+}
+
+// validateComponentFlags holds the `validate component` flags
+// ExecuteValidateComponentCmd needs to run validation.
+type validateComponentFlags struct {
+	stack       string
+	schemaPath  string
+	schemaType  string
+	modulePaths []string
+	timeout     int
+}
+
+// readValidateComponentFlags reads the flags ExecuteValidateComponentCmd needs
+// from the command's flag set.
+func readValidateComponentFlags(flags *pflag.FlagSet) (validateComponentFlags, error) {
+	var f validateComponentFlags
+	var err error
+	if f.stack, err = flags.GetString("stack"); err != nil {
+		return f, err
+	}
+	if f.schemaPath, err = flags.GetString("schema-path"); err != nil {
+		return f, err
+	}
+	if f.schemaType, err = flags.GetString("schema-type"); err != nil {
+		return f, err
+	}
+	if f.modulePaths, err = flags.GetStringSlice("module-paths"); err != nil {
+		return f, err
+	}
+	if f.timeout, err = flags.GetInt("timeout"); err != nil {
+		return f, err
+	}
+	return f, nil
+}
+
+// ExecuteValidateComponentCmd executes `validate component` command. The
+// outputFormat argument is the already-resolved config -> env var -> CLI
+// flag precedence value that the caller computes via its normal format
+// selection, used to enable provenance tracking for "rich" output
+// regardless of which source supplied it.
+func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string, outputFormat string) (string, string, error) {
 	defer perf.Track(nil, "exec.ExecuteValidateComponentCmd")()
 
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
@@ -42,12 +91,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	if err != nil {
 		return "", "", err
 	}
-	if outputFormat, formatErr := cmd.Flags().GetString("format"); formatErr == nil && strings.EqualFold(outputFormat, "rich") {
-		// Provenance is enabled only for the rich invocation. It lets the command
-		// map JSON Schema fields back to the effective stack value without
-		// changing normal component-validation cost or behavior.
-		atmosConfig.TrackProvenance = true
-	}
+	enableProvenanceForRichOutput(&atmosConfig, outputFormat)
 
 	if len(args) != 1 {
 		return "", "", errUtils.ErrInvalidComponentArgument
@@ -59,47 +103,21 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	s := spinner.New(fmt.Sprintf("Validating Atmos Component: %s", componentName))
 	s.Start()
 
-	flags := cmd.Flags()
-
-	stack, err := flags.GetString("stack")
+	flags, err := readValidateComponentFlags(cmd.Flags())
 	if err != nil {
 		s.Stop()
 		return "", "", err
 	}
 
-	schemaPath, err := flags.GetString("schema-path")
-	if err != nil {
-		s.Stop()
-		return "", "", err
-	}
-
-	schemaType, err := flags.GetString("schema-type")
-	if err != nil {
-		s.Stop()
-		return "", "", err
-	}
-
-	modulePaths, err := flags.GetStringSlice("module-paths")
-	if err != nil {
-		s.Stop()
-		return "", "", err
-	}
-
-	timeout, err := flags.GetInt("timeout")
-	if err != nil {
-		s.Stop()
-		return "", "", err
-	}
-
-	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
+	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, flags.stack, flags.schemaPath, flags.schemaType, flags.modulePaths, flags.timeout)
 	if err != nil {
 		s.Error("Component validation failed")
 		return "", "", err
 	}
 	s.Success("Component validated successfully")
-	log.Debug("Component validation completed", "component", componentName, "stack", stack)
+	log.Debug("Component validation completed", "component", componentName, "stack", flags.stack)
 
-	return componentName, stack, nil
+	return componentName, flags.stack, nil
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema or OPA schema documents.

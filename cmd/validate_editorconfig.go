@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -28,7 +29,7 @@ import (
 )
 
 var (
-	// defaultConfigFileNames determines the file names where the config is located
+	// DefaultConfigFileNames determines the file names where the config is located.
 	defaultConfigFileNames  = []string{".editorconfig", ".editorconfig-checker.json", ".ecrc"}
 	initEditorConfig        bool
 	currentConfig           *config.Config
@@ -40,6 +41,14 @@ var (
 	editorConfigRich        bool
 	editorConfigAnnotate    = ci.Annotate
 	editorConfigReportSARIF = ci.ReportSARIF
+)
+
+// ciFlagsParser wires the shared "ci" flag through the standard parser so it
+// follows the standard flag > env var > config > default precedence via
+// pkg/flags, replacing direct viper.BindPFlag/BindEnv calls.
+var ciFlagsParser = flags.NewStandardParser(
+	flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (annotations, SARIF upload)"),
+	flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 )
 
 var editorConfigCmd *cobra.Command = &cobra.Command{
@@ -225,6 +234,13 @@ func configureEditorConfigFormat(value string) (bool, error) {
 // runEditorConfig executes EditorConfig validation without terminating the process.
 // It can therefore be composed by aggregate validators.
 func runEditorConfig(cmd *cobra.Command) error {
+	// Re-bind on every invocation (not just at init) so the "ci" flag/env
+	// wiring survives a viper instance being reset between invocations, the
+	// same pattern used by other standard-parser-based commands (e.g.
+	// terraform apply/plan bind their parser inside RunE).
+	if err := ciFlagsParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+		return err
+	}
 	affectedFiles, affected, err := validationAffectedFiles(cmd)
 	if err != nil {
 		return err
@@ -470,7 +486,6 @@ func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&cliConfig.DryRun, "dry-run", false, "Show which files would be checked")
 	cmd.PersistentFlags().BoolVar(&cliConfig.ShowVersion, "version", false, "Print the version number")
 	cmd.PersistentFlags().StringVar(&format, "format", "default", "Specify the output format: default, gcc, codeclimate, github-actions, sarif, rich")
-	cmd.PersistentFlags().Bool("ci", false, "Enable CI mode for automated pipelines (annotations, SARIF upload)")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.TrimTrailingWhitespace, "disable-trim-trailing-whitespace", false, "Disable trailing whitespace check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.EndOfLine, "disable-end-of-line", false, "Disable end-of-line check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.InsertFinalNewline, "disable-insert-final-newline", false, "Disable final newline check")
@@ -483,10 +498,8 @@ func init() {
 	// Add flags
 	addPersistentFlags(editorConfigCmd)
 	addAffectedValidationFlags(editorConfigCmd)
-	if err := viper.BindPFlag("ci", editorConfigCmd.PersistentFlags().Lookup("ci")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindEnv("ci", "ATMOS_CI", "CI"); err != nil {
+	ciFlagsParser.RegisterPersistentFlags(editorConfigCmd)
+	if err := ciFlagsParser.BindFlagsToViper(editorConfigCmd, viper.GetViper()); err != nil {
 		panic(err)
 	}
 	// Add command

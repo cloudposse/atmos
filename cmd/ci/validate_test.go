@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
@@ -146,28 +147,31 @@ func TestWorkflowFilesExcluding(t *testing.T) {
 }
 
 func TestWriteCIValidationOutputFormats(t *testing.T) {
-	command := NewValidateCommand()
-	var richOutput bytes.Buffer
-	command.SetOut(&richOutput)
-	require.NoError(t, writeCIValidationOutput(command, validateFormatRich, validation.Report{FilesChecked: 2}, t.TempDir(), false, ""))
+	richOutput := &bytes.Buffer{}
+	richContext, err := iolib.NewContext(iolib.WithStreams(ciValidationTestStreams{output: richOutput}))
+	require.NoError(t, err)
+	ui.InitFormatter(richContext)
+	t.Cleanup(ui.Reset)
+
+	require.NoError(t, writeCIValidationOutput(validateFormatRich, validation.Report{FilesChecked: 2}, t.TempDir(), false, ""))
 	assert.Contains(t, richOutput.String(), "No GitHub Actions workflow validation findings")
 
 	richOutput.Reset()
-	require.NoError(t, writeCIValidationOutput(command, validateFormatRich, validation.Report{Diagnostics: []validation.Diagnostic{{
+	require.NoError(t, writeCIValidationOutput(validateFormatRich, validation.Report{Diagnostics: []validation.Diagnostic{{
 		Source: "github-actions", RuleID: "syntax", Severity: validation.SeverityError, Message: "invalid workflow",
 	}}}, t.TempDir(), false, ""))
 	assert.Contains(t, richOutput.String(), "invalid workflow")
 
 	// Text diagnostics are returned by workflowValidationError, so the output
 	// phase intentionally has no direct side effect when findings exist.
-	require.NoError(t, writeCIValidationOutput(command, validateFormatText, validation.Report{Diagnostics: []validation.Diagnostic{{Message: "invalid"}}}, "", false, ""))
+	require.NoError(t, writeCIValidationOutput(validateFormatText, validation.Report{Diagnostics: []validation.Diagnostic{{Message: "invalid"}}}, "", false, ""))
 
 	dataOutput := &bytes.Buffer{}
 	context, err := iolib.NewContext(iolib.WithStreams(ciValidationTestStreams{output: dataOutput}))
 	require.NoError(t, err)
 	data.InitWriter(context)
 	t.Cleanup(data.Reset)
-	require.NoError(t, writeCIValidationOutput(command, validateFormatSARIF, validation.Report{Diagnostics: []validation.Diagnostic{{
+	require.NoError(t, writeCIValidationOutput(validateFormatSARIF, validation.Report{Diagnostics: []validation.Diagnostic{{
 		Source: "github-actions", RuleID: "syntax", Severity: validation.SeverityError, Message: "invalid workflow",
 	}}}, "", false, ""))
 	assert.Contains(t, dataOutput.String(), `"version": "2.1.0"`)

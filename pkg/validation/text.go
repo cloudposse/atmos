@@ -24,8 +24,15 @@ func FromGCCText(source, message string) Report {
 			Message: strings.TrimSpace(match[4]),
 		})
 	}
-	if len(diagnostics) == 0 && strings.TrimSpace(message) != "" {
-		diagnostics = append(diagnostics, Diagnostic{Source: source, RuleID: source, Severity: SeverityError, Message: strings.TrimSpace(message)})
+	// Preserve any text that isn't part of a matched GCC-formatted line (e.g.
+	// general stack setup errors mixed in with schema failures) instead of
+	// discarding it whenever at least one diagnostic was parsed.
+	unmatched := strings.TrimSpace(gccDiagnostic.ReplaceAllString(message, ""))
+	if unmatched != "" {
+		diagnostics = append(diagnostics, Diagnostic{
+			Source: source, RuleID: source, Severity: SeverityError,
+			Message: unmatched,
+		})
 	}
 	return Report{Diagnostics: diagnostics}
 }

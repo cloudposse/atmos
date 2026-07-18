@@ -185,7 +185,7 @@ func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, p
 		return fmt.Errorf("validate GitHub Actions workflows: %w", err)
 	}
 
-	if err := writeCIValidationOutput(cmd, format, report, root, len(args) > 0, workflowPath); err != nil {
+	if err := writeCIValidationOutput(format, report, root, len(args) > 0, workflowPath); err != nil {
 		return err
 	}
 
@@ -259,7 +259,7 @@ func affectedWorkflowFiles(paths []string) []string {
 	return result
 }
 
-func writeCIValidationOutput(cmd *cobra.Command, format string, report validation.Report, root string, explicitPaths bool, workflowPath string) error {
+func writeCIValidationOutput(format string, report validation.Report, root string, explicitPaths bool, workflowPath string) error {
 	if format == validateFormatSARIF {
 		body, err := report.SARIF()
 		if err != nil {
@@ -272,15 +272,15 @@ func writeCIValidationOutput(cmd *cobra.Command, format string, report validatio
 	}
 	if format == validateFormatRich {
 		if !report.HasErrors() {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), "✓ No GitHub Actions workflow validation findings")
-			return err
+			ui.Success("No GitHub Actions workflow validation findings")
+			return nil
 		}
 		output := validation.Rich(report, validation.DefaultRichOptions(root))
 		if output == "" {
 			return nil
 		}
-		_, err := fmt.Fprintln(cmd.OutOrStdout(), output)
-		return err
+		ui.Writeln(output)
+		return nil
 	}
 	if report.HasErrors() {
 		return nil

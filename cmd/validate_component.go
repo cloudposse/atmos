@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -12,6 +11,7 @@ import (
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
@@ -134,7 +134,7 @@ var validateComponentCmd = &cobra.Command{
 			args[0] = resolvedComponent
 		}
 
-		_, _, err = e.ExecuteValidateComponentCmd(cmd, args)
+		_, _, err = e.ExecuteValidateComponentCmd(cmd, args, outputFormat)
 		if err != nil {
 			if outputFormat == validateFormatRich {
 				root, rootErr := os.Getwd()
@@ -145,9 +145,7 @@ var validateComponentCmd = &cobra.Command{
 				if len(report.Diagnostics) == 1 && report.Diagnostics[0].File == "" {
 					report.Diagnostics[0].File = componentStackSource(cmd, args, root)
 				}
-				if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), validation.Rich(report, validation.DefaultRichOptions(root))); writeErr != nil {
-					return writeErr
-				}
+				ui.Writeln(validation.Rich(report, validation.DefaultRichOptions(root)))
 				return errUtils.ExitCodeError{Code: 1, Silent: true}
 			}
 			return err

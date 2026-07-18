@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
@@ -68,12 +69,12 @@ JSON Schema — the same one ` + "`atmos stack schema`" + ` prints. This is an a
 			stackConfig := withExcludedStackPaths(atmosConfigPtr, excludes)
 			err := exec.ValidateStacks(stackConfig)
 			if err == nil {
-				message := "✓ All stacks validated successfully"
+				message := "All stacks validated successfully"
 				if len(stackConfig.StackConfigFilesAbsolutePaths) == 0 {
-					message = "✓ No stack manifests found to validate"
+					message = "No stack manifests found to validate"
 				}
-				_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), message)
-				return writeErr
+				ui.Success(message)
+				return nil
 			}
 			root := stackConfig.StacksBaseAbsolutePath
 			if root == "" {
@@ -83,9 +84,7 @@ JSON Schema — the same one ` + "`atmos stack schema`" + ` prints. This is an a
 					return rootErr
 				}
 			}
-			if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), validation.Rich(validation.FromGCCText("stacks", err.Error()), validation.DefaultRichOptions(root))); writeErr != nil {
-				return writeErr
-			}
+			ui.Writeln(validation.Rich(validation.FromGCCText("stacks", err.Error()), validation.DefaultRichOptions(root)))
 			return errUtils.ExitCodeError{Code: 1, Silent: true}
 		}
 		if len(excludes) > 0 {

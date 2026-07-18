@@ -2,6 +2,7 @@ package stack
 
 import (
 	"bytes"
+	stdio "io"
 	"path/filepath"
 	"testing"
 
@@ -9,8 +10,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// stackValidateTestStreams is a minimal io.Streams implementation for
+// capturing ui.* output (UIStream) in tests.
+type stackValidateTestStreams struct{ output *bytes.Buffer }
+
+func (s stackValidateTestStreams) Input() stdio.Reader     { return bytes.NewReader(nil) }
+func (s stackValidateTestStreams) Output() stdio.Writer    { return s.output }
+func (s stackValidateTestStreams) Error() stdio.Writer     { return s.output }
+func (s stackValidateTestStreams) RawOutput() stdio.Writer { return s.output }
+func (s stackValidateTestStreams) RawError() stdio.Writer  { return s.output }
 
 func TestStackValidateCmd_RegisteredUnderStack(t *testing.T) {
 	found := false
@@ -38,15 +51,21 @@ func TestStackValidateCmdRichFormat(t *testing.T) {
 	atmosConfigPtr = &schema.AtmosConfiguration{StacksBaseAbsolutePath: filepath.Join(t.TempDir(), "missing-stacks")}
 
 	output := &bytes.Buffer{}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(stackValidateTestStreams{output: output}))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+
 	command := &cobra.Command{}
 	command.Flags().String("format", "rich", "")
-	command.SetOut(output)
+	command.Flags().StringSlice("exclude", nil, "")
 	require.NoError(t, stackValidateCmd.RunE(command, nil))
 	assert.Contains(t, output.String(), "No stack manifests found")
 
 	invalid := &cobra.Command{}
 	invalid.Flags().String("format", "xml", "")
-	err := stackValidateCmd.RunE(invalid, nil)
+	invalid.Flags().StringSlice("exclude", nil, "")
+	err = stackValidateCmd.RunE(invalid, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "expected text or rich")
 }

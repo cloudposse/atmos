@@ -460,3 +460,16 @@ func TestEmitEditorConfigCI(t *testing.T) {
 	require.Len(t, document.Runs[0].Results, 1)
 	assert.Equal(t, "editorconfig", document.Runs[0].Results[0].RuleID)
 }
+
+// TestEditorConfigCmdCIFlagRegisteredThroughStandardParser guards against
+// regressing back to direct viper.BindPFlag/viper.BindEnv calls: the "ci"
+// flag must be registered on editorConfigCmd and its ATMOS_CI/CI env vars
+// must resolve through Viper for pkg/ci.ModeEnabled's fallback branch.
+func TestEditorConfigCmdCIFlagRegisteredThroughStandardParser(t *testing.T) {
+	flag := editorConfigCmd.PersistentFlags().Lookup("ci")
+	require.NotNil(t, flag, "expected the ci flag to be registered on editorConfigCmd")
+	assert.Equal(t, "false", flag.DefValue)
+
+	t.Setenv("ATMOS_CI", "true")
+	assert.True(t, ci.ModeEnabled(&cobra.Command{}), "expected ATMOS_CI env var to resolve through Viper via the standard parser binding")
+}
