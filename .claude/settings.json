@@ -56,8 +56,6 @@
       "Bash(gh api repos/cloudposse/atmos/pulls/* --method POST*)",
       "Bash(gh api repos/cloudposse/atmos/pulls/* --method PUT*)",
       "Bash(gh api repos/cloudposse/atmos/pulls/* --method DELETE*)",
-      "Edit(.github/workflows/**)",
-      "Write(.github/workflows/**)",
       "Edit(Makefile)",
       "Write(Makefile)",
       "Edit(go.mod)",

@@ -59,6 +59,10 @@ func TestExcludePaths(t *testing.T) {
 }
 
 func TestResolveAffectedBase(t *testing.T) {
+	// GITHUB_EVENT_PATH is set by real GitHub Actions runners and takes precedence
+	// over GITHUB_BASE_REF in resolveAffectedBase; clear it so this test is not at
+	// the mercy of the CI environment it happens to run in.
+	t.Setenv("GITHUB_EVENT_PATH", "")
 	t.Setenv("GITHUB_BASE_REF", "main")
 
 	base, explicit := resolveAffectedBase("abc123")
