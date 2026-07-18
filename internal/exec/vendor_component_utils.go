@@ -165,7 +165,7 @@ func ExecuteComponentVendorInternal(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
-	packages, err := buildComponentVendorPackages(vendorComponentSpec, component, componentPath)
+	packages, err := buildComponentVendorPackages(atmosConfig, vendorComponentSpec, component, componentPath)
 	if err != nil {
 		return err
 	}
@@ -207,7 +207,7 @@ func ExecuteComponentVendorPullBatch(
 		if err != nil {
 			return fmt.Errorf("component %q: %w", component, err)
 		}
-		packages, err := buildComponentVendorPackages(&config.Spec, component, componentPath)
+		packages, err := buildComponentVendorPackages(atmosConfig, &config.Spec, component, componentPath)
 		if err != nil {
 			return fmt.Errorf("component %q: %w", component, err)
 		}

@@ -166,7 +166,7 @@ func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(spec, "vpc", componentPath)
+	packages, err := buildComponentVendorPackages(nil, spec, "vpc", componentPath)
 	require.NoError(t, err)
 	require.Len(t, packages, 2)
 
@@ -183,7 +183,7 @@ func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
 // package is built, matching ExecuteComponentVendorInternal's pre-refactor behavior.
 func TestBuildComponentVendorPackages_MissingUri(t *testing.T) {
 	spec := &schema.VendorComponentSpec{}
-	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
+	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
 	assert.Error(t, err)
 	assert.Nil(t, packages)
 }
@@ -199,7 +199,7 @@ func TestBuildComponentVendorPackages_InvalidUriTemplate(t *testing.T) {
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
+	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
 
 	assert.Error(t, err)
 	assert.Nil(t, packages)
@@ -217,7 +217,7 @@ func TestBuildComponentVendorPackages_PropagatesMixinError(t *testing.T) {
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
+	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrMissingMixinURI)
