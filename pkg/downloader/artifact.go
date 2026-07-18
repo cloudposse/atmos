@@ -119,6 +119,7 @@ func TreeSHA256(root string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// codeql[go/weak-sensitive-data-hashing]: this hashes a portable artifact manifest for immutable content identity, never a password or credential.
 		_, _ = fmt.Fprintf(hash, "%s\x00%o\x00", filepath.ToSlash(rel), info.Mode().Perm())
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(path)

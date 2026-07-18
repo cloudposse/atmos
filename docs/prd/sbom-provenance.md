@@ -12,7 +12,7 @@ Atmos must be able to emit CycloneDX JSON and SPDX JSON from one provenance
 graph, with the NTIA minimum elements required by the selected scope: supplier,
 component name, version, unique identifier or immutable evidence, dependency
 relationship, author, and timestamp. The reference baseline is the [NTIA
-minimum elements](https://www.ntia.gov/files/ntia/publications/sbom_minimum_elements_report.pdf),
+minimum elements](https://www.ntia.gov/report/2021/minimum-elements-software-bill-materials-sbom),
 the [NIST supply-chain guidance](https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance-20),
 and the [CycloneDX model](https://cyclonedx.org/specification/overview/).
 
