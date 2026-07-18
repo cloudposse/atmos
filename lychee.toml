@@ -118,6 +118,10 @@ exclude = [
   # it is the canonical NO_COLOR spec site referenced from the help-system and
   # io-handling PRDs, and resolves in a real browser)
   "no-color\\.org",
+  # bixense.com (intermittent 503 Service Unavailable from CI runners; it is the
+  # canonical CLICOLOR spec site referenced alongside NO_COLOR in the help-system
+  # PRD, and resolves fine outside CI)
+  "bixense\\.com",
   # Algolia DocSearch docs (intermittent timeouts from CI runners)
   "docsearch\\.algolia\\.com",
   # Open Group POSIX specs (intermittent timeouts from CI runners)
