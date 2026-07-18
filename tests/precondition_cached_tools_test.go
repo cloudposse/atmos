@@ -3,12 +3,22 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// cachedToolBinaryName returns the platform-specific filename prependCachedTestTool
+// looks for, mirroring its own runtime.GOOS check.
+func cachedToolBinaryName(binary string) string {
+	if runtime.GOOS == "windows" {
+		return binary + ".exe"
+	}
+	return binary
+}
 
 func TestCachedTestToolForBinary(t *testing.T) {
 	require.NotEmpty(t, cachedTestTools, "cachedTestTools must be populated for this test to be meaningful")
@@ -70,7 +80,7 @@ func TestPrependCachedTestTool(t *testing.T) {
 	t.Run("present cached binary is prepended to non-empty PATH", func(t *testing.T) {
 		binDir := withFakeCachedTool(t, "atmos-precond-fake-present", "v0", "atmos-fake-present")
 		require.NoError(t, os.MkdirAll(binDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(binDir, "atmos-fake-present"), []byte("fake\n"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedToolBinaryName("atmos-fake-present")), []byte("fake\n"), 0o755))
 		t.Cleanup(func() { os.RemoveAll(binDir) })
 
 		// t.Setenv records the original PATH and restores it after the test; the function
@@ -87,7 +97,7 @@ func TestPrependCachedTestTool(t *testing.T) {
 	t.Run("present cached binary sets PATH when PATH is empty", func(t *testing.T) {
 		binDir := withFakeCachedTool(t, "atmos-precond-fake-emptypath", "v0", "atmos-fake-emptypath")
 		require.NoError(t, os.MkdirAll(binDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(binDir, "atmos-fake-emptypath"), []byte("fake\n"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedToolBinaryName("atmos-fake-emptypath")), []byte("fake\n"), 0o755))
 		t.Cleanup(func() { os.RemoveAll(binDir) })
 
 		t.Setenv("PATH", "")
