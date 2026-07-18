@@ -140,6 +140,18 @@ func TestSanitizeOutputNormalizesProvisionedByUserPadding(t *testing.T) {
 	}
 }
 
+func TestSanitizeOutputPreservesShellContinuations(t *testing.T) {
+	input := "Example:\n  atmos helmfile apply app -s dev " + string(rune(92)) + "\r\n    --redirect-stderr /dev/stdout\r\n"
+
+	got, err := sanitizeOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeOutput() error = %v", err)
+	}
+	if got != input {
+		t.Errorf("sanitizeOutput() mismatch:\nExpected: %q\nGot:      %q", input, got)
+	}
+}
+
 // TestSnapshotComparisonSymmetry verifies that the write path and read path
 // use the same normalization, so comparisons are symmetric.
 func TestSnapshotComparisonSymmetry(t *testing.T) {

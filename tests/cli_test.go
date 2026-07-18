@@ -397,12 +397,20 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// to forward slashes, which would turn \u003e into /u003e.
 	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
-	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	const shellContinuationPlaceholder = "\x00SHELL_CONTINUATION\x00"
+	// A trailing backslash in a help example is shell continuation syntax, not
+	// a path separator. Preserve it before Windows path normalization.
+	shellContinuation := regexp.MustCompile(`\\(\r?\n)`)
+	protectedOutput := shellContinuation.ReplaceAllString(output, shellContinuationPlaceholder+"$1")
+	protectedOutput = jsonUnicodeEscape.ReplaceAllString(protectedOutput, unicodePlaceholder+"$1")
 	normalizedOutput := filepath.ToSlash(protectedOutput)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
 	// Restore protected unicode escapes.
 	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
+
+	// Restore shell continuations after path normalization.
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, shellContinuationPlaceholder, `\`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.

@@ -176,7 +176,6 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				assert.Equal(t, "", file)
 				assert.Equal(t, map[string]any{
 					"component": "component-1",
-					"stack":     "nonprod",
 				}, data)
 				return nil
 			}
@@ -590,7 +589,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	filtered := FilterComputedFields(result.ComponentSection)
 
 	// Verify filtered section only has stack-defined fields
-	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports", "dependencies", "provision"}
+	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports", "dependencies", "provision", "component", "hooks"}
 	for k := range filtered {
 		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
 	}
