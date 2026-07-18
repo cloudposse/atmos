@@ -280,6 +280,55 @@ func TestExecuteDescribeComponentCmd_ProvenanceRendersViaContext(t *testing.T) {
 	assert.Contains(t, string(content), "vars:", "provenance-annotated YAML should contain the vars section")
 }
 
+// TestExecuteDescribeComponentCmd_ProvenanceRenderErrorPropagates covers the
+// provenance render error branch: when d.renderProvenance fails (here, because the
+// destination directory does not exist), ExecuteDescribeComponentCmd must surface
+// that error to the caller rather than swallow it.
+func TestExecuteDescribeComponentCmd_ProvenanceRenderErrorPropagates(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	workDir := "../../examples/quick-start-advanced"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// A file path under a directory that doesn't exist makes the underlying
+	// os.WriteFile call in writeOutputToFile fail, which is what renderProvenance
+	// propagates.
+	invalidFile := filepath.Join(t.TempDir(), "does-not-exist", "provenance-output.yaml")
+
+	d := &DescribeComponentExec{
+		initCliConfig:            cfg.InitCliConfig,
+		executeDescribeComponent: ExecuteDescribeComponent,
+		evaluateYqExpression:     u.EvaluateYqExpression,
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			t.Fatal("printOrWriteToFile should not be called on the provenance render path")
+			return nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:            "kms-key",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Format:               "yaml",
+		Provenance:           true,
+		ProvenanceExplicit:   true,
+		File:                 invalidFile,
+		ErrorMode:            "warn",
+	})
+	require.Error(t, err)
+
+	_, statErr := os.Stat(invalidFile)
+	assert.True(t, os.IsNotExist(statErr), "no output should have been written when the render failed")
+}
+
 func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
