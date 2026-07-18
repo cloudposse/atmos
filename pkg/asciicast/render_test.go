@@ -7,18 +7,21 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-func TestRenderReportsMissingAgg(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
+func TestRenderReportsToolchainResolutionFailure(t *testing.T) {
+	want := errors.New("toolchain unavailable")
+	withRenderToolResolver(t, func(renderToolRequirements) (renderTools, error) {
+		return renderTools{}, want
+	})
 	err := Render("input.cast", &RenderOptions{GIF: filepath.Join(t.TempDir(), "out.gif")})
-	if err == nil {
-		t.Fatal("expected missing agg error")
-	}
-	if !strings.Contains(err.Error(), "missing required tool `agg`") {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, want) {
+		t.Fatalf("expected toolchain error, got %v", err)
 	}
 }
 
@@ -28,15 +31,40 @@ func TestRenderNoTargetsSucceeds(t *testing.T) {
 	}
 }
 
+func TestRenderStaticTargetSkipsToolResolution(t *testing.T) {
+	called := false
+	withRenderToolResolver(t, func(renderToolRequirements) (renderTools, error) {
+		called = true
+		return renderTools{}, errors.New("static outputs must not resolve renderers")
+	})
+
+	input := writeTestCast(t, 20, 3, "hello\\n")
+	output := filepath.Join(t.TempDir(), "out.ascii")
+	if err := Render(input, &RenderOptions{ASCII: output}); err != nil {
+		t.Fatalf("render static ASCII: %v", err)
+	}
+	if called {
+		t.Fatal("static output should not resolve renderer tools")
+	}
+}
+
 func TestRenderRejectsExistingOutputBeforeRendering(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "out.gif")
 	if err := os.WriteFile(output, []byte("exists"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
+	called := false
+	withRenderToolResolver(t, func(renderToolRequirements) (renderTools, error) {
+		called = true
+		return renderTools{}, nil
+	})
 	err := Render("input.cast", &RenderOptions{GIF: output})
 	if !errors.Is(err, ErrRenderOutputExists) {
 		t.Fatalf("expected output exists error, got %v", err)
+	}
+	if called {
+		t.Fatal("renderer tools should not resolve when output exists")
 	}
 }
 
@@ -60,13 +88,21 @@ func TestRenderTargetsOrderAndTypes(t *testing.T) {
 			t.Fatalf("target[%d] = %q, want %q", i, targets[i].output, want)
 		}
 	}
+	if targets[0].format != renderFormatGIF || targets[1].format != renderFormatMP4 {
+		t.Fatalf("unexpected render target formats: %#v", targets)
+	}
 }
 
 func TestRenderWithFakeAgg(t *testing.T) {
 	bin := t.TempDir()
 	installFakeTool(t, bin, "agg")
-	t.Setenv("PATH", bin)
 	t.Setenv(asciicastHelperEnv, "1")
+	withRenderToolResolver(t, func(requirements renderToolRequirements) (renderTools, error) {
+		if !requirements.agg || requirements.ffmpeg {
+			t.Fatalf("requirements = %#v", requirements)
+		}
+		return renderTools{agg: filepath.Join(bin, helperExecutableName("agg"))}, nil
+	})
 
 	output := filepath.Join(t.TempDir(), "out.gif")
 	if err := Render("input.cast", &RenderOptions{GIF: output}); err != nil {
@@ -81,11 +117,17 @@ func TestRenderWithFakeAgg(t *testing.T) {
 	}
 }
 
-func TestRenderMP4ReportsMissingFFmpegBeforeAgg(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
+func TestRenderMP4ReportsToolchainFailure(t *testing.T) {
+	want := errors.New("toolchain unavailable")
+	withRenderToolResolver(t, func(requirements renderToolRequirements) (renderTools, error) {
+		if !requirements.agg || !requirements.ffmpeg {
+			t.Fatalf("requirements = %#v", requirements)
+		}
+		return renderTools{}, want
+	})
 	err := Render("input.cast", &RenderOptions{MP4: filepath.Join(t.TempDir(), "out.mp4")})
-	if !errors.Is(err, ErrMissingFFmpeg) {
-		t.Fatalf("expected missing ffmpeg, got %v", err)
+	if !errors.Is(err, want) {
+		t.Fatalf("expected toolchain error, got %v", err)
 	}
 }
 
@@ -93,8 +135,16 @@ func TestRenderMP4WithFakeTools(t *testing.T) {
 	bin := t.TempDir()
 	installFakeTool(t, bin, "agg")
 	installFakeTool(t, bin, "ffmpeg")
-	t.Setenv("PATH", bin)
 	t.Setenv(asciicastHelperEnv, "1")
+	withRenderToolResolver(t, func(requirements renderToolRequirements) (renderTools, error) {
+		if !requirements.agg || !requirements.ffmpeg {
+			t.Fatalf("requirements = %#v", requirements)
+		}
+		return renderTools{
+			agg:    filepath.Join(bin, helperExecutableName("agg")),
+			ffmpeg: filepath.Join(bin, helperExecutableName("ffmpeg")),
+		}, nil
+	})
 
 	output := filepath.Join(t.TempDir(), "out.mp4")
 	if err := Render("input.cast", &RenderOptions{MP4: output}); err != nil {
@@ -106,6 +156,35 @@ func TestRenderMP4WithFakeTools(t *testing.T) {
 	}
 	if string(content) != "mp4" {
 		t.Fatalf("mp4 output = %q", content)
+	}
+}
+
+func TestRenderResolvesAnimatedToolsOnce(t *testing.T) {
+	bin := t.TempDir()
+	installFakeTool(t, bin, "agg")
+	installFakeTool(t, bin, "ffmpeg")
+	t.Setenv(asciicastHelperEnv, "1")
+
+	calls := 0
+	withRenderToolResolver(t, func(requirements renderToolRequirements) (renderTools, error) {
+		calls++
+		if !requirements.agg || !requirements.ffmpeg {
+			t.Fatalf("requirements = %#v", requirements)
+		}
+		return renderTools{
+			agg:    filepath.Join(bin, helperExecutableName("agg")),
+			ffmpeg: filepath.Join(bin, helperExecutableName("ffmpeg")),
+		}, nil
+	})
+
+	if err := Render("input.cast", &RenderOptions{
+		GIF: filepath.Join(t.TempDir(), "out.gif"),
+		MP4: filepath.Join(t.TempDir(), "out.mp4"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("renderer resolver calls = %d, want 1", calls)
 	}
 }
 
@@ -214,30 +293,179 @@ func TestPrepareRenderOutputBareFilenameSkipsMkdirAll(t *testing.T) {
 	}
 }
 
-func TestRenderMP4PropagatesAggFailureAfterFFmpegFound(t *testing.T) {
-	// ffmpeg is present but agg is not: renderMP4 must surface renderWithAgg's
-	// error (the temp-gif render step) rather than proceeding to invoke ffmpeg.
+func TestRenderMP4PropagatesAggFailure(t *testing.T) {
+	// A missing managed agg binary must stop the MP4 pipeline before ffmpeg runs.
 	bin := t.TempDir()
 	installFakeTool(t, bin, "ffmpeg")
-	t.Setenv("PATH", bin)
 	t.Setenv(asciicastHelperEnv, "1")
+	withRenderToolResolver(t, func(renderToolRequirements) (renderTools, error) {
+		return renderTools{
+			agg:    filepath.Join(bin, "missing-agg"),
+			ffmpeg: filepath.Join(bin, helperExecutableName("ffmpeg")),
+		}, nil
+	})
 
 	output := filepath.Join(t.TempDir(), "out.mp4")
 	err := Render("input.cast", &RenderOptions{MP4: output})
-	if !errors.Is(err, ErrMissingAgg) {
-		t.Fatalf("expected missing agg error, got %v", err)
+	if err == nil {
+		t.Fatal("expected agg execution error")
+	}
+	if _, statErr := os.Stat(output); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("ffmpeg should not create output after agg failure: %v", statErr)
 	}
 }
 
 func TestRenderPropagatesAggFailure(t *testing.T) {
-	// renderWithAgg's error must propagate through Render's target loop
-	// (renderTargets -> target.render -> Render's error return).
-	t.Setenv("PATH", t.TempDir())
+	withRenderToolResolver(t, func(renderToolRequirements) (renderTools, error) {
+		return renderTools{agg: filepath.Join(t.TempDir(), "missing-agg")}, nil
+	})
 	output := filepath.Join(t.TempDir(), "out.gif")
 	err := Render("input.cast", &RenderOptions{GIF: output})
-	if !errors.Is(err, ErrMissingAgg) {
-		t.Fatalf("expected missing agg error propagated from Render, got %v", err)
+	if err == nil {
+		t.Fatal("expected agg execution error")
 	}
+}
+
+func TestRenderToolSpecs(t *testing.T) {
+	tests := []struct {
+		name         string
+		requirements renderToolRequirements
+		want         []renderToolSpec
+	}{
+		{
+			name: "gif",
+			requirements: renderToolRequirements{
+				agg: true,
+			},
+			want: []renderToolSpec{{dependency: aggTool, version: aggVersion, binary: "agg"}},
+		},
+		{
+			name: "mp4",
+			requirements: renderToolRequirements{
+				agg:    true,
+				ffmpeg: true,
+			},
+			want: []renderToolSpec{
+				{dependency: aggTool, version: aggVersion, binary: "agg"},
+				{dependency: ffmpegTool, version: ffmpegVersion, binary: "ffmpeg"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := renderToolSpecs(tt.requirements); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("renderToolSpecs() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveRenderToolsReportsInstallationFailure(t *testing.T) {
+	want := errors.New("install failed")
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error { return want },
+		func(renderToolSpec) (string, error) {
+			t.Fatal("should not locate tools after install failure")
+			return "", nil
+		},
+	)
+
+	_, err := resolveRenderToolsFromToolchain(renderToolRequirements{agg: true})
+	if !errors.Is(err, want) || !errors.Is(err, errUtils.ErrToolInstall) {
+		t.Fatalf("expected wrapped install failure, got %v", err)
+	}
+}
+
+func TestResolveRenderToolsRequestsRequiredDependencies(t *testing.T) {
+	tests := []struct {
+		name         string
+		requirements renderToolRequirements
+		want         map[string]string
+	}{
+		{
+			name:         "gif requests agg only",
+			requirements: renderToolRequirements{agg: true},
+			want:         map[string]string{aggTool: aggVersion},
+		},
+		{
+			name:         "mp4 requests agg and ffmpeg",
+			requirements: renderToolRequirements{agg: true, ffmpeg: true},
+			want:         map[string]string{aggTool: aggVersion, ffmpegTool: ffmpegVersion},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got map[string]string
+			withRenderToolchainHooks(
+				t,
+				func(deps map[string]string) error {
+					got = make(map[string]string, len(deps))
+					for dependency, version := range deps {
+						got[dependency] = version
+					}
+					return nil
+				},
+				func(spec renderToolSpec) (string, error) { return filepath.Join(t.TempDir(), spec.binary), nil },
+			)
+
+			if _, err := resolveRenderToolsFromToolchain(tt.requirements); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("requested dependencies = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveRenderToolsReportsResolutionFailure(t *testing.T) {
+	want := errors.New("binary not found")
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error { return nil },
+		func(renderToolSpec) (string, error) { return "", want },
+	)
+
+	_, err := resolveRenderToolsFromToolchain(renderToolRequirements{agg: true})
+	if !errors.Is(err, want) || !errors.Is(err, errUtils.ErrToolInstall) {
+		t.Fatalf("expected wrapped resolution failure, got %v", err)
+	}
+}
+
+func TestResolveRenderToolsUsesAbsoluteBinaryPaths(t *testing.T) {
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error { return nil },
+		func(spec renderToolSpec) (string, error) { return filepath.Join("relative", spec.binary), nil },
+	)
+
+	tools, err := resolveRenderToolsFromToolchain(renderToolRequirements{agg: true, ffmpeg: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(tools.agg) || !filepath.IsAbs(tools.ffmpeg) {
+		t.Fatalf("renderer paths must be absolute: %#v", tools)
+	}
+}
+
+func withRenderToolResolver(t *testing.T, resolver func(renderToolRequirements) (renderTools, error)) {
+	t.Helper()
+	previous := resolveRenderTools
+	resolveRenderTools = resolver
+	t.Cleanup(func() { resolveRenderTools = previous })
+}
+
+func withRenderToolchainHooks(t *testing.T, ensure func(map[string]string) error, find func(renderToolSpec) (string, error)) {
+	t.Helper()
+	previousEnsure := ensureRenderToolDependencies
+	previousFind := findRenderToolBinary
+	ensureRenderToolDependencies = ensure
+	findRenderToolBinary = find
+	t.Cleanup(func() {
+		ensureRenderToolDependencies = previousEnsure
+		findRenderToolBinary = previousFind
+	})
 }
 
 var _ io.Writer = (*errWriter)(nil)

@@ -1258,9 +1258,11 @@ func TestCastHandlerExecuteReturnsRenderErrorsWithMetadata(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
 	}
-	t.Setenv("PATH", t.TempDir())
 	castPath := filepath.Join(t.TempDir(), "demo.cast")
 	gifPath := filepath.Join(t.TempDir(), "demo.gif")
+	if err := os.WriteFile(gifPath, []byte("exists"), 0o644); err != nil {
+		t.Fatalf("create existing GIF output: %v", err)
+	}
 
 	result, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
 		Name: "demo",
@@ -1274,7 +1276,7 @@ func TestCastHandlerExecuteReturnsRenderErrorsWithMetadata(t *testing.T) {
 			Mode: "prompt",
 		}},
 	}, NewVariables())
-	if !errors.Is(err, asciicast.ErrMissingAgg) {
+	if !errors.Is(err, asciicast.ErrRenderOutputExists) {
 		t.Fatalf("expected render error, got %v", err)
 	}
 	if result == nil || result.Metadata["cast"] != castPath || result.Metadata["gif"] != gifPath {
@@ -1654,14 +1656,17 @@ func TestRunCastSessionModeRejectsInvalidDurationsBeforeStartingSession(t *testi
 }
 
 func TestRenderCastOutputs(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
 	if err := renderCastOutputs(&schema.WorkflowStep{}, "input.cast"); err != nil {
 		t.Fatalf("nil cast output should not render: %v", err)
 	}
 
-	err := renderCastOutputs(&schema.WorkflowStep{CastOutput: &schema.CastOutput{GIF: filepath.Join(t.TempDir(), "out.gif")}}, "input.cast")
-	if !errors.Is(err, asciicast.ErrMissingAgg) {
-		t.Fatalf("expected missing agg renderer, got %v", err)
+	output := filepath.Join(t.TempDir(), "out.gif")
+	if err := os.WriteFile(output, []byte("exists"), 0o644); err != nil {
+		t.Fatalf("create existing GIF output: %v", err)
+	}
+	err := renderCastOutputs(&schema.WorkflowStep{CastOutput: &schema.CastOutput{GIF: output}}, "input.cast")
+	if !errors.Is(err, asciicast.ErrRenderOutputExists) {
+		t.Fatalf("expected existing output error, got %v", err)
 	}
 }
 
