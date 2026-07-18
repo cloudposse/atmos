@@ -26,7 +26,7 @@ func TestCreateVersionsTableDoesNotExpandHeaders(t *testing.T) {
 	assert.NotContains(t, header, "VERSION                DATE")
 }
 
-func TestCreateVersionsTableKeepsEmptyIndicatorColumnCompact(t *testing.T) {
+func TestCreateVersionsTableKeepsIndicatorColumnCompact(t *testing.T) {
 	t.Parallel()
 
 	table, err := createVersionsTable(nil, 72)
@@ -34,6 +34,32 @@ func TestCreateVersionsTableKeepsEmptyIndicatorColumnCompact(t *testing.T) {
 
 	header := strings.TrimRight(strings.Split(ansi.Strip(table.String()), "\n")[0], " ")
 	assert.Equal(t, "    VERSION                DATE                   TITLE", header)
+}
+
+// TestCreateVersionsTableIndicatorColumnMatchesPopulatedRows is a regression
+// test: the indicator column must stay pinned to its natural width even when
+// rows are populated. Before this fix, lipgloss/table's auto-expand
+// distributed spare width round-robin across every under-sized column
+// (including the blank indicator column), inflating it and throwing off
+// VERSION/DATE/TITLE header alignment relative to the data rows below it.
+func TestCreateVersionsTableIndicatorColumnMatchesPopulatedRows(t *testing.T) {
+	t.Parallel()
+
+	table, err := createVersionsTable([][]string{
+		{" ", "X.X.X", "YYYY-MM-DD", "Changelog"},
+		{" ", "X.X.X", "YYYY-MM-DD", "Changelog"},
+		{" ", "X.X.X", "YYYY-MM-DD", "Changelog"},
+	}, 72)
+	assert.NoError(t, err)
+
+	lines := strings.Split(ansi.Strip(table.String()), "\n")
+	header := strings.TrimRight(lines[0], " ")
+	firstDataRow := strings.TrimRight(lines[2], " ")
+
+	// Both the header and the data rows must begin with the same indicator
+	// column width (indicatorColumnWidth content + 1 char left padding).
+	assert.True(t, strings.HasPrefix(header, "    VERSION"), "header: %q", header)
+	assert.True(t, strings.HasPrefix(firstDataRow, "    X.X.X"), "first data row: %q", firstDataRow)
 }
 
 func TestInfoCommand_AliasResolution(t *testing.T) {

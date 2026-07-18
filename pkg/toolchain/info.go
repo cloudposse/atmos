@@ -234,9 +234,7 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 		rows = append(rows, []string{indicator, v.version, date, title})
 	}
 
-	// Keep the table within the terminal width. Populated tables must use the
-	// same auto-sizing path for every column; pinning only the indicator column
-	// makes non-TTY headers expand differently from their body cells.
+	// Keep the table within the terminal width.
 	tableWidth := templates.GetTerminalWidth() - tableBorderPadding
 	t, err := createVersionsTable(rows, tableWidth)
 	if err != nil {
@@ -269,10 +267,14 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
-			case len(rows) == 0 && col == 0:
-				// Without a data row, the blank indicator header has no content
-				// width. Keep it at the same width a blank indicator would occupy
-				// in a populated table, rather than letting it absorb spare space.
+			case col == 0:
+				// The indicator column only ever holds a single glyph (a colored
+				// dot) or a blank placeholder, in every row including the header.
+				// Without a pinned width, lipgloss/table's auto-expand distributes
+				// spare width round-robin across every under-sized column,
+				// inflating this one well past what its content needs and
+				// throwing off the VERSION/DATE/TITLE alignment relative to the
+				// golden fixtures.
 				return lipgloss.NewStyle().Padding(0, 1).Width(indicatorColumnWidth)
 			case row == lipglosstable.HeaderRow:
 				return headerStyle.Padding(0, 1)
