@@ -29,6 +29,51 @@ func TestCachedTestToolForBinary(t *testing.T) {
 	})
 }
 
+func TestCachedTestToolBinaryPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		binary   string
+		file     string
+		wantPath string
+		wantOK   bool
+	}{
+		{
+			name:     "native binary",
+			binary:   "atmos-fake",
+			file:     "atmos-fake",
+			wantPath: "atmos-fake",
+			wantOK:   true,
+		},
+		{
+			name:     "Windows executable",
+			binary:   "atmos-fake",
+			file:     "atmos-fake.exe",
+			wantPath: "atmos-fake.exe",
+			wantOK:   true,
+		},
+		{
+			name:   "missing binary",
+			binary: "atmos-fake",
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binDir := t.TempDir()
+			if tt.file != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(binDir, tt.file), []byte("fake\n"), 0o755))
+			}
+
+			got, ok := cachedTestToolBinaryPath(binDir, tt.binary)
+			assert.Equal(t, tt.wantOK, ok)
+			if tt.wantOK {
+				assert.Equal(t, filepath.Join(binDir, tt.wantPath), got)
+			}
+		})
+	}
+}
+
 // withFakeCachedTool appends a fake tool to cachedTestTools for the duration of the test,
 // resets its path lock so the sync.Once fires fresh, and returns the expected bin directory.
 func withFakeCachedTool(t *testing.T, repo, version, binary string) string {
