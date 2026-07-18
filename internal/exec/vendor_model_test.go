@@ -477,11 +477,11 @@ func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
 		pkgType:    pkgTypeLocal,
 	}
 	require.NoError(t, recordVendorLock(pkg, tempDir, config))
-	needs, err := needsVendorMaterialization(*pkg, config)
+	needs, err := needsVendorMaterialization(pkg, config)
 	require.NoError(t, err)
 	require.False(t, needs)
 	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("modified"), 0o644))
-	needs, err = needsVendorMaterialization(*pkg, config)
+	needs, err = needsVendorMaterialization(pkg, config)
 	require.NoError(t, err)
 	require.True(t, needs)
 

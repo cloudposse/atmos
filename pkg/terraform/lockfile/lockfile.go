@@ -7,6 +7,7 @@
 package lockfile
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,12 @@ import (
 // Name is the conventional filename of the Terraform/OpenTofu dependency lock
 // file. Both tools write the same filename.
 const Name = ".terraform.lock.hcl"
+
+var (
+	errAttributeMustBeString       = errors.New("must be a string")
+	errAttributeMustBeStringList   = errors.New("must be a list of strings")
+	errAttributeContainsNonStrings = errors.New("must contain only strings")
+)
 
 // Provider is a single provider dependency recorded in a lock file.
 type Provider struct {
@@ -126,14 +133,14 @@ func providerDetails(block *hcl.Block, filename string) (Provider, error) {
 	if attr, ok := attrs.Attributes["constraints"]; ok {
 		constraint, constraintErr := attributeString(attr)
 		if constraintErr != nil {
-			return Provider{}, fmt.Errorf("%w: provider %q constraints in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, constraintErr)
+			return Provider{}, fmt.Errorf("%w: provider %q constraints in %s: %w", errUtils.ErrInvalidConfig, block.Labels[0], filename, constraintErr)
 		}
 		provider.Constraints = constraint
 	}
 	if attr, ok := attrs.Attributes["hashes"]; ok {
 		hashes, hashesErr := attributeStrings(attr)
 		if hashesErr != nil {
-			return Provider{}, fmt.Errorf("%w: provider %q hashes in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, hashesErr)
+			return Provider{}, fmt.Errorf("%w: provider %q hashes in %s: %w", errUtils.ErrInvalidConfig, block.Labels[0], filename, hashesErr)
 		}
 		provider.Hashes = hashes
 	}
@@ -143,7 +150,7 @@ func providerDetails(block *hcl.Block, filename string) (Provider, error) {
 func attributeString(attr *hcl.Attribute) (string, error) {
 	value, diags := attr.Expr.Value(nil)
 	if diags.HasErrors() || value.Type() != cty.String || value.IsNull() {
-		return "", fmt.Errorf("must be a string")
+		return "", errAttributeMustBeString
 	}
 	return value.AsString(), nil
 }
@@ -151,14 +158,14 @@ func attributeString(attr *hcl.Attribute) (string, error) {
 func attributeStrings(attr *hcl.Attribute) ([]string, error) {
 	value, diags := attr.Expr.Value(nil)
 	if diags.HasErrors() || value.IsNull() || !value.CanIterateElements() {
-		return nil, fmt.Errorf("must be a list of strings")
+		return nil, errAttributeMustBeStringList
 	}
 	values := make([]string, 0, value.LengthInt())
 	iterator := value.ElementIterator()
 	for iterator.Next() {
 		_, item := iterator.Element()
 		if item.Type() != cty.String || item.IsNull() {
-			return nil, fmt.Errorf("must contain only strings")
+			return nil, errAttributeContainsNonStrings
 		}
 		values = append(values, item.AsString())
 	}

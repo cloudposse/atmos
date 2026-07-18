@@ -261,13 +261,14 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 // intentionally left eligible for the existing installer.
 func filterMaterializedVendorPackages(packages []pkgAtmosVendor, atmosConfig *schema.AtmosConfiguration) ([]pkgAtmosVendor, error) {
 	pending := make([]pkgAtmosVendor, 0, len(packages))
-	for _, pkg := range packages {
+	for index := range packages {
+		pkg := &packages[index]
 		needsMaterialization, err := needsVendorMaterialization(pkg, atmosConfig)
 		if err != nil {
 			return nil, fmt.Errorf("verify vendor lock for %s: %w", pkg.name, err)
 		}
 		if needsMaterialization {
-			pending = append(pending, pkg)
+			pending = append(pending, *pkg)
 			continue
 		}
 		log.Debug("Vendor target matches immutable lock receipt; skipping download", "package", pkg.name, "target", pkg.targetPath)

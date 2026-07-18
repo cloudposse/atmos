@@ -2,6 +2,7 @@
 package sbom
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,11 @@ import (
 )
 
 var atmosConfig *schema.AtmosConfiguration
+
+var (
+	errSBOMUploadRequiresCI  = errors.New("SBOM upload requires a detected CI provider")
+	errSBOMUploadUnsupported = errors.New("CI provider does not support SBOM upload")
+)
 
 // SetAtmosConfig provides the initialized project configuration to SBOM commands.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
@@ -79,11 +85,11 @@ var generateCmd = &cobra.Command{
 		if upload {
 			ciProvider := ci.Detect()
 			if ciProvider == nil {
-				return fmt.Errorf("SBOM upload requires a detected CI provider")
+				return errSBOMUploadRequiresCI
 			}
 			uploader, ok := ciProvider.(ci.SBOMUploader)
 			if !ok {
-				return fmt.Errorf("CI provider %q does not support SBOM upload", ciProvider.Name())
+				return fmt.Errorf("%w: %s", errSBOMUploadUnsupported, ciProvider.Name())
 			}
 			filename := sbomArtifactFilename(format, output)
 			if _, err := uploader.UploadSBOM(cmd.Context(), ci.SBOMReport{Filename: filename, Format: format, Content: content}); err != nil {

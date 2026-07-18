@@ -26,6 +26,7 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	}
 
 	stacksPath := "../../tests/fixtures/scenarios/vendor2"
+	t.Cleanup(func() { _ = os.Remove(filepath.Join(stacksPath, "vendor.lock.yaml")) })
 
 	// Use t.Setenv for automatic cleanup.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -167,6 +168,7 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 	// Change to test directory.
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 	t.Chdir(testDir)
+	t.Cleanup(func() { _ = os.Remove("vendor.lock.yaml") })
 
 	// Set up command with global flags.
 	cmd := newTestCommandWithGlobalFlags("pull")

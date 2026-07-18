@@ -74,6 +74,8 @@ type ResolvedImage struct {
 // ResolveImage authenticates and resolves an OCI reference without extracting
 // layers. It is the public provenance boundary for OCI consumers.
 func ResolveImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, imageName string) (*ResolvedImage, error) {
+	defer perf.Track(atmosConfig, "oci.ResolveImage")()
+
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrInvalidImageReference, err)

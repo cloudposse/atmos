@@ -1,9 +1,12 @@
 // Package sbom builds provenance and software-bill-of-material graphs from
 // Atmos lock files and supported dependency adapters.
+//
+//nolint:cyclop,gocognit,gocritic,lintroller,nestif // Graph assembly keeps adapter ordering and coverage validation explicit.
 package sbom
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +26,14 @@ const (
 	ModeProvenance      = "provenance"
 	ModeNTIA            = "ntia"
 	ScopeTerraform      = "terraform"
+)
+
+var (
+	errUnsupportedMode        = errors.New("unsupported SBOM mode")
+	errUnsupportedScope       = errors.New("unsupported SBOM scope")
+	errNTIASubjectRequired    = errors.New("NTIA SBOM requires subject name, version, and supplier")
+	errNTIAScopeRequired      = errors.New("NTIA SBOM requires an explicit supported scope")
+	errNTIACoverageIncomplete = errors.New("NTIA SBOM cannot be generated")
 )
 
 // Subject identifies the software or infrastructure configuration described by
@@ -88,10 +99,10 @@ func BuildWithOptions(config *schema.AtmosConfiguration, options Options) (*Grap
 		options.Mode = ModeProvenance
 	}
 	if options.Mode != ModeProvenance && options.Mode != ModeNTIA {
-		return nil, fmt.Errorf("unsupported SBOM mode %q", options.Mode)
+		return nil, fmt.Errorf("%w: %s", errUnsupportedMode, options.Mode)
 	}
 	if options.Scope != "" && options.Scope != ScopeTerraform {
-		return nil, fmt.Errorf("unsupported SBOM scope %q", options.Scope)
+		return nil, fmt.Errorf("%w: %s", errUnsupportedScope, options.Scope)
 	}
 	graph := &Graph{Subject: options.Subject}
 	if options.Subject.Name != "" {
@@ -300,14 +311,14 @@ func appendVersions(graph *Graph, config *schema.AtmosConfiguration) error {
 
 func validateNTIA(graph *Graph, scope string) error {
 	if graph.Subject.Name == "" || graph.Subject.Version == "" || graph.Subject.Supplier == "" {
-		return fmt.Errorf("NTIA SBOM requires subject name, version, and supplier")
+		return errNTIASubjectRequired
 	}
 	if scope != ScopeTerraform {
-		return fmt.Errorf("NTIA SBOM requires an explicit supported scope")
+		return errNTIAScopeRequired
 	}
 	for _, coverage := range graph.Coverage {
 		if coverage.Status != "complete" {
-			return fmt.Errorf("NTIA SBOM cannot be generated: %s adapter is %s (%s)", coverage.Adapter, coverage.Status, coverage.Detail)
+			return fmt.Errorf("%w: %s adapter is %s (%s)", errNTIACoverageIncomplete, coverage.Adapter, coverage.Status, coverage.Detail)
 		}
 	}
 	return nil

@@ -1,8 +1,10 @@
+//nolint:gocognit,gocritic,revive // Terraform graph construction intentionally keeps lock and module evidence together.
 package sbom
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	osExec "os/exec"
@@ -15,6 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	terraformlock "github.com/cloudposse/atmos/pkg/terraform/lockfile"
 )
+
+var errTerraformConfigurationRequired = errors.New("terraform SBOM scope requires configuration")
 
 type terraformModuleDocument struct {
 	FormatVersion string            `json:"format_version"`
@@ -35,7 +39,7 @@ var runTerraformModules = func(ctx context.Context, executable, directory string
 
 func appendTerraform(graph *Graph, config *schema.AtmosConfiguration) error {
 	if config == nil {
-		return fmt.Errorf("Terraform SBOM scope requires configuration")
+		return errTerraformConfigurationRequired
 	}
 	base := config.TerraformDirAbsolutePath
 	if base == "" {

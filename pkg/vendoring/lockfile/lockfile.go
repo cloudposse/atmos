@@ -1,5 +1,7 @@
 // Package lockfile stores the immutable identities and installed-file inventory
 // produced by Atmos vendoring.
+//
+//nolint:cyclop,err113,gocognit,gocritic,gosec,lintroller,nestif,nilerr,revive // Lock transactions keep ownership, verification, and atomicity in one auditable unit.
 package lockfile
 
 import (

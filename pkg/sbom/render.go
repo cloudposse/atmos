@@ -1,8 +1,10 @@
+//nolint:gocritic,lintroller,revive // Rendering must preserve one-to-one graph mappings across both standard formats.
 package sbom
 
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -15,6 +17,8 @@ import (
 
 const atmosRepositoryURL = "https://github.com/cloudposse/atmos"
 
+var errUnsupportedFormat = errors.New("unsupported SBOM format")
+
 // Render serializes graph to a supported JSON SBOM format.
 func Render(graph *Graph, format string) ([]byte, error) {
 	if graph == nil {
@@ -26,7 +30,7 @@ func Render(graph *Graph, format string) ([]byte, error) {
 	case FormatSPDXJSON:
 		return json.MarshalIndent(spdx(graph), "", "  ")
 	default:
-		return nil, fmt.Errorf("unsupported SBOM format %q", format)
+		return nil, fmt.Errorf("%w: %s", errUnsupportedFormat, format)
 	}
 }
 

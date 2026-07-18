@@ -42,7 +42,7 @@ func TestExecuteComponentVendorInternal_PullsLocalSource(t *testing.T) {
 		Source: schema.VendorComponentSource{Uri: sourceDir},
 	}
 
-	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, spec, "vpc", componentPath, false)
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{BasePath: t.TempDir()}, spec, "vpc", componentPath, false)
 
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))

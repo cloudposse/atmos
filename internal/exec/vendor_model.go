@@ -610,7 +610,7 @@ func recordVendorLock(p *pkgAtmosVendor, tempDir string, atmosConfig *schema.Atm
 
 // needsVendorMaterialization returns false only for a copy mode with an exact
 // receipt whose declared source and every destination file still match.
-func needsVendorMaterialization(p pkgAtmosVendor, atmosConfig *schema.AtmosConfiguration) (bool, error) {
+func needsVendorMaterialization(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfiguration) (bool, error) {
 	materialized, err := lockfile.IsMaterialized(
 		atmosConfig,
 		lockfile.ArtifactID(p.pkgType.String(), p.targetPath),

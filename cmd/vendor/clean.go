@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -10,6 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
+
+var errModifiedVendorFiles = errors.New("modified vendor files were preserved; rerun with --force to delete them")
 
 // vendorCleanCmd removes files recorded in vendor.lock.yaml. It intentionally
 // defaults to all artifacts because the lock gives it an exact ownership list.
@@ -53,7 +56,7 @@ var vendorCleanCmd = &cobra.Command{
 			for _, conflict := range report.Conflicts {
 				ui.Warningf("Preserved modified vendor file %s", conflict.Path)
 			}
-			return fmt.Errorf("%d modified vendor files were preserved; rerun with --force to delete them", len(report.Conflicts))
+			return fmt.Errorf("%w: %d", errModifiedVendorFiles, len(report.Conflicts))
 		}
 		return nil
 	},

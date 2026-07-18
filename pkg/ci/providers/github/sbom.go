@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	githubartifact "github.com/cloudposse/atmos/pkg/ci/artifact/github"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/perf"
 	atmosversion "github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -20,6 +21,8 @@ var newSBOMArtifactStore = githubartifact.NewStore
 // this intentionally preserves the generated document as a run artifact rather
 // than claiming dependency-graph ingestion.
 func (p *Provider) UploadSBOM(ctx context.Context, report provider.SBOMReport) (*provider.SBOMUpload, error) {
+	defer perf.Track(nil, "github.Provider.UploadSBOM")()
+
 	if len(report.Content) == 0 {
 		return nil, fmt.Errorf("%w: SBOM content is empty", errUtils.ErrCIOperationNotSupported)
 	}

@@ -31,6 +31,7 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 
 	// Change to the test directory.
 	t.Chdir(testDir)
+	t.Cleanup(func() { _ = os.Remove("vendor.lock.yaml") })
 
 	// Set up the command with global flags.
 	cmd := newTestCommandWithGlobalFlags("pull")
@@ -108,6 +109,7 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 
 	// Change to the test directory.
 	t.Chdir(testDir)
+	t.Cleanup(func() { _ = os.Remove("vendor.lock.yaml") })
 
 	// Verify that multiple vendor files exist in the directory.
 	vendorFiles := []string{"vendor.yaml", "vendor-test.yaml"}

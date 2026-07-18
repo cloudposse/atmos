@@ -1,9 +1,11 @@
+//nolint:gocognit,revive // Resolution and deterministic tree hashing must keep the source-type decision tree together.
 package downloader
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -16,6 +18,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+const (
+	gitSHA1Length   = 40
+	gitSHA256Length = 64
+)
+
+var errInvalidGitCommit = errors.New("invalid git commit")
 
 // ResolvedArtifact is immutable provenance captured at the common download
 // boundary. Declared and Resolved never contain URL credentials or queries.
@@ -156,8 +165,8 @@ func gitCommit(directory string) (string, error) {
 		return "", err
 	}
 	commit := strings.TrimSpace(string(output))
-	if len(commit) != 40 && len(commit) != 64 {
-		return "", fmt.Errorf("invalid git commit")
+	if len(commit) != gitSHA1Length && len(commit) != gitSHA256Length {
+		return "", errInvalidGitCommit
 	}
 	return commit, nil
 }

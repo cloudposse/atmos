@@ -1,3 +1,4 @@
+//nolint:gocritic // Graph fixtures intentionally use value components to exercise serialization copies.
 package sbom
 
 import (
