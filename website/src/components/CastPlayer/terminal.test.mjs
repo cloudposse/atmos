@@ -167,8 +167,9 @@ test('regression: init cast clears the interactive multiselect before its summar
     'init-basic.cast',
   );
   const { events } = parseCast(readFileSync(castPath, 'utf8'));
+  // The regenerated cast reaches the summary at approximately 10.07 seconds.
   const upTo = events
-    .filter(([time]) => time <= 6.8)
+    .filter(([time]) => time <= 10.2)
     .map(([, , data]) => data.replace(/\r\n/g, '\n'))
     .join('');
   const rendered = stripAnsi(replayTerminal(upTo));

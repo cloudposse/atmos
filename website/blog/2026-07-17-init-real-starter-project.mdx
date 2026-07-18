@@ -1,6 +1,6 @@
 ---
 slug: init-real-starter-project
-title: "From a template copy to an executable starter project"
+title: "Initialize an Atmos project from a proven starting point"
 date: 2026-07-17T12:00:00.000Z
 authors: [osterman]
 tags: [enhancement, dx]
@@ -8,58 +8,49 @@ tags: [enhancement, dx]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Platform teams need every new service, environment, and tenant to begin on a paved road. GitHub
-template repositories are excellent at distributing a starting tree, but a copy alone cannot ask
-which environments a team needs, enforce the platform's naming rules, tailor the generated files,
-or prove the result works. The first developer still has to connect the pieces and discover the
-gaps.
+Initializing a project should establish a useful local starting point, not leave a developer with
+an empty directory and a list of conventions to reconstruct. Modern development platforms provide
+an initialization workflow: developers select a known-good example or template, create the project
+locally, and make the next action obvious. Atmos provides that workflow for infrastructure projects.
 
-`atmos init` turns a starter template into a guided, executable project bootstrap. It captures the
-choices that matter, generates only the right project shape, and gives the team a working path from
-day one.
+The `atmos init` command initializes an Atmos project from a template chosen for the job at hand:
+a minimal cloud-agnostic project, an AWS application SDLC project, or a cloud landing zone. Each
+template creates the configuration, structure, and operational path appropriate to that project
+rather than asking every team to assemble it from scratch.
 
 <!--truncate-->
 
-## The Platform Problem
-
-At organization scale, "start from this repository" is not a platform experience. A static copy
-cannot prevent bad inputs from slipping through automation, distinguish a small development setup
-from a multi-environment project, or establish confidence that the generated repository is ready
-for a real workflow. That creates template sprawl, inconsistent first commits, and a support queue
-for the platform team.
-
-## What `init` Delivers Now
-
-The cloud-agnostic `basic` template now starts with a real `greeting` Terraform component: one
-local `local_file` resource, with no cloud account, credentials, or emulator required. It is small
-on purpose. The first outcome is proof that the project can run, not an empty directory asking the
-developer to build that proof themselves.
-
-The template asks which environments to create and generates only those stacks. Its field rules
-are enforced consistently whether values come from an interactive answer, a default, a saved
-project value, or `--set`, so the same template works for a developer at a terminal and for
-repeatable automation.
-
-For platform teams, that means a starter project can carry both the organization’s conventions and
-an executable acceptance path. Developers get a useful first commit; the platform gets a governed,
-repeatable entry point instead of another one-off repository copy.
-
-`init` and `scaffold generate` use the same generation engine. The conditional fields, files, and
-hooks described in [the scaffold announcement](/changelog/scaffold-conditional-generation-and-hooks)
-therefore apply to a whole-project bootstrap as well as to a catalog template. This is what turns a
-GitHub template repository from a useful starting artifact into part of a platform workflow.
-
-## See the Complete Bootstrap
-
-The cast creates a project interactively, selects its environments, inspects the generated catalog,
-validates the stacks, and deploys the generated component across the selected environments. It is
-the same end-to-end path a new project can use immediately.
-
-<CastPlayer src="/casts/examples/init/init-basic.cast" title="atmos init executable starter project" chrome controls scrubber />
+<CastPlayer src="/casts/examples/init/init-basic.cast" title="atmos init a working project" chrome controls scrubber />
 
 [View the full init example](/examples/init)
 
-## Get Involved
+## Initialize the Project You Need
 
-See the [Init Command Documentation](/cli/commands/init) for the full template list and the
-[Scaffold Command Documentation](/cli/commands/scaffold/generate) for the shared generation model.
+The `basic` template gives a new project a small, cloud-agnostic foundation with a real `greeting`
+Terraform component. It creates a local file, so a developer can validate and deploy the generated
+project without a cloud account, credentials, or an emulator. The point is to prove that the
+initialized project works before anyone starts extending it.
+
+For teams beginning an application project, the `aws/app` catalog template establishes a complete
+AWS application SDLC repository with dev, staging, and production stacks, native CI, and an
+emulator-proven application component. For a platform foundation, `aws/landing-zone` initializes
+dev, staging, and production environments with a conventional AWS baseline for audit, KMS, SSM,
+monitoring, and IAM. The catalog also includes GCP and Azure landing-zone starting points.
+
+## A Consistent Initialization Contract
+
+An interactive invocation lets a developer choose the project template and answer only the
+questions that shape it. Required answers, patterns, option lists, and boolean values are enforced
+consistently whether they come from prompts, defaults, persisted values, or `--set`. The same
+initialization can therefore be repeated from automation without bypassing the template’s contract.
+
+Built-in templates travel with the Atmos binary. Catalog templates resolve to the source associated
+with that build, so a team initializes from a known template version rather than an accidental
+snapshot of a repository.
+
+## Build Your Organization's Golden Paths
+
+The `init` catalog distributes proven starting points with Atmos. For organization-owned golden
+paths that your platform team distributes through a catalog or Git repository, see [the scaffolds announcement](/changelog/scaffold-conditional-generation-and-hooks).
+
+See the [Init Command Documentation](/cli/commands/init) for the full template list.

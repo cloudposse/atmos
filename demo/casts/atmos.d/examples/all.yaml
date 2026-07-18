@@ -22,6 +22,9 @@ commands:
         name: toolchain-demo-convert
         command: atmos casts generate examples toolchain demo-convert
       - type: shell
+        name: toolchain-proxies
+        command: atmos casts generate examples toolchain proxies
+      - type: shell
         name: custom-commands-hello-greet
         command: atmos casts generate examples custom-commands hello-greet
       - type: shell
