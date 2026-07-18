@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
@@ -36,6 +37,8 @@ var (
 // invalid registration because registrations occur during package setup and a
 // duplicate would otherwise make command behavior non-deterministic.
 func Register(validator Validator) {
+	defer perf.Track(nil, "validate.Register")()
+
 	if validator == nil {
 		panic("ci validator must not be nil")
 	}
@@ -54,6 +57,8 @@ func Register(validator Validator) {
 
 // Get returns a registered validator by name.
 func Get(name string) (Validator, bool) {
+	defer perf.Track(nil, "validate.Get")()
+
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	validator, ok := registry[name]
@@ -62,6 +67,8 @@ func Get(name string) (Validator, bool) {
 
 // Names returns registered validator names in stable order.
 func Names() []string {
+	defer perf.Track(nil, "validate.Names")()
+
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	names := make([]string, 0, len(registry))

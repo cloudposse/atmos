@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var gccDiagnostic = regexp.MustCompile(`(?m)^\s*(?:[-*]\s+)?([^:\n]+):(\d+):(\d+):\s*(?:error:\s*)?(.+)$`)
@@ -13,6 +15,8 @@ var gccDiagnostic = regexp.MustCompile(`(?m)^\s*(?:[-*]\s+)?([^:\n]+):(\d+):(\d+
 // location become a single file-less finding so rich output never discards
 // useful validation context.
 func FromGCCText(source, message string) Report {
+	defer perf.Track(nil, "validation.FromGCCText")()
+
 	matches := gccDiagnostic.FindAllStringSubmatch(message, -1)
 	diagnostics := make([]Diagnostic, 0, len(matches))
 	for _, match := range matches {

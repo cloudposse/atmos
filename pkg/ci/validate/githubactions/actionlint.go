@@ -11,6 +11,7 @@ import (
 	"github.com/rhysd/actionlint"
 
 	civalidate "github.com/cloudposse/atmos/pkg/ci/validate"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
@@ -25,13 +26,19 @@ func init() {
 }
 
 // Name returns this validator's registry name.
-func (Validator) Name() string { return ValidatorName }
+func (Validator) Name() string {
+	defer perf.Track(nil, "githubactions.Validator.Name")()
+
+	return ValidatorName
+}
 
 // Validate checks the requested workflow files or workflow path. When neither
 // is given, it checks the default .github/workflows path under Root. ShellCheck
 // and Pyflakes are disabled intentionally: they are external tools and would
 // make this built-in command depend on the host environment.
 func (Validator) Validate(_ context.Context, request civalidate.Request) (validation.Report, error) {
+	defer perf.Track(nil, "githubactions.Validator.Validate")()
+
 	var renderedDiagnostics bytes.Buffer
 	linter, err := actionlint.NewLinter(&renderedDiagnostics, &actionlint.LinterOptions{
 		Color:      actionlint.ColorOptionKindNever,
@@ -45,14 +52,15 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 
 	report := validation.Report{Target: request.Root}
 	var errors []*actionlint.Error
-	if request.WorkflowPath != "" {
+	switch {
+	case request.WorkflowPath != "":
 		report.Target = request.WorkflowPath
 		report.FilesChecked, err = workflowFileCount(request.WorkflowPath)
 		if err != nil {
 			return validation.Report{}, err
 		}
 		errors, err = linter.LintDir(request.WorkflowPath, nil)
-	} else if len(request.Paths) == 0 {
+	case len(request.Paths) == 0:
 		workflowPath := filepath.Join(request.Root, ".github", "workflows")
 		report.Target = workflowPath
 		report.FilesChecked, err = workflowFileCount(workflowPath)
@@ -60,7 +68,7 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 			return validation.Report{}, err
 		}
 		errors, err = linter.LintDir(workflowPath, nil)
-	} else {
+	default:
 		report.FilesChecked = len(request.Paths)
 		errors, err = linter.LintFiles(request.Paths, nil)
 	}

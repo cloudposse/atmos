@@ -23,6 +23,8 @@ var errValidationExcludePatternEmpty = errors.New("validation exclude pattern ca
 // whether a dependent validator must run, while skipping files that can no
 // longer be read.
 func AffectedFiles(base string) ([]string, error) {
+	defer perf.Track(nil, "validation.AffectedFiles")()
+
 	mergeBase, err := resolveAffectedMergeBase(base)
 	if err != nil {
 		return nil, err
@@ -104,18 +106,18 @@ func resolveAffectedBase(base string) (string, bool) {
 	if sha := githubEventBaseSHA(); sha != "" {
 		return sha, false
 	}
-	if branch := strings.TrimSpace(os.Getenv("GITHUB_BASE_REF")); branch != "" {
+	if branch := strings.TrimSpace(os.Getenv("GITHUB_BASE_REF")); branch != "" { //nolint:forbidigo // GitHub Actions' own ambient env var, not an Atmos-owned flag/config value to bind via viper -- this package has no cobra command to bind against.
 		return "origin/" + branch, false
 	}
 	return "origin/HEAD", false
 }
 
 func githubEventBaseSHA() string {
-	path := strings.TrimSpace(os.Getenv("GITHUB_EVENT_PATH"))
+	path := strings.TrimSpace(os.Getenv("GITHUB_EVENT_PATH")) //nolint:forbidigo // GitHub Actions' own ambient env var, not an Atmos-owned flag/config value to bind via viper -- this package has no cobra command to bind against.
 	if path == "" {
 		return ""
 	}
-	body, err := os.ReadFile(path)
+	body, err := os.ReadFile(path) //nolint:gosec // path is GITHUB_EVENT_PATH, provided by the GitHub Actions runner itself, not user input.
 	if err != nil {
 		return ""
 	}

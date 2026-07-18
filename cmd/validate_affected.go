@@ -148,13 +148,7 @@ func affectedEditorConfigFiles(paths []string) ([]string, bool) {
 
 func affectedSchemaFiles(paths []string, sourceKey string) ([]string, bool) {
 	if sourceKey == validateConfigSchemaKey {
-		files := make([]string, 0, len(paths))
-		for _, path := range paths {
-			if isAtmosConfigPath(path) && affectedPathExists(path) {
-				files = append(files, path)
-			}
-		}
-		return files, false
+		return affectedConfigSchemaFiles(paths), false
 	}
 
 	for _, path := range paths {
@@ -165,13 +159,27 @@ func affectedSchemaFiles(paths []string, sourceKey string) ([]string, bool) {
 		}
 	}
 
+	return affectedYAMLFiles(paths), false
+}
+
+func affectedConfigSchemaFiles(paths []string) []string {
+	files := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if isAtmosConfigPath(path) && affectedPathExists(path) {
+			files = append(files, path)
+		}
+	}
+	return files
+}
+
+func affectedYAMLFiles(paths []string) []string {
 	files := make([]string, 0, len(paths))
 	for _, path := range paths {
 		if affectedPathExists(path) && (strings.EqualFold(filepath.Ext(path), ".yaml") || strings.EqualFold(filepath.Ext(path), ".yml")) {
 			files = append(files, path)
 		}
 	}
-	return files, false
+	return files
 }
 
 func validationNoAffectedFiles(cmd *cobra.Command, validator string) error {

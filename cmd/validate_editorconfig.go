@@ -309,7 +309,7 @@ func runEditorConfig(cmd *cobra.Command) error {
 // runEditorConfigForFiles validates a subset of files when selectedFiles is
 // non-nil. A nil list retains the established whole-project behavior.
 //
-//nolint:cyclop,funlen,gocognit,revive // This preserves the established format and spinner branches while adding file selection.
+//nolint:funlen,gocognit,revive // This preserves the established format and spinner branches while adding file selection.
 func runEditorConfigForFiles(cmd *cobra.Command, selectedFiles []string, excludes []string) error {
 	if err := initializeConfig(cmd); err != nil {
 		return err

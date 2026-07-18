@@ -6,12 +6,15 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 // Text renders diagnostics in a stable file:line:column form suitable for
 // terminal and CI UI output.
 func Text(report validation.Report) string {
+	defer perf.Track(nil, "validate.Text")()
+
 	diagnostics := append([]validation.Diagnostic(nil), report.Diagnostics...)
 	sort.SliceStable(diagnostics, func(i, j int) bool {
 		left, right := diagnostics[i], diagnostics[j]
@@ -44,6 +47,8 @@ func Text(report validation.Report) string {
 // WriteText writes Text to an arbitrary writer for callers that need a raw,
 // pipeable representation.
 func WriteText(writer io.Writer, report validation.Report) error {
+	defer perf.Track(nil, "validate.WriteText")()
+
 	_, err := io.WriteString(writer, Text(report))
 	return err
 }

@@ -5,16 +5,23 @@ import (
 	"strings"
 
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 var componentInstanceLocation = regexp.MustCompile(`"instanceLocation"\s*:\s*"([^"]*)"`)
+
+// fieldPathSeparator joins/splits the dotted field-path segments used to
+// locate a component's provenance entry (e.g. "vars.enabled").
+const fieldPathSeparator = "."
 
 // ComponentValidationReport adapts the established component validator error
 // contract into display diagnostics. JSON Schema exposes instance locations in
 // its BasicOutput JSON; OPA continues to return strings and is anchored to the
 // selected component declaration by the caller's fallback diagnostic.
 func ComponentValidationReport(component string, err error) validation.Report {
+	defer perf.Track(nil, "exec.ComponentValidationReport")()
+
 	if err == nil {
 		return validation.Report{}
 	}
@@ -52,19 +59,28 @@ func componentPointerPath(pointer string) string {
 	for index := range parts {
 		parts[index] = strings.ReplaceAll(strings.ReplaceAll(parts[index], "~1", "/"), "~0", "~")
 	}
-	return strings.Join(parts, ".")
+	return strings.Join(parts, fieldPathSeparator)
 }
 
 func componentProvenance(context *m.MergeContext, component, field string) *m.ProvenanceEntry {
 	if context == nil || !context.IsProvenanceEnabled() {
 		return nil
 	}
+	if best := componentProvenanceMatch(context, component, field); best != nil || field == "" {
+		return best
+	}
+	return componentProvenanceAncestor(context, component, field)
+}
+
+// componentProvenanceMatch returns the most recent provenance entry for a
+// path that names component (when given) and ends with field, or nil when no
+// such path has a recorded entry.
+func componentProvenanceMatch(context *m.MergeContext, component, field string) *m.ProvenanceEntry {
 	suffix := field
 	if suffix != "" {
-		suffix = "." + suffix
+		suffix = fieldPathSeparator + suffix
 	}
-	componentNeedle := "." + component
-	var best *m.ProvenanceEntry
+	componentNeedle := fieldPathSeparator + component
 	for _, path := range context.GetProvenancePaths() {
 		if component != "" && !strings.Contains(path, componentNeedle) {
 			continue
@@ -77,16 +93,17 @@ func componentProvenance(context *m.MergeContext, component, field string) *m.Pr
 			continue
 		}
 		entry := entries[len(entries)-1]
-		best = &entry
-		break
+		return &entry
 	}
-	if best != nil || field == "" {
-		return best
-	}
-	// A JSON Schema error can name an object rather than a scalar. Fall back
-	// through ancestor paths until one has a concrete source entry.
+	return nil
+}
+
+// componentProvenanceAncestor falls back through ancestor field paths until
+// one has a concrete source entry. A JSON Schema error can name an object
+// rather than a scalar, so the object's own field has no direct provenance.
+func componentProvenanceAncestor(context *m.MergeContext, component, field string) *m.ProvenanceEntry {
 	for field != "" {
-		if cut := strings.LastIndex(field, "."); cut >= 0 {
+		if cut := strings.LastIndex(field, fieldPathSeparator); cut >= 0 {
 			field = field[:cut]
 		} else {
 			field = ""

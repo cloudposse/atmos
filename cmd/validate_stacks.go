@@ -41,7 +41,6 @@ func runValidateStacks(cmd *cobra.Command, args []string) error {
 	return runValidateStacksForFiles(cmd, args, affectedFiles, affected, excludes)
 }
 
-//nolint:gocognit,revive // The command preserves explicit file, affected, rich-output, and exclusion behavior.
 func runValidateStacksForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool, excludes []string) error {
 	// A missing stacks directory is a valid no-op for this validator. The
 	// executor below handles it explicitly, so do not reject the project while
@@ -57,37 +56,43 @@ func runValidateStacksForFiles(cmd *cobra.Command, args []string, affectedFiles 
 		return err
 	}
 	if format == validateFormatRich {
-		stackConfig := withValidationExcludedStackPaths(&atmosConfig, excludes)
-		err := exec.ValidateStacks(stackConfig)
-		if err == nil {
-			message := "✓ All stacks validated successfully"
-			if len(stackConfig.StackConfigFilesAbsolutePaths) == 0 {
-				message = "✓ No stack manifests found to validate"
-			}
-			_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), message)
-			return writeErr
-		}
-		root := stackConfig.StacksBaseAbsolutePath
-		if root == "" {
-			var rootErr error
-			root, rootErr = os.Getwd()
-			if rootErr != nil {
-				return rootErr
-			}
-		}
-		output := validation.Rich(validation.FromGCCText("stacks", err.Error()), validation.DefaultRichOptions(root))
-		if output != "" {
-			if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), output); writeErr != nil {
-				return writeErr
-			}
-		}
-		return errUtils.ExitCodeError{Code: 1, Silent: true}
+		return writeValidateStacksRichReport(cmd, excludes)
 	}
 
 	if len(excludes) > 0 {
 		return exec.ValidateStacks(withValidationExcludedStackPaths(&atmosConfig, excludes))
 	}
 	return exec.ExecuteValidateStacksCmd(cmd, args)
+}
+
+// writeValidateStacksRichReport runs stack validation and renders a rich,
+// source-context report when it fails.
+func writeValidateStacksRichReport(cmd *cobra.Command, excludes []string) error {
+	stackConfig := withValidationExcludedStackPaths(&atmosConfig, excludes)
+	err := exec.ValidateStacks(stackConfig)
+	if err == nil {
+		message := "✓ All stacks validated successfully"
+		if len(stackConfig.StackConfigFilesAbsolutePaths) == 0 {
+			message = "✓ No stack manifests found to validate"
+		}
+		_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), message)
+		return writeErr
+	}
+	root := stackConfig.StacksBaseAbsolutePath
+	if root == "" {
+		var rootErr error
+		root, rootErr = os.Getwd()
+		if rootErr != nil {
+			return rootErr
+		}
+	}
+	output := validation.Rich(validation.FromGCCText("stacks", err.Error()), validation.DefaultRichOptions(root))
+	if output != "" {
+		if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), output); writeErr != nil {
+			return writeErr
+		}
+	}
+	return errUtils.ExitCodeError{Code: 1, Silent: true}
 }
 
 func withValidationExcludedStackPaths(config *schema.AtmosConfiguration, excludes []string) *schema.AtmosConfiguration {

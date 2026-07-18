@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -150,7 +151,11 @@ func TestCheckVersion(t *testing.T) {
 	}
 }
 
-// TestReplaceAtmosConfigInConfig tests that atmos config values are properly applied.
+// TestReplaceAtmosConfigInConfig tests that atmos config values are properly
+// applied. Exclude is intentionally not covered here: atmosConfig.Validate.
+// EditorConfig.Exclude is glob-matched via runEditorConfig's excludes
+// parameter, not folded into tmpExclude by this function -- see
+// TestRunEditorConfigExcludesFromAtmosConfig.
 func TestReplaceAtmosConfigInConfig(t *testing.T) {
 	// Reset module-level variables before test.
 	originalConfigFilePaths := configFilePaths
@@ -184,19 +189,6 @@ func TestReplaceAtmosConfigInConfig(t *testing.T) {
 			},
 			validate: func(t *testing.T) {
 				assert.Equal(t, []string{".custom-editorconfig"}, configFilePaths)
-			},
-		},
-		{
-			name: "applies exclude patterns from atmos config",
-			atmosConfig: schema.AtmosConfiguration{
-				Validate: schema.Validate{
-					EditorConfig: schema.EditorConfig{
-						Exclude: []string{"vendor/**", "node_modules/**"},
-					},
-				},
-			},
-			validate: func(t *testing.T) {
-				assert.Equal(t, "vendor/**,node_modules/**", tmpExclude)
 			},
 		},
 		{
@@ -387,6 +379,57 @@ func TestRunEditorConfigRichOutput(t *testing.T) {
 	require.NoError(t, command.Flags().Set("format", "sarif"))
 	require.NoError(t, runEditorConfig(command))
 	assert.Contains(t, output.String(), `"version": "2.1.0"`)
+}
+
+// TestRunEditorConfigExcludesFromAtmosConfig verifies that
+// atmosConfig.Validate.EditorConfig.Exclude is glob-matched (not compiled as
+// a regex, and not folded into the command's own regex --exclude flag) --
+// see the runEditorConfig doc comment. A file that would otherwise fail
+// validation is skipped entirely once its path matches an atmos.yaml glob.
+func TestRunEditorConfigExcludesFromAtmosConfig(t *testing.T) {
+	originalAtmosConfig := atmosConfig
+	originalCurrentConfig := currentConfig
+	originalCLIConfig := cliConfig
+	originalPaths := configFilePaths
+	originalExclude := tmpExclude
+	originalInit := initEditorConfig
+	originalSARIF := editorConfigSARIF
+	originalRich := editorConfigRich
+	originalFormat := format
+	t.Cleanup(func() {
+		atmosConfig = originalAtmosConfig
+		currentConfig = originalCurrentConfig
+		cliConfig = originalCLIConfig
+		configFilePaths = originalPaths
+		tmpExclude = originalExclude
+		initEditorConfig = originalInit
+		editorConfigSARIF = originalSARIF
+		editorConfigRich = originalRich
+		format = originalFormat
+	})
+
+	project := t.TempDir()
+	t.Chdir(project)
+	require.NoError(t, os.WriteFile(".editorconfig", []byte("root = true\n[*]\nend_of_line = lf\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n"), 0o600))
+	require.NoError(t, os.MkdirAll("vendor", 0o755))
+	// Trailing whitespace: would fail validation if checked.
+	require.NoError(t, os.WriteFile(filepath.Join("vendor", "invalid.txt"), []byte("invalid  \n"), 0o600))
+
+	atmosConfig = schema.AtmosConfiguration{
+		Validate: schema.Validate{
+			EditorConfig: schema.EditorConfig{Exclude: []string{"vendor/**"}},
+		},
+	}
+	cliConfig = config.Config{}
+	configFilePaths = nil
+	tmpExclude = ""
+	initEditorConfig = false
+
+	command := &cobra.Command{}
+	addPersistentFlags(command)
+	require.NoError(t, command.ParseFlags(nil))
+
+	require.NoError(t, runEditorConfig(command))
 }
 
 func TestRequestedEditorConfigFormatPrecedence(t *testing.T) {

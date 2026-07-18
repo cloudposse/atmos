@@ -100,6 +100,8 @@ func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string
 // ExecuteAtmosValidateSchemaCmdForFiles validates only the supplied files.
 // A nil file list retains the established behavior of validating every match.
 func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmdForFiles(sourceKey string, customSchema string, files []string) error {
+	defer perf.Track(nil, "exec.atmosValidatorExecutor.ExecuteAtmosValidateSchemaCmdForFiles")()
+
 	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, files, nil)
 }
 
@@ -148,12 +150,16 @@ func (av *atmosValidatorExecutor) executeAtmosValidateSchemaCmd(sourceKey string
 // output. It is used by the rich renderer; the established spinner/log path
 // above remains the default text behavior.
 func (av *atmosValidatorExecutor) ValidateAtmosSchemaReport(sourceKey string, customSchema string) (validation.Report, error) {
+	defer perf.Track(nil, "exec.atmosValidatorExecutor.ValidateAtmosSchemaReport")()
+
 	return av.validateAtmosSchemaReport(sourceKey, customSchema, nil, nil)
 }
 
 // ValidateAtmosSchemaReportForFiles collects findings for only the supplied files.
 // A nil file list retains the established behavior of validating every match.
 func (av *atmosValidatorExecutor) ValidateAtmosSchemaReportForFiles(sourceKey string, customSchema string, files []string) (validation.Report, error) {
+	defer perf.Track(nil, "exec.atmosValidatorExecutor.ValidateAtmosSchemaReportForFiles")()
+
 	return av.validateAtmosSchemaReport(sourceKey, customSchema, files, nil)
 }
 

@@ -57,8 +57,8 @@ func TestRichHelpers(t *testing.T) {
 	assert.Equal(t, filepath.Join(root, "file.yaml"), richPath(root, filepath.Join(root, "file.yaml")))
 
 	diagnostic := Diagnostic{Line: 2, Column: 4}
-	assert.Equal(t, 4, diagnosticColumn(diagnostic, "  value", 2))
-	assert.Equal(t, 4, diagnosticColumn(diagnostic, "\t  value", 1))
+	assert.Equal(t, 4, diagnosticColumn(&diagnostic, "  value", 2))
+	assert.Equal(t, 4, diagnosticColumn(&diagnostic, "\t  value", 1))
 	assert.Equal(t, 1, firstContentColumn(" \t "))
 
 	short, shortOffset := richClip("short", 1, 1)

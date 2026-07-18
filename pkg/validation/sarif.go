@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -75,6 +76,8 @@ type sarifRegion struct {
 
 // SARIF serializes the report as an indented SARIF 2.1.0 document.
 func (r Report) SARIF() ([]byte, error) {
+	defer perf.Track(nil, "validation.Report.SARIF")()
+
 	diagnostics := r.sortedDiagnostics()
 	rules, ruleIndex := sarifRules(diagnostics)
 	results := make([]sarifResult, 0, len(diagnostics))

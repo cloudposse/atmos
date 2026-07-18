@@ -47,85 +47,122 @@ func runValidateAll(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	schemaFiles, schemaValidateAll := affectedSchemaFiles(affectedFiles, "")
-	editorConfigFiles, editorConfigValidateAll := affectedEditorConfigFiles(affectedFiles)
-	workflowFiles := affectedWorkflowPaths(affectedFiles)
-	workflowValidateAll := affectedWorkflowConfigChanged(affectedFiles)
 
 	format, err := validationFormat(cmd)
 	if err != nil {
 		return err
 	}
 	if format == validateFormatRich {
-		aggregateValidationFormat = validateFormatRich
-		defer func() { aggregateValidationFormat = "" }()
-		for _, child := range []*cobra.Command{ValidateSchemaCmd, ValidateStacksCmd, editorConfigCmd, validateCICmd} {
-			flags := child.Flags()
-			if flags.Lookup("format") == nil {
-				flags = child.PersistentFlags()
-			}
-			if flag := flags.Lookup("format"); flag != nil {
-				if err := flags.Set("format", validateFormatRich); err != nil {
-					return err
-				}
-			}
+		if err := activateRichFormatForChildren(); err != nil {
+			return err
 		}
+		defer func() { aggregateValidationFormat = "" }()
 	}
-	results, err := runValidationTasks([]validationTask{
-		{
-			name: "schema",
-			applicable: func() (bool, error) {
-				return !affected || schemaValidateAll || len(schemaFiles) > 0, nil
-			},
-			run: func() error {
-				return runValidateSchemaForFiles(ValidateSchemaCmd, nil, affectedFiles, affected, excludes)
-			},
-		},
-		{
-			name: "stacks",
-			applicable: func() (bool, error) {
-				return !affected || affectedStacksApplicable(affectedFiles), nil
-			},
-			run: func() error {
-				return runValidateStacksForFiles(ValidateStacksCmd, nil, affectedFiles, affected, excludes)
-			},
-		},
-		{
-			name: "editorconfig",
-			applicable: func() (bool, error) {
-				if affected && !editorConfigValidateAll && len(editorConfigFiles) == 0 {
-					return false, nil
-				}
-				return editorConfigValidationApplicable()
-			},
-			run: func() error {
-				if affected && !editorConfigValidateAll {
-					return runEditorConfigForFiles(editorConfigCmd, editorConfigFiles, excludes)
-				}
-				return runEditorConfigForFiles(editorConfigCmd, nil, excludes)
-			},
-		},
-		{
-			name: "ci",
-			applicable: func() (bool, error) {
-				if affected && !workflowValidateAll && len(workflowFiles) == 0 {
-					return false, nil
-				}
-				return githubActionsValidationApplicable()
-			},
-			run: func() error {
-				if affected && !workflowValidateAll {
-					return cicmd.RunValidateFilesExcluding(validateCICmd, workflowFiles, excludes)
-				}
-				return cicmd.RunValidateFilesExcluding(validateCICmd, nil, excludes)
-			},
-		},
-	})
+
+	results, err := runValidationTasks(buildValidationTasks(affectedFiles, affected, excludes))
 
 	summary := formatValidationSummary(results)
 	ui.Writeln(summary)
 	writeValidationCISummary(results)
 	return err
+}
+
+// activateRichFormatForChildren sets the aggregate command's format to rich
+// and propagates it to each focused validator's own --format flag, so a
+// rich-format aggregate run renders every failing validator as its own rich
+// block. On error it resets the aggregate override itself, matching the
+// caller's own defer-based reset on the success path.
+func activateRichFormatForChildren() error {
+	aggregateValidationFormat = validateFormatRich
+	for _, child := range []*cobra.Command{ValidateSchemaCmd, ValidateStacksCmd, editorConfigCmd, validateCICmd} {
+		flags := child.Flags()
+		if flags.Lookup("format") == nil {
+			flags = child.PersistentFlags()
+		}
+		if flag := flags.Lookup("format"); flag != nil {
+			if err := flags.Set("format", validateFormatRich); err != nil {
+				aggregateValidationFormat = ""
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// buildValidationTasks assembles the aggregate command's per-validator task
+// list, each scoped to affectedFiles/excludes the same way its focused
+// command would be run standalone.
+func buildValidationTasks(affectedFiles []string, affected bool, excludes []string) []validationTask {
+	return []validationTask{
+		buildSchemaValidationTask(affectedFiles, affected, excludes),
+		buildStacksValidationTask(affectedFiles, affected, excludes),
+		buildEditorConfigValidationTask(affectedFiles, affected, excludes),
+		buildCIValidationTask(affectedFiles, affected, excludes),
+	}
+}
+
+func buildSchemaValidationTask(affectedFiles []string, affected bool, excludes []string) validationTask {
+	schemaFiles, schemaValidateAll := affectedSchemaFiles(affectedFiles, "")
+	return validationTask{
+		name: "schema",
+		applicable: func() (bool, error) {
+			return !affected || schemaValidateAll || len(schemaFiles) > 0, nil
+		},
+		run: func() error {
+			return runValidateSchemaForFiles(ValidateSchemaCmd, nil, affectedFiles, affected, excludes)
+		},
+	}
+}
+
+func buildStacksValidationTask(affectedFiles []string, affected bool, excludes []string) validationTask {
+	return validationTask{
+		name: "stacks",
+		applicable: func() (bool, error) {
+			return !affected || affectedStacksApplicable(affectedFiles), nil
+		},
+		run: func() error {
+			return runValidateStacksForFiles(ValidateStacksCmd, nil, affectedFiles, affected, excludes)
+		},
+	}
+}
+
+func buildEditorConfigValidationTask(affectedFiles []string, affected bool, excludes []string) validationTask {
+	editorConfigFiles, editorConfigValidateAll := affectedEditorConfigFiles(affectedFiles)
+	return validationTask{
+		name: "editorconfig",
+		applicable: func() (bool, error) {
+			if affected && !editorConfigValidateAll && len(editorConfigFiles) == 0 {
+				return false, nil
+			}
+			return editorConfigValidationApplicable()
+		},
+		run: func() error {
+			if affected && !editorConfigValidateAll {
+				return runEditorConfigForFiles(editorConfigCmd, editorConfigFiles, excludes)
+			}
+			return runEditorConfigForFiles(editorConfigCmd, nil, excludes)
+		},
+	}
+}
+
+func buildCIValidationTask(affectedFiles []string, affected bool, excludes []string) validationTask {
+	workflowFiles := affectedWorkflowPaths(affectedFiles)
+	workflowValidateAll := affectedWorkflowConfigChanged(affectedFiles)
+	return validationTask{
+		name: "ci",
+		applicable: func() (bool, error) {
+			if affected && !workflowValidateAll && len(workflowFiles) == 0 {
+				return false, nil
+			}
+			return githubActionsValidationApplicable()
+		},
+		run: func() error {
+			if affected && !workflowValidateAll {
+				return cicmd.RunValidateFilesExcluding(validateCICmd, workflowFiles, excludes)
+			}
+			return cicmd.RunValidateFilesExcluding(validateCICmd, nil, excludes)
+		},
+	}
 }
 
 func writeValidationCISummary(results []validationTaskResult) {
@@ -178,7 +215,7 @@ func formatValidationSummary(results []validationTaskResult) string {
 	var builder strings.Builder
 	builder.WriteString("Validation summary:\n")
 	for _, result := range results {
-		builder.WriteString(fmt.Sprintf("  %s: %s\n", result.name, result.status))
+		fmt.Fprintf(&builder, "  %s: %s\n", result.name, result.status)
 	}
 	return strings.TrimSuffix(builder.String(), "\n")
 }

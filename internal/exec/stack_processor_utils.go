@@ -869,7 +869,7 @@ func jsonPointerToPositionKey(pointer string) string {
 // isSchemaBranchWrapperMessage reports whether a jsonschema.BasicError.Error
 // is a structural "one of these sub-schemas should have matched" wrapper
 // (from oneOf/anyOf/$ref indirection) rather than an actionable leaf
-// violation. oneOf/anyOf constructs report every failed candidate branch, so
+// violation: oneOf/anyOf constructs report every failed candidate branch, so
 // a single mistake (e.g. a wrong type) can otherwise produce many redundant
 // lines at the same location; dropping wrapper messages keeps only the
 // specific ones (e.g. "expected object, but got string").
@@ -895,22 +895,43 @@ func isSchemaBranchWrapperMessage(msg string) bool {
 // The leading "\n" pushes every item, including the first, onto its own
 // line rather than running into the box's own "Error:" label inline.
 func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema.ValidationError, positions u.PositionMap) string {
-	type typeAlternatives struct {
-		path        string
-		position    u.Position
-		got         string
-		expected    []string
-		expectedSet map[string]struct{}
+	items := collectManifestSchemaErrorItems(e, positions)
+	if len(items) == 0 {
+		return fmt.Sprintf("\n- %s: error: %s", relativeFilePath, e.Error())
 	}
-	type item struct {
-		path     string
-		position u.Position
-		message  string
-		types    *typeAlternatives
-	}
+	rendered := renderManifestSchemaErrorItems(relativeFilePath, items)
+	return "\n" + strings.Join(rendered, "\n")
+}
 
-	items := make([]item, 0)
-	alternatives := make(map[string]*typeAlternatives)
+// manifestSchemaTypeAlternatives coalesces the distinct expected types that
+// failed a shared oneOf/anyOf branch for the same instance location and
+// actual value, so they render as one "expected X or Y, but got Z" finding
+// instead of one line per failed branch.
+type manifestSchemaTypeAlternatives struct {
+	path        string
+	position    u.Position
+	got         string
+	expected    []string
+	expectedSet map[string]struct{}
+}
+
+// manifestSchemaErrorItem is one candidate finding collected from a
+// jsonschema.ValidationError's BasicOutput -- either a concrete leaf message,
+// or a coalesced type-alternatives entry.
+type manifestSchemaErrorItem struct {
+	path     string
+	position u.Position
+	message  string
+	types    *manifestSchemaTypeAlternatives
+}
+
+// collectManifestSchemaErrorItems walks a jsonschema.ValidationError's
+// BasicOutput and builds one item per actionable leaf finding, coalescing
+// oneOf/anyOf type-mismatch branches for the same instance location and
+// actual value into a single manifestSchemaTypeAlternatives entry.
+func collectManifestSchemaErrorItems(e *jsonschema.ValidationError, positions u.PositionMap) []manifestSchemaErrorItem {
+	items := make([]manifestSchemaErrorItem, 0)
+	alternatives := make(map[string]*manifestSchemaTypeAlternatives)
 	for _, basicErr := range e.BasicOutput().Errors {
 		if basicErr.KeywordLocation == "" || isSchemaBranchWrapperMessage(basicErr.Error) {
 			continue
@@ -924,12 +945,12 @@ func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema
 			key := path + "\x00" + got
 			alternative := alternatives[key]
 			if alternative == nil {
-				alternative = &typeAlternatives{
+				alternative = &manifestSchemaTypeAlternatives{
 					path: path, position: pos, got: got,
 					expectedSet: make(map[string]struct{}),
 				}
 				alternatives[key] = alternative
-				items = append(items, item{types: alternative})
+				items = append(items, manifestSchemaErrorItem{types: alternative})
 			}
 			if _, seen := alternative.expectedSet[expected]; !seen {
 				alternative.expectedSet[expected] = struct{}{}
@@ -937,34 +958,47 @@ func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema
 			}
 			continue
 		}
-		items = append(items, item{path: path, position: pos, message: manifestSchemaErrorMessage(basicErr.Error)})
+		items = append(items, manifestSchemaErrorItem{path: path, position: pos, message: manifestSchemaErrorMessage(basicErr.Error)})
 	}
-	if len(items) == 0 {
-		return fmt.Sprintf("\n- %s: error: %s", relativeFilePath, e.Error())
-	}
-	hasDescendant := func(current int, path string) bool {
-		for index, candidate := range items {
-			if index == current {
-				continue
-			}
-			candidatePath := candidate.path
-			if candidate.types != nil {
-				candidatePath = candidate.types.path
-			}
-			if strings.HasPrefix(candidatePath, path+".") || strings.HasPrefix(candidatePath, path+"[") {
-				return true
-			}
+	return items
+}
+
+// manifestSchemaItemHasDescendant reports whether some other item's path is a
+// nested child of path (a JSON object/array descendant), which makes path's
+// own type-mismatch finding a redundant cascade rather than the actionable
+// error.
+func manifestSchemaItemHasDescendant(items []manifestSchemaErrorItem, current int, path string) bool {
+	for index, candidate := range items {
+		if index == current {
+			continue
 		}
-		return false
-	}
-	hasSpecificFinding := func(current int, path string) bool {
-		for index, candidate := range items {
-			if index != current && candidate.types == nil && candidate.path == path {
-				return true
-			}
+		candidatePath := candidate.path
+		if candidate.types != nil {
+			candidatePath = candidate.types.path
 		}
-		return false
+		if strings.HasPrefix(candidatePath, path+".") || strings.HasPrefix(candidatePath, path+"[") {
+			return true
+		}
 	}
+	return false
+}
+
+// manifestSchemaItemHasSpecificFinding reports whether some other item names
+// exactly path with a specific (non-type-alternative) finding, which makes
+// path's own type-mismatch finding a redundant cascade.
+func manifestSchemaItemHasSpecificFinding(items []manifestSchemaErrorItem, current int, path string) bool {
+	for index, candidate := range items {
+		if index != current && candidate.types == nil && candidate.path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// renderManifestSchemaErrorItems renders each collected item as a GCC-style
+// diagnostic line, dropping type-mismatch items that are cascades of a more
+// specific sibling finding.
+func renderManifestSchemaErrorItems(relativeFilePath string, items []manifestSchemaErrorItem) []string {
 	rendered := make([]string, 0, len(items))
 	for index, item := range items {
 		if item.types != nil {
@@ -973,7 +1007,7 @@ func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema
 			// misses the !include pattern) or identifies a more-specific child
 			// finding. Keep the type diagnostic when every branch failed only on
 			// type, since then it is the actionable error.
-			if hasSpecificFinding(index, item.types.path) || hasDescendant(index, item.types.path) {
+			if manifestSchemaItemHasSpecificFinding(items, index, item.types.path) || manifestSchemaItemHasDescendant(items, index, item.types.path) {
 				continue
 			}
 			message := fmt.Sprintf("expected %s, but got %s", strings.Join(item.types.expected, " or "), item.types.got)
@@ -982,7 +1016,7 @@ func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema
 		}
 		rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.position.Line, item.position.Column, item.path, item.message))
 	}
-	return "\n" + strings.Join(rendered, "\n")
+	return rendered
 }
 
 // manifestSchemaErrorMessage replaces implementation-detail regex failures

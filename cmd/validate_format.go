@@ -37,18 +37,13 @@ var validateFormatEnvParser = flags.NewStandardParser(
 // legacy specialized formats (EditorConfig and ci validate) keep their own
 // resolver and use this only for the common validators.
 func validationFormat(cmd *cobra.Command) (string, error) {
-	value := ""
-	if aggregateValidationFormat != "" {
-		value = aggregateValidationFormat
-	} else {
-		if err := validateFormatEnvParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+	value := aggregateValidationFormat
+	if value == "" {
+		resolved, err := resolveValidationFormatValue(cmd)
+		if err != nil {
 			return "", err
 		}
-		if resolved := strings.TrimSpace(viper.GetString("format")); resolved != "" {
-			value = resolved
-		} else {
-			value = atmosConfig.Validate.Format
-		}
+		value = resolved
 	}
 	if value == "" {
 		return validateFormatText, nil
@@ -58,6 +53,19 @@ func validationFormat(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("%w: %q", errUtils.ErrUnsupportedValidationFormat, value)
 	}
 	return value, nil
+}
+
+// resolveValidationFormatValue resolves cmd's own "format" flag/env/config
+// value, used only when no aggregate-run override (aggregateValidationFormat)
+// is active.
+func resolveValidationFormatValue(cmd *cobra.Command) (string, error) {
+	if err := validateFormatEnvParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+		return "", err
+	}
+	if resolved := strings.TrimSpace(viper.GetString("format")); resolved != "" {
+		return resolved, nil
+	}
+	return atmosConfig.Validate.Format, nil
 }
 
 func addValidationFormatFlag(cmd *cobra.Command) {

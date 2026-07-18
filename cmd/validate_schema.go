@@ -77,7 +77,7 @@ func runValidateSchema(cmd *cobra.Command, args []string) error {
 	return runValidateSchemaForFiles(cmd, args, affectedFiles, affected, excludes)
 }
 
-//nolint:cyclop,funlen,gocognit,revive // The command preserves explicit-schema, affected, and rich-output behavior.
+//nolint:cyclop,funlen,revive // The command preserves explicit-schema, affected, and rich-output behavior.
 func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool, excludes []string) error {
 	// Schema validation does not require a stacks directory — atmos.yaml (and its
 	// fragments) must be validatable in repositories that only carry CLI configuration.
@@ -110,11 +110,12 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 	}
 	if format != validateFormatRich {
 		var err error
-		if affected && !validateAll {
+		switch {
+		case affected && !validateAll:
 			err = executor.ExecuteAtmosValidateSchemaCmdForFiles(key, schema, selectedFiles)
-		} else if len(excludes) > 0 {
+		case len(excludes) > 0:
 			err = executor.ExecuteAtmosValidateSchemaCmdExcluding(key, schema, excludes)
-		} else {
+		default:
 			err = executor.ExecuteAtmosValidateSchemaCmd(key, schema)
 		}
 		if errors.Is(err, exec.ErrInvalidYAML) {
@@ -123,11 +124,12 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 		return err
 	}
 	var report validation.Report
-	if affected && !validateAll {
+	switch {
+	case affected && !validateAll:
 		report, err = executor.ValidateAtmosSchemaReportForFiles(key, schema, selectedFiles)
-	} else if len(excludes) > 0 {
+	case len(excludes) > 0:
 		report, err = executor.ValidateAtmosSchemaReportExcluding(key, schema, excludes)
-	} else {
+	default:
 		report, err = executor.ValidateAtmosSchemaReport(key, schema)
 	}
 	if err != nil {

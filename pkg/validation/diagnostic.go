@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Severity is the normalized severity of a validation finding.
@@ -44,6 +45,8 @@ type Report struct {
 
 // HasErrors reports whether the report contains at least one error.
 func (r Report) HasErrors() bool {
+	defer perf.Track(nil, "validation.Report.HasErrors")()
+
 	for _, diagnostic := range r.Diagnostics {
 		if diagnostic.Severity == SeverityError {
 			return true
@@ -54,6 +57,8 @@ func (r Report) HasErrors() bool {
 
 // ToAnnotations maps the report to provider-neutral CI annotations.
 func (r Report) ToAnnotations() []ci.Annotation {
+	defer perf.Track(nil, "validation.Report.ToAnnotations")()
+
 	diagnostics := r.sortedDiagnostics()
 	annotations := make([]ci.Annotation, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {
