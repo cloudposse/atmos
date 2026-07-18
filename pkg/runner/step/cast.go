@@ -410,8 +410,8 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 
 // runCastChildStep executes one child step of a steps-mode cast: simulate
 // steps replay scripted output, everything else runs through the executor
-// followed by the configured input pause. skipPrompt suppresses a simulate
-// step's own prompt draw when a real prompt is already visible (see the
+// followed by the configured input pause. The skipPrompt flag suppresses a
+// simulate step's own prompt draw when a real prompt is already visible (see the
 // prevWasSession tracking in runCastStepMode, and castSessionActions' Fn
 // wrapper, which always skips it since a live session's real shell prompt is
 // always already showing before any of its actions run).

@@ -85,6 +85,15 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 	}
 
 	// Remote sources: download into a temp dir via go-getter, then load.
+	return resolveRemote(atmosConfig, name, src, timeout)
+}
+
+// resolveRemote fetches a remote scaffold source (git/https/s3, via
+// go-getter) into a temporary directory and loads its configuration. The
+// returned cleanup function removes the temporary directory.
+func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*templates.Configuration, func(), error) {
+	noop := func() {}
+
 	tempDir, err := os.MkdirTemp("", "atmos-scaffold-")
 	if err != nil {
 		return nil, noop, errUtils.Build(errUtils.ErrCreateTempDirectory).
@@ -95,26 +104,9 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 
-	normalized := vendor.NormalizeURI(src)
-	// Keep the spinner message short: the full go-getter URL (subdir + ref)
-	// can be long enough to wrap across terminal rows, which breaks
-	// bubbletea's in-place redraw and makes the spinner scroll a new line
-	// per tick instead of overwriting.
-	progressMsg := fmt.Sprintf("Fetching scaffold template `%s`", name)
-	completedMsg := fmt.Sprintf("Fetched scaffold template `%s`", name)
-	fetchErr := spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		return downloader.NewGoGetterDownloader(atmosConfig).Fetch(normalized, tempDir, downloader.ClientModeDir, timeout)
-	})
-	if fetchErr != nil {
+	if err := fetchRemoteSource(atmosConfig, name, src, tempDir, timeout); err != nil {
 		cleanup()
-		return nil, noop, errUtils.Build(errUtils.ErrScaffoldFetchSource).
-			WithCause(fetchErr).
-			WithExplanationf("Failed to fetch scaffold template from `%s`", src).
-			WithHint("Check the source URL and your network connection").
-			WithHint("For private repositories set `ATMOS_GITHUB_TOKEN` (or the host-specific token)").
-			WithContext("source", src).
-			WithExitCode(1).
-			Err()
+		return nil, noop, err
 	}
 
 	conf, err := templates.LoadConfigurationFromDir(name, tempDir)
@@ -127,6 +119,32 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 		return nil, noop, err
 	}
 	return conf, cleanup, nil
+}
+
+// fetchRemoteSource downloads src into destDir via go-getter, showing a
+// spinner while the download runs.
+func fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDir string, timeout time.Duration) error {
+	normalized := vendor.NormalizeURI(src)
+	// Keep the spinner message short: the full go-getter URL (subdir + ref)
+	// can be long enough to wrap across terminal rows, which breaks
+	// bubbletea's in-place redraw and makes the spinner scroll a new line
+	// per tick instead of overwriting.
+	progressMsg := fmt.Sprintf("Fetching scaffold template `%s`", name)
+	completedMsg := fmt.Sprintf("Fetched scaffold template `%s`", name)
+	fetchErr := spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		return downloader.NewGoGetterDownloader(atmosConfig).Fetch(normalized, destDir, downloader.ClientModeDir, timeout)
+	})
+	if fetchErr != nil {
+		return errUtils.Build(errUtils.ErrScaffoldFetchSource).
+			WithCause(fetchErr).
+			WithExplanationf("Failed to fetch scaffold template from `%s`", src).
+			WithHint("Check the source URL and your network connection").
+			WithHint("For private repositories set `ATMOS_GITHUB_TOKEN` (or the host-specific token)").
+			WithContext("source", src).
+			WithExitCode(1).
+			Err()
+	}
+	return nil
 }
 
 func resolveLocal(name, src string) (*templates.Configuration, error) {

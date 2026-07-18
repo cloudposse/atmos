@@ -474,21 +474,9 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
 	// If no target path was provided (interactive mode), prompt for it after setup.
 	// For scaffold templates, promptForTargetPath also returns the values the user
 	// already entered so we can avoid running the setup form a second time.
-	if targetPath == "" {
-		var preCollectedValues map[string]interface{}
-		var err error
-		targetPath, preCollectedValues, err = ui.promptForTargetPath(embedsConfig, useDefaults, cmdTemplateValues)
-		if err != nil {
-			return "", err
-		}
-		if preCollectedValues != nil {
-			cmdTemplateValues, useDefaults, err = ui.resolvePreCollectedValues(
-				embedsConfig, targetPath, update, useDefaults, preCollectedValues, cmdTemplateValues,
-			)
-			if err != nil {
-				return targetPath, err
-			}
-		}
+	targetPath, cmdTemplateValues, useDefaults, err := ui.resolveTargetPath(embedsConfig, targetPath, update, useDefaults, cmdTemplateValues)
+	if err != nil {
+		return targetPath, err
 	}
 
 	// Now execute with the determined target path. targetPath is returned even on
@@ -498,6 +486,31 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
 		return targetPath, err
 	}
 	return targetPath, nil
+}
+
+// resolveTargetPath determines the target path to generate into, prompting
+// interactively (and reconciling any values pre-collected during that
+// prompt) when the caller did not already provide one.
+func (ui *InitUI) resolveTargetPath(
+	embedsConfig *tmpl.Configuration,
+	targetPath string,
+	update, useDefaults bool,
+	cmdTemplateValues map[string]interface{},
+) (string, map[string]interface{}, bool, error) {
+	if targetPath != "" {
+		return targetPath, cmdTemplateValues, useDefaults, nil
+	}
+	targetPath, preCollectedValues, err := ui.promptForTargetPath(embedsConfig, useDefaults, cmdTemplateValues)
+	if err != nil {
+		return "", cmdTemplateValues, useDefaults, err
+	}
+	if preCollectedValues == nil {
+		return targetPath, cmdTemplateValues, useDefaults, nil
+	}
+	cmdTemplateValues, useDefaults, err = ui.resolvePreCollectedValues(
+		embedsConfig, targetPath, update, useDefaults, preCollectedValues, cmdTemplateValues,
+	)
+	return targetPath, cmdTemplateValues, useDefaults, err
 }
 
 // resolvePreCollectedValues reconciles preCollectedValues (gathered by
@@ -725,6 +738,46 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 // RunSetupForm runs the interactive setup form to collect configuration values
 // This method can be used by both init and scaffold commands.
 func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath string, useDefaults bool, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
+	mergedValues, valueSources, err := buildSetupValues(scaffoldConfig, targetPath, cmdTemplateValues)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := coerceSetupFieldTypes(scaffoldConfig, mergedValues); err != nil {
+		return nil, nil, err
+	}
+
+	// Prompt the user to edit the configuration values unless --use-defaults is specified
+	// This allows them to review and modify values from command line, config, or defaults
+	if !useDefaults {
+		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues); err != nil {
+			return nil, nil, fmt.Errorf("failed to prompt for configuration: %w", err)
+		}
+	}
+
+	if err := validateSetupValues(scaffoldConfig, mergedValues); err != nil {
+		return nil, nil, err
+	}
+
+	// Show configuration summary after any user input
+	// Get configuration summary data and display it
+	rows, header := config.GetConfigurationSummary(scaffoldConfig, mergedValues, valueSources)
+
+	// Debug: Log valueSources to verify configuration sources.
+	log.Debug("Configuration value sources", "valueSources", valueSources)
+
+	ui.displayConfigurationTable(header, rows)
+
+	// Flush the configuration summary before processing files
+	ui.flushOutput()
+
+	return mergedValues, valueSources, nil
+}
+
+// buildSetupValues merges project defaults, any values already persisted at
+// targetPath, and the command-line-supplied values (highest priority),
+// tracking which source each field ultimately came from for display.
+func buildSetupValues(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
 	// Load existing user values from the scaffold template directory
 	userValues, err := config.LoadUserValues(targetPath)
 	if err != nil {
@@ -763,60 +816,49 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	// Debug: Log valueSources map.
 	log.Debug("valueSources map", "valueSources", valueSources)
 
-	// --set (and other external string sources) always supplies raw strings;
-	// coerce boolean-typed fields (confirm/bool/boolean) to native bools so
-	// When conditions and templates see the same type regardless of whether
-	// the value came from a flag, an interactive prompt, or a YAML default.
+	return mergedValues, valueSources, nil
+}
+
+// coerceSetupFieldTypes coerces boolean-typed fields (confirm/bool/boolean)
+// to native bools so When conditions and templates see the same type
+// regardless of whether the value came from a flag, an interactive prompt,
+// or a YAML default. --set (and other external string sources) always
+// supplies raw strings, so this coercion is required before validation.
+func coerceSetupFieldTypes(scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) error {
 	if err := config.CoerceFieldValueTypes(scaffoldConfig, mergedValues); err != nil {
-		return nil, nil, errUtils.Build(err).
+		return errUtils.Build(err).
 			WithExplanation("Boolean scaffold fields must be set to true or false").
 			WithHint("Pass a valid value with --set <field>=true or --set <field>=false").
 			WithExitCode(2).
 			Err()
 	}
+	return nil
+}
 
-	// Prompt the user to edit the configuration values unless --use-defaults is specified
-	// This allows them to review and modify values from command line, config, or defaults
-	if !useDefaults {
-		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues); err != nil {
-			return nil, nil, fmt.Errorf("failed to prompt for configuration: %w", err)
-		}
+// validateSetupValues validates the final merged answers for both
+// interactive and non-interactive generation. Prompt-level validation
+// provides immediate feedback, while this canonical check also covers
+// defaults, persisted values, and --set values.
+func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) error {
+	err := config.ValidateFieldValues(scaffoldConfig, mergedValues)
+	if err == nil {
+		return nil
 	}
-
-	// Validate the final merged answers for both interactive and non-interactive
-	// generation. Prompt-level validation provides immediate feedback, while this
-	// canonical check also covers defaults, persisted values, and --set values.
-	if err := config.ValidateFieldValues(scaffoldConfig, mergedValues); err != nil {
-		if errors.Is(err, errUtils.ErrGeneratorFieldRequired) {
-			missing := config.MissingRequiredValues(scaffoldConfig, mergedValues)
-			return nil, nil, errUtils.Build(err).
-				WithExplanationf("Required fields have no value: `%s`", strings.Join(missing, "`, `")).
-				WithHintf("Provide values with `--set %s=<value>`", missing[0]).
-				WithHint("Or run interactively (in a terminal) to be prompted").
-				WithContext("missing_fields", strings.Join(missing, ", ")).
-				WithExitCode(2).
-				Err()
-		}
-		return nil, nil, errUtils.Build(err).
-			WithExplanation("Scaffold field validation failed").
-			WithHint("Correct the invalid field value or update the scaffold configuration").
+	if errors.Is(err, errUtils.ErrGeneratorFieldRequired) {
+		missing := config.MissingRequiredValues(scaffoldConfig, mergedValues)
+		return errUtils.Build(err).
+			WithExplanationf("Required fields have no value: `%s`", strings.Join(missing, "`, `")).
+			WithHintf("Provide values with `--set %s=<value>`", missing[0]).
+			WithHint("Or run interactively (in a terminal) to be prompted").
+			WithContext("missing_fields", strings.Join(missing, ", ")).
 			WithExitCode(2).
 			Err()
 	}
-
-	// Show configuration summary after any user input
-	// Get configuration summary data and display it
-	rows, header := config.GetConfigurationSummary(scaffoldConfig, mergedValues, valueSources)
-
-	// Debug: Log valueSources to verify configuration sources.
-	log.Debug("Configuration value sources", "valueSources", valueSources)
-
-	ui.displayConfigurationTable(header, rows)
-
-	// Flush the configuration summary before processing files
-	ui.flushOutput()
-
-	return mergedValues, valueSources, nil
+	return errUtils.Build(err).
+		WithExplanation("Scaffold field validation failed").
+		WithHint("Correct the invalid field value or update the scaffold configuration").
+		WithExitCode(2).
+		Err()
 }
 
 // executeWithSetup handles any scaffold configuration with interactive prompts.

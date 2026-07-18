@@ -75,7 +75,7 @@ func cloneSimulatePrompt(prompt *schema.SimulatePrompt) *schema.SimulatePrompt {
 	return &clone
 }
 
-// runCastSimulateStep replays a scripted simulate action. skipPrompt
+// runCastSimulateStep replays a scripted simulate action. The skipPrompt flag
 // suppresses "typed" mode's own prompt draw when a real shell prompt is
 // already visible on screen (see runCastChildStep); "prompt" mode is
 // unaffected since drawing a prompt is its entire purpose.

@@ -17,6 +17,12 @@ const (
 	singleQuote = "'"
 	// SingleQuoteEscaped is the escaped form for single-quoted shell strings.
 	singleQuoteEscaped = "'\\''"
+
+	// Output format names, shared by the emit/format switch statements below.
+	formatBash       = "bash"
+	formatFish       = "fish"
+	formatPowershell = "powershell"
+	formatDotenv     = "dotenv"
 )
 
 // EmitEnv outputs the PATH entries for installed toolchain binaries in shell-specific format.
@@ -64,43 +70,54 @@ func EmitEnv(format string, relativeFlag bool, outputPath string) error {
 	finalPath := constructFinalPath(pathEntries, currentPath)
 
 	// Output based on the requested format.
-	return emitEnvOutput(toolPaths, pathEntries, finalPath, format, outputPath, proxyEnv)
+	paths := envPathResult{ToolPaths: toolPaths, PathEntries: pathEntries, FinalPath: finalPath}
+	return emitEnvOutput(paths, format, outputPath, proxyEnv)
+}
+
+// envPathResult bundles the artifacts of building PATH entries (the per-tool
+// paths, the raw entries, and the constructed final PATH string) so they can
+// be threaded through the emit/format helpers as a single argument.
+type envPathResult struct {
+	ToolPaths   []ToolPath
+	PathEntries []string
+	FinalPath   string
 }
 
 // emitEnvOutput outputs environment variables in the requested format.
-func emitEnvOutput(toolPaths []ToolPath, pathEntries []string, finalPath, format, outputPath string, proxyEnv ProxyEnvironment) error {
+func emitEnvOutput(paths envPathResult, format, outputPath string, proxyEnv ProxyEnvironment) error {
 	// If outputPath is specified, append to file instead of stdout.
 	if outputPath != "" {
-		return appendToFile(outputPath, format, pathEntries, finalPath, proxyEnv)
+		return appendToFile(outputPath, format, paths.PathEntries, paths.FinalPath, proxyEnv)
 	}
 
+	if err := emitFormat(format, paths, proxyEnv); err != nil {
+		return err
+	}
+
+	// emitProxyExports is a no-op for the json/github formats (they carry any
+	// proxy context in their own output, see emitJSONPath/formatProxyExports),
+	// so it is always safe to call after emitFormat.
+	return emitProxyExports(format, proxyEnv)
+}
+
+// emitFormat writes the environment output for format to stdout, dispatching
+// to the shell-specific emitter (or the JSON/GitHub Actions emitters).
+func emitFormat(format string, paths envPathResult, proxyEnv ProxyEnvironment) error {
 	switch format {
 	case "json":
-		return emitJSONPath(toolPaths, finalPath, proxyEnv)
-	case "bash":
-		if err := emitBashEnv(finalPath); err != nil {
-			return err
-		}
-	case "dotenv":
-		if err := emitDotenvEnv(finalPath); err != nil {
-			return err
-		}
-	case "fish":
-		if err := emitFishEnv(finalPath); err != nil {
-			return err
-		}
-	case "powershell":
-		if err := emitPowershellEnv(finalPath); err != nil {
-			return err
-		}
+		return emitJSONPath(paths.ToolPaths, paths.FinalPath, proxyEnv)
 	case "github":
-		return emitGitHubEnv(pathEntries)
+		return emitGitHubEnv(paths.PathEntries)
+	case formatDotenv:
+		return emitDotenvEnv(paths.FinalPath)
+	case formatFish:
+		return emitFishEnv(paths.FinalPath)
+	case formatPowershell:
+		return emitPowershellEnv(paths.FinalPath)
 	default:
-		if err := emitBashEnv(finalPath); err != nil {
-			return err
-		}
+		// formatBash and any unrecognized format fall back to bash export syntax.
+		return emitBashEnv(paths.FinalPath)
 	}
-	return emitProxyExports(format, proxyEnv)
 }
 
 // emitGitHubEnv outputs paths in GitHub Actions GITHUB_PATH format.
@@ -121,14 +138,14 @@ func formatContentForFile(format string, pathEntries []string, finalPath string,
 	switch format {
 	case "github":
 		return formatGitHubContent(pathEntries)
-	case "bash":
-		return formatBashContent(finalPath) + formatProxyExports("bash", proxyEnv)
-	case "dotenv":
-		return formatDotenvContent(finalPath) + formatProxyExports("dotenv", proxyEnv)
-	case "fish":
-		return formatFishContent(finalPath) + formatProxyExports("fish", proxyEnv)
-	case "powershell":
-		return formatPowershellContent(finalPath) + formatProxyExports("powershell", proxyEnv)
+	case formatBash:
+		return formatBashContent(finalPath) + formatProxyExports(formatBash, proxyEnv)
+	case formatDotenv:
+		return formatDotenvContent(finalPath) + formatProxyExports(formatDotenv, proxyEnv)
+	case formatFish:
+		return formatFishContent(finalPath) + formatProxyExports(formatFish, proxyEnv)
+	case formatPowershell:
+		return formatPowershellContent(finalPath) + formatProxyExports(formatPowershell, proxyEnv)
 	case "json":
 		// Use json.Marshal for proper escaping of special characters.
 		jsonData := map[string]string{"final_path": finalPath}
@@ -139,7 +156,7 @@ func formatContentForFile(format string, pathEntries []string, finalPath string,
 		}
 		return string(bytes) + "\n"
 	default:
-		return formatBashContent(finalPath) + formatProxyExports("bash", proxyEnv)
+		return formatBashContent(finalPath) + formatProxyExports(formatBash, proxyEnv)
 	}
 }
 
@@ -272,11 +289,11 @@ func formatProxyExports(format string, proxyEnv ProxyEnvironment) string {
 			continue
 		}
 		switch format {
-		case "fish":
+		case formatFish:
 			fmt.Fprintf(&builder, "set -gx %s '%s'\n", key, strings.ReplaceAll(value, singleQuote, "\\'"))
-		case "powershell":
+		case formatPowershell:
 			fmt.Fprintf(&builder, "$env:%s = \"%s\"\n", key, strings.ReplaceAll(value, "\"", "`\""))
-		case "dotenv":
+		case formatDotenv:
 			fmt.Fprintf(&builder, "%s='%s'\n", key, strings.ReplaceAll(value, singleQuote, singleQuoteEscaped))
 		default:
 			fmt.Fprintf(&builder, "export %s='%s'\n", key, strings.ReplaceAll(value, singleQuote, singleQuoteEscaped))

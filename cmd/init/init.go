@@ -363,21 +363,32 @@ func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, co
 
 // runInitExecution executes the init with the selected template and target directory.
 func runInitExecution(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
-	// If target directory is empty, use interactive flow.
+	// If target directory is empty, use interactive flow; otherwise use normal Execute.
 	if opts.targetDir == "" {
-		if !opts.interactive {
-			return "", fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
-		}
-		targetDir, err := initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
-		if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
-			if confirmed, cErr := initUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
-				return initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
-			}
-		}
-		return targetDir, err
+		return runInitInteractiveFlow(initUI, selectedConfig, opts)
 	}
+	return runInitTargetedFlow(initUI, selectedConfig, opts)
+}
 
-	// Target directory provided, use normal Execute.
+// runInitInteractiveFlow handles init when no target directory was provided,
+// prompting the user for one (and optionally offering a 3-way-merge update
+// instead of failing when it already exists and is non-empty).
+func runInitInteractiveFlow(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
+	if !opts.interactive {
+		return "", fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
+	}
+	targetDir, err := initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
+	if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
+		if confirmed, cErr := initUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
+			return initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
+		}
+	}
+	return targetDir, err
+}
+
+// runInitTargetedFlow handles init when a target directory was provided
+// (offering the same 3-way-merge update fallback as the interactive flow).
+func runInitTargetedFlow(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
 	err := initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
 	if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
 		if confirmed, cErr := initUI.ConfirmUpdateInstead(opts.targetDir); cErr == nil && confirmed {
