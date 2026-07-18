@@ -499,7 +499,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// This must run after every config source has merged (so the `edition:` key is
 	// visible) and before the final unmarshal; SetDefault never beats user-set values.
 	if err := applyEditionDefaults(v); err != nil {
-		return atmosConfig, err
+		return atmosConfig, fmt.Errorf("apply edition defaults: %w", err)
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644

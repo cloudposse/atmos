@@ -170,6 +170,23 @@ func TestSetCustomUsageFunc(t *testing.T) {
 	assert.Contains(t, cmd.UsageTemplate(), `{{formatCommands .Commands "customCommands"}}`)
 }
 
+func TestGetTerminalWidthFallsBackForNarrowTerminal(t *testing.T) {
+	originalSupportsStdout := terminalSupportsStdout
+	originalGetSize := terminalGetSize
+	originalLimit := terminalWidthLimit.Load()
+	t.Cleanup(func() {
+		terminalSupportsStdout = originalSupportsStdout
+		terminalGetSize = originalGetSize
+		terminalWidthLimit.Store(originalLimit)
+	})
+
+	terminalSupportsStdout = func() bool { return true }
+	terminalGetSize = func(int) (int, int, error) { return 2, 24, nil }
+	terminalWidthLimit.Store(0)
+
+	assert.Equal(t, 80, GetTerminalWidth())
+}
+
 func TestWrappedFlagUsages_DoubleDashAtEnd(t *testing.T) {
 	// Create a new FlagSet with various flags
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)

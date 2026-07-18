@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -70,11 +71,6 @@ func TestDefaultConfigurationSnapshot(t *testing.T) {
 	require.Positive(t, len(current), "setDefaultConfiguration produced no defaults; the guardrail is misconfigured")
 
 	path := snapshotPath(t)
-	if os.Getenv(regenerateSnapshotEnvVar) != "" {
-		regenerateSnapshot(t, path, current)
-		return
-	}
-
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err, "missing defaults snapshot; regenerate with %s=true", regenerateSnapshotEnvVar)
 
@@ -85,6 +81,13 @@ func TestDefaultConfigurationSnapshot(t *testing.T) {
 	snapshot := make(map[string]string, len(snapshotValues))
 	for key, value := range snapshotValues {
 		snapshot[key] = canonicalYAML(t, value)
+	}
+
+	if os.Getenv(regenerateSnapshotEnvVar) != "" {
+		violations := validateSnapshotRegeneration(snapshot, current, latestJournalEntryByKey())
+		require.Empty(t, violations, strings.Join(violations, "\n"))
+		regenerateSnapshot(t, path, current)
+		return
 	}
 
 	journalByKey := latestJournalEntryByKey()
@@ -138,6 +141,60 @@ func latestJournalEntryByKey() map[string]edition.Entry {
 		byKey[entry.Key] = entry
 	}
 	return byKey
+}
+
+// validateSnapshotRegeneration prevents a regeneration from accepting an
+// unjournaled change to a previously shipped default.
+func validateSnapshotRegeneration(snapshot, current map[string]string, journalByKey map[string]edition.Entry) []string {
+	var violations []string
+	for key, previous := range snapshot {
+		latest, exists := current[key]
+		if !exists || latest == previous {
+			continue
+		}
+
+		entry, journaled := journalByKey[key]
+		if !journaled {
+			violations = append(violations, fmt.Sprintf("default changed without a journal entry: key %s changed from %s to %s", key, previous, latest))
+			continue
+		}
+		if journalOld := canonicalYAMLValue(entry.Old); journalOld != previous {
+			violations = append(violations, fmt.Sprintf("journal entry for %s has Old=%s but the snapshot says %s", key, journalOld, previous))
+		}
+		if journalNew := canonicalYAMLValue(entry.New); journalNew != latest {
+			violations = append(violations, fmt.Sprintf("journal entry for %s has New=%s but the live default is %s", key, journalNew, latest))
+		}
+	}
+	return violations
+}
+
+func canonicalYAMLValue(value any) string {
+	encoded, err := yaml.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("<invalid YAML: %v>", err)
+	}
+	return strings.TrimSuffix(string(encoded), "\n")
+}
+
+func TestValidateSnapshotRegeneration(t *testing.T) {
+	snapshot := map[string]string{"settings.example.enabled": "false"}
+	current := map[string]string{"settings.example.enabled": "true"}
+	matchingJournal := map[string]edition.Entry{
+		"settings.example.enabled": {Old: false, New: true},
+	}
+
+	t.Run("accepts a matching journal entry", func(t *testing.T) {
+		assert.Empty(t, validateSnapshotRegeneration(snapshot, current, matchingJournal))
+	})
+	t.Run("rejects an unjournaled changed default", func(t *testing.T) {
+		assert.Contains(t, strings.Join(validateSnapshotRegeneration(snapshot, current, nil), "\n"), "without a journal entry")
+	})
+	t.Run("rejects a journal entry with the wrong old value", func(t *testing.T) {
+		journal := map[string]edition.Entry{
+			"settings.example.enabled": {Old: true, New: true},
+		}
+		assert.Contains(t, strings.Join(validateSnapshotRegeneration(snapshot, current, journal), "\n"), "has Old")
+	})
 }
 
 func regenerateSnapshot(t *testing.T, path string, current map[string]string) {

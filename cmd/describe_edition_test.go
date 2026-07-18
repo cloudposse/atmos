@@ -40,3 +40,28 @@ func TestEditionPinSource(t *testing.T) {
 		assert.Equal(t, "config", editionPinSource(newCmd(), "2026"))
 	})
 }
+
+func TestDescribeEditionCmdOutputFormats(t *testing.T) {
+	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EDITION", "")
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("edition: \"2025-09\"\n"), 0o600))
+
+	for _, tt := range []struct {
+		name   string
+		format string
+		want   string
+	}{
+		{name: "yaml", format: "yaml", want: "pinned: true"},
+		{name: "json", format: "json", want: "\"pinned\": true"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			testCmd := &cobra.Command{Use: "edition"}
+			testCmd.Flags().String("format", tt.format, "")
+			stdout, _ := captureStdoutStderr(t, func() {
+				require.NoError(t, describeEditionCmd.RunE(testCmd, nil))
+			})
+			assert.Contains(t, stdout, tt.want)
+		})
+	}
+}

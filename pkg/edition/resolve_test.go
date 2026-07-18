@@ -79,6 +79,31 @@ func TestOverridesIgnoresBehaviorEntries(t *testing.T) {
 	assert.False(t, present, "behavior entries must not produce value overrides")
 }
 
+func TestDescribePin(t *testing.T) {
+	setTestJournal(t, chainedJournal())
+
+	t.Run("empty pin is unpinned", func(t *testing.T) {
+		pin, err := DescribePin("", "")
+		require.NoError(t, err)
+		assert.False(t, pin.Pinned)
+		assert.Empty(t, pin.Overrides)
+	})
+	t.Run("valid pin reports its resolved anchor and overrides", func(t *testing.T) {
+		pin, err := DescribePin("2025-05", "config")
+		require.NoError(t, err)
+		assert.True(t, pin.Pinned)
+		assert.Equal(t, "2025-05", pin.Edition)
+		assert.Equal(t, "2025-05-31", pin.ResolvedDate)
+		assert.Equal(t, GranularityMonth, pin.Granularity)
+		assert.Equal(t, "config", pin.Source)
+		require.Len(t, pin.Overrides, 2)
+	})
+	t.Run("invalid pin returns the anchor validation error", func(t *testing.T) {
+		_, err := DescribePin("not-a-date", "env")
+		require.ErrorIs(t, err, ErrInvalidEdition)
+	})
+}
+
 func TestDiff(t *testing.T) {
 	setTestJournal(t, chainedJournal())
 

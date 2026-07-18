@@ -188,7 +188,7 @@ stacks:
     format: table  # Supported formats: table, json, yaml, csv, tsv, tree
 ```
 
-**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`tree`)
+**Precedence**: CLI `--format` flag > Environment variable `ATMOS_LIST_FORMAT` > Config file > Default (`tree`)
 
 Scripts that parse the output should always pass an explicit format (e.g., `--format=csv` or `--format=json`) rather than relying on the default.
 

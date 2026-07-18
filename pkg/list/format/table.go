@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -914,7 +915,7 @@ func columnRoleForeground(role ColumnRole, styles *theme.StyleSet) (lipgloss.Ter
 	}
 }
 
-// createStyledTable creates a styled table with headers and rows.
+// CreateStyledTable creates a styled table with headers and rows.
 // Uses intelligent column width calculation to optimize space usage.
 func CreateStyledTable(header []string, rows [][]string) string {
 	return CreateStyledTableWithOptions(header, rows, TableOptions{SemanticCellStyling: true})
@@ -922,6 +923,8 @@ func CreateStyledTable(header []string, rows [][]string) string {
 
 // CreateStyledTableWithOptions is CreateStyledTable with explicit behavior options.
 func CreateStyledTableWithOptions(header []string, rows [][]string, options TableOptions) string {
+	defer perf.Track(nil, "format.CreateStyledTableWithOptions")()
+
 	// Get terminal width - use exactly what's detected.
 	detectedWidth := templates.GetTerminalWidth()
 

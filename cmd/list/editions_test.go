@@ -50,6 +50,22 @@ func TestExecuteListEditionsWithOptionsInvalidAnchors(t *testing.T) {
 	require.ErrorIs(t, err, edition.ErrInvalidEdition)
 }
 
+func TestExecuteListEditionsWithOptionsFormats(t *testing.T) {
+	initTestIO(t)
+	for _, outputFormat := range []string{"json", "yaml", "csv", "tsv"} {
+		t.Run(outputFormat, func(t *testing.T) {
+			require.NoError(t, executeListEditionsWithOptions(&EditionsOptions{Format: outputFormat, From: "2025", To: "2026"}))
+		})
+	}
+}
+
+func TestEditionColumns(t *testing.T) {
+	columns := editionColumns()
+	require.Len(t, columns, 5)
+	assert.Equal(t, "Date", columns[0].Name)
+	assert.Equal(t, "Description", columns[4].Name)
+}
+
 func TestBuildEditionsFooter(t *testing.T) {
 	tests := []struct {
 		name string

@@ -320,9 +320,16 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 }
 
 // terminalWidthLimit holds the user-configured settings.terminal.max_width
-// (0 = unset, unlimited). Registered once at startup via SetTerminalWidthLimit
-// so every width consumer (tables, help output) respects the setting uniformly.
+// (0 = unset, unlimited). It is registered once at startup via
+// SetTerminalWidthLimit so every width consumer respects the setting uniformly.
 var terminalWidthLimit atomic.Int64
+
+// terminalSupportsStdout and terminalGetSize are replaceable in tests so width
+// boundary handling does not depend on the terminal attached to the test process.
+var (
+	terminalSupportsStdout = termUtils.IsTTYSupportForStdout
+	terminalGetSize        = term.GetSize
+)
 
 // SetTerminalWidthLimit registers settings.terminal.max_width as a ceiling for
 // GetTerminalWidth. Zero or negative clears the limit (the default).
@@ -330,17 +337,19 @@ func SetTerminalWidthLimit(limit int) {
 	terminalWidthLimit.Store(int64(limit))
 }
 
-// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
+// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined.
 func GetTerminalWidth() int {
 	defaultWidth := 80
 	screenWidth := defaultWidth
 	source := "fallback"
 
-	// Detect terminal width and use it by default if available
-	isTTY := termUtils.IsTTYSupportForStdout()
+	// Detect terminal width and use it by default if available.
+	isTTY := terminalSupportsStdout()
 	if isTTY {
-		termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
-		if err == nil && termWidth > 0 {
+		termWidth, _, err := terminalGetSize(int(os.Stdout.Fd()))
+		// Two columns are reserved for the layout margin. Keep the fallback for
+		// narrower terminals so downstream uint conversions remain safe.
+		if err == nil && termWidth > 2 {
 			screenWidth = termWidth - 2
 			source = "detected"
 		}

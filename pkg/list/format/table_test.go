@@ -501,6 +501,21 @@ func TestCreateStyledTable(t *testing.T) {
 	}
 }
 
+func TestCreateStyledTableWithOptions(t *testing.T) {
+	result := CreateStyledTableWithOptions(
+		[]string{"Date", "Key", "Description"},
+		[][]string{{"2026-07-17", "settings.example.enabled", "A **formatted** description"}},
+		TableOptions{
+			SemanticCellStyling: false,
+			ColumnRoles:         []ColumnRole{ColumnRoleMuted, ColumnRoleIdentifier, ColumnRoleNone},
+		},
+	)
+
+	assert.Contains(t, result, "Date")
+	assert.Contains(t, result, "settings.example.enabled")
+	assert.Contains(t, result, "formatted")
+}
+
 // TestTableFormatterFormat tests the Format method.
 func TestTableFormatterFormat(t *testing.T) {
 	tests := []struct {
