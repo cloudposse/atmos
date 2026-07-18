@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -196,6 +197,23 @@ func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {
 	assert.False(t, isCompoundTerraformCommandWithoutComponent(nil))
 	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"providers"}))
 	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"version", "show"}))
+}
+
+func TestRunBeforeHooksRejectsInvalidMocksBeforeResolution(t *testing.T) {
+	cmd := &cobra.Command{Use: "apply"}
+	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+
+	err := runBeforeHooks(h.HookEvent("before.terraform.apply"), cmd, nil)
+	assert.ErrorContains(t, err, "supported only by `atmos terraform plan`")
+}
+
+func TestTerraformRunWithOptionsRejectsInvalidMocksBeforeConfig(t *testing.T) {
+	parent := &cobra.Command{Use: "terraform"}
+	actual := &cobra.Command{Use: "plan"}
+
+	err := terraformRunWithOptions(parent, actual, nil, &TerraformRunOptions{UseMocks: true})
+	assert.ErrorContains(t, err, "requires --process-functions=true")
 }
 
 // TestTerraformIdentityFlagHandling tests the identity flag handling in terraformRun.

@@ -28,6 +28,12 @@ const (
 
 var kubernetesParser *flags.StandardParser
 
+var (
+	kubernetesInitCliConfig     = cfg.InitCliConfig
+	kubernetesDescribeStacks    = e.ExecuteDescribeStacks
+	kubernetesListAllComponents = component.ListAllComponents
+)
+
 var kubernetesCmd = &cobra.Command{
 	Use:     "kubernetes",
 	Aliases: []string{"k8s"},
@@ -191,15 +197,15 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 	}
 
 	info := buildConfigAndStacksInfo(cmd)
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := kubernetesInitCliConfig(info, true)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.KubernetesComponentType}, nil, false, false, false, false, nil, nil)
+	stacksMap, err := kubernetesDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.KubernetesComponentType}, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	components, err := component.ListAllComponents(context.Background(), cfg.KubernetesComponentType, stacksMap)
+	components, err := kubernetesListAllComponents(context.Background(), cfg.KubernetesComponentType, stacksMap)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

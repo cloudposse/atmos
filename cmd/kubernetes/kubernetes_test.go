@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -97,6 +99,60 @@ func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
 	components, directive := componentArgCompletion(cmd, []string{"already-provided"}, "")
 	assert.Nil(t, components)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestComponentArgCompletionResolvesConfiguredComponents(t *testing.T) {
+	originalInit, originalDescribe, originalList := kubernetesInitCliConfig, kubernetesDescribeStacks, kubernetesListAllComponents
+	t.Cleanup(func() {
+		kubernetesInitCliConfig = originalInit
+		kubernetesDescribeStacks = originalDescribe
+		kubernetesListAllComponents = originalList
+	})
+
+	cmd := newOperationCommand("apply", "Apply")
+	kubernetesInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	kubernetesDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+		return map[string]any{"dev": map[string]any{}}, nil
+	}
+	kubernetesListAllComponents = func(context.Context, string, map[string]any) ([]string, error) {
+		return []string{"api", "worker"}, nil
+	}
+
+	components, directive := componentArgCompletion(cmd, nil, "")
+	assert.Equal(t, []string{"api", "worker"}, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	t.Run("configuration error", func(t *testing.T) {
+		kubernetesInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, errors.New("config failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
+
+	t.Run("describe error", func(t *testing.T) {
+		kubernetesInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		}
+		kubernetesDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+			return nil, errors.New("describe failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
+
+	t.Run("list error", func(t *testing.T) {
+		kubernetesDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+			return map[string]any{}, nil
+		}
+		kubernetesListAllComponents = func(context.Context, string, map[string]any) ([]string, error) {
+			return nil, errors.New("list failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
 }
 
 func TestGetOperationFlagsSurfacesServer(t *testing.T) {

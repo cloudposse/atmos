@@ -29,6 +29,12 @@ const (
 
 var helmParser *flags.StandardParser
 
+var (
+	helmInitCliConfig     = cfg.InitCliConfig
+	helmDescribeStacks    = e.ExecuteDescribeStacks
+	helmListAllComponents = component.ListAllComponents
+)
+
 var helmCmd = &cobra.Command{
 	Use:   "helm",
 	Short: "Manage native Helm components",
@@ -201,15 +207,15 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 	}
 
 	info := buildConfigAndStacksInfo(cmd)
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := helmInitCliConfig(info, true)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.HelmComponentType}, nil, false, false, false, false, nil, nil)
+	stacksMap, err := helmDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.HelmComponentType}, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	components, err := component.ListAllComponents(context.Background(), cfg.HelmComponentType, stacksMap)
+	components, err := helmListAllComponents(context.Background(), cfg.HelmComponentType, stacksMap)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

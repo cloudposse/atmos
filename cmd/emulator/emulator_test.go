@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -9,9 +10,29 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+type capturingEmulatorProvider struct{ execution *component.ExecutionContext }
+
+func (p *capturingEmulatorProvider) GetType() string                               { return cfg.EmulatorComponentType }
+func (p *capturingEmulatorProvider) GetGroup() string                              { return "test" }
+func (p *capturingEmulatorProvider) GetBasePath(*schema.AtmosConfiguration) string { return "" }
+func (p *capturingEmulatorProvider) ListComponents(context.Context, string, map[string]any) ([]string, error) {
+	return nil, nil
+}
+func (p *capturingEmulatorProvider) ValidateComponent(map[string]any) error { return nil }
+func (p *capturingEmulatorProvider) Execute(execution *component.ExecutionContext) error {
+	p.execution = execution
+	return nil
+}
+
+func (p *capturingEmulatorProvider) GenerateArtifacts(*component.ExecutionContext) error { return nil }
+
+func (p *capturingEmulatorProvider) GetAvailableCommands() []string { return nil }
 
 // restoreViperKey snapshots a single Viper key and restores it after the test.
 // Note that cmd.NewTestKit cannot be imported here: cmd/root.go imports
@@ -235,6 +256,28 @@ func TestRequiresStack(t *testing.T) {
 func TestVerbFlagsOmitsRuntimeWhenDisabled(t *testing.T) {
 	require.NoError(t, listCmd.Flags().Set(flagRuntime, "false"))
 	assert.NotContains(t, verbFlags(listCmd), flagRuntime)
+}
+
+func TestRunVerbDispatchesInspectionCommand(t *testing.T) {
+	provider := &capturingEmulatorProvider{}
+	original, hadOriginal := component.GetProvider(cfg.EmulatorComponentType)
+	require.NoError(t, component.Register(provider))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	restoreViperKey(t, "stack")
+	_ = listCmd.Flags().Set(flagRuntime, "false")
+	t.Cleanup(func() { _ = listCmd.Flags().Set(flagRuntime, "false") })
+
+	require.NoError(t, runVerb(listCmd, "list", nil))
+	require.NotNil(t, provider.execution)
+	assert.Equal(t, cfg.EmulatorComponentType, provider.execution.ComponentType)
+	assert.Equal(t, "list", provider.execution.SubCommand)
+	assert.Empty(t, provider.execution.Component)
+	assert.NotContains(t, provider.execution.Flags, flagRuntime)
 }
 
 func TestInitConfigAndStacksInfo_ExtraPositionalArgs(t *testing.T) {
