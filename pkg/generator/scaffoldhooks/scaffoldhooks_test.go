@@ -166,6 +166,39 @@ func TestRun_StepsKind(t *testing.T) {
 	assert.Equal(t, []string{"first", "second"}, *calls)
 }
 
+func TestRun_DocumentationFixtureUsesEventsConditionsAndOrderedSteps(t *testing.T) {
+	calls := registerCapture(t)
+	answers := map[string]any{"component_name": "vpc", "enable_monitoring": true}
+
+	hooksMap := map[string]hooks.Hook{
+		"prepare": {
+			Kind:   "step",
+			Events: []string{"before.scaffold.generate"},
+			Type:   t.Name(),
+			With:   map[string]any{"content": "prepare {{ .Answers.component_name }}"},
+		},
+		"format": {
+			Kind:   "step",
+			Events: []string{"after.scaffold.generate"},
+			Type:   t.Name(),
+			When:   mustCondition(t, "answers.enable_monitoring == true"),
+			With:   map[string]any{"content": "format {{ .Answers.component_name }}"},
+		},
+		"verify": {
+			Kind:   "steps",
+			Events: []string{"after.scaffold.generate"},
+			With: []any{
+				map[string]any{"type": t.Name(), "content": "validate {{ .Answers.component_name }}"},
+				map[string]any{"type": t.Name(), "content": "finish {{ .Answers.component_name }}"},
+			},
+		},
+	}
+
+	require.NoError(t, Run(hooksMap, hooks.BeforeScaffoldGenerate, answers, "success", nil))
+	require.NoError(t, Run(hooksMap, hooks.AfterScaffoldGenerate, answers, "success", nil))
+	assert.Equal(t, []string{"prepare vpc", "format vpc", "validate vpc", "finish vpc"}, *calls)
+}
+
 func TestRun_UnsupportedKindReturnsError(t *testing.T) {
 	hooksMap := map[string]hooks.Hook{
 		"legacy": {Kind: "command", Command: "echo hi"},

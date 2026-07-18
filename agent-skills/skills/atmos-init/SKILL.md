@@ -33,6 +33,19 @@ to see all templates, including remote/catalog ones not built in.
 
 `atmos init` ships experimental — behavior may change between releases.
 
+## Shared Template Contract
+
+Every `init` template is an `AtmosScaffoldConfig`, so it uses the same contract
+as `atmos scaffold generate`: `spec.fields`, `spec.files`, and `spec.hooks`.
+Fields and files can use `when:` predicates or CEL expressions over earlier
+`answers`; generation hooks run at `before.scaffold.generate` or
+`after.scaffold.generate`. Scaffold hooks deliberately support only `kind: step`
+and ordered `kind: steps`, even though stack lifecycle hooks support more kinds.
+
+Load `atmos-scaffold` before authoring or changing any of those template
+features. It contains the field, CEL, file-condition, hook, and template-context
+rules that `init` consumes unchanged.
+
 ## Differences from `atmos scaffold generate`
 
 | | `atmos init` | `atmos scaffold generate` |
@@ -75,7 +88,7 @@ of failing" interactive prompt, shared verbatim between both commands).
 
 | Need | Skill |
 |---|---|
-| Template authoring: field types, conditional `when:`, hooks, full schema | `atmos-scaffold` |
+| Template authoring: `spec.fields`, CEL `when:`, conditional files, step-backed hooks, full schema | `atmos-scaffold` |
 | 3-way merge mechanics | `atmos-scaffold` → `references/merge-strategy.md` |
 | Shared hook vocabulary | `atmos-hooks` |
 | Project layout produced by a template (`atmos.yaml`, stacks, components) | `atmos-project-layout` |

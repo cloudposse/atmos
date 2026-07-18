@@ -150,10 +150,12 @@ spec:
         command: "git add ."
 ```
 
-Only `kind: step`/`kind: steps` are supported today (the `command`/`store`/`git` kinds
-stack-level hooks also support assume stack/component context scaffold generation
-doesn't have). Answers reach `when:` via the `answers` CEL variable and reach step
-bodies via `{{ .Answers.<field> }}` Go-template syntax.
+Only `kind: step`/`kind: steps` are supported today. Stack-level `command`, scanner,
+`store`, `git`, and CI kinds require stack/component context that scaffold generation
+does not have. `kind: step` takes one registered step type in `type:` and its payload
+in `with:`; `kind: steps` takes an ordered `with:` list. Answers reach `when:` through
+the `answers` CEL variable and reach step bodies through `{{ .Answers.<field> }}`
+Go-template syntax.
 
 **Security**: use `--skip-hooks` (skip all) or `--skip-hooks=name1,name2` (skip
 specific hooks) to bypass hooks for a diagnostic or untrusted-template run — the same
@@ -192,8 +194,8 @@ the JSON Schema.
 
 | Need | Skill |
 |---|---|
-| Shared hook vocabulary (`events`/`kind`/`when`/`type`/`with`) | `atmos-hooks` |
-| Step types usable in a hook's `with:` | `atmos-steps` |
+| Stack hook kinds, lifecycle events, envelope (`events`/`when`/`retry`/`on_failure`) | `atmos-hooks` |
+| Every registered step type and aliases usable in a hook's `with:` | `atmos-steps` |
 | Go-template/Gomplate/Sprig functions available in file content | `atmos-templates` |
 | Project bootstrap from the built-in template catalog | `atmos-init` |
 | Generated JSON Schema for IDE validation | `atmos-schemas` |

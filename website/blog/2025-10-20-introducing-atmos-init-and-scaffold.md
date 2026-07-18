@@ -210,21 +210,23 @@ Scaffold templates are simple directories with a `scaffold.yaml` file:
 
 ```yaml
 # scaffolds/vpc/scaffold.yaml
-name: "vpc-component"
-description: "AWS VPC component template"
-author: "Cloud Posse"
-version: "1.0.0"
-
-prompts:
-  - name: "vpc_name"
-    description: "VPC name"
-    type: "input"
-    default: "main"
-
-  - name: "cidr_block"
-    description: "CIDR block"
-    type: "input"
-    default: "10.0.0.0/16"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: vpc-component
+  description: AWS VPC component template
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: vpc_name
+      label: VPC name
+      type: input
+      default: main
+    - name: cidr_block
+      label: CIDR block
+      type: input
+      default: 10.0.0.0/16
 ```
 
 Template files support Go templates:

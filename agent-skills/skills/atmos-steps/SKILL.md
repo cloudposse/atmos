@@ -73,7 +73,7 @@ steps:
 Important shared fields:
 
 - `name`: Stable step id for logs, dependencies, outputs, and resume behavior.
-- `type`: Step handler (`atmos`, `shell`, `script`, `parallel`, `http`, etc.).
+- `type`: Registered step handler; the canonical catalog below is the source for authored YAML.
 - `command`: Command text for command-running steps.
 - `script` and `interpreter`: Inline script body and runtime for `type: script`.
 - `working_directory`: Directory for the subprocess or script.
@@ -90,17 +90,18 @@ Important shared fields:
 
 Use the docs at `website/docs/workflows/workflows/workflow/steps/type.mdx` and
 the type-specific files under `website/docs/workflows/workflows/workflow/steps/type/`
-as the canonical reference. Current step families include:
+as the canonical reference. Current canonical step types include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
-  `http`/`webhook`, `require`.
-- Orchestration: `parallel`, `matrix`, `wait`, `wait-all`, `cancel`, `sleep`,
-  `exit`.
+  `emulator`, `http`, `archive`, `require`, `workdir`, `cast`.
+- Orchestration: `parallel`, `matrix`, `wait`, `wait-all`, `cancel`.
 - Interactive: `input`, `confirm`, `choose`, `filter`, `file`, `write`.
 - UI and output: `toast`, `markdown`, `spin`, `table`, `pager`, `format`,
-  `join`, `style`, `log`, `alert`, `say`, `title`, `clear`, `linebreak`,
-  `stage`.
-- Workspace and recording: `workdir`, `cast`.
+  `join`, `style`, `log`, `junit`, `hint`, `alert`, `say`, `title`, `clear`,
+  `linebreak`, `stage`, `sleep`, `env`, `exit`.
+
+Use `webhook` only as the `http` alias and `assert` only as the `require` alias;
+document and configure the canonical names unless compatibility requires an alias.
 
 If code and docs disagree, inspect the registered step handlers under
 `pkg/runner/step/` and schema constants in `pkg/schema/task.go`.
@@ -191,7 +192,8 @@ This replaces shell sequences that create, delete, and copy directories.
 ## Hooks
 
 For hooks, the hook envelope controls lifecycle behavior and `with:` is the
-step payload:
+step payload. A scaffold template may use this bridge too, but only with
+`kind: step` or `kind: steps` and its two generation events:
 
 ```yaml
 hooks:
