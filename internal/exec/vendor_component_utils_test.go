@@ -36,13 +36,19 @@ spec:
 func TestExecuteComponentVendorInternal_PullsLocalSource(t *testing.T) {
 	sourceDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
-	componentPath := t.TempDir()
+
+	// componentPath must live under basePath, matching how ReadAndProcessComponentVendorConfigFile
+	// always constructs it (filepath.Join(atmosConfig.BasePath, componentBasePath, component)) - the
+	// vendor lock's target-containment check rejects a target outside the configured project root.
+	basePath := t.TempDir()
+	componentPath := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
 
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{Uri: sourceDir},
 	}
 
-	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{BasePath: t.TempDir()}, spec, "vpc", componentPath, false)
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{BasePath: basePath}, spec, "vpc", componentPath, false)
 
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))

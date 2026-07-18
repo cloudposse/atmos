@@ -464,6 +464,13 @@ func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 			return nil, err
 		}
 		targetPath := filepath.Join(params.VendorConfigFilePath, target)
+		// Resolve to absolute so the vendor lock's target-containment check (pkg/vendoring/lockfile)
+		// compares two absolute paths; a relative VendorConfigFilePath otherwise makes targetPath
+		// relative to CWD, which the lock validation cannot reliably relate back to BasePath.
+		targetPath, err = filepath.Abs(targetPath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve target path: %w", err)
+		}
 		pkgName := params.Source.Component
 		if pkgName == "" {
 			pkgName = effectiveURI

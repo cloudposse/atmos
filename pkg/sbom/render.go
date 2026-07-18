@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -154,7 +153,10 @@ func isLocalFilesystemPath(value string) bool {
 	if value == "" {
 		return false
 	}
-	if filepath.IsAbs(value) || strings.HasPrefix(strings.ToLower(value), "file://") {
+	// Classify by syntax alone, never filepath.IsAbs: a Unix-style "/..." path is not
+	// absolute per Go's Windows implementation, so redaction would silently miss it
+	// when the generator itself runs on Windows.
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(strings.ToLower(value), "file://") || strings.HasPrefix(value, `\\`) {
 		return true
 	}
 	return len(value) >= 3 && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && (value[2] == '\\' || value[2] == '/')

@@ -1,13 +1,14 @@
 // Package sbom builds provenance and software-bill-of-material graphs from
 // Atmos lock files and supported dependency adapters.
 //
-//nolint:cyclop,gocognit,gocritic,lintroller,nestif // Graph assembly keeps adapter ordering and coverage validation explicit.
+//nolint:gocritic,lintroller,nestif // Graph assembly keeps adapter ordering and coverage validation explicit.
 package sbom
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -191,18 +192,7 @@ func appendJITSources(graph *Graph, config *schema.AtmosConfiguration) (bool, st
 		return true, "vendor lock parsed; no JIT workdir search path", nil
 	}
 	state := jitSourceState{complete: true}
-	err := filepath.WalkDir(config.BasePath, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".terraform") {
-			return filepath.SkipDir
-		}
-		if !isJITReceipt(entry, path) {
-			return nil
-		}
-		return state.append(graph, config, path)
-	})
+	err := filepath.WalkDir(config.BasePath, jitSourceWalkFunc(graph, config, &state))
 	if err != nil {
 		return false, "failed to inspect JIT receipts", err
 	}
@@ -213,6 +203,24 @@ func appendJITSources(graph *Graph, config *schema.AtmosConfiguration) (bool, st
 		return false, "one or more JIT receipts lack immutable source identity", nil
 	}
 	return true, "vendor lock and JIT receipts parsed", nil
+}
+
+// jitSourceWalkFunc builds the filepath.WalkDirFunc used to inspect JIT
+// workdir receipts, keeping the walk logic separate from appendJITSources'
+// overall result assembly.
+func jitSourceWalkFunc(graph *Graph, config *schema.AtmosConfiguration, state *jitSourceState) fs.WalkDirFunc {
+	return func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".terraform") {
+			return filepath.SkipDir
+		}
+		if !isJITReceipt(entry, path) {
+			return nil
+		}
+		return state.append(graph, config, path)
+	}
 }
 
 type jitSourceState struct {

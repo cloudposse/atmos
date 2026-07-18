@@ -465,9 +465,17 @@ func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
 	target := filepath.Join(base, "target")
 	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, ".git"), 0o755))
 	require.NoError(t, os.MkdirAll(target, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.tf"), []byte("resource"), 0o644))
+	sourceFile := filepath.Join(tempDir, "main.tf")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("resource"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".git", "config"), []byte("metadata"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("resource"), 0o644))
+
+	// recordVendorLock captures File.Mode via a raw os.Stat (pkg/vendoring/lockfile's Inventory),
+	// so the expected mode must come from the same call rather than a hardcoded Unix literal:
+	// Windows collapses any os.WriteFile mode to 0666 (rw) or 0444 (read-only), never 0644.
+	sourceInfo, err := os.Stat(sourceFile)
+	require.NoError(t, err)
+	expectedMode := uint32(sourceInfo.Mode().Perm())
 
 	config := &schema.AtmosConfiguration{BasePath: base}
 	pkg := &pkgAtmosVendor{
@@ -497,7 +505,7 @@ func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
 	for _, artifact := range lock.Artifacts {
 		require.Equal(t, "sha256", artifact.Source.Digest[:6])
 		require.Equal(t, []lockfile.File{{
-			Path: "main.tf", Type: "file", Mode: 0o644,
+			Path: "main.tf", Type: "file", Mode: expectedMode,
 			SHA256: "5de95319f17467ed6dc58e4e0b16c1193a13b35d60dc48bcf06bf6b7beebbe6c",
 		}}, artifact.Files)
 	}
