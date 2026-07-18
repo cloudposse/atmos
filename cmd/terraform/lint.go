@@ -50,16 +50,42 @@ func runTerraformLint(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	v := viper.GetViper()
-	if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
-		return err
-	}
-	if err := lintParser.BindFlagsToViper(cmd, v); err != nil {
+	if err := bindTerraformLintFlags(cmd, v); err != nil {
 		return err
 	}
 
-	info, err := e.ProcessCommandLineArgs("terraform", terraformCmd, append([]string{"lint"}, args...), nil)
+	info, err := resolveTerraformLintInfo(v, args)
 	if err != nil {
 		return err
+	}
+
+	if err := checkTerraformLintFlags(info); err != nil {
+		return err
+	}
+
+	if info.Affected {
+		return e.ExecuteTerraformLintAffected(terraformLintAffectedArgs(cmd, info), info)
+	}
+	return e.ExecuteTerraformLint(info)
+}
+
+// bindTerraformLintFlags binds both the shared terraform flags and the
+// lint-specific flags to viper so precedence (CLI flags > env vars > config)
+// is resolved consistently before the lint run info is assembled.
+func bindTerraformLintFlags(cmd *cobra.Command, v *viper.Viper) error {
+	if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+	return lintParser.BindFlagsToViper(cmd, v)
+}
+
+// resolveTerraformLintInfo builds the ConfigAndStacksInfo for the lint run,
+// applying the documented --all default when neither a component nor
+// --affected was given.
+func resolveTerraformLintInfo(v *viper.Viper, args []string) (*schema.ConfigAndStacksInfo, error) {
+	info, err := e.ProcessCommandLineArgs("terraform", terraformCmd, append([]string{"lint"}, args...), nil)
+	if err != nil {
+		return nil, err
 	}
 	info.SubCommand = "lint"
 	info.ProcessTemplates = v.GetBool("process-templates")
@@ -73,18 +99,20 @@ func runTerraformLint(cmd *cobra.Command, args []string) error {
 	if info.ComponentFromArg == "" && !info.Affected {
 		info.All = true
 	}
+	return &info, nil
+}
 
+// checkTerraformLintFlags rejects flag combinations that don't make sense
+// together: a single component with a multi-component flag, or --all with
+// --affected.
+func checkTerraformLintFlags(info *schema.ConfigAndStacksInfo) error {
 	if info.ComponentFromArg != "" && (info.All || info.Affected) {
 		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
 	}
 	if info.All && info.Affected {
 		return errUtils.ErrInvalidTerraformFlagsWithAffectedFlag
 	}
-
-	if info.Affected {
-		return e.ExecuteTerraformLintAffected(terraformLintAffectedArgs(cmd, &info), &info)
-	}
-	return e.ExecuteTerraformLint(&info)
+	return nil
 }
 
 func terraformLintAffectedArgs(cmd *cobra.Command, info *schema.ConfigAndStacksInfo) *e.DescribeAffectedCmdArgs {

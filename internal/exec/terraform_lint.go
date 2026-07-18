@@ -76,26 +76,10 @@ func ExecuteTerraformLintAffected(args *DescribeAffectedCmdArgs, info *schema.Co
 		return errUtils.ErrNilParam
 	}
 
-	authDisabled := args.AuthDisabled || info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue
-	if authDisabled {
-		info.Identity = cfg.IdentityFlagDisabledValue
-		info.AuthDisabled = true
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	atmosConfig, authManager, err := prepareTerraformLintAffectedAuth(args, info)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err)
+		return err
 	}
-	authManager, err := createQueryAuthManager(info, &atmosConfig)
-	if err != nil {
-		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrTerraformLintAuth, err)
-	}
-	if authManager != nil {
-		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
-	}
-	args.CLIConfig = &atmosConfig
-	args.AuthManager = authManager
-	args.AuthDisabled = authDisabled
 
 	affected, err := getAffectedComponents(args)
 	if err != nil {
@@ -108,11 +92,42 @@ func ExecuteTerraformLintAffected(args *DescribeAffectedCmdArgs, info *schema.Co
 	}
 
 	targets := make([]*dependency.Node, 0, len(affected))
-	for _, item := range affected {
+	for i := range affected {
+		item := &affected[i]
 		targets = append(targets, &dependency.Node{Component: item.Component, Stack: item.Stack, Type: cfg.TerraformComponentType})
 	}
 	targets = lintTargets(nil, targets)
-	return executeTerraformLintTargets(&atmosConfig, info, targets, authManager)
+	return executeTerraformLintTargets(atmosConfig, info, targets, authManager)
+}
+
+// prepareTerraformLintAffectedAuth resolves the CLI config and auth manager
+// for an affected-components lint run, honoring an auth-disabled request from
+// either the affected-args or the execution info, and wires the resolved
+// auth manager back onto args and info so downstream calls observe the same
+// state.
+func prepareTerraformLintAffectedAuth(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) (*schema.AtmosConfiguration, auth.AuthManager, error) {
+	authDisabled := args.AuthDisabled || info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue
+	if authDisabled {
+		info.Identity = cfg.IdentityFlagDisabledValue
+		info.AuthDisabled = true
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err)
+	}
+	authManager, err := createQueryAuthManager(info, &atmosConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrTerraformLintAuth, err)
+	}
+	if authManager != nil {
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
+	}
+	args.CLIConfig = &atmosConfig
+	args.AuthManager = authManager
+	args.AuthDisabled = authDisabled
+
+	return &atmosConfig, authManager, nil
 }
 
 // lintTargets sorts targets for reproducible output and keeps the first stack

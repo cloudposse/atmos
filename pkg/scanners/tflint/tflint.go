@@ -76,6 +76,8 @@ func Run(ctx context.Context, opts *Options) (*scanners.Output, *scanners.Contex
 // component directory, Terraform components base path, then repository root.
 // The project-level components.terraform.lint.config setting is a final fallback.
 func ResolveArgs(args []string, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
+	defer perf.Track(atmosConfig, "tflint.ResolveArgs")()
+
 	resolved := append([]string(nil), args...)
 	if hasConfigArg(resolved) {
 		return resolved
@@ -91,6 +93,8 @@ func ResolveArgs(args []string, atmosConfig *schema.AtmosConfiguration, info *sc
 // the component directory, then the Terraform components base path, then the
 // repository root. This lets shared components override project-wide rules.
 func ConfigPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(atmosConfig, "tflint.ConfigPath")()
+
 	if atmosConfig == nil || info == nil {
 		return ""
 	}
