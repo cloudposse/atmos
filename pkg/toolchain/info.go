@@ -30,6 +30,7 @@ const (
 	dateFormatYYYYMMDDLen = 10  // Length of "YYYY-MM-DD".
 	fallbackTerminalWidth = 120 // Default terminal width when detection fails.
 	emptyValuePlaceholder = " " // Placeholder for empty values in output.
+	indicatorColumnWidth  = 3   // 1-char indicator plus horizontal padding.
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
@@ -233,9 +234,9 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 		rows = append(rows, []string{indicator, v.version, date, title})
 	}
 
-	// Keep the table within the terminal width. All columns must use the same
-	// auto-sizing path; pinning only the indicator column makes non-TTY headers
-	// expand differently from their corresponding body cells.
+	// Keep the table within the terminal width. Populated tables must use the
+	// same auto-sizing path for every column; pinning only the indicator column
+	// makes non-TTY headers expand differently from their body cells.
 	tableWidth := templates.GetTerminalWidth() - tableBorderPadding
 	t, err := createVersionsTable(rows, tableWidth)
 	if err != nil {
@@ -268,6 +269,11 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
+			case len(rows) == 0 && col == 0:
+				// Without a data row, the blank indicator header has no content
+				// width. Keep it at the same width a blank indicator would occupy
+				// in a populated table, rather than letting it absorb spare space.
+				return lipgloss.NewStyle().Padding(0, 1).Width(indicatorColumnWidth)
 			case row == lipglosstable.HeaderRow:
 				return headerStyle.Padding(0, 1)
 			case col == 2: // Date column.

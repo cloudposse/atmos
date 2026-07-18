@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/stretchr/testify/assert"
@@ -20,9 +21,19 @@ func TestCreateVersionsTableDoesNotExpandHeaders(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	header := strings.TrimRight(strings.Split(table.String(), "\n")[0], " ")
+	header := strings.TrimRight(strings.Split(ansi.Strip(table.String()), "\n")[0], " ")
 	assert.Equal(t, "    VERSION  DATE        TITLE", header)
 	assert.NotContains(t, header, "VERSION                DATE")
+}
+
+func TestCreateVersionsTableKeepsEmptyIndicatorColumnCompact(t *testing.T) {
+	t.Parallel()
+
+	table, err := createVersionsTable(nil, 72)
+	assert.NoError(t, err)
+
+	header := strings.TrimRight(strings.Split(ansi.Strip(table.String()), "\n")[0], " ")
+	assert.Equal(t, "    VERSION                DATE                   TITLE", header)
 }
 
 func TestInfoCommand_AliasResolution(t *testing.T) {
