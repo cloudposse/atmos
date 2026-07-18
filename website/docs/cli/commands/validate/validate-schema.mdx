@@ -50,6 +50,7 @@ Run `atmos validate schema --help` to see all the available options
 atmos validate schema           # everything in `schemas`, plus atmos.yaml via the built-in `config` entry
 atmos validate schema config    # only atmos.yaml (and its fragments)
 atmos config validate           # alias for `atmos validate schema config`
+atmos config validate --affected --base origin/main
 atmos validate schema <my_custom_key>
 ```
 

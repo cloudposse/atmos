@@ -101,3 +101,18 @@ func githubEventBaseSHA() string {
 	}
 	return event.Before
 }
+
+// IsAtmosConfigPath reports whether path is one of the project-local Atmos
+// configuration files read by the CLI configuration loader.
+func IsAtmosConfigPath(path string) bool {
+	path = filepath.ToSlash(filepath.Clean(path))
+	if path == "atmos.yaml" || path == "atmos.yml" || path == ".atmos.yaml" || path == ".atmos.yml" {
+		return true
+	}
+	for _, directory := range []string{"atmos.d/", ".atmos.d/", "profiles/", ".atmos/profiles/"} {
+		if strings.HasPrefix(path, directory) {
+			return true
+		}
+	}
+	return false
+}

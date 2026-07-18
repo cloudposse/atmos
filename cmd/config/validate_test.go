@@ -22,6 +22,11 @@ func TestConfigValidateCmd_RegisteredUnderConfig(t *testing.T) {
 	assert.True(t, found, "expected \"validate\" to be registered as a subcommand of \"config\"")
 }
 
+func TestConfigValidateCmdHasAffectedFlags(t *testing.T) {
+	assert.NotNil(t, configValidateCmd.Flags().Lookup("affected"))
+	assert.NotNil(t, configValidateCmd.Flags().Lookup("base"))
+}
+
 func TestRunConfigValidate_ValidConfig(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("logs:\n  level: Debug\n"), 0o644))

@@ -2,6 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -9,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 // configSchemaKey is the well-known `schemas:` registry key that targets the
@@ -26,17 +30,65 @@ configuration code. This is an alias for ` + "`atmos validate schema config`" + 
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "config.validateRunE")()
-		return runConfigValidate()
+		return runConfigValidateCommand(cmd)
 	},
 }
 
+func init() {
+	configValidateCmd.Flags().Bool("affected", false, "Validate only configuration files affected since the Git merge-base")
+	configValidateCmd.Flags().String("base", "", "Git base ref or SHA to compare against for affected validation")
+}
+
+func runConfigValidateCommand(cmd *cobra.Command) error {
+	affected, err := cmd.Flags().GetBool("affected")
+	if err != nil {
+		return err
+	}
+	if !affected {
+		return runConfigValidate()
+	}
+	base, err := cmd.Flags().GetString("base")
+	if err != nil {
+		return err
+	}
+	paths, err := validation.AffectedFiles(base)
+	if err != nil {
+		return err
+	}
+	configFiles := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if !validation.IsAtmosConfigPath(path) {
+			continue
+		}
+		if _, err := os.Stat(filepath.FromSlash(path)); err == nil {
+			configFiles = append(configFiles, path)
+		}
+	}
+	if len(configFiles) == 0 {
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), "No affected Atmos configuration files to validate.")
+		return err
+	}
+	return runConfigValidateForFiles(configFiles)
+}
+
 func runConfigValidate() error {
+	return runConfigValidateForFiles(nil)
+}
+
+func runConfigValidateForFiles(files []string) error {
 	atmosConfig := atmosConfigPtr
 	if atmosConfig == nil {
 		atmosConfig = &schema.AtmosConfiguration{}
 	}
 
-	if err := exec.NewAtmosValidatorExecutor(atmosConfig).ExecuteAtmosValidateSchemaCmd(configSchemaKey, ""); err != nil {
+	executor := exec.NewAtmosValidatorExecutor(atmosConfig)
+	var err error
+	if files == nil {
+		err = executor.ExecuteAtmosValidateSchemaCmd(configSchemaKey, "")
+	} else {
+		err = executor.ExecuteAtmosValidateSchemaCmdForFiles(configSchemaKey, "", files)
+	}
+	if err != nil {
 		if errors.Is(err, exec.ErrInvalidYAML) {
 			errUtils.OsExit(1)
 		}

@@ -53,16 +53,7 @@ func affectedPathsWithExistingFiles(paths []string) []string {
 }
 
 func isAtmosConfigPath(path string) bool {
-	path = filepath.ToSlash(filepath.Clean(path))
-	if path == "atmos.yaml" || path == "atmos.yml" || path == ".atmos.yaml" || path == ".atmos.yml" {
-		return true
-	}
-	for _, directory := range []string{"atmos.d/", ".atmos.d/", "profiles/", ".atmos/profiles/"} {
-		if strings.HasPrefix(path, directory) {
-			return true
-		}
-	}
-	return false
+	return validation.IsAtmosConfigPath(path)
 }
 
 func affectedPathsContainAtmosConfig(paths []string) bool {
