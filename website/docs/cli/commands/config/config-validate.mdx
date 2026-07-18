@@ -40,6 +40,7 @@ atmos validate schema config
 
 # Validate only changed Atmos configuration files.
 atmos config validate --affected --base origin/main
+atmos config validate --exclude 'tests/fixtures/**'
 ```
 
 Exits non-zero when any file fails validation, making it suitable for CI and
@@ -50,3 +51,5 @@ entry — see [CLI Configuration Schemas](/cli/configuration/schemas).
 only changed `atmos.yaml` files, fragments, and profiles. On GitHub Actions, the
 pull request base SHA is detected automatically; use `--base` locally when the
 default baseline is not appropriate.
+
+Use repeatable `--exclude <glob>` to omit matching configuration files from full or affected validation.

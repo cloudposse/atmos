@@ -36,12 +36,15 @@ atmos stack validate --schemas-atmos-manifest schemas/atmos-manifest.json
 
 # Skip validation when no stack or Atmos configuration inputs changed.
 atmos stack validate --affected --base origin/main
+atmos stack validate --exclude 'stacks/experimental/**'
 ```
 
 `--affected` resolves the Git merge-base automatically on GitHub Actions. A
 relevant stack or Atmos configuration change runs the complete stack validation,
 so imports and duplicate-component checks remain correct; unrelated changes are
 skipped. Use `--base` to select a local comparison point.
+
+Use repeatable `--exclude <glob>` to omit stack manifests from full or affected validation.
 
 ## Flags
 

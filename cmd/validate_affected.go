@@ -16,6 +16,23 @@ func addAffectedValidationFlags(cmd *cobra.Command) {
 	cmd.Flags().String("base", "", "Git base ref or SHA to compare against for affected validation")
 }
 
+func addValidationExcludeFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSlice("exclude", nil, "Exclude repository paths from validation (glob; can be repeated)")
+}
+
+func validationExcludePatterns(cmd *cobra.Command) ([]string, error) {
+	flag := cmd.Flags().Lookup("exclude")
+	if flag == nil || flag.Value.Type() != "stringSlice" {
+		return nil, nil
+	}
+	patterns, err := cmd.Flags().GetStringSlice("exclude")
+	if err != nil {
+		return nil, err
+	}
+	_, err = validation.ExcludePaths(nil, patterns)
+	return patterns, err
+}
+
 // validationAffectedFiles resolves changed files only when --affected is set.
 func validationAffectedFiles(cmd *cobra.Command) ([]string, bool, error) {
 	flag := cmd.Flags().Lookup("affected")
@@ -31,6 +48,14 @@ func validationAffectedFiles(cmd *cobra.Command) ([]string, bool, error) {
 		return nil, false, err
 	}
 	paths, err := validation.AffectedFiles(base)
+	if err != nil {
+		return nil, false, err
+	}
+	excludes, err := validationExcludePatterns(cmd)
+	if err != nil {
+		return nil, false, err
+	}
+	paths, err = validation.ExcludePaths(paths, excludes)
 	if err != nil {
 		return nil, false, err
 	}

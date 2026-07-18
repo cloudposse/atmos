@@ -56,11 +56,14 @@ atmos validate schema <my_custom_key>
 # Validate only changed YAML files; configuration or JSON Schema changes
 # conservatively revalidate every matching file.
 atmos validate schema --affected --base origin/main
+atmos validate schema --exclude 'tests/fixtures/**'
 ```
 
 Use `--affected` to compare against the Git merge-base. On GitHub Actions, the
 pull request base SHA is detected automatically; use `--base` locally to select
 another baseline.
+
+Use repeatable `--exclude <glob>` to omit repository-relative matches from either full or affected schema validation.
 
 ## How to set my schema validators?
 

@@ -37,6 +37,7 @@ configuration code. This is an alias for ` + "`atmos validate schema config`" + 
 func init() {
 	configValidateCmd.Flags().Bool("affected", false, "Validate only configuration files affected since the Git merge-base")
 	configValidateCmd.Flags().String("base", "", "Git base ref or SHA to compare against for affected validation")
+	configValidateCmd.Flags().StringSlice("exclude", nil, "Exclude repository paths from validation (glob; can be repeated)")
 }
 
 func runConfigValidateCommand(cmd *cobra.Command) error {
@@ -45,13 +46,25 @@ func runConfigValidateCommand(cmd *cobra.Command) error {
 		return err
 	}
 	if !affected {
-		return runConfigValidate()
+		excludes, err := cmd.Flags().GetStringSlice("exclude")
+		if err != nil {
+			return err
+		}
+		return runConfigValidate(excludes...)
 	}
 	base, err := cmd.Flags().GetString("base")
 	if err != nil {
 		return err
 	}
 	paths, err := validation.AffectedFiles(base)
+	if err != nil {
+		return err
+	}
+	excludes, err := cmd.Flags().GetStringSlice("exclude")
+	if err != nil {
+		return err
+	}
+	paths, err = validation.ExcludePaths(paths, excludes)
 	if err != nil {
 		return err
 	}
@@ -71,8 +84,15 @@ func runConfigValidateCommand(cmd *cobra.Command) error {
 	return runConfigValidateForFiles(configFiles)
 }
 
-func runConfigValidate() error {
-	return runConfigValidateForFiles(nil)
+func runConfigValidate(excludes ...string) error {
+	if len(excludes) == 0 {
+		return runConfigValidateForFiles(nil)
+	}
+	atmosConfig := atmosConfigPtr
+	if atmosConfig == nil {
+		atmosConfig = &schema.AtmosConfiguration{}
+	}
+	return exec.NewAtmosValidatorExecutor(atmosConfig).ExecuteAtmosValidateSchemaCmdExcluding(configSchemaKey, "", excludes)
 }
 
 func runConfigValidateForFiles(files []string) error {

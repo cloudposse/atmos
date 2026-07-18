@@ -284,6 +284,8 @@ docs:
 # trailing version token is a manual cache-bust — bump it to start from a clean
 # cache. restore_keys lets a bumped token still seed from the previous blob.
 ci:
+  # Enable native CI summaries and failure annotations for repository validation.
+  enabled: true
   cache:
     enabled: true
     key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2'

@@ -156,7 +156,7 @@ jobs:
           target: linux
 
       - name: Validate affected project inputs
-        run: atmos validate --affected --format rich
+        run: atmos validate --affected --exclude 'tests/fixtures/**' --format rich
 
   # run acceptance tests
   test:

@@ -36,6 +36,28 @@ func TestAffectedFilesIncludesCommittedWorkingTreeAndUntrackedFiles(t *testing.T
 	assert.Equal(t, []string{"diff", "--name-only", "-z", "--diff-filter=ACMRD", "base-sha...HEAD"}, calls[1])
 }
 
+func TestExcludePaths(t *testing.T) {
+	paths := []string{
+		"atmos.yaml",
+		"tests/fixtures/scenarios/invalid/stack.yaml",
+		"tests/fixtures/valid.yaml",
+		"stacks/dev.yaml",
+	}
+
+	filtered, err := ExcludePaths(paths, []string{"tests/fixtures/**"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"atmos.yaml", "stacks/dev.yaml"}, filtered)
+
+	filtered, err = ExcludePaths([]string{"tests\\fixtures\\invalid.yaml", "stacks/dev.yaml"}, []string{"tests/fixtures/**"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"stacks/dev.yaml"}, filtered)
+
+	_, err = ExcludePaths(paths, []string{"["})
+	assert.Error(t, err)
+	_, err = ExcludePaths(paths, []string{""})
+	assert.Error(t, err)
+}
+
 func TestResolveAffectedBase(t *testing.T) {
 	t.Setenv("GITHUB_BASE_REF", "main")
 

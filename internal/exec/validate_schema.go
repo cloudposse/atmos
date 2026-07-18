@@ -94,16 +94,24 @@ func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosVal
 }
 
 func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
-	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, nil)
+	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, nil, nil)
 }
 
 // ExecuteAtmosValidateSchemaCmdForFiles validates only the supplied files.
 // A nil file list retains the established behavior of validating every match.
 func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmdForFiles(sourceKey string, customSchema string, files []string) error {
-	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, files)
+	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, files, nil)
 }
 
-func (av *atmosValidatorExecutor) executeAtmosValidateSchemaCmd(sourceKey string, customSchema string, files []string) error {
+// ExecuteAtmosValidateSchemaCmdExcluding validates every matched file except
+// those matched by repository-relative exclude globs.
+func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmdExcluding(sourceKey string, customSchema string, excludes []string) error {
+	defer perf.Track(nil, "exec.atmosValidatorExecutor.ExecuteAtmosValidateSchemaCmdExcluding")()
+
+	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, nil, excludes)
+}
+
+func (av *atmosValidatorExecutor) executeAtmosValidateSchemaCmd(sourceKey string, customSchema string, files []string, excludes []string) error {
 	defer perf.Track(nil, "exec.ExecuteAtmosValidateSchemaCmd")()
 
 	var totalErrCount uint
@@ -116,7 +124,10 @@ func (av *atmosValidatorExecutor) executeAtmosValidateSchemaCmd(sourceKey string
 			if err != nil {
 				return err
 			}
-			validationSchemaWithFiles = filterValidationSchemaFiles(validationSchemaWithFiles, files)
+			validationSchemaWithFiles, err = filterValidationSchemaFiles(validationSchemaWithFiles, files, excludes)
+			if err != nil {
+				return err
+			}
 
 			totalErrCount, err = av.validateSchemas(validationSchemaWithFiles)
 			if err != nil {
@@ -137,21 +148,32 @@ func (av *atmosValidatorExecutor) executeAtmosValidateSchemaCmd(sourceKey string
 // output. It is used by the rich renderer; the established spinner/log path
 // above remains the default text behavior.
 func (av *atmosValidatorExecutor) ValidateAtmosSchemaReport(sourceKey string, customSchema string) (validation.Report, error) {
-	return av.validateAtmosSchemaReport(sourceKey, customSchema, nil)
+	return av.validateAtmosSchemaReport(sourceKey, customSchema, nil, nil)
 }
 
 // ValidateAtmosSchemaReportForFiles collects findings for only the supplied files.
 // A nil file list retains the established behavior of validating every match.
 func (av *atmosValidatorExecutor) ValidateAtmosSchemaReportForFiles(sourceKey string, customSchema string, files []string) (validation.Report, error) {
-	return av.validateAtmosSchemaReport(sourceKey, customSchema, files)
+	return av.validateAtmosSchemaReport(sourceKey, customSchema, files, nil)
 }
 
-func (av *atmosValidatorExecutor) validateAtmosSchemaReport(sourceKey string, customSchema string, files []string) (validation.Report, error) {
+// ValidateAtmosSchemaReportExcluding collects findings for every matched file
+// except those matched by repository-relative exclude globs.
+func (av *atmosValidatorExecutor) ValidateAtmosSchemaReportExcluding(sourceKey string, customSchema string, excludes []string) (validation.Report, error) {
+	defer perf.Track(nil, "exec.atmosValidatorExecutor.ValidateAtmosSchemaReportExcluding")()
+
+	return av.validateAtmosSchemaReport(sourceKey, customSchema, nil, excludes)
+}
+
+func (av *atmosValidatorExecutor) validateAtmosSchemaReport(sourceKey string, customSchema string, files []string, excludes []string) (validation.Report, error) {
 	schemas, err := av.buildValidationSchema(sourceKey, customSchema)
 	if err != nil {
 		return validation.Report{}, err
 	}
-	schemas = filterValidationSchemaFiles(schemas, files)
+	schemas, err = filterValidationSchemaFiles(schemas, files, excludes)
+	if err != nil {
+		return validation.Report{}, err
+	}
 	report := validation.Report{}
 	for schemaSource, files := range schemas {
 		for _, file := range files {
@@ -178,11 +200,8 @@ func (av *atmosValidatorExecutor) validateAtmosSchemaReport(sourceKey string, cu
 	return report, nil
 }
 
-func filterValidationSchemaFiles(schemas map[string][]string, files []string) map[string][]string {
-	if files == nil {
-		return schemas
-	}
-
+//nolint:gocognit // Filtering must apply both exclusions and optional affected-file selection.
+func filterValidationSchemaFiles(schemas map[string][]string, files []string, excludes []string) (map[string][]string, error) {
 	selected := make(map[string]struct{}, len(files))
 	for _, file := range files {
 		absolute, err := filepath.Abs(file)
@@ -193,6 +212,17 @@ func filterValidationSchemaFiles(schemas map[string][]string, files []string) ma
 	filtered := make(map[string][]string, len(schemas))
 	for schemaSource, schemaFiles := range schemas {
 		for _, file := range schemaFiles {
+			remaining, err := validation.ExcludePaths([]string{file}, excludes)
+			if err != nil {
+				return nil, err
+			}
+			if len(remaining) == 0 {
+				continue
+			}
+			if files == nil {
+				filtered[schemaSource] = append(filtered[schemaSource], file)
+				continue
+			}
 			absolute, err := filepath.Abs(file)
 			if err == nil {
 				if _, ok := selected[filepath.Clean(absolute)]; ok {
@@ -201,7 +231,7 @@ func filterValidationSchemaFiles(schemas map[string][]string, files []string) ma
 			}
 		}
 	}
-	return filtered
+	return filtered, nil
 }
 
 func schemaFilePositions(file string) u.PositionMap {

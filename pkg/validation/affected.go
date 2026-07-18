@@ -2,12 +2,18 @@ package validation
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+var errValidationExcludePatternEmpty = errors.New("validation exclude pattern cannot be empty")
 
 // AffectedFiles returns repository-relative files changed between HEAD and its
 // merge-base with base. When base is empty, it uses the GitHub event's base SHA
@@ -115,4 +121,69 @@ func IsAtmosConfigPath(path string) bool {
 		}
 	}
 	return false
+}
+
+// ExcludePaths removes paths matching any repository-relative glob pattern.
+// Patterns use forward slashes and support doublestar (for example,
+// "tests/fixtures/**") on every platform.
+//
+//nolint:revive // Path normalization and matching must remain together to preserve exclusion semantics.
+func ExcludePaths(paths []string, patterns []string) ([]string, error) {
+	defer perf.Track(nil, "validation.ExcludePaths")()
+	if len(patterns) == 0 {
+		return paths, nil
+	}
+
+	normalizedPatterns := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		pattern = strings.ReplaceAll(filepath.ToSlash(filepath.Clean(strings.TrimSpace(pattern))), "\\", "/")
+		pattern = strings.TrimPrefix(pattern, "./")
+		if pattern == "" || pattern == "." {
+			return nil, errValidationExcludePatternEmpty
+		}
+		// Validate the glob even when the current path set is empty.
+		if _, err := u.PathMatch(pattern, ""); err != nil {
+			return nil, fmt.Errorf("invalid validation exclude pattern %q: %w", pattern, err)
+		}
+		normalizedPatterns = append(normalizedPatterns, pattern)
+	}
+
+	filtered := make([]string, 0, len(paths))
+	for _, path := range paths {
+		normalizedPath, err := validationRepositoryPath(path)
+		if err != nil {
+			return nil, err
+		}
+		excluded := false
+		for _, pattern := range normalizedPatterns {
+			match, err := u.PathMatch(pattern, normalizedPath)
+			if err != nil {
+				return nil, fmt.Errorf("match validation exclude pattern %q: %w", pattern, err)
+			}
+			if match {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			filtered = append(filtered, path)
+		}
+	}
+	return filtered, nil
+}
+
+func validationRepositoryPath(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("resolve working directory for validation excludes: %w", err)
+		}
+		relative, err := filepath.Rel(cwd, path)
+		if err != nil {
+			return "", fmt.Errorf("resolve validation path %q: %w", path, err)
+		}
+		path = relative
+	}
+	path = strings.ReplaceAll(filepath.ToSlash(filepath.Clean(path)), "\\", "/")
+	return strings.TrimPrefix(path, "./"), nil
 }

@@ -60,3 +60,12 @@ func TestValidateCommandsExposeAffectedFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestValidationExcludePatternsIgnoresEditorConfigRegexFlag(t *testing.T) {
+	command := &cobra.Command{}
+	command.Flags().String("exclude", `^vendor/`, "")
+
+	patterns, err := validationExcludePatterns(command)
+	require.NoError(t, err)
+	assert.Nil(t, patterns)
+}

@@ -11,6 +11,8 @@ import (
 
 	cicmd "github.com/cloudposse/atmos/cmd/ci"
 	errUtils "github.com/cloudposse/atmos/errors"
+	ci "github.com/cloudposse/atmos/pkg/ci"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -33,9 +35,15 @@ type validationTaskResult struct {
 	status validationTaskStatus
 }
 
+var validationCISummaryWriter = ci.WriteStepSummary
+
 // runValidateAll runs every project-wide validation target and reports all outcomes.
 func runValidateAll(cmd *cobra.Command) error {
 	affectedFiles, affected, err := validationAffectedFiles(cmd)
+	if err != nil {
+		return err
+	}
+	excludes, err := validationExcludePatterns(cmd)
 	if err != nil {
 		return err
 	}
@@ -70,7 +78,7 @@ func runValidateAll(cmd *cobra.Command) error {
 				return !affected || schemaValidateAll || len(schemaFiles) > 0, nil
 			},
 			run: func() error {
-				return runValidateSchemaForFiles(ValidateSchemaCmd, nil, affectedFiles, affected)
+				return runValidateSchemaForFiles(ValidateSchemaCmd, nil, affectedFiles, affected, excludes)
 			},
 		},
 		{
@@ -79,7 +87,7 @@ func runValidateAll(cmd *cobra.Command) error {
 				return !affected || affectedStacksApplicable(affectedFiles), nil
 			},
 			run: func() error {
-				return runValidateStacksForFiles(ValidateStacksCmd, nil, affectedFiles, affected)
+				return runValidateStacksForFiles(ValidateStacksCmd, nil, affectedFiles, affected, excludes)
 			},
 		},
 		{
@@ -92,9 +100,9 @@ func runValidateAll(cmd *cobra.Command) error {
 			},
 			run: func() error {
 				if affected && !editorConfigValidateAll {
-					return runEditorConfigForFiles(editorConfigCmd, editorConfigFiles)
+					return runEditorConfigForFiles(editorConfigCmd, editorConfigFiles, excludes)
 				}
-				return runEditorConfigForFiles(editorConfigCmd, nil)
+				return runEditorConfigForFiles(editorConfigCmd, nil, excludes)
 			},
 		},
 		{
@@ -107,15 +115,26 @@ func runValidateAll(cmd *cobra.Command) error {
 			},
 			run: func() error {
 				if affected && !workflowValidateAll {
-					return cicmd.RunValidateFiles(validateCICmd, workflowFiles)
+					return cicmd.RunValidateFilesExcluding(validateCICmd, workflowFiles, excludes)
 				}
-				return validateCICmd.RunE(validateCICmd, nil)
+				return cicmd.RunValidateFilesExcluding(validateCICmd, nil, excludes)
 			},
 		},
 	})
 
-	ui.Writeln(formatValidationSummary(results))
+	summary := formatValidationSummary(results)
+	ui.Writeln(summary)
+	writeValidationCISummary(results)
 	return err
+}
+
+func writeValidationCISummary(results []validationTaskResult) {
+	if !ci.Enabled(&atmosConfig) {
+		return
+	}
+	if err := validationCISummaryWriter(formatValidationSummaryMarkdown(results)); err != nil {
+		log.Warn("Failed to write validation CI summary", "error", err)
+	}
 }
 
 // runValidationTasks executes applicable tasks in declaration order and does not stop at failures.
@@ -162,6 +181,23 @@ func formatValidationSummary(results []validationTaskResult) string {
 		builder.WriteString(fmt.Sprintf("  %s: %s\n", result.name, result.status))
 	}
 	return strings.TrimSuffix(builder.String(), "\n")
+}
+
+func formatValidationSummaryMarkdown(results []validationTaskResult) string {
+	var builder strings.Builder
+	builder.WriteString("## Atmos validation\n\n")
+	builder.WriteString("| Validator | Result |\n| --- | --- |\n")
+	for _, result := range results {
+		icon := "✅"
+		switch result.status {
+		case validationTaskFailed:
+			icon = "❌"
+		case validationTaskSkipped:
+			icon = "⏭️"
+		}
+		_, _ = fmt.Fprintf(&builder, "| %s | %s %s |\n", result.name, icon, result.status)
+	}
+	return builder.String()
 }
 
 func editorConfigValidationApplicable() (bool, error) {

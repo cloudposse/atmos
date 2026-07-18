@@ -52,6 +52,9 @@ atmos ci validate --format=sarif > actionlint.sarif
 
 # Print rich, actionlint-compatible multi-line diagnostics
 atmos ci validate --format=rich
+
+# Exclude intentionally invalid workflow fixtures from a full or affected run
+atmos ci validate --exclude 'tests/fixtures/**'
 ```
 
 ## GitHub Actions annotations
@@ -77,6 +80,7 @@ The command respects actionlint configuration at `.github/actionlint.yaml` or `.
 | --- | --- | --- |
 | `--format` | `text` | Output format: `text`, `rich`, or `sarif`. `rich` writes Atmos source-context diagnostics to standard output and exits non-zero without an Atmos error box. |
 | `--workflow-path` | — | Directory containing workflow files to recursively validate. Cannot be combined with workflow-file arguments. |
+| `--exclude` | — | Repeatable repository-relative glob to omit workflow files from full or affected validation. |
 
 ## Related
 

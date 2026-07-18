@@ -1,0 +1,80 @@
+name: Validation annotations E2E
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "cmd/ci/validate.go"
+      - "pkg/ci/**"
+      - "pkg/validation/**"
+      - "atmos.yaml"
+      - "tests/fixtures/scenarios/invalid-github-actions-workflows/**"
+      - ".github/workflows/validation-annotations-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  checks: read
+  contents: read
+
+jobs:
+  validation-annotations:
+    name: Validation annotations E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: "1.223.0"
+
+      - name: Emit the expected validation annotation
+        shell: bash
+        run: |
+          set +e
+          atmos ci validate \
+            --workflow-path tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows \
+            --format rich
+          status=$?
+          set -e
+
+          if [ "$status" -ne 1 ]; then
+            echo "Expected the intentionally invalid workflow fixture to exit 1; got $status." >&2
+            exit 1
+          fi
+
+      - name: Assert the GitHub Check annotation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_PATH: tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows/invalid.yml
+          EXPECTED_MESSAGE: 'unexpected key "branch" for "push" section'
+        shell: bash
+        run: |
+          set -euo pipefail
+          annotation=""
+          for attempt in {1..12}; do
+            check_run_id="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?check_name=Validation%20annotations%20E2E" \
+              --jq '.check_runs[] | select(.name == "Validation annotations E2E") | .id' | head -n 1)"
+
+            if [ -n "$check_run_id" ]; then
+              annotation="$(gh api \
+                -H 'Accept: application/vnd.github+json' \
+                "/repos/${GITHUB_REPOSITORY}/check-runs/${check_run_id}/annotations" \
+                --paginate \
+                --jq ".[] | select(.path == \"${EXPECTED_PATH}\" and .start_line == 5 and .annotation_level == \"failure\" and .title == \"syntax-check\" and (.message | contains(\"${EXPECTED_MESSAGE}\"))) | .path" | head -n 1)"
+            fi
+
+            if [ "$annotation" = "$EXPECTED_PATH" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "Expected Atmos validation annotation was not published to this GitHub Check." >&2
+          exit 1

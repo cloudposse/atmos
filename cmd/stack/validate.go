@@ -42,10 +42,22 @@ JSON Schema — the same one ` + "`atmos stack schema`" + ` prints. This is an a
 			if err != nil {
 				return err
 			}
+			excludes, err := cmd.Flags().GetStringSlice("exclude")
+			if err != nil {
+				return err
+			}
+			paths, err = validation.ExcludePaths(paths, excludes)
+			if err != nil {
+				return err
+			}
 			if !affectedStackValidationApplicable(paths, atmosConfigPtr) {
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), "No affected stack manifest files to validate.")
 				return err
 			}
+		}
+		excludes, err := cmd.Flags().GetStringSlice("exclude")
+		if err != nil {
+			return err
 		}
 		format, _ := cmd.Flags().GetString("format")
 		format = strings.ToLower(strings.TrimSpace(format))
@@ -53,16 +65,17 @@ JSON Schema — the same one ` + "`atmos stack schema`" + ` prints. This is an a
 			return fmt.Errorf("unsupported validation format %q: expected text or rich", format)
 		}
 		if format == "rich" {
-			err := exec.ValidateStacks(atmosConfigPtr)
+			stackConfig := withExcludedStackPaths(atmosConfigPtr, excludes)
+			err := exec.ValidateStacks(stackConfig)
 			if err == nil {
 				message := "✓ All stacks validated successfully"
-				if len(atmosConfigPtr.StackConfigFilesAbsolutePaths) == 0 {
+				if len(stackConfig.StackConfigFilesAbsolutePaths) == 0 {
 					message = "✓ No stack manifests found to validate"
 				}
 				_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), message)
 				return writeErr
 			}
-			root := atmosConfigPtr.StacksBaseAbsolutePath
+			root := stackConfig.StacksBaseAbsolutePath
 			if root == "" {
 				var rootErr error
 				root, rootErr = os.Getwd()
@@ -75,6 +88,9 @@ JSON Schema — the same one ` + "`atmos stack schema`" + ` prints. This is an a
 			}
 			return errUtils.ExitCodeError{Code: 1, Silent: true}
 		}
+		if len(excludes) > 0 {
+			return exec.ValidateStacks(withExcludedStackPaths(atmosConfigPtr, excludes))
+		}
 		return exec.ExecuteValidateStacksCmd(cmd, args)
 	},
 }
@@ -84,6 +100,24 @@ func init() {
 	stackValidateCmd.PersistentFlags().String("format", "", "Output format: text, rich")
 	stackValidateCmd.PersistentFlags().Bool("affected", false, "Validate stack manifests affected since the Git merge-base")
 	stackValidateCmd.PersistentFlags().String("base", "", "Git base ref or SHA to compare against for affected validation")
+	stackValidateCmd.PersistentFlags().StringSlice("exclude", nil, "Exclude repository paths from validation (glob; can be repeated)")
+}
+
+func withExcludedStackPaths(atmosConfig *schema.AtmosConfiguration, excludes []string) *schema.AtmosConfiguration {
+	if atmosConfig == nil || len(excludes) == 0 {
+		return atmosConfig
+	}
+	copy := *atmosConfig
+	copy.Stacks.ExcludedPaths = append([]string{}, atmosConfig.Stacks.ExcludedPaths...)
+	stackBase := filepath.ToSlash(filepath.Clean(atmosConfig.Stacks.BasePath))
+	for _, exclude := range excludes {
+		exclude = filepath.ToSlash(filepath.Clean(exclude))
+		if stackBase != "." && strings.HasPrefix(exclude, stackBase+"/") {
+			exclude = strings.TrimPrefix(exclude, stackBase+"/")
+		}
+		copy.Stacks.ExcludedPaths = append(copy.Stacks.ExcludedPaths, exclude)
+	}
+	return &copy
 }
 
 func affectedStackValidationApplicable(paths []string, atmosConfig *schema.AtmosConfiguration) bool {

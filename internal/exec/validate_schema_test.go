@@ -355,8 +355,15 @@ func TestFilterValidationSchemaFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(first, []byte("first: true\n"), 0o600))
 	require.NoError(t, os.WriteFile(second, []byte("second: true\n"), 0o600))
 
-	filtered := filterValidationSchemaFiles(map[string][]string{
+	filtered, err := filterValidationSchemaFiles(map[string][]string{
 		"schema.json": {first, second},
-	}, []string{second})
+	}, []string{second}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]string{"schema.json": {second}}, filtered)
+
+	filtered, err = filterValidationSchemaFiles(map[string][]string{
+		"schema.json": {first, second},
+	}, nil, []string{"**/first.yaml"})
+	require.NoError(t, err)
 	assert.Equal(t, map[string][]string{"schema.json": {second}}, filtered)
 }

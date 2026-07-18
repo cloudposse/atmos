@@ -77,6 +77,30 @@ func TestRunValidationTasksContinuesAndSummarizes(t *testing.T) {
 		{name: "ci", status: validationTaskFailed},
 	}, results)
 	assert.Equal(t, "Validation summary:\n  schema: failed\n  stacks: skipped\n  editorconfig: passed\n  ci: failed", formatValidationSummary(results))
+	assert.Equal(t, "## Atmos validation\n\n| Validator | Result |\n| --- | --- |\n| schema | ❌ failed |\n| stacks | ⏭️ skipped |\n| editorconfig | ✅ passed |\n| ci | ❌ failed |\n", formatValidationSummaryMarkdown(results))
+}
+
+func TestWriteValidationCISummary(t *testing.T) {
+	originalConfig := atmosConfig
+	originalWriter := validationCISummaryWriter
+	t.Cleanup(func() {
+		atmosConfig = originalConfig
+		validationCISummaryWriter = originalWriter
+	})
+
+	atmosConfig = schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+	var got string
+	validationCISummaryWriter = func(summary string) error {
+		got = summary
+		return nil
+	}
+	writeValidationCISummary([]validationTaskResult{{name: "schema", status: validationTaskPassed}})
+	assert.Equal(t, "## Atmos validation\n\n| Validator | Result |\n| --- | --- |\n| schema | ✅ passed |\n", got)
+
+	atmosConfig.CI.Enabled = false
+	got = ""
+	writeValidationCISummary([]validationTaskResult{{name: "schema", status: validationTaskPassed}})
+	assert.Empty(t, got)
 }
 
 func TestValidationApplicability(t *testing.T) {

@@ -28,6 +28,7 @@ Add `--affected` to validate only inputs changed since the Git merge-base. In Gi
 
 ```shell
 atmos validate --affected --format rich
+atmos validate --exclude 'tests/fixtures/**' --format rich
 atmos validate config --affected --base origin/main
 atmos validate stacks --affected --base origin/main
 atmos validate editorconfig --affected --base origin/main
@@ -35,6 +36,8 @@ atmos validate ci --affected --base origin/main
 ```
 
 Schema and EditorConfig validation process only affected files unless their configuration or schema/rule file changes, in which case Atmos validates the complete relevant set. Stack validation skips unrelated changes, but validates all stack manifests after a relevant stack or configuration change so imports and duplicate-component checks remain correct. GitHub Actions validation passes only affected workflow files to actionlint unless its actionlint configuration changes.
+
+Use repeatable `--exclude <glob>` with either the full aggregate command or `--affected` to omit repository-relative paths from every aggregate validator. This is useful for test fixtures that deliberately contain invalid YAML or workflows. Globs use forward slashes and support `**`; `atmos validate editorconfig --exclude` retains its existing regex behavior when used directly.
 
 ## Rich diagnostics
 

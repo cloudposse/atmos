@@ -3,11 +3,14 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
@@ -31,10 +34,15 @@ func runValidateStacks(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runValidateStacksForFiles(cmd, args, affectedFiles, affected)
+	excludes, err := validationExcludePatterns(cmd)
+	if err != nil {
+		return err
+	}
+	return runValidateStacksForFiles(cmd, args, affectedFiles, affected, excludes)
 }
 
-func runValidateStacksForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool) error {
+//nolint:gocognit,revive // The command preserves explicit file, affected, rich-output, and exclusion behavior.
+func runValidateStacksForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool, excludes []string) error {
 	// A missing stacks directory is a valid no-op for this validator. The
 	// executor below handles it explicitly, so do not reject the project while
 	// loading the CLI configuration.
@@ -49,16 +57,17 @@ func runValidateStacksForFiles(cmd *cobra.Command, args []string, affectedFiles 
 		return err
 	}
 	if format == validateFormatRich {
-		err := exec.ValidateStacks(&atmosConfig)
+		stackConfig := withValidationExcludedStackPaths(&atmosConfig, excludes)
+		err := exec.ValidateStacks(stackConfig)
 		if err == nil {
 			message := "✓ All stacks validated successfully"
-			if len(atmosConfig.StackConfigFilesAbsolutePaths) == 0 {
+			if len(stackConfig.StackConfigFilesAbsolutePaths) == 0 {
 				message = "✓ No stack manifests found to validate"
 			}
 			_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), message)
 			return writeErr
 		}
-		root := atmosConfig.StacksBaseAbsolutePath
+		root := stackConfig.StacksBaseAbsolutePath
 		if root == "" {
 			var rootErr error
 			root, rootErr = os.Getwd()
@@ -75,7 +84,27 @@ func runValidateStacksForFiles(cmd *cobra.Command, args []string, affectedFiles 
 		return errUtils.ExitCodeError{Code: 1, Silent: true}
 	}
 
+	if len(excludes) > 0 {
+		return exec.ValidateStacks(withValidationExcludedStackPaths(&atmosConfig, excludes))
+	}
 	return exec.ExecuteValidateStacksCmd(cmd, args)
+}
+
+func withValidationExcludedStackPaths(config *schema.AtmosConfiguration, excludes []string) *schema.AtmosConfiguration {
+	if config == nil || len(excludes) == 0 {
+		return config
+	}
+	copy := *config
+	copy.Stacks.ExcludedPaths = append([]string{}, config.Stacks.ExcludedPaths...)
+	stackBase := filepath.ToSlash(filepath.Clean(config.Stacks.BasePath))
+	for _, exclude := range excludes {
+		exclude = filepath.ToSlash(filepath.Clean(exclude))
+		if stackBase != "." && strings.HasPrefix(exclude, stackBase+"/") {
+			exclude = strings.TrimPrefix(exclude, stackBase+"/")
+		}
+		copy.Stacks.ExcludedPaths = append(copy.Stacks.ExcludedPaths, exclude)
+	}
+	return &copy
 }
 
 func init() {
@@ -84,6 +113,7 @@ func init() {
 	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
 	addValidationFormatFlag(ValidateStacksCmd)
 	addAffectedValidationFlags(ValidateStacksCmd)
+	addValidationExcludeFlag(ValidateStacksCmd)
 
 	validateCmd.AddCommand(ValidateStacksCmd)
 }

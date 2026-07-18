@@ -128,6 +128,23 @@ func TestCIValidationAnnotationsEnabled(t *testing.T) {
 	assert.False(t, ciValidationAnnotationsEnabled(&cobra.Command{}))
 }
 
+func TestWorkflowFilesExcluding(t *testing.T) {
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, ".github", "workflows")
+	require.NoError(t, os.MkdirAll(workflowDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(workflowDir, "keep.yml"), []byte("name: keep\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(workflowDir, "skip.yaml"), []byte("name: skip\n"), 0o600))
+
+	files, err := workflowFilesExcluding(root, workflowDir, []string{".github/workflows/skip.yaml"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{".github/workflows/keep.yml"}, files)
+
+	t.Chdir(root)
+	files, err = workflowFilesExcluding(root, filepath.Join(".github", "workflows"), []string{".github/workflows/skip.yaml"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{".github/workflows/keep.yml"}, files)
+}
+
 func TestWriteCIValidationOutputFormats(t *testing.T) {
 	command := NewValidateCommand()
 	var richOutput bytes.Buffer

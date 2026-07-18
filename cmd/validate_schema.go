@@ -62,10 +62,15 @@ func runValidateSchema(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runValidateSchemaForFiles(cmd, args, affectedFiles, affected)
+	excludes, err := validationExcludePatterns(cmd)
+	if err != nil {
+		return err
+	}
+	return runValidateSchemaForFiles(cmd, args, affectedFiles, affected, excludes)
 }
 
-func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool) error {
+//nolint:cyclop,funlen,gocognit,revive // The command preserves explicit-schema, affected, and rich-output behavior.
+func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool, excludes []string) error {
 	// Schema validation does not require a stacks directory — atmos.yaml (and its
 	// fragments) must be validatable in repositories that only carry CLI configuration.
 	if err := checkAtmosConfigE(WithStackValidation(false)); err != nil {
@@ -99,6 +104,8 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 		var err error
 		if affected && !validateAll {
 			err = executor.ExecuteAtmosValidateSchemaCmdForFiles(key, schema, selectedFiles)
+		} else if len(excludes) > 0 {
+			err = executor.ExecuteAtmosValidateSchemaCmdExcluding(key, schema, excludes)
 		} else {
 			err = executor.ExecuteAtmosValidateSchemaCmd(key, schema)
 		}
@@ -110,6 +117,8 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 	var report validation.Report
 	if affected && !validateAll {
 		report, err = executor.ValidateAtmosSchemaReportForFiles(key, schema, selectedFiles)
+	} else if len(excludes) > 0 {
+		report, err = executor.ValidateAtmosSchemaReportExcluding(key, schema, excludes)
 	} else {
 		report, err = executor.ValidateAtmosSchemaReport(key, schema)
 	}
@@ -134,5 +143,6 @@ func init() {
 	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
 	addValidationFormatFlag(ValidateSchemaCmd)
 	addAffectedValidationFlags(ValidateSchemaCmd)
+	addValidationExcludeFlag(ValidateSchemaCmd)
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }

@@ -62,6 +62,7 @@ The command respects .github/actionlint.yaml and .github/actionlint.yml.`,
 	command.Flags().String("workflow-path", "", "Path to a directory of GitHub Actions workflow files")
 	command.Flags().Bool("affected", false, "Validate only workflow files affected since the Git merge-base")
 	command.Flags().String("base", "", "Git base ref or SHA to compare against for affected validation")
+	command.Flags().StringSlice("exclude", nil, "Exclude repository paths from validation (glob; can be repeated)")
 	return command
 }
 
@@ -69,17 +70,24 @@ The command respects .github/actionlint.yaml and .github/actionlint.yml.`,
 var validateCmd = NewValidateCommand()
 
 func runCIValidate(cmd *cobra.Command, args []string) error {
-	return runCIValidateWithPaths(cmd, args, nil, false)
+	return runCIValidateWithPaths(cmd, args, nil, false, nil)
 }
 
 // RunValidateFiles validates the provided workflow files. A nil paths list
 // retains whole-directory validation and is used by aggregate validation when
 // an actionlint configuration change can affect every workflow.
 func RunValidateFiles(cmd *cobra.Command, paths []string) error {
-	return runCIValidateWithPaths(cmd, nil, paths, true)
+	return runCIValidateWithPaths(cmd, nil, paths, true, nil)
 }
 
-func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, pathsProvided bool) error {
+// RunValidateFilesExcluding validates workflow files while excluding paths
+// matched by repository-relative glob patterns.
+func RunValidateFilesExcluding(cmd *cobra.Command, paths []string, excludes []string) error {
+	return runCIValidateWithPaths(cmd, nil, paths, true, excludes)
+}
+
+//nolint:cyclop,funlen,gocognit,revive // The command coordinates mutually exclusive workflow, affected, and exclusion inputs.
+func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, pathsProvided bool, additionalExcludes []string) error {
 	format, err := cmd.Flags().GetString("format")
 	if err != nil {
 		return err
@@ -100,6 +108,17 @@ func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, p
 		return err
 	}
 	workflowPath = strings.TrimSpace(workflowPath)
+	excludes, err := cmd.Flags().GetStringSlice("exclude")
+	if err != nil {
+		return err
+	}
+	if _, err := validation.ExcludePaths(nil, excludes); err != nil {
+		return err
+	}
+	excludes = append(excludes, additionalExcludes...)
+	if _, err := validation.ExcludePaths(nil, excludes); err != nil {
+		return err
+	}
 	if workflowPath != "" && len(args) > 0 {
 		return errors.New("workflow-file arguments cannot be used with --workflow-path")
 	}
@@ -132,6 +151,25 @@ func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, p
 	root, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
+	}
+	//nolint:nestif // Selection differs for an explicit file list and a workflow directory.
+	if len(excludes) > 0 {
+		if len(args) == 0 {
+			path := workflowPath
+			if path == "" {
+				path = filepath.Join(root, ".github", "workflows")
+			}
+			args, err = workflowFilesExcluding(root, path, excludes)
+			if err != nil {
+				return err
+			}
+			workflowPath = ""
+		} else {
+			args, err = validation.ExcludePaths(args, excludes)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	validator, ok := civalidate.Get(githubactions.ValidatorName)
@@ -166,6 +204,36 @@ func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, p
 		return workflowValidationError(report)
 	}
 	return nil
+}
+
+func workflowFilesExcluding(root string, workflowPath string, excludes []string) ([]string, error) {
+	if !filepath.IsAbs(workflowPath) {
+		workflowPath = filepath.Join(root, workflowPath)
+	}
+
+	files := make([]string, 0)
+	err := filepath.Walk(workflowPath, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		extension := strings.ToLower(filepath.Ext(path))
+		if extension != ".yaml" && extension != ".yml" {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(relative))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return validation.ExcludePaths(files, excludes)
 }
 
 func actionlintConfigChanged(paths []string) bool {
