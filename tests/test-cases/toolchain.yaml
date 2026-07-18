@@ -148,9 +148,11 @@ tests:
         "v?[0-9]+\\.[0-9]+\\.[0-9]+": "X.X.X"
         "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
       diff:
-        # Ignore table data rows and continuation lines - release titles change
-        # when upstream repos publish new versions.
+        # Ignore table data rows, dynamic header spacing, and continuation lines.
+        # Release titles change when upstream repos publish new versions, which
+        # redistributes the title column without changing the configured width.
         - "YYYY-MM-DD"
+        - "^\\s*VERSION\\s+DATE\\s+TITLE\\s*$"
         - "^\\s{20,}\\S"
       exit_code: 0
 
