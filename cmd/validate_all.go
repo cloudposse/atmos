@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cicmd "github.com/cloudposse/atmos/cmd/ci"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -34,6 +35,15 @@ type validationTaskResult struct {
 
 // runValidateAll runs every project-wide validation target and reports all outcomes.
 func runValidateAll(cmd *cobra.Command) error {
+	affectedFiles, affected, err := validationAffectedFiles(cmd)
+	if err != nil {
+		return err
+	}
+	schemaFiles, schemaValidateAll := affectedSchemaFiles(affectedFiles, "")
+	editorConfigFiles, editorConfigValidateAll := affectedEditorConfigFiles(affectedFiles)
+	workflowFiles := affectedWorkflowPaths(affectedFiles)
+	workflowValidateAll := affectedWorkflowConfigChanged(affectedFiles)
+
 	format, err := validationFormat(cmd)
 	if err != nil {
 		return err
@@ -57,32 +67,48 @@ func runValidateAll(cmd *cobra.Command) error {
 		{
 			name: "schema",
 			applicable: func() (bool, error) {
-				return true, nil
+				return !affected || schemaValidateAll || len(schemaFiles) > 0, nil
 			},
 			run: func() error {
-				return runValidateSchema(ValidateSchemaCmd, nil)
+				return runValidateSchemaForFiles(ValidateSchemaCmd, nil, affectedFiles, affected)
 			},
 		},
 		{
 			name: "stacks",
 			applicable: func() (bool, error) {
-				return true, nil
+				return !affected || affectedStacksApplicable(affectedFiles), nil
 			},
 			run: func() error {
-				return runValidateStacks(ValidateStacksCmd, nil)
-			},
-		},
-		{
-			name:       "editorconfig",
-			applicable: editorConfigValidationApplicable,
-			run: func() error {
-				return runEditorConfig(editorConfigCmd)
+				return runValidateStacksForFiles(ValidateStacksCmd, nil, affectedFiles, affected)
 			},
 		},
 		{
-			name:       "ci",
-			applicable: githubActionsValidationApplicable,
+			name: "editorconfig",
+			applicable: func() (bool, error) {
+				if affected && !editorConfigValidateAll && len(editorConfigFiles) == 0 {
+					return false, nil
+				}
+				return editorConfigValidationApplicable()
+			},
 			run: func() error {
+				if affected && !editorConfigValidateAll {
+					return runEditorConfigForFiles(editorConfigCmd, editorConfigFiles)
+				}
+				return runEditorConfigForFiles(editorConfigCmd, nil)
+			},
+		},
+		{
+			name: "ci",
+			applicable: func() (bool, error) {
+				if affected && !workflowValidateAll && len(workflowFiles) == 0 {
+					return false, nil
+				}
+				return githubActionsValidationApplicable()
+			},
+			run: func() error {
+				if affected && !workflowValidateAll {
+					return cicmd.RunValidateFiles(validateCICmd, workflowFiles)
+				}
 				return validateCICmd.RunE(validateCICmd, nil)
 			},
 		},

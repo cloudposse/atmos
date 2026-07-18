@@ -347,3 +347,16 @@ func TestValidateAtmosSchemaReport(t *testing.T) {
 		assert.ErrorIs(t, err, assert.AnError)
 	})
 }
+
+func TestFilterValidationSchemaFiles(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.yaml")
+	second := filepath.Join(dir, "second.yaml")
+	require.NoError(t, os.WriteFile(first, []byte("first: true\n"), 0o600))
+	require.NoError(t, os.WriteFile(second, []byte("second: true\n"), 0o600))
+
+	filtered := filterValidationSchemaFiles(map[string][]string{
+		"schema.json": {first, second},
+	}, []string{second})
+	assert.Equal(t, map[string][]string{"schema.json": {second}}, filtered)
+}

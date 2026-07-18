@@ -20,5 +20,6 @@ Use a subcommand to run one validation target, including component JSON Schema o
 
 func init() {
 	validateCmd.Flags().String("format", "", "Output format for aggregate validation: text, rich")
+	addAffectedValidationFlags(validateCmd)
 	RootCmd.AddCommand(validateCmd)
 }

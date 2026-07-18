@@ -12,4 +12,6 @@ func TestValidateCIAlias(t *testing.T) {
 	assert.Same(t, validateCICmd, command)
 	assert.NotNil(t, validateCICmd.Flag("format"))
 	assert.Equal(t, "ci [workflow-file ...]", validateCICmd.Use)
+	assert.NotNil(t, validateCICmd.Flags().Lookup("affected"))
+	assert.NotNil(t, validateCICmd.Flags().Lookup("base"))
 }

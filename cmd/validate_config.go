@@ -30,5 +30,6 @@ configuration code. This is an alias for ` + "`atmos validate schema config`" + 
 
 func init() {
 	addValidationFormatFlag(ValidateConfigCmd)
+	addAffectedValidationFlags(ValidateConfigCmd)
 	validateCmd.AddCommand(ValidateConfigCmd)
 }

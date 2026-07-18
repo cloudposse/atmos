@@ -28,6 +28,8 @@ atmos validate ci [workflow-file ...]
 
 With no arguments, the command checks every `.yml` and `.yaml` file in `.github/workflows` below the current working directory. Pass one or more workflow files to check only those files, or use `--workflow-path` to recursively check a different directory.
 
+Use `--affected` to check only workflows changed since the Git merge-base. On GitHub Actions, Atmos automatically uses the pull request base SHA; locally, use `--base <ref-or-sha>` to select a comparison point. A change to `.github/actionlint.yaml` or `.github/actionlint.yml` validates all workflows because it can affect every result.
+
 On a clean text-mode run, Atmos prints the number of workflow files checked. It never walks to an ancestor repository to select workflows: a command run with `--chdir` uses that directory's `.github/workflows` by default.
 
 ## Examples

@@ -58,6 +58,14 @@ own ` + "`" + `schemas.config` + "`" + ` entry to override or disable it.
 // runValidateSchema executes schema validation without terminating the process.
 // It can therefore be composed by aggregate validators.
 func runValidateSchema(cmd *cobra.Command, args []string) error {
+	affectedFiles, affected, err := validationAffectedFiles(cmd)
+	if err != nil {
+		return err
+	}
+	return runValidateSchemaForFiles(cmd, args, affectedFiles, affected)
+}
+
+func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool) error {
 	// Schema validation does not require a stacks directory — atmos.yaml (and its
 	// fragments) must be validatable in repositories that only carry CLI configuration.
 	if err := checkAtmosConfigE(WithStackValidation(false)); err != nil {
@@ -79,18 +87,32 @@ func runValidateSchema(cmd *cobra.Command, args []string) error {
 	}
 
 	executor := exec.NewAtmosValidatorExecutor(&atmosConfig)
+	selectedFiles, validateAll := affectedSchemaFiles(affectedFiles, key)
+	if affected && !validateAll && len(selectedFiles) == 0 {
+		return validationNoAffectedFiles(cmd, "YAML schema")
+	}
 	format, err := validationFormat(cmd)
 	if err != nil {
 		return err
 	}
 	if format != validateFormatRich {
-		err := executor.ExecuteAtmosValidateSchemaCmd(key, schema)
+		var err error
+		if affected && !validateAll {
+			err = executor.ExecuteAtmosValidateSchemaCmdForFiles(key, schema, selectedFiles)
+		} else {
+			err = executor.ExecuteAtmosValidateSchemaCmd(key, schema)
+		}
 		if errors.Is(err, exec.ErrInvalidYAML) {
 			errUtils.OsExit(1)
 		}
 		return err
 	}
-	report, err := executor.ValidateAtmosSchemaReport(key, schema)
+	var report validation.Report
+	if affected && !validateAll {
+		report, err = executor.ValidateAtmosSchemaReportForFiles(key, schema, selectedFiles)
+	} else {
+		report, err = executor.ValidateAtmosSchemaReport(key, schema)
+	}
 	if err != nil {
 		return err
 	}
@@ -111,5 +133,6 @@ func runValidateSchema(cmd *cobra.Command, args []string) error {
 func init() {
 	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
 	addValidationFormatFlag(ValidateSchemaCmd)
+	addAffectedValidationFlags(ValidateSchemaCmd)
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }

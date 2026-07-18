@@ -137,6 +137,27 @@ jobs:
           path: |
             ./build/
 
+  validate-affected:
+    name: Validation (affected)
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source with validation base history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          # `atmos validate --affected` compares HEAD to the PR merge-base.
+          fetch-depth: 0
+
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+
+      - name: Validate affected project inputs
+        run: atmos validate --affected --format rich
+
   # run acceptance tests
   test:
     name: Acceptance Tests (${{ matrix.flavor.target }})

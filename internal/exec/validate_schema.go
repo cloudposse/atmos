@@ -94,6 +94,16 @@ func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosVal
 }
 
 func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
+	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, nil)
+}
+
+// ExecuteAtmosValidateSchemaCmdForFiles validates only the supplied files.
+// A nil file list retains the established behavior of validating every match.
+func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmdForFiles(sourceKey string, customSchema string, files []string) error {
+	return av.executeAtmosValidateSchemaCmd(sourceKey, customSchema, files)
+}
+
+func (av *atmosValidatorExecutor) executeAtmosValidateSchemaCmd(sourceKey string, customSchema string, files []string) error {
 	defer perf.Track(nil, "exec.ExecuteAtmosValidateSchemaCmd")()
 
 	var totalErrCount uint
@@ -106,6 +116,7 @@ func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string
 			if err != nil {
 				return err
 			}
+			validationSchemaWithFiles = filterValidationSchemaFiles(validationSchemaWithFiles, files)
 
 			totalErrCount, err = av.validateSchemas(validationSchemaWithFiles)
 			if err != nil {
@@ -126,10 +137,21 @@ func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string
 // output. It is used by the rich renderer; the established spinner/log path
 // above remains the default text behavior.
 func (av *atmosValidatorExecutor) ValidateAtmosSchemaReport(sourceKey string, customSchema string) (validation.Report, error) {
+	return av.validateAtmosSchemaReport(sourceKey, customSchema, nil)
+}
+
+// ValidateAtmosSchemaReportForFiles collects findings for only the supplied files.
+// A nil file list retains the established behavior of validating every match.
+func (av *atmosValidatorExecutor) ValidateAtmosSchemaReportForFiles(sourceKey string, customSchema string, files []string) (validation.Report, error) {
+	return av.validateAtmosSchemaReport(sourceKey, customSchema, files)
+}
+
+func (av *atmosValidatorExecutor) validateAtmosSchemaReport(sourceKey string, customSchema string, files []string) (validation.Report, error) {
 	schemas, err := av.buildValidationSchema(sourceKey, customSchema)
 	if err != nil {
 		return validation.Report{}, err
 	}
+	schemas = filterValidationSchemaFiles(schemas, files)
 	report := validation.Report{}
 	for schemaSource, files := range schemas {
 		for _, file := range files {
@@ -154,6 +176,32 @@ func (av *atmosValidatorExecutor) ValidateAtmosSchemaReport(sourceKey string, cu
 		}
 	}
 	return report, nil
+}
+
+func filterValidationSchemaFiles(schemas map[string][]string, files []string) map[string][]string {
+	if files == nil {
+		return schemas
+	}
+
+	selected := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		absolute, err := filepath.Abs(file)
+		if err == nil {
+			selected[filepath.Clean(absolute)] = struct{}{}
+		}
+	}
+	filtered := make(map[string][]string, len(schemas))
+	for schemaSource, schemaFiles := range schemas {
+		for _, file := range schemaFiles {
+			absolute, err := filepath.Abs(file)
+			if err == nil {
+				if _, ok := selected[filepath.Clean(absolute)]; ok {
+					filtered[schemaSource] = append(filtered[schemaSource], file)
+				}
+			}
+		}
+	}
+	return filtered
 }
 
 func schemaFilePositions(file string) u.PositionMap {

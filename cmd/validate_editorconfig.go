@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -224,6 +225,23 @@ func configureEditorConfigFormat(value string) (bool, error) {
 // runEditorConfig executes EditorConfig validation without terminating the process.
 // It can therefore be composed by aggregate validators.
 func runEditorConfig(cmd *cobra.Command) error {
+	affectedFiles, affected, err := validationAffectedFiles(cmd)
+	if err != nil {
+		return err
+	}
+	selectedFiles, validateAll := affectedEditorConfigFiles(affectedFiles)
+	if affected && !validateAll && len(selectedFiles) == 0 {
+		return validationNoAffectedFiles(cmd, "EditorConfig")
+	}
+	if !affected || validateAll {
+		selectedFiles = nil
+	}
+	return runEditorConfigForFiles(cmd, selectedFiles)
+}
+
+// runEditorConfigForFiles validates a subset of files when selectedFiles is
+// non-nil. A nil list retains the established whole-project behavior.
+func runEditorConfigForFiles(cmd *cobra.Command, selectedFiles []string) error {
 	if err := initializeConfig(cmd); err != nil {
 		return err
 	}
@@ -242,6 +260,7 @@ func runEditorConfig(cmd *cobra.Command) error {
 		if err != nil {
 			return err
 		}
+		filePaths = filterEditorConfigFiles(filePaths, selectedFiles)
 		for _, file := range filePaths {
 			log.Info(file)
 		}
@@ -249,7 +268,7 @@ func runEditorConfig(cmd *cobra.Command) error {
 	}
 
 	if editorConfigSARIF || editorConfigRich {
-		validationErrors, err := validateEditorConfig(config)
+		validationErrors, err := validateEditorConfigForFiles(config, selectedFiles)
 		if err != nil && len(validationErrors) == 0 {
 			ui.Error(fmt.Sprintf("Validation failed: %v", err))
 			return err
@@ -300,6 +319,7 @@ func runEditorConfig(cmd *cobra.Command) error {
 			if validationErr != nil {
 				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, validationErr)
 			}
+			filePaths = filterEditorConfigFiles(filePaths, selectedFiles)
 			validationErrors = validation.ProcessValidation(filePaths, config)
 			log.Debug("Files checked", "count", len(filePaths))
 			if er.GetErrorCount(validationErrors) != 0 {
@@ -323,16 +343,44 @@ func runEditorConfig(cmd *cobra.Command) error {
 }
 
 func validateEditorConfig(config config.Config) ([]er.ValidationErrors, error) {
+	return validateEditorConfigForFiles(config, nil)
+}
+
+func validateEditorConfigForFiles(config config.Config, selectedFiles []string) ([]er.ValidationErrors, error) {
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, err)
 	}
+	filePaths = filterEditorConfigFiles(filePaths, selectedFiles)
 	validationErrors := validation.ProcessValidation(filePaths, config)
 	log.Debug("Files checked", "count", len(filePaths))
 	if er.GetErrorCount(validationErrors) != 0 {
 		return validationErrors, errUtils.ErrEditorConfigValidationFailed
 	}
 	return validationErrors, nil
+}
+
+func filterEditorConfigFiles(filePaths []string, selectedFiles []string) []string {
+	if selectedFiles == nil {
+		return filePaths
+	}
+	selected := make(map[string]struct{}, len(selectedFiles))
+	for _, file := range selectedFiles {
+		absolute, err := filepath.Abs(filepath.FromSlash(file))
+		if err == nil {
+			selected[filepath.Clean(absolute)] = struct{}{}
+		}
+	}
+	filtered := make([]string, 0, len(selected))
+	for _, file := range filePaths {
+		absolute, err := filepath.Abs(file)
+		if err == nil {
+			if _, ok := selected[filepath.Clean(absolute)]; ok {
+				filtered = append(filtered, file)
+			}
+		}
+	}
+	return filtered
 }
 
 func editorConfigDiagnostics(validationErrors []er.ValidationErrors) validateReport.Report {
@@ -415,6 +463,7 @@ func addPersistentFlags(cmd *cobra.Command) {
 func init() {
 	// Add flags
 	addPersistentFlags(editorConfigCmd)
+	addAffectedValidationFlags(editorConfigCmd)
 	if err := viper.BindPFlag("ci", editorConfigCmd.PersistentFlags().Lookup("ci")); err != nil {
 		panic(err)
 	}

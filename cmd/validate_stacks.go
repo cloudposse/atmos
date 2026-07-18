@@ -27,11 +27,22 @@ var ValidateStacksCmd = &cobra.Command{
 // runValidateStacks executes stack validation without terminating the process.
 // It can therefore be composed by aggregate validators.
 func runValidateStacks(cmd *cobra.Command, args []string) error {
+	affectedFiles, affected, err := validationAffectedFiles(cmd)
+	if err != nil {
+		return err
+	}
+	return runValidateStacksForFiles(cmd, args, affectedFiles, affected)
+}
+
+func runValidateStacksForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool) error {
 	// A missing stacks directory is a valid no-op for this validator. The
 	// executor below handles it explicitly, so do not reject the project while
 	// loading the CLI configuration.
 	if err := checkAtmosConfigE(WithStackValidation(false)); err != nil {
 		return err
+	}
+	if affected && !affectedStacksApplicable(affectedFiles) {
+		return validationNoAffectedFiles(cmd, "stack manifest")
 	}
 	format, err := validationFormat(cmd)
 	if err != nil {
@@ -72,6 +83,7 @@ func init() {
 
 	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
 	addValidationFormatFlag(ValidateStacksCmd)
+	addAffectedValidationFlags(ValidateStacksCmd)
 
 	validateCmd.AddCommand(ValidateStacksCmd)
 }
