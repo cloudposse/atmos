@@ -52,8 +52,18 @@ cleanup() {
 trap cleanup EXIT
 
 set +e
+# -timeout 40m matches .atmos.d/test.yaml's full-suite convention. go test's own
+# default is 10m for the whole binary, not per test — when the diff touches
+# ./tests, this scopes in the entire acceptance-test package (hundreds of tests,
+# one binary; Go can't compile/run a subset of a package), and that package's
+# genuine runtime regularly exceeds 10m under concurrent-session load or
+# unauthenticated GitHub API calls. Confirmed for real: three consecutive hourly
+# cycles each panicked with "test timed out after 10m0s" on a different,
+# patch-unrelated subtest (whichever happened to still be running when the
+# clock ran out), while every one of them passed cleanly in isolation given more
+# time — a false positive from the timeout, not a real failure.
 # shellcheck disable=SC2086
-go test -v -coverprofile="$tmp_profile" -covermode=set $packages >"$tmp_output" 2>&1
+go test -v -timeout 40m -coverprofile="$tmp_profile" -covermode=set $packages >"$tmp_output" 2>&1
 test_exit=$?
 set -e
 

@@ -1,6 +1,6 @@
 ---
 name: test-coverage
-description: "Run tests scoped to the current patch vs origin/main, fix any failures in files this patch touched, then fix genuine coverage gaps on added lines — never pre-existing failures, never coverage theater. Invoke on explicit requests like \"check test coverage\" / \"are my tests passing\", or from within the fix-all skill's cycle."
+description: "Run tests scoped to the current patch vs origin/main, fix any failures found in those packages (this patch's own regressions or genuinely pre-existing ones alike), then fix genuine coverage gaps on added lines — never coverage theater. Invoke on explicit requests like \"check test coverage\" / \"are my tests passing\", or from within the fix-all skill's cycle."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -14,10 +14,11 @@ and is it adequately covered? Both come from the same scoped test run, so one sk
 ## Why patch-scoped, not full-suite
 
 The full suite is 349 packages / 1876 test files and takes 45-75 minutes per CI timeouts — running
-it every hour is not feasible. This skill only ever runs tests for packages containing files this
-patch touched. It never chases failures or coverage gaps elsewhere in the suite — that's the
-repo's existing "don't touch what you didn't break" concurrent-worktree norm, applied to patch
-quality instead of file edits.
+it every hour is not feasible. This skill only ever *runs* tests for packages containing files this
+patch touched — it never expands to the other 340+ packages just to go looking for trouble. But
+once a package is in scope and its run turns up a failure, fix it regardless of whether that
+specific test or file is what this patch changed: what this loop cares about is the packages it
+touched actually passing, not whose commit originally broke them.
 
 ## Running the check
 
@@ -43,23 +44,30 @@ Three outcomes:
 numbers)
 
 Delegate to `Agent subagent_type: "test-coverage-fix"`, Section A, passing the raw failing-test
-output and the list of touched files. The agent itself determines, from that raw output, which
-failing test belongs to a file this patch touched (**in-scope** — fix it) versus a file this patch
-never touched (**pre-existing** — do not touch it, report only, exactly like the loop's existing
-"DIRTY merge conflict → report, don't auto-resolve" pattern).
+output and the list of touched files. The agent classifies each failure as **in-scope** (the file
+lives among this patch's touched files) or **pre-existing** (it doesn't), but scope only changes
+how much diagnosis a fix needs — not whether an attempt is made. What this loop cares about is the
+suite passing, full stop; "not this patch's fault" is not a reason to leave something red.
+Confirmed for real: a "pre-existing failure" was itself a false positive in the *check*, not the
+code — the patch-scoped `go test` run had no `-timeout` override, so Go's 10-minute binary default
+tripped on the full (patch-unrelated) `./tests` acceptance package under load, panicking on
+whichever subtest happened to still be running when the clock ran out. The fix was to the
+test-infrastructure itself (`patch-test-coverage.sh` now passes `-timeout 40m`, matching
+`.atmos.d/test.yaml`'s full-suite convention) — exactly the kind of pre-existing-but-fixable root
+cause this agent should resolve rather than just report.
 
 **Non-negotiable, equal severity to the anti-theater rule below:** never weaken or delete an
 assertion just to force a red test green. If the test's own expectation was wrong (not the code),
 fix the test to assert the *correct* behavior and say so explicitly — don't just make it pass.
 
-One fix attempt per in-scope failure per cycle. Still red after that: stop, report for human
+One fix attempt per failing test per cycle, in-scope or pre-existing alike. Still red after that,
+or the agent isn't confident it can safely attempt a fix at all (e.g. it would require touching a
+hard-prohibited file, or needs a credential/decision only a human has): stop, report for human
 attention, and invoke the [`say` skill](../say/SKILL.md) with something like `"PR <number>
 coverage check needs your input."` Don't loop indefinitely inside an hourly budget.
 
-A pre-existing failure also gets a `say` nudge: `"PR <number> has a pre-existing test failure, not
-from this patch."`
-
-Only proceed to coverage gaps once in-scope failures are fixed (or there were none to begin with).
+Only proceed to coverage gaps once every failure this cycle is either fixed or reported (or there
+were none to begin with).
 
 ## Fix coverage gaps
 
