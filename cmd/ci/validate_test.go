@@ -6,6 +6,7 @@ import (
 	stdio "io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -21,6 +22,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
+
+// ansiEscapeRE matches CSI-style ANSI escape sequences (`\x1b[…m`). The UI
+// formatter wraps text in style codes for color, which split
+// otherwise-contiguous strings across multiple escape blocks on CI (where
+// TrueColor is enabled). Tests that assert on the visible content of
+// captured output must strip these before searching.
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// stripANSI returns s with all CSI ANSI escape sequences removed.
+func stripANSI(s string) string {
+	return ansiEscapeRE.ReplaceAllString(s, "")
+}
 
 type ciValidationTestStreams struct{ output *bytes.Buffer }
 
@@ -154,13 +167,13 @@ func TestWriteCIValidationOutputFormats(t *testing.T) {
 	t.Cleanup(ui.Reset)
 
 	require.NoError(t, writeCIValidationOutput(validateFormatRich, validation.Report{FilesChecked: 2}, t.TempDir(), false, ""))
-	assert.Contains(t, richOutput.String(), "No GitHub Actions workflow validation findings")
+	assert.Contains(t, stripANSI(richOutput.String()), "No GitHub Actions workflow validation findings")
 
 	richOutput.Reset()
 	require.NoError(t, writeCIValidationOutput(validateFormatRich, validation.Report{Diagnostics: []validation.Diagnostic{{
 		Source: "github-actions", RuleID: "syntax", Severity: validation.SeverityError, Message: "invalid workflow",
 	}}}, t.TempDir(), false, ""))
-	assert.Contains(t, richOutput.String(), "invalid workflow")
+	assert.Contains(t, stripANSI(richOutput.String()), "invalid workflow")
 
 	// Text diagnostics are returned by workflowValidationError, so the output
 	// phase intentionally has no direct side effect when findings exist.
