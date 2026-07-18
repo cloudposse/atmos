@@ -3,6 +3,7 @@ package list
 import (
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -52,11 +53,46 @@ func TestExecuteListEditionsWithOptionsInvalidAnchors(t *testing.T) {
 
 func TestExecuteListEditionsWithOptionsFormats(t *testing.T) {
 	initTestIO(t)
-	for _, outputFormat := range []string{"json", "yaml", "csv", "tsv"} {
+	for _, outputFormat := range []string{"", "json", "yaml", "csv", "tsv"} {
 		t.Run(outputFormat, func(t *testing.T) {
 			require.NoError(t, executeListEditionsWithOptions(&EditionsOptions{Format: outputFormat, From: "2025", To: "2026"}))
 		})
 	}
+}
+
+func TestExecuteListEditionsWithOptionsEmptyRange(t *testing.T) {
+	initTestIO(t)
+	require.NoError(t, executeListEditionsWithOptions(&EditionsOptions{Format: "json", From: "2099"}))
+}
+
+func TestEditionsCommandFlags(t *testing.T) {
+	for _, name := range []string{"format", "from", "to"} {
+		assert.NotNil(t, editionsCmd.Flags().Lookup(name), "%s should be registered", name)
+	}
+	assert.NoError(t, editionsCmd.Args(editionsCmd, nil))
+	assert.Error(t, editionsCmd.Args(editionsCmd, []string{"unexpected"}))
+}
+
+func TestExecuteListEditionsBindsCommandFlags(t *testing.T) {
+	initTestIO(t)
+	previous := map[string]string{}
+	for _, name := range []string{"format", "from", "to"} {
+		value, err := editionsCmd.Flags().GetString(name)
+		require.NoError(t, err)
+		previous[name] = value
+		previousViper := viper.GetString(name)
+		t.Cleanup(func() { viper.Set(name, previousViper) })
+	}
+	t.Cleanup(func() {
+		for name, value := range previous {
+			require.NoError(t, editionsCmd.Flags().Set(name, value))
+		}
+	})
+	require.NoError(t, editionsCmd.Flags().Set("format", "json"))
+	require.NoError(t, editionsCmd.Flags().Set("from", "2025"))
+	require.NoError(t, editionsCmd.Flags().Set("to", "2026"))
+
+	require.NoError(t, executeListEditions(editionsCmd, nil))
 }
 
 func TestEditionColumns(t *testing.T) {
@@ -82,4 +118,5 @@ func TestBuildEditionsFooter(t *testing.T) {
 			assert.Contains(t, buildEditionsFooter(2, &tt.opts), tt.want)
 		})
 	}
+	assert.Contains(t, buildEditionsFooter(1, &EditionsOptions{}), "1 default change journaled")
 }

@@ -5,9 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/degradation"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestTryExpandScalarArray(t *testing.T) {
@@ -514,6 +516,84 @@ func TestCreateStyledTableWithOptions(t *testing.T) {
 	assert.Contains(t, result, "Date")
 	assert.Contains(t, result, "settings.example.enabled")
 	assert.Contains(t, result, "formatted")
+}
+
+func TestTableLayoutHelpersCoverConstrainedWidths(t *testing.T) {
+	natural := columnWidthParams{
+		numColumns:          3,
+		availableWidth:      100,
+		minWidths:           []int{10, 20, 40},
+		descriptionColIndex: 2,
+	}
+	assert.Equal(t, []int{10, 20, 40}, distributeWithDescriptionColumn(natural))
+	constrained := distributeWithDescriptionColumn(columnWidthParams{
+		numColumns:          3,
+		availableWidth:      55,
+		minWidths:           []int{10, 30, 80},
+		descriptionColIndex: 2,
+	})
+	assert.Equal(t, []int{10, 15, DescriptionColumnMinWidth}, constrained)
+
+	initial := allocateInitialWidths(columnWidthParams{
+		numColumns:          3,
+		minWidths:           []int{10, 35, 80},
+		descriptionColIndex: 2,
+	})
+	assert.Equal(t, []int{10, CompactColumnMaxWidth, DescriptionColumnMinWidth}, initial)
+	assert.Equal(t, 30, calculateUsedWidth([]int{10, 20, 30}, 2))
+	assert.Equal(t, DescriptionColumnMinWidth, calculateDescriptionWidth(20, 15))
+	assert.Equal(t, DescriptionColumnMinWidth, calculateDescriptionWidth(20, -20))
+	assert.Equal(t, MaxColumnWidth, calculateDescriptionWidth(200, 10))
+
+	shrunk := shrinkIfNeeded([]int{10, 30, 30}, 50, 2)
+	assert.Equal(t, []int{10, 10, 30}, shrunk, "the widest non-description column absorbs pressure first")
+
+	slack := expandIntoSlack([]int{10, 10, 30}, columnWidthParams{
+		numColumns:          3,
+		availableWidth:      60,
+		minWidths:           []int{12, 20, 50},
+		descriptionColIndex: 2,
+	})
+	assert.Equal(t, []int{12, 18, 30}, slack, "slack first restores compact columns")
+	assert.Equal(t, []int{12, 20, 38}, expandIntoSlack([]int{12, 20, 30}, columnWidthParams{
+		numColumns:          3,
+		availableWidth:      70,
+		minWidths:           []int{12, 20, 50},
+		descriptionColIndex: 2,
+	}), "remaining slack belongs to the description column")
+
+	proportional := distributeProportionally(columnWidthParams{
+		numColumns:     2,
+		availableWidth: 20,
+		minWidths:      []int{20, 40},
+	})
+	assert.Equal(t, []int{10, 20}, proportional, "each column keeps the absolute minimum width")
+}
+
+func TestTableRenderingHelpersCoverANSIWrappingAndRoles(t *testing.T) {
+	styled := "\x1b[31m  rendered value  \x1b[0m"
+	trimmed := trimANSISpace(styled)
+	assert.Equal(t, "rendered value", ansi.Strip(trimmed))
+	assert.Contains(t, trimmed, "\x1b[31m", "trimming preserves ANSI styling")
+
+	assert.Equal(t, "abcd\nefgh", wrapCellToWidth("abcdefgh", 4))
+	assert.Equal(t, "short", wrapCellToWidth("short", 0))
+	assert.Equal(t, "one\ntwo", wrapCellToWidth("one\ntwo", 3))
+
+	styles := theme.GetCurrentStyles()
+	for _, role := range []ColumnRole{ColumnRoleMuted, ColumnRoleIdentifier, ColumnRoleAccent} {
+		foreground, ok := columnRoleForeground(role, styles)
+		assert.True(t, ok)
+		assert.NotNil(t, foreground)
+	}
+	for _, role := range []ColumnRole{ColumnRoleNone, ColumnRole(99)} {
+		foreground, ok := columnRoleForeground(role, styles)
+		assert.False(t, ok)
+		assert.Nil(t, foreground)
+	}
+
+	styleForCell := buildTableStyleFunc([][]string{{"true"}}, TableOptions{SemanticCellStyling: false})
+	assert.NotNil(t, styleForCell(0, 0))
 }
 
 // TestTableFormatterFormat tests the Format method.

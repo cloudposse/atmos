@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -185,6 +186,29 @@ func TestGetTerminalWidthFallsBackForNarrowTerminal(t *testing.T) {
 	terminalWidthLimit.Store(0)
 
 	assert.Equal(t, 80, GetTerminalWidth())
+}
+
+func TestGetTerminalWidthUsesDetectedWidthAndConfiguredLimit(t *testing.T) {
+	originalSupportsStdout := terminalSupportsStdout
+	originalGetSize := terminalGetSize
+	originalLimit := terminalWidthLimit.Load()
+	t.Cleanup(func() {
+		terminalSupportsStdout = originalSupportsStdout
+		terminalGetSize = originalGetSize
+		terminalWidthLimit.Store(originalLimit)
+	})
+
+	terminalSupportsStdout = func() bool { return true }
+	terminalGetSize = func(int) (int, int, error) { return 182, 24, nil }
+	SetTerminalWidthLimit(0)
+	assert.Equal(t, 180, GetTerminalWidth(), "detected width is unlimited by default")
+
+	SetTerminalWidthLimit(120)
+	assert.Equal(t, 120, GetTerminalWidth(), "configured max_width is a ceiling")
+
+	terminalGetSize = func(int) (int, int, error) { return 0, 0, errors.New("no tty size") }
+	SetTerminalWidthLimit(72)
+	assert.Equal(t, 72, GetTerminalWidth(), "the limit also applies to the fallback width")
 }
 
 func TestWrappedFlagUsages_DoubleDashAtEnd(t *testing.T) {

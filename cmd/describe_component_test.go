@@ -7,6 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 func TestDescribeComponentCmd_Error(t *testing.T) {
@@ -25,6 +29,26 @@ func TestDescribeComponentCmd_ProvenanceFlag(t *testing.T) {
 	require.NotNil(t, provenanceFlag, "provenance flag should be registered")
 	assert.Equal(t, "bool", provenanceFlag.Value.Type(), "provenance flag should be a boolean")
 	assert.Equal(t, "false", provenanceFlag.DefValue, "provenance flag should default to false")
+}
+
+func TestHasIdentityBackedStore(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	identityAware := store.NewMockIdentityAwareStore(ctrl)
+	plain := store.NewMockStore(ctrl)
+
+	assert.False(t, hasIdentityBackedStore(nil))
+	assert.False(t, hasIdentityBackedStore(&schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{"plain": {Identity: "platform"}},
+		Stores:       store.StoreRegistry{"plain": plain},
+	}))
+	assert.False(t, hasIdentityBackedStore(&schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{"cloud": {}},
+		Stores:       store.StoreRegistry{"cloud": identityAware},
+	}))
+	assert.True(t, hasIdentityBackedStore(&schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{"cloud": {Identity: "platform"}},
+		Stores:       store.StoreRegistry{"cloud": identityAware},
+	}))
 }
 
 // TestDescribeComponentCmd_ProvenanceWithFormatJSON tests that provenance and format flags

@@ -154,3 +154,18 @@ func TestDiff(t *testing.T) {
 		assert.Empty(t, Diff(&latestPin, nil))
 	})
 }
+
+func TestBetweenAndEntryDateBoundaries(t *testing.T) {
+	setTestJournal(t, chainedJournal())
+
+	from := mustAnchor(t, "2025-03")
+	to := mustAnchor(t, "2025-06-15")
+	entries := Between(&from, &to)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "settings.demo.enabled", entries[0].Key)
+
+	all := Between(nil, nil)
+	require.Len(t, all, 3, "behavior entries are not part of the default journal")
+
+	assert.True(t, entryDate(&Entry{Date: "not-a-date"}).IsZero())
+}

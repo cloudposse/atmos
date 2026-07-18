@@ -682,6 +682,8 @@ func TestFilterComputedFields(t *testing.T) {
 				"overrides": map[string]any{"key": "val"},
 				"providers": map[string]any{"aws": "config"},
 				"settings":  map[string]any{"key": "val"},
+				"component": map[string]any{"name": "vpc"},
+				"hooks":     map[string]any{"before": []string{"validate"}},
 			},
 			expected: map[string]any{
 				"vars":      map[string]any{"enabled": true},
@@ -691,6 +693,8 @@ func TestFilterComputedFields(t *testing.T) {
 				"overrides": map[string]any{"key": "val"},
 				"providers": map[string]any{"aws": "config"},
 				"settings":  map[string]any{"key": "val"},
+				"component": map[string]any{"name": "vpc"},
+				"hooks":     map[string]any{"before": []string{"validate"}},
 			},
 		},
 		{
@@ -711,6 +715,17 @@ func TestFilterComputedFields(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestDescribeComponentFilter(t *testing.T) {
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(nil))
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(&schema.AtmosConfiguration{}))
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(&schema.AtmosConfiguration{
+		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: "unexpected"}},
+	}))
+	assert.Equal(t, describeComponentFilterFull, describeComponentFilter(&schema.AtmosConfiguration{
+		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: describeComponentFilterFull}},
+	}))
 }
 
 func TestFilterAbstractComponents(t *testing.T) {

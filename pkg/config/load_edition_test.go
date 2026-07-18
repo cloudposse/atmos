@@ -217,3 +217,9 @@ func TestLoadConfigEditionExposedOnConfig(t *testing.T) {
 
 	assert.Equal(t, "2026", atmosConfig.Edition)
 }
+
+func TestParseEditionFromOsArgs(t *testing.T) {
+	assert.Equal(t, "2025-09", parseEditionFromOsArgs([]string{"terraform", "--edition=2025-09", "plan"}))
+	assert.Equal(t, "2025-10", parseEditionFromOsArgs([]string{"helmfile", "--unknown", "x", "--edition", " 2025-10 "}))
+	assert.Empty(t, parseEditionFromOsArgs([]string{"terraform", "plan", "--help"}))
+}
