@@ -57,17 +57,16 @@ actually passes, not whose commit originally broke it.
 
 - `bash -n .claude/skills/test-coverage/scripts/patch-test-coverage.sh` — shell syntax check
   passes.
-- Re-ran `atmos fix coverage` against PR #2763's actual diff after the timeout fix; the run was
-  interrupted by the harness before completion, so full pass/fail confirmation under the new
-  40-minute timeout is still outstanding — the underlying reasoning (individual tests reproduce as
-  passing in isolation; only the overall 10-minute binary cap was tripping) was independently
-  confirmed across all three prior cycles' `test-coverage-fix` diagnoses.
-- No `.go` files were changed by this fix, so `atmos lint --changed` / `go build ./...` are not
-  applicable.
+- Re-ran `atmos fix coverage` against PR #2763's actual diff (by then also touching
+  `tests/preconditions.go` and `tests/precondition_cached_tools_test.go` from the unrelated
+  Windows cached-test-tool fix) after the timeout fix landed: `STATUS: OK` — the full `./tests`
+  package completed cleanly under `-timeout 40m` with no false-positive panic, confirming the
+  root-cause fix. Prior attempts had been interrupted by the harness before completion; this run
+  was not.
+- No `.go` files were changed by this fix itself, so `atmos lint --changed` / `go build ./...` are
+  not applicable to it directly.
 
 ## Follow-ups
 
-Re-run `atmos fix coverage` on a patch that touches `tests/` to confirm the 40-minute timeout
-lets the full `./tests` package run to completion without a false-positive panic. No GitHub issue
-opened for this — low-risk, self-verifying the next time the loop runs against a `tests/`-touching
-patch.
+None. The one open item — confirming the 40-minute timeout lets the full `./tests` package run to
+completion — is validated above.
