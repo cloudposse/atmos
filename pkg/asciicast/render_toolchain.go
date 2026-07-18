@@ -2,12 +2,12 @@ package asciicast
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
@@ -124,7 +124,13 @@ func runRenderer(binary string, args ...string) error {
 	}
 	//nolint:gosec // The command path is resolved from the managed toolchain and arguments are file paths.
 	cmd := exec.Command(binary, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	// Route the renderer's own output through the Atmos IO layer instead of wiring
+	// os.Stdout/os.Stderr directly, so masking/test capture keep working: any file
+	// data the tool prints goes to the data channel, progress/log lines to the UI channel.
+	cmd.Stdout = iolib.GetContext().Data()
+	cmd.Stderr = iolib.GetContext().UI()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrRenderToolExecFailed, binary, err)
+	}
+	return nil
 }

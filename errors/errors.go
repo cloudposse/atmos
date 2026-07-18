@@ -56,6 +56,7 @@ var (
 	ErrMissingAgg                            = errors.New("missing required tool `agg`; install asciinema agg and retry")
 	ErrMissingFFmpeg                         = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
 	ErrMissingRenderOutput                   = errors.New("specify an output path with --output")
+	ErrRenderToolExecFailed                  = errors.New("managed renderer execution failed")
 	ErrUnknownSessionAction                  = errors.New("unknown cast session action type")
 	ErrWaitTimeout                           = errors.New("timed out waiting for cast output")
 	ErrUnsupportedCastKey                    = errors.New("unsupported cast key")
