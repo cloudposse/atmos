@@ -59,6 +59,98 @@ func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
 	require.Equal(t, 1, closes)
 }
 
+func TestStartSharedTerraformCache(t *testing.T) {
+	originalStart := startTerraformCacheForExecution
+	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+	t.Run("reuses an externally managed cache", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{TerraformCacheExternal: true}
+		startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+			t.Fatal("external cache must not start again")
+			return nil, nil, nil
+		}
+
+		cleanup, err := startSharedTerraformCache(context.Background(), &schema.AtmosConfiguration{}, info)
+		require.NoError(t, err)
+		cleanup()
+	})
+
+	t.Run("records setup and returns cleanup", func(t *testing.T) {
+		setup := &tfcache.Setup{}
+		cleaned := false
+		startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+			return setup, func() { cleaned = true }, nil
+		}
+		info := &schema.ConfigAndStacksInfo{}
+
+		cleanup, err := startSharedTerraformCache(context.Background(), &schema.AtmosConfiguration{}, info)
+		require.NoError(t, err)
+		require.Same(t, setup, info.TerraformCache)
+		require.True(t, info.TerraformCacheExternal)
+		cleanup()
+		require.True(t, cleaned)
+	})
+
+	t.Run("propagates startup errors", func(t *testing.T) {
+		startErr := errors.New("cache startup failed")
+		startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+			return nil, func() {}, startErr
+		}
+		cleanup, err := startSharedTerraformCache(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, startErr)
+		cleanup()
+	})
+}
+
+func TestSkippedResultCount(t *testing.T) {
+	require.Zero(t, skippedResultCount(nil))
+	require.Equal(t, 2, skippedResultCount(&scheduler.AggregateResult{Results: []scheduler.Result{
+		{Status: scheduler.StatusSkipped},
+		{},
+		{Status: scheduler.StatusSkipped},
+	}}))
+}
+
+func TestTerraformDependenciesModernAndLegacy(t *testing.T) {
+	t.Run("modern dependencies normalize name aliases", func(t *testing.T) {
+		dependencies, err := terraformDependencies(map[string]any{
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{map[string]any{"name": "vpc", "stack": "core"}},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []schema.ComponentDependency{{Component: "vpc", Stack: "core"}}, dependencies)
+	})
+
+	t.Run("modern decode and normalization errors propagate", func(t *testing.T) {
+		_, err := terraformDependencies(map[string]any{
+			cfg.DependenciesSectionName: map[string]any{"components": "not-a-list"},
+		})
+		require.Error(t, err)
+
+		_, err = terraformDependencies(map[string]any{
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{map[string]any{"component": "vpc", "name": "network"}},
+			},
+		})
+		require.ErrorIs(t, err, schema.ErrComponentDependencyNameConflict)
+	})
+
+	t.Run("legacy settings remain supported", func(t *testing.T) {
+		dependencies, err := terraformDependencies(map[string]any{
+			cfg.SettingsSectionName: map[string]any{"depends_on": []any{"vpc"}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []schema.ComponentDependency{{Component: "vpc"}}, dependencies)
+	})
+
+	t.Run("missing dependency sections are empty", func(t *testing.T) {
+		dependencies, err := terraformDependencies(map[string]any{})
+		require.NoError(t, err)
+		require.Empty(t, dependencies)
+	})
+}
+
 func TestExecuteTerraformClosesSharedRegistryCacheOnFailureAndCancellation(t *testing.T) {
 	tests := []struct {
 		name     string

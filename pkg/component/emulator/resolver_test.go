@@ -126,3 +126,43 @@ func TestParseEmulatorReference(t *testing.T) {
 		})
 	}
 }
+
+func TestEmulatorReferenceErrorsAndAddresses(t *testing.T) {
+	assert.Equal(t, "aws", (emulatorReference{Name: "aws"}).String())
+	assert.Equal(t, "dev/aws", (emulatorReference{Stack: "dev", Name: "aws"}).String())
+	assert.Equal(t, "dev/aws", emulatorInstanceAddress("dev", "aws"))
+
+	bareConfigured := emulatorNotConfiguredError(emulatorReference{Name: "aws"})
+	require.ErrorIs(t, bareConfigured, errUtils.ErrEmulatorNotConfigured)
+	assert.Contains(t, cockroachErrors.GetAllHints(bareConfigured), "Run `atmos emulator list` to find configured emulator instances.")
+
+	bareStopped := emulatorNotRunningError(emulatorReference{Name: "aws"})
+	require.ErrorIs(t, bareStopped, errUtils.ErrEmulatorNotRunning)
+	assert.Contains(t, cockroachErrors.GetAllHints(bareStopped), "Start it with `atmos emulator up aws -s <stack>`.")
+}
+
+func TestRunningEmulatorsMatchingFiltersAndSorts(t *testing.T) {
+	matches := runningEmulatorsMatching([]emu.Status{
+		{Name: "aws", Stack: "prod", Container: "z", Status: "running"},
+		{Name: "aws", Stack: "dev", Container: "b", Status: "running"},
+		{Name: "aws", Stack: "dev", Container: "a", Status: "running"},
+		{Name: "aws", Stack: "dev", Container: "stopped", Status: "exited"},
+		{Name: "gcp", Stack: "dev", Container: "other", Status: "running"},
+	}, emulatorReference{Name: "aws"})
+
+	require.Equal(t, []string{"dev/a", "dev/b", "prod/z"}, []string{
+		emulatorInstanceAddress(matches[0].Stack, matches[0].Container),
+		emulatorInstanceAddress(matches[1].Stack, matches[1].Container),
+		emulatorInstanceAddress(matches[2].Stack, matches[2].Container),
+	})
+
+	qualified := runningEmulatorsMatching(matches, emulatorReference{Stack: "prod", Name: "aws"})
+	require.Equal(t, []emu.Status{{Name: "aws", Stack: "prod", Container: "z", Status: "running"}}, qualified)
+}
+
+func TestResolveEmulator_RuntimeListingError(t *testing.T) {
+	stubPrepare(t, validSection(), nil, &fakeManager{psErr: errBoom})
+
+	_, _, err := emulatorResolver{}.ResolveEmulator(context.Background(), "aws")
+	require.ErrorIs(t, err, errBoom)
+}

@@ -184,6 +184,20 @@ func TestValidateTerraformMockOptions(t *testing.T) {
 	assert.NoError(t, validateTerraformMockOptions("plan", true, true))
 }
 
+func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {
+	for _, args := range [][]string{
+		{"providers", "lock"},
+		{"state", "list"},
+		{"workspace", "show"},
+	} {
+		assert.True(t, isCompoundTerraformCommandWithoutComponent(args))
+	}
+
+	assert.False(t, isCompoundTerraformCommandWithoutComponent(nil))
+	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"providers"}))
+	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"version", "show"}))
+}
+
 // TestTerraformIdentityFlagHandling tests the identity flag handling in terraformRun.
 // Regression test for: https://github.com/cloudposse/atmos/issues/XXXX
 // Ensures that when --identity flag is NOT provided, the code doesn't try to
