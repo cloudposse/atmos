@@ -41,20 +41,20 @@ but today a user only sees this in local CLI text output or a CI log dump.
 ## Goals
 
 1. All four `validate` subcommands support `--ci` (annotations + SARIF
-   auto-upload when a CI provider is detected and `ci.enabled: true`) and
-   `--format=sarif` (plain SARIF 2.1.0 file/stdout output, independent of CI).
-   `validate editorconfig` retains all vendored values (`default`, `gcc`,
-   `codeclimate`, and `github-actions`) and adds `sarif` as an Atmos-owned
-   renderer.
+    auto-upload when a CI provider is detected and `ci.enabled: true`) and
+    `--format=sarif` (plain SARIF 2.1.0 file/stdout output, independent of CI).
+    `validate editorconfig` retains all vendored values (`default`, `gcc`,
+    `codeclimate`, and `github-actions`) and adds `sarif` as an Atmos-owned
+    renderer.
 2. `validate schema` and `validate stacks` annotations/SARIF results carry a
-   real line + column, not just a file path.
+    real line + column, not just a file path.
 3. Zero behavior change to the default text-mode output of any command.
 4. Reuse existing framework primitives (`pkg/ci`, `pkg/provenance`) — no parallel
-   infrastructure.
+    infrastructure.
 5. Every validation entry point also supports Atmos-owned `--format=rich`, a
-   human-readable source-context renderer. The aggregate `atmos validate`
-   command renders failing validators as separate rich blocks; `validate.format:
-   rich` supplies the shared persistent default.
+    human-readable source-context renderer. The aggregate `atmos validate`
+    command renders failing validators as separate rich blocks; `validate.format:
+    rich` supplies the shared persistent default.
 
 ## Non-Goals
 
@@ -121,23 +121,23 @@ command's run — validate commands don't care about the performance cost
 
 Concrete plan:
 1. **`validate stacks`** (santhosh-tekuri path): after
-   `compiledSchema.Validate(dataFromJson)` fails, call
-   `utils.ExtractYAMLPositions(node, true)` for a `PositionMap`; write a small
-   JSON-Pointer → `AppendJSONPathKey`/`AppendJSONPathIndex`-format converter
-   (strip leading `/`, split on unescaped `/`, unescape `~1`→`/` and `~0`→`~`
-   per RFC 6901); look up each `instanceLocation` via `utils.GetYAMLPosition`.
+    `compiledSchema.Validate(dataFromJson)` fails, call
+    `utils.ExtractYAMLPositions(node, true)` for a `PositionMap`; write a small
+    JSON-Pointer → `AppendJSONPathKey`/`AppendJSONPathIndex`-format converter
+    (strip leading `/`, split on unescaped `/`, unescape `~1`→`/` and `~0`→`~`
+    per RFC 6901); look up each `instanceLocation` via `utils.GetYAMLPosition`.
 2. **`validate schema`** (gojsonschema path): same
-   `utils.ExtractYAMLPositions`/`GetYAMLPosition` machinery — no new parser,
-   no `pkg/provenance` dependency.
-   ```go
-   // pkg/validator/schema_validator.go
-   type ValidationError struct {
-       gojsonschema.ResultError
-       Line, Column int // 0 = unknown, falls back to file-level annotation
-   }
-   func ValidateYAMLSchema(schema, sourceFile string) ([]ValidationError, error)
-   func ValidateYAMLContent(schema string, yamlContent []byte) ([]ValidationError, error)
-   ```
+    `utils.ExtractYAMLPositions`/`GetYAMLPosition` machinery — no new parser,
+    no `pkg/provenance` dependency.
+    ```go
+    // pkg/validator/schema_validator.go
+    type ValidationError struct {
+        gojsonschema.ResultError
+        Line, Column int // 0 = unknown, falls back to file-level annotation
+    }
+    func ValidateYAMLSchema(schema, sourceFile string) ([]ValidationError, error)
+    func ValidateYAMLContent(schema string, yamlContent []byte) ([]ValidationError, error)
+    ```
 
 **First task, before any wiring**: verify `gojsonschema.Field()`'s exact join
 format matches `AppendJSONPathKey`/`AppendJSONPathIndex`'s (dot-separated
@@ -266,23 +266,23 @@ necessarily lives with the producer.
 Two distinct decisions, both needed, easy to conflate:
 
 1. **CI-mode output** — matches existing `--ci` semantics across
-   `terraform`/`helmfile`/`kubernetes`/`helm`: `--ci` flag (if set) →
-   `viper.GetBool("ci")` → `ci.IsCI()`. Extract
-   `cmd/terraform/utils.go:terraformCIModeEnabled`'s logic into
-   `pkg/ci.ModeEnabled(cmd *cobra.Command) bool`; make the terraform helper a
-   thin wrapper so there's one implementation, not a 5th/6th/7th duplicate.
+    `terraform`/`helmfile`/`kubernetes`/`helm`: `--ci` flag (if set) →
+    `viper.GetBool("ci")` → `ci.IsCI()`. Extract
+    `cmd/terraform/utils.go:terraformCIModeEnabled`'s logic into
+    `pkg/ci.ModeEnabled(cmd *cobra.Command) bool`; make the terraform helper a
+    thin wrapper so there's one implementation, not a 5th/6th/7th duplicate.
 2. **CI hook firing** (annotations, SARIF auto-upload) — gated separately by
-   `atmosConfig.CI.Enabled` (`ci.enabled` in `atmos.yaml`), the documented hard
-   kill switch (see [CI Detection](../framework/ci-detection.md#ci-enabled-is-a-hard-kill-switch)),
-   enforced today at `pkg/hooks/command_engine.go:567` before any call into
-   `pkg/ci`. This exists because the generic `CI` env var is `true` on every CI
-   runner — without this gate, `ci.IsCI()` auto-detection would silently start
-   firing annotations/SARIF uploads on every CI run with no opt-out. Add
-   `pkg/ci.HooksEnabled(atmosConfig *schema.AtmosConfiguration) bool` mirroring
-   `command_engine.go:567`, and call it before every `ci.Annotate`/
-   `ci.ReportSARIF` site added below. `--format=sarif`'s plain file/stdout
-   output is unaffected by this gate — it's an output format choice, not a CI
-   hook.
+    `atmosConfig.CI.Enabled` (`ci.enabled` in `atmos.yaml`), the documented hard
+    kill switch (see [CI Detection](../framework/ci-detection.md#ci-enabled-is-a-hard-kill-switch)),
+    enforced today at `pkg/hooks/command_engine.go:567` before any call into
+    `pkg/ci`. This exists because the generic `CI` env var is `true` on every CI
+    runner — without this gate, `ci.IsCI()` auto-detection would silently start
+    firing annotations/SARIF uploads on every CI run with no opt-out. Add
+    `pkg/ci.HooksEnabled(atmosConfig *schema.AtmosConfiguration) bool` mirroring
+    `command_engine.go:567`, and call it before every `ci.Annotate`/
+    `ci.ReportSARIF` site added below. `--format=sarif`'s plain file/stdout
+    output is unaffected by this gate — it's an output format choice, not a CI
+    hook.
 
 ### Per-command wiring (PRs 3–6)
 

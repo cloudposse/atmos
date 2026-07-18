@@ -14,17 +14,17 @@ Atmos uses JSON Schema (Draft 2020-12) to validate configuration files, provide 
 auto-completion, and catch configuration errors early. Two schemas cover the core file types:
 
 1. **Stack manifest schema** -- Validates stack YAML manifests (`stacks/**`). Published at
-   `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` and registered
-   with SchemaStore as `https://json.schemastore.org/atmos-manifest.json`. Used by
-   `atmos validate stacks` and by IDEs for auto-completion.
+    `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` and registered
+    with SchemaStore as `https://json.schemastore.org/atmos-manifest.json`. Used by
+    `atmos validate stacks` and by IDEs for auto-completion.
 
 2. **CLI configuration schema** -- Validates `atmos.yaml` itself (every configuration section
-   the CLI reads). Published at
-   `https://atmos.tools/schemas/atmos/atmos-config/1.0/atmos-config.json`. Used by
-   `atmos validate schema config` and by IDEs for auto-completion. This schema is generated
-   from the Atmos configuration code, so it always matches the options the installed release
-   actually supports -- including YAML function alternatives (like `logs: !include shared.yaml`)
-   and descriptions for hover text.
+    the CLI reads). Published at
+    `https://atmos.tools/schemas/atmos/atmos-config/1.0/atmos-config.json`. Used by
+    `atmos validate schema config` and by IDEs for auto-completion. This schema is generated
+    from the Atmos configuration code, so it always matches the options the installed release
+    actually supports -- including YAML function alternatives (like `logs: !include shared.yaml`)
+    and descriptions for hover text.
 
 Users can also validate arbitrary YAML files against arbitrary schemas via `schemas.<key>`
 entries in `atmos.yaml` (see "Custom Schema Validation" below), and `vendor.yaml` manifests

@@ -9,7 +9,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/validation"
+)
+
+// schemaFlagsParser wires the schemas-atmos-manifest flag through the
+// standard parser so it follows the standard flag > env var > config > default
+// precedence via pkg/flags, replacing direct Cobra flag registration.
+var schemaFlagsParser = flags.NewStandardParser(
+	flags.WithStringFlag("schemas-atmos-manifest", "", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file"),
 )
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.
@@ -140,7 +148,7 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 }
 
 func init() {
-	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
+	schemaFlagsParser.RegisterPersistentFlags(ValidateSchemaCmd)
 	addValidationFormatFlag(ValidateSchemaCmd)
 	addAffectedValidationFlags(ValidateSchemaCmd)
 	addValidationExcludeFlag(ValidateSchemaCmd)
