@@ -36,6 +36,7 @@ type VendorFlags struct {
 	Tags          []string
 	Everything    bool
 	ComponentType string
+	RefreshLock   bool
 }
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands.
@@ -98,6 +99,11 @@ func parseVendorFlags(flags *pflag.FlagSet) (VendorFlags, error) {
 	if vendorFlags.Everything, err = flags.GetBool("everything"); err != nil {
 		return vendorFlags, err
 	}
+	if flags.Lookup("refresh-lock") != nil {
+		if vendorFlags.RefreshLock, err = flags.GetBool("refresh-lock"); err != nil {
+			return vendorFlags, err
+		}
+	}
 
 	// Set default for 'everything' if no specific flags are provided
 	setDefaultEverythingFlag(flags, &vendorFlags)
@@ -152,6 +158,7 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 		return ExecuteAtmosVendorInternal(&executeVendorOptions{
 			vendorConfigFileName: foundVendorConfigFile,
 			dryRun:               flg.DryRun,
+			refreshLock:          flg.RefreshLock,
 			atmosConfig:          atmosConfig,
 			atmosVendorSpec:      vendorConfig.Spec,
 			component:            flg.Component,

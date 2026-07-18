@@ -64,6 +64,7 @@ type executeVendorOptions struct {
 	component            string
 	tags                 []string
 	dryRun               bool
+	refreshLock          bool
 }
 
 type vendorSourceParams struct {
@@ -242,10 +243,36 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	if err != nil {
 		return err
 	}
+	if !params.dryRun && !params.refreshLock {
+		packages, err = filterMaterializedVendorPackages(packages, params.atmosConfig)
+		if err != nil {
+			return err
+		}
+	}
 	if len(packages) > 0 {
 		return executeVendorModel(packages, params.dryRun, params.atmosConfig)
 	}
 	return nil
+}
+
+// filterMaterializedVendorPackages avoids a download only when a lock receipt
+// verifies both the declared source and every exact output file. Sources that
+// use filtered or file copy modes have no exact destination plan yet and are
+// intentionally left eligible for the existing installer.
+func filterMaterializedVendorPackages(packages []pkgAtmosVendor, atmosConfig *schema.AtmosConfiguration) ([]pkgAtmosVendor, error) {
+	pending := make([]pkgAtmosVendor, 0, len(packages))
+	for _, pkg := range packages {
+		needsMaterialization, err := needsVendorMaterialization(pkg, atmosConfig)
+		if err != nil {
+			return nil, fmt.Errorf("verify vendor lock for %s: %w", pkg.name, err)
+		}
+		if needsMaterialization {
+			pending = append(pending, pkg)
+			continue
+		}
+		log.Debug("Vendor target matches immutable lock receipt; skipping download", "package", pkg.name, "target", pkg.targetPath)
+	}
+	return pending, nil
 }
 
 func validateTagsAndComponents(

@@ -1944,6 +1944,9 @@ type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files.
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order.
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// LockFile is the committed vendor materialization lock. Relative paths are
+	// resolved from the Atmos base path. It defaults to vendor.lock.yaml.
+	LockFile string `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
 	// List configuration for vendor list output.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	// Retry configuration for vendor operations (global default).

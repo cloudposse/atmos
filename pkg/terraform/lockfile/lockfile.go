@@ -30,6 +30,13 @@ type Provider struct {
 	Source string
 	// Version is the exact locked version, e.g. "5.95.0".
 	Version string
+	// Constraints is the declaration that selected Version, when Terraform
+	// recorded one. It is descriptive rather than immutable evidence.
+	Constraints string
+	// Hashes contains the checksum entries recorded by Terraform/OpenTofu. The
+	// zh: entries are archive SHA-256 checksums; h1: entries retain their native
+	// hash scheme and are intentionally not rewritten as SHA-256 values.
+	Hashes []string
 }
 
 // providerSchema matches the provider blocks in a lock file. Lock files only
@@ -41,9 +48,11 @@ var providerSchema = &hcl.BodySchema{
 }
 
 // versionSchema matches the version attribute inside a provider block.
-var versionSchema = &hcl.BodySchema{
+var providerAttributesSchema = &hcl.BodySchema{
 	Attributes: []hcl.AttributeSchema{
 		{Name: "version", Required: true},
+		{Name: "constraints"},
+		{Name: "hashes"},
 	},
 }
 
@@ -88,28 +97,70 @@ func Parse(src []byte, filename string) ([]Provider, error) {
 
 	providers := make([]Provider, 0, len(content.Blocks))
 	for _, block := range content.Blocks {
-		version, err := providerVersion(block, filename)
+		provider, err := providerDetails(block, filename)
 		if err != nil {
 			return nil, err
 		}
-		providers = append(providers, Provider{Source: block.Labels[0], Version: version})
+		provider.Source = block.Labels[0]
+		providers = append(providers, provider)
 	}
 	return providers, nil
 }
 
-// providerVersion extracts the version attribute from a provider block.
-func providerVersion(block *hcl.Block, filename string) (string, error) {
-	attrs, _, diags := block.Body.PartialContent(versionSchema)
+// providerDetails extracts the immutable provider selection and the optional
+// constraints/checksums from a provider block.
+func providerDetails(block *hcl.Block, filename string) (Provider, error) {
+	attrs, _, diags := block.Body.PartialContent(providerAttributesSchema)
 	if diags.HasErrors() {
-		return "", fmt.Errorf("%w: provider %q in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, diags.Error())
+		return Provider{}, fmt.Errorf("%w: provider %q in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, diags.Error())
 	}
 
 	val, diags := attrs.Attributes["version"].Expr.Value(nil)
 	if diags.HasErrors() {
-		return "", fmt.Errorf("%w: provider %q version in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, diags.Error())
+		return Provider{}, fmt.Errorf("%w: provider %q version in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, diags.Error())
 	}
 	if val.Type() != cty.String || val.IsNull() {
-		return "", fmt.Errorf("%w: provider %q in %s has a non-string version", errUtils.ErrInvalidConfig, block.Labels[0], filename)
+		return Provider{}, fmt.Errorf("%w: provider %q in %s has a non-string version", errUtils.ErrInvalidConfig, block.Labels[0], filename)
 	}
-	return val.AsString(), nil
+	provider := Provider{Version: val.AsString()}
+	if attr, ok := attrs.Attributes["constraints"]; ok {
+		constraint, constraintErr := attributeString(attr)
+		if constraintErr != nil {
+			return Provider{}, fmt.Errorf("%w: provider %q constraints in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, constraintErr)
+		}
+		provider.Constraints = constraint
+	}
+	if attr, ok := attrs.Attributes["hashes"]; ok {
+		hashes, hashesErr := attributeStrings(attr)
+		if hashesErr != nil {
+			return Provider{}, fmt.Errorf("%w: provider %q hashes in %s: %s", errUtils.ErrInvalidConfig, block.Labels[0], filename, hashesErr)
+		}
+		provider.Hashes = hashes
+	}
+	return provider, nil
+}
+
+func attributeString(attr *hcl.Attribute) (string, error) {
+	value, diags := attr.Expr.Value(nil)
+	if diags.HasErrors() || value.Type() != cty.String || value.IsNull() {
+		return "", fmt.Errorf("must be a string")
+	}
+	return value.AsString(), nil
+}
+
+func attributeStrings(attr *hcl.Attribute) ([]string, error) {
+	value, diags := attr.Expr.Value(nil)
+	if diags.HasErrors() || value.IsNull() || !value.CanIterateElements() {
+		return nil, fmt.Errorf("must be a list of strings")
+	}
+	values := make([]string, 0, value.LengthInt())
+	iterator := value.ElementIterator()
+	for iterator.Next() {
+		_, item := iterator.Element()
+		if item.Type() != cty.String || item.IsNull() {
+			return nil, fmt.Errorf("must contain only strings")
+		}
+		values = append(values, item.AsString())
+	}
+	return values, nil
 }

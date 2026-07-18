@@ -39,8 +39,9 @@ func init() {
 	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
 	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
 	vendorPullCmd.PersistentFlags().Bool("everything", false, "Vendor all components")
+	vendorPullCmd.PersistentFlags().Bool("refresh-lock", false, "Refresh immutable vendor lock entries from declared sources")
 
-	// Add subcommands. The 'update', 'diff', 'get', and 'set' subcommands are
+	// Add subcommands. The 'clean', 'update', 'diff', 'get', and 'set' subcommands are
 	// attached in their own files' init() functions.
 	vendorCmd.AddCommand(vendorPullCmd)
 

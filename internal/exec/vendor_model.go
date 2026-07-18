@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 type pkgType int
@@ -112,7 +113,7 @@ func (p pkgType) String() string {
 	if p < pkgTypeRemote || p > pkgTypeLocal {
 		return "unknown"
 	}
-	return names[p]
+	return names[p-pkgTypeRemote]
 }
 
 type pkgVendor struct {
@@ -566,11 +567,68 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
+		if err := recordVendorLock(p, tempDir, atmosConfig); err != nil {
+			return newInstallError(fmt.Errorf("failed to record vendor lock: %w", err), p.name)
+		}
 		return installedPkgMsg{
 			err:  nil,
 			name: p.name,
 		}
 	}
+}
+
+// recordVendorLock creates a receipt only when the installer can prove the
+// exact destination set. Filtered copies have their own planner and must not
+// be represented by a broad target-directory snapshot.
+func recordVendorLock(p *pkgAtmosVendor, tempDir string, atmosConfig *schema.AtmosConfiguration) error {
+	files, err := lockfile.VendorInventoryWithPatterns(tempDir, p.atmosVendorSource.IncludedPaths, p.atmosVendorSource.ExcludedPaths)
+	if err != nil {
+		return err
+	}
+	declaredSource := lockDeclaredSource(p.pkgType, p.uri)
+	resolved, err := downloader.ResolveArtifact(context.Background(), atmosConfig, declaredSource, tempDir)
+	if err != nil {
+		return err
+	}
+	identity := resolved.Identity
+	if identity == "" {
+		identity = lockfile.FilesDigest(files)
+	}
+	artifact := lockfile.Artifact{
+		Component: p.name,
+		Kind:      p.pkgType.String(),
+		Target:    p.targetPath,
+		Source: lockfile.Source{
+			Declared: declaredSource,
+			Resolved: resolved.Resolved,
+			Digest:   identity,
+		},
+		Files: files,
+	}
+	return lockfile.Replace(atmosConfig, lockfile.ArtifactID(artifact.Kind, artifact.Target), artifact)
+}
+
+// needsVendorMaterialization returns false only for a copy mode with an exact
+// receipt whose declared source and every destination file still match.
+func needsVendorMaterialization(p pkgAtmosVendor, atmosConfig *schema.AtmosConfiguration) (bool, error) {
+	materialized, err := lockfile.IsMaterialized(
+		atmosConfig,
+		lockfile.ArtifactID(p.pkgType.String(), p.targetPath),
+		lockDeclaredSource(p.pkgType, p.uri),
+		p.targetPath,
+	)
+	return !materialized, err
+}
+
+// lockDeclaredSource restores the OCI scheme stripped by the legacy installer
+// before provenance resolution. This preserves the registry manifest digest as
+// the immutable receipt identity instead of degrading OCI sources to a file
+// tree hash.
+func lockDeclaredSource(kind pkgType, uri string) string {
+	if kind == pkgTypeOci && !strings.HasPrefix(uri, ociScheme) {
+		return ociScheme + uri
+	}
+	return uri
 }
 
 func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosConfiguration) error {

@@ -88,8 +88,22 @@ Atmos's native CI features rely on the standard GitHub Actions permission scopes
 | PR comments | `pull-requests: write` |
 | Checkout | `contents: read` |
 | OIDC token issuance | `id-token: write` |
+| SBOM workflow artifact upload | `contents: read`; GitHub Actions runtime credentials (see below) |
 
 There is no `comments: write` scope — PR comment writes use `pull-requests: write` (PR comments are issue comments under the hood). If you disable a feature in `atmos.yaml` (e.g. `ci.checks.enabled: false`), you can drop the matching permission.
+
+### SBOM Artifacts
+
+`atmos sbom generate --upload` uses the detected native CI provider to retain the generated SBOM with the CI run. In GitHub Actions, this is a workflow artifact, not a Dependency Graph import: GitHub's SBOM REST API can export or request a GitHub-generated SPDX report but does not accept an arbitrary submitted SBOM. Add `github-runtime` before the command so Atmos can access the Actions artifact runtime API.
+
+```yaml
+- uses: cloudposse/atmos/actions/github-runtime@v1
+  with:
+    mode: env
+- run: atmos sbom generate --format spdx-json --output sbom.spdx.json --upload
+  env:
+    GITHUB_TOKEN: ${{ github.token }}
+```
 
 ### Plan on Pull Request
 

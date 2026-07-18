@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 const ociScheme = "oci://"
@@ -164,6 +165,12 @@ func ExecuteComponentVendorInternal(
 	if err != nil {
 		return err
 	}
+	if !dryRun {
+		packages, err = filterMaterializedComponentVendorPackages(packages, atmosConfig)
+		if err != nil {
+			return err
+		}
+	}
 	if len(packages) > 0 {
 		return executeVendorModel(packages, dryRun, atmosConfig)
 	}
@@ -200,6 +207,12 @@ func ExecuteComponentVendorPullBatch(
 		if err != nil {
 			return fmt.Errorf("component %q: %w", component, err)
 		}
+		if !dryRun {
+			packages, err = filterMaterializedComponentVendorPackages(packages, atmosConfig)
+			if err != nil {
+				return fmt.Errorf("component %q: verify vendor lock: %w", component, err)
+			}
+		}
 		allPackages = append(allPackages, packages...)
 	}
 
@@ -207,6 +220,25 @@ func ExecuteComponentVendorPullBatch(
 		return nil
 	}
 	return executeVendorModel(allPackages, dryRun, atmosConfig)
+}
+
+func filterMaterializedComponentVendorPackages(packages []pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) ([]pkgComponentVendor, error) {
+	pending := make([]pkgComponentVendor, 0, len(packages))
+	for _, pkg := range packages {
+		materialized, err := lockfile.IsMaterialized(
+			atmosConfig,
+			lockfile.ArtifactID(pkg.pkgType.String(), pkg.componentPath, pkg.name, pkg.mixinFilename),
+			lockDeclaredSource(pkg.pkgType, pkg.uri),
+			pkg.componentPath,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if !materialized {
+			pending = append(pending, pkg)
+		}
+	}
+	return pending, nil
 }
 
 // buildComponentVendorPackages resolves a single component's vendor spec (plus any mixins) into
@@ -471,6 +503,9 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec); err != nil {
 		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
 	}
+	if err := recordComponentVendorLock(p, tempDir, atmosConfig, true); err != nil {
+		return fmt.Errorf("record component vendor lock: %w", err)
+	}
 
 	return nil
 }
@@ -567,6 +602,44 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 	if err := cp.Copy(tempDir, p.componentPath, copyOptions); err != nil {
 		return fmt.Errorf("Failed to copy package %s error %w", p.name, err)
 	}
+	if err := recordComponentVendorLock(p, tempDir, atmosConfig, false); err != nil {
+		return fmt.Errorf("record mixin vendor lock: %w", err)
+	}
 
 	return nil
+}
+
+// recordComponentVendorLock records component.yaml sources and mixins as
+// independent writers. The staging directory gives us the exact copy plan,
+// including include/exclude patterns, without claiming locally authored files.
+func recordComponentVendorLock(p *pkgComponentVendor, tempDir string, atmosConfig *schema.AtmosConfiguration, applyPatterns bool) error {
+	var (
+		files []lockfile.File
+		err   error
+	)
+	if applyPatterns && p.vendorComponentSpec != nil {
+		files, err = lockfile.VendorInventoryWithPatterns(tempDir, p.vendorComponentSpec.Source.IncludedPaths, p.vendorComponentSpec.Source.ExcludedPaths)
+	} else {
+		files, err = lockfile.VendorInventory(tempDir)
+	}
+	if err != nil {
+		return err
+	}
+	declaredSource := lockDeclaredSource(p.pkgType, p.uri)
+	resolved, err := downloader.ResolveArtifact(context.Background(), atmosConfig, declaredSource, tempDir)
+	if err != nil {
+		return err
+	}
+	identity := resolved.Identity
+	if identity == "" {
+		identity = lockfile.FilesDigest(files)
+	}
+	artifact := lockfile.Artifact{
+		Component: p.name,
+		Kind:      p.pkgType.String(),
+		Target:    p.componentPath,
+		Source:    lockfile.Source{Declared: declaredSource, Resolved: resolved.Resolved, Digest: identity},
+		Files:     files,
+	}
+	return lockfile.Replace(atmosConfig, lockfile.ArtifactID(artifact.Kind, artifact.Target, p.name, p.mixinFilename), artifact)
 }

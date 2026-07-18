@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"context"
 	"io"
 	"os"
 	"runtime"
@@ -207,16 +208,39 @@ func TestUpdateSpinnerModel_Update_WindowSizeMsg(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-// TestUpdateSpinnerModel_Update_KeyMsg proves any keypress quits the spinner program, the same
-// early-exit path runUpdateWithSpinner's doc comment describes (the trigger for the
-// nil-report/nil-err race cmd/vendor/update.go guards against).
+// TestUpdateSpinnerModel_Update_KeyMsg proves ordinary keypresses are ignored. A status display
+// must not silently terminate an update because the user happened to press a key.
 func TestUpdateSpinnerModel_Update_KeyMsg(t *testing.T) {
 	m := newTestUpdateSpinnerModel()
 
-	_, cmd := m.Update(tea.KeyMsg{})
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.False(t, updated.canceled)
+	assert.Nil(t, cmd)
+}
+
+// TestUpdateSpinnerModel_Update_CtrlC proves the one explicit cancellation control quits the
+// spinner so runUpdateWithSpinner can return a visible cancellation error to the CLI.
+func TestUpdateSpinnerModel_Update_CtrlC(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.True(t, updated.canceled)
 	require.NotNil(t, cmd)
 	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+func TestUpdateSpinnerResult_Canceled(t *testing.T) {
+	report, err := updateSpinnerResult(&updateSpinnerModel{canceled: true})
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "vendor update canceled")
 }
 
 // TestUpdateSpinnerModel_Update_SpinnerAndProgressFrames proves the spinner.TickMsg and

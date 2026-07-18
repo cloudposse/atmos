@@ -62,6 +62,29 @@ var defaultFileSystem = filesystem.NewOSFileSystem()
 // httptest server. Production code must not reassign it.
 var remoteGet = remote.Get
 
+// ResolvedImage is the immutable registry identity selected for an OCI source.
+// Digest is the descriptor digest for the selected manifest; it is suitable for
+// locks and SBOM provenance, unlike the mutable declared tag/reference.
+type ResolvedImage struct {
+	Reference string
+	Digest    string
+	MediaType string
+}
+
+// ResolveImage authenticates and resolves an OCI reference without extracting
+// layers. It is the public provenance boundary for OCI consumers.
+func ResolveImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, imageName string) (*ResolvedImage, error) {
+	ref, err := name.ParseReference(imageName)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrInvalidImageReference, err)
+	}
+	descriptor, err := pullImage(ctx, atmosConfig, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &ResolvedImage{Reference: ref.Name(), Digest: descriptor.Digest.String(), MediaType: string(descriptor.MediaType)}, nil
+}
+
 // ProcessImage pulls an OCI image and extracts its layers to the specified
 // destination directory. The context bounds the pull (registry auth plus
 // manifest/layer fetch) -- callers should pass one with a deadline, matching

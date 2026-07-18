@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	stdio "io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -17,7 +19,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 // Note on testing bubbletea's TTY/cursor/line-clearing behavior:
@@ -45,6 +49,13 @@ import (
 // terminal width (and is correctly omitted when a line exactly fills the
 // terminal width) -- both zero before this fix, in an otherwise identical
 // capture.
+func TestPkgTypeString(t *testing.T) {
+	assert.Equal(t, "remote", pkgTypeRemote.String())
+	assert.Equal(t, "oci", pkgTypeOci.String())
+	assert.Equal(t, "local", pkgTypeLocal.String())
+	assert.Equal(t, "unknown", pkgType(999).String())
+}
+
 func TestVendorFailureError(t *testing.T) {
 	// Regression test: the vendor error must contain a descriptive explanation
 	// listing the failed component names, not just a bare integer count.
@@ -445,6 +456,45 @@ func TestModelVendor_View_LiveLine_TruncatesLongName(t *testing.T) {
 
 	assert.NotContains(t, view, longName, "the full 200-char name must not appear verbatim in a 60-column line")
 	assert.Contains(t, view, ellipsis)
+}
+
+func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	tempDir := filepath.Join(base, "download")
+	target := filepath.Join(base, "target")
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, ".git"), 0o755))
+	require.NoError(t, os.MkdirAll(target, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.tf"), []byte("resource"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".git", "config"), []byte("metadata"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("resource"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+	pkg := &pkgAtmosVendor{
+		uri:        filepath.Join(base, "source"),
+		name:       "vpc",
+		targetPath: target,
+		pkgType:    pkgTypeLocal,
+	}
+	require.NoError(t, recordVendorLock(pkg, tempDir, config))
+	needs, err := needsVendorMaterialization(*pkg, config)
+	require.NoError(t, err)
+	require.False(t, needs)
+	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("modified"), 0o644))
+	needs, err = needsVendorMaterialization(*pkg, config)
+	require.NoError(t, err)
+	require.True(t, needs)
+
+	lock, err := lockfile.Load(config)
+	require.NoError(t, err)
+	require.Len(t, lock.Artifacts, 1)
+	for _, artifact := range lock.Artifacts {
+		require.Equal(t, "sha256", artifact.Source.Digest[:6])
+		require.Equal(t, []lockfile.File{{
+			Path: "main.tf", Type: "file", Mode: 0o644,
+			SHA256: "d8bf94d27094999a0e1f8cf9a1d4a25c2c8eb615fd828c8f15dd87f02ef76a21",
+		}}, artifact.Files)
+	}
 }
 
 func setupVendorModelTestUI(t *testing.T) (stderr *bytes.Buffer, cleanup func()) {

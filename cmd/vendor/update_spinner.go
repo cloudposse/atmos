@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -92,6 +93,7 @@ type updateSpinnerModel struct {
 	report     *vendoring.UpdateReport
 	err        error
 	done       bool
+	canceled   bool
 	progressCh <-chan tea.Msg
 	doneCh     <-chan updateDoneMsg
 }
@@ -107,7 +109,15 @@ func (m *updateSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bar.Width = progressBarWidthFor(m.width)
 		return m, nil
 	case tea.KeyMsg:
-		return m, tea.Quit
+		// A status spinner must not turn ordinary terminal input into an implicit
+		// cancellation. In particular, returning tea.Quit here makes the command
+		// exit before its background update has reported a result, which silently
+		// abandons the update. Ctrl-C is the one explicit cancellation control.
+		if msg.String() == "ctrl+c" {
+			m.canceled = true
+			return m, tea.Quit
+		}
+		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -213,11 +223,8 @@ func runUpdateWithSpinner(doWork vendorUpdateWork) (*vendoring.UpdateReport, err
 
 	// progressCh streams best-effort progress from the goroutine performing the blocking,
 	// sequential network checks to the bubbletea event loop. Buffered by 1 so the goroutine
-	// never blocks handing off an update; sends use a non-blocking select so that if the
-	// program has already exited (e.g. the user pressed a key, or a send raced ahead of the
-	// reader) the goroutine drops the message and moves on rather than deadlocking - it still
-	// runs doWork to completion (bounded by resolveLatest's own per-source timeout) and simply
-	// has nothing left to notify once done.
+	// never blocks handing off an update; sends use a non-blocking select so that if a send races
+	// ahead of the reader it drops that progress update rather than deadlocking.
 	//
 	// doneCh is a separate channel (not multiplexed onto progressCh) so the single, terminal
 	// updateDoneMsg can never be dropped by a still-buffered progress message occupying
@@ -243,6 +250,12 @@ func runUpdateWithSpinner(doWork vendorUpdateWork) (*vendoring.UpdateReport, err
 		return nil, fmt.Errorf("spinner execution failed: %w", runErr)
 	}
 
+	return updateSpinnerResult(finalModel)
+}
+
+// updateSpinnerResult converts Bubble Tea's final model into the vendor update result. Keeping
+// this boundary separate makes the cancellation contract testable without a timing-sensitive PTY.
+func updateSpinnerResult(finalModel tea.Model) (*vendoring.UpdateReport, error) {
 	if finalModel == nil {
 		return nil, fmt.Errorf("%w: spinner completed but returned nil model during vendor update", errUtils.ErrSpinnerReturnedNilModel)
 	}
@@ -250,6 +263,9 @@ func runUpdateWithSpinner(doWork vendorUpdateWork) (*vendoring.UpdateReport, err
 	final, ok := finalModel.(*updateSpinnerModel)
 	if !ok {
 		return nil, fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
+	}
+	if final.canceled {
+		return nil, fmt.Errorf("vendor update canceled: %w", context.Canceled)
 	}
 
 	return final.report, final.err

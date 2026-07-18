@@ -132,7 +132,10 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			return err
 		}
 
-		if report != nil && v.GetBool("pull") && !check && report.UpdatedCount() > 0 {
+		// Reconciliation is independent of version discovery: a matching version
+		// can still have an absent or locally modified materialization. The pull
+		// executor uses vendor.lock.yaml to skip fully verified targets.
+		if report != nil && v.GetBool("pull") && !check {
 			err = runVendorPull(cmd, args, report, vendorPullParams{
 				component:     component,
 				componentType: componentType,
@@ -304,7 +307,7 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 		return e.ExecuteVendorPullCmd(cmd, args)
 	}
 
-	batchComponentsByType, fallback := partitionUpdatedResults(report)
+	batchComponentsByType, fallback := partitionPullResults(report)
 
 	var errs []error
 	// Batch per type: DiscoverAllComponentManifests' repo-wide sweep (no explicit --type) can mix
@@ -340,10 +343,20 @@ var componentManifestBasenames = map[string]bool{
 // everything else (vendor.yaml or an imported manifest file), which keeps using the existing
 // per-component pullUpdatedComponent loop.
 func partitionUpdatedResults(report *vendoring.UpdateReport) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
+	return partitionReportResults(report, true)
+}
+
+// partitionPullResults selects every report entry because an unchanged version
+// can still need materialization reconciliation against vendor.lock.yaml.
+func partitionPullResults(report *vendoring.UpdateReport) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
+	return partitionReportResults(report, false)
+}
+
+func partitionReportResults(report *vendoring.UpdateReport, updatedOnly bool) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
 	batchComponentsByType = map[string][]string{}
 	for i := range report.Results {
 		result := report.Results[i]
-		if result.Status != vendoring.StatusUpdated {
+		if updatedOnly && result.Status != vendoring.StatusUpdated {
 			continue
 		}
 		if componentManifestBasenames[filepath.Base(result.File)] {

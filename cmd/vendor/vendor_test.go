@@ -654,7 +654,7 @@ func newVendorPullTestCmd() *cobra.Command {
 	return c
 }
 
-// TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents is a regression test for
+// TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedComponents is a regression test for
 // the reported bug: a component.yaml-only repo (no vendor.yaml anywhere) running
 // "vendor update --pull" updated every component successfully, then the automatic follow-up pull
 // hard-failed with "the '--everything' flag is set, but vendor config file does not exist" -
@@ -665,10 +665,9 @@ func newVendorPullTestCmd() *cobra.Command {
 // The fixed runVendorPull now drives one "--component X" pull per StatusUpdated result instead -
 // the same code path "vendor pull --component X" already uses successfully against component.yaml
 // sources.
-// This proves that end to end: given a synthetic report with one updated and one untouched
-// component, only the updated component's source is actually copied to disk, and no
-// ErrVendorConfigNotExist (or any other error) is returned.
-func TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents(t *testing.T) {
+// This proves end to end that an unchanged source with no receipt is materialized as well as an
+// updated source, and no ErrVendorConfigNotExist (or any other error) is returned.
+func TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedComponents(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot) // no vendor.yaml anywhere in this repo.
 
@@ -697,7 +696,7 @@ func TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents(t *t
 	require.NoError(t, err, "a component.yaml-only repo-wide --pull must succeed, not fail with ErrVendorConfigNotExist")
 
 	assert.FileExists(t, filepath.Join(updatedDir, "main.tf"), "the updated component's source must have been pulled to disk")
-	assert.NoFileExists(t, filepath.Join(untouchedDir, "main.tf"), "the untouched component must not have been pulled")
+	assert.FileExists(t, filepath.Join(untouchedDir, "main.tf"), "an unmaterialized component must be reconciled even when its version is current")
 }
 
 // TestRunVendorPull_ClearsStackAndTagsBetweenIterations proves the per-component pull loop clears
