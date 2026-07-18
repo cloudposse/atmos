@@ -91,8 +91,8 @@ const cosignHTTPFetchMarker = "server returned HTTP "
 
 var cosignHTTPFetchRetryableStatuses = []string{"429", "500", "502", "503", "504"}
 
-// classifyCosignError joins ErrSignatureRetryable into err when the cosign
-// output contains a known transient failure marker. Three classes qualify:
+// classifySignatureVerificationError joins ErrSignatureRetryable into err when
+// signature-verifier output contains a known transient failure marker. Three classes qualify:
 // Sigstore Rekor API flakes (rekorFlakeMarkers, tlog 5xx), transport-level
 // network errors (transportFlakeMarkers), and generic upstream HTTP 5xx/429
 // responses cosign surfaces when it directly fetches a URL
@@ -102,8 +102,8 @@ var cosignHTTPFetchRetryableStatuses = []string{"429", "500", "502", "503", "504
 // flakes and transport failures — real signature failures (tampering,
 // expired cert, identity mismatch, missing signature) must surface
 // immediately on the first attempt.
-func classifyCosignError(err error) error {
-	defer perf.Track(nil, "verification.classifyCosignError")()
+func classifySignatureVerificationError(err error) error {
+	defer perf.Track(nil, "verification.classifySignatureVerificationError")()
 
 	if err == nil {
 		return nil

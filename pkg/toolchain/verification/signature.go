@@ -88,7 +88,7 @@ func runCosignWithRetry(ctx context.Context, req *Request, args []string) error 
 	attempt := 0
 	return retry.WithPredicate(ctx, cosignRetryConfig(), func() error {
 		attempt++
-		runErr := classifyCosignError(runner(req).Run(ctx, "cosign", args...))
+		runErr := classifySignatureVerificationError(runner(req).Run(ctx, "cosign", args...))
 		// Only log the "retrying" warning when a retry will actually happen
 		// — suppress on the terminal attempt where the retry budget is
 		// exhausted and the error is about to surface unchanged.
@@ -257,11 +257,31 @@ func (v *Verifier) verifyGitHubAttestation(ctx context.Context, req *Request, cf
 	if cfg.PredicateType != "" {
 		args = append(args, "--predicate-type", cfg.PredicateType)
 	}
-	if err := runner(req).Run(ctx, "gh", args...); err != nil {
+	if err := runGitHubAttestationWithRetry(ctx, req, args); err != nil {
 		return handleSignatureVerificationError("github artifact attestations", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "github_artifact_attestations")
 	return nil
+}
+
+// runGitHubAttestationWithRetry retries only transport failures from GitHub's
+// attestation API. Signature verdicts, such as a missing or invalid
+// attestation, are not retried.
+func runGitHubAttestationWithRetry(ctx context.Context, req *Request, args []string) error {
+	attempt := 0
+	return retry.WithPredicate(ctx, cosignRetryConfig(), func() error {
+		attempt++
+		runErr := classifySignatureVerificationError(runner(req).Run(ctx, "gh", args...))
+		if runErr != nil && isRetryableCosignError(runErr) && attempt < cosignRetryMaxAttempts {
+			log.Warn(
+				"GitHub attestation verification hit a transient transport error; retrying",
+				"attempt", attempt,
+				"max_attempts", cosignRetryMaxAttempts,
+				"error", runErr.Error(),
+			)
+		}
+		return runErr
+	}, isRetryableCosignError)
 }
 
 type signatureSidecarResolution struct {
