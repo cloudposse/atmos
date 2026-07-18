@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -346,7 +347,15 @@ func GetTerminalWidth() int {
 	// Detect terminal width and use it by default if available.
 	isTTY := terminalSupportsStdout()
 	if isTTY {
-		termWidth, _, err := terminalGetSize(int(os.Stdout.Fd()))
+		// Stdout's file descriptor is an OS-provided uintptr that always fits in
+		// an int in practice; guard the conversion explicitly so it's provably
+		// safe rather than relying on that assumption.
+		fd := os.Stdout.Fd()
+		fdInt := -1
+		if fd <= math.MaxInt {
+			fdInt = int(fd)
+		}
+		termWidth, _, err := terminalGetSize(fdInt)
 		// Two columns are reserved for the layout margin. Keep the fallback for
 		// narrower terminals so downstream uint conversions remain safe.
 		if err == nil && termWidth > 2 {

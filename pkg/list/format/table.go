@@ -781,12 +781,14 @@ func shrinkIfNeeded(widths []int, availableWidth, descriptionColIndex int) []int
 	excess := totalWidth - availableWidth
 	for excess > 0 {
 		widest := -1
+		widestWidth := 0
 		for i, w := range widths {
 			if i == descriptionColIndex || w <= MinColumnWidth {
 				continue
 			}
-			if widest < 0 || w > widths[widest] {
+			if widest < 0 || w > widestWidth {
 				widest = i
+				widestWidth = w
 			}
 		}
 		if widest < 0 {
