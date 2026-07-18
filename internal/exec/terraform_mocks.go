@@ -4,11 +4,17 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// yqPathSeparator is the YQ-style path separator used to address a nested mock
+// output (e.g. ".foo.bar"); it also delimits path segments when checking whether
+// a mocked output path exists.
+const yqPathSeparator = "."
 
 // resolveTerraformMockOutput resolves a Terraform lookup from the referenced
 // component's literal `mocks` map. It deliberately describes the target with
@@ -44,7 +50,7 @@ func resolveTerraformMockOutput(
 
 	mocks, ok := componentSection[cfg.MocksSectionName].(map[string]any)
 	if !ok || mocks == nil {
-		return nil, true, fmt.Errorf("Terraform component %q in stack %q does not declare `mocks` required by --use-mocks", component, stack)
+		return nil, true, fmt.Errorf("%w: component %q in stack %q", errUtils.ErrTerraformComponentMocksNotDeclared, component, stack)
 	}
 
 	value, err := tb.GetTerraformBackendVariable(atmosConfig, mocks, output)
@@ -52,7 +58,7 @@ func resolveTerraformMockOutput(
 		return nil, true, fmt.Errorf("failed to resolve mocked Terraform output %q for component %q in stack %q: %w", output, component, stack, err)
 	}
 	if value == nil && !hasYqDefault(output) && !mockOutputExists(mocks, output) {
-		return nil, true, fmt.Errorf("mocked Terraform output %q is not declared for component %q in stack %q", output, component, stack)
+		return nil, true, fmt.Errorf("%w %q for component %q in stack %q", errUtils.ErrTerraformMockOutputNotDeclared, output, component, stack)
 	}
 
 	log.Debug(
@@ -68,8 +74,8 @@ func resolveTerraformMockOutput(
 // output exactly. It lets an explicitly null mock remain valid while producing
 // a useful error for a missing direct output name.
 func isDirectMockOutputReference(output string) bool {
-	output = strings.TrimPrefix(strings.TrimSpace(output), ".")
-	return output != "" && !strings.Contains(output, ".") && !strings.ContainsAny(output, "[]{}|/ \t\n\r\"'")
+	output = strings.TrimPrefix(strings.TrimSpace(output), yqPathSeparator)
+	return output != "" && !strings.Contains(output, yqPathSeparator) && !strings.ContainsAny(output, "[]{}|/ \t\n\r\"'")
 }
 
 // mockOutputExists detects absent simple output paths while preserving an
@@ -77,18 +83,18 @@ func isDirectMockOutputReference(output string) bool {
 // empty result can be intentional (for example, a filter expression).
 func mockOutputExists(mocks map[string]any, output string) bool {
 	if isDirectMockOutputReference(output) {
-		key := strings.TrimPrefix(strings.TrimSpace(output), ".")
+		key := strings.TrimPrefix(strings.TrimSpace(output), yqPathSeparator)
 		_, exists := mocks[key]
 		return exists
 	}
 
 	output = strings.TrimSpace(output)
-	if !strings.HasPrefix(output, ".") || strings.ContainsAny(output, "[]{}|/ \t\n\r\"'") {
+	if !strings.HasPrefix(output, yqPathSeparator) || strings.ContainsAny(output, "[]{}|/ \t\n\r\"'") {
 		return true
 	}
 
 	current := any(mocks)
-	for _, key := range strings.Split(strings.TrimPrefix(output, "."), ".") {
+	for _, key := range strings.Split(strings.TrimPrefix(output, yqPathSeparator), yqPathSeparator) {
 		if key == "" {
 			return true
 		}

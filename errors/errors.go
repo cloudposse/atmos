@@ -202,6 +202,10 @@ var (
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
+	// --use-mocks errors.
+	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
+	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
+
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
 	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")

@@ -179,18 +179,8 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	// (for example, `kubectl -n demo`) are never interpreted as Atmos flags.
 	positional, _ := flags.SplitArgsAtDash(cmd, args)
 	if requiresStack(subCommand) {
-		parsed, err := emulatorParser.Parse(context.Background(), positional)
-		if err != nil {
+		if err := applyParsedStackFlag(cmd, positional); err != nil {
 			return err
-		}
-		// Interactive selections only live in the parsed result. Carry the
-		// value forward explicitly rather than mutating global Viper state.
-		if parsed.Stack != "" {
-			if stackFlag := cmd.Flag("stack"); stackFlag != nil {
-				if err := stackFlag.Value.Set(parsed.Stack); err != nil {
-					return err
-				}
-			}
 		}
 	}
 	if parser, ok := componentPromptParsers[cmd]; ok {
@@ -214,6 +204,26 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 		Args:                info.AdditionalArgsAndFlags,
 		Flags:               verbFlags(cmd),
 	})
+}
+
+// applyParsedStackFlag parses the stack-selecting positional args for a
+// subcommand that requires a stack and, when interactive prompting resolved
+// one, propagates it onto the `--stack` flag. Interactive selections only live
+// in the parsed result, so the value is carried forward explicitly rather than
+// by mutating global Viper state.
+func applyParsedStackFlag(cmd *cobra.Command, positional []string) error {
+	parsed, err := emulatorParser.Parse(context.Background(), positional)
+	if err != nil {
+		return err
+	}
+	if parsed.Stack == "" {
+		return nil
+	}
+	stackFlag := cmd.Flag("stack")
+	if stackFlag == nil {
+		return nil
+	}
+	return stackFlag.Value.Set(parsed.Stack)
 }
 
 func requiresStack(subCommand string) bool {

@@ -53,16 +53,9 @@ func resolveEmulatorProfile(ctx context.Context, reference string) (emu.Profile,
 	// A qualified reference is an exact configured component address. Resolve it
 	// before consulting the runtime so an absent component is not misreported as
 	// a stopped emulator.
-	var configured *resolved
-	if ref.Stack != "" {
-		info := schema.ConfigAndStacksInfo{Stack: ref.Stack, ComponentFromArg: ref.Name, ComponentType: cfg.EmulatorComponentType}
-		configured, err = prepare(&info)
-		if err != nil {
-			if errors.Is(err, errUtils.ErrInvalidComponent) {
-				return emu.Profile{}, emulatorNotConfiguredError(ref)
-			}
-			return emu.Profile{}, err
-		}
+	configured, err := resolveConfiguredEmulatorComponent(ref)
+	if err != nil {
+		return emu.Profile{}, err
 	}
 
 	atmosConfig, err := initCliConfig(schema.ConfigAndStacksInfo{}, true)
@@ -79,39 +72,75 @@ func resolveEmulatorProfile(ctx context.Context, reference string) (emu.Profile,
 		return emu.Profile{}, err
 	}
 
-	matches := runningEmulatorsMatching(statuses, ref)
-	switch len(matches) {
-	case 0:
-		return emu.Profile{}, emulatorNotRunningError(ref)
-	case 1:
-		// Continue below.
-	default:
-		addresses := make([]string, 0, len(matches))
-		for _, match := range matches {
-			addresses = append(addresses, emulatorInstanceAddress(match.Stack, match.Name))
-		}
-		return emu.Profile{}, fmt.Errorf(
-			"%w: emulator %q matches multiple running instances (%s); set the identity's emulator to one INSTANCE value",
-			errUtils.ErrEmulatorAmbiguous,
-			ref.String(),
-			strings.Join(addresses, ", "),
-		)
+	match, err := matchSingleRunningEmulator(statuses, ref)
+	if err != nil {
+		return emu.Profile{}, err
 	}
 
 	r := configured
 	if r == nil {
-		info := schema.ConfigAndStacksInfo{Stack: matches[0].Stack, ComponentFromArg: ref.Name, ComponentType: cfg.EmulatorComponentType}
+		info := schema.ConfigAndStacksInfo{Stack: match.Stack, ComponentFromArg: ref.Name, ComponentType: cfg.EmulatorComponentType}
 		r, err = prepare(&info)
 		if err != nil {
 			return emu.Profile{}, err
 		}
 	}
 
-	_, profile, err := r.manager().Resolve(ctx, &r.spec, matches[0].Stack, ref.Name)
+	_, profile, err := r.manager().Resolve(ctx, &r.spec, match.Stack, ref.Name)
 	if err != nil {
 		return emu.Profile{}, err
 	}
 	return profile, nil
+}
+
+// resolveConfiguredEmulatorComponent resolves the exact configured component for
+// a qualified ("stack/name") reference. A bare reference has no configured stack
+// to resolve up front, so it returns a nil *resolved and is matched against the
+// runtime later.
+func resolveConfiguredEmulatorComponent(ref emulatorReference) (*resolved, error) {
+	if ref.Stack == "" {
+		return nil, nil
+	}
+	info := schema.ConfigAndStacksInfo{Stack: ref.Stack, ComponentFromArg: ref.Name, ComponentType: cfg.EmulatorComponentType}
+	configured, err := prepare(&info)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrInvalidComponent) {
+			return nil, emulatorNotConfiguredError(ref)
+		}
+		return nil, err
+	}
+	return configured, nil
+}
+
+// matchSingleRunningEmulator narrows the running emulator statuses to the single
+// instance selected by ref, producing a descriptive error when none or more than
+// one instance matches.
+func matchSingleRunningEmulator(statuses []emu.Status, ref emulatorReference) (emu.Status, error) {
+	matches := runningEmulatorsMatching(statuses, ref)
+	switch len(matches) {
+	case 0:
+		return emu.Status{}, emulatorNotRunningError(ref)
+	case 1:
+		return matches[0], nil
+	default:
+		return emu.Status{}, multipleEmulatorMatchesError(matches, ref)
+	}
+}
+
+// multipleEmulatorMatchesError reports that an unqualified reference matched more
+// than one running emulator instance, listing the qualified addresses so the
+// caller can disambiguate.
+func multipleEmulatorMatchesError(matches []emu.Status, ref emulatorReference) error {
+	addresses := make([]string, 0, len(matches))
+	for _, match := range matches {
+		addresses = append(addresses, emulatorInstanceAddress(match.Stack, match.Name))
+	}
+	return fmt.Errorf(
+		"%w: emulator %q matches multiple running instances (%s); set the identity's emulator to one INSTANCE value",
+		errUtils.ErrEmulatorAmbiguous,
+		ref.String(),
+		strings.Join(addresses, ", "),
+	)
 }
 
 func emulatorNotConfiguredError(ref emulatorReference) error {
@@ -171,6 +200,8 @@ func parseEmulatorReference(value string) (emulatorReference, error) {
 }
 
 func (r emulatorReference) String() string {
+	defer perf.Track(nil, "emulator.emulatorReference.String")()
+
 	if r.Stack == "" {
 		return r.Name
 	}

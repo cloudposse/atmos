@@ -242,8 +242,8 @@ func skippedResultCount(result *scheduler.AggregateResult) int {
 		return 0
 	}
 	count := 0
-	for _, nodeResult := range result.Results {
-		if nodeResult.Status == scheduler.StatusSkipped {
+	for i := range result.Results {
+		if result.Results[i].Status == scheduler.StatusSkipped {
 			count++
 		}
 	}
