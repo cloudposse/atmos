@@ -26,6 +26,10 @@ func initRemoteImportsGitRepo(t *testing.T, files map[string]string) string {
 	runRemoteImportsGit(t, repoDir, "checkout", "-b", "main")
 	runRemoteImportsGit(t, repoDir, "config", "user.email", "test@example.com")
 	runRemoteImportsGit(t, repoDir, "config", "user.name", "Test User")
+	// Disable commit signing for this throwaway fixture repo so the test
+	// never depends on the developer machine's ambient signing config
+	// (e.g. a 1Password SSH signer, which can transiently fail under load).
+	runRemoteImportsGit(t, repoDir, "config", "commit.gpgsign", "false")
 
 	for name, content := range files {
 		path := filepath.Join(repoDir, filepath.FromSlash(name))

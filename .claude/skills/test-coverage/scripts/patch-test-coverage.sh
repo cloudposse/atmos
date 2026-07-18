@@ -52,8 +52,12 @@ cleanup() {
 trap cleanup EXIT
 
 set +e
+# -timeout 40m matches the repo's own full-run convention (.atmos.d/test.yaml)
+# instead of go test's stingy 10m default, which a large touched-package set
+# (or a table test like TestCLICommands growing with this patch) can exceed
+# on wall-clock time alone even with zero real failures.
 # shellcheck disable=SC2086
-go test -v -coverprofile="$tmp_profile" -covermode=set $packages >"$tmp_output" 2>&1
+go test -v -timeout 40m -coverprofile="$tmp_profile" -covermode=set $packages >"$tmp_output" 2>&1
 test_exit=$?
 set -e
 
