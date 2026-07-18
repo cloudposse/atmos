@@ -6,7 +6,7 @@ authors:
   - jamengual
 tags:
   - feature
-date: 2025-10-22T12:00:00.000Z
+date: 2026-07-16T12:00:00.000Z
 release: v1.196.0
 ---
 
@@ -151,10 +151,10 @@ vars:
   db_endpoint: !terraform.state database .config_map.endpoint
 
   # String concatenation
-  jdbc_url: !terraform.state postgres ".master_hostname | \"jdbc:postgresql://\" + . + \":5432/events\""
+  jdbc_url: !terraform.state 'postgres .master_hostname | "jdbc:postgresql://" + . + ":5432/events"'
 
   # Default values for unprovisioned components
-  username: !terraform.state config ".username // \"default-user\""
+  username: !terraform.state config .username // "default-user"
 ```
 
 ### Caching
@@ -268,7 +268,7 @@ components:
         primary_vpc: !terraform.state vpc plat-ue2-prod vpc_id
 
         # DR region with default fallback
-        dr_vpc: !terraform.state vpc plat-uw2-prod ".vpc_id // \"vpc-mock-dr\""
+        dr_vpc: !terraform.state vpc plat-uw2-prod .vpc_id // "vpc-mock-dr"
 ```
 
 ## Considerations

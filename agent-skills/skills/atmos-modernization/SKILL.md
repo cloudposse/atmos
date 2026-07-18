@@ -28,6 +28,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | Legacy hook event spelling | Modern dotted lifecycle events such as `after.terraform.plan` |
 | Static GitHub tokens in URLs | Atmos Auth `github/sts` through Atmos Pro |
 | `cloudposse/terraform-aws-components` sources | Repos in the `cloudposse-terraform-components` organization |
+| Parser-specific doubled double quotes (`""`) in `!terraform.state` or `!terraform.output` expressions | Direct YQ expressions; quote only as required by YAML |
 
 ## Process
 
@@ -37,6 +38,36 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 3. Preserve resolved stack output unless the modernization intentionally changes behavior.
 4. Validate with `atmos describe component <component> -s <stack>` before changing CI.
 5. Update CI last, after stack config and auth patterns are current.
+
+## YAML Function Quoting
+
+Older stack manifests may wrap an entire YQ expression in double quotes and double its inner
+double quotes. That parser-specific escaping is obsolete: `!terraform.state` and
+`!terraform.output` parse the component, optional stack, and remaining expression directly.
+
+Replace legacy string-default quoting:
+
+```yaml
+# Before
+username: !terraform.output config ".username // ""default-user"""
+
+# After
+username: !terraform.output config .username // "default-user"
+```
+
+Replace legacy string-concatenation quoting:
+
+```yaml
+# Before
+postgres_url: !terraform.state aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432/events"""
+
+# After
+postgres_url: !terraform.state 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432/events"'
+```
+
+The outer single quotes in the concatenation example are YAML quoting, not function-parser
+escaping. Use YAML quoting only when the scalar requires it; for complete YAML and YQ quoting
+guidance, see the [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md) skill.
 
 ## Native CI Direction
 
