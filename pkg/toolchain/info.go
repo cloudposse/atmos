@@ -30,7 +30,6 @@ const (
 	dateFormatYYYYMMDDLen = 10  // Length of "YYYY-MM-DD".
 	fallbackTerminalWidth = 120 // Default terminal width when detection fails.
 	emptyValuePlaceholder = " " // Placeholder for empty values in output.
-	indicatorColumnWidth  = 3   // 1-char indicator + 1 char padding each side; keeps the dot column from being stretched by lipgloss/table's auto-expand.
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
@@ -234,12 +233,10 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 		rows = append(rows, []string{indicator, v.version, date, title})
 	}
 
-	// Get terminal width - use exactly what's detected.
-	detectedWidth := templates.GetTerminalWidth()
-	tableWidth := detectedWidth - tableBorderPadding
-
-	// Create table with lipgloss/table to match version list exactly.
-	// Use lipgloss/table for auto column width calculation.
+	// Keep the table within the terminal width. All columns must use the same
+	// auto-sizing path; pinning only the indicator column makes non-TTY headers
+	// expand differently from their corresponding body cells.
+	tableWidth := templates.GetTerminalWidth() - tableBorderPadding
 	t, err := createVersionsTable(rows, tableWidth)
 	if err != nil {
 		ui.Writeln(err.Error())
@@ -257,7 +254,6 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 	// Styling to match atmos version list exactly.
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for date.
-
 	// Create table with lipgloss/table - only border under header.
 	t := lipglosstable.New().
 		Headers("", "VERSION", "DATE", "TITLE").
@@ -272,8 +268,6 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
-			case col == 0: // Indicator column: pin the width so lipgloss/table's expand step doesn't stretch this 1-char column.
-				return lipgloss.NewStyle().Padding(0, 1).Width(indicatorColumnWidth)
 			case row == lipglosstable.HeaderRow:
 				return headerStyle.Padding(0, 1)
 			case col == 2: // Date column.

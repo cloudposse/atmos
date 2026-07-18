@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"strings"
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -8,6 +9,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestCreateVersionsTableDoesNotExpandHeaders(t *testing.T) {
+	t.Parallel()
+
+	table, err := createVersionsTable([][]string{
+		{" ", "X.X.X", "YYYY-MM-DD", "X.X.X"},
+		{" ", "X.X.X", "YYYY-MM-DD", "When the result list is updated, move the cursor to the item with the best score"},
+	}, 72)
+
+	assert.NoError(t, err)
+
+	header := strings.TrimRight(strings.Split(table.String(), "\n")[0], " ")
+	assert.Equal(t, "    VERSION  DATE        TITLE", header)
+	assert.NotContains(t, header, "VERSION                DATE")
+}
 
 func TestInfoCommand_AliasResolution(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{})
