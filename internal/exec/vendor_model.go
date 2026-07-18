@@ -605,7 +605,7 @@ func recordVendorLock(p *pkgAtmosVendor, tempDir string, atmosConfig *schema.Atm
 		},
 		Files: files,
 	}
-	return lockfile.Replace(atmosConfig, lockfile.ArtifactID(artifact.Kind, artifact.Target), artifact)
+	return lockfile.Replace(atmosConfig, lockfile.ArtifactID(artifact.Kind, artifact.Target, p.name), artifact)
 }
 
 // needsVendorMaterialization returns false only for a copy mode with an exact
@@ -613,7 +613,7 @@ func recordVendorLock(p *pkgAtmosVendor, tempDir string, atmosConfig *schema.Atm
 func needsVendorMaterialization(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfiguration) (bool, error) {
 	materialized, err := lockfile.IsMaterialized(
 		atmosConfig,
-		lockfile.ArtifactID(p.pkgType.String(), p.targetPath),
+		lockfile.ArtifactID(p.pkgType.String(), p.targetPath, p.name),
 		lockDeclaredSource(p.pkgType, p.uri),
 		p.targetPath,
 	)

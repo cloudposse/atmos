@@ -477,7 +477,13 @@ func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
 		pkgType:    pkgTypeLocal,
 	}
 	require.NoError(t, recordVendorLock(pkg, tempDir, config))
+	secondPkg := *pkg
+	secondPkg.name = "vpc-secondary"
+	require.NoError(t, recordVendorLock(&secondPkg, tempDir, config))
 	needs, err := needsVendorMaterialization(pkg, config)
+	require.NoError(t, err)
+	require.False(t, needs)
+	needs, err = needsVendorMaterialization(&secondPkg, config)
 	require.NoError(t, err)
 	require.False(t, needs)
 	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("modified"), 0o644))
@@ -487,12 +493,12 @@ func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
 
 	lock, err := lockfile.Load(config)
 	require.NoError(t, err)
-	require.Len(t, lock.Artifacts, 1)
+	require.Len(t, lock.Artifacts, 2)
 	for _, artifact := range lock.Artifacts {
 		require.Equal(t, "sha256", artifact.Source.Digest[:6])
 		require.Equal(t, []lockfile.File{{
 			Path: "main.tf", Type: "file", Mode: 0o644,
-			SHA256: "d8bf94d27094999a0e1f8cf9a1d4a25c2c8eb615fd828c8f15dd87f02ef76a21",
+			SHA256: "5de95319f17467ed6dc58e4e0b16c1193a13b35d60dc48bcf06bf6b7beebbe6c",
 		}}, artifact.Files)
 	}
 }

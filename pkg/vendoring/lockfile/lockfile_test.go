@@ -14,11 +14,12 @@ import (
 func TestSaveRedactsSourcesAndIsDeterministic(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
+	target := filepath.Join(base, "vendor")
 	config := &schema.AtmosConfiguration{BasePath: base}
 	lock := New()
 	lock.Artifacts["b"] = Artifact{
 		Kind:   "source",
-		Target: filepath.Join(base, "vendor"),
+		Target: target,
 		Source: Source{Declared: "https://token@example.com/repository?signature=secret"},
 		Files: []File{
 			{Path: "z.txt", Type: "file", SHA256: "z"},
@@ -32,6 +33,8 @@ func TestSaveRedactsSourcesAndIsDeterministic(t *testing.T) {
 	require.NotContains(t, string(first), "token")
 	require.NotContains(t, string(first), "secret")
 	require.Less(t, strings.Index(string(first), "a.txt"), strings.Index(string(first), "z.txt"))
+	require.Contains(t, string(first), "target: vendor")
+	require.NotContains(t, string(first), filepath.ToSlash(target))
 
 	require.NoError(t, Save(config, lock))
 	second, err := os.ReadFile(Path(config))
@@ -93,6 +96,49 @@ func TestCleanRetainsPathsOwnedByUnselectedArtifact(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, loaded.Artifacts, "first")
 	require.Contains(t, loaded.Artifacts, "second")
+}
+
+func TestCleanRejectsLockTargetOutsideProject(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		target func(string, string) string
+	}{
+		{name: "traversal", target: func(_ string, _ string) string { return "../outside" }},
+		{name: "absolute", target: func(_ string, outside string) string { return outside }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			base := filepath.Join(root, "project")
+			outside := filepath.Join(root, "outside")
+			require.NoError(t, os.MkdirAll(base, 0o755))
+			require.NoError(t, os.MkdirAll(outside, 0o755))
+			outsideFile := filepath.Join(outside, "owned.txt")
+			require.NoError(t, os.WriteFile(outsideFile, []byte("do not remove"), 0o644))
+
+			config := &schema.AtmosConfiguration{BasePath: base}
+			maliciousLock := `version: 1
+artifacts:
+  malicious:
+    component: malicious
+    kind: local
+    target: ` + test.target(base, outside) + `
+    source: {}
+    files:
+      - path: owned.txt
+        type: file
+        mode: 420
+        sha256: ignored
+    order: 1
+`
+			require.NoError(t, os.WriteFile(Path(config), []byte(maliciousLock), 0o644))
+
+			_, err := Clean(config, "", true, false)
+			require.Error(t, err)
+			require.FileExists(t, outsideFile)
+		})
+	}
 }
 
 func TestIsMaterializedRequiresMatchingSourceAndFiles(t *testing.T) {

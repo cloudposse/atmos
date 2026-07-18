@@ -137,6 +137,11 @@ func Save(config *schema.AtmosConfiguration, lock *LockFile) error {
 		lock.Artifacts = map[string]Artifact{}
 	}
 	for id, artifact := range lock.Artifacts {
+		target, targetErr := projectRelativeTarget(config, artifact.Target)
+		if targetErr != nil {
+			return fmt.Errorf("normalize lock target for artifact %q: %w", id, targetErr)
+		}
+		artifact.Target = target
 		artifact.Source.Declared = RedactSource(artifact.Source.Declared)
 		artifact.Source.Resolved = RedactSource(artifact.Source.Resolved)
 		sort.Slice(artifact.Files, func(i, j int) bool { return artifact.Files[i].Path < artifact.Files[j].Path })
@@ -318,12 +323,16 @@ func IsMaterialized(config *schema.AtmosConfiguration, id, declared, target stri
 	if err != nil {
 		return false, err
 	}
+	lockTarget, err := projectRelativeTarget(config, target)
+	if err != nil {
+		return false, err
+	}
 	artifact, found := lock.Artifacts[id]
-	if !found || artifact.Target != target || artifact.Source.Declared != RedactSource(declared) {
+	if !found || artifact.Target != lockTarget || artifact.Source.Declared != RedactSource(declared) {
 		return false, nil
 	}
 	for _, file := range artifact.Files {
-		path, pathErr := lockedPath(artifact.Target, file.Path)
+		path, pathErr := lockedPath(config, artifact.Target, file.Path)
 		if pathErr != nil {
 			return false, pathErr
 		}
@@ -339,6 +348,11 @@ func IsMaterialized(config *schema.AtmosConfiguration, id, declared, target stri
 // materialized. It safely prunes stale, unchanged files from the previous
 // receipt while retaining files claimed by another artifact.
 func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) error {
+	target, err := projectRelativeTarget(config, artifact.Target)
+	if err != nil {
+		return fmt.Errorf("normalize artifact target: %w", err)
+	}
+	artifact.Target = target
 	lock, err := Load(config)
 	if err != nil {
 		return err
@@ -351,7 +365,7 @@ func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) er
 	}
 	newPaths := map[string]struct{}{}
 	for _, file := range artifact.Files {
-		path, pathErr := lockedPath(artifact.Target, file.Path)
+		path, pathErr := lockedPath(config, artifact.Target, file.Path)
 		if pathErr != nil {
 			return pathErr
 		}
@@ -359,11 +373,11 @@ func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) er
 	}
 	if hadPrevious {
 		for _, file := range previous.Files {
-			path, pathErr := lockedPath(previous.Target, file.Path)
+			path, pathErr := lockedPath(config, previous.Target, file.Path)
 			if pathErr != nil {
 				return pathErr
 			}
-			if _, retained := newPaths[path]; retained || ownedByAnother(lock, id, path) {
+			if _, retained := newPaths[path]; retained || ownedByAnother(config, lock, id, path) {
 				continue
 			}
 			info, statErr := os.Lstat(path)
@@ -379,22 +393,30 @@ func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) er
 			if err := os.Remove(path); err != nil {
 				return fmt.Errorf("remove stale lock-owned file %q: %w", path, err)
 			}
-			removeEmptyParents(filepath.Dir(path), previous.Target)
+			previousRoot, rootErr := lockTargetRoot(config, previous.Target)
+			if rootErr != nil {
+				return rootErr
+			}
+			removeEmptyParents(filepath.Dir(path), previousRoot)
 		}
 	}
 	lock.Artifacts[id] = artifact
 	return Save(config, lock)
 }
 
-// Verify compares lock-owned files with the current target tree.
-func Verify(lock *LockFile) []Drift {
+// Verify compares lock-owned files with the current target tree and rejects
+// lock targets that escape the configured project root.
+func Verify(config *schema.AtmosConfiguration, lock *LockFile) ([]Drift, error) {
 	if lock == nil {
-		return nil
+		return nil, nil
 	}
 	var drifts []Drift
 	for id, artifact := range lock.Artifacts {
 		for _, file := range artifact.Files {
-			path := filepath.Join(artifact.Target, filepath.FromSlash(file.Path))
+			path, pathErr := lockedPath(config, artifact.Target, file.Path)
+			if pathErr != nil {
+				return nil, pathErr
+			}
 			info, err := os.Lstat(path)
 			if os.IsNotExist(err) {
 				drifts = append(drifts, Drift{Artifact: id, Path: path, Reason: "missing"})
@@ -418,7 +440,7 @@ func Verify(lock *LockFile) []Drift {
 			}
 		}
 	}
-	return drifts
+	return drifts, nil
 }
 
 // Clean removes files owned by selected lock artifacts. A blank component
@@ -438,7 +460,7 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 			continue
 		}
 		for _, file := range artifact.Files {
-			path, pathErr := lockedPath(artifact.Target, file.Path)
+			path, pathErr := lockedPath(config, artifact.Target, file.Path)
 			if pathErr != nil {
 				return nil, pathErr
 			}
@@ -450,7 +472,7 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 	// lock. This keeps a conflict from producing a partially-cleaned receipt.
 	for id, artifact := range selected {
 		for _, file := range artifact.Files {
-			path, pathErr := lockedPath(artifact.Target, file.Path)
+			path, pathErr := lockedPath(config, artifact.Target, file.Path)
 			if pathErr != nil {
 				return nil, pathErr
 			}
@@ -475,7 +497,7 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 
 	for _, artifact := range selected {
 		for _, file := range artifact.Files {
-			path, pathErr := lockedPath(artifact.Target, file.Path)
+			path, pathErr := lockedPath(config, artifact.Target, file.Path)
 			if pathErr != nil {
 				return nil, pathErr
 			}
@@ -491,7 +513,11 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 				if err := os.Remove(path); err != nil {
 					return nil, fmt.Errorf("remove lock-owned file %q: %w", path, err)
 				}
-				removeEmptyParents(filepath.Dir(path), artifact.Target)
+				root, rootErr := lockTargetRoot(config, artifact.Target)
+				if rootErr != nil {
+					return nil, rootErr
+				}
+				removeEmptyParents(filepath.Dir(path), root)
 			}
 			report.Removed = append(report.Removed, path)
 		}
@@ -523,12 +549,79 @@ func RedactSource(source string) string {
 	return strings.SplitN(source, "?", 2)[0]
 }
 
-func lockedPath(root, relative string) (string, error) {
+func lockedPath(config *schema.AtmosConfiguration, target, relative string) (string, error) {
+	root, err := lockTargetRoot(config, target)
+	if err != nil {
+		return "", err
+	}
 	cleaned := filepath.Clean(filepath.FromSlash(relative))
 	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
 		return "", fmt.Errorf("invalid lock-owned file path %q", relative)
 	}
 	return filepath.Join(root, cleaned), nil
+}
+
+// projectRelativeTarget canonicalizes a runtime target before it is persisted.
+// Absolute targets are accepted only when they resolve beneath the project root.
+func projectRelativeTarget(config *schema.AtmosConfiguration, target string) (string, error) {
+	base, err := projectBase(config)
+	if err != nil {
+		return "", err
+	}
+	cleaned := filepath.Clean(filepath.FromSlash(target))
+	if filepath.IsAbs(cleaned) {
+		cleaned, err = filepath.Rel(base, cleaned)
+		if err != nil {
+			return "", fmt.Errorf("make target relative to project root: %w", err)
+		}
+	}
+	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
+		return "", fmt.Errorf("invalid vendor lock target %q", target)
+	}
+	return filepath.ToSlash(cleaned), nil
+}
+
+// lockTargetRoot resolves a persisted target beneath the project root. Persisted
+// targets must be relative so a crafted lock cannot redirect filesystem actions.
+func lockTargetRoot(config *schema.AtmosConfiguration, target string) (string, error) {
+	if filepath.IsAbs(filepath.FromSlash(target)) {
+		return "", fmt.Errorf("invalid absolute vendor lock target %q", target)
+	}
+	relative, err := projectRelativeTarget(config, target)
+	if err != nil {
+		return "", err
+	}
+	base, err := projectBase(config)
+	if err != nil {
+		return "", err
+	}
+	root := filepath.Join(base, filepath.FromSlash(relative))
+	if relative, err := filepath.Rel(base, root); err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("vendor lock target %q escapes project root", target)
+	}
+	return root, nil
+}
+
+func projectBase(config *schema.AtmosConfiguration) (string, error) {
+	base := ""
+	if config != nil {
+		base = config.BasePath
+		if base == "" {
+			base = config.CliConfigPath
+		}
+	}
+	if base == "" {
+		var err error
+		base, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("get project root: %w", err)
+		}
+	}
+	abs, err := filepath.Abs(base)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root: %w", err)
+	}
+	return filepath.Clean(abs), nil
 }
 
 func matches(file File, path string, info os.FileInfo) bool {
@@ -566,13 +659,13 @@ func nextOrder(lock *LockFile) int {
 	return order + 1
 }
 
-func ownedByAnother(lock *LockFile, excludedID, path string) bool {
+func ownedByAnother(config *schema.AtmosConfiguration, lock *LockFile, excludedID, path string) bool {
 	for id, artifact := range lock.Artifacts {
 		if id == excludedID {
 			continue
 		}
 		for _, file := range artifact.Files {
-			artifactPath, err := lockedPath(artifact.Target, file.Path)
+			artifactPath, err := lockedPath(config, artifact.Target, file.Path)
 			if err == nil && artifactPath == path {
 				return true
 			}
