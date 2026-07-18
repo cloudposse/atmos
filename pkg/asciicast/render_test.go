@@ -449,6 +449,35 @@ func TestResolveRenderToolsUsesAbsoluteBinaryPaths(t *testing.T) {
 	}
 }
 
+// TestResolveRenderToolsSkipsInstallWhenNoToolsRequired asserts the
+// short-circuit at the top of resolveRenderToolsFromToolchain: a static
+// render target (ASCII/HTML/PNG/JPEG) produces a zero-value
+// renderToolRequirements, and that must return immediately without ever
+// invoking the dependency installer or binary resolver hooks -- reaching
+// either would mean an unnecessary (and possibly network-dependent) tool
+// install was triggered for a render that needs no managed renderer at all.
+func TestResolveRenderToolsSkipsInstallWhenNoToolsRequired(t *testing.T) {
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error {
+			t.Fatal("should not install dependencies when no renderer tools are required")
+			return nil
+		},
+		func(renderToolSpec) (string, error) {
+			t.Fatal("should not resolve binaries when no renderer tools are required")
+			return "", nil
+		},
+	)
+
+	tools, err := resolveRenderToolsFromToolchain(renderToolRequirements{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if tools != (renderTools{}) {
+		t.Fatalf("expected zero-value renderTools, got %#v", tools)
+	}
+}
+
 func withRenderToolResolver(t *testing.T, resolver func(renderToolRequirements) (renderTools, error)) {
 	t.Helper()
 	previous := resolveRenderTools
