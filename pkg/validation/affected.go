@@ -23,29 +23,57 @@ var errValidationExcludePatternEmpty = errors.New("validation exclude pattern ca
 // whether a dependent validator must run, while skipping files that can no
 // longer be read.
 func AffectedFiles(base string) ([]string, error) {
-	base, explicit := resolveAffectedBase(base)
-	mergeBase, err := runGit("merge-base", "HEAD", base)
-	if err != nil && !explicit && base == "origin/HEAD" {
+	mergeBase, err := resolveAffectedMergeBase(base)
+	if err != nil {
+		return nil, err
+	}
+
+	combined, err := collectAffectedDiffOutputs(mergeBase)
+	if err != nil {
+		return nil, err
+	}
+
+	return dedupeAffectedPaths(combined), nil
+}
+
+// resolveAffectedMergeBase resolves the requested base to a merge-base commit,
+// falling back to HEAD~1 when origin/HEAD cannot be resolved (for example, a
+// shallow checkout with no remote-tracking branch).
+func resolveAffectedMergeBase(base string) (string, error) {
+	resolvedBase, explicit := resolveAffectedBase(base)
+	mergeBase, err := runGit("merge-base", "HEAD", resolvedBase)
+	if err != nil && !explicit && resolvedBase == "origin/HEAD" {
 		mergeBase, err = runGit("merge-base", "HEAD", "HEAD~1")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("resolve validation base %q: %w", base, err)
+		return "", fmt.Errorf("resolve validation base %q: %w", resolvedBase, err)
 	}
+	return mergeBase, nil
+}
 
+// collectAffectedDiffOutputs gathers and concatenates the NUL-separated path
+// lists that make up the affected set: committed changes since mergeBase,
+// uncommitted changes, and untracked files.
+func collectAffectedDiffOutputs(mergeBase string) (string, error) {
 	output, err := runGit("diff", "--name-only", "-z", "--diff-filter=ACMRD", strings.TrimSpace(mergeBase)+"...HEAD")
 	if err != nil {
-		return nil, fmt.Errorf("list files changed since %s: %w", strings.TrimSpace(mergeBase), err)
+		return "", fmt.Errorf("list files changed since %s: %w", strings.TrimSpace(mergeBase), err)
 	}
 	worktree, err := runGit("diff", "--name-only", "-z", "--diff-filter=ACMRD")
 	if err != nil {
-		return nil, fmt.Errorf("list uncommitted changed files: %w", err)
+		return "", fmt.Errorf("list uncommitted changed files: %w", err)
 	}
 	untracked, err := runGit("ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil {
-		return nil, fmt.Errorf("list untracked files: %w", err)
+		return "", fmt.Errorf("list untracked files: %w", err)
 	}
+	return output + worktree + untracked, nil
+}
 
-	paths := strings.Split(output+worktree+untracked, "\x00")
+// dedupeAffectedPaths splits a NUL-separated path list, normalizes separators,
+// and removes duplicates while preserving first-seen order.
+func dedupeAffectedPaths(combined string) []string {
+	paths := strings.Split(combined, "\x00")
 	result := make([]string, 0, len(paths))
 	seen := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
@@ -58,7 +86,7 @@ func AffectedFiles(base string) ([]string, error) {
 			result = append(result, path)
 		}
 	}
-	return result, nil
+	return result
 }
 
 var runGit = func(args ...string) (string, error) {
@@ -111,6 +139,8 @@ func githubEventBaseSHA() string {
 // IsAtmosConfigPath reports whether path is one of the project-local Atmos
 // configuration files read by the CLI configuration loader.
 func IsAtmosConfigPath(path string) bool {
+	defer perf.Track(nil, "validation.IsAtmosConfigPath")()
+
 	path = filepath.ToSlash(filepath.Clean(path))
 	if path == "atmos.yaml" || path == "atmos.yml" || path == ".atmos.yaml" || path == ".atmos.yml" {
 		return true

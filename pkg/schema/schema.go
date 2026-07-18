@@ -337,7 +337,7 @@ type EditorConfig struct {
 	DryRun          bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
 	Format          string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
 	ConfigFilePaths []string `yaml:"config_file_paths,omitempty" json:"config_file_paths,omitempty" mapstructure:"config_file_paths"`
-	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
+	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"` // Glob patterns for files to exclude
 	Init            bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
 
 	DisableEndOfLine              bool `yaml:"disable_end_of_line,omitempty" json:"disable_end_of_line,omitempty" mapstructure:"disable_end_of_line"`

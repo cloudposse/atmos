@@ -290,7 +290,7 @@ func TestReplaceAtmosConfigInConfig(t *testing.T) {
 				tt.setup(cmd)
 			}
 
-			require.NoError(t, replaceAtmosConfigInConfig(cmd, tt.atmosConfig))
+			require.NoError(t, replaceAtmosConfigInConfig(cmd, &tt.atmosConfig))
 			tt.validate(t)
 		})
 	}
@@ -400,10 +400,10 @@ func TestRequestedEditorConfigFormatPrecedence(t *testing.T) {
 	require.NoError(t, cmd.ParseFlags(nil))
 
 	t.Setenv("ATMOS_VALIDATE_FORMAT", "sarif")
-	assert.Equal(t, "sarif", requestedEditorConfigFormat(cmd, config))
+	assert.Equal(t, "sarif", requestedEditorConfigFormat(cmd, &config))
 	format = "codeclimate"
 	require.NoError(t, cmd.Flags().Set("format", format))
-	assert.Equal(t, "codeclimate", requestedEditorConfigFormat(cmd, config))
+	assert.Equal(t, "codeclimate", requestedEditorConfigFormat(cmd, &config))
 }
 
 func TestEmitEditorConfigCI(t *testing.T) {

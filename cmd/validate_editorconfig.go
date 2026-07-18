@@ -96,7 +96,7 @@ func initializeConfig(cmd *cobra.Command) error {
 	editorConfigSARIF = false
 	editorConfigRich = false
 	configFilePaths = nil
-	if err := replaceAtmosConfigInConfig(cmd, atmosConfig); err != nil {
+	if err := replaceAtmosConfigInConfig(cmd, &atmosConfig); err != nil {
 		return err
 	}
 
@@ -128,13 +128,33 @@ func initializeConfig(cmd *cobra.Command) error {
 	return nil
 }
 
-func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) error {
+func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
+	applyEditorConfigPathOverrides(cmd, atmosConfig)
+	if err := applyEditorConfigFormatOverride(cmd, atmosConfig); err != nil {
+		return err
+	}
+	applyEditorConfigVerbosityOverride(cmd, atmosConfig)
+	applyEditorConfigColorOverride(cmd, atmosConfig)
+	applyEditorConfigDisableOverrides(cmd, atmosConfig)
+
+	return nil
+}
+
+// applyEditorConfigPathOverrides applies atmos.yaml fallbacks for the
+// EditorConfig command's file-discovery flags (--config, --init,
+// --ignore-defaults, --dry-run) whenever the corresponding flag was not set
+// explicitly on the command line.
+func applyEditorConfigPathOverrides(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) {
 	if !cmd.Flags().Changed("config") && len(atmosConfig.Validate.EditorConfig.ConfigFilePaths) > 0 {
 		configFilePaths = atmosConfig.Validate.EditorConfig.ConfigFilePaths
 	}
-	if !cmd.Flags().Changed("exclude") && len(atmosConfig.Validate.EditorConfig.Exclude) > 0 {
-		tmpExclude = strings.Join(atmosConfig.Validate.EditorConfig.Exclude, ",")
-	}
+	// atmosConfig.Validate.EditorConfig.Exclude is glob-matched via
+	// runEditorConfig's excludes parameter (pkg/validation.ExcludePaths), not
+	// fed into tmpExclude here: this command's own --exclude flag stays a
+	// regex (editorconfig-checker's native, pre-existing contract), while the
+	// atmos.yaml config field uses glob -- the syntax most users reach for,
+	// and the same one every other `validate ... --exclude` flag in this repo
+	// already speaks.
 	if !cmd.Flags().Changed("init") && atmosConfig.Validate.EditorConfig.Init {
 		initEditorConfig = atmosConfig.Validate.EditorConfig.Init
 	}
@@ -144,15 +164,28 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("dry-run") && atmosConfig.Validate.EditorConfig.DryRun {
 		cliConfig.DryRun = atmosConfig.Validate.EditorConfig.DryRun
 	}
+}
+
+// applyEditorConfigFormatOverride resolves the requested output format (flag >
+// env var > atmos.yaml EditorConfig format > atmos.yaml Validate format) and
+// configures the vendored checker's format plus the SARIF/rich output
+// switches.
+func applyEditorConfigFormatOverride(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
 	requestedFormat := requestedEditorConfigFormat(cmd, atmosConfig)
-	if requestedFormat != "" {
-		isSARIF, err := configureEditorConfigFormat(requestedFormat)
-		if err != nil {
-			return err
-		}
-		editorConfigSARIF = isSARIF
+	if requestedFormat == "" {
+		return nil
 	}
-	// Set verbose mode if log level is Trace
+	isSARIF, err := configureEditorConfigFormat(requestedFormat)
+	if err != nil {
+		return err
+	}
+	editorConfigSARIF = isSARIF
+	return nil
+}
+
+// applyEditorConfigVerbosityOverride enables verbose output when the log
+// level -- from either a flag or atmos.yaml -- is Trace.
+func applyEditorConfigVerbosityOverride(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) {
 	traceFromConfig := !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == u.LogLevelTrace
 	traceFromFlag := false
 	if cmd.Flags().Changed("logs-level") {
@@ -165,42 +198,60 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if traceFromConfig || traceFromFlag {
 		cliConfig.Verbose = true
 	}
+}
+
+// applyEditorConfigColorOverride resolves --no-color from either the flag or
+// atmos.yaml's terminal settings.
+func applyEditorConfigColorOverride(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) {
 	if !cmd.Flags().Changed("no-color") && atmosConfig.Settings.Terminal.NoColor {
 		cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor
 	} else if cmd.Flags().Changed("no-color") {
 		cliConfig.NoColor, _ = cmd.Flags().GetBool("no-color")
 	}
-	if !cmd.Flags().Changed("disable-trim-trailing-whitespace") && atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace {
-		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace
-	}
-	if !cmd.Flags().Changed("disable-end-of-line") && atmosConfig.Validate.EditorConfig.DisableEndOfLine {
-		cliConfig.Disable.EndOfLine = atmosConfig.Validate.EditorConfig.DisableEndOfLine
-	}
-	if !cmd.Flags().Changed("disable-insert-final-newline") && atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline {
-		cliConfig.Disable.InsertFinalNewline = atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline
-	}
-	if !cmd.Flags().Changed("disable-indentation") && atmosConfig.Validate.EditorConfig.DisableIndentation {
-		cliConfig.Disable.Indentation = atmosConfig.Validate.EditorConfig.DisableIndentation
-	}
-	if !cmd.Flags().Changed("disable-indent-size") && atmosConfig.Validate.EditorConfig.DisableIndentSize {
-		cliConfig.Disable.IndentSize = atmosConfig.Validate.EditorConfig.DisableIndentSize
-	}
-	if !cmd.Flags().Changed("disable-max-line-length") && atmosConfig.Validate.EditorConfig.DisableMaxLineLength {
-		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.DisableMaxLineLength
-	}
-
-	return nil
 }
 
-func requestedEditorConfigFormat(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) string {
+// editorConfigDisableOverride pairs a --disable-* flag name with the
+// atmos.yaml source field and vendored-checker target field it feeds when the
+// flag was not set explicitly.
+type editorConfigDisableOverride struct {
+	flagName string
+	source   *bool
+	target   *bool
+}
+
+// applyEditorConfigDisableOverrides applies atmos.yaml fallbacks for each
+// --disable-* flag whenever the corresponding flag was not set explicitly.
+func applyEditorConfigDisableOverrides(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) {
+	overrides := []editorConfigDisableOverride{
+		{"disable-trim-trailing-whitespace", &atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace, &cliConfig.Disable.TrimTrailingWhitespace},
+		{"disable-end-of-line", &atmosConfig.Validate.EditorConfig.DisableEndOfLine, &cliConfig.Disable.EndOfLine},
+		{"disable-insert-final-newline", &atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline, &cliConfig.Disable.InsertFinalNewline},
+		{"disable-indentation", &atmosConfig.Validate.EditorConfig.DisableIndentation, &cliConfig.Disable.Indentation},
+		{"disable-indent-size", &atmosConfig.Validate.EditorConfig.DisableIndentSize, &cliConfig.Disable.IndentSize},
+		{"disable-max-line-length", &atmosConfig.Validate.EditorConfig.DisableMaxLineLength, &cliConfig.Disable.MaxLineLength},
+	}
+	for _, override := range overrides {
+		if !cmd.Flags().Changed(override.flagName) && *override.source {
+			*override.target = *override.source
+		}
+	}
+}
+
+// requestedEditorConfigFormat resolves the requested output format following
+// the standard flag > env var > config > default precedence via pkg/flags'
+// validateFormatEnvParser (shared with the other validate commands), instead
+// of a direct os.Getenv call.
+func requestedEditorConfigFormat(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) string {
 	if aggregateValidationFormat != "" {
 		return aggregateValidationFormat
 	}
 	if cmd.Flags().Changed("format") {
 		return format
 	}
-	if value := os.Getenv("ATMOS_VALIDATE_FORMAT"); value != "" {
-		return value
+	if err := validateFormatEnvParser.BindFlagsToViper(cmd, viper.GetViper()); err == nil {
+		if value := strings.TrimSpace(viper.GetString("format")); value != "" {
+			return value
+		}
 	}
 	if value := atmosConfig.Validate.EditorConfig.Format; value != "" {
 		return value
@@ -225,7 +276,7 @@ func configureEditorConfigFormat(value string) (bool, error) {
 
 	upstreamFormat := outputformat.OutputFormat(value)
 	if !upstreamFormat.IsValid() {
-		return false, fmt.Errorf("%v is not a valid format choose from the following: %v, sarif, rich", value, outputformat.GetArgumentChoiceText())
+		return false, fmt.Errorf("%w: %v is not a valid format choose from the following: %v, sarif, rich", errUtils.ErrEditorConfigInvalidFormat, value, outputformat.GetArgumentChoiceText())
 	}
 	cliConfig.Format = upstreamFormat
 	return false, nil
@@ -252,7 +303,7 @@ func runEditorConfig(cmd *cobra.Command) error {
 	if !affected || validateAll {
 		selectedFiles = nil
 	}
-	return runEditorConfigForFiles(cmd, selectedFiles, nil)
+	return runEditorConfigForFiles(cmd, selectedFiles, atmosConfig.Validate.EditorConfig.Exclude)
 }
 
 // runEditorConfigForFiles validates a subset of files when selectedFiles is
@@ -289,43 +340,7 @@ func runEditorConfigForFiles(cmd *cobra.Command, selectedFiles []string, exclude
 	}
 
 	if editorConfigSARIF || editorConfigRich {
-		validationErrors, err := validateEditorConfigForFiles(&config, selectedFiles, excludes)
-		if err != nil && len(validationErrors) == 0 {
-			ui.Error(fmt.Sprintf("Validation failed: %v", err))
-			return err
-		}
-		report := editorConfigDiagnostics(validationErrors)
-		emitEditorConfigCI(cmd, report)
-		if editorConfigRich {
-			root, rootErr := os.Getwd()
-			if rootErr != nil {
-				return rootErr
-			}
-			output := validateReport.Rich(report, validateReport.DefaultRichOptions(root))
-			if output != "" {
-				if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), output); writeErr != nil {
-					return writeErr
-				}
-			} else if err == nil {
-				if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), "✓ EditorConfig validation passed"); writeErr != nil {
-					return writeErr
-				}
-			}
-		} else {
-			body, marshalErr := report.SARIF()
-			if marshalErr != nil {
-				ui.Error(fmt.Sprintf("Failed to render SARIF: %v", marshalErr))
-				return marshalErr
-			}
-			if _, writeErr := cmd.OutOrStdout().Write(body); writeErr != nil {
-				ui.Error(fmt.Sprintf("Failed to write SARIF: %v", writeErr))
-				return writeErr
-			}
-		}
-		if editorConfigRich && err != nil {
-			return errUtils.ExitCodeError{Code: 1, Silent: true}
-		}
-		return err
+		return runEditorConfigStructuredOutput(cmd, &config, selectedFiles, excludes)
 	}
 
 	var filePaths []string
@@ -366,8 +381,64 @@ func runEditorConfigForFiles(cmd *cobra.Command, selectedFiles []string, exclude
 	return nil
 }
 
-func validateEditorConfig(config config.Config) ([]er.ValidationErrors, error) {
-	return validateEditorConfigForFiles(&config, nil, nil)
+// runEditorConfigStructuredOutput handles the rich and SARIF output modes for
+// EditorConfig validation, extracted from runEditorConfigForFiles to keep that
+// function a flat pipeline.
+func runEditorConfigStructuredOutput(cmd *cobra.Command, config *config.Config, selectedFiles, excludes []string) error {
+	validationErrors, err := validateEditorConfigForFiles(config, selectedFiles, excludes)
+	if err != nil && len(validationErrors) == 0 {
+		ui.Error(fmt.Sprintf("Validation failed: %v", err))
+		return err
+	}
+	report := editorConfigDiagnostics(validationErrors)
+	emitEditorConfigCI(cmd, report)
+
+	if editorConfigRich {
+		if writeErr := writeEditorConfigRichOutput(cmd, report, err); writeErr != nil {
+			return writeErr
+		}
+	} else if writeErr := writeEditorConfigSARIFOutput(cmd, report); writeErr != nil {
+		return writeErr
+	}
+
+	if editorConfigRich && err != nil {
+		return errUtils.ExitCodeError{Code: 1, Silent: true}
+	}
+	return err
+}
+
+// writeEditorConfigRichOutput renders the collected report as source-excerpt
+// diagnostics, or a success message when there is nothing to show and
+// validationErr is nil.
+func writeEditorConfigRichOutput(cmd *cobra.Command, report validateReport.Report, validationErr error) error {
+	root, rootErr := os.Getwd()
+	if rootErr != nil {
+		return rootErr
+	}
+	output := validateReport.Rich(report, validateReport.DefaultRichOptions(root))
+	if output != "" {
+		_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), output)
+		return writeErr
+	}
+	if validationErr == nil {
+		_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), "✓ EditorConfig validation passed")
+		return writeErr
+	}
+	return nil
+}
+
+// writeEditorConfigSARIFOutput renders the collected report as a SARIF document.
+func writeEditorConfigSARIFOutput(cmd *cobra.Command, report validateReport.Report) error {
+	body, marshalErr := report.SARIF()
+	if marshalErr != nil {
+		ui.Error(fmt.Sprintf("Failed to render SARIF: %v", marshalErr))
+		return marshalErr
+	}
+	if _, writeErr := cmd.OutOrStdout().Write(body); writeErr != nil {
+		ui.Error(fmt.Sprintf("Failed to write SARIF: %v", writeErr))
+		return writeErr
+	}
+	return nil
 }
 
 func validateEditorConfigForFiles(config *config.Config, selectedFiles []string, excludes []string) ([]er.ValidationErrors, error) {

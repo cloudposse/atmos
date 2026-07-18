@@ -11,6 +11,10 @@ USAGE
 
 FLAGS
 
+      --affected                          Validate only files affected since the Git merge-base
+
+      --base string                       Git base ref or SHA to compare against for affected validation
+
       --ci                                Enable CI mode for automated pipelines (annotations, SARIF upload)
 
       --disable-end-of-line               Disable end-of-line check

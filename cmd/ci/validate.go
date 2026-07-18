@@ -27,9 +27,24 @@ const (
 	validateFormatText  = "text"
 	validateFormatRich  = "rich"
 	validateFormatSARIF = "sarif"
+
+	// The ciFormatFlagName constant names the shared "format" flag, referenced
+	// by both the direct cobra registration and the standard-parser env-var
+	// wiring below.
+	ciFormatFlagName = "format"
 )
 
 var errWorkflowValidationFailed = errors.New("GitHub Actions workflow validation failed")
+
+// ciValidateFormatEnvParser wires the local "format" flag through the standard
+// parser so ATMOS_VALIDATE_FORMAT follows the standard flag > env var > config
+// > default precedence via pkg/flags, replacing a direct os.Getenv call. It is
+// only used for BindFlagsToViper, which binds this command's existing "format"
+// flag plus the environment variable.
+var ciValidateFormatEnvParser = flags.NewStandardParser(
+	flags.WithStringFlag(ciFormatFlagName, "", "", "Output format"),
+	flags.WithEnvVars(ciFormatFlagName, "ATMOS_VALIDATE_FORMAT"),
+)
 
 // ciValidationConfigLoader is replaceable so command tests can isolate
 // configuration loading from the validator and output behavior.
@@ -58,7 +73,7 @@ The command respects .github/actionlint.yaml and .github/actionlint.yml.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: runCIValidate,
 	}
-	command.Flags().String("format", validateFormatText, "Output format: text, rich, sarif")
+	command.Flags().String(ciFormatFlagName, validateFormatText, "Output format: text, rich, sarif")
 	command.Flags().String("workflow-path", "", "Path to a directory of GitHub Actions workflow files")
 	command.Flags().Bool("affected", false, "Validate only workflow files affected since the Git merge-base")
 	command.Flags().String("base", "", "Git base ref or SHA to compare against for affected validation")
@@ -86,95 +101,189 @@ func RunValidateFilesExcluding(cmd *cobra.Command, paths []string, excludes []st
 	return runCIValidateWithPaths(cmd, nil, paths, true, excludes)
 }
 
-//nolint:cyclop,funlen,gocognit,revive // The command coordinates mutually exclusive workflow, affected, and exclusion inputs.
+// runCIValidateWithPaths coordinates the mutually exclusive workflow,
+// affected, and exclusion inputs as a flat pipeline of named steps.
 func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, pathsProvided bool, additionalExcludes []string) error {
-	format, err := cmd.Flags().GetString("format")
+	format, err := resolveCIValidateFormat(cmd)
 	if err != nil {
 		return err
 	}
-	if !cmd.Flags().Changed("format") {
-		if value := strings.TrimSpace(os.Getenv("ATMOS_VALIDATE_FORMAT")); value != "" {
-			format = value
-		} else if atmosConfig, configErr := ciValidationConfigLoader(cmd); configErr == nil && atmosConfig.Validate.Format != "" {
-			format = atmosConfig.Validate.Format
-		}
-	}
-	format = strings.ToLower(strings.TrimSpace(format))
-	if format != validateFormatText && format != validateFormatRich && format != validateFormatSARIF {
-		return fmt.Errorf("unsupported format %q: expected text, rich, or sarif", format)
-	}
-	workflowPath, err := cmd.Flags().GetString("workflow-path")
+
+	workflowPath, excludes, err := resolveCIValidateFlags(cmd, args, additionalExcludes)
 	if err != nil {
 		return err
 	}
-	workflowPath = strings.TrimSpace(workflowPath)
-	excludes, err := cmd.Flags().GetStringSlice("exclude")
+
+	selection, err := resolveCIValidateSelection(cmd, args, paths, pathsProvided, workflowPath)
 	if err != nil {
 		return err
 	}
-	if _, err := validation.ExcludePaths(nil, excludes); err != nil {
-		return err
+	if selection.earlyExit {
+		return nil
 	}
-	excludes = append(excludes, additionalExcludes...)
-	if _, err := validation.ExcludePaths(nil, excludes); err != nil {
-		return err
-	}
-	if workflowPath != "" && len(args) > 0 {
-		return errors.New("workflow-file arguments cannot be used with --workflow-path")
-	}
-	if pathsProvided {
-		args = paths
-		workflowPath = ""
-	} else if affected, _ := cmd.Flags().GetBool("affected"); affected {
-		if len(args) > 0 || workflowPath != "" {
-			return errors.New("--affected cannot be used with workflow-file arguments or --workflow-path")
-		}
-		base, err := cmd.Flags().GetString("base")
-		if err != nil {
-			return err
-		}
-		affectedPaths, err := validation.AffectedFiles(base)
-		if err != nil {
-			return err
-		}
-		if actionlintConfigChanged(affectedPaths) {
-			args = nil
-		} else {
-			args = affectedWorkflowFiles(affectedPaths)
-			if len(args) == 0 {
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), "No affected GitHub Actions workflow files to validate.")
-				return err
-			}
-		}
-	}
+	args, workflowPath = selection.args, selection.workflowPath
 
 	root, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
-	//nolint:nestif // Selection differs for an explicit file list and a workflow directory.
-	if len(excludes) > 0 {
-		if len(args) == 0 {
-			path := workflowPath
-			if path == "" {
-				path = filepath.Join(root, ".github", "workflows")
-			}
-			args, err = workflowFilesExcluding(root, path, excludes)
-			if err != nil {
-				return err
-			}
-			workflowPath = ""
-		} else {
-			args, err = validation.ExcludePaths(args, excludes)
-			if err != nil {
-				return err
-			}
-		}
+
+	args, workflowPath, err = applyCIValidateExcludes(root, args, workflowPath, excludes)
+	if err != nil {
+		return err
 	}
 
+	report, err := validateGitHubActionsWorkflows(cmd, root, args, workflowPath)
+	if err != nil {
+		return err
+	}
+
+	return finishCIValidate(cmd, format, &ciValidateOutcome{
+		report:        report,
+		root:          root,
+		explicitPaths: len(args) > 0,
+		workflowPath:  workflowPath,
+	})
+}
+
+// resolveCIValidateFormat resolves the requested output format following the
+// standard flag > env var > config > default precedence via pkg/flags'
+// ciValidateFormatEnvParser, instead of a direct os.Getenv call.
+func resolveCIValidateFormat(cmd *cobra.Command) (string, error) {
+	format, err := cmd.Flags().GetString(ciFormatFlagName)
+	if err != nil {
+		return "", err
+	}
+	if !cmd.Flags().Changed(ciFormatFlagName) {
+		if fallback := ciValidateFormatFallback(cmd); fallback != "" {
+			format = fallback
+		}
+	}
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format != validateFormatText && format != validateFormatRich && format != validateFormatSARIF {
+		return "", fmt.Errorf("%w: %q", errUtils.ErrUnsupportedCIValidationFormat, format)
+	}
+	return format, nil
+}
+
+// ciValidateFormatFallback resolves the env var > atmos.yaml fallback chain
+// used when the --format flag was not set explicitly, returning "" when
+// neither source has a value.
+func ciValidateFormatFallback(cmd *cobra.Command) string {
+	if err := ciValidateFormatEnvParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+		return ""
+	}
+	if value := strings.TrimSpace(viper.GetString(ciFormatFlagName)); value != "" {
+		return value
+	}
+	atmosConfig, err := ciValidationConfigLoader(cmd)
+	if err != nil {
+		return ""
+	}
+	return atmosConfig.Validate.Format
+}
+
+// resolveCIValidateFlags reads and validates the workflow-path and exclude
+// flags, and rejects the mutually exclusive workflow-path/file-arguments
+// combination.
+func resolveCIValidateFlags(cmd *cobra.Command, args []string, additionalExcludes []string) (string, []string, error) {
+	workflowPath, err := cmd.Flags().GetString("workflow-path")
+	if err != nil {
+		return "", nil, err
+	}
+	workflowPath = strings.TrimSpace(workflowPath)
+	excludes, err := cmd.Flags().GetStringSlice("exclude")
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err := validation.ExcludePaths(nil, excludes); err != nil {
+		return "", nil, err
+	}
+	excludes = append(excludes, additionalExcludes...)
+	if _, err := validation.ExcludePaths(nil, excludes); err != nil {
+		return "", nil, err
+	}
+	if workflowPath != "" && len(args) > 0 {
+		return "", nil, errUtils.ErrWorkflowArgsWithWorkflowPath
+	}
+	return workflowPath, excludes, nil
+}
+
+// ciValidateSelectionResult is the resolved workflow file (or directory)
+// selection for one validate invocation. EarlyExit is true when there is
+// nothing to validate and the caller should return without validating.
+type ciValidateSelectionResult struct {
+	args         []string
+	workflowPath string
+	earlyExit    bool
+}
+
+// resolveCIValidateSelection determines the workflow files (or directory) to
+// validate for the mutually exclusive explicit-path, aggregate, and
+// --affected selection modes. The result's earlyExit field is true when there
+// is nothing to validate and the caller should return the accompanying error
+// (nil, or a write error) without validating.
+func resolveCIValidateSelection(cmd *cobra.Command, args []string, paths []string, pathsProvided bool, workflowPath string) (ciValidateSelectionResult, error) {
+	if pathsProvided {
+		return ciValidateSelectionResult{args: paths}, nil
+	}
+	affected, _ := cmd.Flags().GetBool("affected")
+	if !affected {
+		return ciValidateSelectionResult{args: args, workflowPath: workflowPath}, nil
+	}
+	if len(args) > 0 || workflowPath != "" {
+		return ciValidateSelectionResult{}, errUtils.ErrAffectedWithFileArgsOrPath
+	}
+	base, err := cmd.Flags().GetString("base")
+	if err != nil {
+		return ciValidateSelectionResult{}, err
+	}
+	affectedPaths, err := validation.AffectedFiles(base)
+	if err != nil {
+		return ciValidateSelectionResult{}, err
+	}
+	if actionlintConfigChanged(affectedPaths) {
+		return ciValidateSelectionResult{}, nil
+	}
+	resolvedArgs := affectedWorkflowFiles(affectedPaths)
+	if len(resolvedArgs) == 0 {
+		_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), "No affected GitHub Actions workflow files to validate.")
+		return ciValidateSelectionResult{earlyExit: true}, writeErr
+	}
+	return ciValidateSelectionResult{args: resolvedArgs}, nil
+}
+
+// applyCIValidateExcludes filters args by excludes, or expands workflowPath
+// into an explicit file list when no args were selected yet, so the exclude
+// globs apply uniformly to both selection styles.
+func applyCIValidateExcludes(root string, args []string, workflowPath string, excludes []string) ([]string, string, error) {
+	if len(excludes) == 0 {
+		return args, workflowPath, nil
+	}
+	if len(args) > 0 {
+		filtered, err := validation.ExcludePaths(args, excludes)
+		if err != nil {
+			return nil, "", err
+		}
+		return filtered, workflowPath, nil
+	}
+	path := workflowPath
+	if path == "" {
+		path = filepath.Join(root, ".github", "workflows")
+	}
+	filtered, err := workflowFilesExcluding(root, path, excludes)
+	if err != nil {
+		return nil, "", err
+	}
+	return filtered, "", nil
+}
+
+// validateGitHubActionsWorkflows runs the registered GitHub Actions validator
+// against the resolved file selection.
+func validateGitHubActionsWorkflows(cmd *cobra.Command, root string, args []string, workflowPath string) (validation.Report, error) {
 	validator, ok := civalidate.Get(githubactions.ValidatorName)
 	if !ok {
-		return fmt.Errorf("GitHub Actions validator %q is not registered", githubactions.ValidatorName)
+		return validation.Report{}, fmt.Errorf("%w: %q", errUtils.ErrCIValidatorNotRegistered, githubactions.ValidatorName)
 	}
 	report, err := validator.Validate(cmd.Context(), civalidate.Request{
 		Root:         root,
@@ -182,26 +291,41 @@ func runCIValidateWithPaths(cmd *cobra.Command, args []string, paths []string, p
 		WorkflowPath: workflowPath,
 	})
 	if err != nil {
-		return fmt.Errorf("validate GitHub Actions workflows: %w", err)
+		return validation.Report{}, fmt.Errorf("validate GitHub Actions workflows: %w", err)
 	}
+	return report, nil
+}
 
-	if err := writeCIValidationOutput(format, report, root, len(args) > 0, workflowPath); err != nil {
+// ciValidateOutcome bundles the validator's report with the context needed to
+// render and report it, keeping finishCIValidate's argument count within
+// this repo's function argument limit.
+type ciValidateOutcome struct {
+	report        validation.Report
+	root          string
+	explicitPaths bool
+	workflowPath  string
+}
+
+// finishCIValidate writes the report, publishes CI annotations when enabled,
+// and translates validation findings into the command's exit behavior.
+func finishCIValidate(cmd *cobra.Command, format string, outcome *ciValidateOutcome) error {
+	if err := writeCIValidationOutput(format, outcome.report, outcome.root, outcome.explicitPaths, outcome.workflowPath); err != nil {
 		return err
 	}
 
 	// SARIF output is deliberately an explicit, side-effect-free output mode.
 	// Rich is a presentation choice, not a separate CI reporting channel.
 	if format != validateFormatSARIF && ciValidationAnnotationsEnabled(cmd) {
-		if err := cipkg.Annotate(report.ToAnnotations()); err != nil {
+		if err := cipkg.Annotate(outcome.report.ToAnnotations()); err != nil {
 			log.Warn("Failed to publish GitHub Actions validation annotations", "error", err)
 		}
 	}
 
-	if report.HasErrors() {
+	if outcome.report.HasErrors() {
 		if format == validateFormatRich {
 			return errUtils.ExitCodeError{Code: 1, Silent: true}
 		}
-		return workflowValidationError(report)
+		return workflowValidationError(outcome.report)
 	}
 	return nil
 }
@@ -311,9 +435,9 @@ func validationSuccessMessage(report validation.Report, explicitPaths bool, work
 		return fmt.Sprintf("Validated **%d** GitHub Actions workflow file(s).", report.FilesChecked)
 	}
 	if workflowPath != "" {
-		return fmt.Sprintf("Validated **%d** GitHub Actions workflow file(s) in %c%s%c.", report.FilesChecked, 96, workflowPath, 96)
+		return fmt.Sprintf("Validated **%d** GitHub Actions workflow file(s) in `%s`.", report.FilesChecked, workflowPath)
 	}
-	return fmt.Sprintf("Validated **%d** GitHub Actions workflow file(s) in %c.github/workflows%c.", report.FilesChecked, 96, 96)
+	return fmt.Sprintf("Validated **%d** GitHub Actions workflow file(s) in `.github/workflows`.", report.FilesChecked)
 }
 
 func ciValidationAnnotationsEnabled(cmd *cobra.Command) bool {

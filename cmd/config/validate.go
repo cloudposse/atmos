@@ -52,21 +52,36 @@ func runConfigValidateCommand(cmd *cobra.Command) error {
 		}
 		return runConfigValidate(excludes...)
 	}
-	base, err := cmd.Flags().GetString("base")
+
+	configFiles, err := affectedConfigValidateFiles(cmd)
 	if err != nil {
 		return err
+	}
+	if len(configFiles) == 0 {
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), "No affected Atmos configuration files to validate.")
+		return err
+	}
+	return runConfigValidateForFiles(configFiles)
+}
+
+// affectedConfigValidateFiles resolves the Atmos configuration files changed
+// since the Git merge-base, honoring --base and --exclude.
+func affectedConfigValidateFiles(cmd *cobra.Command) ([]string, error) {
+	base, err := cmd.Flags().GetString("base")
+	if err != nil {
+		return nil, err
 	}
 	paths, err := validation.AffectedFiles(base)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	excludes, err := cmd.Flags().GetStringSlice("exclude")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	paths, err = validation.ExcludePaths(paths, excludes)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	configFiles := make([]string, 0, len(paths))
 	for _, path := range paths {
@@ -77,11 +92,7 @@ func runConfigValidateCommand(cmd *cobra.Command) error {
 			configFiles = append(configFiles, path)
 		}
 	}
-	if len(configFiles) == 0 {
-		_, err := fmt.Fprintln(cmd.OutOrStdout(), "No affected Atmos configuration files to validate.")
-		return err
-	}
-	return runConfigValidateForFiles(configFiles)
+	return configFiles, nil
 }
 
 func runConfigValidate(excludes ...string) error {

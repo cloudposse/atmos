@@ -63,7 +63,7 @@ JSON Schema — the same one ` + "`atmos stack schema`" + ` prints. This is an a
 		format, _ := cmd.Flags().GetString("format")
 		format = strings.ToLower(strings.TrimSpace(format))
 		if format != "" && format != "text" && format != "rich" {
-			return fmt.Errorf("unsupported validation format %q: expected text or rich", format)
+			return fmt.Errorf("%w: %q", errUtils.ErrUnsupportedValidationFormat, format)
 		}
 		if format == "rich" {
 			stackConfig := withExcludedStackPaths(atmosConfigPtr, excludes)
