@@ -83,6 +83,10 @@ exclude = [
   "lfaidata\\.foundation",
   # Taskfile.dev (connection resets in CI)
   "taskfile\\.dev",
+  # Gemini CLI documentation resets connections from GitHub-hosted runners.
+  "geminicli\\.com",
+  # Concourse's public site intermittently resets CI connections.
+  "concourse-ci\\.org",
   # regex101.com (intermittent timeouts in CI)
   "regex101\\.com",
   # nx.dev (intermittent connection failures in CI)

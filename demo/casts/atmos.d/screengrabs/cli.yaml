@@ -150,6 +150,7 @@ commands:
           atmos terraform graph --help
           atmos terraform import --help
           atmos terraform init --help
+          atmos terraform lint --help
           atmos terraform login --help
           atmos terraform logout --help
           atmos terraform metadata --help
@@ -516,6 +517,7 @@ commands:
           atmos terraform graph --help
           atmos terraform import --help
           atmos terraform init --help
+          atmos terraform lint --help
           atmos terraform login --help
           atmos terraform logout --help
           atmos terraform metadata --help

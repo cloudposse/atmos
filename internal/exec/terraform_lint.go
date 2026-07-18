@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -15,6 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+const terraformLintWrappedErrorFormat = "%w: %w"
+
+var runTerraformLintTarget = executeTerraformLintTarget
 
 // ExecuteTerraformLint lints the selected Terraform components. When no
 // component is provided it selects every Terraform component once, even when a
@@ -32,7 +37,7 @@ func ExecuteTerraformLint(info *schema.ConfigAndStacksInfo) error {
 
 	authManager, err := createQueryAuthManager(info, &atmosConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrTerraformLintAuth, err)
 	}
 	if authManager != nil {
 		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
@@ -52,7 +57,7 @@ func ExecuteTerraformLint(info *schema.ConfigAndStacksInfo) error {
 
 	graph, err := scheduleradapters.BuildTerraformGraph(stacks)
 	if err != nil {
-		return fmt.Errorf("building Terraform lint targets: %w", err)
+		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrBuildTerraformLintTargets, err)
 	}
 	targets := lintTargets(graph, nil)
 	if len(targets) == 0 {
@@ -83,7 +88,7 @@ func ExecuteTerraformLintAffected(args *DescribeAffectedCmdArgs, info *schema.Co
 	}
 	authManager, err := createQueryAuthManager(info, &atmosConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrTerraformLintAuth, err)
 	}
 	if authManager != nil {
 		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
@@ -94,7 +99,7 @@ func ExecuteTerraformLintAffected(args *DescribeAffectedCmdArgs, info *schema.Co
 
 	affected, err := getAffectedComponents(args)
 	if err != nil {
-		return err
+		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrTerraformLintAffected, err)
 	}
 	affected = filterTerraformAffected(affected)
 	if len(affected) == 0 {
@@ -143,28 +148,40 @@ func lintTargets(graph *dependency.Graph, input []*dependency.Node) []*dependenc
 }
 
 func executeTerraformLintTargets(atmosConfig *schema.AtmosConfiguration, baseInfo *schema.ConfigAndStacksInfo, targets []*dependency.Node, authManager auth.AuthManager) error {
+	errs := make([]error, 0)
 	for _, target := range targets {
-		info := *baseInfo
-		info.ComponentType = cfg.TerraformComponentType
-		info.ComponentFromArg = target.Component
-		info.Component = target.Component
-		info.Stack = target.Stack
-		info.SubCommand = "lint"
-
-		processed, err := ProcessStacks(atmosConfig, info, true, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
-		if err != nil {
-			return err
-		}
-		if _, err = resolveAndProvisionComponentPath(atmosConfig, &processed); err != nil {
-			return err
-		}
-		tenv, err := resolveAndInstallToolchainDeps(atmosConfig, &processed)
-		if err != nil {
-			return err
-		}
-		if _, _, err = tflint.Run(context.Background(), &tflint.Options{AtmosConfig: atmosConfig, Info: &processed, ToolchainPATH: tenv.PATH()}); err != nil {
-			return err
+		if err := runTerraformLintTarget(atmosConfig, baseInfo, target, authManager); err != nil {
+			errs = append(errs, err)
 		}
 	}
+	return errors.Join(errs...)
+}
+
+func executeTerraformLintTarget(atmosConfig *schema.AtmosConfiguration, baseInfo *schema.ConfigAndStacksInfo, target *dependency.Node, authManager auth.AuthManager) error {
+	info := *baseInfo
+	info.ComponentType = cfg.TerraformComponentType
+	info.ComponentFromArg = target.Component
+	info.Component = target.Component
+	info.Stack = target.Stack
+	info.SubCommand = "lint"
+
+	processed, err := ProcessStacks(atmosConfig, info, true, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
+	if err != nil {
+		return terraformLintTargetError(target, "resolving the stack configuration", err)
+	}
+	if _, err = resolveAndProvisionComponentPath(atmosConfig, &processed); err != nil {
+		return terraformLintTargetError(target, "resolving the component path", err)
+	}
+	tenv, err := resolveAndInstallToolchainDeps(atmosConfig, &processed)
+	if err != nil {
+		return terraformLintTargetError(target, "resolving the TFLint toolchain", err)
+	}
+	if _, _, err = tflint.Run(context.Background(), &tflint.Options{AtmosConfig: atmosConfig, Info: &processed, ToolchainPATH: tenv.PATH()}); err != nil {
+		return terraformLintTargetError(target, "running TFLint", err)
+	}
 	return nil
+}
+
+func terraformLintTargetError(target *dependency.Node, operation string, err error) error {
+	return fmt.Errorf("%w: %s for component %q in stack %q: %w", errUtils.ErrTerraformLint, operation, target.Component, target.Stack, err)
 }

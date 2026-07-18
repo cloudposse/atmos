@@ -7,12 +7,19 @@ description: Lint Terraform components with TFLint
 ---
 
 import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Run TFLint against Atmos Terraform components without repeating work for components used by multiple stacks.
 </Intro>
 
+<CastPlayer title="atmos terraform lint --help" src="/casts/screengrabs/atmos-terraform-lint--help.cast" static chrome />
+
 ## Usage
+
+Run `atmos terraform lint [component] [flags]`.
+
+## Examples
 
 ```shell
 # Lint every Terraform component once (the default)

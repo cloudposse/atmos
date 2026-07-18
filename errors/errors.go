@@ -202,6 +202,12 @@ var (
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
+	// Terraform lint errors.
+	ErrTerraformLint             = errors.New("terraform lint failed")
+	ErrTerraformLintAuth         = errors.New("failed to initialize authentication for terraform lint")
+	ErrTerraformLintAffected     = errors.New("failed to determine affected terraform lint targets")
+	ErrBuildTerraformLintTargets = errors.New("failed to build terraform lint targets")
+
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
 	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")
