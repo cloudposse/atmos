@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/edition"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -100,6 +101,37 @@ func TestLoadConfigFromCLIArgs_InvalidConfigFile(t *testing.T) {
 	var atmosConfig schema.AtmosConfiguration
 	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
 	require.Error(t, err)
+}
+
+// TestLoadConfigFromCLIArgs_InvalidEditionPin covers the applyEditionDefaults call this
+// --config path added: this path skips the main LoadConfig flow's edition hook, so it
+// applies (and validates) the pin itself. An unparseable `edition:` value must surface
+// as an error here too, not silently unmarshal into an invalid AtmosConfig.
+func TestLoadConfigFromCLIArgs_InvalidEditionPin(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "atmos.yaml")
+
+	configContent := `
+base_path: "."
+edition: "not-a-date"
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+	require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o644))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configFile},
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+	require.ErrorIs(t, err, edition.ErrInvalidEdition)
 }
 
 func TestLoadConfigFromCLIArgs_InvalidConfigDir(t *testing.T) {

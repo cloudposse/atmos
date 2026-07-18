@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -178,6 +179,22 @@ func TestNormalizeProvenancePath(t *testing.T) {
 func TestGetCommentColumn(t *testing.T) {
 	// Test default column when not a TTY.
 	// Since tests don't run with a TTY, this should return default.
+	column := getCommentColumn()
+	assert.GreaterOrEqual(t, column, 40, "Comment column should be at least 40")
+	assert.LessOrEqual(t, column, 200, "Comment column should not be unreasonably large")
+}
+
+// TestGetCommentColumn_TTYUsesDetectedTerminalWidth covers the TTY branch, which the
+// non-TTY test above never reaches: with --force-tty, getCommentColumn must call
+// templates.GetTerminalWidth() (honoring settings.terminal.max_width as a ceiling) rather
+// than return the plain default. GetTerminalWidth never actually returns <= 0 (it floors at
+// its own 80-column fallback), so the "width <= 0 -> defaultColumn" body a few lines below is
+// unreachable defensive code and is not exercised here.
+func TestGetCommentColumn_TTYUsesDetectedTerminalWidth(t *testing.T) {
+	origForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", origForceTTY) })
+
 	column := getCommentColumn()
 	assert.GreaterOrEqual(t, column, 40, "Comment column should be at least 40")
 	assert.LessOrEqual(t, column, 200, "Comment column should not be unreasonably large")

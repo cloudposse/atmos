@@ -227,6 +227,59 @@ func TestExecuteDescribeComponentCmd_ErrorModeSilentEnablesDegradation(t *testin
 	assert.True(t, called)
 }
 
+// TestExecuteDescribeComponentCmd_ProvenanceRendersViaContext covers the
+// ExecuteDescribeComponentCmd provenance==true dispatch branch, which calls
+// ExecuteDescribeComponentWithContext directly (not through the mockable
+// d.executeDescribeComponent field) and renders the result via
+// d.renderProvenance instead of the normal print/pager path. Writing to a
+// file (rather than stdout) keeps the assertion self-contained. ErrorMode
+// "warn" also exercises processStacks' onWarning != nil branch (routed
+// through ProcessStacksWithDegradation → ProcessCustomYamlTagsLenient),
+// which only ExecuteDescribeComponentWithContext's ErrorOptions plumbing
+// reaches.
+func TestExecuteDescribeComponentCmd_ProvenanceRendersViaContext(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	workDir := "../../examples/quick-start-advanced"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	tmpFile := filepath.Join(t.TempDir(), "provenance-output.yaml")
+
+	d := &DescribeComponentExec{
+		initCliConfig:            cfg.InitCliConfig,
+		executeDescribeComponent: ExecuteDescribeComponent,
+		evaluateYqExpression:     u.EvaluateYqExpression,
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			t.Fatal("printOrWriteToFile should not be called on the provenance render path")
+			return nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:            "kms-key",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Format:               "yaml",
+		Provenance:           true,
+		ProvenanceExplicit:   true,
+		File:                 tmpFile,
+		ErrorMode:            "warn",
+	})
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(tmpFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "vars:", "provenance-annotated YAML should contain the vars section")
+}
+
 func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {

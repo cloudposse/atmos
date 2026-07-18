@@ -86,6 +86,30 @@ func TestComputeColumnWidths(t *testing.T) {
 	}
 }
 
+// TestContentColumnWidths_IgnoresExtraCells covers the bounds guard in
+// contentColumnWidths: a row with more cells than declared column specs
+// must not panic (index out of range) and the extra cells must be ignored
+// rather than measured.
+func TestContentColumnWidths_IgnoresExtraCells(t *testing.T) {
+	specs := []columnSizingSpec{
+		{title: "NAME", legacy: 15, floor: 10},
+		{title: "KIND", legacy: 10, floor: 10},
+	}
+	rows := []table.Row{
+		// Third cell has no corresponding column spec.
+		{"aws-sso", "aws/iam-identity-center", "this-extra-cell-must-be-ignored"},
+	}
+
+	var widths []int
+	assert.NotPanics(t, func() {
+		widths = contentColumnWidths(specs, rows)
+	})
+
+	require.Len(t, widths, 2)
+	assert.Equal(t, len("aws/iam-identity-center"), widths[1],
+		"the second column should still measure its own cell content")
+}
+
 func TestFitColumnWidths_ShrinkOrderSpillsToNextColumn(t *testing.T) {
 	specs := []columnSizingSpec{
 		{title: "A", legacy: 10, floor: 5},

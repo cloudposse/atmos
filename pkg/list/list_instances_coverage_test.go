@@ -20,6 +20,55 @@ import (
 	"github.com/cloudposse/atmos/tests"
 )
 
+// TestApplyConfigDefaultedInstancesFormat covers list.instances.format defaulting from
+// atmos.yaml, including the tree-vs-row-shaped-flags conflict resolution: a
+// config-defaulted "tree" steps aside when the caller also requested any row-shaped flag
+// (--upload, --filter, --query, or --columns), since tree has no rows to filter, query,
+// or upload — but an explicit --format=tree flag, or a request with none of those flags,
+// keeps tree.
+func TestApplyConfigDefaultedInstancesFormat(t *testing.T) {
+	tests := []struct {
+		name          string
+		formatFlag    string
+		configFormat  string
+		rowShapedFlag bool
+		want          string
+	}{
+		{
+			name: "no config default, format stays empty",
+		},
+		{
+			name:         "config default applied when flag unset",
+			configFormat: "table",
+			want:         "table",
+		},
+		{
+			name:         "explicit flag format wins over config default",
+			formatFlag:   "json",
+			configFormat: "tree",
+			want:         "json",
+		},
+		{
+			name:         "config-defaulted tree kept when no row-shaped flags requested",
+			configFormat: "tree",
+			want:         "tree",
+		},
+		{
+			name:          "config-defaulted tree steps aside for row-shaped flags",
+			configFormat:  "tree",
+			rowShapedFlag: true,
+			want:          "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := applyConfigDefaultedInstancesFormat(tt.formatFlag, tt.configFormat, tt.rowShapedFlag)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestUploadInstances tests the uploadInstances() wrapper function.
 func TestUploadInstances(t *testing.T) {
 	// This tests the production wrapper that uses default implementations.

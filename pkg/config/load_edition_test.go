@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -216,6 +217,40 @@ func TestLoadConfigEditionExposedOnConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "2026", atmosConfig.Edition)
+}
+
+// TestLoadConfigEditionFromGlobalFlag covers resolveEditionPin's top-priority source:
+// the --edition flag synced onto the global Viper singleton by syncGlobalFlagsToViper
+// in cmd/root.go (simulated here directly, since that sync itself is a cmd-layer
+// concern). It must win over both the config-file pin and (implicitly) ATMOS_EDITION.
+func TestLoadConfigEditionFromGlobalFlag(t *testing.T) {
+	writeEditionTestConfig(t, "base_path: ./\nedition: \"2026-07\"\n")
+
+	viper.GetViper().Set(editionKey, "2026-01")
+	t.Cleanup(func() { viper.GetViper().Set(editionKey, "") })
+
+	atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	assert.Equal(t, "2026-01", atmosConfig.Edition, "the global --edition flag must win over the config-file pin")
+	assert.True(t, atmosConfig.Components.Helmfile.UseEKS, "the flag-sourced pin must still apply its rollback overlay")
+}
+
+// TestLoadConfigEditionFromOsArgsFallback covers resolveEditionPin's os.Args fallback,
+// used by commands that run with DisableFlagParsing=true (terraform, helmfile, packer,
+// auth exec) where Cobra never populates the global Viper flag binding.
+func TestLoadConfigEditionFromOsArgsFallback(t *testing.T) {
+	writeEditionTestConfig(t, "base_path: ./\n")
+
+	origArgs := os.Args
+	os.Args = []string{"atmos", "terraform", "plan", "--edition=2025-09"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	assert.Equal(t, "2025-09", atmosConfig.Edition, "os.Args fallback must resolve the pin when the flag isn't parsed by Cobra")
+	assert.True(t, atmosConfig.Components.Helmfile.UseEKS)
 }
 
 func TestParseEditionFromOsArgs(t *testing.T) {

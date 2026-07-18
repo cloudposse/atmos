@@ -1,14 +1,45 @@
 package list
 
 import (
+	"bytes"
+	"io"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/edition"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
+
+// editionsTestStreams is a minimal io.Streams implementation backed by in-memory buffers,
+// so tests can capture data.Write output without touching the real stdout/stderr.
+type editionsTestStreams struct {
+	output *bytes.Buffer
+	error  *bytes.Buffer
+}
+
+func (s editionsTestStreams) Input() io.Reader     { return bytes.NewReader(nil) }
+func (s editionsTestStreams) Output() io.Writer    { return s.output }
+func (s editionsTestStreams) Error() io.Writer     { return s.error }
+func (s editionsTestStreams) RawOutput() io.Writer { return s.output }
+func (s editionsTestStreams) RawError() io.Writer  { return s.error }
+
+// captureEditionsOutput initializes the data-writer context with in-memory buffers for the
+// duration of the test and returns the stdout buffer.
+func captureEditionsOutput(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(editionsTestStreams{output: &stdout, error: &stderr}))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	t.Cleanup(data.Reset)
+
+	return &stdout
+}
 
 func TestParseOptionalAnchor(t *testing.T) {
 	anchor, err := parseOptionalAnchor("")
@@ -63,6 +94,24 @@ func TestExecuteListEditionsWithOptionsFormats(t *testing.T) {
 func TestExecuteListEditionsWithOptionsEmptyRange(t *testing.T) {
 	initTestIO(t)
 	require.NoError(t, executeListEditionsWithOptions(&EditionsOptions{Format: "json", From: "2099"}))
+}
+
+// TestExecuteListEditionsWithOptionsTTYFooter covers the table/TTY branch: with a TTY
+// attached and no explicit --format (or --format=table), the command must render the
+// table via RenderToString and append the range-summarizing footer built by
+// buildEditionsFooter, writing the combined result to the data channel — instead of the
+// non-TTY r.Render(rows) path exercised by TestExecuteListEditionsWithOptionsFormats.
+func TestExecuteListEditionsWithOptionsTTYFooter(t *testing.T) {
+	stdout := captureEditionsOutput(t)
+
+	origForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", origForceTTY) })
+
+	require.NoError(t, executeListEditionsWithOptions(&EditionsOptions{From: "2025", To: "2026"}))
+
+	output := stdout.String()
+	assert.Contains(t, output, "between editions 2025 and 2026", "TTY output must include the range footer")
 }
 
 func TestEditionsCommandFlags(t *testing.T) {

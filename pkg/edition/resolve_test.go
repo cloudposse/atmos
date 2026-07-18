@@ -142,6 +142,20 @@ func TestDiff(t *testing.T) {
 		assert.Equal(t, "2025-09-01", changes[0].Entries[0].Date)
 	})
 
+	t.Run("window bounded above excludes a later chained entry", func(t *testing.T) {
+		// components.demo.mode has two chained entries (2025-03-01, 2025-09-01).
+		// Bounding the window at `middle` (2025-05) must include the March entry
+		// but exclude the later September one — covers entriesBetween's
+		// upper-bound continue, which Between()'s own inlined loop doesn't share.
+		changes := Diff(&earliest, &middle)
+		require.Len(t, changes, 1)
+		assert.Equal(t, "components.demo.mode", changes[0].Key)
+		assert.Equal(t, "A", changes[0].FromValue)
+		assert.Equal(t, "B", changes[0].ToValue)
+		require.Len(t, changes[0].Entries, 1)
+		assert.Equal(t, "2025-03-01", changes[0].Entries[0].Date)
+	})
+
 	t.Run("identical anchors produce no changes", func(t *testing.T) {
 		assert.Empty(t, Diff(&middle, &middle))
 	})

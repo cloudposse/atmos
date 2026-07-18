@@ -5,10 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -49,6 +51,65 @@ func TestHasIdentityBackedStore(t *testing.T) {
 		StoresConfig: store.StoresConfig{"cloud": {Identity: "platform"}},
 		Stores:       store.StoreRegistry{"cloud": identityAware},
 	}))
+}
+
+// TestGetRunnableDescribeComponentCmd_InvalidErrorMode covers the dispatch call site
+// inside getRunnableDescribeComponentCmd that rejects a resolved --error-mode value that
+// isn't one of "strict", "warn", or "silent" once resolved against atmos.yaml's
+// describe.error_mode: an invalid resolved value must short-circuit before the describe
+// component executor ever runs. Mirrors describe_stacks_test.go's and
+// describe_dependents_test.go's InvalidErrorMode tests for the same shared --error-mode
+// flag resolution path (cmd/describe_error_mode_flag.go).
+//
+// Unlike those siblings, the value is set via ParseFlags rather than by reaching into the
+// registered flag's Value directly, since describeComponentCmd's --error-mode is a
+// PersistentFlag, and cobra only merges persistent flags into the command's own flag set
+// on the first ParseFlags/Execute call, not on registration. Its siblings happen to get
+// that merge for free from an unrelated earlier test's real dispatch call, but
+// describeComponentCmd does not, so looking up the flag directly would return nil here
+// depending on test order. ParseFlags both triggers the merge and sets the value in one
+// deterministic step.
+func TestGetRunnableDescribeComponentCmd_InvalidErrorMode(t *testing.T) {
+	tk := NewTestKit(t)
+
+	viper.Reset()
+	tk.Setenv("ATMOS_IDENTITY", "")
+	tk.Setenv("IDENTITY", "")
+
+	errorModeFlag := describeComponentCmd.PersistentFlags().Lookup(describeErrorModeFlagName)
+	require.NotNil(t, errorModeFlag, "error-mode flag must be registered on describeComponentCmd")
+	origValue := errorModeFlag.Value.String()
+	origChanged := errorModeFlag.Changed
+	t.Cleanup(func() {
+		_ = errorModeFlag.Value.Set(origValue)
+		errorModeFlag.Changed = origChanged
+	})
+	require.NoError(t, describeComponentCmd.ParseFlags([]string{"--error-mode=bogus"}))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Times(0)
+
+	run := getRunnableDescribeComponentCmd(getRunnableDescribeComponentCmdProps{
+		checkAtmosConfigE: func(opts ...AtmosValidateOption) error { return nil },
+		initCliConfig: func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		isExplicitComponentPath: func(component string) bool { return false },
+		resolveComponentFromPath: func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
+			return component, nil
+		},
+		executeDescribeComponent: func(params *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
+			return nil, nil
+		},
+		newDescribeComponentExec: mockExec,
+	})
+
+	err := run(describeComponentCmd, []string{"vpc"})
+
+	require.ErrorIs(t, err, exec.ErrInvalidErrorMode, "invalid error-mode should be rejected before executing")
 }
 
 // TestDescribeComponentCmd_ProvenanceWithFormatJSON tests that provenance and format flags

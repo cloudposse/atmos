@@ -548,6 +548,13 @@ func TestTableLayoutHelpersCoverConstrainedWidths(t *testing.T) {
 	shrunk := shrinkIfNeeded([]int{10, 30, 30}, 50, 2)
 	assert.Equal(t, []int{10, 10, 30}, shrunk, "the widest non-description column absorbs pressure first")
 
+	// Every shrinkable (non-description) column is already at MinColumnWidth,
+	// so no column can absorb the remaining excess: the loop must give up
+	// (break) rather than shrink a column below its floor or spin forever.
+	floored := shrinkIfNeeded([]int{MinColumnWidth, MinColumnWidth, 50}, 10, 2)
+	assert.Equal(t, []int{MinColumnWidth, MinColumnWidth, 50}, floored,
+		"columns already at the floor are left untouched when no column can absorb more excess")
+
 	slack := expandIntoSlack([]int{10, 10, 30}, columnWidthParams{
 		numColumns:          3,
 		availableWidth:      60,
@@ -575,6 +582,12 @@ func TestTableRenderingHelpersCoverANSIWrappingAndRoles(t *testing.T) {
 	trimmed := trimANSISpace(styled)
 	assert.Equal(t, "rendered value", ansi.Strip(trimmed))
 	assert.Contains(t, trimmed, "\x1b[31m", "trimming preserves ANSI styling")
+
+	// No leading/trailing space: the fast path returns the input unchanged
+	// (not even ANSI-stripped/re-wrapped).
+	noPadding := "\x1b[31mrendered value\x1b[0m"
+	assert.Equal(t, noPadding, trimANSISpace(noPadding),
+		"no leading/trailing space must return the input unchanged")
 
 	assert.Equal(t, "abcd\nefgh", wrapCellToWidth("abcdefgh", 4))
 	assert.Equal(t, "short", wrapCellToWidth("short", 0))
