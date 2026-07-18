@@ -37,8 +37,16 @@ atmos config validate
 
 # Equivalent long form; validates only the `config` schema entry.
 atmos validate schema config
+
+# Validate only changed Atmos configuration files.
+atmos config validate --affected --base origin/main
 ```
 
 Exits non-zero when any file fails validation, making it suitable for CI and
 pre-commit hooks. Override the schema or matched files with a `schemas.config`
 entry — see [CLI Configuration Schemas](/cli/configuration/schemas).
+
+`--affected` compares the current worktree with the Git merge-base and validates
+only changed `atmos.yaml` files, fragments, and profiles. On GitHub Actions, the
+pull request base SHA is detected automatically; use `--base` locally when the
+default baseline is not appropriate.

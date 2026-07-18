@@ -49,7 +49,13 @@ atmos validate editorconfig --format sarif > editorconfig.sarif
 # Source excerpts for local or CI logs
 atmos validate editorconfig --format rich
 atmos validate editorconfig --ci
+atmos validate editorconfig --affected --base origin/main
 ```
+
+`--affected` checks only files changed since the Git merge-base. Changing an
+EditorConfig rule file validates the complete project because the rule can apply
+to every file. GitHub Actions automatically uses the pull request base SHA;
+use `--base` locally to choose a comparison point.
 
 ## Flags
 

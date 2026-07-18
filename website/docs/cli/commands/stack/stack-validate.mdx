@@ -33,11 +33,23 @@ atmos validate stacks
 
 # Validate against a custom schema.
 atmos stack validate --schemas-atmos-manifest schemas/atmos-manifest.json
+
+# Skip validation when no stack or Atmos configuration inputs changed.
+atmos stack validate --affected --base origin/main
 ```
+
+`--affected` resolves the Git merge-base automatically on GitHub Actions. A
+relevant stack or Atmos configuration change runs the complete stack validation,
+so imports and duplicate-component checks remain correct; unrelated changes are
+skipped. Use `--base` to select a local comparison point.
 
 ## Flags
 
 <dl>
   <dt>`--schemas-atmos-manifest` <em>(optional)</em></dt>
   <dd>Path or URL of a JSON Schema to validate stack manifests against, overriding the embedded schema and any `schemas.atmos.manifest` setting.</dd>
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Validate only when stack or Atmos configuration inputs changed since the Git merge-base.</dd>
+  <dt>`--base` <em>(optional)</em></dt>
+  <dd>Git ref or SHA used as the comparison baseline for <code>--affected</code>.</dd>
 </dl>

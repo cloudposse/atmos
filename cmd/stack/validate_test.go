@@ -28,6 +28,8 @@ func TestStackValidateCmd_HasSchemaOverrideFlag(t *testing.T) {
 	// stacks`, which the shared executor reads from the command's flag set.
 	flag := stackValidateCmd.PersistentFlags().Lookup("schemas-atmos-manifest")
 	require.NotNil(t, flag, "expected the schemas-atmos-manifest flag to be defined")
+	assert.NotNil(t, stackValidateCmd.PersistentFlags().Lookup("affected"))
+	assert.NotNil(t, stackValidateCmd.PersistentFlags().Lookup("base"))
 }
 
 func TestStackValidateCmdRichFormat(t *testing.T) {
