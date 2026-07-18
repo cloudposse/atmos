@@ -600,13 +600,17 @@ type Terraform struct {
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
 	// Generated files are defined in the component's generate section.
-	AutoGenerateFiles bool            `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
-	WorkspacesEnabled *bool           `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
-	Command           string          `yaml:"command" json:"command" mapstructure:"command"`
-	Shell             ShellConfig     `yaml:"shell" json:"shell" mapstructure:"shell"`
-	Init              TerraformInit   `yaml:"init" json:"init" mapstructure:"init"`
-	Plan              TerraformPlan   `yaml:"plan" json:"plan" mapstructure:"plan"`
-	Planfiles         PlanfilesConfig `yaml:"planfiles,omitempty" json:"planfiles,omitempty" mapstructure:"planfiles"`
+	AutoGenerateFiles bool          `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	WorkspacesEnabled *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
+	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
+	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
+	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
+	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// Lint configures the built-in `atmos terraform lint` command.
+	// A configured config path is used when a component does not provide its own
+	// .tflint.hcl file.
+	Lint      TerraformLint   `yaml:"lint,omitempty" json:"lint,omitempty" mapstructure:"lint"`
+	Planfiles PlanfilesConfig `yaml:"planfiles,omitempty" json:"planfiles,omitempty" mapstructure:"planfiles"`
 	// PluginCache enables automatic Terraform provider plugin caching.
 	// When true, Atmos sets TF_PLUGIN_CACHE_DIR to XDG cache or PluginCacheDir.
 	// Default: true.
@@ -638,6 +642,12 @@ type Terraform struct {
 	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
 	// Empty defaults to the current host platform.
 	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+}
+
+// TerraformLint configures TFLint for Terraform components. Config may be an
+// absolute path or a path relative to the Atmos base path.
+type TerraformLint struct {
+	Config string `yaml:"config,omitempty" json:"config,omitempty" mapstructure:"config"`
 }
 
 // TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native

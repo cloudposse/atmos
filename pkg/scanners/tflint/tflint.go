@@ -2,6 +2,11 @@ package tflint
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
+
+	gitlib "github.com/go-git/go-git/v5"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/scanners"
@@ -43,6 +48,7 @@ func Run(ctx context.Context, opts *Options) (*scanners.Output, *scanners.Contex
 	if len(args) == 0 {
 		args = DefaultArgs()
 	}
+	args = ResolveArgs(args, opts.AtmosConfig, opts.Info)
 
 	scan := &scanners.Context{
 		Name:          Name,
@@ -63,4 +69,106 @@ func Run(ctx context.Context, opts *Options) (*scanners.Output, *scanners.Contex
 
 	out, err := scanners.Run(ctx, scan)
 	return out, scan, err
+}
+
+// ResolveArgs adds TFLint's configuration file when the caller did not
+// explicitly provide one. Config discovery uses the closest standard location:
+// component directory, Terraform components base path, then repository root.
+// The project-level components.terraform.lint.config setting is a final fallback.
+func ResolveArgs(args []string, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
+	resolved := append([]string(nil), args...)
+	if hasConfigArg(resolved) {
+		return resolved
+	}
+
+	if configPath := ConfigPath(atmosConfig, info); configPath != "" {
+		return append(resolved, "--config="+configPath)
+	}
+	return resolved
+}
+
+// ConfigPath finds the applicable TFLint configuration. The closest config wins:
+// the component directory, then the Terraform components base path, then the
+// repository root. This lets shared components override project-wide rules.
+func ConfigPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	if atmosConfig == nil || info == nil {
+		return ""
+	}
+
+	for _, directory := range configDirectories(atmosConfig, info) {
+		configPath := filepath.Join(directory, ".tflint.hcl")
+		if fileExists(configPath) {
+			return configPath
+		}
+	}
+
+	global := strings.TrimSpace(atmosConfig.Components.Terraform.Lint.Config)
+	if global == "" {
+		return ""
+	}
+	if !filepath.IsAbs(global) {
+		global = filepath.Join(atmosConfig.BasePathAbsolute, global)
+	}
+	return filepath.Clean(global)
+}
+
+func configDirectories(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
+	directories := []string{
+		scanners.ComponentPath(&scanners.Context{AtmosConfig: atmosConfig, Info: info}),
+		atmosConfig.TerraformDirAbsolutePath,
+		repositoryRoot(atmosConfig.BasePathAbsolute),
+	}
+
+	seen := make(map[string]struct{}, len(directories))
+	result := make([]string, 0, len(directories))
+	for _, directory := range directories {
+		directory = filepath.Clean(directory)
+		if directory == "." || directory == "" {
+			continue
+		}
+		if _, ok := seen[directory]; ok {
+			continue
+		}
+		seen[directory] = struct{}{}
+		result = append(result, directory)
+	}
+	return result
+}
+
+// repositoryRoot resolves the Git worktree from the Atmos base path. Projects
+// without a Git worktree use the Atmos base path as their repository root.
+func repositoryRoot(basePath string) string {
+	if basePath == "" {
+		return ""
+	}
+	repo, err := gitlib.PlainOpenWithOptions(basePath, &gitlib.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,
+	})
+	if err != nil {
+		return basePath
+	}
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return basePath
+	}
+	root, err := filepath.Abs(worktree.Filesystem.Root())
+	if err != nil {
+		return basePath
+	}
+	return root
+}
+
+func hasConfigArg(args []string) bool {
+	for _, arg := range args {
+		if arg == "--config" || strings.HasPrefix(arg, "--config=") {
+			return true
+		}
+	}
+	return false
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }

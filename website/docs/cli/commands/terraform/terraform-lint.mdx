@@ -1,0 +1,70 @@
+---
+title: atmos terraform lint
+sidebar_label: lint
+sidebar_class_name: command
+id: lint
+description: Lint Terraform components with TFLint
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Run TFLint against Atmos Terraform components without repeating work for components used by multiple stacks.
+</Intro>
+
+## Usage
+
+```shell
+# Lint every Terraform component once (the default)
+atmos terraform lint
+atmos terraform lint --all
+
+# Lint a component, selecting a stack automatically when it is used by more than one stack
+atmos terraform lint vpc
+
+# Lint the component instance selected by a stack
+atmos terraform lint vpc --stack test
+
+# Lint Terraform components affected by the current change
+atmos terraform lint --affected
+```
+
+`--all` and the no-argument form select all Terraform components. Atmos selects
+a deterministic stack context for each component so toolchain and stack-specific
+settings can be resolved, but runs TFLint just once per component directory.
+
+## TFLint configuration
+
+Atmos detects TFLint configuration in this order:
+
+1. An explicit `--config` argument configured on a TFLint hook or workflow step.
+2. A `.tflint.hcl` file in the component directory.
+3. A `.tflint.hcl` file in the Terraform components base path.
+4. A `.tflint.hcl` file at the Git repository root.
+5. The optional project-wide `components.terraform.lint.config` setting.
+
+For example, configure a global fallback in `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    lint:
+      config: .tflint.hcl
+```
+
+The closest standard path wins: component directory, then components base path,
+then repository root. The configured path may be absolute or relative to the
+Atmos base path and is used only when none of those files exists.
+
+## Flags
+
+<dl>
+  <dt><code>--all</code></dt>
+  <dd>Lint all Terraform components. This is the default when no component is provided.</dd>
+
+  <dt><code>--affected</code></dt>
+  <dd>Lint Terraform components selected by Atmos change detection.</dd>
+
+  <dt><code>--stack</code> / <code>-s</code></dt>
+  <dd>Limit selection to one stack, or choose the stack context for a named component.</dd>
+</dl>
