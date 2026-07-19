@@ -83,6 +83,11 @@ exclude = [
   # scoped to just these two dynamic badge types, not shields.io as a whole.
   "img\\.shields\\.io/github/actions/workflow/status/",
   "img\\.shields\\.io/github/last-commit/",
+  # The bare shields.io domain (distinct infrastructure from img.shields.io, which
+  # serves the actual badge images and resolves fine) is currently unreachable
+  # from CI runners - verified via direct curl, consistent timeout with zero bytes
+  # received. Used by static badge markdown in the terraform CI plugin templates.
+  "^https?://shields\\.io/badge/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
