@@ -1,14 +1,25 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
+	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
+	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/outputformat"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
+	validateReport "github.com/cloudposse/atmos/pkg/validation"
 )
 
 // TestParseConfigPaths tests the pure parseConfigPaths function.
@@ -71,11 +82,11 @@ func TestParseConfigPaths(t *testing.T) {
 // Integration test coverage exists in validate-editorconfig.yaml.
 func TestInitConfig(t *testing.T) {
 	// Call function with no assertions - test passes if no panic occurs.
-	initializeConfig(editorConfigCmd)
+	require.NoError(t, initializeConfig(editorConfigCmd))
 }
 
-// TestRunMainLogicDryRun tests the dry-run path in runMainLogic.
-func TestRunMainLogicDryRun(t *testing.T) {
+// TestRunEditorConfigDryRun tests the dry-run path in runEditorConfig.
+func TestRunEditorConfigDryRun(t *testing.T) {
 	// Save original state.
 	originalConfig := currentConfig
 	originalCliConfig := cliConfig
@@ -91,8 +102,8 @@ func TestRunMainLogicDryRun(t *testing.T) {
 	cliConfig = config.Config{DryRun: true}
 
 	// This should not panic and should list files (if any match).
-	// In dry-run mode, runMainLogic just lists files without validation.
-	runMainLogic()
+	// In dry-run mode, runEditorConfig just lists files without validation.
+	require.NoError(t, runEditorConfig(editorConfigCmd))
 }
 
 // TestCheckVersion tests the version checking logic.
@@ -140,18 +151,24 @@ func TestCheckVersion(t *testing.T) {
 	}
 }
 
-// TestReplaceAtmosConfigInConfig tests that atmos config values are properly applied.
+// TestReplaceAtmosConfigInConfig tests that atmos config values are properly
+// applied. Exclude is intentionally not covered here: atmosConfig.Validate.
+// EditorConfig.Exclude is glob-matched via runEditorConfig's excludes
+// parameter, not folded into tmpExclude by this function -- see
+// TestRunEditorConfigExcludesFromAtmosConfig.
 func TestReplaceAtmosConfigInConfig(t *testing.T) {
 	// Reset module-level variables before test.
 	originalConfigFilePaths := configFilePaths
 	originalTmpExclude := tmpExclude
 	originalInitEditorConfig := initEditorConfig
 	originalCliConfig := cliConfig
+	originalEditorConfigSARIF := editorConfigSARIF
 	defer func() {
 		configFilePaths = originalConfigFilePaths
 		tmpExclude = originalTmpExclude
 		initEditorConfig = originalInitEditorConfig
 		cliConfig = originalCliConfig
+		editorConfigSARIF = originalEditorConfigSARIF
 	}()
 
 	tests := []struct {
@@ -172,19 +189,6 @@ func TestReplaceAtmosConfigInConfig(t *testing.T) {
 			},
 			validate: func(t *testing.T) {
 				assert.Equal(t, []string{".custom-editorconfig"}, configFilePaths)
-			},
-		},
-		{
-			name: "applies exclude patterns from atmos config",
-			atmosConfig: schema.AtmosConfiguration{
-				Validate: schema.Validate{
-					EditorConfig: schema.EditorConfig{
-						Exclude: []string{"vendor/**", "node_modules/**"},
-					},
-				},
-			},
-			validate: func(t *testing.T) {
-				assert.Equal(t, "vendor/**,node_modules/**", tmpExclude)
 			},
 		},
 		{
@@ -278,8 +282,237 @@ func TestReplaceAtmosConfigInConfig(t *testing.T) {
 				tt.setup(cmd)
 			}
 
-			replaceAtmosConfigInConfig(cmd, tt.atmosConfig)
+			require.NoError(t, replaceAtmosConfigInConfig(cmd, &tt.atmosConfig))
 			tt.validate(t)
 		})
 	}
+}
+
+func TestConfigureEditorConfigFormat(t *testing.T) {
+	original := cliConfig
+	t.Cleanup(func() { cliConfig = original })
+
+	for _, format := range []string{"default", "gcc", "codeclimate", "github-actions"} {
+		t.Run(format, func(t *testing.T) {
+			isSARIF, err := configureEditorConfigFormat(format)
+			require.NoError(t, err)
+			assert.False(t, isSARIF)
+		})
+	}
+	isSARIF, err := configureEditorConfigFormat("sarif")
+	require.NoError(t, err)
+	assert.True(t, isSARIF)
+	isSARIF, err = configureEditorConfigFormat("rich")
+	require.NoError(t, err)
+	assert.False(t, isSARIF)
+	assert.True(t, editorConfigRich)
+	_, err = configureEditorConfigFormat("xml")
+	assert.Error(t, err)
+}
+
+func TestEditorConfigDiagnosticsNormalizesLocations(t *testing.T) {
+	report := editorConfigDiagnostics([]er.ValidationErrors{{
+		FilePath: "example.tf",
+		Errors: []er.ValidationError{
+			{LineNumber: -1, Message: errors.New("missing final newline")},
+			{LineNumber: 4, AdditionalIdenticalErrorCount: 2, Message: errors.New("trailing whitespace")},
+		},
+	}})
+	require.Len(t, report.Diagnostics, 2)
+	assert.Equal(t, "editorconfig", report.Diagnostics[0].Source)
+	assert.Zero(t, report.Diagnostics[0].Line)
+	assert.Equal(t, 4, report.Diagnostics[1].Line)
+	assert.Equal(t, 6, report.Diagnostics[1].EndLine)
+}
+
+func TestRunEditorConfigRichOutput(t *testing.T) {
+	originalAtmosConfig := atmosConfig
+	originalCurrentConfig := currentConfig
+	originalCLIConfig := cliConfig
+	originalPaths := configFilePaths
+	originalExclude := tmpExclude
+	originalInit := initEditorConfig
+	originalSARIF := editorConfigSARIF
+	originalRich := editorConfigRich
+	originalFormat := format
+	t.Cleanup(func() {
+		atmosConfig = originalAtmosConfig
+		currentConfig = originalCurrentConfig
+		cliConfig = originalCLIConfig
+		configFilePaths = originalPaths
+		tmpExclude = originalExclude
+		initEditorConfig = originalInit
+		editorConfigSARIF = originalSARIF
+		editorConfigRich = originalRich
+		format = originalFormat
+	})
+
+	project := t.TempDir()
+	t.Chdir(project)
+	require.NoError(t, os.WriteFile(".editorconfig", []byte("root = true\n[*]\nend_of_line = lf\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n"), 0o600))
+	require.NoError(t, os.WriteFile("valid.txt", []byte("valid\n"), 0o600))
+	atmosConfig = schema.AtmosConfiguration{}
+	cliConfig = config.Config{}
+	configFilePaths = nil
+	tmpExclude = ""
+	initEditorConfig = false
+
+	command := &cobra.Command{}
+	addPersistentFlags(command)
+	require.NoError(t, command.ParseFlags(nil))
+	require.NoError(t, command.Flags().Set("format", "rich"))
+	var output bytes.Buffer
+	command.SetOut(&output)
+
+	require.NoError(t, runEditorConfig(command))
+	assert.Contains(t, output.String(), "EditorConfig validation passed")
+
+	output.Reset()
+	require.NoError(t, os.WriteFile("invalid.txt", []byte("invalid  \n"), 0o600))
+	err := runEditorConfig(command)
+	require.Error(t, err)
+	assert.Equal(t, 1, errUtils.GetExitCode(err))
+	assert.Contains(t, output.String(), "Trailing whitespace")
+
+	output.Reset()
+	require.NoError(t, os.Remove("invalid.txt"))
+	require.NoError(t, command.Flags().Set("format", "sarif"))
+	require.NoError(t, runEditorConfig(command))
+	assert.Contains(t, output.String(), `"version": "2.1.0"`)
+}
+
+// TestRunEditorConfigExcludesFromAtmosConfig verifies that
+// atmosConfig.Validate.EditorConfig.Exclude is glob-matched (not compiled as
+// a regex, and not folded into the command's own regex --exclude flag) --
+// see the runEditorConfig doc comment. A file that would otherwise fail
+// validation is skipped entirely once its path matches an atmos.yaml glob.
+func TestRunEditorConfigExcludesFromAtmosConfig(t *testing.T) {
+	originalAtmosConfig := atmosConfig
+	originalCurrentConfig := currentConfig
+	originalCLIConfig := cliConfig
+	originalPaths := configFilePaths
+	originalExclude := tmpExclude
+	originalInit := initEditorConfig
+	originalSARIF := editorConfigSARIF
+	originalRich := editorConfigRich
+	originalFormat := format
+	t.Cleanup(func() {
+		atmosConfig = originalAtmosConfig
+		currentConfig = originalCurrentConfig
+		cliConfig = originalCLIConfig
+		configFilePaths = originalPaths
+		tmpExclude = originalExclude
+		initEditorConfig = originalInit
+		editorConfigSARIF = originalSARIF
+		editorConfigRich = originalRich
+		format = originalFormat
+	})
+
+	project := t.TempDir()
+	t.Chdir(project)
+	require.NoError(t, os.WriteFile(".editorconfig", []byte("root = true\n[*]\nend_of_line = lf\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n"), 0o600))
+	require.NoError(t, os.MkdirAll("vendor", 0o755))
+	// Trailing whitespace: would fail validation if checked.
+	require.NoError(t, os.WriteFile(filepath.Join("vendor", "invalid.txt"), []byte("invalid  \n"), 0o600))
+
+	atmosConfig = schema.AtmosConfiguration{
+		Validate: schema.Validate{
+			EditorConfig: schema.EditorConfig{Exclude: []string{"vendor/**"}},
+		},
+	}
+	cliConfig = config.Config{}
+	configFilePaths = nil
+	tmpExclude = ""
+	initEditorConfig = false
+
+	command := &cobra.Command{}
+	addPersistentFlags(command)
+	require.NoError(t, command.ParseFlags(nil))
+
+	require.NoError(t, runEditorConfig(command))
+}
+
+func TestRequestedEditorConfigFormatPrecedence(t *testing.T) {
+	originalFormat := format
+	t.Cleanup(func() { format = originalFormat })
+	config := schema.AtmosConfiguration{Validate: schema.Validate{EditorConfig: schema.EditorConfig{Format: "gcc"}}}
+	cmd := &cobra.Command{}
+	addPersistentFlags(cmd)
+	// Merge persistent flags into cmd.Flags() the way cobra does during
+	// execution, so Set/Changed below see the format flag.
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	t.Setenv("ATMOS_VALIDATE_FORMAT", "sarif")
+	assert.Equal(t, "sarif", requestedEditorConfigFormat(cmd, &config))
+	format = "codeclimate"
+	require.NoError(t, cmd.Flags().Set("format", format))
+	assert.Equal(t, "codeclimate", requestedEditorConfigFormat(cmd, &config))
+}
+
+func TestEmitEditorConfigCI(t *testing.T) {
+	originalConfig := atmosConfig
+	originalCLIConfig := cliConfig
+	originalAnnotate := editorConfigAnnotate
+	originalReportSARIF := editorConfigReportSARIF
+	t.Cleanup(func() {
+		atmosConfig = originalConfig
+		cliConfig = originalCLIConfig
+		editorConfigAnnotate = originalAnnotate
+		editorConfigReportSARIF = originalReportSARIF
+	})
+
+	resultUploads := true
+	atmosConfig = schema.AtmosConfiguration{CI: schema.CIConfig{
+		Enabled: true,
+		Results: schema.CIResultsConfig{Enabled: &resultUploads},
+	}}
+	cliConfig.Format = outputformat.Default
+	var annotations []ci.Annotation
+	var uploads []ci.SARIFReport
+	editorConfigAnnotate = func(items []ci.Annotation) error {
+		annotations = append(annotations, items...)
+		return nil
+	}
+	editorConfigReportSARIF = func(_ context.Context, report ci.SARIFReport) error {
+		uploads = append(uploads, report)
+		return nil
+	}
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("ci", false, "")
+	require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+	emitEditorConfigCI(cmd, validateReport.Report{Diagnostics: []validateReport.Diagnostic{{
+		RuleID: "editorconfig", Severity: validateReport.SeverityError,
+		Message: "wrong indentation", File: "context.tf", Line: 4,
+	}}})
+	require.Len(t, annotations, 1)
+	assert.Equal(t, 4, annotations[0].StartLine)
+	require.Len(t, uploads, 1)
+	assert.Equal(t, "validate-editorconfig", uploads[0].Category)
+	var document struct {
+		Version string `json:"version"`
+		Runs    []struct {
+			Results []struct {
+				RuleID string `json:"ruleId"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	require.NoError(t, json.Unmarshal(uploads[0].Body, &document))
+	assert.Equal(t, "2.1.0", document.Version)
+	require.Len(t, document.Runs, 1)
+	require.Len(t, document.Runs[0].Results, 1)
+	assert.Equal(t, "editorconfig", document.Runs[0].Results[0].RuleID)
+}
+
+// TestEditorConfigCmdCIFlagRegisteredThroughStandardParser guards against
+// regressing back to direct viper.BindPFlag/viper.BindEnv calls: the "ci"
+// flag must be registered on editorConfigCmd and its ATMOS_CI/CI env vars
+// must resolve through Viper for pkg/ci.ModeEnabled's fallback branch.
+func TestEditorConfigCmdCIFlagRegisteredThroughStandardParser(t *testing.T) {
+	flag := editorConfigCmd.PersistentFlags().Lookup("ci")
+	require.NotNil(t, flag, "expected the ci flag to be registered on editorConfigCmd")
+	assert.Equal(t, "false", flag.DefValue)
+
+	t.Setenv("ATMOS_CI", "true")
+	assert.True(t, ci.ModeEnabled(&cobra.Command{}), "expected ATMOS_CI env var to resolve through Viper via the standard parser binding")
 }

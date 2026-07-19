@@ -1,12 +1,11 @@
 package utils
 
 import (
-	"log/slog"
 	"testing"
 
-	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	logging "gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -704,23 +703,22 @@ func TestConfigureYqLogger(t *testing.T) {
 // to recover the original slogger), so this test guards against a
 // regression that reintroduces it.
 func TestConfigureYqLogger_LevelIsReversible(t *testing.T) {
-	logger := yqlib.GetLogger()
 	// Restore the default level at the end so unrelated tests see the
 	// yq package's own initial state.
-	defer logger.SetLevel(slog.LevelWarn)
+	defer logging.SetLevel(logging.WARNING, "yq-lib")
 
 	nonTrace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
 	trace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: LogLevelTrace}}
 
 	configureYqLogger(nonTrace)
-	assert.Equal(t, yqSilentLevel, logger.GetLevel(), "non-Trace must silence yq")
+	assert.Equal(t, yqSilentLevel, logging.GetLevel("yq-lib"), "non-Trace must silence yq")
 
 	configureYqLogger(trace)
-	assert.Equal(t, slog.LevelDebug, logger.GetLevel(), "Trace must restore verbosity after a previous silencing")
+	assert.Equal(t, logging.DEBUG, logging.GetLevel("yq-lib"), "Trace must restore verbosity after a previous silencing")
 
 	// And back again to confirm the toggle is not accidentally sticky.
 	configureYqLogger(nil)
-	assert.Equal(t, yqSilentLevel, logger.GetLevel(), "nil config must re-silence")
+	assert.Equal(t, yqSilentLevel, logging.GetLevel("yq-lib"), "nil config must re-silence")
 }
 
 // TestEvaluateYqExpression_EdgeCases tests additional edge cases.
