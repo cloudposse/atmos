@@ -235,7 +235,7 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 		Command:          command,
 		RunArgs:          runArgs,
 		Ports:            portBindings(ports),
-		Env:              mergeEnv(defaultEnv, env),
+		Env:              mergeEnv(defaultEnv, specContainerEnv(spec), env),
 		Mounts:           mounts,
 		Privileged:       privileged,
 		Host:             spec.HostRuntime(),
@@ -245,6 +245,13 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 		RuntimeName:      m.runtimePref,
 		RuntimeAutoStart: m.autoStart,
 	}, nil
+}
+
+func specContainerEnv(spec *Spec) map[string]string {
+	if spec == nil || spec.Container == nil {
+		return nil
+	}
+	return spec.Container.Env
 }
 
 // emulatorNetworkName is the per-stack user network emulators join so containers
@@ -329,15 +336,14 @@ func (m *Manager) resolveRootlessRun(spec *Spec, command []string, rootless bool
 	return nil, command, nil
 }
 
-// mergeEnv layers the component/profile env over the driver defaults so an explicit
-// value wins, while driver-required vars (e.g. K3S_TOKEN) remain present.
-func mergeEnv(defaults, overrides map[string]string) map[string]string {
-	merged := make(map[string]string, len(defaults))
-	for k, v := range defaults {
-		merged[k] = v
-	}
-	for k, v := range overrides {
-		merged[k] = v
+// mergeEnv layers env maps from lowest to highest precedence. Driver defaults
+// come first, then container.env, then resolved component/profile env.
+func mergeEnv(envs ...map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for _, env := range envs {
+		for k, v := range env {
+			merged[k] = v
+		}
 	}
 	return merged
 }
@@ -378,6 +384,11 @@ func (m *Manager) Resolve(ctx context.Context, spec *Spec, stack, name string) (
 		return Endpoint{}, Profile{}, err
 	}
 	profile := driver.Profile(&endpoint)
+	if driver.Target() == TargetAzure {
+		if err := addAzureTrustEnv(&profile, stack, name); err != nil {
+			return Endpoint{}, Profile{}, err
+		}
+	}
 
 	// Kubernetes profiles are harvested from the running container (the kubeconfig IS
 	// the credential) rather than built from the endpoint, so the driver's Profile leaves

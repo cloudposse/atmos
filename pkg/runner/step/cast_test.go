@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -1020,7 +1021,7 @@ func TestRunCastSimulateStepResolvesTextTemplate(t *testing.T) {
 			Text:  "> ",
 			Style: "command",
 		},
-	}, vars)
+	}, vars, false)
 	if err != nil {
 		t.Fatalf("run simulate: %v", err)
 	}
@@ -1043,7 +1044,7 @@ func TestRunCastSimulateStepReturnsTextResolutionError(t *testing.T) {
 		Type: schema.TaskTypeSimulate,
 		Mode: "typed",
 		Text: "{{ .Bad ",
-	}, NewVariables())
+	}, NewVariables(), false)
 	if err == nil {
 		t.Fatal("expected an error resolving an invalid text template")
 	}
@@ -1055,7 +1056,7 @@ func TestRunCastSimulateStepReturnsWriteRateParseError(t *testing.T) {
 		Mode: "typed",
 		Text: "atmos version",
 		Rate: "bad-duration",
-	}, NewVariables())
+	}, NewVariables(), false)
 	if err == nil {
 		t.Fatal("expected an error parsing an invalid write rate")
 	}
@@ -1067,7 +1068,7 @@ func TestRunCastSimulateStepReturnsEnterDelayParseError(t *testing.T) {
 		Mode:     "typed",
 		Text:     "atmos version",
 		Duration: "bad-duration",
-	}, NewVariables())
+	}, NewVariables(), false)
 	if err == nil {
 		t.Fatal("expected an error parsing an invalid enter delay duration")
 	}
@@ -1097,7 +1098,7 @@ func TestRunCastSimulateStepPromptModeWritesPrompt(t *testing.T) {
 			Text:  "ready> ",
 			Style: "info",
 		},
-	}, NewVariables())
+	}, NewVariables(), false)
 	if err != nil {
 		t.Fatalf("run prompt simulate: %v", err)
 	}
@@ -1605,7 +1606,7 @@ func TestValidateCastSimulateStepModesAndDurations(t *testing.T) {
 }
 
 func TestCastSessionActionsAndCommandArgs(t *testing.T) {
-	actions := castSessionActions([]schema.WorkflowStep{{
+	castStep := &schema.WorkflowStep{Steps: []schema.WorkflowStep{{
 		Type:     "write",
 		Text:     "echo hi",
 		Regex:    "hi",
@@ -1615,12 +1616,15 @@ func TestCastSessionActionsAndCommandArgs(t *testing.T) {
 		Rate:     "3ms",
 		Interval: "4ms",
 		Repeat:   2,
-	}})
+	}}}
+	actions := castSessionActions(context.Background(), castStep, NewVariables(), nil)
 	if len(actions) != 1 {
 		t.Fatalf("action count = %d", len(actions))
 	}
+	// Fn is only set for simulate actions; this is a "write" action, so both
+	// sides are nil and reflect.DeepEqual (unlike ==) tolerates that.
 	want := asciicast.SessionAction{Type: "write", Text: "echo hi", Regex: "hi", Key: "enter", Duration: "1s", Timeout: "2s", Rate: "3ms", Interval: "4ms", Repeat: 2}
-	if actions[0] != want {
+	if !reflect.DeepEqual(actions[0], want) {
 		t.Fatalf("action = %#v, want %#v", actions[0], want)
 	}
 
@@ -1635,6 +1639,144 @@ func TestCastSessionActionsAndCommandArgs(t *testing.T) {
 	}
 }
 
+// TestCastSessionActionsSimulateChildGetsCallback verifies a type: simulate
+// child in a session's steps becomes a "simulate" SessionAction carrying a
+// non-nil Fn, rather than being converted into a write/key/pause/wait
+// action -- this is the wiring that lets a session mix in the same styled,
+// non-interactive narration mode: steps uses via type: simulate, instead of
+// typing raw (unstyled) keystrokes for comment lines.
+func TestCastSessionActionsSimulateChildGetsCallback(t *testing.T) {
+	castStep := &schema.WorkflowStep{
+		Steps: []schema.WorkflowStep{
+			{Type: schema.TaskTypeSimulate, Text: "# narration"},
+			{Type: "write", Text: "echo hi"},
+		},
+	}
+	actions := castSessionActions(context.Background(), castStep, NewVariables(), nil)
+	if len(actions) != 2 {
+		t.Fatalf("action count = %d", len(actions))
+	}
+	if actions[0].Type != schema.TaskTypeSimulate || actions[0].Fn == nil {
+		t.Fatalf("expected a simulate action with a callback, got %#v", actions[0])
+	}
+	if actions[1].Type != "write" || actions[1].Fn != nil {
+		t.Fatalf("expected a plain write action with no callback, got %#v", actions[1])
+	}
+}
+
+func TestCastSessionActionsExecChildGetsSimulateCallback(t *testing.T) {
+	castStep := &schema.WorkflowStep{
+		Steps: []schema.WorkflowStep{{
+			Name:    "plan",
+			Type:    schema.TaskTypeAtmos,
+			Command: "terraform plan",
+			Output:  string(OutputModeNone),
+			Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+		}},
+	}
+	actions := castSessionActions(context.Background(), castStep, NewVariables(), nil)
+	if len(actions) != 1 {
+		t.Fatalf("action count = %d", len(actions))
+	}
+	if actions[0].Type != schema.TaskTypeSimulate || actions[0].Fn == nil {
+		t.Fatalf("expected an executable child to become a simulate callback, got %#v", actions[0])
+	}
+}
+
+// TestSessionPromptDefault covers the three-tier fallback
+// applySessionPromptEnv relies on: a child-level SimulatePrompt beats the
+// cast step's own, which beats the built-in "> "/"command" default.
+func TestSessionPromptDefault(t *testing.T) {
+	own := &schema.SimulatePrompt{Text: "own> "}
+	fromDefaults := &schema.SimulatePrompt{Text: "default> "}
+
+	if got := sessionPromptDefault(&schema.WorkflowStep{SimulatePrompt: own}); got != own {
+		t.Fatalf("expected the step's own prompt to win, got %#v", got)
+	}
+	if got := sessionPromptDefault(&schema.WorkflowStep{
+		Defaults: &schema.CastDefaults{Simulate: &schema.CastSimulateDefaults{Prompt: fromDefaults}},
+	}); got != fromDefaults {
+		t.Fatalf("expected the cast step's Defaults.Simulate.Prompt, got %#v", got)
+	}
+	if got := sessionPromptDefault(&schema.WorkflowStep{}); got != nil {
+		t.Fatalf("expected nil (built-in fallback) when nothing is configured, got %#v", got)
+	}
+}
+
+// TestApplySessionPromptEnv covers PS1 injection: it renders the resolved
+// prompt into env["PS1"], and leaves an explicit caller-supplied PS1 alone.
+func TestApplySessionPromptEnv(t *testing.T) {
+	env := map[string]string{}
+	if err := applySessionPromptEnv(&schema.WorkflowStep{}, env); err != nil {
+		t.Fatalf("applySessionPromptEnv error: %v", err)
+	}
+	if env["PS1"] == "" || env["PS1"] == "> " {
+		t.Fatalf("expected a styled (ANSI-wrapped) PS1, got %q", env["PS1"])
+	}
+
+	explicit := map[string]string{"PS1": "custom$ "}
+	if err := applySessionPromptEnv(&schema.WorkflowStep{}, explicit); err != nil {
+		t.Fatalf("applySessionPromptEnv error: %v", err)
+	}
+	if explicit["PS1"] != "custom$ " {
+		t.Fatalf("expected an explicit PS1 to be left untouched, got %q", explicit["PS1"])
+	}
+}
+
+// TestRunCastSessionModeInterleavesSimulateNarration is an end-to-end proof
+// that a type: simulate action mixed into mode: session's steps renders
+// through the same styled path type: simulate uses in mode: steps (writing
+// via pkg/data, captured by the same recorder that captures the real PTY's
+// output), landing in the final .cast alongside genuine command output.
+func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "session-simulate.cast")
+
+	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:  "demo",
+		Type:  schema.TaskTypeCast,
+		Mode:  "session",
+		Shell: shell,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{Type: schema.TaskTypeSimulate, Text: "# narration line", Rate: "0"},
+			{Type: "write", Text: "printf ready", Rate: "0"},
+			{Type: "key", Key: "enter"},
+			{Type: "wait", Text: "ready", Timeout: "2s"},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute session-mode cast: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast file: %v", err)
+	}
+	text := castOutputText(t, content)
+	if !strings.Contains(text, "# narration line") {
+		t.Fatalf("expected narration text in cast output, got %q", text)
+	}
+	if !strings.Contains(text, "ready") {
+		t.Fatalf("expected the real command's output in cast output, got %q", text)
+	}
+	// The narration line must carry an SGR (color) escape, matching
+	// mode: steps' styled rendering -- not just plain, unstyled text.
+	narrationIndex := strings.Index(text, "narration line")
+	if narrationIndex == -1 || !strings.Contains(text[:narrationIndex], "\x1b[") {
+		t.Fatalf("expected the narration line to be styled with an SGR escape, got %q", text)
+	}
+}
+
 func TestRunCastBodyRejectsInvalidMode(t *testing.T) {
 	err := runCastBody(context.Background(), &schema.WorkflowStep{Name: "demo", Mode: "bogus"}, NewVariables(), nil)
 	if !errors.Is(err, ErrInvalidCastMode) {
@@ -1643,11 +1785,11 @@ func TestRunCastBodyRejectsInvalidMode(t *testing.T) {
 }
 
 func TestRunCastSessionModeRejectsInvalidDurationsBeforeStartingSession(t *testing.T) {
-	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{WriteRate: "fast"}, NewVariables())
+	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{WriteRate: "fast"}, NewVariables(), nil)
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid write rate, got %v", err)
 	}
-	err = runCastSessionMode(context.Background(), &schema.WorkflowStep{KeyInterval: "soon"}, NewVariables())
+	err = runCastSessionMode(context.Background(), &schema.WorkflowStep{KeyInterval: "soon"}, NewVariables(), nil)
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid key interval, got %v", err)
 	}
@@ -1785,14 +1927,15 @@ func TestRunCastChildStepReturnsPauseDelayError(t *testing.T) {
 		t.Fatalf("initialize io: %v", err)
 	}
 	executor := NewStepExecutorWithVars(NewVariables())
-	err := runCastChildStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
+	runner := castChildStepRunner{ctx: context.Background(), castStep: &schema.WorkflowStep{}, vars: NewVariables(), executor: executor}
+	err := runner.run(&schema.WorkflowStep{
 		Name:     "child",
 		Type:     schema.TaskTypeAtmos,
 		Output:   string(OutputModeNone),
 		Command:  "terraform plan",
 		Env:      map[string]string{"_ATMOS_STEP_FAKE": "ok"},
 		Interval: "bad-duration",
-	}, NewVariables(), executor)
+	}, false)
 	if err == nil {
 		t.Fatal("expected an error parsing an invalid pause delay")
 	}
@@ -1815,7 +1958,7 @@ func TestRunCastSessionModeReturnsEnvResolutionError(t *testing.T) {
 		Env: map[string]string{
 			"BAD": "{{ .Bad ",
 		},
-	}, NewVariables())
+	}, NewVariables(), nil)
 	if err == nil {
 		t.Fatal("expected an error resolving an invalid session env template")
 	}
@@ -1984,7 +2127,7 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Text: "ready", Timeout: "2s"},
 		},
-	}, NewVariables())
+	}, NewVariables(), nil)
 	if err != nil {
 		t.Fatalf("runCastSessionMode error: %v", err)
 	}
@@ -2020,6 +2163,262 @@ func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
 	}
 	if _, err := os.Stat(castPath); err != nil {
 		t.Fatalf("cast file missing: %v", err)
+	}
+}
+
+func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "session-exec.cast")
+
+	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:  "demo",
+		Type:  schema.TaskTypeCast,
+		Mode:  "session",
+		Shell: shell,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{Type: "write", Text: "printf ready", Rate: "0"},
+			{Type: "key", Key: "enter"},
+			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{
+				Name:    "plan",
+				Type:    schema.TaskTypeAtmos,
+				Command: "terraform plan",
+				Output:  string(OutputModeRaw),
+				Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+			},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute session-mode cast with real child: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast file: %v", err)
+	}
+	if !strings.Contains(castOutputText(t, content), "fake-atmos-output") {
+		t.Fatalf("expected real child output in cast")
+	}
+}
+
+// TestCastHandlerNestedSessionStepFallsThroughToRealExecution is an
+// end-to-end proof of the steps-mode `type: session` child: the cast step
+// itself defaults to mode: steps (no top-level `mode: session` at all), the
+// "session" child drives a real interactive PTY for its own nested actions,
+// and once that block completes, control returns to the enclosing steps-mode
+// loop, which runs an ordinary (non-PTY) `type: atmos` step -- proving a
+// recording can open on real interactive prompts and then fall through to
+// real, non-interactive command execution without that command ever running
+// inside the PTY.
+func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "nested-session.cast")
+
+	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Type:  castSessionStepType,
+				Shell: shell,
+				Steps: []schema.WorkflowStep{
+					{Type: "write", Text: "printf ready", Rate: "0"},
+					{Type: "key", Key: "enter"},
+					{Type: "wait", Text: "ready", Timeout: "2s"},
+				},
+			},
+			{
+				Name:    "plan",
+				Type:    schema.TaskTypeAtmos,
+				Command: "terraform plan",
+				Output:  string(OutputModeRaw),
+				Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+			},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute nested-session cast: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast file: %v", err)
+	}
+	text := castOutputText(t, content)
+	if !strings.Contains(text, "ready") {
+		t.Fatalf("expected the session block's real PTY output in cast output, got %q", text)
+	}
+	if !strings.Contains(text, "fake-atmos-output") {
+		t.Fatalf("expected the real atmos step's output after the session block, got %q", text)
+	}
+}
+
+func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "nested-session-workflow.cast")
+
+	_, err = (&CastHandler{}).ExecuteWithWorkflow(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{{
+			Type:  castSessionStepType,
+			Shell: shell,
+			Steps: []schema.WorkflowStep{
+				{Type: "write", Text: "printf ready", Rate: "0"},
+				{Type: "key", Key: "enter"},
+				{Type: "wait", Text: "ready", Timeout: "2s"},
+				{Name: "workflow-child", Type: schema.TaskTypeShell, Command: "printf workflow-child"},
+			},
+		}},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: string(OutputModeRaw)})
+	if err != nil {
+		t.Fatalf("execute nested session with workflow context: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast file: %v", err)
+	}
+	if !strings.Contains(castOutputText(t, content), "workflow-child") {
+		t.Fatalf("expected nested child output inherited from the workflow in cast")
+	}
+}
+
+// TestRunCastSimulateStepSkipPromptOmitsPromptDraw verifies skipPrompt
+// suppresses "typed" mode's own prompt render: a real shell's already-visible
+// prompt (e.g. right after a `type: session` block exits) must not get a
+// second, redundant prompt drawn on top of it by the next simulate action.
+func TestRunCastSimulateStepSkipPromptOmitsPromptDraw(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	t.Cleanup(restore)
+
+	prompt, err := renderCastPrompt(nil)
+	if err != nil {
+		t.Fatalf("render prompt: %v", err)
+	}
+
+	err = runCastSimulateStep(context.Background(), &schema.WorkflowStep{WriteRate: "0"}, &schema.WorkflowStep{
+		Type: schema.TaskTypeSimulate,
+		Mode: "typed",
+		Text: "# narration after a session",
+	}, NewVariables(), true)
+	if err != nil {
+		t.Fatalf("run simulate: %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast: %v", err)
+	}
+	text := castOutputText(t, content)
+	if !strings.Contains(text, "# narration after a session") {
+		t.Fatalf("expected the narration text in cast output, got %q", text)
+	}
+	if strings.Contains(text, prompt) {
+		t.Fatalf("expected no redundant prompt draw when skipPrompt is true, got %q", text)
+	}
+}
+
+// TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock is an
+// end-to-end regression test for the doubled-prompt bug: a `type: session`
+// block's real shell always leaves its own prompt visible the moment the
+// block exits, and the very next `type: simulate` narration line must not
+// draw a second one on top of it (reported as "> > # comment" instead of
+// "> # comment" in a recorded cast).
+func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "session-then-simulate.cast")
+
+	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Type:  castSessionStepType,
+				Shell: shell,
+				Steps: []schema.WorkflowStep{
+					{Type: "write", Text: "printf ready", Rate: "0"},
+					{Type: "key", Key: "enter"},
+					{Type: "wait", Text: "ready", Timeout: "2s"},
+				},
+			},
+			{Type: schema.TaskTypeSimulate, Text: "# narration after the session", Rate: "0"},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute session-then-simulate cast: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast file: %v", err)
+	}
+	text := castOutputText(t, content)
+	if !strings.Contains(text, "# narration after the session") {
+		t.Fatalf("expected the narration text in cast output, got %q", text)
+	}
+	// Two adjacent prompt renders are separated by ANSI reset/re-color escapes
+	// (e.g. "...m> \x1b[0m\x1b[1;...m> ..."), so "> >" never appears as a raw
+	// contiguous substring even when doubled -- check the ANSI-stripped text.
+	if strings.Contains(ansi.Strip(text), "> >") {
+		t.Fatalf("expected a single prompt at the session/simulate boundary, got a doubled prompt in %q", ansi.Strip(text))
 	}
 }
 

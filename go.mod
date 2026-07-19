@@ -63,6 +63,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.8.0
 	github.com/elewis787/boa v0.1.3
+	github.com/epiclabs-io/diff3 v0.0.0-20241115194849-280ec18688b6
 	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.19.0
 	github.com/gabriel-vasile/mimetype v1.4.13
@@ -314,6 +315,7 @@ require (
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect; Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates.
+	github.com/invopop/jsonschema v0.13.0 // Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates.
 	github.com/itchyny/gojq v0.12.19 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
