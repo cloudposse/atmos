@@ -66,8 +66,9 @@ hard-prohibited file, or needs a credential/decision only a human has): stop, re
 attention, and invoke the [`say` skill](../say/SKILL.md) with something like `"PR <number>
 coverage check needs your input."` Don't loop indefinitely inside an hourly budget.
 
-Only proceed to coverage gaps once every failure this cycle is either fixed or reported (or there
-were none to begin with).
+Only proceed to coverage gaps when every scoped test passes. If any failure remains red after its
+single fix attempt, report it, invoke `say`, and stop; do not analyze coverage from a failing test
+run.
 
 ## Fix coverage gaps
 

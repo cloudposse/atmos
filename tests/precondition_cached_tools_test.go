@@ -3,7 +3,6 @@ package tests
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -11,13 +10,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// cachedToolBinaryName returns the platform-specific filename prependCachedTestTool
-// looks for, mirroring its own runtime.GOOS check.
-func cachedToolBinaryName(binary string) string {
-	if runtime.GOOS == "windows" {
-		return binary + ".exe"
+func TestCachedTestToolBinaryNameForOS(t *testing.T) {
+	tests := []struct {
+		name   string
+		binary string
+		goos   string
+		want   string
+	}{
+		{name: "windows appends exe", binary: "tofu", goos: "windows", want: "tofu.exe"},
+		{name: "linux preserves name", binary: "tofu", goos: "linux", want: "tofu"},
+		{name: "darwin preserves name", binary: "tofu", goos: "darwin", want: "tofu"},
 	}
-	return binary
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, cachedTestToolBinaryNameForOS(tt.binary, tt.goos))
+		})
+	}
 }
 
 func TestCachedTestToolForBinary(t *testing.T) {
@@ -80,7 +89,7 @@ func TestPrependCachedTestTool(t *testing.T) {
 	t.Run("present cached binary is prepended to non-empty PATH", func(t *testing.T) {
 		binDir := withFakeCachedTool(t, "atmos-precond-fake-present", "v0", "atmos-fake-present")
 		require.NoError(t, os.MkdirAll(binDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedToolBinaryName("atmos-fake-present")), []byte("fake\n"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedTestToolBinaryName("atmos-fake-present")), []byte("fake\n"), 0o755))
 		t.Cleanup(func() { os.RemoveAll(binDir) })
 
 		// t.Setenv records the original PATH and restores it after the test; the function
@@ -97,7 +106,7 @@ func TestPrependCachedTestTool(t *testing.T) {
 	t.Run("present cached binary sets PATH when PATH is empty", func(t *testing.T) {
 		binDir := withFakeCachedTool(t, "atmos-precond-fake-emptypath", "v0", "atmos-fake-emptypath")
 		require.NoError(t, os.MkdirAll(binDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedToolBinaryName("atmos-fake-emptypath")), []byte("fake\n"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedTestToolBinaryName("atmos-fake-emptypath")), []byte("fake\n"), 0o755))
 		t.Cleanup(func() { os.RemoveAll(binDir) })
 
 		t.Setenv("PATH", "")
