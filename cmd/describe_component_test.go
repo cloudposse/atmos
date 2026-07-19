@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,6 +111,62 @@ func TestGetRunnableDescribeComponentCmd_InvalidErrorMode(t *testing.T) {
 	err := run(describeComponentCmd, []string{"vpc"})
 
 	require.ErrorIs(t, err, exec.ErrInvalidErrorMode, "invalid error-mode should be rejected before executing")
+}
+
+// TestGetRunnableDescribeComponentCmd_ErrorModeWrongType covers the genuinely-forceable
+// return-err branch on cmd.Flags().GetString(describeErrorModeFlagName) inside
+// getRunnableDescribeComponentCmd: registering "error-mode" as a Bool flag (instead of the
+// real String flag) reproduces a type mismatch without needing to touch any
+// BindFlagsToViper-adjacent code path. Mirrors describe_dependents_test.go's
+// TestSetFlagsForDescribeDependentsCmd_ErrorModeWrongType and
+// describe_edition_test.go's TestDescribeEditionCmd_FormatFlagWrongType.
+//
+// Note: resolveDescribeErrorModeFlag itself still succeeds here (binding a Bool pflag to
+// Viper doesn't error, and Viper's GetString on the bound Bool value round-trips to
+// "false", which cmd.Flags().Set("error-mode", "false") happily accepts on a Bool flag)
+// -- it's the subsequent cmd.Flags().GetString call that fails, because the flag is
+// genuinely a Bool.
+func TestGetRunnableDescribeComponentCmd_ErrorModeWrongType(t *testing.T) {
+	tk := NewTestKit(t)
+	viper.Reset()
+
+	testCmd := &cobra.Command{Use: "component"}
+	testCmd.Flags().String("stack", "", "")
+	testCmd.Flags().String("format", "yaml", "")
+	testCmd.Flags().String("file", "", "")
+	testCmd.Flags().Bool("process-templates", true, "")
+	testCmd.Flags().Bool("process-functions", true, "")
+	testCmd.Flags().String("query", "", "")
+	testCmd.Flags().StringSlice("skip", nil, "")
+	testCmd.Flags().Bool("provenance", false, "")
+	testCmd.Flags().Bool("error-mode", false, "")
+	require.NoError(t, testCmd.Flags().Set("error-mode", "true"))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Times(0)
+
+	run := getRunnableDescribeComponentCmd(getRunnableDescribeComponentCmdProps{
+		checkAtmosConfigE: func(opts ...AtmosValidateOption) error { return nil },
+		initCliConfig: func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		isExplicitComponentPath: func(component string) bool { return false },
+		resolveComponentFromPath: func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
+			return component, nil
+		},
+		executeDescribeComponent: func(params *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
+			return nil, nil
+		},
+		newDescribeComponentExec: mockExec,
+	})
+
+	err := run(testCmd, []string{"vpc"})
+
+	require.Error(tk, err, "GetString on a Bool-typed error-mode flag must return an error")
+	assert.NotErrorIs(tk, err, exec.ErrInvalidErrorMode, "the failure must come from GetString, not error-mode validation")
 }
 
 // TestDescribeComponentCmd_ProvenanceWithFormatJSON tests that provenance and format flags
