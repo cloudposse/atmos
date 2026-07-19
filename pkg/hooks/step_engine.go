@@ -72,7 +72,7 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 			Err()
 	}
 
-	ws, err := stepFromHook(ctx.Hook)
+	ws, err := StepFromHook(ctx.Hook)
 	if err != nil {
 		return nil, err
 	}
@@ -122,11 +122,11 @@ func verifyStepHookType(name, stepType string) error {
 	return nil
 }
 
-// stepFromHook builds a WorkflowStep from a step-kind hook. The `with:` block
+// StepFromHook builds a WorkflowStep from a step-kind hook. The `with:` block
 // (already rendered by resolveHookForExecution) is round-tripped through YAML
 // into the WorkflowStep — WorkflowStep is designed to unmarshal from YAML, so
 // this reuses its tags and nested-struct decoding without a separate mapping.
-func stepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
+func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 	ws := &schema.WorkflowStep{}
 	if hook.With != nil {
 		data, err := yaml.Marshal(hook.With)
@@ -162,7 +162,7 @@ type stepsEngine struct{}
 func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	defer perf.Track(nil, "hooks.stepsEngine.Run")()
 
-	steps, err := stepsFromHook(ctx.Hook)
+	steps, err := StepsFromHook(ctx.Hook)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,10 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	return out, nil
 }
 
-func stepsFromHook(hook *Hook) ([]schema.WorkflowStep, error) {
+// StepsFromHook builds an ordered list of WorkflowSteps from a steps-kind
+// hook's `with:` block, round-tripped through YAML the same way
+// StepFromHook does for a single step.
+func StepsFromHook(hook *Hook) ([]schema.WorkflowStep, error) {
 	if hook.With == nil {
 		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
 			WithExplanation("A hook with kind: steps must set `with:` to an ordered list of steps").
@@ -230,7 +233,7 @@ func stepsFromHook(hook *Hook) ([]schema.WorkflowStep, error) {
 }
 
 func verifyStepsHookTypes(name string, hook *Hook) error {
-	steps, err := stepsFromHook(hook)
+	steps, err := StepsFromHook(hook)
 	if err != nil {
 		return err
 	}

@@ -24,11 +24,15 @@ steps:
 | --- | --- | --- |
 | [`atmos`](/workflows/steps/type/atmos) | Run an Atmos CLI command. This is the default for command steps. | `command`, `stack`, `identity` |
 | [`shell`](/workflows/steps/type/shell) | Run a shell command or script. | `command`, `working_directory`, `env`, `tty`, `interactive` |
+| [`script`](/workflows/steps/type/script) | Run an inline script with an explicit interpreter. | `interpreter`, `script`, `working_directory` |
 | [`exec`](/workflows/steps/type/exec) | Replace the Atmos process with another executable. Must be the final step. | `command` |
 | [`container`](/workflows/steps/type/container) | Build, push, run, or inspect containers. | `action`, `build`, `push`, `run`, `inspect` |
+| [`emulator`](/workflows/steps/type/emulator) | Start, stop, or reset a local cloud emulator component. | `component`, `stack`, `action` |
 | [`http`](/workflows/steps/type/http) | Call an HTTP endpoint (alias: `webhook`). | `url`, `method`, `body`/`form`, `expect`, `retry` |
 | [`archive`](/workflows/steps/type/archive) | Pack (or update) a zip/tar/tgz archive. | `source`, `destination`, `action`, `format` |
 | [`require`](/workflows/steps/type/require) | Assert that required tools are on PATH and files/dirs exist (alias: `assert`). | `tools`, `files`, `dirs`, `hint` |
+| [`workdir`](/workflows/steps/type/workdir) | Provision a repeatable writable directory from a source. | `path`, `source`, `reset` |
+| [`cast`](/workflows/steps/type/cast) | Record nested steps or a terminal session as an asciicast. | `mode`, `steps`, `output.cast` |
 
 ## Orchestration Types
 
@@ -36,7 +40,8 @@ steps:
 | --- | --- | --- |
 | [`parallel`](/workflows/steps/type/parallel) | Run child steps concurrently with dependencies and bounded concurrency. | `steps`, `max_concurrency`, `fail`, `output`, `needs` |
 | [`matrix`](/workflows/steps/type/matrix) | Expand axes into generated child steps and run them concurrently. | `matrix`, `steps`, `max_concurrency`, `fail`, `output` |
-| [`wait`](/workflows/steps/type/wait) | Block until named background container services are healthy (`wait-all` waits for all). | `for` |
+| [`wait`](/workflows/steps/type/wait) | Block until named background container services are healthy. | `for` |
+| [`wait-all`](/workflows/steps/type/wait#wait-all) | Block until every background container service is healthy. | none |
 | [`cancel`](/workflows/steps/type/cancel) | Stop and remove a background container service. | `for` |
 
 ## Interactive Types
@@ -64,6 +69,8 @@ steps:
 | [`join`](/workflows/steps/type/join) | Join strings. | `options`, `separator`, `content` |
 | [`style`](/workflows/steps/type/style) | Apply terminal styling. | `content`, `foreground`, `background`, `border`, `padding` |
 | [`log`](/workflows/steps/type/log) | Emit a structured log message. | `level`, `content`, `fields` |
+| [`junit`](/workflows/steps/type/junit) | Read JUnit XML and publish a CI summary and test annotations. | `files`, `action`, `title` |
+| [`hint`](/workflows/steps/type/hint) | Display a muted terminal tip. | `content` |
 
 ## Terminal and Control Types
 
