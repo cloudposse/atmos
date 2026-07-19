@@ -3,7 +3,6 @@ package exec
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +10,19 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// fileURIFromPath converts an absolute filesystem path into a "file://" URI that
+// resolveFileURIPath can parse back to the original path on every platform: on POSIX the path
+// already starts with "/", so it is used as-is; on Windows (e.g. "C:\foo") it is slash-converted
+// and given a leading "/" so the URI reads "file:///C:/foo", matching resolveFileURIPath's
+// documented drive-letter handling.
+func fileURIFromPath(path string) string {
+	sourcePath := filepath.ToSlash(path)
+	if len(sourcePath) == 0 || sourcePath[0] != '/' {
+		sourcePath = "/" + sourcePath
+	}
+	return "file://" + sourcePath
+}
 
 // TestResolveFileURIPath_NotFileScheme proves resolveFileURIPath only handles "file://" URIs,
 // leaving every other scheme (or a bare path) untouched.
@@ -31,28 +43,22 @@ func TestResolveFileURIPath_NotFileScheme(t *testing.T) {
 // Regression: "file:///tmp/source" previously resolved to the relative "tmp/source" because the
 // leading "/" was unconditionally stripped.
 func TestResolveFileURIPath_PreservesAbsoluteRoot(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX absolute-path case only applies on non-Windows platforms")
-	}
+	absPath := filepath.Join(t.TempDir(), "source")
 
-	resolved, ok := resolveFileURIPath("file:///tmp/source")
+	resolved, ok := resolveFileURIPath(fileURIFromPath(absPath))
 	require.True(t, ok)
-	assert.Equal(t, "/tmp/source", resolved)
+	assert.Equal(t, absPath, resolved)
 }
 
 // TestHandleLocalFileScheme_FileURI_RecomputesSourceIsLocalFile proves handleLocalFileScheme
 // recognizes an existing file named by a "file://" URI (sourceIsLocalFile), not just an existing
 // file named by a plain path resolved against componentPath.
 func TestHandleLocalFileScheme_FileURI_RecomputesSourceIsLocalFile(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX absolute-path case only applies on non-Windows platforms")
-	}
-
 	tempDir := t.TempDir()
 	sourceFile := filepath.Join(tempDir, "source")
 	require.NoError(t, os.WriteFile(sourceFile, []byte("test"), 0o644))
 
-	uri, useLocalFileSystem, sourceIsLocalFile := handleLocalFileScheme(t.TempDir(), "file://"+sourceFile)
+	uri, useLocalFileSystem, sourceIsLocalFile := handleLocalFileScheme(t.TempDir(), fileURIFromPath(sourceFile))
 
 	assert.Equal(t, sourceFile, uri)
 	assert.True(t, useLocalFileSystem)
@@ -63,17 +69,13 @@ func TestHandleLocalFileScheme_FileURI_RecomputesSourceIsLocalFile(t *testing.T)
 // "file://" URI resolves to the absolute path it names (shared with handleLocalFileScheme via
 // resolveFileURIPath), instead of a broken relative path.
 func TestProcessComponentMixins_FileURI_NormalizesToAbsolutePath(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX absolute-path case only applies on non-Windows platforms")
-	}
-
 	// A path that does not exist locally, so processComponentMixins does not skip it via the
 	// already-materialized dedup check.
 	missingSource := filepath.Join(t.TempDir(), "does-not-exist")
 
 	spec := &schema.VendorComponentSpec{
 		Mixins: []schema.VendorComponentMixins{
-			{Uri: "file://" + missingSource, Filename: "context.tf"},
+			{Uri: fileURIFromPath(missingSource), Filename: "context.tf"},
 		},
 	}
 
