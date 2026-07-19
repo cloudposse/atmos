@@ -511,6 +511,78 @@ func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
 	}
 }
 
+// TestLockDeclaredSource proves lockDeclaredSource restores the "oci://" scheme the legacy
+// installer strips before provenance resolution (so the lock records the original declared
+// source), while leaving every other pkgType's uri untouched.
+func TestLockDeclaredSource(t *testing.T) {
+	tests := []struct {
+		name string
+		kind pkgType
+		uri  string
+		want string
+	}{
+		{
+			name: "oci kind without the scheme gets it restored",
+			kind: pkgTypeOci,
+			uri:  "ghcr.io/cloudposse/vpc:1.0.0",
+			want: "oci://ghcr.io/cloudposse/vpc:1.0.0",
+		},
+		{
+			name: "oci kind that already carries the scheme is left alone",
+			kind: pkgTypeOci,
+			uri:  "oci://ghcr.io/cloudposse/vpc:1.0.0",
+			want: "oci://ghcr.io/cloudposse/vpc:1.0.0",
+		},
+		{
+			name: "remote kind is never prefixed",
+			kind: pkgTypeRemote,
+			uri:  "github.com/cloudposse/terraform-null-label.git",
+			want: "github.com/cloudposse/terraform-null-label.git",
+		},
+		{
+			name: "local kind is never prefixed",
+			kind: pkgTypeLocal,
+			uri:  "/abs/path/to/component",
+			want: "/abs/path/to/component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, lockDeclaredSource(tt.kind, tt.uri))
+		})
+	}
+}
+
+// TestDownloadAndInstall_RecordVendorLockErrorSurfaced proves a vendor-lock recording failure
+// after a successful copy is surfaced as an installedPkgMsg error (naming the package), instead of
+// being reported as an overall success despite the receipt never having been written.
+func TestDownloadAndInstall_RecordVendorLockErrorSurfaced(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	// targetPath deliberately lives outside atmosConfig.BasePath's tree, so recordVendorLock's
+	// lockfile.Replace can't relate it back to the project root and returns an error, even though
+	// the preceding copy to targetPath itself succeeds.
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	targetPath := t.TempDir()
+
+	pkg := &pkgAtmosVendor{
+		uri:        sourceDir,
+		name:       "vpc",
+		targetPath: targetPath,
+		pkgType:    pkgTypeLocal,
+	}
+
+	msg := downloadAndInstall(pkg, false, atmosConfig)()
+
+	installed, ok := msg.(installedPkgMsg)
+	require.True(t, ok)
+	require.Error(t, installed.err)
+	assert.Contains(t, installed.err.Error(), "vpc")
+	assert.Contains(t, installed.err.Error(), "failed to record vendor lock")
+}
+
 func setupVendorModelTestUI(t *testing.T) (stderr *bytes.Buffer, cleanup func()) {
 	t.Helper()
 

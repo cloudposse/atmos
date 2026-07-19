@@ -82,3 +82,136 @@ func TestProcessComponentMixins_FileURI_NormalizesToAbsolutePath(t *testing.T) {
 	require.Len(t, packages, 1)
 	assert.Equal(t, missingSource, packages[0].uri)
 }
+
+// TestBuildComponentVendorPackages_OciScheme proves a component source.uri using the "oci://"
+// scheme is classified as pkgTypeOci with the scheme stripped from the stored uri, matching the
+// mixin-side handling in resolveMixinPackage.
+func TestBuildComponentVendorPackages_OciScheme(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{Uri: "oci://ghcr.io/cloudposse/vpc:1.0.0"},
+	}
+
+	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
+
+	require.NoError(t, err)
+	require.Len(t, packages, 1)
+	assert.Equal(t, pkgTypeOci, packages[0].pkgType)
+	assert.Equal(t, "ghcr.io/cloudposse/vpc:1.0.0", packages[0].uri)
+}
+
+// TestResolveMixinPackage_OciScheme proves a mixin uri using the "oci://" scheme is classified as
+// pkgTypeOci with the scheme stripped, mirroring buildComponentVendorPackages' component-level
+// handling of the same scheme.
+func TestResolveMixinPackage_OciScheme(t *testing.T) {
+	spec := &schema.VendorComponentSpec{}
+	mixin := &schema.VendorComponentMixins{Uri: "oci://ghcr.io/cloudposse/mixins:context.tf", Filename: "context.tf"}
+
+	pkg, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, t.TempDir())
+
+	require.NoError(t, err)
+	assert.False(t, alreadyMaterialized)
+	assert.Equal(t, pkgTypeOci, pkg.pkgType)
+	assert.Equal(t, "ghcr.io/cloudposse/mixins:context.tf", pkg.uri)
+}
+
+// TestResolveMixinPackage_AlreadyMaterialized proves a mixin whose target file already exists at
+// the resolved destination path is reported as already materialized (nothing to fetch), instead
+// of producing a package that would re-download and overwrite it.
+func TestResolveMixinPackage_AlreadyMaterialized(t *testing.T) {
+	componentPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "context.tf"), []byte("# already here\n"), 0o644))
+
+	spec := &schema.VendorComponentSpec{}
+	mixin := &schema.VendorComponentMixins{Uri: "context.tf", Filename: "context.tf"}
+
+	pkg, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, componentPath)
+
+	require.NoError(t, err)
+	assert.True(t, alreadyMaterialized)
+	assert.Equal(t, pkgComponentVendor{}, pkg, "an already-materialized mixin returns the zero-value package, since there is nothing to fetch")
+}
+
+// TestResolveMixinPackage_TemplateError proves an invalid Go template in a versioned mixin's uri
+// is surfaced as an error identifying the failing mixin (filename and uri), rather than a bare
+// template-package error with no mixin context.
+func TestResolveMixinPackage_TemplateError(t *testing.T) {
+	spec := &schema.VendorComponentSpec{}
+	mixin := &schema.VendorComponentMixins{
+		Uri:      "https://example.com/{{.Version",
+		Version:  "1.0.0",
+		Filename: "context.tf",
+	}
+
+	_, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, t.TempDir())
+
+	require.Error(t, err)
+	assert.False(t, alreadyMaterialized)
+	assert.Contains(t, err.Error(), "context.tf", "the error must identify which mixin failed to template")
+}
+
+// TestParseMixinURI_RendersVersionTemplate proves a versioned mixin's uri template is rendered
+// against the mixin itself (so `{{ .Version }}` resolves), instead of being returned unparsed.
+func TestParseMixinURI_RendersVersionTemplate(t *testing.T) {
+	mixin := &schema.VendorComponentMixins{
+		Uri:      "https://example.com/archive/{{ .Version }}/context.tf",
+		Version:  "1.2.3",
+		Filename: "context.tf",
+	}
+
+	uri, err := parseMixinURI(nil, mixin)
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/archive/1.2.3/context.tf", uri)
+}
+
+// TestProcessComponentMixins_MissingFilename proves a mixin with a uri but no filename is
+// rejected before resolveMixinPackage is ever invoked, matching the sibling missing-uri check.
+func TestProcessComponentMixins_MissingFilename(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Mixins: []schema.VendorComponentMixins{
+			{Uri: "github.com/cloudposse/terraform-null-label.git//exports/context.tf?ref=0.1.0"}, // Missing Filename.
+		},
+	}
+
+	packages, err := processComponentMixins(nil, spec, t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrMissingMixinFilename)
+	assert.Nil(t, packages)
+}
+
+// TestProcessComponentMixins_AlreadyMaterializedMixinIsSkipped proves a mixin whose target already
+// exists on disk produces no package (it is silently skipped, not re-fetched), while a second,
+// not-yet-materialized mixin in the same component.yaml still produces one.
+func TestProcessComponentMixins_AlreadyMaterializedMixinIsSkipped(t *testing.T) {
+	componentPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "context.tf"), []byte("# already here\n"), 0o644))
+
+	spec := &schema.VendorComponentSpec{
+		Mixins: []schema.VendorComponentMixins{
+			{Uri: "context.tf", Filename: "context.tf"},
+			{Uri: "github.com/cloudposse/terraform-null-label.git//exports/fixtures.tf?ref=0.1.0", Filename: "fixtures.tf"},
+		},
+	}
+
+	packages, err := processComponentMixins(nil, spec, componentPath)
+
+	require.NoError(t, err)
+	require.Len(t, packages, 1, "only the not-yet-materialized mixin should produce a package")
+	assert.Equal(t, "fixtures.tf", packages[0].mixinFilename)
+}
+
+// TestProcessComponentMixins_PropagatesResolveError proves a mixin whose uri fails template
+// evaluation fails the whole component's mixin processing, not just that one mixin.
+func TestProcessComponentMixins_PropagatesResolveError(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Mixins: []schema.VendorComponentMixins{
+			{Uri: "https://example.com/{{.Version", Version: "1.0.0", Filename: "context.tf"},
+		},
+	}
+
+	packages, err := processComponentMixins(nil, spec, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, packages)
+}

@@ -977,3 +977,118 @@ func TestValidateTagsAndComponents(t *testing.T) {
 		})
 	}
 }
+
+// TestFilterMaterializedVendorPackages_SkipsMaterializedPackage proves a package with an existing,
+// matching vendor lock receipt is filtered out (skipped), while a sibling package with no receipt
+// yet is kept pending.
+func TestFilterMaterializedVendorPackages_SkipsMaterializedPackage(t *testing.T) {
+	base := t.TempDir()
+	target := filepath.Join(base, "target")
+	require.NoError(t, os.MkdirAll(target, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("resource"), 0o644))
+
+	tempDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.tf"), []byte("resource"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+	materialized := pkgAtmosVendor{
+		uri: filepath.Join(base, "source"), name: "vpc-materialized",
+		targetPath: target, pkgType: pkgTypeLocal,
+	}
+	require.NoError(t, recordVendorLock(&materialized, tempDir, config))
+
+	pending := pkgAtmosVendor{
+		uri: filepath.Join(base, "source"), name: "vpc-pending",
+		targetPath: filepath.Join(base, "pending-target"), pkgType: pkgTypeLocal,
+	}
+
+	result, err := filterMaterializedVendorPackages([]pkgAtmosVendor{materialized, pending}, config)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1, "only the not-yet-materialized package should remain")
+	assert.Equal(t, "vpc-pending", result[0].name)
+}
+
+// TestFilterMaterializedVendorPackages_PropagatesError proves a package whose targetPath can't be
+// related back to the project's BasePath surfaces the vendor lock verification error, naming the
+// failing package, instead of silently treating it as pending.
+func TestFilterMaterializedVendorPackages_PropagatesError(t *testing.T) {
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	pkgs := []pkgAtmosVendor{{uri: "source", name: "vpc", targetPath: t.TempDir(), pkgType: pkgTypeLocal}}
+
+	result, err := filterMaterializedVendorPackages(pkgs, config)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "verify vendor lock for vpc")
+}
+
+// TestExecuteAtmosVendorInternal_PropagatesMaterializationCheckError proves ExecuteAtmosVendorInternal
+// surfaces the vendor lock verification error (rather than swallowing it or proceeding to install)
+// when a resolved target can't be related back to the project's BasePath.
+func TestExecuteAtmosVendorInternal_PropagatesMaterializationCheckError(t *testing.T) {
+	vendorDir := t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	// atmosConfig.BasePath deliberately points elsewhere from vendorDir, so the resolved target
+	// (joined against vendorDir) can't be related back to it.
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+
+	opts := &executeVendorOptions{
+		vendorConfigFileName: filepath.Join(vendorDir, "vendor.yaml"),
+		atmosConfig:          atmosConfig,
+		atmosVendorSpec: schema.AtmosVendorSpec{
+			Sources: []schema.AtmosVendorSource{
+				{
+					Component: "vpc",
+					Source:    sourceDir,
+					Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+				},
+			},
+		},
+	}
+
+	err := ExecuteAtmosVendorInternal(opts)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "verify vendor lock for vpc")
+}
+
+// TestExecuteAtmosVendorInternal_AllMaterialized_NoOp proves a vendor.yaml whose only source is
+// already vendored and unchanged filters down to zero packages and returns without error, instead
+// of calling executeVendorModel with an empty list or re-copying the source.
+func TestExecuteAtmosVendorInternal_AllMaterialized_NoOp(t *testing.T) {
+	vendorDir := t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: vendorDir}
+	newOpts := func() *executeVendorOptions {
+		return &executeVendorOptions{
+			vendorConfigFileName: filepath.Join(vendorDir, "vendor.yaml"),
+			atmosConfig:          atmosConfig,
+			atmosVendorSpec: schema.AtmosVendorSpec{
+				Sources: []schema.AtmosVendorSource{
+					{
+						Component: "vpc",
+						Source:    sourceDir,
+						Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+					},
+				},
+			},
+		}
+	}
+
+	require.NoError(t, ExecuteAtmosVendorInternal(newOpts()))
+	target := filepath.Join(vendorDir, "components", "terraform", "vpc")
+	assert.FileExists(t, filepath.Join(target, "main.tf"))
+
+	// Add a new file to the source after the first pull; if the second call re-pulls instead of
+	// skipping the already-materialized source, this file would show up too.
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "extra.tf"), []byte("# added later\n"), 0o644))
+
+	err := ExecuteAtmosVendorInternal(newOpts())
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(target, "extra.tf"), "an already-materialized source must be skipped, not re-copied")
+}
