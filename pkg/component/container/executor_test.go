@@ -104,7 +104,7 @@ func TestExecuteUp_ResolvesRelativeBindMountAgainstProjectRoot(t *testing.T) {
 		rt.EXPECT().Create(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, c *ctr.CreateConfig) (string, error) {
 				require.Equal(t, []ctr.Mount{
-					{Type: "bind", Source: filepath.Join(projectRoot, "app/public"), Target: "/app/public"},
+					{Type: "bind", Source: filepath.Join(projectRoot, "app", "public"), Target: "/app/public"},
 					{Type: "volume", Source: "cache", Target: "/cache"},
 				}, c.Mounts)
 				return "cid", nil
