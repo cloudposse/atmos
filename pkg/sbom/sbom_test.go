@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	toolchainlock "github.com/cloudposse/atmos/pkg/toolchain/lockfile"
 	vendorlock "github.com/cloudposse/atmos/pkg/vendoring/lockfile"
@@ -180,6 +182,280 @@ func TestRepositoryPathMakesRelativeBaseAbsolute(t *testing.T) {
 	require.Equal(t, "components/terraform/vpc/.terraform.lock.hcl", repositoryPath(config, filepath.Join(base, "components", "terraform", "vpc", ".terraform.lock.hcl")))
 }
 
+// --- normalizeOptions / BuildWithOptions error propagation --------------------
+
+func TestNormalizeOptionsDefaultsModeWhenEmpty(t *testing.T) {
+	t.Parallel()
+	options := Options{}
+	require.NoError(t, normalizeOptions(&options))
+	require.Equal(t, ModeProvenance, options.Mode)
+}
+
+func TestNormalizeOptionsRejectsUnsupportedMode(t *testing.T) {
+	t.Parallel()
+	err := normalizeOptions(&Options{Mode: "bogus"})
+	require.ErrorIs(t, err, errUnsupportedMode)
+}
+
+func TestNormalizeOptionsRejectsUnsupportedScope(t *testing.T) {
+	t.Parallel()
+	err := normalizeOptions(&Options{Scope: "bogus"})
+	require.ErrorIs(t, err, errUnsupportedScope)
+}
+
+func TestBuildWithOptionsPropagatesNormalizeOptionsError(t *testing.T) {
+	t.Parallel()
+	_, err := BuildWithOptions(&schema.AtmosConfiguration{BasePath: t.TempDir()}, Options{Mode: "bogus"})
+	require.ErrorIs(t, err, errUnsupportedMode)
+}
+
+func TestBuildWithOptionsPropagatesVendorLockParseError(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	require.NoError(t, os.WriteFile(vendorlock.Path(config), []byte("not: [valid yaml"), 0o644))
+
+	_, err := BuildWithOptions(config, Options{Scope: ScopeTerraform})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "parse vendor lock")
+}
+
+func TestBuildWithOptionsPropagatesScopeArtifactsError(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	config.Toolchain.LockFile = "toolchain.lock.yaml"
+	require.NoError(t, os.WriteFile(filepath.Join(base, config.Toolchain.LockFile), []byte("not: [valid yaml"), 0o644))
+
+	_, err := BuildWithOptions(config, Options{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed to parse lock file")
+}
+
+func TestAppendVersionsErrorPropagatesThroughScopeArtifacts(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	config.Version.LockFile = "versions.lock.yaml"
+	require.NoError(t, os.WriteFile(filepath.Join(base, config.Version.LockFile), []byte("not: [valid yaml"), 0o644))
+
+	_, err := BuildWithOptions(config, Options{})
+	require.Error(t, err)
+}
+
+// --- appendVendor: artifact naming fallback ------------------------------------
+
+func TestAppendVendorFallsBackToArtifactIDWhenComponentNameEmpty(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	lock := vendorlock.New()
+	lock.Artifacts["unnamed"] = vendorlock.Artifact{
+		Kind:   "source",
+		Target: filepath.Join(base, "components", "terraform", "unnamed"),
+		Source: vendorlock.Source{Declared: "oci://ghcr.io/example/unnamed:v1"},
+	}
+	require.NoError(t, vendorlock.Save(config, lock))
+
+	graph := &Graph{}
+	require.NoError(t, appendVendor(graph, config, false))
+	require.Len(t, graph.Components, 1)
+	require.Equal(t, "unnamed", graph.Components[0].Name)
+}
+
+// --- appendJITSources -----------------------------------------------------------
+
+func writeJITReceipt(t *testing.T, componentDir string, metadata workdir.WorkdirMetadata) {
+	t.Helper()
+	atmosDir := filepath.Join(componentDir, workdir.AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	content, err := json.Marshal(metadata)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(atmosDir, workdir.MetadataFile), content, 0o644))
+}
+
+func TestAppendJITSourcesReturnsCompleteWithNoSearchPath(t *testing.T) {
+	t.Parallel()
+	complete, detail, err := appendJITSources(&Graph{}, &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	require.True(t, complete)
+	require.Contains(t, detail, "no JIT workdir search path")
+}
+
+func TestAppendJITSourcesParsesCompleteReceipt(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	componentDir := filepath.Join(base, "components", "terraform", "vpc")
+	writeJITReceipt(t, componentDir, workdir.WorkdirMetadata{
+		Component:      "vpc",
+		Stack:          "core-usw2",
+		SourceIdentity: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		SourceResolved: "https://example.com/org/vpc.git",
+		CreatedAt:      time.Now(),
+	})
+
+	graph := &Graph{}
+	complete, detail, err := appendJITSources(graph, &schema.AtmosConfiguration{BasePath: base})
+	require.NoError(t, err)
+	require.True(t, complete)
+	require.Contains(t, detail, "vendor lock and JIT receipts parsed")
+	require.Len(t, graph.Components, 1)
+	require.Equal(t, "vpc", graph.Components[0].Name)
+	require.Equal(t, "https://example.com/org/vpc.git", graph.Components[0].Source)
+}
+
+func TestAppendJITSourcesIncompleteWhenIdentityMissing(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	completeDir := filepath.Join(base, "components", "terraform", "complete")
+	writeJITReceipt(t, completeDir, workdir.WorkdirMetadata{Component: "complete", SourceIdentity: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"})
+	incompleteDir := filepath.Join(base, "components", "terraform", "incomplete")
+	writeJITReceipt(t, incompleteDir, workdir.WorkdirMetadata{Component: "incomplete", SourceURI: "https://example.com/org/incomplete.git"})
+
+	graph := &Graph{}
+	complete, detail, err := appendJITSources(graph, &schema.AtmosConfiguration{BasePath: base})
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Contains(t, detail, "lack immutable source identity")
+	require.Len(t, graph.Components, 2)
+	for _, component := range graph.Components {
+		if component.Name == "incomplete" {
+			require.Equal(t, "NOASSERTION", component.Version)
+			require.Equal(t, "https://example.com/org/incomplete.git", component.Source)
+		}
+	}
+}
+
+func TestAppendJITSourcesReturnsErrorForCorruptReceipt(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	atmosDir := filepath.Join(base, "components", "terraform", "vpc", workdir.AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(atmosDir, workdir.MetadataFile), []byte("{not valid json"), 0o644))
+
+	_, _, err := appendJITSources(&Graph{}, &schema.AtmosConfiguration{BasePath: base})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "parse JIT workdir receipt")
+}
+
+func TestAppendVendorPropagatesJITSourcesError(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	atmosDir := filepath.Join(base, "components", "terraform", "vpc", workdir.AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(atmosDir, workdir.MetadataFile), []byte("{not valid json"), 0o644))
+
+	err := appendVendor(&Graph{}, &schema.AtmosConfiguration{BasePath: base}, false)
+	require.Error(t, err)
+}
+
+// --- loadJITReceipt / firstNonEmpty ---------------------------------------------
+
+func TestFirstNonEmpty(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		values []string
+		want   string
+	}{
+		{name: "all empty", values: []string{"", ""}, want: ""},
+		{name: "no values", values: nil, want: ""},
+		{name: "first wins", values: []string{"a", "b"}, want: "a"},
+		{name: "skips leading empties", values: []string{"", "", "c"}, want: "c"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, firstNonEmpty(tt.values...))
+		})
+	}
+}
+
+// --- relativeToBase / repositoryPath --------------------------------------------
+
+func TestRelativeToBaseFallsBackToPathWhenRelUnavailable(t *testing.T) {
+	t.Parallel()
+	// filepath.Rel cannot make an absolute path relative to a relative base;
+	// relativeToBase must return the original path unchanged in that case.
+	require.Equal(t, "/absolute/path", relativeToBase("relative-base", "/absolute/path"))
+}
+
+func TestRepositoryPathReturnsEmptyForEmptyInput(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "", repositoryPath(&schema.AtmosConfiguration{}, ""))
+}
+
+func TestRepositoryPathFallsBackToBaseNameWithoutConfigBasePath(t *testing.T) {
+	t.Parallel()
+	absPath := filepath.Join(t.TempDir(), "vendor.lock.yaml")
+	require.Equal(t, filepath.Base(absPath), repositoryPath(nil, absPath))
+	require.Equal(t, filepath.Base(absPath), repositoryPath(&schema.AtmosConfiguration{}, absPath))
+}
+
+// --- appendToolchain / appendVersions: nil config and absent lock files --------
+
+func TestAppendToolchainAndAppendVersionsNoOpOnNilConfig(t *testing.T) {
+	t.Parallel()
+	graph := &Graph{}
+	require.NoError(t, appendToolchain(graph, nil))
+	require.NoError(t, appendVersions(graph, nil))
+	require.Empty(t, graph.Components)
+}
+
+func TestAppendToolchainAndAppendVersionsNoOpWhenLockFilesAbsent(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+
+	graph := &Graph{}
+	require.NoError(t, appendToolchain(graph, config))
+	require.NoError(t, appendVersions(graph, config))
+	require.Empty(t, graph.Components)
+}
+
+func TestAppendToolchainPropagatesCorruptLockError(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	config.Toolchain.LockFile = "toolchain.lock.yaml"
+	require.NoError(t, os.WriteFile(filepath.Join(base, config.Toolchain.LockFile), []byte("not: [valid yaml"), 0o644))
+
+	err := appendToolchain(&Graph{}, config)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed to parse lock file")
+}
+
+func TestAppendVersionsPropagatesCorruptLockError(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	config.Version.LockFile = "versions.lock.yaml"
+	require.NoError(t, os.WriteFile(filepath.Join(base, config.Version.LockFile), []byte("not: [valid yaml"), 0o644))
+
+	err := appendVersions(&Graph{}, config)
+	require.Error(t, err)
+}
+
+// --- validateNTIA ----------------------------------------------------------------
+
+func TestValidateNTIARequiresTerraformScope(t *testing.T) {
+	t.Parallel()
+	graph := &Graph{Subject: Subject{Name: "n", Version: "v", Supplier: "s"}}
+	err := validateNTIA(graph, "not-terraform")
+	require.ErrorIs(t, err, errNTIAScopeRequired)
+}
+
+func TestValidateNTIARequiresCompleteCoverage(t *testing.T) {
+	t.Parallel()
+	graph := &Graph{
+		Subject:  Subject{Name: "n", Version: "v", Supplier: "s"},
+		Coverage: []Coverage{{Adapter: "atmos-sources", Status: "incomplete", Detail: "some detail"}},
+	}
+	err := validateNTIA(graph, ScopeTerraform)
+	require.ErrorIs(t, err, errNTIACoverageIncomplete)
+	require.ErrorContains(t, err, "atmos-sources adapter is incomplete")
+}
+
 func TestRenderIdentifiesAtmosGeneratorVersion(t *testing.T) {
 	original := atmosversion.Version
 	atmosversion.Version = "1.2.3"
@@ -195,4 +471,62 @@ func TestRenderIdentifiesAtmosGeneratorVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(spdx), "Tool: atmos-1.2.3")
 	require.Contains(t, string(spdx), "generator repository: https://github.com/cloudposse/atmos")
+}
+
+func TestRenderTreatsNilGraphAsEmpty(t *testing.T) {
+	t.Parallel()
+	content, err := Render(nil, FormatCycloneDXJSON)
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(content, &document))
+	require.Equal(t, "CycloneDX", document["bomFormat"])
+	require.Empty(t, document["components"])
+}
+
+func TestRenderIncludesPURLSupplierAndSubjectMetadata(t *testing.T) {
+	t.Parallel()
+	graph := &Graph{
+		Subject: Subject{Name: "infra-live", Version: "2026.07.18", Supplier: "Example Corp"},
+		Components: []Component{{
+			ID:       "terraform-provider:registry.terraform.io/hashicorp/aws@5.95.0",
+			Name:     "registry.terraform.io/hashicorp/aws",
+			Version:  "5.95.0",
+			Type:     "library",
+			PURL:     "pkg:golang/registry.terraform.io/hashicorp/aws@5.95.0",
+			Supplier: "HashiCorp",
+			Source:   "https://registry.terraform.io/hashicorp/aws",
+		}},
+	}
+
+	cyclonedxContent, err := Render(graph, FormatCycloneDXJSON)
+	require.NoError(t, err)
+	require.Contains(t, string(cyclonedxContent), `"purl": "pkg:golang/registry.terraform.io/hashicorp/aws@5.95.0"`)
+	require.Contains(t, string(cyclonedxContent), `"name": "HashiCorp"`)
+
+	spdxContent, err := Render(graph, FormatSPDXJSON)
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(spdxContent, &document))
+	require.Equal(t, "infra-live", document["name"])
+	packages, ok := document["packages"].([]any)
+	require.True(t, ok)
+	require.Len(t, packages, 1)
+	pkg, ok := packages[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "HashiCorp", pkg["supplier"])
+	externalRefs, ok := pkg["externalRefs"].([]any)
+	require.True(t, ok)
+	require.Len(t, externalRefs, 1)
+	relationships, ok := document["relationships"].([]any)
+	require.True(t, ok)
+	foundDescribes := false
+	for _, entry := range relationships {
+		relationship, ok := entry.(map[string]any)
+		require.True(t, ok)
+		if relationship["relationshipType"] == "DESCRIBES" {
+			foundDescribes = true
+			require.Equal(t, "SPDXRef-DOCUMENT", relationship["spdxElementId"])
+		}
+	}
+	require.True(t, foundDescribes, "expected an SPDX DESCRIBES relationship for the document subject")
 }
