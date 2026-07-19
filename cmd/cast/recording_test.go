@@ -876,14 +876,11 @@ func TestFinalizeRecordingRendersOutputAndReportsSuccess(t *testing.T) {
 
 func TestFinalizeRecordingReportsRenderFailure(t *testing.T) {
 	activeCast = nil
-	// An unsupported rendered extension makes planRecordingOutput reject the
-	// path up front, so instead force a render failure by pointing PATH at an
-	// empty directory: the static renderers for html/ascii/png/jpeg do not
-	// require external tools, but gif/mp4 require agg/ffmpeg, which will be
-	// unresolvable and surface as a render error from FinalizeRecording.
-	t.Setenv("PATH", t.TempDir())
+	// Make the output parent a regular file after planning succeeds. This
+	// produces a deterministic render failure during finalization without
+	// relying on a renderer being installed locally.
 	tmpDir := t.TempDir()
-	renderOutput := filepath.Join(tmpDir, "demo.gif")
+	renderOutput := filepath.Join(tmpDir, "blocked", "demo.gif")
 	t.Setenv(EnvName, renderOutput)
 	t.Cleanup(func() {
 		if activeCast != nil {
@@ -902,6 +899,9 @@ func TestFinalizeRecordingReportsRenderFailure(t *testing.T) {
 	if activeCast == nil {
 		t.Fatal("expected active recording")
 	}
+	if err := os.WriteFile(filepath.Dir(renderOutput), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("block render output parent: %v", err)
+	}
 
 	// FinalizeRecording swallows the render error internally (it reports to
 	// UI and returns), so simply confirm it does not panic and clears state.
@@ -909,8 +909,8 @@ func TestFinalizeRecordingReportsRenderFailure(t *testing.T) {
 	if activeCast != nil {
 		t.Fatal("expected activeCast to be cleared even when rendering fails")
 	}
-	if _, err := os.Stat(renderOutput); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("render output should not exist after failed render, stat err: %v", err)
+	if _, err := os.Stat(renderOutput); err == nil {
+		t.Fatal("render output should not exist after failed render")
 	}
 }
 
