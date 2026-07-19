@@ -15,8 +15,11 @@ match `atmos fix --all` at the CLI, which runs the mechanical half of the same s
 threads, lint, coverage) — this skill adds the agent-delegated fixing (CodeRabbit threads, lint
 findings, test/coverage gaps) that a plain CLI command can't do on its own.
 
-Every check stays scoped to the **patch relative to `origin/main`** — this never chases
-pre-existing issues elsewhere in the repo, only what this PR's diff touched or broke.
+Every check stays scoped to the **patch relative to `origin/main`** in *which packages it looks
+at* — this never goes hunting for trouble in the other 340+ packages this PR's diff never touched.
+But within a package a check does look at, a failing test gets fixed regardless of whether this
+patch's own diff is what broke it — see the [`test-coverage` skill](../test-coverage/SKILL.md) for
+why "pre-existing" no longer means "don't touch" for test failures specifically.
 
 ## Precondition
 
@@ -88,8 +91,10 @@ wrong. Trigger points:
    your attention."`
 3. **CodeRabbit finding skipped as invalid** (step 4/5, reply-only, not resolved) — `"PR <number>
    has a CodeRabbit finding that needs your review."`
-4. **Pre-existing test failure surfaced** (step 7, never touched, reported only) — `"PR <number>
-   has a pre-existing test failure, not from this patch."`
+4. **A failing test couldn't be safely attempted this cycle** (step 2/7 — not "it's not this
+   patch's fault", but a fix would need a human decision/credential the loop doesn't have, or
+   would require touching a hard-prohibited file) — `"PR <number> has a test failure that needs
+   your input before it can be fixed."`
 5. **Coverage-phase edge case needing a human** (step 7 — a fix attempt capped out still red, or
    a coverage gap was judged genuinely untestable) — `"PR <number> coverage check needs your
    input."`
@@ -143,10 +148,12 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
    - Name is `Acceptance Tests`-shaped: delegate to `Agent subagent_type: "test-coverage-fix"`,
      Section A. This is a full-suite failure, wider than this skill's own patch-scoped `atmos fix
      coverage` (step 7) — it may be in a package this patch never directly touched. Reproduce
-     locally first; only attempt a fix if you can confidently trace the failure's root cause to
-     something in this patch's diff. If you can't confidently make that connection, or it looks
-     pre-existing, flaky, or platform-specific, treat it exactly like a pre-existing test failure
-     (`say` trigger 4) — report only, never guess.
+     locally first, then attempt a confident fix regardless of whether the root cause traces to
+     this patch's own diff or is genuinely pre-existing — what matters is the suite passing, not
+     whose fault it is. Only report without fixing (`say` trigger 4) when you can't confidently and
+     safely identify and fix the root cause at all this cycle — e.g. it needs a human decision, a
+     credential the loop doesn't have, or would require touching a hard-prohibited file
+     (`.github/workflows/**`, `Makefile`, `go.mod`, `go.sum`).
    - Name is `PR Semver Labels`-shaped (the required-labels CI gate, `mheap/github-action-
      required-labels`): fix it directly, don't just report it. Apply the `pull-request` skill's
      label decision tree — don't re-derive the decision tree here — against the full patch
@@ -189,16 +196,18 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
    skipped finding triggers `say` trigger 6.
 
 7. Invoke the [`test-coverage` skill](../test-coverage/SKILL.md). `STATUS: NO_GO_CHANGES`:
-   one-line no-op. `STATUS: TESTS_FAILING`: in-scope failures get fixed (gating coverage work
-   until green); pre-existing failures are reported only, with `say` trigger 4. `STATUS: OK` with
-   no uncovered added lines: one-line no-op. Gaps get fixed per that skill's process; anything
-   judged genuinely untestable, or a fix attempt that caps out still red, triggers `say` trigger 5.
+   one-line no-op. `STATUS: TESTS_FAILING`: every failing test gets a fix attempt — in-scope or
+   pre-existing alike (gating coverage work until green). Only a failure that can't be confidently
+   or safely attempted at all is reported via `say` trigger 4; one that's attempted but still red
+   after one try is reported via `say` trigger 5. `STATUS: OK` with no uncovered added lines:
+   one-line no-op. Gaps get fixed per that skill's process; anything judged genuinely untestable,
+   or a fix attempt that caps out still red, triggers `say` trigger 5.
 
 8. Check readiness for final human review. This only fires on an otherwise-fully-clean cycle — skip
    it entirely if any of `say` triggers 1-6 above fired this cycle (a merge conflict, a failing
-   non-lint/test CI check, a CodeRabbit finding skipped as invalid, a pre-existing test failure, an
-   untestable coverage gap, or an unfixable lint finding all mean the PR is NOT ready). Otherwise
-   check all five of:
+   non-lint/test CI check, a CodeRabbit finding skipped as invalid, an unfixable-this-cycle test
+   failure, an untestable coverage gap, or an unfixable lint finding all mean the PR is NOT ready).
+   Otherwise check all five of:
 
    - Re-run `atmos fix ci` for a fresh read — not the cached step-2 result, since steps 4/6/7 may
      have pushed new commits since then, and a fresh push means new CI runs that are likely still
