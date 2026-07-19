@@ -28,6 +28,23 @@ func skipUnlessWritablePermissionsWork(t *testing.T) {
 	}
 }
 
+// skipUnlessNonDirectoryPathComponentIsDistinguishable skips tests that rely on a
+// regular file blocking a path component (e.g. stat-ing "blocker/nested.txt" where
+// "blocker" is a file, not a directory) producing an error distinct from "does not
+// exist". On POSIX this is ENOTDIR, which os.IsNotExist reports as false, so the
+// production code under test correctly falls through to its stat-error branch. On
+// Windows the equivalent condition surfaces as ERROR_PATH_NOT_FOUND, which Go's
+// os.IsNotExist treats as true (conflated with "not found"), so the production
+// code's `if os.IsNotExist(err) { continue }` silently treats it as already-gone
+// instead of surfacing an error - a genuine platform semantic difference, not a
+// bug in the code under test.
+func skipUnlessNonDirectoryPathComponentIsDistinguishable(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping non-directory path component test on Windows: os.IsNotExist does not distinguish ENOTDIR from ENOENT there")
+	}
+}
+
 func TestSaveRedactsSourcesAndIsDeterministic(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
@@ -1036,6 +1053,7 @@ func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T
 	})
 
 	t.Run("a previous file blocked by a non-directory path component surfaces a stat error", func(t *testing.T) {
+		skipUnlessNonDirectoryPathComponentIsDistinguishable(t)
 		base := t.TempDir()
 		target := filepath.Join(base, "vendor")
 		require.NoError(t, os.MkdirAll(target, 0o755))
@@ -1093,6 +1111,7 @@ func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T
 }
 
 func TestVerifyReportsStatErrorForNonDirectoryPathComponent(t *testing.T) {
+	skipUnlessNonDirectoryPathComponentIsDistinguishable(t)
 	base := t.TempDir()
 	target := filepath.Join(base, "vendor")
 	require.NoError(t, os.MkdirAll(target, 0o755))
@@ -1121,6 +1140,7 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 	})
 
 	t.Run("a path blocked by a non-directory component is rejected during validation", func(t *testing.T) {
+		skipUnlessNonDirectoryPathComponentIsDistinguishable(t)
 		base := t.TempDir()
 		target := filepath.Join(base, "vendor")
 		require.NoError(t, os.MkdirAll(target, 0o755))
