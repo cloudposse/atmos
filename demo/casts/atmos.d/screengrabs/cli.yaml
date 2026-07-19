@@ -200,11 +200,14 @@ commands:
           atmos config delete --help
           atmos config format --help
           atmos config list --help
+          atmos config schema --help
+          atmos config validate --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
           atmos stack format --help
           atmos stack schema --help
+          atmos stack validate --help
           atmos stack config --help
           atmos stack config get --help
           atmos stack config set --help
@@ -571,11 +574,14 @@ commands:
           atmos config delete --help
           atmos config format --help
           atmos config list --help
+          atmos config schema --help
+          atmos config validate --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
           atmos stack format --help
           atmos stack schema --help
+          atmos stack validate --help
           atmos stack config --help
           atmos stack config get --help
           atmos stack config set --help
