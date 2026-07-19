@@ -77,6 +77,11 @@ exclude = [
   "\\?raw=true",
   # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
   "img\\.shields\\.io/github/release/",
+  # Shields badge endpoints intermittently return 503/520 from CI runners even
+  # though the badges resolve in browsers. These are decorative status badges,
+  # so exclude the unstable badge and GitHub-status endpoints from link checks.
+  "shields\\.io/badge/",
+  "img\\.shields\\.io/github/(actions/workflow/status|last-commit)/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
