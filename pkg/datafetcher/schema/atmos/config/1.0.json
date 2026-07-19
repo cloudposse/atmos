@@ -11791,10 +11791,78 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "proxies": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ToolchainProxy"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
         }
       },
       "type": "object",
       "description": "Toolchain configures the built-in CLI toolchain management system for installing and managing external tools."
+    },
+    "ToolchainProxy": {
+      "properties": {
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ToolchainProxy exposes a toolchain binary under a command name. The tool is\nresolved through Toolchain.Aliases and args are prepended to user arguments."
     },
     "ToolchainRegistry": {
       "properties": {

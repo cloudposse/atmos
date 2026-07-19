@@ -30,7 +30,11 @@ func TestGeneratedSchemaCompiles(t *testing.T) {
 // this repository's own root atmos.yaml and .atmos.d — must validate against
 // the generated schema through the same engine `atmos validate schema` uses
 // (which stringifies YAML function tags like `!include`). The tests/fixtures
-// tree is deliberately excluded: it contains intentionally invalid configs.
+// tree is deliberately excluded, as it contains intentionally invalid configs,
+// and so is examples/scaffolds: those atmos.yaml files are `atmos scaffold`
+// template sources using `[[ ... ]]` placeholder syntax (e.g. `command: [[
+// .Config.terraform_command ]]`), not directly valid runtime configs — the
+// placeholder is substituted before the result is ever schema-validated.
 func TestGeneratedSchemaAcceptsRealConfigs(t *testing.T) {
 	files := corpusFiles(t)
 	require.Positive(t, len(files), "no atmos.yaml corpus files found under examples/; the corpus scan is misconfigured")
@@ -65,6 +69,9 @@ func corpusFiles(t *testing.T) []string {
 				return walkErr
 			}
 			if entry.IsDir() {
+				if dir == "examples" && entry.Name() == "scaffolds" {
+					return fs.SkipDir
+				}
 				return nil
 			}
 			if dir == ".atmos.d" {
