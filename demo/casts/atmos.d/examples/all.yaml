@@ -22,6 +22,9 @@ commands:
         name: toolchain-demo-convert
         command: atmos casts generate examples toolchain demo-convert
       - type: shell
+        name: toolchain-proxies
+        command: atmos casts generate examples toolchain proxies
+      - type: shell
         name: custom-commands-hello-greet
         command: atmos casts generate examples custom-commands hello-greet
       - type: shell
@@ -159,6 +162,15 @@ commands:
       - type: shell
         name: local-gitops-lifecycle
         command: atmos casts generate examples local-gitops lifecycle
+      - type: shell
+        name: init-init-basic
+        command: atmos casts generate examples init init-basic
+      - type: shell
+        name: scaffolding-generate-example
+        command: atmos casts generate examples scaffolding generate-example
+      - type: shell
+        name: scaffolds-aws-landing-zone-lifecycle
+        command: atmos casts generate examples scaffolds aws-landing-zone-lifecycle
       - type: shell
         name: version-tracker-tracks-and-vars
         command: atmos casts generate examples version-tracker tracks-and-vars
@@ -330,6 +342,15 @@ commands:
       - type: shell
         name: local-gitops-lifecycle
         command: atmos casts validate examples local-gitops lifecycle
+      - type: shell
+        name: init-init-basic
+        command: atmos casts validate examples init init-basic
+      - type: shell
+        name: scaffolding-generate-example
+        command: atmos casts validate examples scaffolding generate-example
+      - type: shell
+        name: scaffolds-aws-landing-zone-lifecycle
+        command: atmos casts validate examples scaffolds aws-landing-zone-lifecycle
       - type: shell
         name: version-tracker-tracks-and-vars
         command: atmos casts validate examples version-tracker tracks-and-vars

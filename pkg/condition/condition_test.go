@@ -127,6 +127,36 @@ func TestConditionUnmarshalYAML(t *testing.T) {
 			ctx:  Context{Status: PredicateSuccess, Env: map[string]string{"DEPLOY_ENV": "prod"}},
 			want: true,
 		},
+		{
+			name: "cel answers list membership",
+			yaml: "when: \"'dev' in answers.environments\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"environments": []string{"dev", "staging"}}},
+			want: true,
+		},
+		{
+			name: "cel answers list membership false",
+			yaml: "when: \"'prod' in answers.environments\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"environments": []string{"dev", "staging"}}},
+			want: false,
+		},
+		{
+			name: "cel answers bool flag",
+			yaml: "when: \"answers.deploy_multi_env == true\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"deploy_multi_env": true}},
+			want: true,
+		},
+		{
+			name: "cel answers size",
+			yaml: "when: \"size(answers.environments) > 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"environments": []string{"dev"}}},
+			want: true,
+		},
+		{
+			name: "cel answers nil map defaults to empty",
+			yaml: "when: \"size(answers) == 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: nil},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {

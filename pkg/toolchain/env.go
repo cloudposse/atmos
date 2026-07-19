@@ -17,6 +17,12 @@ const (
 	singleQuote = "'"
 	// SingleQuoteEscaped is the escaped form for single-quoted shell strings.
 	singleQuoteEscaped = "'\\''"
+
+	// Output format names, shared by the emit/format switch statements below.
+	formatBash       = "bash"
+	formatFish       = "fish"
+	formatPowershell = "powershell"
+	formatDotenv     = "dotenv"
 )
 
 // EmitEnv outputs the PATH entries for installed toolchain binaries in shell-specific format.
@@ -26,6 +32,10 @@ func EmitEnv(format string, relativeFlag bool, outputPath string) error {
 	defer perf.Track(nil, "toolchain.EmitEnv")()
 
 	installer := NewInstaller()
+	proxyEnv, err := PrepareProxyEnvironment(GetAtmosConfig())
+	if err != nil {
+		return err
+	}
 
 	// Read tool-versions file from the configured path.
 	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
@@ -48,8 +58,11 @@ func EmitEnv(format string, relativeFlag bool, outputPath string) error {
 
 	// Build PATH entries for each tool using the helper from path_helpers.go.
 	pathEntries, toolPaths, err := buildPathEntries(toolVersions, installer, relativeFlag)
-	if err != nil {
+	if err != nil && proxyEnv.Path == "" {
 		return err
+	}
+	if proxyEnv.Path != "" {
+		pathEntries = append([]string{proxyEnv.Path}, pathEntries...)
 	}
 
 	// Get current PATH and construct the final PATH value.
@@ -57,31 +70,53 @@ func EmitEnv(format string, relativeFlag bool, outputPath string) error {
 	finalPath := constructFinalPath(pathEntries, currentPath)
 
 	// Output based on the requested format.
-	return emitEnvOutput(toolPaths, pathEntries, finalPath, format, outputPath)
+	paths := envPathResult{ToolPaths: toolPaths, PathEntries: pathEntries, FinalPath: finalPath}
+	return emitEnvOutput(paths, format, outputPath, proxyEnv)
+}
+
+// envPathResult bundles the artifacts of building PATH entries (the per-tool
+// paths, the raw entries, and the constructed final PATH string) so they can
+// be threaded through the emit/format helpers as a single argument.
+type envPathResult struct {
+	ToolPaths   []ToolPath
+	PathEntries []string
+	FinalPath   string
 }
 
 // emitEnvOutput outputs environment variables in the requested format.
-func emitEnvOutput(toolPaths []ToolPath, pathEntries []string, finalPath, format, outputPath string) error {
+func emitEnvOutput(paths envPathResult, format, outputPath string, proxyEnv ProxyEnvironment) error {
 	// If outputPath is specified, append to file instead of stdout.
 	if outputPath != "" {
-		return appendToFile(outputPath, format, pathEntries, finalPath)
+		return appendToFile(outputPath, format, paths.PathEntries, paths.FinalPath, proxyEnv)
 	}
 
+	if err := emitFormat(format, paths, proxyEnv); err != nil {
+		return err
+	}
+
+	// emitProxyExports is a no-op for the json/github formats (they carry any
+	// proxy context in their own output, see emitJSONPath/formatProxyExports),
+	// so it is always safe to call after emitFormat.
+	return emitProxyExports(format, proxyEnv)
+}
+
+// emitFormat writes the environment output for format to stdout, dispatching
+// to the shell-specific emitter (or the JSON/GitHub Actions emitters).
+func emitFormat(format string, paths envPathResult, proxyEnv ProxyEnvironment) error {
 	switch format {
 	case "json":
-		return emitJSONPath(toolPaths, finalPath)
-	case "bash":
-		return emitBashEnv(finalPath)
-	case "dotenv":
-		return emitDotenvEnv(finalPath)
-	case "fish":
-		return emitFishEnv(finalPath)
-	case "powershell":
-		return emitPowershellEnv(finalPath)
+		return emitJSONPath(paths.ToolPaths, paths.FinalPath, proxyEnv)
 	case "github":
-		return emitGitHubEnv(pathEntries)
+		return emitGitHubEnv(paths.PathEntries)
+	case formatDotenv:
+		return emitDotenvEnv(paths.FinalPath)
+	case formatFish:
+		return emitFishEnv(paths.FinalPath)
+	case formatPowershell:
+		return emitPowershellEnv(paths.FinalPath)
 	default:
-		return emitBashEnv(finalPath)
+		// formatBash and any unrecognized format fall back to bash export syntax.
+		return emitBashEnv(paths.FinalPath)
 	}
 }
 
@@ -98,18 +133,19 @@ func emitGitHubEnv(pathEntries []string) error {
 }
 
 // formatContentForFile generates the content string for a given format.
-func formatContentForFile(format string, pathEntries []string, finalPath string) string {
+func formatContentForFile(format string, pathEntries []string, finalPath string, proxyEnvs ...ProxyEnvironment) string {
+	proxyEnv := optionalProxyEnvironment(proxyEnvs)
 	switch format {
 	case "github":
 		return formatGitHubContent(pathEntries)
-	case "bash":
-		return formatBashContent(finalPath)
-	case "dotenv":
-		return formatDotenvContent(finalPath)
-	case "fish":
-		return formatFishContent(finalPath)
-	case "powershell":
-		return formatPowershellContent(finalPath)
+	case formatBash:
+		return formatBashContent(finalPath) + formatProxyExports(formatBash, proxyEnv)
+	case formatDotenv:
+		return formatDotenvContent(finalPath) + formatProxyExports(formatDotenv, proxyEnv)
+	case formatFish:
+		return formatFishContent(finalPath) + formatProxyExports(formatFish, proxyEnv)
+	case formatPowershell:
+		return formatPowershellContent(finalPath) + formatProxyExports(formatPowershell, proxyEnv)
 	case "json":
 		// Use json.Marshal for proper escaping of special characters.
 		jsonData := map[string]string{"final_path": finalPath}
@@ -120,7 +156,7 @@ func formatContentForFile(format string, pathEntries []string, finalPath string)
 		}
 		return string(bytes) + "\n"
 	default:
-		return formatBashContent(finalPath)
+		return formatBashContent(finalPath) + formatProxyExports(formatBash, proxyEnv)
 	}
 }
 
@@ -160,8 +196,9 @@ func formatPowershellContent(finalPath string) string {
 }
 
 // appendToFile appends the environment output to a file (append mode).
-func appendToFile(outputPath, format string, pathEntries []string, finalPath string) error {
-	content := formatContentForFile(format, pathEntries, finalPath)
+func appendToFile(outputPath, format string, pathEntries []string, finalPath string, proxyEnvs ...ProxyEnvironment) error {
+	proxyEnv := optionalProxyEnvironment(proxyEnvs)
+	content := formatContentForFile(format, pathEntries, finalPath, proxyEnv)
 
 	f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFileWritePermissions)
 	if err != nil {
@@ -215,15 +252,59 @@ func emitPowershellEnv(finalPath string) error {
 }
 
 // emitJSONPath outputs PATH and tool information in JSON format.
-func emitJSONPath(toolPaths []ToolPath, finalPath string) error {
+func emitJSONPath(toolPaths []ToolPath, finalPath string, proxyEnvs ...ProxyEnvironment) error {
+	proxyEnv := optionalProxyEnvironment(proxyEnvs)
 	output := struct {
-		Tools     []ToolPath `json:"tools"`
-		FinalPath string     `json:"final_path"`
-		Count     int        `json:"count"`
+		Tools     []ToolPath        `json:"tools"`
+		FinalPath string            `json:"final_path"`
+		Count     int               `json:"count"`
+		Proxy     *ProxyEnvironment `json:"proxy,omitempty"`
 	}{
 		Tools:     toolPaths,
 		FinalPath: finalPath,
 		Count:     len(toolPaths),
 	}
+	if proxyEnv.Path != "" {
+		output.Proxy = &proxyEnv
+	}
 	return data.WriteJSON(output)
+}
+
+func emitProxyExports(format string, proxyEnv ProxyEnvironment) error {
+	if proxyEnv.Path == "" {
+		return nil
+	}
+	return data.Writef("%s", formatProxyExports(format, proxyEnv))
+}
+
+func formatProxyExports(format string, proxyEnv ProxyEnvironment) string {
+	if proxyEnv.Path == "" || format == "github" || format == "json" {
+		return ""
+	}
+	var builder strings.Builder
+	variables := proxyEnv.Variables()
+	for _, key := range []string{ProxyConfigPathEnv, ProxyVersionsFileEnv, ProxyInstallPathEnv} {
+		value := variables[key]
+		if value == "" {
+			continue
+		}
+		switch format {
+		case formatFish:
+			fmt.Fprintf(&builder, "set -gx %s '%s'\n", key, strings.ReplaceAll(value, singleQuote, "\\'"))
+		case formatPowershell:
+			fmt.Fprintf(&builder, "$env:%s = \"%s\"\n", key, strings.ReplaceAll(value, "\"", "`\""))
+		case formatDotenv:
+			fmt.Fprintf(&builder, "%s='%s'\n", key, strings.ReplaceAll(value, singleQuote, singleQuoteEscaped))
+		default:
+			fmt.Fprintf(&builder, "export %s='%s'\n", key, strings.ReplaceAll(value, singleQuote, singleQuoteEscaped))
+		}
+	}
+	return builder.String()
+}
+
+func optionalProxyEnvironment(proxyEnvs []ProxyEnvironment) ProxyEnvironment {
+	if len(proxyEnvs) == 0 {
+		return ProxyEnvironment{}
+	}
+	return proxyEnvs[0]
 }

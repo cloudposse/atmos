@@ -1,0 +1,142 @@
+---
+title: atmos scaffold generate
+sidebar_label: generate
+sidebar_class_name: command
+id: generate
+description: Generate or update files from an AtmosScaffoldConfig template.
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Generate a component, configuration, or project shape from a template. The template's versioned
+manifest owns its fields, conditions, files, hooks, and update provenance.
+</Intro>
+
+<CastPlayer title="atmos scaffold generate --help" src="/casts/screengrabs/atmos-scaffold-generate--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos scaffold generate [template] [target] [flags]
+```
+
+## Examples
+
+```shell
+# Prompt for active fields and generate into a new directory.
+atmos scaffold generate terraform-component ./components/terraform/vpc
+
+# Supply values for automation; defaults satisfy required fields.
+atmos scaffold generate terraform-component ./components/terraform/vpc \
+  --defaults \
+  --set component_name=vpc \
+  --set environments=dev,staging
+
+# Preview a template without writing files or running generation hooks.
+atmos scaffold generate terraform-component ./preview --dry-run --skip-hooks
+
+# Bring a recorded project forward after its template changes.
+atmos scaffold generate terraform-component ./components/terraform/vpc \
+  --update --merge-strategy=manual
+```
+
+## Template Sources
+
+Select an embedded template, a template declared under `scaffold.templates` in `atmos.yaml`, or a
+local/remote source. A source can be pinned with `--ref` to make a release, tag, or commit explicit.
+
+```shell
+atmos scaffold list
+atmos scaffold generate ./scaffolds/terraform-component ./components/terraform/vpc
+atmos scaffold generate https://github.com/example/platform-templates.git ./output --ref v1.2.0
+```
+
+## Template Configuration
+
+Use the versioned manifest below; the former top-level `prompts:` key is not valid.
+
+```yaml title="scaffold.yaml"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: terraform-component
+spec:
+  fields:
+    - name: component_name
+      label: Component name
+      type: input
+      required: true
+      validation:
+        pattern: "^[a-z0-9-]+$"
+    - name: create_monitoring
+      type: confirm
+      default: false
+    - name: alert_email
+      type: input
+      when: "answers.create_monitoring == true"
+  files:
+    - path: monitoring.tf
+      when: "answers.create_monitoring == true"
+```
+
+Fields render into template content and paths through `{{ .Config.<field> }}`. Required, option,
+boolean, and regular-expression validation is enforced after all answer sources merge: interactive
+answers, defaults, saved `spec.values`, and `--set`. `select` and `multiselect` require values from
+their declared `options`; `false` remains a valid answer for a required boolean.
+
+`when:` accepts predicate words, CEL, or an implicit-`all` list. Conditions can inspect only
+earlier field answers through `answers`; use CEL (`&&`, `||`, `!`) for compound logic because the
+map-style `{all, any, not}` form is not accepted by scaffold manifests.
+
+## Generation Hooks
+
+Generation hooks run after answers are validated and before or after files are written:
+
+```yaml title="scaffold.yaml"
+spec:
+  hooks:
+    prepare:
+      events: [before.scaffold.generate]
+      kind: step
+      type: shell
+      with:
+        command: mkdir -p generated
+    validate:
+      events: [after.scaffold.generate]
+      kind: steps
+      with:
+        - type: shell
+          command: terraform fmt -recursive
+        - type: shell
+          command: terraform validate
+```
+
+Scaffold hooks run in stable name order and support only `kind: step` and `kind: steps`. A single
+step hook uses its envelope `type:` plus step-specific `with:` data; a steps hook executes the
+ordered `with:` list. The shared envelope supplies `events`, `when`, `env`, `retry`, and
+`on_failure`. Use `answers` in hook CEL and `{{ .Answers.<field> }}` inside a step template.
+
+Use `--skip-hooks` to skip all hooks or `--skip-hooks=prepare,validate` to skip named hooks. The
+stack-level [hooks reference](/stacks/hooks) documents additional stack-only kinds such as scanners,
+stores, Git, and CI integrations.
+
+## Update and Safety Flags
+
+| Flag | Behavior |
+| --- | --- |
+| `--defaults` | Use defaults and `--set` values without prompting. |
+| `--dry-run` | Render a preview without generated-file writes. |
+| `--force` | Permit generation into a non-empty target without update merging. |
+| `--update` | Apply an optimistic three-way merge using the recorded source/base revision. |
+| `--merge-strategy` | Choose `manual` (default), `ours`, or `theirs` for merge conflicts. |
+| `--skip-hooks` | Skip all hooks or a comma-separated set of hook names. |
+| `--git` / `--no-git` | Control initial Git setup; generation defaults to no Git initialization. |
+
+## Related Commands
+
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate)
+- [`atmos scaffold list`](/cli/commands/scaffold/list)
+- [`atmos init`](/cli/commands/init)
+- [Lifecycle hooks](/stacks/hooks)
