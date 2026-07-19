@@ -367,7 +367,7 @@ func prependCachedTestTool(binary string) {
 			return
 		}
 		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
-		binaryPath := filepath.Join(binDir, tool.Binary)
+		binaryPath := filepath.Join(binDir, cachedTestToolBinaryName(tool.Binary))
 		if _, err := os.Stat(binaryPath); err != nil {
 			return
 		}
@@ -379,6 +379,17 @@ func prependCachedTestTool(binary string) {
 		}
 		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
 	})
+}
+
+func cachedTestToolBinaryName(binary string) string {
+	return cachedTestToolBinaryNameForOS(binary, runtime.GOOS)
+}
+
+func cachedTestToolBinaryNameForOS(binary, goos string) string {
+	if goos == "windows" {
+		return binary + ".exe"
+	}
+	return binary
 }
 
 func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {

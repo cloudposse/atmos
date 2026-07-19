@@ -164,9 +164,9 @@ jobs:
         with:
           version: 101ccaca0df22b2e36dd917ed5d0be423baa6298
           install-mode: none
-          # `config verify` downloads the JSON schema at runtime. The lint config
-          # is verified by the repository's local lint check; skip this duplicate,
-          # network-dependent action preflight so SARIF generation remains reliable.
+          # The action's config verification downloads a remote JSON schema and
+          # can fail transiently. The subsequent lint command still parses and
+          # validates the configuration, so skip the duplicate network preflight.
           verify: false
           only-new-issues: true
           args: >
