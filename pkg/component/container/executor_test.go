@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -85,6 +86,7 @@ func TestExecuteUp_ResolvesRelativeBindMountAgainstProjectRoot(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
+	projectRoot := t.TempDir()
 
 	section := map[string]any{
 		"image": "localhost:5001/api:abc",
@@ -95,14 +97,14 @@ func TestExecuteUp_ResolvesRelativeBindMountAgainstProjectRoot(t *testing.T) {
 			},
 		},
 	}
-	withStubsConfig(t, &schema.AtmosConfiguration{BasePathAbsolute: "/project"}, section, nil, rt)
+	withStubsConfig(t, &schema.AtmosConfiguration{BasePathAbsolute: projectRoot}, section, nil, rt)
 
 	gomock.InOrder(
 		rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).Return([]ctr.Info{}, nil),
 		rt.EXPECT().Create(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, c *ctr.CreateConfig) (string, error) {
 				require.Equal(t, []ctr.Mount{
-					{Type: "bind", Source: "/project/app/public", Target: "/app/public"},
+					{Type: "bind", Source: filepath.Join(projectRoot, "app/public"), Target: "/app/public"},
 					{Type: "volume", Source: "cache", Target: "/cache"},
 				}, c.Mounts)
 				return "cid", nil
