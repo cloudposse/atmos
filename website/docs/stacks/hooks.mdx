@@ -10,12 +10,9 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Atmos hooks run automated actions at specific points in a component's
-lifecycle — before/after `terraform plan`, `apply`, `test`, `deploy`, or `init`.
-Built-in kinds cover the common cases (cost analysis, security scanning,
-storing outputs) and the generic `command` kind plugs in any binary you
-need. Tools auto-install through the Atmos toolchain and their output
-renders identically in your terminal and on Atmos Pro.
+Atmos hooks run automated actions around Terraform, Kubernetes, Helm, and Helmfile component
+operations. Built-in kinds cover cost analysis, security scanning, stores, Git, and CI; `kind: step`
+and `kind: steps` make the complete typed step library available at lifecycle events.
 </Intro>
 
 ## Hooks Schema
@@ -55,18 +52,13 @@ each level merges into the final result so you can keep configuration
 
 ## Supported Lifecycle Events
 
-| Event | When it fires |
-|---|---|
-| `before.terraform.init` | Before `atmos terraform init` runs |
-| `after.terraform.init` | After `atmos terraform init` finishes |
-| `before.terraform.plan` | Before `atmos terraform plan` runs (after init has completed) |
-| `after.terraform.plan` | After `atmos terraform plan` finishes |
-| `before.terraform.apply` | Before `atmos terraform apply` runs |
-| `after.terraform.apply` | After `atmos terraform apply` finishes |
-| `before.terraform.test` | Before `atmos terraform test` runs |
-| `after.terraform.test` | After `atmos terraform test` finishes (fires on success and failure) |
-| `before.terraform.deploy` | Alias of `before.terraform.apply` (deploy is apply with `-auto-approve`) |
-| `after.terraform.deploy` | Alias of `after.terraform.apply` |
+| Family | Events |
+| --- | --- |
+| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, and `test`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `after.terraform.plan.aggregate`, `after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. |
+| Kubernetes | `before`/`after.kubernetes.render`, `diff`/`plan`, `apply`/`deploy`, `delete`, and `validate`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. |
+| Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. |
+| Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`. `sync` and `deploy` normalize to `apply`. |
+| Scaffold generation | `before.scaffold.generate` and `after.scaffold.generate`. These are declared in `scaffold.yaml`, not stack manifests, and support only `kind: step` and `kind: steps`. |
 
 Hooks with no `events` list fire on every supported event for backward
 compatibility with configs written before event filtering existed. You
@@ -78,6 +70,18 @@ The `before.terraform.init` and `after.terraform.init` events fire around the
 explicit `atmos terraform init` command. They do not fire for the implicit
 `init` that `plan`, `apply`, and `deploy` run automatically — use
 `before.terraform.plan` / `before.terraform.apply` for those.
+
+## Supported Kinds
+
+Stack hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`, `kics`, `step`,
+and `steps`.
+The named kinds below provide purpose-built defaults; `kind: command` is the general binary
+runner. Scaffold hooks reuse the `when:` vocabulary and step engine but reject every kind except
+`step` and `steps` because they do not have stack/component execution context.
+
+The legacy `ci.check`, `ci.output`, `ci.summary`, `ci.upload`, and `ci.download` kinds still parse
+for compatibility but are deprecated no-ops. Use current CI provider bindings rather than adding
+new `ci.*` hook configuration.
 
 ## Built-in Kinds
 
@@ -963,7 +967,7 @@ Stores](/stacks/sharing-state/stores).
   <dd>List of [lifecycle events](#supported-lifecycle-events) that trigger this hook.</dd>
 
   <dt>`hooks.<name>.kind`</dt>
-  <dd>Which engine runs the hook. One of `store`, `command`, `git`, `step`, `steps`, `infracost`, `checkov`, `trivy`, `kics`, or the CI integration hook kinds `ci.check`, `ci.output`, `ci.summary`, `ci.upload`, and `ci.download`. Aliased from legacy `command:` field.</dd>
+  <dd>Which engine runs the hook: `store`, `command`, `git`, `step`, `steps`, `infracost`, `checkov`, `trivy`, or `kics`. Aliased from the legacy `command:` field. The legacy `ci.*` values parse as deprecated no-ops and must not be used for new configuration.</dd>
 
   <dt>`hooks.<name>.type`</dt>
   <dd>For `kind: step`: the [step type](#kind-step-run-a-step-type) to run (e.g. `container`, `http`, `toast`, `log`).</dd>

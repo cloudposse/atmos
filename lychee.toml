@@ -89,6 +89,8 @@ exclude = [
   "concourse-ci\\.org",
   # Aqua's documentation host intermittently returns 503 from CI runners.
   "aquaproj\\.github\\.io",
+  # Gomplate docs (connection resets in CI)
+  "docs\\.gomplate\\.ca",
   # regex101.com (intermittent timeouts in CI)
   "regex101\\.com",
   # nx.dev (intermittent connection failures in CI)

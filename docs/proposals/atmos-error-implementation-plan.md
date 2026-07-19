@@ -1,5 +1,15 @@
 # AtmosError Implementation Plan - Complete
 
+> **Status: Superseded by the shipped implementation.** The real `errors/sentry.go`
+> implements `CaptureError(err error)` and `CaptureErrorWithContext(err error, context
+> map[string]string)` — not this plan's `ReportError(err error, stackContext
+> *schema.Context) string` — and both build the Sentry event via
+> `errors.BuildSentryReport(err)` (cockroachdb/errors) and apply it through a
+> per-event `sentry.CurrentHub().WithScope(...)`, not this plan's global
+> `sentry.ConfigureScope(...)`. Treat the "Sentry Context Integration" section below
+> as historical design rationale, not the current API — see `errors/sentry.go` for
+> what actually shipped.
+
 ## Executive Summary
 
 Integrate `cockroachdb/errors` library to provide:
@@ -256,8 +266,13 @@ datacenter: us-east-1
 
 ### Implementation
 
+**Note:** the snippet below is this plan's original design and does not match what
+shipped. See the status note at the top of this document; the real functions are
+`CaptureError(err error)` and `CaptureErrorWithContext(err error, context
+map[string]string)` in `errors/sentry.go`.
+
 ```go
-// errors/sentry.go
+// errors/sentry.go (original proposal — see note above; superseded)
 
 func ReportError(err error, stackContext *schema.Context) string {
     if !sentryInitialized || err == nil {
@@ -447,8 +462,10 @@ docs/
 
   prd/
     error-handling.md              # Architecture PRD (NEW)
-    atmos-error-implementation-plan.md   # This file
     error-handling-strategy.md           # Updated
+
+  proposals/
+    atmos-error-implementation-plan.md   # This file
 
 website/docs/
   cli/
