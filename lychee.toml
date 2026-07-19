@@ -23,7 +23,9 @@ max_retries = 3
 # spanning arbitrary github.com issue/PR/repo URLs across different repos —
 # not any one specific broken link. See the v1.203.0 release-tag exclude below
 # for the single-URL precedent of this same GitHub-gateway flakiness.
-accept = ["200", "204", "301", "302", "403", "429", "500"]
+# 503/520 cover the same class of flakiness on (img.)shields.io badge URLs,
+# which intermittently reject requests under CI's request volume.
+accept = ["200", "204", "301", "302", "403", "429", "500", "503", "520"]
 
 # Paths to exclude from checking (input files to scan)
 exclude_path = [
@@ -31,6 +33,9 @@ exclude_path = [
   "node_modules",
   ".git",
   ".conductor",
+  # Go template files (badge URLs contain unrendered `{{ }}` placeholders,
+  # e.g. pkg/ci/plugins/terraform/templates/test.md) — not real documentation.
+  "pkg/ci",
 ]
 
 # URL patterns to exclude (regex)
