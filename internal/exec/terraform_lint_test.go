@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,6 +24,29 @@ func TestLintTargetsDeduplicatesComponentsDeterministically(t *testing.T) {
 	require.Equal(t, "prod", targets[0].Stack)
 	require.Equal(t, "vpc", targets[1].Component)
 	require.Equal(t, "dev", targets[1].Stack)
+}
+
+func TestLintTargetsReadsAndDeduplicatesGraphs(t *testing.T) {
+	graph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"vpc-prod": {Component: "vpc", Stack: "prod"},
+		"app-prod": {Component: "app", Stack: "prod"},
+		"vpc-dev":  {Component: "vpc", Stack: "dev"},
+	}}
+
+	targets := lintTargets(graph, []*dependency.Node{{Component: "ignored", Stack: "ignored"}})
+	require.Len(t, targets, 2)
+	require.Equal(t, "app", targets[0].Component)
+	require.Equal(t, "vpc", targets[1].Component)
+	require.Equal(t, "dev", targets[1].Stack)
+}
+
+func TestTerraformLintTargetErrorIncludesTargetAndCause(t *testing.T) {
+	cause := errors.New("scanner failed")
+	err := terraformLintTargetError(&dependency.Node{Component: "vpc", Stack: "prod"}, "running TFLint", cause)
+	require.ErrorIs(t, err, cause)
+	require.ErrorIs(t, err, errUtils.ErrTerraformLint)
+	require.ErrorContains(t, err, `component "vpc" in stack "prod"`)
+	require.ErrorContains(t, err, "running TFLint")
 }
 
 func TestExecuteTerraformLintTargetsContinuesAfterFailures(t *testing.T) {

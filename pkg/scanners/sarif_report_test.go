@@ -218,3 +218,31 @@ func TestPublishCIResultsGuards(t *testing.T) {
 	scan := &Context{AtmosConfig: &schema.AtmosConfiguration{}}
 	publishCIResults(scan, &Output{Summary: &Summary{SARIF: []byte(`{"runs":[]}`)}})
 }
+
+func TestRenderCISummaryUsesEnabledCISink(t *testing.T) {
+	// The scanner package has no provider registered in its unit-test binary;
+	// this validates that an enabled CI summary safely reaches the public CI seam
+	// and remains a no-op when there is no active provider.
+	t.Setenv("GITHUB_ACTIONS", "true")
+	scan := &Context{AtmosConfig: &schema.AtmosConfiguration{}}
+	scan.AtmosConfig.CI.Enabled = true
+
+	renderCISummary(scan, &Output{Summary: &Summary{Body: "## scanner summary"}})
+}
+
+func TestEnabledCIReportersAcceptFindingsAndSARIFWithoutProvider(t *testing.T) {
+	// A configured scan should build annotations and a SARIF report even outside
+	// CI. The CI package then intentionally no-ops because no provider is found.
+	t.Setenv("GITHUB_ACTIONS", "")
+	results := true
+	scan := &Context{AtmosConfig: &schema.AtmosConfiguration{}}
+	scan.AtmosConfig.CI.Enabled = true
+	scan.AtmosConfig.CI.Results.Enabled = &results
+	out := &Output{Summary: &Summary{
+		Findings: []Finding{{Path: "components/vpc/main.tf", Line: 7, Severity: "critical", RuleID: "terraform_unused", Message: "unused local"}},
+		SARIF:    []byte(`{"runs":[{"tool":{"driver":{"name":"tflint"}},"results":[{"level":"error"}]}]}`),
+	}}
+
+	emitCIAnnotations(scan, out)
+	publishCIResults(scan, out)
+}

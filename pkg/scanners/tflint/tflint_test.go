@@ -1,6 +1,8 @@
 package tflint
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +13,36 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestMain(m *testing.M) {
+	if os.Getenv("_ATMOS_TFLINT_TEST_SARIF") == "1" {
+		fmt.Fprint(os.Stdout, `{"runs":[{"tool":{"driver":{"name":"tflint","rules":[]}},"results":[]}]}`)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+func TestRunUsesToolchainBinaryAndParsesSARIF(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	toolchain := t.TempDir()
+	tool := filepath.Join(toolchain, Command)
+	require.NoError(t, os.Symlink(exe, tool))
+
+	out, scan, err := Run(context.Background(), &Options{
+		ToolchainPATH: toolchain,
+		Env:           map[string]string{"_ATMOS_TFLINT_TEST_SARIF": "1"},
+		Info:          &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "prod"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, scan)
+	assert.Equal(t, Name, scan.Name)
+	assert.Equal(t, toolchain, scan.ToolchainPATH)
+	require.NotNil(t, out.Artifact)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, Name, out.Summary.Kind)
+	assert.Contains(t, string(out.Artifact.Body), `"tflint"`)
+}
 
 func TestConfigPathPrefersComponentConfig(t *testing.T) {
 	base := t.TempDir()
