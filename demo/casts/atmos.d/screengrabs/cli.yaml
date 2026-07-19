@@ -327,6 +327,11 @@ commands:
           atmos ci cache paths --help
           atmos ci cache restore --help
           atmos ci cache save --help
+          atmos init --help
+          atmos scaffold --help
+          atmos scaffold list --help
+          atmos scaffold validate --help
+          atmos scaffold generate --help
           """
           FIXTURE = REPO / ".context" / "cast-fixtures" / "demo-stacks"
           OUT = REPO / "website" / "static" / "casts" / "screengrabs"
@@ -696,6 +701,11 @@ commands:
           atmos ci cache paths --help
           atmos ci cache restore --help
           atmos ci cache save --help
+          atmos init --help
+          atmos scaffold --help
+          atmos scaffold list --help
+          atmos scaffold validate --help
+          atmos scaffold generate --help
           """
 
           commands = [line.strip() for line in COMMANDS.splitlines() if line.strip()]
