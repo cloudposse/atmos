@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
@@ -241,6 +242,35 @@ func TestUpdateSpinnerResult_Canceled(t *testing.T) {
 	assert.Nil(t, report)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Contains(t, err.Error(), "vendor update canceled")
+}
+
+// TestUpdateSpinnerResult_NilModel proves a nil final model (bubbletea's Run returning nil
+// without error, which shouldn't happen but must not be silently mistaken for success) surfaces
+// a clear error instead of a nil pointer dereference further down the call chain.
+func TestUpdateSpinnerResult_NilModel(t *testing.T) {
+	report, err := updateSpinnerResult(nil)
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, errUtils.ErrSpinnerReturnedNilModel)
+}
+
+// unexpectedTeaModel is a minimal tea.Model stand-in used only to prove updateSpinnerResult
+// rejects a final model of the wrong concrete type instead of panicking on a failed type
+// assertion.
+type unexpectedTeaModel struct{}
+
+func (unexpectedTeaModel) Init() tea.Cmd                       { return nil }
+func (unexpectedTeaModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return unexpectedTeaModel{}, nil }
+func (unexpectedTeaModel) View() string                        { return "" }
+
+// TestUpdateSpinnerResult_UnexpectedModelType proves a final model of the wrong concrete type
+// (a programming error, since only *updateSpinnerModel is ever run) surfaces a clear error
+// instead of a panicking type assertion.
+func TestUpdateSpinnerResult_UnexpectedModelType(t *testing.T) {
+	report, err := updateSpinnerResult(unexpectedTeaModel{})
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, errUtils.ErrSpinnerUnexpectedModelType)
 }
 
 // TestUpdateSpinnerModel_Update_SpinnerAndProgressFrames proves the spinner.TickMsg and

@@ -35,6 +35,7 @@ func (c componentUpdaterFailingContext) Write(iolib.Stream, string) error {
 
 type componentUpdaterLister struct {
 	tags  []string
+	err   error
 	calls int
 }
 
@@ -53,6 +54,9 @@ func (p *componentUpdaterPublisher) Reconcile(_ context.Context, options *atmosg
 
 func (l *componentUpdaterLister) ListTags(context.Context, string) ([]string, error) {
 	l.calls++
+	if l.err != nil {
+		return nil, l.err
+	}
 	return l.tags, nil
 }
 
@@ -126,6 +130,47 @@ spec:
 	require.NoError(t, err)
 	assert.Equal(t, 1, report.UpdatedCount())
 	assert.Equal(t, 3, lister.calls, "group discovery occurs once and selected mutation runs once")
+}
+
+// TestRunVendorUpdateGroupDiscoveryError proves a discovery-phase failure inside the
+// group-scoped branch (no manifest resolvable at all) is returned as-is rather than being
+// swallowed or panicking.
+func TestRunVendorUpdateGroupDiscoveryError(t *testing.T) {
+	chdirTest(t, t.TempDir()) // no vendor.yaml or component.yaml anywhere.
+
+	v := viper.New()
+	v.Set("file", filepath.Join(t.TempDir(), "missing-vendor.yaml"))
+	v.Set("vendor.update.groups.platform.include", []string{"vpc"})
+
+	_, err := runVendorUpdate(v, "terraform", nil, false, nil, "platform", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read vendor manifest")
+}
+
+// TestRunVendorUpdateComponentResolvedError proves a per-component UpdateResolved failure (here,
+// the remote tag lister erroring) during the explicit --component selector path is returned as-is.
+func TestRunVendorUpdateComponentResolvedError(t *testing.T) {
+	manifest := filepath.Join(t.TempDir(), "vendor.yaml")
+	require.NoError(t, os.WriteFile(manifest, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-vpc
+      version: 1.0.0
+      targets: [components/terraform/vpc]
+`), 0o644))
+
+	lister := &componentUpdaterLister{err: errors.New("remote unavailable")}
+	previous := version.DefaultLister
+	version.DefaultLister = lister
+	t.Cleanup(func() { version.DefaultLister = previous })
+
+	v := viper.New()
+	v.Set("file", manifest)
+	_, err := runVendorUpdate(v, "terraform", nil, false, []string{"vpc"}, "", true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "remote unavailable")
 }
 
 func TestRunVendorUpdateGroupCheckIsDryRun(t *testing.T) {
@@ -347,6 +392,17 @@ func TestPrepareComponentUpdateBranchPrepareBranchError(t *testing.T) {
 	v.Set("vendor.ci.pull_request.base_branch", "main")
 	_, _, err := prepareComponentUpdateBranch(context.Background(), v, "all")
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterDirtyWorktree)
+}
+
+// TestCommitAndPushComponentUpdateStatusError proves a git-status failure (here, currentWorkdir
+// not even being a git repository) is returned as-is rather than panicking or being swallowed.
+func TestCommitAndPushComponentUpdateStatusError(t *testing.T) {
+	previous := currentWorkdir
+	currentWorkdir = t.TempDir() // not a git repository at all.
+	t.Cleanup(func() { currentWorkdir = previous })
+
+	_, err := commitAndPushComponentUpdate(context.Background(), "some-branch")
+	require.Error(t, err)
 }
 
 func TestPublishComponentUpdatePushError(t *testing.T) {
@@ -628,6 +684,101 @@ spec:
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
 	assert.Contains(t, stdout.String(), `"status": "no_updates"`)
 	assert.NotContains(t, stdout.String(), `"branch":`)
+}
+
+// TestVendorUpdatePullRequestDiscoveryError proves a discovery-phase failure (the initial dry
+// run runVendorUpdate call --pull-request makes before ever touching git) is returned as-is,
+// without attempting to prepare a branch or publish anything.
+func TestVendorUpdatePullRequestDiscoveryError(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	resetCommandFlags(t, vendorUpdateCmd)
+	chdirTest(t, t.TempDir()) // no vendor.yaml or component.yaml anywhere.
+
+	_ = captureVendorStdout(t)
+	require.NoError(t, vendorUpdateCmd.Flags().Set("file", filepath.Join(t.TempDir(), "missing-vendor.yaml")))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("pull-request", "true"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read vendor manifest")
+}
+
+// NOTE on the --pull-request "found updates" success path (vendorUpdateCmd's RunE, update.go
+// lines ~112-121 branch preparation and ~149-157 publish): --pull-request unconditionally forces
+// v.Set("pull", true), so exercising that branch through vendorUpdateCmd.RunE end-to-end also
+// drives the auto-pull's real ExecuteVendorPullCmd materialization step for the "updated"
+// component. Doing that without a real network-hosted Git source would require standing up a
+// second, separately-tagged local bare Git repo to serve as the vendored *component* source (on
+// top of the "origin" repo already used for the PR branch/commit/push flow here), purely to
+// satisfy this one branch - a disproportionate amount of integration scaffolding for coverage
+// that's already exercised at the unit level: prepareComponentUpdateBranch,
+// commitAndPushComponentUpdate, and publishComponentUpdate (the actual logic these RunE lines
+// call into) are each already covered directly above and in TestPrepareComponentUpdateBranch* /
+// TestPublishComponentUpdate* (100% coverage per `go tool cover -func`). Skipped here rather than
+// forcing a flaky or disproportionately heavy test; see TestVendorUpdatePullRequestDiscoveryError
+// and TestVendorUpdatePullRequestNoUpdatesDoesNotPublish above for the branches of this same
+// RunE block that are covered.
+
+// TestVendorUpdateCommand_JSONRenderErrorPropagates proves a data-writer failure while rendering
+// the final JSON summary surfaces as a command error instead of being silently swallowed.
+func TestVendorUpdateCommand_JSONRenderErrorPropagates(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	resetCommandFlags(t, vendorUpdateCmd)
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: mock
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: [components/terraform/mock]
+`)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(componentUpdaterFailingContext{Context: ioCtx, err: errors.New("broken pipe")})
+	t.Cleanup(data.Reset)
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("file", file))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("check", "true"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("format", "json"))
+
+	err = vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broken pipe")
+}
+
+// TestVendorUpdatePullRequestNoUpdatesJSONRenderErrorPropagates proves a data-writer failure
+// while rendering the discovery-phase "no updates" JSON summary (the --pull-request early-return
+// branch, distinct from the final renderComponentUpdaterJSON call covered by
+// TestVendorUpdateCommand_JSONRenderErrorPropagates above) also surfaces as a command error
+// instead of being silently swallowed.
+func TestVendorUpdatePullRequestNoUpdatesJSONRenderErrorPropagates(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	resetCommandFlags(t, vendorUpdateCmd)
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: mock
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: [components/terraform/mock]
+`)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(componentUpdaterFailingContext{Context: ioCtx, err: errors.New("broken pipe")})
+	t.Cleanup(data.Reset)
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("file", file))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("pull-request", "true"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("format", "json"))
+
+	err = vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broken pipe")
 }
 
 func TestVendorUpdateCommandSurfacesValidationError(t *testing.T) {

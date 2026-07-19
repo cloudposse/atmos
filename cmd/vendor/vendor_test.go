@@ -786,7 +786,7 @@ func TestRunVendorPull_SingleComponent_ClearsStackAndTags(t *testing.T) {
 // TestRunVendorPull_ClearsStackAndTagsBetweenIterations reports above, which leave File empty and
 // so exercise only the pre-existing per-component fallback loop) point at the real
 // "component.yaml" manifest that declared the source, and that File basename is what
-// partitionUpdatedResults uses to route every component.yaml-declared update into a single
+// partitionReportResults uses to route every component.yaml-declared update into a single
 // ExecuteComponentVendorPullBatch call. This test proves that: given three updated components,
 // all three land on disk from one batched call, without ever going through the noisy
 // per-component pullUpdatedComponent/e.ExecuteVendorPullCmd path.

@@ -330,20 +330,11 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 
 // componentManifestBasenames are the physical file basenames a component.yaml-declared source's
 // SourceUpdateResult.File can carry (see ReadAndProcessComponentVendorConfigFile's
-// findComponentConfigFile), used by partitionUpdatedResults to distinguish it from a
+// findComponentConfigFile), used by partitionReportResults to distinguish it from a
 // vendor.yaml-declared source (vendor.yaml itself, or any file it imports).
 var componentManifestBasenames = map[string]bool{
 	"component.yaml": true,
 	"component.yml":  true,
-}
-
-// partitionUpdatedResults splits report's StatusUpdated results into components declared via their
-// own component.yaml/component.yml manifest (eligible for the batched ExecuteComponentVendorPullBatch
-// call, grouped by ComponentType since a repo-wide sweep can mix types in one report) versus
-// everything else (vendor.yaml or an imported manifest file), which keeps using the existing
-// per-component pullUpdatedComponent loop.
-func partitionUpdatedResults(report *vendoring.UpdateReport) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
-	return partitionReportResults(report, true)
 }
 
 // partitionPullResults selects every report entry because an unchanged version
@@ -352,6 +343,11 @@ func partitionPullResults(report *vendoring.UpdateReport) (batchComponentsByType
 	return partitionReportResults(report, false)
 }
 
+// partitionReportResults splits report's results (optionally filtered to StatusUpdated only,
+// via updatedOnly) into components declared via their own component.yaml/component.yml manifest
+// (eligible for the batched ExecuteComponentVendorPullBatch call, grouped by ComponentType since a
+// repo-wide sweep can mix types in one report) versus everything else (vendor.yaml or an imported
+// manifest file), which keeps using the existing per-component pullUpdatedComponent loop.
 func partitionReportResults(report *vendoring.UpdateReport, updatedOnly bool) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
 	batchComponentsByType = map[string][]string{}
 	for i := range report.Results {
