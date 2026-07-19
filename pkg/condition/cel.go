@@ -34,6 +34,7 @@ func conditionCELEnv() (*cel.Env, error) {
 			cel.Variable("hook", cel.StringType),
 			cel.Variable("event", cel.StringType),
 			cel.Variable("env", cel.MapType(cel.StringType, cel.StringType)),
+			cel.Variable("answers", cel.MapType(cel.StringType, cel.DynType)),
 		)
 		if celEnvErr != nil {
 			celEnvErr = fmt.Errorf("%w: failed to initialize CEL environment: %w", ErrInvalidWhenCondition, celEnvErr)
@@ -48,6 +49,10 @@ func (ctx Context) activation() map[string]any {
 	if env == nil {
 		env = map[string]string{}
 	}
+	answers := ctx.Answers
+	if answers == nil {
+		answers = map[string]any{}
+	}
 	return map[string]any{
 		"ci":        ctx.CI,
 		"status":    ctx.Status,
@@ -58,6 +63,7 @@ func (ctx Context) activation() map[string]any {
 		"hook":      ctx.Hook,
 		"event":     ctx.Event,
 		"env":       env,
+		"answers":   answers,
 	}
 }
 

@@ -6,6 +6,7 @@
 - Keep simulated input defaults such as prompt text, cursor behavior, typing rate, and jitter together with the cast defaults when the project has several recordings.
 - Use `type: cast` with `mode: steps` for deterministic command demos that need exit-code propagation.
 - Use `mode: session` only when the demo must show typed input, prompts, key presses, or terminal timing.
+- When a `mode: steps` demo logically enters a generated or nested directory, add a synthetic `type: simulate` `cd <directory>` before the first command shown there. Keep every real child step's `working_directory` explicit: simulated input does not change subprocess state.
 - Keep ad hoc local recordings in the XDG cache via `--cast`; do not commit cache recordings.
 - Store committed casts wherever the host project keeps documentation assets.
 

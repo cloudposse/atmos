@@ -94,11 +94,9 @@ func mergeInputs(cfg *schema.AtmosConfiguration, dir string, dg *schema.DocsGene
 		var dataMap map[string]any
 		switch v := src.(type) {
 		case string:
-			// fetch from file or URL
 			m, err := fetchAndParseYAML(cfg, v, dir)
 			if err != nil {
-				log.Debug("skipping input", "input", v, "err", err)
-				continue
+				return nil, fmt.Errorf("input %q: %w", v, err)
 			}
 			dataMap = m
 
@@ -132,8 +130,21 @@ func getTerraformSource(dir, source string) (string, error) {
 	return dir, nil
 }
 
-// getTemplateContent downloads and reads the template file from the given URL.
+// getTemplateContent reads a template from a local file or downloads it from a remote URL.
 func getTemplateContent(atmosConfig *schema.AtmosConfiguration, templateURL, dir string) (string, error) {
+	if !isRemoteSource(templateURL) {
+		templateFile, err := resolvePath(templateURL, dir, "")
+		if err != nil {
+			return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPathResolution, err)
+		}
+		//nolint:gosec // Docs template paths are user-configured and resolved relative to the docs base directory.
+		body, err := os.ReadFile(templateFile)
+		if err != nil {
+			return "", err
+		}
+		return string(body), nil
+	}
+
 	templateFile, tempDir, err := downloadSource(atmosConfig, templateURL, dir)
 	if err != nil {
 		return "", err
@@ -181,15 +192,7 @@ func applyTerraformDocsWithRunner(dir string, docsGenerate *schema.DocsGenerate,
 	return nil
 }
 
-func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.DocsGenerate, dir string) string {
-	if docsGenerate.Template != "" {
-		tmpl, err := getTemplateContent(atmosConfig, docsGenerate.Template, dir)
-		if err == nil {
-			return tmpl
-		}
-		log.Warn("Error fetching template, falling back to default template", "template", docsGenerate.Template, "error", err)
-	}
-	// Return the default template if none is provided or on error.
+func defaultDocsTemplate() string {
 	// ProcessTmplWithDatasourcesGomplate only exposes the merged input data via the
 	// "config" datasource (root "." is bound to the outer Env wrapper), so the default
 	// template must read through (ds "config") rather than bare fields like .name.
@@ -199,6 +202,18 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 	return "# {{ index (ds \"config\") \"name\" | default \"Project\" }}\n\n" +
 		"{{ index (ds \"config\") \"description\" | default \"No description.\" }}\n\n" +
 		"{{ index (ds \"config\") \"terraform_docs\" | default \"\" }}"
+}
+
+func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.DocsGenerate, dir string) (string, error) {
+	if docsGenerate.Template == "" {
+		return defaultDocsTemplate(), nil
+	}
+
+	tmpl, err := getTemplateContent(atmosConfig, docsGenerate.Template, dir)
+	if err != nil {
+		return "", fmt.Errorf("template %q: %w", docsGenerate.Template, err)
+	}
+	return tmpl, nil
 }
 
 // generateDocument merges the docs inputs, optionally runs terraform-docs, renders, and writes the document.
@@ -223,7 +238,10 @@ func generateDocument(
 	}
 
 	// 3) Fetch the template.
-	chosenTemplate := fetchTemplate(atmosConfig, docsGenerate, baseDir)
+	chosenTemplate, err := fetchTemplate(atmosConfig, docsGenerate, baseDir)
+	if err != nil {
+		return err
+	}
 
 	// 4) Render final document using the injected renderer.
 	rendered, err := renderer.Render("docs-generate", chosenTemplate, mergedData, true)
@@ -247,8 +265,16 @@ func generateDocument(
 	return nil
 }
 
-// fetchAndParseYAML fetches a YAML file from a local path or URL, parses it, and returns the data.
+// fetchAndParseYAML reads a YAML file from a local path or downloads it from a remote URL.
 func fetchAndParseYAML(atmosConfig *schema.AtmosConfiguration, pathOrURL string, baseDir string) (map[string]interface{}, error) {
+	if !isRemoteSource(pathOrURL) {
+		localPath, err := resolvePath(pathOrURL, baseDir, "")
+		if err != nil {
+			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPathResolution, err)
+		}
+		return parseYAML(localPath)
+	}
+
 	localPath, tempDir, err := downloadSource(atmosConfig, pathOrURL, baseDir)
 	if err != nil {
 		return nil, err
