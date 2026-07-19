@@ -164,6 +164,10 @@ jobs:
         with:
           version: 101ccaca0df22b2e36dd917ed5d0be423baa6298
           install-mode: none
+          # The action's config verification fetches a remote JSON schema and
+          # has failed transiently on runner network timeouts. The subsequent
+          # lint command still parses and validates the configuration.
+          verify: false
           only-new-issues: true
           args: >
             --output.sarif.path=golangci-lint.sarif
