@@ -125,6 +125,34 @@ with:
 `), &step)
 		require.Error(t, err)
 	})
+
+	t.Run("non-container with decode error propagates", func(t *testing.T) {
+		// `with:` for a non-container step must be a mapping; a scalar cannot
+		// decode into map[string]any and the error must surface, not be
+		// swallowed.
+		var step WorkflowStep
+		err := yaml.Unmarshal([]byte(`
+type: tflint
+with: not-a-map
+`), &step)
+		require.Error(t, err)
+	})
+}
+
+// TestDecodeStepWith_GenericNilGuard exercises decodeStepWith's defensive
+// guard directly: every real caller wires stepPolyTargets.generic (see
+// UnmarshalYAML for WorkflowStep and Task), so this branch is unreachable
+// through the public YAML API. It still must not panic if a future caller
+// forgets to wire it.
+func TestDecodeStepWith_GenericNilGuard(t *testing.T) {
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("component: vpc\n"), &node))
+	// yaml.Unmarshal into a Node wraps content in a DocumentNode; unwrap to
+	// the mapping node decodeStepWith expects.
+	mapping := node.Content[0]
+
+	err := decodeStepWith(mapping, "tflint", "", &stepPolyTargets{})
+	require.NoError(t, err)
 }
 
 // TestWorkflowStep_DecodeBackground verifies the polymorphic `background:` key:

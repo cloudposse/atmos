@@ -182,6 +182,21 @@ func TestCommandEngine_NoCaptureStdoutLeavesOutputFileEmpty(t *testing.T) {
 	assert.Nil(t, out.Artifact, "without CaptureStdout, stdout must not be written to the output file")
 }
 
+func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {
+	exe := testExePath(t)
+	prep := &subprocessPrep{
+		binary: exe,
+		args:   []string{"-test.run", "^$"},
+		env:    os.Environ(),
+		// The parent directory does not exist, so os.Create must fail.
+		captureStdoutPath: filepath.Join(t.TempDir(), "missing-dir", "output"),
+	}
+
+	err := runSubprocess(prep)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCreateFile)
+}
+
 func TestCaptureOutput_AllowsNilInfo(t *testing.T) {
 	outputFile := filepath.Join(t.TempDir(), "output")
 	require.NoError(t, os.WriteFile(outputFile, []byte("hello"), 0o600))
