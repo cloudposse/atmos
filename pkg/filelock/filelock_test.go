@@ -92,6 +92,13 @@ func TestLockFilePersistsAndUnlocksAfterCallbackError(t *testing.T) {
 	require.NoError(t, New(path).WithExclusive(context.Background(), func() error { return nil }))
 }
 
+// processWaitTimeout bounds how long the test waits for the helper subprocess to start
+// or exit. Windows CI runners have much heavier process creation/teardown overhead than
+// Unix, especially under load from the rest of the suite's other packages running
+// concurrently; a 1s margin was observed to flake there ("helper process did not release
+// the lock") even though the helper's own critical section only holds the lock 300ms.
+const processWaitTimeout = 5 * time.Second
+
 func TestExclusiveLockContendsAcrossProcesses(t *testing.T) {
 	if os.Getenv("ATMOS_FILELOCK_HELPER") == "1" {
 		path := os.Getenv("ATMOS_FILELOCK_PATH")
@@ -127,7 +134,7 @@ func TestExclusiveLockContendsAcrossProcesses(t *testing.T) {
 		require.NoError(t, result.err)
 		require.True(t, result.ok)
 		require.Equal(t, "locked", result.text)
-	case <-time.After(time.Second):
+	case <-time.After(processWaitTimeout):
 		require.NoError(t, cmd.Process.Kill())
 		_, _ = cmd.Process.Wait()
 		t.Fatal("helper process did not acquire the lock")
@@ -142,7 +149,7 @@ func TestExclusiveLockContendsAcrossProcesses(t *testing.T) {
 	select {
 	case err := <-wait:
 		require.NoError(t, err)
-	case <-time.After(time.Second):
+	case <-time.After(processWaitTimeout):
 		require.NoError(t, cmd.Process.Kill())
 		<-wait
 		t.Fatal("helper process did not release the lock")
@@ -156,7 +163,7 @@ func requireLockSignal(t *testing.T, signal <-chan struct{}, done <-chan error, 
 	case err := <-done:
 		require.NoError(t, err)
 		t.Fatal(message)
-	case <-time.After(time.Second):
+	case <-time.After(processWaitTimeout):
 		t.Fatal(message)
 	}
 }
@@ -166,7 +173,7 @@ func requireLockComplete(t *testing.T, done <-chan error) {
 	select {
 	case err := <-done:
 		require.NoError(t, err)
-	case <-time.After(time.Second):
+	case <-time.After(processWaitTimeout):
 		t.Fatal("lock operation did not complete")
 	}
 }
