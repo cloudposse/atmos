@@ -191,7 +191,10 @@ func isRetryableDownloadError(err error) bool {
 	if err == nil || errors.Is(err, ErrHTTP404) {
 		return false
 	}
-	return errors.Is(err, errUtils.ErrDownloadRetryable)
+	// Retry on errors explicitly marked retryable (transport failures, 5xx/429)
+	// and on transient network failures detected structurally (e.g. a
+	// connection reset by peer while reading the response body).
+	return errors.Is(err, errUtils.ErrDownloadRetryable) || registry.IsTransientNetworkError(err)
 }
 
 // writeResponseToCache reads the response body and writes it atomically to cache.
@@ -210,10 +213,11 @@ func writeResponseToCacheWithProgress(body io.Reader, cachePath string, total in
 	}
 	_, err := io.Copy(&buf, reader)
 	if err != nil {
-		return "", errors.Join(
-			errUtils.ErrDownloadRetryable,
-			fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err),
-		)
+		// A failure reading the response body (e.g. "connection reset by peer",
+		// a truncated stream) is a transient transfer error. Mark it retryable
+		// so downloadToCache re-issues the request from scratch.
+		return "", errors.Join(errUtils.ErrDownloadRetryable,
+			fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err))
 	}
 
 	fs := filesystem.NewOSFileSystem()
