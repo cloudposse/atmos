@@ -77,6 +77,12 @@ exclude = [
   "\\?raw=true",
   # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
   "img\\.shields\\.io/github/release/",
+  # shields.io's dynamic GitHub-sourced badges (workflow status, last-commit) query
+  # GitHub's API server-side to render and intermittently return 520/timeout under
+  # load; a plain static shields.io badge (verified) resolves fine, so this is
+  # scoped to just these two dynamic badge types, not shields.io as a whole.
+  "img\\.shields\\.io/github/actions/workflow/status/",
+  "img\\.shields\\.io/github/last-commit/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
