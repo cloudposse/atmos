@@ -1712,7 +1712,7 @@ func TestGetTerminalWidthPrecedence(t *testing.T) {
 		assert.Equal(t, 60, getTerminalWidth())
 	})
 
-	t.Run("COLUMNS is ignored on non-TTY", func(t *testing.T) {
+	t.Run("COLUMNS is honored on non-TTY", func(t *testing.T) {
 		if terminal.New().IsTTY(terminal.Stdout) {
 			t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
 		}
@@ -1720,7 +1720,7 @@ func TestGetTerminalWidthPrecedence(t *testing.T) {
 		ui.ReinitFormatter()
 		t.Cleanup(ui.Reset)
 		atmosConfig = schema.AtmosConfiguration{}
-		assert.Equal(t, 120, getTerminalWidth())
+		assert.Equal(t, 90, getTerminalWidth())
 	})
 }
 
