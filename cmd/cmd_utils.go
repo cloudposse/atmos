@@ -59,6 +59,9 @@ var missingConfigFoundMarkdown string
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
 
+// equalsSign separates a flag name from its inline value (e.g. `--flag=value`).
+const equalsSign = "="
+
 const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
@@ -1476,7 +1479,102 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 // Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
+	return isVersionCommandWithArgs(os.Args)
+}
+
+// isVersionCommandWithArgs checks if the given args represent a version command.
+// This is a testable version of isVersionCommand that accepts args as a parameter.
+// It only recognizes root-level version requests. Once a real command token is
+// reached, any later --version belongs to that command.
+func isVersionCommandWithArgs(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "version" || arg == "--version" {
+			return true
+		}
+		if arg == "--" {
+			return false
+		}
+		skip, consumesValue := isSkippableRootFlag(arg)
+		if !skip {
+			// A real command token (or an unrecognized flag) ends the scan.
+			return false
+		}
+		if consumesValue {
+			i++ // The flag's value is the next arg.
+		}
+	}
+	return false
+}
+
+// isSkippableRootFlag reports whether arg is a root-level flag that should be
+// skipped while scanning for a version request. The consumesValue result is
+// true when the flag takes a separate value argument (i.e. a value flag without
+// an inline `=value`).
+func isSkippableRootFlag(arg string) (skip, consumesValue bool) {
+	if isRootBoolFlag(arg) {
+		return true, false
+	}
+	if isRootValueFlag(arg) {
+		return true, !strings.Contains(arg, equalsSign)
+	}
+	if strings.HasPrefix(arg, "-C") && arg != "-C" {
+		return true, false
+	}
+	return false, false
+}
+
+func isRootBoolFlag(arg string) bool {
+	flagName := strings.SplitN(arg, equalsSign, 2)[0]
+	switch flagName {
+	case "--ai",
+		"--force-color",
+		"--force-tty",
+		"--heatmap",
+		"--help",
+		"-h",
+		"--interactive",
+		"--mask",
+		"--no-color",
+		"--profiler-enabled",
+		"--verbose",
+		"-v":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRootValueFlag(arg string) bool {
+	flagName := strings.SplitN(arg, equalsSign, 2)[0]
+	switch flagName {
+	case "--base-path",
+		"--chdir",
+		"-C",
+		"--config",
+		"--config-path",
+		"--heatmap-mode",
+		"--identity",
+		"--logs-file",
+		"--logs-level",
+		"--pager",
+		"--profile",
+		"--profile-file",
+		"--profile-type",
+		"--profiler-host",
+		"--profiler-port",
+		"--redirect-stderr",
+		"--settings-list-merge-strategy",
+		"--skill",
+		"--use-version":
+		return true
+	default:
+		return false
+	}
 }
 
 // isHelpRequestedInArgs reports whether this invocation is a help request.
