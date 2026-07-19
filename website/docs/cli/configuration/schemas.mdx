@@ -58,6 +58,11 @@ schemas:
   <dd>
     Path to the JSON Schema used to validate Atmos stack manifests. Supports both absolute and relative paths (relative to `base_path`). Can also be set using `ATMOS_SCHEMAS_ATMOS_MANIFEST` environment variable or `--schemas-atmos-manifest` command-line argument.
   </dd>
+
+  <dt>`schemas.config`</dt>
+  <dd>
+    Overrides the built-in entry that validates `atmos.yaml` (plus `atmos.d` and project-local profile fragments) against the schema generated from the Atmos configuration code. Set `schema` to a path or URL and `matches` to the file globs to validate. When omitted, the embedded schema and default matches are used — see [Atmos CLI Configuration Schema](#atmos-cli-configuration-schema-atmosyaml).
+  </dd>
 </dl>
 
 ## Directory Structure
@@ -148,6 +153,54 @@ invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-1.yaml'
 yaml: line 15: found unknown directive name
 ```
 </Terminal>
+
+## Atmos CLI Configuration Schema (atmos.yaml)
+
+The [Atmos CLI Configuration JSON Schema](pathname:///schemas/atmos/atmos-config/1.0/atmos-config.json) validates `atmos.yaml` itself — every configuration section the CLI reads — and provides auto-completion in supported editors.
+
+Unlike the stack-manifest schema, this schema is **generated from the Atmos configuration code**: whenever a new configuration option ships, the schema already models it, including YAML function alternatives (like `logs: !include shared.yaml`) and descriptions sourced from the code documentation. Print it locally with [`atmos config schema`](/cli/commands/config/config-schema).
+
+### Validation by Default
+
+Out of the box, [`atmos validate schema`](/cli/commands/validate/schema) validates `atmos.yaml` — plus `atmos.d` fragments and project-local [profile](/cli/configuration/profiles) files — against the built-in schema, with no configuration required:
+
+```shell
+atmos validate schema           # validates atmos.yaml, atmos.d/**, profiles/** (and everything in `schemas`)
+atmos validate schema config    # validates only the atmos.yaml schema entry
+atmos config validate           # alias for `atmos validate schema config`
+```
+
+Fragments and profiles are partial configurations; the schema requires no specific fields, so they validate standalone.
+
+### Overriding the Built-In Entry
+
+Define your own `schemas.config` entry to change the schema or the matched files:
+
+```yaml title="atmos.yaml"
+schemas:
+  config:
+    # Pin to a specific Atmos release's schema instead of the embedded one.
+    schema: "https://atmos.tools/schemas/atmos/atmos-config/1.219.0/atmos-config.json"
+    matches:
+      - "atmos.yaml"
+      - "atmos.d/**/*.yaml"
+```
+
+### Floating vs. Pinned URLs
+
+The same floating/pinned model as the manifest schema applies:
+
+- **Floating** — `https://atmos.tools/schemas/atmos/atmos-config/1.0/atmos-config.json` always reflects the schema shipped by the latest Atmos release.
+- **Pinned** — `https://atmos.tools/schemas/atmos/atmos-config/<atmos-version>/atmos-config.json` is an immutable snapshot of the schema exactly as it shipped with that Atmos release. Pinned URLs only exist for versions released after this feature shipped.
+
+### Editor Integration
+
+Add a `yaml-language-server` modeline to the top of `atmos.yaml` for auto-completion and inline validation:
+
+```yaml title="atmos.yaml"
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-config/1.0/atmos-config.json
+base_path: "./"
+```
 
 ## Environment Variables
 

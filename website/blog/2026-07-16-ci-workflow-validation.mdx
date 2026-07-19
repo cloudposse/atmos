@@ -1,0 +1,114 @@
+---
+slug: ci-workflow-validation
+title: "Validate GitHub Actions Workflows with Atmos"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-16T12:00:00.000Z
+---
+
+A workflow can be valid YAML and still fail only after GitHub Actions tries to run it: a
+misspelled trigger filter, an invalid expression, or an action reference that does not make
+sense in context. Those failures are slow to discover and usually arrive after a push.
+
+Atmos now includes GitHub Actions workflow validation as an experimental native-CI command. Run
+it from your workstation or in the workflow that it checks:
+
+~~~shell
+atmos ci validate
+
+# Equivalent validation-oriented alias
+atmos validate ci
+~~~
+
+<!--truncate-->
+
+## Validate Before the Push
+
+With no arguments, <code>atmos ci validate</code> recursively checks every <code>.yml</code> and
+<code>.yaml</code> file in the current working directory's <code>.github/workflows</code>. It uses
+the built-in [actionlint](https://github.com/rhysd/actionlint) integration, so the linting
+capability ships with Atmos rather than requiring a separately installed binary.
+
+A successful run gives a compact confirmation:
+
+~~~text
+✓ Validated 3 GitHub Actions workflow file(s) in .github/workflows.
+~~~
+
+Findings include the workflow path, line, column, and actionlint rule. They fail the command,
+which makes validation suitable for both a pre-push check and a CI gate.
+
+## Check a Fixture or Another Directory
+
+Sometimes the workflows you want to validate do not live in the current directory's default
+location — for example, when testing generated workflows or fixtures. Use
+<code>--workflow-path</code> to point at that directory. Atmos recursively finds workflow YAML
+beneath it:
+
+~~~shell
+atmos ci validate --workflow-path tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows
+~~~
+
+That repository fixture intentionally uses <code>branch</code> instead of <code>branches</code>
+in a <code>push</code> trigger. The command reports the line and exits with status 1, making it a
+quick end-to-end smoke test of the feature. You can also select specific files directly:
+
+~~~shell
+atmos ci validate .github/workflows/plan.yml .github/workflows/apply.yml
+~~~
+
+<code>--workflow-path</code> and explicit workflow-file arguments are intentionally separate
+selectors and cannot be combined. This keeps the validation scope unambiguous.
+
+## Put It in GitHub Actions
+
+Add a validation step after checkout:
+
+~~~yaml title=".github/workflows/validate.yml"
+name: Validate workflows
+
+on:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos ci validate
+~~~
+
+When native CI is enabled, Atmos turns findings into line-anchored GitHub Actions annotations:
+
+~~~yaml title="atmos.yaml"
+ci:
+  enabled: true
+~~~
+
+Annotations are enabled by default once <code>ci.enabled</code> is true; set
+<code>ci.annotations.enabled: false</code> to suppress them. Outside GitHub Actions, the same
+command has no provider side effects and simply renders its diagnostics.
+
+## SARIF Is Explicit
+
+For a separate Code Scanning upload or an artifact, request SARIF explicitly:
+
+~~~shell
+atmos ci validate --format=sarif > actionlint.sarif
+~~~
+
+Atmos does not upload SARIF automatically. That avoids duplicate pull-request feedback and keeps
+<code>security-events: write</code> unnecessary unless your workflow deliberately adds a SARIF
+upload step.
+
+The validator respects <code>.github/actionlint.yaml</code> and
+<code>.github/actionlint.yml</code>. Its optional ShellCheck and Pyflakes integrations are
+disabled for now, so the command stays deterministic and does not depend on tools installed on
+the runner.
+
+## Learn More
+
+- [atmos ci validate](/cli/commands/ci/validate) — usage, flags, and output formats
+- [Native CI](/ci) — native CI behavior and configuration
+- [CI configuration](/cli/configuration/ci) — enable annotations and other CI features
