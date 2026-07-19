@@ -75,8 +75,13 @@ exclude = [
   "github\\.com/codespaces",
   # Raw file URLs redirect through GitHub's CDN (by design)
   "\\?raw=true",
-  # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
-  "img\\.shields\\.io/github/release/",
+  # shields.io (and its img.shields.io badge-rendering host) intermittently
+  # returns Cloudflare 520 "Unknown status code" or a bare 500 under CI's
+  # request volume, especially for the dynamically-generated /badge/... image
+  # endpoint used in example status-badge docs; the badges render fine in a
+  # browser. This also covers the narrower img.shields.io/github/release/ ->
+  # /github/v/release/ internal-redirect case (both work).
+  "shields\\.io",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
