@@ -1,0 +1,31 @@
+# atmos:template
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  project: "[[ .Config.project_name ]]"
+  gcp_project: "[[ .Config.gcp_project ]]"
+  region: "[[ .Config.region ]]"
+
+# Pin the toolchain for every component. `dependencies.tools` is the current,
+# integrated way to declare required tool versions (installed/resolved by
+# `atmos toolchain` and recorded in toolchain.lock.yaml).
+# https://atmos.tools/cli/commands/toolchain
+dependencies:
+  tools:
+    # `terraform_command` selects the invoked binary (see atmos.yaml); the toolchain
+    # registry key differs for OpenTofu (`opentofu`, not the `tofu` binary name).
+    '[[ if eq .Config.terraform_command "tofu" ]]opentofu[[ else ]]terraform[[ end ]]': "latest"
+
+components:
+  emulator:
+    gcp:
+      driver: floci/gcp
+      project: "[[ .Config.gcp_project ]]"
+      container:
+        ports:
+          - host: 14588
+            container: 4588
+
+  terraform:
+    foundation:
+      vars: {}
