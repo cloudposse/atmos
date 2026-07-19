@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -21,9 +22,11 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		tfoutput.ResetOutputsCache()
 	})
 
-	if _, err := exec.LookPath("tofu"); err != nil {
+	tofuPath, err := exec.LookPath("tofu")
+	if err != nil {
 		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
 	}
+	isolateTerraformOutputTestBinary(t, tofuPath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")
 
@@ -49,7 +52,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err := ExecuteTerraform(info)
+	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -174,4 +177,45 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		assert.Contains(t, y, "client_id_arn_bare: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 		assert.Contains(t, y, "client_id_arn_with_stack: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 	})
+}
+
+// isolateTerraformOutputTestBinary copies the OpenTofu executable used by this
+// integration test into a per-test directory and prepends it to PATH. The
+// Windows acceptance job runs packages concurrently and other package tests
+// can uninstall the shared Atmos toolchain cache after LookPath succeeds.
+// Keeping a private copy prevents that race from turning later
+// !terraform.output calls into a spurious missing-executable failure.
+func isolateTerraformOutputTestBinary(t *testing.T, source string) {
+	t.Helper()
+
+	contents, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("read OpenTofu executable %q: %v", source, err)
+	}
+
+	info, err := os.Stat(source)
+	if err != nil {
+		t.Fatalf("stat OpenTofu executable %q: %v", source, err)
+	}
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, filepath.Base(source))
+	if err := os.WriteFile(destination, contents, info.Mode()); err != nil {
+		t.Fatalf("copy OpenTofu executable to test directory: %v", err)
+	}
+
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestIsolateTerraformOutputTestBinary(t *testing.T) {
+	source, err := os.Executable()
+	assert.NoError(t, err)
+
+	isolateTerraformOutputTestBinary(t, source)
+
+	resolved, err := exec.LookPath(filepath.Base(source))
+	assert.NoError(t, err)
+	assert.FileExists(t, resolved)
+	assert.NotEqual(t, filepath.Dir(source), filepath.Dir(resolved))
+	assert.Equal(t, filepath.Base(source), filepath.Base(resolved))
 }

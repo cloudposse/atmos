@@ -291,6 +291,9 @@ func initFlociGitRepo(t *testing.T, dir, message string) {
 	runFlociGit(t, dir, "init")
 	runFlociGit(t, dir, "config", "user.email", "atmos-floci@example.com")
 	runFlociGit(t, dir, "config", "user.name", "Atmos Floci")
+	// Never sign commits in throwaway test repos: signing is slow, needs no verification here, and
+	// flakes on dev machines whose global git config enables commit.gpgsign (e.g. a 1Password agent).
+	runFlociGit(t, dir, "config", "commit.gpgsign", "false")
 	runFlociGit(t, dir, "remote", "add", "origin", "https://github.com/example/atmos-floci-fixture.git")
 	runFlociGit(t, dir, "add", ".")
 	runFlociGit(t, dir, "commit", "-m", message)

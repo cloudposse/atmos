@@ -1,0 +1,17 @@
+# atmos:template
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: "{{ .Config.project_name }}"
+  description: "Atmos vendoring manifest for {{ .Config.project_name }}"
+spec:
+  imports: []
+
+  sources:
+    - component: "s3-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/s3-bucket?ref={{ .Config.vendor_version }}"
+      version: "{{ .Config.vendor_version }}"
+      targets:
+        - "components/terraform/s3-bucket"
+      tags:
+        - storage

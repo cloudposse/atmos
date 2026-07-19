@@ -8,8 +8,8 @@ tags: [feature, dx, experimental]
 
 import ActionCard from '@site/src/components/ActionCard'
 
-Atmos hooks now have a **`kind`** system — same `before-terraform-plan` /
-`after-terraform-plan` lifecycle you already know, but the dispatch is
+Atmos hooks now have a **`kind`** system — the same `before.terraform.plan` /
+`after.terraform.plan` lifecycle you already know, but the dispatch is
 pluggable and built-in kinds ship for common tools. Two lines in a stack
 manifest gets you cost analysis from infracost, or SARIF scanning from
 checkov, trivy, or kics, with tools auto-installed via the Atmos
@@ -24,7 +24,7 @@ components:
           checkov: "3.2.529"
       hooks:
         security:
-          events: [after-terraform-plan]
+          events: [after.terraform.plan]
           kind: checkov
 ```
 
@@ -43,8 +43,8 @@ run page.
 
 ```yaml
 hooks:
-  cost:     { events: [after-terraform-plan], kind: infracost }
-  security: { events: [after-terraform-plan], kind: trivy }
+  cost:     { events: [after.terraform.plan], kind: infracost }
+  security: { events: [after.terraform.plan], kind: trivy }
 ```
 
 Built-in kinds ship in this release:
@@ -69,7 +69,7 @@ finding block the run:
 ```yaml
 hooks:
   security:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: trivy
     on_failure: fail              # default is warn — fail the run on a finding
     args:                         # full replacement, not merge
@@ -103,7 +103,7 @@ components:
     demo:
       hooks:
         notify:
-          events: [after-terraform-plan]
+          events: [after.terraform.plan]
           kind: command
           command: python3
           args:
@@ -131,8 +131,8 @@ components:
           infracost: "0.10.44"
           trivy:     "0.70.0"
       hooks:
-        cost:     { events: [after-terraform-plan], kind: infracost }
-        security: { events: [after-terraform-plan], kind: trivy }
+        cost:     { events: [after.terraform.plan], kind: infracost }
+        security: { events: [after.terraform.plan], kind: trivy }
 ```
 
 A **pre-flight check** runs once per `atmos terraform …` invocation —
