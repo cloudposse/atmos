@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -96,6 +97,22 @@ func TestGitRepositoryPathsWrapsRevParseExitError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitCommandExited)
+}
+
+// TestGitRepositoryPathsWrapsMissingBinaryAsCommandFailed asserts the
+// non-ExitError branch: when the "git" binary itself can't be found (as
+// opposed to running and exiting non-zero), gitRepositoryPaths classifies the
+// failure as ErrGitCommandFailed, not ErrGitCommandExited.
+func TestGitRepositoryPathsWrapsMissingBinaryAsCommandFailed(t *testing.T) {
+	// An empty PATH means exec.Command can't locate "git" at all, which
+	// surfaces as a *exec.Error (LookPath failure), not a *exec.ExitError.
+	t.Setenv("PATH", t.TempDir())
+
+	_, err := gitRepositoryPaths(t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitCommandFailed)
+	assert.False(t, errors.Is(err, errUtils.ErrGitCommandExited))
 }
 
 // Helper function to create a repository with a remote.
