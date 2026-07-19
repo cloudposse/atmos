@@ -31,6 +31,7 @@ atmos stack delete <path> -s <stack> -c <component> [--file <manifest>]
 atmos stack format -s <stack> -c <component> [--file <manifest>]
 atmos stack config list [path-pattern] -s <stack> -c <component> [--format <format>]
 atmos stack schema [output-path]
+atmos stack validate
 ```
 
 Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_enabled`).
@@ -43,6 +44,7 @@ Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_
 - [`atmos stack format`](/cli/commands/stack/stack-format) — format the manifest files that define a component. Alias of [`atmos stack config format`](/cli/commands/stack/config/format).
 - [`atmos stack config`](/cli/commands/stack/config) — the canonical `get`/`set`/`delete`/`format`/`list` command set.
 - [`atmos stack schema`](/cli/commands/stack/stack-schema) — print the stack-manifest JSON Schema.
+- [`atmos stack validate`](/cli/commands/stack/stack-validate) — validate stack manifests. Alias of [`atmos validate stacks`](/cli/commands/validate/stacks).
 
 ## Examples
 
