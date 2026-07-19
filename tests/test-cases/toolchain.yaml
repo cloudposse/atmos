@@ -100,6 +100,10 @@ tests:
       diff:
         # Ignore table data rows - release titles change when upstream repos publish new versions.
         - "YYYY-MM-DD"
+        # Ignore the header row - lipgloss/table sizes VERSION/DATE/TITLE columns from the
+        # widest actual (pre-sanitize) cell content, so column padding shifts as upstream
+        # releases new versions even though the sanitized cell values stay "X.X.X"/"YYYY-MM-DD".
+        - "VERSION\\s+DATE\\s+TITLE"
       exit_code: 0
 
   - name: "atmos toolchain info http type tool"
@@ -152,6 +156,10 @@ tests:
         # when upstream repos publish new versions.
         - "YYYY-MM-DD"
         - "^\\s{20,}\\S"
+        # Ignore the header row - lipgloss/table sizes VERSION/DATE/TITLE columns from the
+        # widest actual (pre-sanitize) cell content, so column padding shifts as upstream
+        # releases new versions even though the sanitized cell values stay "X.X.X"/"YYYY-MM-DD".
+        - "VERSION\\s+DATE\\s+TITLE"
       exit_code: 0
 
   - name: "atmos toolchain info raw format tool"
