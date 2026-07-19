@@ -174,8 +174,14 @@ def assert_colored(text, needle):
 
     The needle is matched against the ANSI-stripped line (styling can split a
     phrase mid-word), while the color requirement checks the raw line.
+
+    Unlike assert_body_color, this does not exclude prompt lines: a styled
+    type: simulate narration comment (e.g. "# some note") is typed right
+    after its own prompt on the same raw line with no linebreak in between,
+    and is legitimately colored -- excluding prompt lines here would treat
+    that real styling as if it didn't count.
     """
     for line in text.splitlines():
-        if needle in strip_ansi(line) and _SGR.search(line) and not _PROMPT_LINE.match(line):
+        if needle in strip_ansi(line) and _SGR.search(line):
             return
     raise SystemExit(f"cast does not render {needle!r} with color")

@@ -203,6 +203,10 @@ steps:
 - **Mixing real and simulated steps**: interleave `type: simulate` (to narrate/type the command)
   with the real `type: atmos`/`type: shell` step that actually executes it, so the recording
   looks hand-typed while the executed output is genuine.
+- **Synthetic directory transitions**: when the story enters a generated or nested directory,
+  show `type: simulate` with `cd <directory>` before the first command there. This is
+  display-only; keep `working_directory` on every real child step so execution does not depend
+  on simulated terminal state.
 - Prefer `atmos cast render` over ad hoc `--cast=<gif>` one-liners when a `.cast` source should be
   kept and re-rendered into multiple formats later; use `--cast=<ext>` for quick one-shot capture
   when only the rendered artifact matters.

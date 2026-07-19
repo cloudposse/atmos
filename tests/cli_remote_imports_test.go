@@ -26,9 +26,8 @@ func initRemoteImportsGitRepo(t *testing.T, files map[string]string) string {
 	runRemoteImportsGit(t, repoDir, "checkout", "-b", "main")
 	runRemoteImportsGit(t, repoDir, "config", "user.email", "test@example.com")
 	runRemoteImportsGit(t, repoDir, "config", "user.name", "Test User")
-	// Disable commit signing for this throwaway fixture repo so the test
-	// never depends on the developer machine's ambient signing config
-	// (e.g. a 1Password SSH signer, which can transiently fail under load).
+	// Never sign commits in throwaway test repos: signing is slow, needs no verification here, and
+	// flakes on dev machines whose global git config enables commit.gpgsign (e.g. a 1Password agent).
 	runRemoteImportsGit(t, repoDir, "config", "commit.gpgsign", "false")
 
 	for name, content := range files {
