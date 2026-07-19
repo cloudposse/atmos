@@ -1,0 +1,72 @@
+---
+slug: scaffold-conditional-generation-and-hooks
+title: "Scaffolds turn your golden paths into a platform product"
+date: 2026-07-17T12:00:00.000Z
+authors: [osterman]
+tags: [feature, dx]
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Platform teams build golden paths so application teams can begin with the right architecture,
+guardrails, and operational conventions. A GitHub template repository is an excellent way to
+distribute that starting tree, but its job ends at the copy. It cannot ask project-specific
+questions, apply a policy to CI-supplied answers, tailor the file set, or evolve the template
+without every team manually reconciling a fork.
+
+Atmos scaffolds turn a golden path into an executable contract. Use a local template, register one
+in `atmos.yaml`, or point to a Git repository—including a GitHub template repository—and let the
+same template guide developers, automate CI, and evolve with the platform.
+
+Creation is only day one. Golden paths accumulate improvements after projects have adopted them:
+updated CI conventions, guardrails, shared configuration, and boilerplate. Atmos scaffolds include
+an optimistic three-way merge process so a project can take those upstream improvements without
+blindly replacing the custom work that happened after initialization.
+
+<!--truncate-->
+
+<CastPlayer src="/casts/examples/scaffolding/generate-example.cast" title="atmos scaffold golden path" chrome controls scrubber />
+
+[View the full scaffolding example](/examples/scaffolding)
+
+## From Repository Copy to Golden Path
+
+The usual alternative is either a generic template that every team must customize by hand or a
+matrix of near-duplicate templates for every language, environment, compliance rule, and deployment
+option. The first creates drift. The second makes the platform team responsible for maintaining an
+ever-growing catalog of almost-the-same repositories.
+
+A scaffold keeps one template and makes it adapt to the project being created. The platform team
+owns the contract; the consuming team supplies only the choices that belong to its project.
+
+## What the Contract Enforces
+
+- **Validated inputs.** Required fields, patterns, select and multiselect options, and boolean
+  values are validated for interactive answers, defaults, presets, persisted values, and `--set`
+  flags. Platform policy does not disappear when a template runs in CI.
+- **Conditional prompts and files.** A field or file can use `when:` and the answers collected so
+  far. A template can ask for a vendored component version only when vendoring is enabled, then
+  generate the corresponding manifest only in that case.
+- **Lifecycle hooks.** Templates can run declared work before or after generation—formatting,
+  validation, or setup—with the same condition engine used by Atmos workflows and CI hooks. Teams
+  can use `--skip-hooks` as an explicit per-invocation escape hatch.
+- **Day-two updates.** The `atmos scaffold generate --update` command re-runs a template against
+  an existing project and performs an optimistic three-way merge. It is a strong fit for shared
+  boilerplate that changes infrequently across many projects: non-overlapping improvements can be
+  carried forward, while real conflicts stay visible instead of silently overwriting local work.
+  The `--merge-strategy` option selects manual, ours, or theirs conflict handling.
+
+Both `when:` forms use the condition language shared by Atmos workflows and CI hooks. The `answers`
+variable exposes the values collected so far, allowing a golden path to express its decisions once
+rather than encode them in a pile of repository variants.
+
+## Keep GitHub Templates, Add a Platform Contract
+
+GitHub template repositories remain a useful ownership and discovery mechanism. Atmos adds the
+behavior they intentionally do not provide: typed choices, conditional generation, hooks, and a
+safe path for bringing template improvements back to an existing project. A remote source can be
+pinned to a branch, tag, or commit with `--ref`, so platform teams can make a deliberate release
+available instead of distributing an accidental snapshot.
+
+See the [Scaffold Command Documentation](/cli/commands/scaffold/generate) for the field, hook,
+remote-source, and update reference.

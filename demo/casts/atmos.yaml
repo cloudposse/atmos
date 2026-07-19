@@ -1,3 +1,11 @@
+toolchain:
+  aliases:
+    coreutils: uutils/coreutils
+  proxies:
+    ls:
+      tool: coreutils
+      args: [ls, --color=always]
+
 commands:
   - name: casts
     description: Generate published website asciicast demos
@@ -285,6 +293,21 @@ commands:
         name: container-component-fixture
         source: "../../examples/container-component"
         path: "../../.context/cast-fixtures/container-component"
+        reset: true
+      - type: workdir
+        name: init-fixture
+        source: "../../examples/init"
+        path: "../../.context/cast-fixtures/init"
+        reset: true
+      - type: workdir
+        name: scaffolding-fixture
+        source: "../../examples/scaffolding"
+        path: "../../.context/cast-fixtures/scaffolding"
+        reset: true
+      - type: workdir
+        name: scaffolds-fixture
+        source: "../../examples/scaffolds"
+        path: "../../.context/cast-fixtures/scaffolds"
         reset: true
       - type: workdir
         name: version-tracker-fixture
