@@ -37,6 +37,8 @@ var (
 	ErrWaitTimeout = errUtils.ErrWaitTimeout
 	// ErrUnsupportedCastKey indicates that a key action requested an unknown key sequence.
 	ErrUnsupportedCastKey = errUtils.ErrUnsupportedCastKey
+	// ErrSimulateActionMissingCallback indicates a "simulate" action was built without its Fn callback set.
+	ErrSimulateActionMissingCallback = errUtils.ErrSimulateActionMissingCallback
 
 	errSessionProcessWaitTimeout = errors.New("timed out waiting for cast session process to exit")
 )
@@ -52,6 +54,14 @@ type SessionAction struct {
 	Rate     string
 	Interval string
 	Repeat   int
+	// Fn runs a caller-supplied action (Type == "simulate") in place, letting
+	// a session mix in the same styled, non-interactive narration steps
+	// mode: steps uses (see pkg/runner/step's simulate rendering) instead of
+	// typing raw, unstyled keystrokes for comment/narration lines. asciicast
+	// deliberately has no styling logic of its own; the caller renders and
+	// writes the styled bytes itself, and this callback is how a session
+	// action list carries that back out to it in order.
+	Fn func() error
 }
 
 // SessionOptions configures a scripted shell session used to generate cast output.
@@ -361,6 +371,11 @@ func runAction(ctx context.Context, input io.Writer, state *sessionState, action
 		return runPauseAction(ctx, action)
 	case "wait":
 		return waitForOutput(ctx, state, action)
+	case "simulate":
+		if action.Fn == nil {
+			return ErrSimulateActionMissingCallback
+		}
+		return action.Fn()
 	default:
 		return fmt.Errorf("%w: %q", ErrUnknownSessionAction, action.Type)
 	}

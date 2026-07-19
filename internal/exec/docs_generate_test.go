@@ -155,6 +155,49 @@ func TestGetTemplateContent(t *testing.T) {
 	}
 }
 
+func TestGetTemplateContent_Remote(t *testing.T) {
+	templateContent := "This is a remote template."
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(templateContent))
+	}))
+	defer server.Close()
+
+	atmosConfig := schema.AtmosConfiguration{}
+	got, err := getTemplateContent(&atmosConfig, server.URL+"/README.md.gotmpl", "")
+	if err != nil {
+		t.Fatalf("getTemplateContent failed: %v", err)
+	}
+	if got != templateContent {
+		t.Errorf("Expected template %q, got %q", templateContent, got)
+	}
+}
+
+func TestFetchTemplate_ConfiguredTemplateFailure(t *testing.T) {
+	docsGen := schema.DocsGenerate{
+		Template: "./missing-template.gotmpl",
+	}
+
+	_, err := fetchTemplate(&schema.AtmosConfiguration{}, &docsGen, t.TempDir())
+	if err == nil {
+		t.Fatal("expected missing configured template to return an error")
+	}
+	if !strings.Contains(err.Error(), "missing-template.gotmpl") {
+		t.Errorf("expected error to include template path, got %v", err)
+	}
+}
+
+func TestFetchTemplate_DefaultWhenUnconfigured(t *testing.T) {
+	docsGen := schema.DocsGenerate{}
+
+	got, err := fetchTemplate(&schema.AtmosConfiguration{}, &docsGen, t.TempDir())
+	if err != nil {
+		t.Fatalf("expected default template without error, got %v", err)
+	}
+	if got != defaultDocsTemplate() {
+		t.Errorf("expected default template, got %q", got)
+	}
+}
+
 // TestApplyTerraformDocs_Disabled tests that when terraform docs are disabled, nothing is added.
 func TestApplyTerraformDocs_Disabled(t *testing.T) {
 	docsGen := schema.DocsGenerate{
@@ -235,38 +278,6 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 	}
 }
 
-func TestGenerateDocument_DefaultTemplateFallbackUsesRootData(t *testing.T) {
-	targetDir := t.TempDir()
-	inputPath := filepath.Join(targetDir, "README.yaml")
-	if err := os.WriteFile(inputPath, []byte("name: TestProject\ndescription: A test project\n"), defaultFilePermissions); err != nil {
-		t.Fatalf("failed to write input YAML: %v", err)
-	}
-
-	docsGenerate := schema.DocsGenerate{
-		BaseDir:  ".",
-		Input:    []any{inputPath},
-		Template: "./missing-template.gotmpl",
-		Output:   "README.md",
-		Terraform: schema.TerraformDocsReadmeSettings{
-			Enabled: false,
-		},
-	}
-
-	err := generateDocument(&schema.AtmosConfiguration{}, targetDir, &docsGenerate, defaultTemplateRenderer{})
-	if err != nil {
-		t.Fatalf("generateDocument failed: %v", err)
-	}
-
-	outputPath := filepath.Join(targetDir, "README.md")
-	data, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("failed to read generated README: %v", err)
-	}
-	if !strings.Contains(string(data), "# TestProject") {
-		t.Errorf("Expected fallback template to render root name, got %q", string(data))
-	}
-}
-
 // TestGenerateDocument_DefaultTemplateFallback_RealRenderer exercises the default fallback
 // template through the real defaultTemplateRenderer (gomplate), not mockRenderer. It guards
 // against regressions where the fallback template references bare fields (e.g. ".name")
@@ -322,10 +333,11 @@ func TestGenerateDocument_DefaultTemplateFallback_RealRenderer(t *testing.T) {
 	}
 }
 
-// TestGenerateDocument_TemplateFetchFailsFallsBackToDefault verifies that when a configured
-// template fails to download, generateDocument still succeeds by falling back to the default
-// template rendered through the real renderer, instead of crashing.
-func TestGenerateDocument_TemplateFetchFailsFallsBackToDefault(t *testing.T) {
+// TestGenerateDocument_TemplateFetchFailsReturnsError verifies that when a configured
+// template fails to fetch, generateDocument surfaces the error instead of silently
+// falling back to the default template — a fetch failure should fail loudly (e.g. in CI)
+// rather than mask a real problem (a typo'd path, a flaky download) behind a default doc.
+func TestGenerateDocument_TemplateFetchFailsReturnsError(t *testing.T) {
 	targetDir := t.TempDir()
 
 	tmpYAML, err := os.CreateTemp("", "test-docs-input-*.yaml")
@@ -356,19 +368,17 @@ func TestGenerateDocument_TemplateFetchFailsFallsBackToDefault(t *testing.T) {
 	}
 
 	docsGenerate := atmosConfig.Docs.Generate["readme"]
-	if err := generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{}); err != nil {
-		t.Fatalf("generateDocument failed: %v", err)
+	err = generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{})
+	if err == nil {
+		t.Fatal("expected generateDocument to return an error for a missing configured template")
+	}
+	if !strings.Contains(err.Error(), "does-not-exist.gotmpl") {
+		t.Errorf("expected error to include template path, got %v", err)
 	}
 
 	outputPath := filepath.Join(targetDir, "TEST_README_FALLBACK.md")
-	data, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("failed to read generated README: %v", err)
-	}
-
-	got := string(data)
-	if !strings.Contains(got, "TestProject") {
-		t.Errorf("expected fallback output to contain merged name %q, got %q", "TestProject", got)
+	if _, err := os.Stat(outputPath); !os.IsNotExist(err) {
+		t.Errorf("expected no output file to be written on template fetch failure")
 	}
 }
 
@@ -629,5 +639,17 @@ common: remote
 				}
 			}
 		})
+	}
+}
+
+func TestMergeInputs_MissingLocalInputFails(t *testing.T) {
+	dg := &schema.DocsGenerate{Input: []any{"missing.yaml"}}
+
+	_, err := mergeInputs(&schema.AtmosConfiguration{}, t.TempDir(), dg)
+	if err == nil {
+		t.Fatal("expected missing configured input to return an error")
+	}
+	if !strings.Contains(err.Error(), "missing.yaml") {
+		t.Errorf("expected error to include input path, got %v", err)
 	}
 }

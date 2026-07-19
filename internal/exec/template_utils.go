@@ -479,17 +479,22 @@ func writeMergedDataToFile(tempDir string, mergedData map[string]interface{}) (*
 
 // Write the 'outer' top-level file and return its final file URL.
 func writeOuterTopLevelFile(tempDir string, fileURL string, mergedData map[string]interface{}) (*url.URL, error) {
-	// Write the 'outer' top-level file.
+	// Keep merged data at the template root for templates that use `.name`,
+	// while preserving the historical Env.README_YAML helper.
 	topLevel := make(map[string]interface{}, len(mergedData))
-	for key, value := range mergedData {
-		topLevel[key] = value
+	for k, v := range mergedData {
+		topLevel[k] = v
 	}
-	topLevel["Env"] = map[string]interface{}{
-		// Legacy Cloud Posse README templates call `defineDatasource "config" .Env.README_YAML`.
-		// Keep that path available while still exposing mergedData as root fields
-		// for fallback templates such as `{{ .name }}`.
-		"README_YAML": fileURL,
+
+	envData := map[string]interface{}{}
+	if existingEnv, ok := topLevel["Env"].(map[string]interface{}); ok {
+		for k, v := range existingEnv {
+			envData[k] = v
+		}
 	}
+	envData["README_YAML"] = fileURL
+	topLevel["Env"] = envData
+
 	outerJSON, err := json.Marshal(topLevel)
 	if err != nil {
 		return nil, err
