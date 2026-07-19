@@ -286,18 +286,23 @@ func (t *terminal) Width(stream Stream) int {
 	return width
 }
 
-// fallbackWidth returns the terminal width when no real TTY size is available:
-// the forced default when --force-tty is set, and 0 otherwise. Non-TTY output
-// deliberately ignores the general-purpose COLUMNS variable so CI snapshots and
-// piped output keep Atmos' stable default wrapping; recording pipelines that
-// force TTY mode may still pin an explicit width via ATMOS_CAST_RECORDING_WIDTH
-// (e.g. 90 cols for docs screengrabs) since that variable is never set ambiently.
+// fallbackWidth returns the terminal width when no real TTY size is available.
+// An explicit COLUMNS value is honored for piped output and CI, allowing callers
+// to request deterministic layout. Recording pipelines can override it with
+// ATMOS_CAST_RECORDING_WIDTH under --force-tty; otherwise --force-tty uses its
+// sane default and regular non-TTY output returns 0 for its caller to default.
 func (t *terminal) fallbackWidth() int {
 	if t.forceTTY {
 		//nolint:forbidigo // ATMOS_CAST_RECORDING_WIDTH is a deliberate, purpose-specific override read before/without config.
 		if width, err := strconv.Atoi(os.Getenv("ATMOS_CAST_RECORDING_WIDTH")); err == nil && width > 0 {
 			return width
 		}
+	}
+	//nolint:forbidigo // COLUMNS is the conventional explicit terminal-width override for piped commands and CI.
+	if width, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && width > 0 {
+		return width
+	}
+	if t.forceTTY {
 		return defaultForcedWidth
 	}
 	return 0
