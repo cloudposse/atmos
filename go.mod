@@ -114,7 +114,7 @@ require (
 	github.com/pact-foundation/pact-go/v2 v2.5.1
 	github.com/pkg/errors v0.9.1
 	github.com/playwright-community/playwright-go v0.5700.1
-	github.com/posthog/posthog-go v1.12.6
+	github.com/posthog/posthog-go v1.17.4
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/samber/lo v1.53.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
