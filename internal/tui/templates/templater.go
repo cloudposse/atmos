@@ -2,18 +2,17 @@ package templates
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -317,20 +316,16 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	return nil
 }
 
-// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
+// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined.
+// It honors an explicit COLUMNS value through the shared terminal resolver when
+// no physical terminal size is available.
 func GetTerminalWidth() int {
 	defaultWidth := 80
-	screenWidth := defaultWidth
-
-	// Detect terminal width and use it by default if available
-	if termUtils.IsTTYSupportForStdout() {
-		termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
-		if err == nil && termWidth > 0 {
-			screenWidth = termWidth - 2
-		}
+	width := terminal.New().Width(terminal.Stdout)
+	if width <= 0 {
+		return defaultWidth
 	}
-
-	return screenWidth
+	return width - 2
 }
 
 // WrappedFlagUsages formats the flag usage string to fit within the terminal width
