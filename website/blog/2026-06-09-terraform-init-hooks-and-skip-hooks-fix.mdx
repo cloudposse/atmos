@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature, bugfix]
 ---
 
-Atmos now supports `before-terraform-init` and `after-terraform-init` lifecycle
+Atmos now supports `before.terraform.init` and `after.terraform.init` lifecycle
 hooks, and `--skip-hooks` is finally honored for *before-* hooks across `plan`,
 `apply`, and `deploy`.
 
@@ -21,21 +21,21 @@ hooks, and `--skip-hooks` is finally honored for *before-* hooks across `plan`,
   terraform:
     hooks:
       pre-init:
-        events: [before-terraform-init]
+        events: [before.terraform.init]
         kind: command
         command: ./scripts/check-tooling.sh
       post-init:
-        events: [after-terraform-init]
+        events: [after.terraform.init]
         kind: command
         command: ./scripts/notify-init-done.sh
   ```
 
-  `after-terraform-init` is brand new, and `before-terraform-init` — previously
+  `after.terraform.init` is brand new, and `before.terraform.init` — previously
   listed in the docs but never dispatched to user hooks — now actually fires.
 
 - **`--skip-hooks` works for before-* hooks.** Previously `--skip-hooks` only
-  skipped `after-*` hooks; `before-terraform-plan` / `before-terraform-apply` /
-  `before-terraform-deploy` hooks ran anyway. Now `--skip-hooks` (skip all) and
+  skipped `after.*` hooks; `before.terraform.plan` / `before.terraform.apply` /
+  `before.terraform.deploy` hooks ran anyway. Now `--skip-hooks` (skip all) and
   `--skip-hooks=name1,name2` (skip by name) are honored symmetrically for both
   before and after events.
 
@@ -64,7 +64,7 @@ atmos terraform plan vpc -s plat-ue2-prod --skip-hooks
 atmos terraform apply vpc -s plat-ue2-prod --skip-hooks=cost,policy
 ```
 
-The `before-terraform-init` / `after-terraform-init` events fire around the
+The `before.terraform.init` / `after.terraform.init` events fire around the
 explicit `atmos terraform init` command — not the implicit init that `plan` and
 `apply` run automatically. See the [Hooks documentation](/stacks/hooks) for the
 full list of supported events.

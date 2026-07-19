@@ -1,0 +1,123 @@
+---
+title: atmos init
+sidebar_label: init
+sidebar_class_name: command
+id: init
+description: Initialize a complete Atmos project from a built-in or catalog template.
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
+
+<Intro>
+Initialize a project from a proven Atmos starting point. `atmos init` selects a project template,
+collects its validated answers, generates the project, and records the source needed for later
+updates.
+</Intro>
+
+<CastPlayer title="atmos init --help" src="/casts/screengrabs/atmos-init--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos init [template] [target] [flags]
+```
+
+```shell
+# Choose a template and target interactively.
+atmos init
+
+# Initialize a minimal cloud-agnostic project.
+atmos init basic ./my-project
+
+# Initialize an AWS application or landing-zone foundation.
+atmos init aws/app ./my-app
+atmos init aws/landing-zone ./my-platform
+
+# Provide values for automated project creation.
+atmos init basic ./my-project --set project_name=my-project --interactive=false
+```
+
+## Templates
+
+The built-in catalog includes `basic`, `simple`, `atmos`, `aws/app`,
+`aws/landing-zone`, `gcp/landing-zone`, and `azure/landing-zone`. Run
+[`atmos scaffold list`](/cli/commands/scaffold/list) to see the complete catalog, including
+configured and remote sources available to the current project.
+
+`basic` is a small cloud-agnostic project with a real local greeting component. `aws/app` starts
+an application SDLC layout with development, staging, and production stacks. The landing-zone
+templates establish cloud-specific platform foundations.
+
+## Shared Scaffold Contract
+
+Project templates use the same `AtmosScaffoldConfig` manifest and generation engine as
+[`atmos scaffold generate`](/cli/commands/scaffold/generate). A template can define validated
+`spec.fields`, conditional `spec.files`, and step-backed `spec.hooks`:
+
+```yaml title="scaffold.yaml"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: application-project
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options: [dev, staging, prod]
+      default: [dev]
+    - name: enable_monitoring
+      type: confirm
+      default: false
+  files:
+    - path: monitoring.tf
+      when: "answers.enable_monitoring == true"
+  hooks:
+    format:
+      events: [after.scaffold.generate]
+      kind: step
+      type: shell
+      with:
+        command: terraform fmt -recursive
+```
+
+Conditions use `when:` predicates or CEL over earlier `answers`. Generation hooks can use only
+`kind: step` and ordered `kind: steps`; see [scaffold templates](/cli/commands/scaffold) for the
+complete authoring model, including `--skip-hooks` and answer templating.
+
+## Updating an Initialized Project
+
+`init` records the selected source, base revision, and answers in `.atmos/scaffold.yaml`. Re-run
+with `--update` to bring an existing project forward using an optimistic three-way merge:
+
+```shell
+cd my-project
+atmos init --update
+atmos init --update --merge-strategy=theirs
+```
+
+`manual` is the default merge strategy and surfaces conflicts. `ours` preserves local changes;
+`theirs` applies the template side of a conflict. `atmos init` creates Git history by default; pass
+`--no-git` when that is not wanted.
+
+## Flags and Automation
+
+| Flag | Behavior |
+| --- | --- |
+| `--set key=value` | Provide a template answer; repeat for multiple fields. |
+| `--interactive=false` | Run without form prompts when values and defaults satisfy active fields. |
+| `--force` | Permit writes into an existing target. |
+| `--update` | Merge a generated project with its template's newer revision. |
+| `--base-ref` | Override the recorded merge base. |
+| `--merge-strategy` | Select `manual`, `ours`, or `theirs`. |
+| `--skip-hooks` | Skip all hooks or named generation hooks. |
+| `--no-git` | Do not initialize or commit Git history. |
+
+<EmbedExample example="init" />
+
+## Related Commands
+
+- [Scaffold templates](/cli/commands/scaffold)
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate)
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate)
