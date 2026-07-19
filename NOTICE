@@ -695,7 +695,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.yaml.in/yaml/v4
     License: Apache-2.0
-    URL: https://github.com/yaml/go-yaml/blob/v4.0.0-rc.4/LICENSE
+    URL: https://github.com/yaml/go-yaml/blob/v4.0.0-rc.3/LICENSE
 
   - gocloud.dev
     License: Apache-2.0
@@ -1149,6 +1149,10 @@ BSD LICENSED DEPENDENCIES
   - gopkg.in/inf.v0
     License: BSD-3-Clause
     URL: https://github.com/go-inf/inf/blob/v0.9.1/LICENSE
+
+  - gopkg.in/op/go-logging.v1
+    License: BSD-3-Clause
+    URL: https://github.com/op/go-logging/blob/b2cb9fa56473/LICENSE
 
   - gopkg.in/warnings.v0
     License: BSD-2-Clause
@@ -1960,13 +1964,17 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/mattn/go-runewidth/blob/v0.0.23/LICENSE
 
+  - github.com/mattn/go-shellwords
+    License: MIT
+    URL: https://github.com/mattn/go-shellwords/blob/v1.0.13/LICENSE
+
   - github.com/mgutz/ansi
     License: MIT
     URL: https://github.com/mgutz/ansi/blob/d51e80ef957d/LICENSE
 
   - github.com/mikefarah/yq/v4/pkg/yqlib
     License: MIT
-    URL: https://github.com/mikefarah/yq/blob/v4.53.2/LICENSE
+    URL: https://github.com/mikefarah/yq/blob/v4.52.4/LICENSE
 
   - github.com/minamijoyo/hcledit/editor
     License: MIT
@@ -2044,9 +2052,17 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/posthog/posthog-go/blob/v1.12.6/LICENSE.md
 
+  - github.com/rhysd/actionlint
+    License: MIT
+    URL: https://github.com/rhysd/actionlint/blob/v1.7.12/LICENSE.txt
+
   - github.com/rivo/uniseg
     License: MIT
     URL: https://github.com/rivo/uniseg/blob/v0.4.7/LICENSE.txt
+
+  - github.com/robfig/cron/v3
+    License: MIT
+    URL: https://github.com/robfig/cron/blob/v3.0.1/LICENSE
 
   - github.com/rs/zerolog
     License: MIT

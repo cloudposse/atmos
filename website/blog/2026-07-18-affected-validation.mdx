@@ -1,0 +1,63 @@
+---
+slug: affected-validation
+title: "Validate Only What Changed"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-07-18T12:00:00.000Z
+---
+
+Large repositories often have validation rules that are useful but expensive or
+noisy to run across every file on every pull request. That makes it tempting to
+skip validation exactly when a focused signal would be most helpful.
+
+Atmos can now validate the files affected by a change, so pull requests get
+actionable feedback without rechecking unrelated project inputs.
+
+<!--truncate-->
+
+## The Problem
+
+Configuration schema checks, stack validation, formatting rules, and workflow
+linting protect different parts of a project. Running every check over an entire
+repository can obscure the result that matters to the change under review.
+
+## The Fix
+
+Add `--affected` to the project-wide validator or to an individual validator.
+Atmos compares the current worktree with the Git merge-base, including local
+uncommitted and untracked files. In GitHub Actions, it reads the pull request
+base SHA automatically.
+
+```shell
+atmos validate --affected --format rich
+atmos validate config --affected --base origin/main
+atmos config validate --affected --base origin/main
+atmos validate stacks --affected --base origin/main
+atmos stack validate --affected --base origin/main
+atmos validate editorconfig --affected --base origin/main
+atmos validate ci --affected --base origin/main
+```
+
+Schema and EditorConfig checks validate changed inputs directly. Changes to a
+schema or rule configuration expand validation to the relevant full set. Stack
+validation runs whenever stack or Atmos configuration inputs change, preserving
+import and duplicate-component checks. Workflow validation sends only changed
+workflows to actionlint unless its configuration changes.
+
+## How to Use It
+
+Use the new `Validation (affected)` GitHub Actions job as a model for a project
+workflow. Check out enough Git history for the merge-base, then run the command
+with rich output:
+
+```yaml
+- uses: actions/checkout@v6
+  with:
+    fetch-depth: 0
+- run: atmos validate --affected --format rich
+```
+
+## Get Involved
+
+Try affected validation in your pull request workflow and share feedback through
+[GitHub issues](https://github.com/cloudposse/atmos/issues).
