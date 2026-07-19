@@ -75,13 +75,13 @@ exclude = [
   "github\\.com/codespaces",
   # Raw file URLs redirect through GitHub's CDN (by design)
   "\\?raw=true",
-  # shields.io (and its img.shields.io badge-rendering host) intermittently
-  # returns Cloudflare 520 "Unknown status code" or a bare 500 under CI's
-  # request volume, especially for the dynamically-generated /badge/... image
-  # endpoint used in example status-badge docs; the badges render fine in a
-  # browser. This also covers the narrower img.shields.io/github/release/ ->
-  # /github/v/release/ internal-redirect case (both work).
-  "shields\\.io",
+  # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
+  "img\\.shields\\.io/github/release/",
+  # Shields badge endpoints intermittently return 503/520 from CI runners even
+  # though the badges resolve in browsers. These are decorative status badges,
+  # so exclude the unstable badge and GitHub-status endpoints from link checks.
+  "shields\\.io/badge/",
+  "img\\.shields\\.io/github/(actions/workflow/status|last-commit)/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
@@ -143,4 +143,7 @@ exclude = [
   # Server Error from GitHub's gateway in CI; the page is valid and loads in
   # a browser (verified via `gh api repos/cloudposse/atmos/releases/tags/v1.203.0`).
   "github\\.com/cloudposse/atmos/releases/tag/v1\\.203\\.0",
+  # Otelic (intermittent "Connection reset by peer" from CI runners; the page
+  # returns 200 and loads fine outside CI, verified via curl).
+  "otelic\\.com",
 ]

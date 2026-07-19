@@ -397,6 +397,21 @@ func cachedTestToolBinaryPath(binDir string, binary string) (string, bool) {
 	return "", false
 }
 
+// cachedTestToolBinaryName returns the expected on-disk binary name for the
+// current OS. Used by test fixture setup, which needs the exact deterministic
+// name a real install would produce -- unlike cachedTestToolBinaryPath, which
+// tries multiple candidates when looking up an existing cached binary.
+func cachedTestToolBinaryName(binary string) string {
+	return cachedTestToolBinaryNameForOS(binary, runtime.GOOS)
+}
+
+func cachedTestToolBinaryNameForOS(binary, goos string) string {
+	if goos == "windows" {
+		return binary + ".exe"
+	}
+	return binary
+}
+
 func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {
 	for _, tool := range cachedTestTools {
 		if tool.Binary == binary {
