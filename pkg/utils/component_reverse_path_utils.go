@@ -191,7 +191,7 @@ func normalizePathForResolution(path string) (string, error) {
 // tryExtractComponentType attempts to extract component info for a specific component type.
 
 // ResolveAndCleanBasePath resolves a base path to absolute form and resolves symlinks.
-func resolveAndCleanBasePath(basePath string) (string, error) {
+func ResolveAndCleanBasePath(basePath string) (string, error) {
 	// Ensure base path is absolute.
 	if !filepath.IsAbs(basePath) {
 		basePathAbs, err := filepath.Abs(basePath)
@@ -282,7 +282,7 @@ func getResolvedBasePath(atmosConfig *schema.AtmosConfiguration, componentType s
 		return "", err
 	}
 
-	return resolveAndCleanBasePath(basePath)
+	return ResolveAndCleanBasePath(basePath)
 }
 
 // validatePathWithinBase validates that absPath is within basePath and returns the relative path.

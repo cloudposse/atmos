@@ -1,0 +1,31 @@
+---
+title: workdir
+sidebar_label: workdir
+slug: /workflows/steps/type/workdir
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `workdir` step provisions a mutable directory from a source. It replaces ad hoc shell sequences
+that create, delete, and copy scratch directories.
+</Intro>
+
+```yaml
+steps:
+  - name: stage fixture
+    type: workdir
+    path: .context/e2e/fixture
+    source: tests/fixtures/example
+    reset: true
+```
+
+## Fields
+
+| Field | Description |
+| --- | --- |
+| `path` | Required target directory. Relative paths resolve from the current process directory. |
+| `source` | Required source URI or source specification. Supports the same source forms as vendoring. |
+| `reset` | Replace an existing target directory. Without it, an existing target is protected. |
+
+The step result is the provisioned absolute path and metadata records the path and resolved source.

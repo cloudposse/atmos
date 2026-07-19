@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
@@ -91,12 +92,13 @@ import (
 	gitcmd "github.com/cloudposse/atmos/cmd/git"
 	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
-	"github.com/cloudposse/atmos/cmd/internal"
+	_ "github.com/cloudposse/atmos/cmd/init"
 	_ "github.com/cloudposse/atmos/cmd/kubernetes"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	_ "github.com/cloudposse/atmos/cmd/scaffold"
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
@@ -493,6 +495,15 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
+		// Proxy links are available to every child process launched by Atmos.
+		// Keep this at the shared command boundary so built-in commands,
+		// workflows, hooks, and custom commands inherit the same PATH/context.
+		if err == nil {
+			if proxyErr := toolchain.ApplyProxyEnvironment(&tmpConfig); proxyErr != nil {
+				errUtils.CheckErrorPrintAndExit(proxyErr, "Failed to prepare toolchain proxies", "")
+			}
+		}
+
 		// Check for version.use configuration and re-exec with specified version if needed.
 		// This runs after profiles are loaded, so version.use can be set via profiles.
 		if !isHelpRequested && err == nil {
@@ -851,16 +862,22 @@ func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
 // This is called during init() before Boa styles are created, ensuring Cobra help
 // text rendering respects the forced color profile.
 func setupColorProfileFromEnv() {
-	defer perf.Track(nil, "cmd.setupColorProfileFromEnv")()
+	setupColorProfileFromEnvWithArgs(os.Args)
+}
 
-	// Check environment variable first using global viper.
-	// Note: ATMOS env prefix and AutomaticEnv are configured in init().
+// setupColorProfileFromEnvWithArgs checks for --force-color flag in the given args.
+// This is a testable version of setupColorProfileFromEnv that accepts args as a parameter.
+func setupColorProfileFromEnvWithArgs(args []string) {
+	defer perf.Track(nil, "cmd.setupColorProfileFromEnvWithArgs")()
+
+	// Check environment variables first using the bound viper key:
+	// init() maps both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to "force-color".
 	forceColor := viper.GetBool("force-color")
 
-	// Also check --force-color CLI flag by manually parsing os.Args.
+	// Also check --force-color CLI flag by manually parsing args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
 	if !forceColor {
-		for _, arg := range os.Args {
+		for _, arg := range args {
 			if arg == "--force-color" {
 				forceColor = true
 				break
@@ -1550,7 +1567,13 @@ func ExecuteVersion() error {
 // handleConfigInitError processes config initialization errors and enriches them for display.
 // Returns nil if the error can be ignored (e.g., for version command), or an enriched error.
 func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration) error {
-	if isVersionCommand() {
+	return handleConfigInitErrorWithArgs(initErr, atmosConfig, os.Args)
+}
+
+// handleConfigInitErrorWithArgs processes config initialization errors with explicit args.
+// This is a testable version of handleConfigInitError that accepts args as a parameter.
+func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfiguration, args []string) error {
+	if isVersionCommandWithArgs(args) {
 		// Version command should always work, even with invalid config.
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
 		return nil

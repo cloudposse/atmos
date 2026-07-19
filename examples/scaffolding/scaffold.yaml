@@ -1,0 +1,50 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: Example scaffold template for demonstration
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project
+      type: input
+      default: my-project
+      required: true
+
+    - name: terraform_version
+      label: Terraform version
+      description: Terraform version to pin in generated configuration
+      type: input
+      default: "1.5.0"
+
+    - name: aws_region
+      label: Default AWS region
+      description: Default AWS region for generated configuration
+      type: select
+      default: us-east-1
+      options:
+        - us-east-1
+        - us-west-2
+        - eu-west-1
+        - ap-southeast-1
+
+    - name: enable_vendoring
+      label: Enable component vendoring
+      description: Whether to include a vendor.yaml manifest
+      type: confirm
+      default: true
+
+    - name: vendor_version
+      label: Vendor component version
+      description: Immutable tag for the generated S3 bucket component
+      type: input
+      default: "1.536.0"
+      when: "answers.enable_vendoring == true"
+
+  # vendor.yaml is only generated when vendoring is enabled; skip it otherwise.
+  files:
+    - path: vendor.yaml
+      when: "answers.enable_vendoring == true"

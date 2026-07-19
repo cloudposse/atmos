@@ -52,8 +52,19 @@ cleanup() {
 trap cleanup EXIT
 
 set +e
+# Go's default per-binary timeout is 10m, tuned for a single package on a
+# dedicated runner. This branch's scoped package set includes slow
+# acceptance suites (internal/exec, tests) that finish well under 10m on
+# CI's dedicated runners, but on a shared dev machine running several
+# worktree sessions at once (multiple `go test`/dev-server processes
+# competing for the same CPUs -- confirmed via `uptime` load averages well
+# above core count) the same suites can take several times longer, panicking
+# the whole run with no actual test failure. -timeout 55m gives headroom up
+# to just under CI's own Acceptance Tests job-level ceiling
+# (.github/workflows/test.yml's `timeout-minutes: 60`) without masking a
+# genuine deadlock outright.
 # shellcheck disable=SC2086
-go test -v -coverprofile="$tmp_profile" -covermode=set $packages >"$tmp_output" 2>&1
+go test -v -timeout 55m -coverprofile="$tmp_profile" -covermode=set $packages >"$tmp_output" 2>&1
 test_exit=$?
 set -e
 
