@@ -210,11 +210,14 @@ func validationRepositoryPath(path string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("resolve working directory for validation excludes: %w", err)
 		}
-		relative, err := filepath.Rel(cwd, path)
-		if err != nil {
-			return "", fmt.Errorf("resolve validation path %q: %w", path, err)
+		// filepath.Rel errors when path and cwd are on different Windows volumes
+		// (e.g. a t.TempDir() on C: while the repo is checked out on D:, as GitHub
+		// Actions Windows runners do). That path is outside the repo either way, so
+		// no repo-relative exclude glob can legitimately match it -- fall back to
+		// the absolute path unchanged rather than failing the whole exclude call.
+		if relative, err := filepath.Rel(cwd, path); err == nil {
+			path = relative
 		}
-		path = relative
 	}
 	path = strings.ReplaceAll(filepath.ToSlash(filepath.Clean(path)), "\\", "/")
 	return strings.TrimPrefix(path, "./"), nil

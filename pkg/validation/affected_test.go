@@ -2,6 +2,9 @@ package validation
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,6 +59,30 @@ func TestExcludePaths(t *testing.T) {
 	assert.Error(t, err)
 	_, err = ExcludePaths(paths, []string{""})
 	assert.Error(t, err)
+}
+
+// TestValidationRepositoryPath_CrossVolumeFallsBackToAbsolute guards against a
+// regression where GitHub Actions Windows runners check out the repo on one
+// drive letter while t.TempDir() and other temp paths live on another, and
+// filepath.Rel errors on cross-volume paths on Windows. That used to fail the
+// whole ExcludePaths call for any absolute path outside the repo, as hit for
+// real by TestFilterValidationSchemaFiles in internal/exec. The fallback here
+// keeps the absolute path instead of erroring.
+func TestValidationRepositoryPath_CrossVolumeFallsBackToAbsolute(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("cross-volume filepath.Rel failures are Windows-specific")
+	}
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	otherVolume := "E:"
+	if filepath.VolumeName(cwd) == otherVolume {
+		otherVolume = "F:"
+	}
+
+	got, err := validationRepositoryPath(otherVolume + `\temp\first.yaml`)
+	require.NoError(t, err)
+	assert.Equal(t, otherVolume+"/temp/first.yaml", got)
 }
 
 func TestResolveAffectedBase(t *testing.T) {
