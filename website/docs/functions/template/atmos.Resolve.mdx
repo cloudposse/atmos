@@ -81,6 +81,69 @@ vars:
   bucket: '{{ atmos.Resolve "!env BUCKET_PREFIX" }}-state'
 ```
 
+## Resolving Nested Values (works with `evaluations`)
+
+`atmos.Resolve` evaluates a YAML-function **tag string** directly, so the *direct* form resolves in a
+single template pass — `atmos.Resolve` is called and runs the tag immediately:
+
+<File>
+```yaml
+settings:
+  context:
+    repo: "!git.repository"          # a bare YAML tag stored as the value
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # One pass: atmos.Resolve receives "!git.repository" and evaluates it.
+        name: '{{ atmos.Resolve .settings.context.repo }}'
+```
+</File>
+
+The *indirect* (nested) form is different. If you store a value that is **itself a template** and then
+reference it elsewhere with a plain `{{ .settings.context.x }}` lookup, the first pass substitutes that
+value as **literal text** — Atmos does not re-interpret data substituted during a pass, so the embedded
+`{{ atmos.Resolve … }}` is left unevaluated:
+
+<File>
+```yaml
+settings:
+  context:
+    # The value is a templated string, not a bare tag.
+    deployment_repo: 'git@{{ atmos.Resolve "!git.host" }}:{{ atmos.Resolve "!git.repository" }}'
+
+components:
+  terraform:
+    vpc:
+      source:
+        # Pass 1 substitutes `deployment_repo` (the result still contains
+        # `{{ atmos.Resolve … }}`); a second pass is needed to evaluate it.
+        uri: '{{ .settings.context.deployment_repo }}//components/terraform/vpc'
+```
+</File>
+
+To resolve the nested templates, raise the number of [template processing passes](/templates#processing-pipelines)
+with [`templates.settings.evaluations`](/cli/configuration/templates):
+
+<File title="atmos.yaml">
+```yaml
+templates:
+  settings:
+    enabled: true
+    # Pass 1 resolves `{{ .settings.context.deployment_repo }}`; pass 2 evaluates the
+    # `{{ atmos.Resolve … }}` it contained.
+    evaluations: 2
+```
+</File>
+
+:::note Import paths are the exception
+Templated [import paths](/stacks/imports#referencing-earlier-imports-in-import-paths) are rendered to a
+**fixed point** automatically, so a nested value used in an import path resolves without setting
+`evaluations`. This applies to import paths only; component sections (such as `source.uri`) use the
+`evaluations` setting above.
+:::
+
 ## Considerations
 
 - `atmos.Resolve` runs during the **template** phase (before the eager YAML-function pass), giving it
