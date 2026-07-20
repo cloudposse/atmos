@@ -209,8 +209,8 @@ The container runtime is auto-detected (Docker first, then Podman). Override it 
 ```yaml
 container:
   runtime:
-    provider: podman      # or docker, or empty for auto-detect
-    auto_start: true      # auto-init/start the Podman machine when needed
+    provider: auto        # or docker/podman; auto is also the default
+    # Auto-start is on by default. Set auto_start: false to opt out.
 ```
 
 It can also be set with the `ATMOS_CONTAINER_RUNTIME` environment variable.

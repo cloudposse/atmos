@@ -34,7 +34,7 @@ func (h *ContainerHandler) validateInspectAction(step *schema.WorkflowStep) erro
 		return err
 	}
 	if !isValidContainerRuntime(inspect.Provider) {
-		return invalidContainerField(step, "inspect.provider", inspect.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
+		return invalidContainerField(step, "inspect.provider", inspect.Provider, "Provider must be `auto`, `docker`, `podman`, or empty for auto-detect")
 	}
 	return nil
 }

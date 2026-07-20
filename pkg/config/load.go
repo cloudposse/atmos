@@ -641,6 +641,10 @@ func bindEnv(v *viper.Viper, key ...string) {
 
 // setDefaultConfiguration set default configuration for the viper instance.
 func setDefaultConfiguration(v *viper.Viper) {
+	// Start or initialize the Podman machine when it is selected and not running.
+	// Docker remains preferred whenever it is already available.
+	v.SetDefault("container.runtime.auto_start", true)
+
 	v.SetDefault("components.helmfile.use_eks", true)
 	v.SetDefault("components.terraform.append_user_agent",
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))

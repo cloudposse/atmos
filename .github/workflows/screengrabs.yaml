@@ -6,6 +6,14 @@ on:
     types: [labeled, opened, synchronize]
     paths:
       - ".github/workflows/screengrabs.yaml"
+      - "cmd/terraform/**"
+      - "internal/exec/**"
+      - "pkg/provisioner/lock/**"
+      - "pkg/provisioner/workdir/**"
+      - "pkg/terraform/cache/**"
+      - "examples/quick-start-advanced/**"
+      - "demo/casts/atmos.d/examples/quick-start-advanced/**"
+      - "demo/casts/cast_checks.py"
 
 permissions:
   contents: write
@@ -75,6 +83,8 @@ jobs:
         run: |
           ./build/atmos --chdir=demo/casts casts generate screengrabs cli
           ./build/atmos --chdir=demo/casts casts generate screengrabs demo-stacks
+          ./build/atmos --chdir=demo/casts casts generate examples quick-start-advanced list-instances
+          ./build/atmos --chdir=demo/casts casts validate examples quick-start-advanced list-instances
           git add -A
           git status
         env:

@@ -61,6 +61,7 @@ func TestDefaultEnvironmentSetup_SetupEnvironment(t *testing.T) {
 					Region:          "us-west-2",
 					CredentialsFile: "/path/to/credentials",
 					ConfigFile:      "/path/to/config",
+					EndpointURL:     "http://127.0.0.1:4566",
 				},
 			},
 			expectError: false,
@@ -70,6 +71,7 @@ func TestDefaultEnvironmentSetup_SetupEnvironment(t *testing.T) {
 				"AWS_DEFAULT_REGION":          "us-west-2",
 				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
 				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_ENDPOINT_URL_S3":         "http://127.0.0.1:4566",
 			},
 		},
 		{

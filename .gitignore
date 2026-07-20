@@ -67,6 +67,7 @@ demos/audio/
 # Environment files (except .envrc which is tracked for Nix)
 .env*
 !.envrc
+!examples/quick-start-advanced/.env.local
 
 # Tool version managers
 .tool-versions
