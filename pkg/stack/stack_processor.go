@@ -40,6 +40,8 @@ func ProcessYAMLConfigFiles(
 	)
 }
 
+// ProcessYAMLConfigFile takes a path to a YAML stack manifest, recursively
+// processes and deep-merges all the imports, and returns the processing result.
 func ProcessYAMLConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
@@ -55,16 +57,7 @@ func ProcessYAMLConfigFile(
 	parentHelmfileOverridesInline map[string]any,
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
-) (
-	map[string]any,
-	map[string]map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	error,
-) {
+) (*schema.StackManifestProcessingResult, error) {
 	defer perf.Track(atmosConfig, "stack.ProcessYAMLConfigFile")()
 
 	return exec.ProcessYAMLConfigFile(

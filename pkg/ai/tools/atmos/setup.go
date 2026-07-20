@@ -50,6 +50,7 @@ func registerCoreTools(registry *tools.Registry, atmosConfig *schema.AtmosConfig
 		NewListStacksTool(atmosConfig),
 		NewDescribeAffectedTool(atmosConfig),
 		NewValidateStacksTool(atmosConfig),
+		NewValidateSchemaTool(atmosConfig),
 		NewReadFileTool(atmosConfig),
 		NewSearchFilesTool(atmosConfig),
 		NewListComponentFilesTool(atmosConfig),
