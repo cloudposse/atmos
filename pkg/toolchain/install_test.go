@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -71,6 +72,25 @@ func TestBatchRendererMarksCompletedDownloadAsVerifying(t *testing.T) {
 	renderer.updateProgress(tool, downloadProgress{downloaded: 100, total: 100})
 
 	assert.Equal(t, "Verifying", renderer.active[0].phase)
+}
+
+func TestCollectBatchInstallEventsFailsForMissingTerminalResults(t *testing.T) {
+	setupTestIO(t)
+	events := make(chan batchEvent, 1)
+	events <- batchEvent{
+		tool:   toolInfo{owner: "owner", repo: "installed", version: "v1.0.0"},
+		result: resultInstalled,
+	}
+	close(events)
+
+	counts := collectBatchInstallEvents(events, &batchDisplay{renderer: &batchRenderer{total: 2}}, 2)
+	err := counts.finish(2, false)
+
+	assert.Equal(t, 1, counts.installed)
+	assert.Equal(t, 1, counts.failed)
+	assert.Equal(t, 2, counts.completed)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+	assert.Contains(t, err.Error(), "1 tool installation(s) failed")
 }
 
 func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
