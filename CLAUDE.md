@@ -25,6 +25,7 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 - **NEVER delete, reset, or discard files you didn't create** - Other sessions may have created them
 - **NEVER run `git reset`, `git checkout --`, or `git clean`** without explicit user approval
+- **NEVER run `go clean`**. In particular, `go clean -cache` deletes the shared Go build cache and breaks concurrent builds; it is not an approved troubleshooting step.
 - **ALWAYS ask the user before removing untracked files** - They may be work-in-progress from another session
 - **When you see unfamiliar files**, assume another session created them - ask the user what to do
 - **If pre-commit hooks fail due to files you didn't touch**, ask the user how to proceed rather than trying to fix or remove them

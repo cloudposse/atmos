@@ -103,9 +103,14 @@ exclude = [
   "file://.*/ai/skill-marketplace",
   # Example/placeholder URLs in usage documentation
   "github\\.com/user/repo",
-  # Claude Code product page (claude.com edge returns 500 to non-browser/CI requests;
-  # the docs subdomain code.claude.com is reachable and is intentionally not excluded)
+  # Claude Code product page (claude.com edge returns 500 to non-browser/CI requests)
   "claude\\.com/product/",
+  # Claude Code docs (code.claude.com) now exhibit the same CI-hostile pattern as
+  # docs.anthropic.com/platform.openai.com/clau.de below: requests from CI runners
+  # 302-redirect to https://dns.google/<same-path> (a DNS-sinkhole-style artifact,
+  # not a real site redirect) before 404ing, while the pages resolve normally and
+  # are correctly indexed by search engines when fetched from a real browser.
+  "code\\.claude\\.com",
   # regex101.com (intermittent 504 Gateway Timeout in CI)
   "regex101\\.com",
   # Anthropic's clau.de URL shortener is Cloudflare-fronted and returns 525

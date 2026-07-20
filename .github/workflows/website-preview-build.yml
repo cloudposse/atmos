@@ -58,6 +58,15 @@ jobs:
           CGO_ENABLED: "0"
         run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
+      - name: Generate atmos-config schema
+        # website/static/schemas/atmos/atmos-config/ is gitignored (see .gitignore) — it is
+        # never hand-maintained or committed, only generated here from the embedded schema
+        # (pkg/datafetcher/schema/atmos/config/1.0.json), itself generated from the Go
+        # configuration structs by `go generate ./pkg/config/schema`.
+        env:
+          CGO_ENABLED: "0"
+        run: go run . config schema website/static/schemas/atmos/atmos-config/1.0/atmos-config.json
+
       - name: Install Dependencies and Build Website
         run: |
           node --version

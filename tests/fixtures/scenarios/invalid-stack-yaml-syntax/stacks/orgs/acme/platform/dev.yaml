@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Deliberately invalid YAML syntax (not a schema violation) -- an
+# unterminated quoted string. This is a distinct failure category from
+# invalid-manifest-schema/: it fails during YAML parsing itself, before any
+# JSON-Schema validation runs, and currently aborts the entire `validate
+# stacks` run rather than being reported per-file alongside other issues --
+# see docs/prd/native-ci/phases/validate-command-parity.md.
+
+vars:
+  stage: dev
+  unterminated: "this quote never closes

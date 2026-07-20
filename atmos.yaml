@@ -83,8 +83,16 @@ logs:
 validate:
   # The configuration settings for the editorconfig-checker.
   editorconfig:
-    # A list of file paths or patterns to exclude from checks.
-    exclude: []
+    # A list of glob patterns (matched the same way as every other
+    # `validate ... --exclude` flag in this repo) to exclude from checks.
+    # *.go is excluded because editorconfig-checker is a naive line-by-line
+    # scanner with no notion of Go syntax: it can't tell a raw string literal's
+    # embedded content (e.g. space-indented YAML test fixtures) from actual Go
+    # source, and flags the former as a tab-indentation violation. gofumpt (via
+    # `atmos lint`) already fully owns real Go source formatting, so editorconfig
+    # checking .go files is both redundant and produces false positives.
+    exclude:
+      - "**/*.go"
     # If set to true, the default ignore patterns (like .git/*) will not be applied.
     ignore_defaults: false
     # Runs the checker without making any changes or producing output, useful for testing configuration.
@@ -285,6 +293,8 @@ docs:
 # trailing version token is a manual cache-bust — bump it to start from a clean
 # cache. restore_keys lets a bumped token still seed from the previous blob.
 ci:
+  # Enable native CI summaries and failure annotations for repository validation.
+  enabled: true
   cache:
     enabled: true
     key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2'
