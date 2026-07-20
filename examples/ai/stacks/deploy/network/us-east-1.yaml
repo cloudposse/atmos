@@ -31,10 +31,9 @@ components:
         tags:
           Environment: "network"
           Region: "us-east-1"
-      settings:
-        depends_on:
-          1:
-            component: vpc
+      dependencies:
+        components:
+          - name: vpc
             stack: "{{ .vars.environment }}-{{ .vars.stage }}"
 
     tgw/attachment:
@@ -44,9 +43,7 @@ components:
         tags:
           Environment: "network"
           Region: "us-east-1"
-      settings:
-        depends_on:
-          1:
-            component: vpc
-          2:
-            component: tgw/hub
+      dependencies:
+        components:
+          - name: vpc
+          - name: tgw/hub
