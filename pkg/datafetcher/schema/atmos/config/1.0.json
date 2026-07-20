@@ -9818,6 +9818,33 @@
           ],
           "description": "Environment variables (supports templates)."
         },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Command/scanner step arguments (supports templates)."
+        },
         "vars": {
           "anyOf": [
             {
@@ -11150,6 +11177,20 @@
             }
           ]
         },
+        "lint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformLint"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lint configures the built-in `atmos terraform lint` command.\nA configured config path is used when a component does not provide its own\n.tflint.hcl file."
+        },
         "planfiles": {
           "anyOf": [
             {
@@ -11600,6 +11641,22 @@
         }
       },
       "type": "object"
+    },
+    "TerraformLint": {
+      "properties": {
+        "config": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "TerraformLint configures TFLint for Terraform components. Config may be an\nabsolute path or a path relative to the Atmos base path."
     },
     "TerraformPlan": {
       "properties": {
@@ -14176,6 +14233,33 @@
             }
           ],
           "description": "Environment variables (supports templates)."
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Command/scanner step arguments (supports templates)."
         },
         "vars": {
           "anyOf": [
