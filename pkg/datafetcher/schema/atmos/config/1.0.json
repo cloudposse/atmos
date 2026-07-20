@@ -4182,6 +4182,34 @@
             }
           ],
           "description": "ErrorMode is the project-wide default for the `describe` commands' (`describe stacks`,\n`describe affected`, `describe dependents`) `--error-mode` flag: how to handle a\nrecoverable per-value YAML function error (e.g. a Terraform backend that has not been\nprovisioned yet). Values: \"strict\", \"warn\" (default), \"silent\". An explicit --error-mode\nflag or ATMOS_DESCRIBE_ERROR_MODE env var overrides this."
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Provenance is the project-wide default for `describe component --provenance`:\nannotate the component configuration with the stack file each value came from.\nEnabled by default (journaled in pkg/edition); an explicit --provenance flag\nor ATMOS_DESCRIBE_PROVENANCE env var overrides this."
+        },
+        "component": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DescribeComponentSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Component configures `describe component` output."
         }
       },
       "type": "object",
@@ -4219,6 +4247,23 @@
       },
       "type": "object",
       "description": "DescribeAffected contains configuration for the `atmos describe affected` command."
+    },
+    "DescribeComponentSettings": {
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Filter selects the output scope: \"schema\" (default; only the sections a\nstack manifest can define — vars, settings, env, backend, metadata, and\nfriends) or \"full\" (every internal field Atmos computes during\nprocessing). Journaled in pkg/edition; ATMOS_DESCRIBE_COMPONENT_FILTER\noverrides."
+        }
+      },
+      "type": "object",
+      "description": "DescribeComponentSettings configures `describe component` output."
     },
     "DescribeSettings": {
       "properties": {
@@ -5651,6 +5696,26 @@
         }
       },
       "type": "object"
+    },
+    "HelpSettings": {
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Filter renders a focused bare `--help` (local flags only, no GLOBAL FLAGS\nsection, with a `--help=all` hint). Enabled by default (journaled in\npkg/edition); disable to restore the full pre-filter help output."
+        }
+      },
+      "type": "object",
+      "description": "HelpSettings controls how `--help` output is rendered."
     },
     "Identity": {
       "properties": {
@@ -10996,6 +11061,19 @@
               "type": "null"
             }
           ]
+        },
+        "help": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HelpSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
         }
       },
       "type": "object"
@@ -14962,6 +15040,17 @@
           "type": "null"
         }
       ]
+    },
+    "edition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Date anchor (\"YYYY\", \"YYYY-MM\", or \"YYYY-MM-DD\") that pins defaults to how they stood on that date."
     },
     "cast": {
       "anyOf": [
