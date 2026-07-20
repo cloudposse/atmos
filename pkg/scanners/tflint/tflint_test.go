@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	gitlib "github.com/go-git/go-git/v5"
@@ -26,7 +27,11 @@ func TestRunUsesToolchainBinaryAndParsesSARIF(t *testing.T) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	toolchain := t.TempDir()
-	tool := filepath.Join(toolchain, Command)
+	toolName := Command
+	if runtime.GOOS == "windows" {
+		toolName += ".exe"
+	}
+	tool := filepath.Join(toolchain, toolName)
 	require.NoError(t, os.Symlink(exe, tool))
 
 	out, scan, err := Run(context.Background(), &Options{
