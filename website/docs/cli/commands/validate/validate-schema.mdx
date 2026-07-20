@@ -31,7 +31,14 @@ Execute the `validate schema` command like this:
 atmos validate schema
 ```
 
-This command validates files against the formatting rules defined in your .editorconfig file.
+This command reads the `schemas` section of `atmos.yaml` and validates every matched
+YAML file against its configured JSON Schema.
+
+Out of the box — with no configuration at all — a built-in `config` entry validates
+`atmos.yaml` itself, along with `atmos.d` fragments and project-local
+[profile](/cli/configuration/profiles) files, against the schema generated from the
+Atmos configuration code (the same document [`atmos config schema`](/cli/commands/config/config-schema)
+prints). Define your own `schemas.config` entry to override or disable it.
 
 :::tip
 Run `atmos validate schema --help` to see all the available options
@@ -40,9 +47,23 @@ Run `atmos validate schema --help` to see all the available options
 ## Examples
 
 ```shell
-atmos validate schema
+atmos validate schema           # everything in `schemas`, plus atmos.yaml via the built-in `config` entry
+atmos validate schema config    # only atmos.yaml (and its fragments)
+atmos config validate           # alias for `atmos validate schema config`
+atmos config validate --affected --base origin/main
 atmos validate schema <my_custom_key>
+
+# Validate only changed YAML files; configuration or JSON Schema changes
+# conservatively revalidate every matching file.
+atmos validate schema --affected --base origin/main
+atmos validate schema --exclude 'tests/fixtures/**'
 ```
+
+Use `--affected` to compare against the Git merge-base. On GitHub Actions, the
+pull request base SHA is detected automatically; use `--base` locally to select
+another baseline.
+
+Use repeatable `--exclude <glob>` to omit repository-relative matches from either full or affected schema validation.
 
 ## How to set my schema validators?
 
