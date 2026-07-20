@@ -891,7 +891,9 @@ jobs:
 
       - name: Lint ${{ matrix.demo-folder }}/${{ matrix.component }}
         working-directory: examples/${{ matrix.demo-folder }}
-        run: atmos terraform lint ${{ matrix.component }} -s ${{ matrix.stack }}
+        # Lint reads static HCL only. Disable the quick-start stack's emulator
+        # identity because this CI job intentionally does not start the emulator.
+        run: atmos terraform lint ${{ matrix.component }} -s ${{ matrix.stack }} --identity=false
 
   hooks-tflint:
     name: "[hooks-tflint] example"
