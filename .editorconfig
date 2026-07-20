@@ -13,19 +13,19 @@ trim_trailing_whitespace = false
 
 # Override for machine generated binary HTML files in Screengrabs directory
 [website/src/components/Screengrabs/**/*.html]
-insert_final_newline = unset
+insert_final_newline = false
 end_of_line = unset
 indent_style = unset
 indent_size = unset
-trim_trailing_whitespace = unset
+trim_trailing_whitespace = false
 
 # Override for machine generated binary files in tests/snapshots directory for golden snapshots
-[tests/snapshots/**/*.golden]
-insert_final_newline = unset
+[test/snapshots/**/*.golden]
+insert_final_newline = false
 end_of_line = unset
 indent_style = unset
 indent_size = unset
-trim_trailing_whitespace = unset
+trim_trailing_whitespace = false
 
 # Override for Makefile
 [{Makefile,makefile,GNUmakefile}]
