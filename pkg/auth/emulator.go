@@ -18,8 +18,7 @@ func SetEmulatorResolver(resolver types.EmulatorResolver) {
 
 // emulatorResolverReceiver is the optional interface implemented by identities
 // that resolve a running emulator's connection profile. The auth manager injects
-// the resolver and the current stack the same way it injects the credential store.
+// the resolver the same way it injects the credential store.
 type emulatorResolverReceiver interface {
 	SetEmulatorResolver(resolver types.EmulatorResolver)
-	SetStack(stack string)
 }

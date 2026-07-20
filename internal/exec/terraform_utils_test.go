@@ -213,7 +213,7 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		require.True(t, processStacks)
 		return schema.AtmosConfiguration{}, nil
 	})
-	patches.ApplyFunc(ExecuteDescribeStacks, func(
+	patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
 		atmosConfig *schema.AtmosConfiguration,
 		filterByStack string,
 		components []string,
@@ -225,6 +225,7 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		includeEmptyStacks bool,
 		skip []string,
 		gotAuthManager auth.AuthManager,
+		useMocks bool,
 	) (map[string]any, error) {
 		described = true
 		require.NotNil(t, atmosConfig)
@@ -238,6 +239,7 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		require.False(t, includeEmptyStacks)
 		require.Equal(t, []string{"skip-me"}, skip)
 		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, useMocks)
 		return stacks, nil
 	})
 	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
@@ -318,7 +320,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 			{Component: "deleted", Stack: "dev", ComponentType: cfg.TerraformComponentType, Deleted: true},
 		}, nil
 	})
-	patches.ApplyFunc(ExecuteDescribeStacksWithAuthDisabled, func(
+	patches.ApplyFunc(ExecuteDescribeStacksWithAuthDisabledAndMocks, func(
 		atmosConfig *schema.AtmosConfiguration,
 		filterByStack string,
 		components []string,
@@ -331,6 +333,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 		skip []string,
 		gotAuthManager auth.AuthManager,
 		authDisabled bool,
+		useMocks bool,
 	) (map[string]any, error) {
 		describedStacks = true
 		require.NotNil(t, atmosConfig)
@@ -345,6 +348,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 		require.Equal(t, []string{"skip-me"}, skip)
 		require.Equal(t, authManager, gotAuthManager)
 		require.False(t, authDisabled)
+		require.False(t, useMocks)
 		return stacks, nil
 	})
 	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
@@ -434,7 +438,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
 			return schema.AtmosConfiguration{}, nil
 		})
-		patches.ApplyFunc(ExecuteDescribeStacks, func(
+		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
 			*schema.AtmosConfiguration,
 			string,
 			[]string,
@@ -446,6 +450,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			bool,
 			[]string,
 			auth.AuthManager,
+			bool,
 		) (map[string]any, error) {
 			return nil, expectedErr
 		})
@@ -469,7 +474,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
 			return schema.AtmosConfiguration{}, nil
 		})
-		patches.ApplyFunc(ExecuteDescribeStacks, func(
+		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
 			*schema.AtmosConfiguration,
 			string,
 			[]string,
@@ -481,6 +486,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			bool,
 			[]string,
 			auth.AuthManager,
+			bool,
 		) (map[string]any, error) {
 			return map[string]any{}, nil
 		})

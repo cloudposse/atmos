@@ -32,7 +32,7 @@ func TestEnumeratedSecretRows(t *testing.T) {
 		{Stack: "prod", Component: "web", Section: listScopeSection(map[string]string{"SHARED": "stack", "WEB_KEY": ""})},
 	}, nil)
 
-	rows, err := enumeratedSecretRows(secretScope{})
+	rows, err := enumeratedSecretRows(secretScope{}, false)
 	require.NoError(t, err)
 	require.Len(t, rows, 3, "SHARED de-duplicated to one row; API_KEY and WEB_KEY each keep theirs")
 
@@ -55,7 +55,7 @@ func TestEnumeratedSecretRows_Error(t *testing.T) {
 	sentinel := errors.New("enumerate failed")
 	overrideEnumerateScopes(t, nil, sentinel)
 
-	_, err := enumeratedSecretRows(secretScope{})
+	_, err := enumeratedSecretRows(secretScope{}, false)
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -97,23 +97,32 @@ func TestRunSecretList_VerifyFlagThreaded(t *testing.T) {
 	})
 }
 
-// TestRunSecretList_VerifyWithoutFullScope_Warns covers the branch where --verify is passed but the
-// target is not fully scoped: enumerating and authenticating every instance is exactly the expensive
-// pass listing avoids, so it warns and falls back to the credential-free enumerated path.
-func TestRunSecretList_VerifyWithoutFullScope_Warns(t *testing.T) {
-	_, stderr := setupIOCapture(t)
-
+// TestRunSecretList_VerifyWithoutFullScope verifies every enumerated scope. The --verify flag is
+// explicit consent to the potentially expensive multi-authentication pass; stack/component facets
+// are optional optimizations, not requirements.
+func TestRunSecretList_VerifyWithoutFullScope(t *testing.T) {
+	setupIO(t)
 	overrideEnumerateScopes(t, []scopeEntry{
 		{Stack: "prod", Component: "api", Section: listScopeSection(map[string]string{"API_KEY": ""})},
+		{Stack: "prod", Component: "web", Section: listScopeSection(map[string]string{"WEB_KEY": ""})},
 	}, nil)
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: true}}
+	oldLoader := loadServiceForListFn
+	var scopes []secretScope
+	loadServiceForListFn = func(scope secretScope, verify bool) (secretService, error) {
+		assert.True(t, verify)
+		scopes = append(scopes, scope)
+		return svc, nil
+	}
+	t.Cleanup(func() { loadServiceForListFn = oldLoader })
 
-	// --verify with only --stack (component unset) → warning branch, then enumerated rendering.
+	// --verify with only --stack authenticates and checks every matching component.
 	err := runSecretSubcommand(t, "list", "--stack", "prod", "--verify")
 	require.NoError(t, err)
-
-	// The warning must actually be emitted (UI channel / stderr), not just the success condition.
-	assert.Contains(t, stderr.String(), "requires both --stack and --component",
-		"the --verify-without-full-scope warning must be emitted")
+	require.Len(t, scopes, 2)
+	assert.Equal(t, secretScope{Stack: "prod", Component: "api"}, scopes[0])
+	assert.Equal(t, secretScope{Stack: "prod", Component: "web"}, scopes[1])
 }
 
 // TestRunSecretList_SingleScope drives runSecretList's fast path (both facets set): it loads the

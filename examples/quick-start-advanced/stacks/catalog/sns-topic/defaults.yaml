@@ -21,5 +21,6 @@ components:
             topic_arn: .topic_arn
       vars:
         name: events
-        # Read the KMS key ARN straight from the kms-key component's Terraform state.
-        kms_key_arn: !terraform.state kms-key .key_arn // "pending"
+        # Real state supersedes this deterministic plan-time placeholder
+        # (a provider-valid mock ARN so a cold `terraform plan --all` succeeds).
+        kms_key_arn: !terraform.state kms-key .key_arn // "arn:aws:kms:{{ .vars.region }}:000000000000:key/00000000-0000-0000-0000-000000000000"
