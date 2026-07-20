@@ -914,6 +914,31 @@ func TestManager_Authenticate_SuccessFlow(t *testing.T) {
 	assert.True(t, called, "PostAuthenticate should be called")
 }
 
+func TestManager_Authenticate_PostAuthenticatePreservesHints(t *testing.T) {
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	postAuthErr := errUtils.Build(errUtils.ErrEmulatorNotRunning).
+		WithHint("Start it with `atmos emulator up aws -s local`.").
+		Err()
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postErr: postAuthErr}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	_, err := m.Authenticate(types.WithSuppressAuthErrors(context.Background(), true), "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Start it with `atmos emulator up aws -s local`.")
+}
+
 func TestManager_Authenticate_UsesCachedTargetCredentials(t *testing.T) {
 	now := ptrTime(time.Now().UTC().Add(30 * time.Minute))
 
