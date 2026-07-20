@@ -182,7 +182,7 @@ func (h *ContainerHandler) writeOutput(step *schema.WorkflowStep, workflow *sche
 }
 
 func isValidContainerRuntime(value string) bool {
-	return value == "" || value == string(container.TypeDocker) || value == string(container.TypePodman)
+	return value == "" || value == string(container.TypeAuto) || value == string(container.TypeDocker) || value == string(container.TypePodman)
 }
 
 func isValidContainerBuildEngine(value string) bool {

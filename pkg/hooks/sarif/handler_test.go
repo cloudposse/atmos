@@ -82,6 +82,21 @@ func TestHandler_NoFindingsFile(t *testing.T) {
 	assert.Contains(t, s.Body, "no findings")
 }
 
+func TestHandler_MissingReportAfterScannerFailure(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "missing.sarif")
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:       "checkov",
+		OutputPath: func(_ *hooks.ExecContext) string { return missingPath },
+	})
+
+	s, err := handler(&hooks.ExecContext{CommandError: errors.New("exit status 1"), ExitCode: 1})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+	assert.Equal(t, hooks.StatusFailure, s.Status)
+	assert.Equal(t, "scan failed", s.Title)
+	assert.Contains(t, s.Body, "exit code 1")
+}
+
 func TestHandler_NilOutputPath(t *testing.T) {
 	handler := sarif.NewResultHandler(sarif.HandlerOptions{Kind: "trivy"})
 	s, err := handler(&hooks.ExecContext{})

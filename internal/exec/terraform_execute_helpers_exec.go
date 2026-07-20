@@ -210,6 +210,10 @@ func executeCommandPipeline(
 	return nil
 }
 
+// dispatchAfterInitFn is a seam for testing the explicit-init path. Implicit
+// init dispatches the same provisioners in executeTerraformInitCommand.
+var dispatchAfterInitFn = dispatchAfterInit
+
 // runWorkspaceSetupPhase selects or creates the Terraform workspace under its own
 // phase-level CI log group. The group is emitted only when workspace setup will
 // actually run, avoiding empty groups for backends/subcommands that skip setup.
@@ -431,6 +435,14 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		},
 		opts...,
 	)
+
+	// An explicit `atmos terraform init` reaches this main-command path rather
+	// than executeTerraformInitCommand. Keep its lifecycle equivalent to an
+	// implicit init so post-init provisioners can complete and persist provider
+	// locks for workdir and vendored components.
+	if err == nil && info.SubCommand == subcommandInit {
+		dispatchAfterInitFn(atmosConfig, info, componentPath)
+	}
 
 	exitCode := resolveExitCode(err)
 
