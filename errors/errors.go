@@ -588,12 +588,18 @@ var (
 	ErrAtlantisConfigTemplateNotSpec = errors.New("atlantis config template is not specified")
 
 	// Validation errors.
-	ErrValidationFailed = errors.New("validation failed")
+	ErrValidationFailed              = errors.New("validation failed")
+	ErrUnsupportedValidationFormat   = errors.New("unsupported validation format: expected text or rich")
+	ErrUnsupportedCIValidationFormat = errors.New("unsupported CI validation format: expected text, rich, or sarif")
+	ErrWorkflowArgsWithWorkflowPath  = errors.New("workflow-file arguments cannot be used with --workflow-path")
+	ErrAffectedWithFileArgsOrPath    = errors.New("--affected cannot be used with workflow-file arguments or --workflow-path")
+	ErrCIValidatorNotRegistered      = errors.New("CI validator is not registered")
 
 	// EditorConfig validation errors.
 	ErrEditorConfigValidationFailed = errors.New("EditorConfig validation failed")
 	ErrEditorConfigVersionMismatch  = errors.New("EditorConfig version mismatch")
 	ErrEditorConfigGetFiles         = errors.New("failed to get files for EditorConfig validation")
+	ErrEditorConfigInvalidFormat    = errors.New("invalid EditorConfig output format")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")

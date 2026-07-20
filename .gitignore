@@ -42,6 +42,7 @@ demos/audio/
 # schema (pkg/datafetcher/schema/atmos/manifest/1.0.json) by `atmos dev generate schema` /
 # `go run ./tools/gen-schema` — never hand-edit or commit this file.
 /website/static/schemas/atmos/atmos-manifest/
+/website/static/schemas/atmos/atmos-config/
 
 # Module directory
 .terraform

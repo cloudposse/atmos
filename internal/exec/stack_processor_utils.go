@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"hash/fnv"
@@ -613,7 +612,7 @@ func ProcessYAMLConfigFiles(
 				mergeContext.EnableProvenance()
 			}
 
-			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, mergeContext, err := ProcessYAMLConfigFileWithContext(
+			processingResult, mergeContext, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				stackBasePath,
 				p,
@@ -644,7 +643,7 @@ func ProcessYAMLConfigFiles(
 			}
 
 			var imports []string
-			for k := range importsConfig {
+			for k := range processingResult.ImportsConfig {
 				imports = append(imports, k)
 			}
 
@@ -661,12 +660,12 @@ func ProcessYAMLConfigFiles(
 				packerComponentsBasePath,
 				ansibleComponentsBasePath,
 				p,
-				deepMergedStackConfig,
+				processingResult.DeepMergedConfig,
 				processStackDeps,
 				processComponentDeps,
 				"",
 				componentStackMap,
-				importsConfig,
+				processingResult.ImportsConfig,
 				true,
 			)
 			if err != nil {
@@ -688,8 +687,8 @@ func ProcessYAMLConfigFiles(
 				stackFileName: stackFileName,
 				yamlConfig:    yamlConfig,
 				finalConfig:   finalConfig,
-				stackConfig:   stackConfig,
-				importsConfig: importsConfig,
+				stackConfig:   processingResult.StackConfig,
+				importsConfig: processingResult.ImportsConfig,
 				uniqueImports: uniqueImports,
 				mergeContext:  mergeContext,
 				err:           nil,
@@ -746,16 +745,7 @@ func ProcessYAMLConfigFile(
 	parentHelmfileOverridesInline map[string]any,
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
-) (
-	map[string]any,
-	map[string]map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	error,
-) {
+) (*schema.StackManifestProcessingResult, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFile")()
 
 	// Create merge context for single-file operations
@@ -766,7 +756,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Call the context-aware version
-	deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, mergeContext, err := ProcessYAMLConfigFileWithContext(
+	result, mergeContext, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		basePath,
 		filePath,
@@ -789,7 +779,7 @@ func ProcessYAMLConfigFile(
 		SetLastMergeContext(mergeContext)
 	}
 
-	return deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, err
+	return result, err
 }
 
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
@@ -811,17 +801,7 @@ func ProcessYAMLConfigFileWithContext(
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 	mergeContext *m.MergeContext,
-) (
-	map[string]any,
-	map[string]map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	*m.MergeContext,
-	error,
-) {
+) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFileWithContext")()
 
 	return processYAMLConfigFileWithContextInternal(
@@ -863,6 +843,209 @@ type importFileResult struct {
 	err                          error
 }
 
+// jsonPointerToPositionKey converts a JSON Pointer (RFC 6901, e.g.
+// "/components/terraform/0/vars") as returned by
+// jsonschema.BasicError.InstanceLocation into the dot/bracket path format
+// u.PositionMap keys use (built via u.AppendJSONPathKey/AppendJSONPathIndex),
+// so a position lookup by path succeeds.
+func jsonPointerToPositionKey(pointer string) string {
+	if pointer == "" {
+		return ""
+	}
+	segments := strings.Split(strings.TrimPrefix(pointer, "/"), "/")
+	path := ""
+	for _, seg := range segments {
+		seg = strings.ReplaceAll(seg, "~1", "/")
+		seg = strings.ReplaceAll(seg, "~0", "~")
+		if idx, err := strconv.Atoi(seg); err == nil {
+			path = u.AppendJSONPathIndex(path, idx)
+			continue
+		}
+		path = u.AppendJSONPathKey(path, seg)
+	}
+	return path
+}
+
+// isSchemaBranchWrapperMessage reports whether a jsonschema.BasicError.Error
+// is a structural "one of these sub-schemas should have matched" wrapper
+// (from oneOf/anyOf/$ref indirection) rather than an actionable leaf
+// violation: oneOf/anyOf constructs report every failed candidate branch, so
+// a single mistake (e.g. a wrong type) can otherwise produce many redundant
+// lines at the same location; dropping wrapper messages keeps only the
+// specific ones (e.g. "expected object, but got string").
+func isSchemaBranchWrapperMessage(msg string) bool {
+	return strings.HasPrefix(msg, "doesn't validate with") ||
+		msg == "oneOf failed" ||
+		msg == "anyOf failed"
+}
+
+// formatManifestSchemaValidationErrors renders a jsonschema.ValidationError as
+// a Markdown list of GCC-style diagnostic lines ("file:line:col: error:
+// path: message" per item), matching the convention `atmos validate
+// editorconfig --format=gcc` already uses, instead of a raw BasicOutput JSON
+// dump. BasicOutput's first entry is always a generic "doesn't validate with
+// <schema>" wrapper around the whole document (empty KeywordLocation);
+// wrapper entries throughout (including nested oneOf/anyOf branch failures)
+// are dropped in favor of the specific leaf violations.
+//
+// Markdown list syntax (not plain lines) is deliberate: the CLI's error box
+// renders this as CommonMark, which treats a lone "\n" between plain
+// paragraph text as a soft break (collapsed to a space) rather than a line
+// break -- only list items reliably keep one diagnostic per rendered line.
+// The leading "\n" pushes every item, including the first, onto its own
+// line rather than running into the box's own "Error:" label inline.
+func formatManifestSchemaValidationErrors(relativeFilePath string, e *jsonschema.ValidationError, positions u.PositionMap) string {
+	items := collectManifestSchemaErrorItems(e, positions)
+	if len(items) == 0 {
+		return fmt.Sprintf("\n- %s: error: %s", relativeFilePath, e.Error())
+	}
+	rendered := renderManifestSchemaErrorItems(relativeFilePath, items)
+	return "\n" + strings.Join(rendered, "\n")
+}
+
+// manifestSchemaTypeAlternatives coalesces the distinct expected types that
+// failed a shared oneOf/anyOf branch for the same instance location and
+// actual value, so they render as one "expected X or Y, but got Z" finding
+// instead of one line per failed branch.
+type manifestSchemaTypeAlternatives struct {
+	path        string
+	position    u.Position
+	got         string
+	expected    []string
+	expectedSet map[string]struct{}
+}
+
+// manifestSchemaErrorItem is one candidate finding collected from a
+// jsonschema.ValidationError's BasicOutput -- either a concrete leaf message,
+// or a coalesced type-alternatives entry.
+type manifestSchemaErrorItem struct {
+	path     string
+	position u.Position
+	message  string
+	types    *manifestSchemaTypeAlternatives
+}
+
+// collectManifestSchemaErrorItems walks a jsonschema.ValidationError's
+// BasicOutput and builds one item per actionable leaf finding, coalescing
+// oneOf/anyOf type-mismatch branches for the same instance location and
+// actual value into a single manifestSchemaTypeAlternatives entry.
+func collectManifestSchemaErrorItems(e *jsonschema.ValidationError, positions u.PositionMap) []manifestSchemaErrorItem {
+	items := make([]manifestSchemaErrorItem, 0)
+	alternatives := make(map[string]*manifestSchemaTypeAlternatives)
+	for _, basicErr := range e.BasicOutput().Errors {
+		if basicErr.KeywordLocation == "" || isSchemaBranchWrapperMessage(basicErr.Error) {
+			continue
+		}
+		path := jsonPointerToPositionKey(basicErr.InstanceLocation)
+		if path == "" {
+			path = "(root)"
+		}
+		pos := u.GetYAMLPosition(positions, jsonPointerToPositionKey(basicErr.InstanceLocation))
+		if expected, got, ok := schemaTypeAlternative(basicErr.Error); ok {
+			key := path + "\x00" + got
+			alternative := alternatives[key]
+			if alternative == nil {
+				alternative = &manifestSchemaTypeAlternatives{
+					path: path, position: pos, got: got,
+					expectedSet: make(map[string]struct{}),
+				}
+				alternatives[key] = alternative
+				items = append(items, manifestSchemaErrorItem{types: alternative})
+			}
+			if _, seen := alternative.expectedSet[expected]; !seen {
+				alternative.expectedSet[expected] = struct{}{}
+				alternative.expected = append(alternative.expected, expected)
+			}
+			continue
+		}
+		items = append(items, manifestSchemaErrorItem{path: path, position: pos, message: manifestSchemaErrorMessage(basicErr.Error)})
+	}
+	return items
+}
+
+// manifestSchemaItemHasDescendant reports whether some other item's path is a
+// nested child of path (a JSON object/array descendant), which makes path's
+// own type-mismatch finding a redundant cascade rather than the actionable
+// error.
+func manifestSchemaItemHasDescendant(items []manifestSchemaErrorItem, current int, path string) bool {
+	for index, candidate := range items {
+		if index == current {
+			continue
+		}
+		candidatePath := candidate.path
+		if candidate.types != nil {
+			candidatePath = candidate.types.path
+		}
+		if strings.HasPrefix(candidatePath, path+".") || strings.HasPrefix(candidatePath, path+"[") {
+			return true
+		}
+	}
+	return false
+}
+
+// manifestSchemaItemHasSpecificFinding reports whether some other item names
+// exactly path with a specific (non-type-alternative) finding, which makes
+// path's own type-mismatch finding a redundant cascade.
+func manifestSchemaItemHasSpecificFinding(items []manifestSchemaErrorItem, current int, path string) bool {
+	for index, candidate := range items {
+		if index != current && candidate.types == nil && candidate.path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// renderManifestSchemaErrorItems renders each collected item as a GCC-style
+// diagnostic line, dropping type-mismatch items that are cascades of a more
+// specific sibling finding.
+func renderManifestSchemaErrorItems(relativeFilePath string, items []manifestSchemaErrorItem) []string {
+	rendered := make([]string, 0, len(items))
+	for index, item := range items {
+		if item.types != nil {
+			// A type mismatch from a sibling oneOf branch is only a cascade when
+			// another branch explains the same value (for example, a string that
+			// misses the !include pattern) or identifies a more-specific child
+			// finding. Keep the type diagnostic when every branch failed only on
+			// type, since then it is the actionable error.
+			if manifestSchemaItemHasSpecificFinding(items, index, item.types.path) || manifestSchemaItemHasDescendant(items, index, item.types.path) {
+				continue
+			}
+			message := fmt.Sprintf("expected %s, but got %s", strings.Join(item.types.expected, " or "), item.types.got)
+			rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.types.position.Line, item.types.position.Column, item.types.path, message))
+			continue
+		}
+		rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.position.Line, item.position.Column, item.path, item.message))
+	}
+	return rendered
+}
+
+// manifestSchemaErrorMessage replaces implementation-detail regex failures
+// with guidance that matches the stack manifest's YAML syntax.
+func manifestSchemaErrorMessage(message string) string {
+	if message == "does not match pattern '^!include'" {
+		return "file references must use the !include YAML tag"
+	}
+	return message
+}
+
+// schemaTypeAlternative identifies equivalent oneOf type branches. A value
+// such as an array can fail both `type: object` and `type: string`; rendering
+// each branch separately adds noise without adding an actionable finding.
+func schemaTypeAlternative(message string) (expected string, got string, ok bool) {
+	const (
+		prefix = "expected "
+		marker = ", but got "
+	)
+	if !strings.HasPrefix(message, prefix) {
+		return "", "", false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(message, prefix), marker, 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
 // processYAMLConfigFileWithContextInternal is the internal recursive implementation.
 //
 //nolint:gocognit,revive,cyclop,funlen,nestif
@@ -885,17 +1068,7 @@ func processYAMLConfigFileWithContextInternal(
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 	mergeContext *m.MergeContext,
-) (
-	map[string]any,
-	map[string]map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	*m.MergeContext,
-	error,
-) {
+) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
 	var stackConfigs []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
@@ -943,13 +1116,13 @@ func processYAMLConfigFileWithContextInternal(
 	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 	if err != nil {
 		if ignoreMissingFiles || skipIfMissing {
-			return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
+			return emptyStackManifestProcessingResult(), nil, nil
 		} else {
-			return nil, nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, err
 		}
 	}
 	if stackYamlConfig == "" {
-		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
+		return emptyStackManifestProcessingResult(), nil, nil
 	}
 
 	// Track whether context was originally provided from outside (e.g., via import context).
@@ -977,9 +1150,9 @@ func processYAMLConfigFileWithContextInternal(
 		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 		if localsErr != nil {
 			if mergeContext != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
 			}
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+			return nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
 		}
 	}
 
@@ -1021,9 +1194,9 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 				if mergeContext != nil {
-					return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 				}
-				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+				return nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 			}
 		}
 	}
@@ -1039,10 +1212,10 @@ func processYAMLConfigFileWithContextInternal(
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
 			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
-			return nil, nil, nil, nil, nil, nil, nil, nil, e
+			return nil, nil, e
 		} else {
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
-			return nil, nil, nil, nil, nil, nil, nil, nil, e
+			return nil, nil, e
 		}
 	}
 
@@ -1076,12 +1249,12 @@ func processYAMLConfigFileWithContextInternal(
 		// jsonschema: invalid jsonType: map[interface {}]interface {}
 		dataJson, err := u.ConvertToJSONFast(stackConfigMap)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		dataFromJson, err := u.ConvertFromJSON(dataJson)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		atmosManifestJsonSchemaValidationErrorFormat := "Atmos manifest JSON Schema validation error in the file '%s':\n%v"
@@ -1095,21 +1268,21 @@ func processYAMLConfigFileWithContextInternal(
 
 			atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 			defer func() {
 				_ = atmosManifestJsonSchemaFileReader.Close()
 			}()
 
 			if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 
 			compiler.Draft = jsonschema.Draft2020
 
 			compiledSchema, err = compiler.Compile(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 
 			// Store compiled schema in cache for reuse.
@@ -1120,13 +1293,23 @@ func processYAMLConfigFileWithContextInternal(
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
 			switch e := err.(type) {
 			case *jsonschema.ValidationError:
-				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
-				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+				// Position lookup is best-effort: re-parse the manifest content
+				// into a yaml.Node here (independent of the `positions` above,
+				// which is only populated when atmosConfig.TrackProvenance is
+				// on) so line/column are always available for a validation
+				// failure, regardless of that unrelated global setting.
+				var manifestNode yaml.Node
+				var errorPositions u.PositionMap
+				if yaml.Unmarshal([]byte(stackManifestTemplatesProcessed), &manifestNode) == nil {
+					errorPositions = u.ExtractYAMLPositions(&manifestNode, true)
 				}
-				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+				// GCC-style lines already carry the file path per violation, so
+				// no outer "validation error in the file '%s'" wrapper sentence
+				// is needed here (unlike the setup-error cases below, which are
+				// each a single, file-level problem).
+				return nil, nil, errors.New(formatManifestSchemaValidationErrors(relativeFilePath, e, errorPositions))
 			default:
-				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 		}
 	}
@@ -1136,19 +1319,19 @@ func processYAMLConfigFileWithContextInternal(
 	// Global overrides in this stack manifest
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidOverridesSection, relativeFilePath)
+			return nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidOverridesSection, relativeFilePath)
 		}
 	}
 
 	// Terraform overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.TerraformSectionName]; ok {
 		if globalTerraformSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformSection, relativeFilePath)
+			return nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformSection, relativeFilePath)
 		}
 
 		if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
 			if terraformOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformOverridesSection, relativeFilePath)
+				return nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -1156,12 +1339,12 @@ func processYAMLConfigFileWithContextInternal(
 	// Helmfile overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.HelmfileSectionName]; ok {
 		if globalHelmfileSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileSection, relativeFilePath)
+			return nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileSection, relativeFilePath)
 		}
 
 		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
 			if helmfileOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileOverridesSection, relativeFilePath)
+				return nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -1172,7 +1355,7 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	parentHelmfileOverridesInline, err = m.MergeWithContext(
@@ -1181,13 +1364,13 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Find and process all imports
 	importStructs, err := ProcessImportSection(stackConfigMap, relativeFilePath)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Record provenance for each import if provenance tracking is enabled.
@@ -1244,7 +1427,7 @@ func processYAMLConfigFileWithContextInternal(
 		nestedImports = normalizeNestedImports(nestedImports)
 
 		if imp == "" {
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
+			return nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
 		// Render Go templates in the import path so an import can reference values
@@ -1253,7 +1436,7 @@ func processYAMLConfigFileWithContextInternal(
 		// imported file's content templating (and its deferral logic) is left untouched.
 		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, imp, accumulatedImportContext, importStruct)
 		if impErr != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, impErr
+			return nil, nil, impErr
 		}
 		imp = renderedImp
 
@@ -1284,7 +1467,7 @@ func processYAMLConfigFileWithContextInternal(
 					log.Debug("Skipping missing remote import", "uri", imp)
 					continue
 				}
-				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w '%s' in file '%s': %w",
+				return nil, nil, fmt.Errorf("%w '%s' in file '%s': %w",
 					errUtils.ErrDownloadRemoteImport, imp, relativeFilePath, err)
 			}
 			importMatches = remoteMatches
@@ -1325,7 +1508,7 @@ func processYAMLConfigFileWithContextInternal(
 			impWithExtPath := filepath.Join(basePath, impWithExt)
 
 			if impWithExtPath == filePath {
-				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: manifest '%s' imports itself via '%s'",
+				return nil, nil, fmt.Errorf("%w: manifest '%s' imports itself via '%s'",
 					errUtils.ErrStackImportSelf, relativeFilePath, imp)
 			}
 
@@ -1341,7 +1524,7 @@ func processYAMLConfigFileWithContextInternal(
 					// The import was not found -> check if the import is a Go template; if not, return the error.
 					isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
 					if err2 != nil {
-						return nil, nil, nil, nil, nil, nil, nil, nil, err2
+						return nil, nil, err2
 					}
 
 					// If the import is not a Go template and SkipIfMissing is false, return the error.
@@ -1351,11 +1534,11 @@ func processYAMLConfigFileWithContextInternal(
 					// results from u.GetGlobMatches), we wrap ErrFailedToFindImport explicitly.
 					if !isGolangTemplate && !importStruct.SkipIfMissing {
 						if err != nil {
-							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
+							return nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
 								errUtils.ErrStackImportNotFound, imp, relativeFilePath, err)
 						}
 						if len(localMatches) == 0 {
-							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
+							return nil, nil, fmt.Errorf(
 								"%w: import '%s' in file '%s': %w",
 								errUtils.ErrStackImportNotFound,
 								imp,
@@ -1379,7 +1562,7 @@ func processYAMLConfigFileWithContextInternal(
 		listOfMaps := []map[string]any{importStruct.Context, context}
 		mergedContext, err := m.MergeWithContext(atmosConfig, listOfMaps, mergeContext)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		// Initialize provenance storage before parallel processing to avoid data races.
@@ -1409,15 +1592,7 @@ func processYAMLConfigFileWithContextInternal(
 				}
 
 				// Process the import file (expensive I/O + parsing + recursive imports).
-				yamlConfig,
-					_,
-					yamlConfigRaw,
-					terraformOverridesInline,
-					terraformOverridesImports,
-					helmfileOverridesInline,
-					helmfileOverridesImports,
-					importMergeContext,
-					processErr := processYAMLConfigFileWithContextInternal(
+				importResult, importMergeContext, processErr := processYAMLConfigFileWithContextInternal(
 					atmosConfig,
 					childBasePath,
 					file,
@@ -1460,12 +1635,12 @@ func processYAMLConfigFileWithContextInternal(
 				results[index] = importFileResult{
 					index:                        index,
 					importFile:                   file,
-					yamlConfig:                   yamlConfig,
-					yamlConfigRaw:                yamlConfigRaw,
-					terraformOverridesInline:     terraformOverridesInline,
-					terraformOverridesImports:    terraformOverridesImports,
-					helmfileOverridesInline:      helmfileOverridesInline,
-					helmfileOverridesImports:     helmfileOverridesImports,
+					yamlConfig:                   importResult.DeepMergedConfig,
+					yamlConfigRaw:                importResult.StackConfig,
+					terraformOverridesInline:     importResult.TerraformOverridesInline,
+					terraformOverridesImports:    importResult.TerraformOverridesImports,
+					helmfileOverridesInline:      importResult.HelmfileOverridesInline,
+					helmfileOverridesImports:     importResult.HelmfileOverridesImports,
 					importRelativePathWithoutExt: importRelativePathWithoutExt,
 					mergeContext:                 importMergeContext,
 					err:                          nil,
@@ -1480,7 +1655,7 @@ func processYAMLConfigFileWithContextInternal(
 		log.Trace("Processing import results", "count", len(results), "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 		for _, result := range results {
 			if result.err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, result.err
+				return nil, nil, result.err
 			}
 
 			// Store merge context for imported files if provenance tracking is enabled.
@@ -1494,7 +1669,7 @@ func processYAMLConfigFileWithContextInternal(
 				mergeContext,
 			)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, err
+				return nil, nil, err
 			}
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
@@ -1505,7 +1680,7 @@ func processYAMLConfigFileWithContextInternal(
 				mergeContext,
 			)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, err
+				return nil, nil, err
 			}
 
 			// Append to stackConfigs in order.
@@ -1553,7 +1728,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergeContext,
 				)
 				if err != nil {
-					return nil, nil, nil, nil, nil, nil, nil, nil, err
+					return nil, nil, err
 				}
 			}
 		}
@@ -1566,7 +1741,7 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Helmfile `overrides`
@@ -1576,7 +1751,7 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Add the `overrides` section to all components in this stack manifest
@@ -1614,22 +1789,36 @@ func processYAMLConfigFileWithContextInternal(
 	stackConfigsDeepMerged, err := m.MergeWithContext(atmosConfig, stackConfigs, mergeContext)
 	if err != nil {
 		// The error already contains context information from MergeWithContext
-		return nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// NOTE: We don't store merge context here because ProcessYAMLConfigFileWithContext
 	// can be called from parallel goroutines in ProcessYAMLConfigFiles, which would create
 	// a race condition. Instead, the caller should store the merge context if needed.
 
-	return stackConfigsDeepMerged,
-		importsConfig,
-		stackConfigMap,
-		parentTerraformOverridesInline,
-		parentTerraformOverridesImports,
-		parentHelmfileOverridesInline,
-		parentHelmfileOverridesImports,
-		mergeContext,
-		nil
+	return &schema.StackManifestProcessingResult{
+		DeepMergedConfig:          stackConfigsDeepMerged,
+		ImportsConfig:             importsConfig,
+		StackConfig:               stackConfigMap,
+		TerraformOverridesInline:  parentTerraformOverridesInline,
+		TerraformOverridesImports: parentTerraformOverridesImports,
+		HelmfileOverridesInline:   parentHelmfileOverridesInline,
+		HelmfileOverridesImports:  parentHelmfileOverridesImports,
+	}, mergeContext, nil
+}
+
+// emptyStackManifestProcessingResult returns a result with initialized empty
+// maps, used when a missing or empty manifest is deliberately skipped.
+func emptyStackManifestProcessingResult() *schema.StackManifestProcessingResult {
+	return &schema.StackManifestProcessingResult{
+		DeepMergedConfig:          map[string]any{},
+		ImportsConfig:             map[string]map[string]any{},
+		StackConfig:               map[string]any{},
+		TerraformOverridesInline:  map[string]any{},
+		TerraformOverridesImports: map[string]any{},
+		HelmfileOverridesInline:   map[string]any{},
+		HelmfileOverridesImports:  map[string]any{},
+	}
 }
 
 // renderImportPath renders Go templates embedded in a stack import path.

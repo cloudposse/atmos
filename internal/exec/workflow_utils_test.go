@@ -1670,6 +1670,14 @@ func registerGitHubLogGroupingForWorkflowTest(t *testing.T) *bytes.Buffer {
 		output:   output,
 	})
 	t.Setenv("GITHUB_ACTIONS", "true")
+	// This test binary can itself run as a child of a CI-grouped step (this
+	// repo's own atmos.yaml sets ci.enabled: true, and CI runs `go test` via
+	// an `atmos test acceptance` custom-command step), in which case the ci
+	// package's nesting sentinel is already present in the process
+	// environment and would make grouping silently no-op below. Clear it so
+	// the caller's assertions on emitted markers are deterministic regardless
+	// of how the test binary itself was launched.
+	t.Setenv("ATMOS_CI_LOG_GROUP_ACTIVE", "")
 	return output
 }
 
