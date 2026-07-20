@@ -26,6 +26,11 @@ func TestDetectRuntime_ExplicitSetting(t *testing.T) {
 			expectError:    false,
 		},
 		{
+			name:           "auto setting",
+			runtimeSetting: "auto",
+			expectError:    false,
+		},
+		{
 			name:           "invalid setting",
 			runtimeSetting: "containerd",
 			expectError:    true,

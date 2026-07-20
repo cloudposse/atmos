@@ -69,6 +69,12 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 			authContext.AWS.ConfigFile,
 			authContext.AWS.Region,
 		)
+		// The S3 backend is initialized by `terraform output` as well as by
+		// plan/apply. Preserve the identity endpoint so post-execution hooks
+		// keep reading emulator-backed state instead of falling back to AWS.
+		if authContext.AWS.EndpointURL != "" {
+			environMap["AWS_ENDPOINT_URL_S3"] = authContext.AWS.EndpointURL
+		}
 	}
 
 	// Add/override environment variables from the component's env section.
