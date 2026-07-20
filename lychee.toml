@@ -63,6 +63,9 @@ exclude = [
   "runatlantis\\.io",
   # GitHub docs (intermittent 503s in CI)
   "docs\\.github\\.com",
+  # npm package-lock documentation intermittently returns 503 from CI runners;
+  # the canonical page returns 200 outside that transient upstream failure.
+  "docs\\.npmjs\\.com/cli/v10/configuring-npm/package-lock-json/?$",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)

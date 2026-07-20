@@ -52,6 +52,11 @@ components:
     platforms:
       - darwin_arm64
       - linux_amd64
+    # Cache provider and module registry downloads behind Atmos's local registry
+    # proxy. The first init warms the cache; repeated plans avoid re-downloading
+    # the same artifacts.
+    cache:
+      enabled: true
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "components/terraform"
@@ -77,7 +82,7 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   # Can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
-  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+  name_template: "{{ if eq .vars.stage \"local\" }}local{{ else }}{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}{{ end }}"
 
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
@@ -85,13 +90,13 @@ workflows:
   base_path: "stacks/workflows"
 
 # Authentication identities.
-# The `local-aws` identity authenticates components against a local AWS emulator (Floci),
-# so this example runs fully offline with no real AWS credentials.
+# The `local-aws` identity targets the `local/aws` emulator instance. Identities
+# are project-scoped, so every platform stack can use this one local sandbox.
 auth:
   identities:
     local-aws:
       kind: aws/emulator
-      emulator: aws
+      emulator: local/aws
       default: true
 
 # Stores for sharing data between components and for storing secrets.
@@ -164,7 +169,7 @@ commands:
         type: stage
         title: Start sandbox
       - type: shell
-        command: atmos emulator up aws -s {{ .Flags.stack }}
+        command: atmos emulator up aws -s local
       - name: validate
         type: stage
         title: Validate stack manifests
@@ -177,6 +182,11 @@ commands:
         command: atmos secret set API_KEY=sk-quickstart-example -s {{ .Flags.stack }} -c app-config --force
       - type: shell
         command: atmos secret set 'DB_CONFIG={"username":"app","password":"s3cr3t"}' -s {{ .Flags.stack }} -c app-config --force
+      - name: plan
+        type: stage
+        title: Plan component graph
+      - type: shell
+        command: atmos terraform plan --all -s {{ .Flags.stack }} || [ "$?" -eq 2 ]
       - name: deploy
         type: stage
         title: Deploy component graph
@@ -198,7 +208,7 @@ commands:
         type: stage
         title: Stop sandbox
       - type: shell
-        command: atmos emulator down aws -s {{ .Flags.stack }}
+        command: atmos emulator down aws -s local
       - type: toast
         level: success
         content: "Advanced quick-start test complete."

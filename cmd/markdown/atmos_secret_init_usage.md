@@ -15,3 +15,21 @@ $ atmos secret init --stack=prod --component=api --force
 ```
 $ atmos secret init --stack=prod --component=api --dry-run
 ```
+
+- Initialize declared secrets across every stack
+
+```
+$ atmos secret init --all
+```
+
+- Initialize declared values from a dotenv file (comments are supported)
+
+```
+$ atmos secret init --input .env.local --stack=prod --component=api
+```
+
+- Initialize from redirected stdin
+
+```
+$ atmos secret init --stack=prod --component=api < .env.local
+```

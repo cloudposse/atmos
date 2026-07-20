@@ -161,6 +161,13 @@ func prepareStepEnvironment(
 	for k, v := range stepEnvMap {
 		mergedEnv[k] = v
 	}
+	if pathOverride, ok := mergedEnv["PATH"]; ok {
+		// Workflow templates commonly extend PATH with the process PATH, for example
+		// `PATH: /workspace/.context/bin:{{ env "PATH" }}`. At this point baseEnv
+		// has already added the workflow toolchain directories, so replacing PATH
+		// would otherwise make declared tools unavailable to the step.
+		mergedEnv["PATH"] = mergeWorkflowPath(pathOverride, lastEnvironmentValue(baseEnv, "PATH"))
+	}
 	if len(mergedEnv) > 0 {
 		stepEnv = append(stepEnv, envpkg.ConvertMapToSlice(mergedEnv)...)
 	}
@@ -204,6 +211,49 @@ func prepareStepEnvironment(
 
 	log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", stepName)
 	return stepEnv, nil
+}
+
+// lastEnvironmentValue returns the effective value for key in env, where later
+// entries take precedence. This matches the environment semantics used for
+// subprocesses and lets a toolchain PATH override the inherited system PATH.
+func lastEnvironmentValue(env []string, key string) string {
+	var value string
+	for _, entry := range env {
+		entryKey, entryValue, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(entryKey, key) {
+			value = entryValue
+		}
+	}
+	return value
+}
+
+// mergeWorkflowPath combines a workflow PATH override with the already
+// toolchain-augmented PATH. When both values share a suffix, that suffix is
+// retained once and toolchain directories are placed after the custom prefix.
+func mergeWorkflowPath(overridePath string, toolchainPath string) string {
+	if overridePath == "" || toolchainPath == "" {
+		return overridePath
+	}
+
+	separator := string(os.PathListSeparator)
+	overrideEntries := strings.Split(overridePath, separator)
+	toolchainEntries := strings.Split(toolchainPath, separator)
+
+	commonSuffix := 0
+	for commonSuffix < len(overrideEntries) && commonSuffix < len(toolchainEntries) {
+		overrideEntry := overrideEntries[len(overrideEntries)-1-commonSuffix]
+		toolchainEntry := toolchainEntries[len(toolchainEntries)-1-commonSuffix]
+		if overrideEntry != toolchainEntry {
+			break
+		}
+		commonSuffix++
+	}
+
+	merged := make([]string, 0, len(overrideEntries)+len(toolchainEntries)-commonSuffix)
+	merged = append(merged, overrideEntries[:len(overrideEntries)-commonSuffix]...)
+	merged = append(merged, toolchainEntries[:len(toolchainEntries)-commonSuffix]...)
+	merged = append(merged, overrideEntries[len(overrideEntries)-commonSuffix:]...)
+	return strings.Join(merged, separator)
 }
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.

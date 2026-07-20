@@ -273,7 +273,9 @@
     "identities": null
   },
   "container": {
-    "runtime": {}
+    "runtime": {
+      "auto_start": true
+    }
   },
   "profiler": {
     "enabled": false,

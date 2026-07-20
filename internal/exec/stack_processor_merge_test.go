@@ -394,6 +394,7 @@ func minimalComponentResult() *ComponentProcessorResult {
 		ComponentProviders:                     map[string]any{},
 		ComponentHooks:                         map[string]any{},
 		ComponentTest:                          map[string]any{},
+		ComponentMocks:                         map[string]any{},
 		ComponentBackendType:                   "",
 		ComponentBackendSection:                map[string]any{},
 		ComponentRemoteStateBackendType:        "",
@@ -403,6 +404,7 @@ func minimalComponentResult() *ComponentProcessorResult {
 		BaseComponentProviders:                 map[string]any{},
 		BaseComponentHooks:                     map[string]any{},
 		BaseComponentTest:                      map[string]any{},
+		BaseComponentMocks:                     map[string]any{},
 		BaseComponentBackendType:               "",
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendType:    "",
@@ -525,6 +527,44 @@ func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *te
 	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 	require.NoError(t, err)
 	assert.NotContains(t, comp, cfg.TestSectionName)
+}
+
+func TestMergeComponentConfigurations_TerraformMocks(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentMocks = map[string]any{
+		"inherited": "from-base",
+		"network": map[string]any{
+			"cidr":   "10.0.0.0/16",
+			"region": "us-east-2",
+		},
+	}
+	res.ComponentMocks = map[string]any{
+		"vpc_id": "vpc-local",
+		"network": map[string]any{
+			"cidr": "10.1.0.0/16",
+		},
+	}
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	mocks, ok := comp[cfg.MocksSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "from-base", mocks["inherited"])
+	assert.Equal(t, "vpc-local", mocks["vpc_id"])
+	network, ok := mocks["network"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "10.1.0.0/16", network["cidr"])
+	assert.Equal(t, "us-east-2", network["region"])
+
+	network["cidr"] = "mutated"
+	assert.Equal(t, "10.1.0.0/16", res.ComponentMocks["network"].(map[string]any)["cidr"])
 }
 
 // TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global

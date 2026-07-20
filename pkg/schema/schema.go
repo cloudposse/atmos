@@ -1597,34 +1597,37 @@ type ConfigAndStacksInfo struct {
 	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
 	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the
 	// before.terraform.deploy hook (download decision) and the RunE verify gate.
-	VerifyPlanMode             PlanfileVerifyMode
-	DryRun                     bool
-	SkipInit                   bool
-	UploadStatus               bool
-	ComponentInheritanceChain  []string
-	ComponentImportsSection    []string
-	NeedHelp                   bool
-	ComponentIsAbstract        bool
-	ComponentIsEnabled         bool
-	ComponentIsLocked          bool
-	ComponentMetadataSection   AtmosSectionMapType
-	TerraformWorkspace         string
-	JsonSchemaDir              string
-	OpaDir                     string
-	CueDir                     string
-	AtmosManifestJsonSchema    string
-	AtmosCliConfigPath         string
-	AtmosBasePath              string
-	ProfilesFromArg            []string
-	RedirectStdErr             string
-	LogsLevel                  string
-	LogsFile                   string
-	SettingsListMergeStrategy  string
-	Query                      string
-	AtmosConfigFilesFromArg    []string
-	AtmosConfigDirsFromArg     []string
-	ProcessTemplates           bool
-	ProcessFunctions           bool
+	VerifyPlanMode            PlanfileVerifyMode
+	DryRun                    bool
+	SkipInit                  bool
+	UploadStatus              bool
+	ComponentInheritanceChain []string
+	ComponentImportsSection   []string
+	NeedHelp                  bool
+	ComponentIsAbstract       bool
+	ComponentIsEnabled        bool
+	ComponentIsLocked         bool
+	ComponentMetadataSection  AtmosSectionMapType
+	TerraformWorkspace        string
+	JsonSchemaDir             string
+	OpaDir                    string
+	CueDir                    string
+	AtmosManifestJsonSchema   string
+	AtmosCliConfigPath        string
+	AtmosBasePath             string
+	ProfilesFromArg           []string
+	RedirectStdErr            string
+	LogsLevel                 string
+	LogsFile                  string
+	SettingsListMergeStrategy string
+	Query                     string
+	AtmosConfigFilesFromArg   []string
+	AtmosConfigDirsFromArg    []string
+	ProcessTemplates          bool
+	ProcessFunctions          bool
+	// UseMocks resolves Terraform state/output YAML functions from the referenced
+	// component's literal `mocks` map instead of remote Terraform state.
+	UseMocks                   bool
 	Skip                       []string
 	CliArgs                    []string
 	Affected                   bool
@@ -1806,6 +1809,7 @@ type BaseComponentConfig struct {
 	BaseComponentRequiredVersion   string
 	BaseComponentHooks             AtmosSectionMapType
 	BaseComponentTest              AtmosSectionMapType
+	BaseComponentMocks             AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType
