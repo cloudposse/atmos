@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -161,54 +162,46 @@ func TestMergeFiles_InheritedBasePathUsesDeclaringConfigDir(t *testing.T) {
 	assert.Equal(t, 157, v.GetInt("settings.terminal.max_width"))
 }
 
-func TestMergeFiles_ImportedBasePathUsesImportedConfigDir(t *testing.T) {
+// mergeFilesImportedBasePathCase writes a two-file `--config` scenario where
+// base.yaml imports imports/defaults.yaml, the overlay imports extra.yaml, and
+// extra.yaml lives under extraSubdir; it asserts the overlay import resolved
+// there (i.e. the effective base_path drove import resolution).
+func mergeFilesImportedBasePathCase(t *testing.T, baseYAML, defaultsYAML, extraSubdir string, wantWidth int) {
+	t.Helper()
 	setupTestAdapters()
 	baseConfigDir := t.TempDir()
 	overlayConfigDir := t.TempDir()
-	defaultsDir := filepath.Join(baseConfigDir, "imports")
-	importDir := filepath.Join(baseConfigDir, "workspace")
-	require.NoError(t, os.MkdirAll(defaultsDir, 0o755))
-	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(baseConfigDir, "imports"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(baseConfigDir, extraSubdir), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(importDir, "extra.yaml"),
-		[]byte("settings:\n  terminal:\n    max_width: 163\n"),
+		filepath.Join(baseConfigDir, extraSubdir, "extra.yaml"),
+		fmt.Appendf(nil, "settings:\n  terminal:\n    max_width: %d\n", wantWidth),
 		0o644,
 	))
-	require.NoError(t, os.WriteFile(filepath.Join(defaultsDir, "defaults.yaml"), []byte("base_path: ../workspace\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(baseConfigDir, "imports", "defaults.yaml"), []byte(defaultsYAML), 0o644))
 	baseConfig := filepath.Join(baseConfigDir, "base.yaml")
-	require.NoError(t, os.WriteFile(baseConfig, []byte("import:\n  - imports/defaults.yaml\n"), 0o644))
+	require.NoError(t, os.WriteFile(baseConfig, []byte(baseYAML), 0o644))
 	overlayConfig := filepath.Join(overlayConfigDir, "overlay.yaml")
 	require.NoError(t, os.WriteFile(overlayConfig, []byte("import:\n  - extra.yaml\n"), 0o644))
 
 	v := viper.New()
 	v.SetConfigType(yamlType)
 	require.NoError(t, mergeFiles(v, []string{baseConfig, overlayConfig}))
-	assert.Equal(t, 163, v.GetInt("settings.terminal.max_width"))
+	assert.Equal(t, wantWidth, v.GetInt("settings.terminal.max_width"))
+}
+
+func TestMergeFiles_ImportedBasePathUsesImportedConfigDir(t *testing.T) {
+	mergeFilesImportedBasePathCase(t,
+		"import:\n  - imports/defaults.yaml\n",
+		"base_path: ../workspace\n",
+		"workspace", 163)
 }
 
 func TestMergeFiles_DirectBasePathKeepsPrecedenceOverImportedDeclaration(t *testing.T) {
-	setupTestAdapters()
-	baseConfigDir := t.TempDir()
-	overlayConfigDir := t.TempDir()
-	directImportDir := filepath.Join(baseConfigDir, "direct")
-	defaultsDir := filepath.Join(baseConfigDir, "imports")
-	require.NoError(t, os.MkdirAll(directImportDir, 0o755))
-	require.NoError(t, os.MkdirAll(defaultsDir, 0o755))
-	require.NoError(t, os.WriteFile(
-		filepath.Join(directImportDir, "extra.yaml"),
-		[]byte("settings:\n  terminal:\n    max_width: 167\n"),
-		0o644,
-	))
-	require.NoError(t, os.WriteFile(filepath.Join(defaultsDir, "defaults.yaml"), []byte("base_path: ../imported\n"), 0o644))
-	baseConfig := filepath.Join(baseConfigDir, "base.yaml")
-	require.NoError(t, os.WriteFile(baseConfig, []byte("base_path: ./direct\nimport:\n  - imports/defaults.yaml\n"), 0o644))
-	overlayConfig := filepath.Join(overlayConfigDir, "overlay.yaml")
-	require.NoError(t, os.WriteFile(overlayConfig, []byte("import:\n  - extra.yaml\n"), 0o644))
-
-	v := viper.New()
-	v.SetConfigType(yamlType)
-	require.NoError(t, mergeFiles(v, []string{baseConfig, overlayConfig}))
-	assert.Equal(t, 167, v.GetInt("settings.terminal.max_width"))
+	mergeFilesImportedBasePathCase(t,
+		"base_path: ./direct\nimport:\n  - imports/defaults.yaml\n",
+		"base_path: ../imported\n",
+		"direct", 167)
 }
 
 func TestMergeFiles_EmptyBasePathUsesImportingConfigDir(t *testing.T) {
@@ -228,4 +221,36 @@ func TestMergeFiles_EmptyBasePathUsesImportingConfigDir(t *testing.T) {
 	v.SetConfigType(yamlType)
 	require.NoError(t, mergeFiles(v, []string{filepath.Join(baseConfigDir, "base.yaml"), overlayConfig}))
 	assert.Equal(t, 173, v.GetInt("settings.terminal.max_width"))
+}
+
+func TestResolveConfigImportBasePath(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("declared dot-relative anchors to the config file's directory", func(t *testing.T) {
+		cfg := filepath.Join(dir, "declared.yaml")
+		require.NoError(t, os.WriteFile(cfg, []byte("base_path: ./sub\n"), 0o644))
+		got, err := ResolveConfigImportBasePath("./sub", cfg, filepath.Join(dir, "fallback"))
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(dir, "sub"), got)
+	})
+
+	t.Run("no base_path declaration returns the fallback", func(t *testing.T) {
+		cfg := filepath.Join(dir, "nodecl.yaml")
+		require.NoError(t, os.WriteFile(cfg, []byte("settings:\n  x: 1\n"), 0o644))
+		got, err := ResolveConfigImportBasePath("", cfg, filepath.Join(dir, "fallback"))
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(dir, "fallback"), got)
+	})
+
+	t.Run("missing config file returns an error", func(t *testing.T) {
+		_, err := ResolveConfigImportBasePath("./sub", filepath.Join(dir, "does-not-exist.yaml"), dir)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid yaml returns an error", func(t *testing.T) {
+		cfg := filepath.Join(dir, "invalid.yaml")
+		require.NoError(t, os.WriteFile(cfg, []byte("base_path: [unterminated\n"), 0o644))
+		_, err := ResolveConfigImportBasePath("x", cfg, dir)
+		require.Error(t, err)
+	})
 }

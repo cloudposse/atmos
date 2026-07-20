@@ -706,3 +706,25 @@ func adapterGitFileURI(path string) string {
 func normalizeAdapterLineEndings(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
 }
+
+// TestLocalAdapter_processNestedImports_ResolveFailureSkips verifies that when
+// the nested-import base path cannot be resolved (unreadable declaring file),
+// the nested imports are skipped (nil) rather than aborting the whole resolve.
+func TestLocalAdapter_processNestedImports_ResolveFailureSkips(t *testing.T) {
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	v.Set("import", []string{"nested.yaml"})
+
+	adapter := &LocalAdapter{}
+	got := adapter.processNestedImports(v, nestedImportParams{
+		basePath:     t.TempDir(),
+		tempDir:      t.TempDir(),
+		currentDepth: 1,
+		maxDepth:     10,
+		path:         filepath.Join(t.TempDir(), "does-not-exist.yaml"),
+	})
+	assert.Nil(t, got)
+}
