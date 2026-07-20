@@ -19,16 +19,16 @@ earlier ones. By default, when two layers define the same list, the later one **
 it entirely:
 
 ```yaml
-# base.yaml -> eks.settings.depends_on: [vpc, iam-role]
+# base.yaml -> eks.dependencies.components: [{ name: vpc }, { name: iam-role }]
 
 components:
   terraform:
     eks:
-      settings:
+      dependencies:
         # This REPLACES the inherited list — vpc and iam-role are lost.
-        depends_on:
-          - rds
-          - elasticache
+        components:
+          - name: rds
+          - name: elasticache
 ```
 
 Your only options were to re-declare the full inherited list in every override (brittle —
@@ -41,15 +41,15 @@ The `!append` function appends to the inherited list for just that one field:
 
 ```yaml
 import:
-  - base   # eks.settings.depends_on: [vpc, iam-role]
+  - base   # eks.dependencies.components: [{ name: vpc }, { name: iam-role }]
 
 components:
   terraform:
     eks:
-      settings:
-        depends_on: !append
-          - rds
-          - elasticache
+      dependencies:
+        components: !append
+          - name: rds
+          - name: elasticache
         # Result: [vpc, iam-role, rds, elasticache]
 ```
 
@@ -58,7 +58,7 @@ behavior.
 
 ## Use Cases
 
-- **Dependencies** — add `depends_on` items without restating the base ones.
+- **Dependencies** — add `dependencies.components` entries without restating the base ones.
 - **Security groups** — layer environment-specific rules onto a shared base.
 - **IAM policies** — extend base policy statements.
 - **Tags/labels** — add extra tags while preserving organizational defaults.
