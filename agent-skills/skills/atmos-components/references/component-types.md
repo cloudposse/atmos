@@ -42,6 +42,29 @@ components:
 
 Atmos generates `backend.tf.json` and `providers_override.tf.json` in the component directory before running Terraform commands. These generated files should be added to `.gitignore`.
 
+## Component Versioning
+
+Keep multiple component versions side by side when a gradual migration is needed:
+
+```text
+components/terraform/vpc/
+  v1/
+  v2/
+```
+
+Set `metadata.name` to preserve the workspace key while `metadata.component` selects the physical version:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        name: vpc
+        component: vpc/v2
+```
+
+Alternatively, use `atmos vendor pull` to pin a remote component version; see the `atmos-vendoring` skill.
+
 ### Helmfile Components
 
 Used for deploying Helm charts to Kubernetes clusters via `helmfile`.
@@ -246,8 +269,8 @@ For a component with inheritance, Atmos resolves configuration in this order:
 1. Start with the global-scope `vars`, `env`, `settings` from all imports.
 2. Apply component-type scope (`terraform.vars`, etc.).
 3. For each component in the `inherits` list (in order):
-   a. Resolve that base component's full configuration (including its own inheritance chain, recursively).
-   b. Deep-merge it on top of the accumulated result.
+    a. Resolve that base component's full configuration (including its own inheritance chain, recursively).
+    b. Deep-merge it on top of the accumulated result.
 4. Deep-merge the component's own inline configuration on top.
 5. Apply `overrides` sections (global, then type-specific).
 

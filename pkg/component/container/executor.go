@@ -5,6 +5,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -116,6 +117,24 @@ func (r *resolved) runtime(ctx context.Context) (ctr.Runtime, error) {
 		setter.SetEnv(r.envList)
 	}
 	return runtime, nil
+}
+
+// mounts returns runtime mounts with bind sources made absolute against the
+// Atmos project root. Podman remote clients resolve relative bind sources in
+// the Podman machine rather than on the client, which turns `app/public` into
+// a path such as `/var/home/core/app/public` on macOS.
+func (r *resolved) mounts() []ctr.Mount {
+	mounts := r.spec.Mounts()
+	if r.atmosConfig.BasePathAbsolute == "" {
+		return mounts
+	}
+
+	for i := range mounts {
+		if mounts[i].Type == "bind" && mounts[i].Source != "" && !filepath.IsAbs(mounts[i].Source) {
+			mounts[i].Source = filepath.Join(r.atmosConfig.BasePathAbsolute, mounts[i].Source)
+		}
+	}
+	return mounts
 }
 
 // ExecuteBuild builds the component image from the build configuration.
@@ -257,7 +276,7 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		Name:    ctr.RuntimeName(r.stack, cfg.ContainerComponentType, r.component),
 		Image:   image,
 		Command: []string{"/bin/sh", "-lc", r.spec.Run.Command},
-		Mounts:  r.spec.Mounts(),
+		Mounts:  r.mounts(),
 		Ports:   ports,
 		Env:     r.envList,
 		User:    r.runUser(),
@@ -294,7 +313,7 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		Image:         image,
 		Command:       command,
 		Ports:         ports,
-		Mounts:        r.spec.Mounts(),
+		Mounts:        r.mounts(),
 		Env:           r.env,
 		User:          r.runUser(),
 		Host:          r.spec.HostRuntime(),

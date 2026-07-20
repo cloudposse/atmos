@@ -303,6 +303,7 @@ func TestDefaultStringAndRuntimePreviewName(t *testing.T) {
 
 func TestValidRuntimePullCleanup(t *testing.T) {
 	assert.True(t, validRuntime(""))
+	assert.True(t, validRuntime(string(container.TypeAuto)))
 	assert.True(t, validRuntime(string(container.TypeDocker)))
 	assert.True(t, validRuntime(string(container.TypePodman)))
 	assert.False(t, validRuntime("containerd"))

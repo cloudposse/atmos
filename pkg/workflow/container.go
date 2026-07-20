@@ -138,7 +138,7 @@ func buildContainerConfig(params *ContainerStepParams, cfg *schema.WorkflowConta
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
 	if !validRuntime(cfg.Provider) {
-		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container runtime must be docker, podman, or empty", errUtils.ErrContainerRuntimeOperation)
+		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container runtime must be auto, docker, podman, or empty", errUtils.ErrContainerRuntimeOperation)
 	}
 	if !validPull(cfg.Pull) {
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container pull must be missing, always, never, or empty", errUtils.ErrContainerRuntimeOperation)
@@ -522,7 +522,7 @@ func runtimePreviewName(value string) string {
 }
 
 func validRuntime(value string) bool {
-	return value == "" || value == string(container.TypeDocker) || value == string(container.TypePodman)
+	return value == "" || value == string(container.TypeAuto) || value == string(container.TypeDocker) || value == string(container.TypePodman)
 }
 
 func validPull(value string) bool {
