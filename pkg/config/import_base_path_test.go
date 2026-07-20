@@ -222,10 +222,10 @@ func TestMergeFiles_EmptyBasePathUsesImportingConfigDir(t *testing.T) {
 	assert.Equal(t, 173, v.GetInt("settings.terminal.max_width"))
 }
 
-// TestMergeFiles_ImportMergeErrorIsNonFatal covers the branch where mergeImports
-// fails: a base_path declared as a mapping (rather than a string) makes the
-// Unmarshal inside mergeImports fail. mergeFiles logs and tolerates that error,
-// so loading of the file's own settings still succeeds.
+// TestMergeFiles_ImportMergeErrorIsNonFatal covers the branch where mergeImports fails.
+// A base_path declared as a mapping (rather than a string) makes the Unmarshal inside
+// mergeImports fail; the failure is logged and tolerated, so the file's own settings
+// still load.
 func TestMergeFiles_ImportMergeErrorIsNonFatal(t *testing.T) {
 	setupTestAdapters()
 	dir := t.TempDir()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -598,4 +599,70 @@ func TestLoadAtmosDFromDirectory_FileNotDirectory(t *testing.T) {
 	loadAtmosDFromDirectory(tempDir, v)
 
 	// Function should complete without panic.
+}
+
+// TestProcessConfigImportsAndReapply_BasePathDeclarationError covers the error branch
+// where parsing the main config's base_path declaration fails.
+func TestProcessConfigImportsAndReapply_BasePathDeclarationError(t *testing.T) {
+	orig := parseBasePathDeclaration
+	parseBasePathDeclaration = func([]byte) (bool, string, error) {
+		return false, "", errors.New("boom")
+	}
+	defer func() { parseBasePathDeclaration = orig }()
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	_, err := processConfigImportsAndReapply(t.TempDir(), v, []byte("base_path: .\n"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
+	assert.Contains(t, err.Error(), "parse main config base path")
+}
+
+// TestMergeConfigFileWithImports_BasePathDeclarationError covers the error branch where
+// parsing an imported config file's base_path declaration fails.
+func TestMergeConfigFileWithImports_BasePathDeclarationError(t *testing.T) {
+	setupTestAdapters()
+	orig := parseBasePathDeclaration
+	parseBasePathDeclaration = func([]byte) (bool, string, error) {
+		return false, "", errors.New("boom")
+	}
+	defer func() { parseBasePathDeclaration = orig }()
+
+	cfg := filepath.Join(t.TempDir(), "atmos.yaml")
+	require.NoError(t, os.WriteFile(cfg, []byte("import:\n  - x.yaml\n"), 0o644))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	err := mergeConfigFileWithImports(cfg, v)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
+	assert.Contains(t, err.Error(), "parse config base path")
+}
+
+// TestMergeImports_ProcessImportsError covers the branch where processing imports fails:
+// an absolute base_path resolves cleanly, but the temp-dir creation used by import
+// processing fails (injected via the package filesystem seam).
+func TestMergeImports_ProcessImportsError(t *testing.T) {
+	setupTestAdapters()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().MkdirTemp(gomock.Any(), gomock.Any()).Return("", errors.New("mkdir failed")).AnyTimes()
+
+	orig := defaultFileSystem
+	defaultFileSystem = mockFS
+	defer func() { defaultFileSystem = orig }()
+
+	dir := t.TempDir()
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set("base_path", dir) // Absolute, so resolveAbsolutePath returns it unchanged.
+	v.Set("import", []string{"x.yaml"})
+
+	_, err := mergeImports(v, dir, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mkdir failed")
 }

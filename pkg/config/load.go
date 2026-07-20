@@ -1196,7 +1196,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 
 	// Process explicit imports.
 	// This will read the import paths from the config and process them.
-	_, basePathSource, err := importBasePathDeclaration(content)
+	_, basePathSource, err := parseBasePathDeclaration(content)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parse main config base path: %w", errUtils.ErrMergeConfiguration, err)
 	}
@@ -1532,6 +1532,11 @@ func importBasePathDeclaration(content []byte) (bool, string, error) {
 	return false, "", nil
 }
 
+// parseBasePathDeclaration is a seam over importBasePathDeclaration. Call sites that
+// re-parse content Viper has already validated route through it so tests can inject a
+// parse failure and exercise the error-propagation path.
+var parseBasePathDeclaration = importBasePathDeclaration
+
 // ResolveConfigImportBasePath resolves a base path declared by an imported config
 // file through the canonical source-aware category model (see resolveAbsolutePath).
 // When the file declares no base_path, the parent's fallback base path is used.
@@ -1746,7 +1751,7 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 			return err
 		}
 		importConfig.Import = imports
-		_, basePathSource, sourceErr := importBasePathDeclaration(content)
+		_, basePathSource, sourceErr := parseBasePathDeclaration(content)
 		if sourceErr != nil {
 			return fmt.Errorf("%w: parse config base path: %w", errUtils.ErrMergeConfiguration, sourceErr)
 		}

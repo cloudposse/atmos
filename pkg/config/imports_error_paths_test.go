@@ -118,6 +118,25 @@ func TestProcessConfigImports_ProvenanceReadError(t *testing.T) {
 	assert.Equal(t, 191, v.GetInt("settings.terminal.max_width"))
 }
 
+// TestProcessConfigImports_EmptyBasePathPropagates covers the processImports error
+// propagation: an empty base path is rejected by processImports and surfaced by
+// processConfigImports (the redundant filepath.Abs that previously masked it is gone).
+func TestProcessConfigImports_EmptyBasePathPropagates(t *testing.T) {
+	setupTestAdapters()
+
+	source := &schema.AtmosConfiguration{
+		BasePath: "",
+		Import:   []string{"x.yaml"},
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := processConfigImports(source, v)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrBasePath)
+}
+
 // TestProcessImports_EmptyBasePath tests error path at imports.go:108-110.
 func TestProcessImports_EmptyBasePath(t *testing.T) {
 	tempDir := t.TempDir()

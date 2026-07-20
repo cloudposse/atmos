@@ -58,7 +58,7 @@ const (
 	ADAPTER importTypes = 2
 )
 
-var defaultFileSystem = filesystem.NewOSFileSystem()
+var defaultFileSystem filesystem.FileSystem = filesystem.NewOSFileSystem()
 
 // ResolvedPaths represents a resolved import path with its file location and type.
 type ResolvedPaths struct {
@@ -92,10 +92,6 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 		return "", nil
 	}
 	importPaths := source.Import
-	basePath, err := filepath.Abs(source.BasePath)
-	if err != nil {
-		return "", err
-	}
 	tempDir, err := fs.MkdirTemp("", "atmos-import-*")
 	if err != nil {
 		return "", err
@@ -105,13 +101,23 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 			log.Debug("Failed to remove temp directory", "path", tempDir, "error", err)
 		}
 	}()
-	resolvedPaths, err := processImports(source, basePath, importPaths, tempDir, 1, MaximumImportLvL)
+	// processImports resolves source.BasePath to an absolute path itself and rejects
+	// an empty base path, so no redundant filepath.Abs is needed here.
+	resolvedPaths, err := processImports(source, source.BasePath, importPaths, tempDir, 1, MaximumImportLvL)
 	if err != nil {
 		return "", err
 	}
 
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
+	return mergeResolvedImports(resolvedPaths, dst, fs), nil
+}
+
+// mergeResolvedImports merges each resolved import file into dst and returns the
+// directory of the last imported file that declares a base_path (empty if none).
+// Files that fail to merge or re-read are skipped so a single bad import does not
+// abort the whole configuration load.
+func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem) string {
 	basePathSourceDir := ""
 	for _, resolvedPath := range resolvedPaths {
 		// Trace: log what we're about to merge (sanitized).
@@ -131,8 +137,7 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 			basePathSourceDir = filepath.Dir(resolvedPath.FilePath)
 		}
 	}
-
-	return basePathSourceDir, nil
+	return basePathSourceDir
 }
 
 // ProcessImportsFromAdapter is the public entry point for adapters to process nested imports.
