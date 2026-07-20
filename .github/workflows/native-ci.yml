@@ -30,6 +30,7 @@ permissions:
   statuses: write
 
 env:
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   ATMOS_NATIVE_CI_WORKDIR: tests/fixtures/scenarios/native-ci-e2e
   ATMOS_VERSION_CHECK_ENABLED: "false"
   NATIVE_CI_TRIVY_VERSION: "0.70.0"
@@ -61,6 +62,8 @@ jobs:
 
       - name: Set up and build Atmos
         uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Run workflow log group fixture
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
@@ -103,6 +106,8 @@ jobs:
 
       - name: Set up and build Atmos
         uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Restore Atmos native CI cache
         uses: ./actions/cache
@@ -151,6 +156,8 @@ jobs:
 
       - name: Set up and build Atmos
         uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Restore Atmos native CI cache
         uses: ./actions/cache

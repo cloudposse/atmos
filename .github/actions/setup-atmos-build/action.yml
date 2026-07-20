@@ -1,5 +1,10 @@
 name: 'Set up and Build Atmos'
-description: 'Set up Go, build Atmos from source, and add it to PATH'
+description: 'Set up Go, bootstrap Atmos via github-action-setup-atmos, then build Atmos from source and add it to PATH'
+
+inputs:
+  atmos-bootstrap-version:
+    description: 'Atmos version to install for bootstrapping (running repo-local custom commands)'
+    required: true
 
 runs:
   using: composite
@@ -9,10 +14,14 @@ runs:
       with:
         go-version-file: "go.mod"
 
+    - name: Set up Atmos
+      uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+      with:
+        atmos-version: ${{ inputs.atmos-bootstrap-version }}
+        install-wrapper: false
+
     - name: Build Atmos
       shell: bash
       run: |
-        # This script is standalone and builds the checked-out source directly;
-        # it does not require a previously installed Atmos binary.
-        sh scripts/build-atmos.sh linux test
+        atmos build binary --target=linux --version=test
         echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
