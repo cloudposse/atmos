@@ -2,8 +2,6 @@ package templates
 
 import (
 	"fmt"
-	"math"
-	"os"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -11,12 +9,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -325,13 +322,6 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 // SetTerminalWidthLimit so every width consumer respects the setting uniformly.
 var terminalWidthLimit atomic.Int64
 
-// terminalSupportsStdout and terminalGetSize are replaceable in tests so width
-// boundary handling does not depend on the terminal attached to the test process.
-var (
-	terminalSupportsStdout = termUtils.IsTTYSupportForStdout
-	terminalGetSize        = term.GetSize
-)
-
 // SetTerminalWidthLimit registers settings.terminal.max_width as a ceiling for
 // GetTerminalWidth. Zero or negative clears the limit (the default).
 func SetTerminalWidthLimit(limit int) {
@@ -339,41 +329,20 @@ func SetTerminalWidthLimit(limit int) {
 }
 
 // GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined.
+// It honors an explicit COLUMNS value through the shared terminal resolver when
+// no physical terminal size is available.
 func GetTerminalWidth() int {
 	defaultWidth := 80
 	screenWidth := defaultWidth
-	source := "fallback"
-
-	// Detect terminal width and use it by default if available.
-	isTTY := terminalSupportsStdout()
-	if isTTY {
-		// Stdout's file descriptor is an OS-provided uintptr that always fits in
-		// an int in practice; guard the conversion explicitly so it's provably
-		// safe rather than relying on that assumption.
-		fd := os.Stdout.Fd()
-		fdInt := -1
-		if fd <= math.MaxInt {
-			fdInt = int(fd)
-		}
-		termWidth, _, err := terminalGetSize(fdInt)
-		// Two columns are reserved for the layout margin. Keep the fallback for
-		// narrower terminals so downstream uint conversions remain safe.
-		if err == nil && termWidth > 2 {
-			screenWidth = termWidth - 2
-			source = "detected"
-		}
+	if width := terminal.New().Width(terminal.Stdout); width > 0 {
+		screenWidth = width - 2
 	}
 
 	// An explicitly-set settings.terminal.max_width is a user preference and
 	// acts as a ceiling only; by default the detected width is used as-is.
-	limit := int(terminalWidthLimit.Load())
-	if limit > 0 && screenWidth > limit {
+	if limit := int(terminalWidthLimit.Load()); limit > 0 && screenWidth > limit {
 		screenWidth = limit
-		source = "max_width"
 	}
-
-	log.Debug("Terminal width resolved",
-		"width", screenWidth, "source", source, "tty", isTTY, "max_width_limit", limit)
 
 	return screenWidth
 }

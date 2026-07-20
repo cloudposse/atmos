@@ -80,7 +80,9 @@ exclude = [
   # (500, 520 "Unknown Error") to automated/CI requests -- confirmed across
   # multiple unrelated badge paths in different files, and reproduced outside
   # CI too (curl returning 200 and 520 on back-to-back requests to the same
-  # badge). The badges render fine in a browser.
+  # badge). The badges render fine in a browser. Supersedes narrower
+  # path-scoped excludes for the same domain (img.shields.io/github/release/,
+  # shields.io/badge/, img.shields.io/github/(actions/workflow/status|last-commit)/).
   "shields\\.io",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
@@ -138,4 +140,7 @@ exclude = [
   # Server Error from GitHub's gateway in CI; the page is valid and loads in
   # a browser (verified via `gh api repos/cloudposse/atmos/releases/tags/v1.203.0`).
   "github\\.com/cloudposse/atmos/releases/tag/v1\\.203\\.0",
+  # Otelic (intermittent "Connection reset by peer" from CI runners; the page
+  # returns 200 and loads fine outside CI, verified via curl).
+  "otelic\\.com",
 ]
