@@ -1129,7 +1129,7 @@ settings:
     - Version constraint parsing
     - Registry querying
     - File operations
-    - Version spec parsing (PR, SHA, semver)
+    - Version spec parsing (PR, SHA, semver, ref)
     - Re-exec guard logic
     - Artifact fetching with mock GitHub API
 
