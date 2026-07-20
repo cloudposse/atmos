@@ -46,7 +46,7 @@ This step type is different from the step-level [`container`](/workflows/steps/c
   <dd>For `action: run`, start the container detached as a long-running service and continue the workflow. See [Background services](#background-services).</dd>
 </dl>
 
-The `provider` (`docker` or `podman`, auto-detected when omitted) and `runtime_auto_start` (start the Podman machine when no runtime is running) keys stay at the top level of the step, alongside `action` and `with`.
+The `provider` (`auto`, `docker`, or `podman`; auto-detected when `auto` or omitted) and `runtime_auto_start` (start the Podman machine when no runtime is running) keys stay at the top level of the step, alongside `action` and `with`.
 
 ## Build
 
@@ -57,7 +57,7 @@ steps:
   - name: build
     type: container
     action: build
-    provider: docker            # docker | podman (auto-detected when omitted)
+    provider: docker            # auto | docker | podman (auto-detected when auto/omitted)
     runtime_auto_start: true    # start the Podman machine if no runtime is running
     with:
       engine: buildx            # buildx (Docker BuildKit) or omit for the default builder

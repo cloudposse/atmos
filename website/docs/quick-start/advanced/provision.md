@@ -12,10 +12,10 @@ the stack's resolved coordinates and two secrets. Atmos uses the component depen
 
 ## 1. Start the sandbox
 
-If it isn't running already, start the sandbox for the stack you're deploying into:
+If it isn't running already, start the shared local sandbox:
 
 ```shell
-atmos emulator up aws -s plat-ue2-dev
+atmos emulator up aws -s local
 ```
 
 ## 2. Validate the stacks
@@ -122,7 +122,7 @@ When you're done, destroy the components through the dependency graph and stop t
 
 ```shell
 atmos terraform destroy --all -s plat-ue2-dev -auto-approve
-atmos emulator down aws -s plat-ue2-dev
+atmos emulator down aws -s local
 ```
 
 Destroy reverses the dependency graph so dependents are removed before the components they depend on.

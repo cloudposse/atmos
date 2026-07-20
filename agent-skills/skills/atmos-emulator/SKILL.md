@@ -48,12 +48,18 @@ driver.
 | `atmos emulator up <name> -s <stack>` | Start an emulator |
 | `atmos emulator down <name> -s <stack>` | Stop and remove an emulator |
 | `atmos emulator reset <name> -s <stack>` | Stop and wipe persisted state |
-| `atmos emulator ps -s <stack>` | List running emulators |
+| `atmos emulator ps -s <stack>` | List configured emulators that are running |
 | `atmos emulator list -s <stack>` | List configured emulators and status |
 | `atmos emulator logs <name> -s <stack>` | Show emulator logs |
 | `atmos emulator exec <name> -s <stack> -- <cmd>` | Run a command in the emulator container |
 
 Use `--dry-run` to preview.
+
+`list` and `ps` are configuration-scoped: emulator components declared in the
+current Atmos project are the inventory, and the container runtime only supplies
+their status. Use `--runtime` on either command only when diagnosing raw labeled
+containers outside the current project configuration. Lifecycle commands prompt
+for a stack on an interactive TTY when `-s` is omitted.
 
 ## YAML Integration
 

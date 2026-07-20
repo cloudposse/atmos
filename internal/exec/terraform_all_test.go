@@ -6,15 +6,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 func TestBuildTerraformDependencyGraph(t *testing.T) {
@@ -337,6 +340,63 @@ func TestExecuteTerraformAll_DryRunHappyPath(t *testing.T) {
 		}
 		assert.NoError(t, ExecuteTerraformAll(info))
 	})
+}
+
+// TestExecuteTerraformAll_MissingSecretFailsDuringPreflight proves that graph execution
+// resolves !secret before it hands any node to the scheduler. DryRun would otherwise make
+// this fixture succeed without invoking Terraform, so the store-resolution error can only
+// originate from the describe-stacks preflight.
+func TestExecuteTerraformAll_MissingSecretFailsDuringPreflight(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "terraform", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`
+components:
+  terraform:
+    app:
+      secrets:
+        vars:
+          API_KEY:
+            store: missing-secrets-store
+            required: true
+      vars:
+        api_key: !secret API_KEY
+`), 0o600))
+
+	t.Chdir(root)
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+
+	err := ExecuteTerraformAll(&schema.ConfigAndStacksInfo{
+		ComponentType:    config.TerraformComponentType,
+		SubCommand:       "plan",
+		DryRun:           true,
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	})
+	require.ErrorIs(t, err, secrets.ErrStoreNotFound)
+}
+
+func TestTerraformPreflightDescribeError_MissingSecretIsActionable(t *testing.T) {
+	cause := errors.Join(secrets.ErrSecretMissing, errors.New("API_KEY is absent from its configured backend"))
+	err := terraformPreflightDescribeError(cause)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrExecuteDescribeStacks)
+	assert.ErrorIs(t, err, secrets.ErrSecretMissing)
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "TITLE:Terraform preflight failed")
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Initialize the reported secret, then rerun the Terraform command.")
+	assert.Contains(t, cockroachErrors.GetAllDetails(err), "A required `!secret` could not be resolved before Terraform started.")
 }
 
 // TestExecuteTerraformAll_AuthManagerResolverWired exercises the

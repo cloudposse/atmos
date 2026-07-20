@@ -42,8 +42,10 @@ var newMarkdownRendererWithWidth = func(config schema.AtmosConfiguration, width 
 const (
 	explanationGradientStart = "#33204f"
 	explanationGradientEnd   = "#123c5c"
-	hexColorLength           = 6
-	hexColorBase             = 16
+	// ExplanationForeground remains readable across the entire explanation gradient.
+	explanationForeground = "#F7FAFC"
+	hexColorLength        = 6
+	hexColorBase          = 16
 )
 
 type markdownSections struct {
@@ -498,13 +500,49 @@ func renderExplanationCallout(rendered string, maxLineLength int, useColor bool)
 		}
 		color := interpolateHexColor(explanationGradientStart, explanationGradientEnd, gradientRatio(i, len(lines)))
 		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(explanationForeground)).
 			Background(lipgloss.Color(color)).
 			PaddingLeft(1).
 			PaddingRight(1).
 			Width(width)
+
+		// Glamour emits a full ANSI reset (CSI 0 m) after styled spans. A full
+		// reset clears this outer background too, leaving only the padding tinted
+		// and exposing the terminal background behind the explanation text.
+		// Reapply the callout colors after each reset before the outer style adds
+		// its padding and width.
+		line = restoreCalloutColorsAfterReset(line, calloutColorPrefix(color))
 		out.WriteString(style.Render(line))
 	}
 	return out.String()
+}
+
+// restoreCalloutColorsAfterReset preserves a callout's colors when nested ANSI
+// markup performs a full terminal reset. Glamour uses both CSI 0 m and CSI m.
+func restoreCalloutColorsAfterReset(rendered, colorPrefix string) string {
+	if colorPrefix == "" {
+		return rendered
+	}
+
+	return strings.NewReplacer(
+		"\x1b[0m", "\x1b[0m"+colorPrefix,
+		"\x1b[m", "\x1b[m"+colorPrefix,
+	).Replace(rendered)
+}
+
+// calloutColorPrefix returns the ANSI sequence that establishes the callout's
+// foreground and background without adding padding or a trailing reset.
+func calloutColorPrefix(background string) string {
+	const marker = "x"
+	rendered := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(explanationForeground)).
+		Background(lipgloss.Color(background)).
+		Render(marker)
+	markerIndex := strings.Index(rendered, marker)
+	if markerIndex < 0 {
+		return ""
+	}
+	return rendered[:markerIndex]
 }
 
 func maxRenderedLineWidth(lines []string) int {

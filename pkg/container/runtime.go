@@ -267,6 +267,10 @@ type RuntimeInfo struct {
 type Type string
 
 const (
+	// TypeAuto represents runtime selection by availability: Docker first, then Podman.
+	// It is a provider selector only; detected runtime instances always report Docker or Podman.
+	TypeAuto Type = "auto"
+
 	// TypeDocker represents Docker runtime.
 	TypeDocker Type = "docker"
 
