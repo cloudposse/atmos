@@ -11,34 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestResolveImportBasePath(t *testing.T) {
-	dir := t.TempDir()
-
-	tests := []struct {
-		name      string
-		basePath  string
-		configDir string
-		source    string
-		want      string
-	}{
-		{"empty base path anchors to config dir", "", dir, "", dir},
-		{"dot anchors to config dir", ".", dir, "", dir},
-		{"dot-slash anchors to config dir", "./", dir, "", dir},
-		{"dot-dot anchors to config dir", "..", dir, "", filepath.Dir(dir)},
-		{"runtime dot retains CWD resolution", ".", dir, basePathSourceRuntime, "."},
-		{"bare base path retains downstream resolution", "sub", dir, "", "sub"},
-		{"nested bare base path retains downstream resolution", filepath.Join("a", "b"), dir, "", filepath.Join("a", "b")},
-		{"absolute base path is returned unchanged", dir, filepath.Join(dir, "unused"), "", dir},
-		{"empty config dir falls back to base path", ".", "", "", "."},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, resolveImportBasePath(tt.basePath, tt.configDir, tt.source))
-		})
-	}
-}
-
 func TestMergeImports_ResolvesImportsRelativeToConfigDir(t *testing.T) {
 	setupTestAdapters()
 	root := t.TempDir()
@@ -93,27 +65,52 @@ func TestMergeConfig_GlobRelativeToConfigDir(t *testing.T) {
 		"glob import must resolve relative to the config dir, not the cwd")
 }
 
-func TestMergeImports_BareBasePathRetainsCWDResolution(t *testing.T) {
+func TestMergeImports_BareBasePathResolvesViaGitRoot(t *testing.T) {
 	setupTestAdapters()
-	configDir := t.TempDir()
-	cwd := t.TempDir()
-	importDir := filepath.Join(cwd, "workspace")
+	gitRoot := t.TempDir()
+	t.Setenv("TEST_GIT_ROOT", gitRoot)
+	importDir := filepath.Join(gitRoot, "workspace")
 	require.NoError(t, os.MkdirAll(importDir, 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(importDir, "extra.yaml"),
 		[]byte("settings:\n  terminal:\n    max_width: 149\n"),
 		0o644,
 	))
-	t.Chdir(cwd)
+	t.Chdir(t.TempDir())
 
 	v := viper.New()
 	v.SetConfigType(yamlType)
 	v.Set("base_path", "workspace")
 	v.Set("import", []string{"extra.yaml"})
 
-	_, err := mergeImports(v, configDir, "")
+	_, err := mergeImports(v, t.TempDir(), "")
 	require.NoError(t, err)
-	assert.Equal(t, 149, v.GetInt("settings.terminal.max_width"))
+	assert.Equal(t, 149, v.GetInt("settings.terminal.max_width"),
+		"bare base path must resolve via git root")
+}
+
+func TestMergeImports_EmptyBasePathResolvesViaGitRoot(t *testing.T) {
+	setupTestAdapters()
+	gitRoot := t.TempDir()
+	t.Setenv("TEST_GIT_ROOT", gitRoot)
+	importDir := filepath.Join(gitRoot, ".atmos")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 153\n"),
+		0o644,
+	))
+	t.Chdir(t.TempDir())
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set("base_path", "")
+	v.Set("import", []string{filepath.Join(".atmos", "extra.yaml")})
+
+	_, err := mergeImports(v, t.TempDir(), "")
+	require.NoError(t, err)
+	assert.Equal(t, 153, v.GetInt("settings.terminal.max_width"),
+		"empty base path must resolve via git root")
 }
 
 func TestMergeConfig_CwdBasePathRetainsCWDImportResolution(t *testing.T) {
@@ -169,6 +166,7 @@ func TestMergeFiles_InheritedBasePathUsesDeclaringConfigDir(t *testing.T) {
 func mergeFilesImportedBasePathCase(t *testing.T, baseYAML, defaultsYAML, extraSubdir string, wantWidth int) {
 	t.Helper()
 	setupTestAdapters()
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
 	baseConfigDir := t.TempDir()
 	overlayConfigDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(baseConfigDir, "imports"), 0o755))
@@ -206,6 +204,7 @@ func TestMergeFiles_DirectBasePathKeepsPrecedenceOverImportedDeclaration(t *test
 
 func TestMergeFiles_EmptyBasePathUsesImportingConfigDir(t *testing.T) {
 	setupTestAdapters()
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
 	baseConfigDir := t.TempDir()
 	overlayConfigDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(baseConfigDir, "base.yaml"), []byte("settings:\n  base: true\n"), 0o644))

@@ -92,10 +92,9 @@ func (g *GoGetterAdapter) Resolve(
 		imports := v.GetStringSlice("import")
 
 		if len(imports) > 0 {
-			importBasePath, resolveErr := config.ResolveConfigImportBasePath(v.GetString("base_path"), tempFile, basePath)
-			if resolveErr != nil {
-				log.Debug("failed to resolve nested import base path", "path", tempFile, "error", resolveErr)
-				continue
+			importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), tempFile, basePath)
+			if err != nil {
+				return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessNestedImports, err)
 			}
 			nestedPaths, err := config.ProcessImportsFromAdapter(atmosConfig, importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 			if err != nil {

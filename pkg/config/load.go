@@ -1532,30 +1532,9 @@ func importBasePathDeclaration(content []byte) (bool, string, error) {
 	return false, "", nil
 }
 
-// resolveImportBasePath anchors config-sourced empty and dot-relative paths to the declaring config directory.
-func resolveImportBasePath(basePath, configDir, source string) string {
-	if filepath.IsAbs(basePath) || configDir == "" || source == basePathSourceRuntime {
-		return basePath
-	}
-
-	sep := string(filepath.Separator)
-	isDotRelative := basePath == "." ||
-		basePath == ".." ||
-		strings.HasPrefix(basePath, "./") ||
-		strings.HasPrefix(basePath, "."+sep) ||
-		strings.HasPrefix(basePath, "../") ||
-		strings.HasPrefix(basePath, ".."+sep)
-	if basePath != "" && !isDotRelative {
-		return basePath
-	}
-
-	if abs, err := filepath.Abs(configDir); err == nil {
-		configDir = abs
-	}
-	return filepath.Join(configDir, basePath)
-}
-
-// ResolveConfigImportBasePath resolves a base path declared by an imported config file.
+// ResolveConfigImportBasePath resolves a base path declared by an imported config
+// file through the canonical source-aware category model (see resolveAbsolutePath).
+// When the file declares no base_path, the parent's fallback base path is used.
 func ResolveConfigImportBasePath(basePath, configFile, fallback string) (string, error) {
 	defer perf.Track(nil, "config.ResolveConfigImportBasePath")()
 
@@ -1570,7 +1549,7 @@ func ResolveConfigImportBasePath(basePath, configFile, fallback string) (string,
 	if !declared {
 		return fallback, nil
 	}
-	return resolveImportBasePath(basePath, filepath.Dir(configFile), source), nil
+	return resolveAbsolutePath(basePath, filepath.Dir(configFile), source)
 }
 
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
@@ -1588,7 +1567,10 @@ func mergeImports(dst *viper.Viper, configDir, basePathSource string) (string, e
 	}
 
 	basePathBeforeImports := src.BasePath
-	src.BasePath = resolveImportBasePath(src.BasePath, configDir, basePathSource)
+	src.BasePath, err = resolveAbsolutePath(src.BasePath, configDir, basePathSource)
+	if err != nil {
+		return "", err
+	}
 	importBasePathDir, err := processConfigImportsWithBasePathSource(&src, dst)
 	if err != nil {
 		return "", err
@@ -1768,7 +1750,10 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 		if sourceErr != nil {
 			return fmt.Errorf("%w: parse config base path: %w", errUtils.ErrMergeConfiguration, sourceErr)
 		}
-		importConfig.BasePath = resolveImportBasePath(tempViper.GetString("base_path"), filepath.Dir(path), basePathSource)
+		importConfig.BasePath, err = resolveAbsolutePath(tempViper.GetString("base_path"), filepath.Dir(path), basePathSource)
+		if err != nil {
+			return err
+		}
 		if err = processConfigImports(&importConfig, v); err != nil {
 			return err
 		}
