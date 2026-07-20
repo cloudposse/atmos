@@ -388,6 +388,23 @@ func TestRenderExplanationCallout_ColorAddsGradientBackground(t *testing.T) {
 	assert.Contains(t, callout, "second line")
 	assert.Contains(t, callout, "48;2;51;32;79")
 	assert.Contains(t, callout, "48;2;18;60;92")
+	assert.Contains(t, callout, "38;2;247;250;252")
+}
+
+func TestRenderExplanationCallout_RestoresColorsAfterNestedReset(t *testing.T) {
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	const background = explanationGradientStart
+	reset := "\x1b[0m"
+	callout := renderExplanationCallout("before"+reset+"after", 80, true)
+
+	assert.Contains(t, callout, reset+calloutColorPrefix(background))
+	assert.Contains(t, callout, "48;2;51;32;79")
+	assert.Contains(t, callout, "38;2;247;250;252")
 }
 
 func TestExplanationMarkdownLineLength_ReservesPaddingForColor(t *testing.T) {

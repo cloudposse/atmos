@@ -88,6 +88,20 @@ vars:
   key: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
 
+### Cold State and `terraform plan --all`
+
+`!terraform.state` resolves configuration before Terraform plans a component. On a first aggregate
+plan, an upstream component may therefore have no state yet. Use a YQ `//` default for values that
+must exist at plan time, with a deterministic, provider-valid mock value:
+
+```yaml
+vars:
+  kms_key_arn: !terraform.state kms-key '.key_arn // "arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000"'
+```
+
+The deployed upstream output supersedes the fallback automatically. Dependency metadata controls
+deployment order; it does not create state before an aggregate plan.
+
 ## `!terraform.output` -- Remote State Access
 
 Reads Terraform outputs by running `terraform output`. Requires Terraform initialization
@@ -286,7 +300,7 @@ vars:
 2. **Prefer `!store` over `atmos.Component` for outputs** -- Avoids Terraform initialization
 3. **All YAML functions cache results** per execution for repeated calls
 4. **Cold-start errors** -- `!terraform.output` and `!store` fail if the referenced component
-   is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
+    is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
 
 ## Additional Resources
 

@@ -16,7 +16,7 @@ import (
 func validateBuildAction(step *schema.WorkflowStep) error {
 	build := effectiveBuildStep(step)
 	if !isValidContainerRuntime(build.Provider) {
-		return invalidContainerField(step, "build.provider", build.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
+		return invalidContainerField(step, "build.provider", build.Provider, "Provider must be `auto`, `docker`, `podman`, or empty for auto-detect")
 	}
 	if !isValidContainerBuildEngine(build.Engine) {
 		return invalidContainerField(step, "build.engine", build.Engine, "Build engine must be `buildx` or empty for the runtime default")
