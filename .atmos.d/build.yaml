@@ -21,7 +21,9 @@ commands:
       - type: toast
         level: info
         content: Building Atmos...
-      - &build_binary_step |
+      - &build_binary_step
+        type: shell
+        command: |
           set -eu
           sh scripts/build-atmos.sh "${ATMOS_BUILD_TARGET:-default}" "${ATMOS_BUILD_VERSION:-test}"
       - &build_success_step

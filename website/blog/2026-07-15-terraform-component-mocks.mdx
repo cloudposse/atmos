@@ -1,0 +1,105 @@
+---
+slug: terraform-component-mocks
+title: "Component Mocks for Terraform YAML Lookups"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Cross-component Terraform lookups are useful precisely when an application component needs the outputs of something like a VPC, cluster, or database. They can also make a local plan or configuration review depend on deployed infrastructure, backend access, and cloud credentials that are irrelevant to the change at hand.
+
+Atmos now supports **component mocks**: literal, component-owned Terraform outputs that you enable explicitly with `--use-mocks`.
+
+<!--truncate-->
+
+## The problem: a small dependency can make a plan non-local
+
+Consider an `app` component that takes its VPC ID from a `vpc` component:
+
+```yaml title="stacks/dev.yaml"
+components:
+  terraform:
+    app:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+```
+
+Normally, Atmos resolves that lookup from the VPC's real Terraform state. That is the right default for regular operations, but it can be inconvenient when you are developing the application configuration before the VPC exists, reviewing a change offline, or deliberately avoiding access to a remote backend.
+
+The old choices were usually to provision the dependency first, change the consumer temporarily, or build an ad hoc fixture outside the component that owns the output. None of those makes the intended fake surface obvious.
+
+## The fix: declare the fake surface next to the producer
+
+Declare the outputs a Terraform component can stand in for under `mocks`:
+
+```yaml title="stacks/dev.yaml"
+components:
+  terraform:
+    vpc:
+      mocks:
+        vpc_id: vpc-local
+        private_subnet_ids: [subnet-a, subnet-b]
+        network:
+          cidr: 10.0.0.0/16
+
+    app:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+        private_subnet_id: !terraform.output vpc '.private_subnet_ids[0]'
+```
+
+Then choose the mock path at invocation time:
+
+```shell
+atmos describe component app -s dev --use-mocks
+atmos terraform plan app -s dev --use-mocks
+```
+
+Both `!terraform.state` and `!terraform.output` resolve from `vpc.mocks`. The familiar output and YQ-expression syntax stays the same; only the source of the value changes.
+
+This is intentionally a narrow model. There are no mock profiles, provider simulations, resource emulation, or consumer-side override DSLs. A component declares the broad fake output surface once, and the command makes an explicit decision to use it.
+
+The [advanced quick start](/quick-start/advanced/) uses this pattern for its first, state-free plan: its regional KMS, storage, and messaging components declare provider-shaped outputs, while its normal deploy continues to use real state.
+
+## What mock mode bypasses
+
+When a Terraform lookup is mocked, Atmos loads the referenced component's merged `mocks` map and evaluates the requested expression against it. It does **not** initialize Terraform, resolve the referenced component's credentials, read a backend, or populate the real-state lookup cache.
+
+That makes mock mode useful for local plans and `describe component` output that should be independent of the remote dependency. It also means `--use-mocks` never silently falls back to real state: a missing mock map or output is an actionable error, not a surprise backend read.
+
+Mock values themselves are literal. Atmos does not evaluate templates or YAML functions inside `mocks`, so a mock cannot accidentally call the real dependency it was meant to replace.
+
+## Guardrails keep normal operations normal
+
+Mocks are opt-in. Without `--use-mocks`, existing `!terraform.state` and `!terraform.output` behavior is unchanged.
+
+The flag is supported by:
+
+- `atmos terraform plan`
+- `atmos describe component`
+
+Mutating Terraform commands—including `apply`, `deploy`, and `destroy`—and Terraform passthrough commands reject it before stack resolution. `--use-mocks` also requires YAML function processing to remain enabled.
+
+Because `mocks` follows normal component inheritance and deep-merge behavior, a base component can provide shared fixtures while a concrete component replaces only the outputs that differ.
+
+## Try it
+
+The repository includes a provider-free example with a producer, a consumer, the normal real-state flow, and the mocked flow:
+
+```shell
+cd examples/terraform-component-mocks
+
+# Resolve app's VPC ID from the vpc mock, without creating state.
+atmos terraform plan app -s dev --use-mocks
+
+# Inspect the final component configuration with the same mock resolution.
+atmos describe component app -s dev --use-mocks
+```
+
+For the normal path, create the producer's state and omit the flag:
+
+```shell
+atmos terraform apply vpc -s dev
+atmos terraform plan app -s dev
+```
+
+Read more about [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output), or use the example as the smallest starting point for adding mocks to your own stack.

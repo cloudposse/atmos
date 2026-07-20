@@ -1,18 +1,21 @@
 package filelock
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+const crossProcessLockTimeout = 5 * time.Second
 
 func TestExclusiveLockHonorsContextAndReleases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.lock")
@@ -102,10 +105,13 @@ const processWaitTimeout = 5 * time.Second
 func TestExclusiveLockContendsAcrossProcesses(t *testing.T) {
 	if os.Getenv("ATMOS_FILELOCK_HELPER") == "1" {
 		path := os.Getenv("ATMOS_FILELOCK_PATH")
+		readyPath := os.Getenv("ATMOS_FILELOCK_READY_PATH")
+		releasePath := os.Getenv("ATMOS_FILELOCK_RELEASE_PATH")
 		if err := New(path).WithExclusive(context.Background(), func() error {
-			_, _ = os.Stdout.WriteString("locked\n")
-			time.Sleep(300 * time.Millisecond)
-			return nil
+			if writeErr := os.WriteFile(readyPath, []byte("locked"), 0o600); writeErr != nil {
+				return fmt.Errorf("write ready signal: %w", writeErr)
+			}
+			return waitForFile(releasePath, crossProcessLockTimeout)
 		}); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -113,47 +119,99 @@ func TestExclusiveLockContendsAcrossProcesses(t *testing.T) {
 		return
 	}
 
-	path := filepath.Join(t.TempDir(), "cross-process.lock")
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "cross-process.lock")
+	readyPath := filepath.Join(tempDir, "helper-ready")
+	releasePath := filepath.Join(tempDir, "helper-release")
 	cmd := exec.Command(os.Args[0], "-test.run=TestExclusiveLockContendsAcrossProcesses")
-	cmd.Env = append(os.Environ(), "ATMOS_FILELOCK_HELPER=1", "ATMOS_FILELOCK_PATH="+path)
-	stdout, err := cmd.StdoutPipe()
-	require.NoError(t, err)
+	cmd.Env = append(
+		os.Environ(),
+		"ATMOS_FILELOCK_HELPER=1",
+		"ATMOS_FILELOCK_PATH="+path,
+		"ATMOS_FILELOCK_READY_PATH="+readyPath,
+		"ATMOS_FILELOCK_RELEASE_PATH="+releasePath,
+	)
+	var stderr synchronizedBuffer
+	cmd.Stderr = &stderr
 	require.NoError(t, cmd.Start())
-	scanner := bufio.NewScanner(stdout)
-	type scanResult struct {
-		ok   bool
-		text string
-		err  error
-	}
-	ready := make(chan scanResult, 1)
-	go func() {
-		ready <- scanResult{ok: scanner.Scan(), text: scanner.Text(), err: scanner.Err()}
-	}()
-	select {
-	case result := <-ready:
-		require.NoError(t, result.err)
-		require.True(t, result.ok)
-		require.Equal(t, "locked", result.text)
-	case <-time.After(processWaitTimeout):
-		require.NoError(t, cmd.Process.Kill())
-		_, _ = cmd.Process.Wait()
-		t.Fatal("helper process did not acquire the lock")
-	}
+	waited := false
+	t.Cleanup(func() {
+		if !waited {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	require.Eventually(t, func() bool {
+		_, statErr := os.Stat(readyPath)
+		return statErr == nil
+	}, crossProcessLockTimeout, 10*time.Millisecond, "helper process did not acquire the lock: %s", stderr.String())
+	ready, err := os.ReadFile(readyPath)
+	require.NoError(t, err)
+	require.Equal(t, []byte("locked"), ready)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	err = New(path).WithExclusive(ctx, func() error { return errors.New("must not run") })
 	require.ErrorIs(t, err, ErrAcquire)
+	require.NoError(t, os.WriteFile(releasePath, []byte("release"), 0o600))
+
 	wait := make(chan error, 1)
 	go func() { wait <- cmd.Wait() }()
 	select {
 	case err := <-wait:
-		require.NoError(t, err)
-	case <-time.After(processWaitTimeout):
+		waited = true
+		require.NoError(t, err, "helper process failed: %s", stderr.String())
+	case <-time.After(crossProcessLockTimeout):
 		require.NoError(t, cmd.Process.Kill())
 		<-wait
-		t.Fatal("helper process did not release the lock")
+		waited = true
+		t.Fatalf("helper process did not release the lock: %s", stderr.String())
 	}
+
+	require.Eventually(t, func() bool {
+		return New(path).WithExclusive(context.Background(), func() error { return nil }) == nil
+	}, crossProcessLockTimeout, 10*time.Millisecond, "lock was not released after helper exit")
+}
+
+func waitForFile(path string, timeout time.Duration) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect release signal: %w", err)
+		}
+
+		select {
+		case <-deadline.C:
+			return fmt.Errorf("timed out waiting for release signal %q", path)
+		case <-ticker.C:
+		}
+	}
+}
+
+type synchronizedBuffer struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (b *synchronizedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buffer.Write(p)
+}
+
+func (b *synchronizedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buffer.String()
 }
 
 func requireLockSignal(t *testing.T, signal <-chan struct{}, done <-chan error, message string) {

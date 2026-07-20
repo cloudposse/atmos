@@ -24,6 +24,7 @@ type TerraformRunOptions struct {
 	// Processing flags.
 	ProcessTemplates bool
 	ProcessFunctions bool
+	UseMocks         bool
 	Skip             []string
 
 	// Execution flags.
@@ -73,6 +74,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 	opts := &TerraformRunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
+		UseMocks:                v.GetBool("use-mocks"),
 		Skip:                    v.GetStringSlice("skip"),
 		DryRun:                  v.GetBool("dry-run"),
 		SkipInit:                v.GetBool("skip-init"),
