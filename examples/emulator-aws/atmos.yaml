@@ -12,7 +12,7 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "**/*"
+    - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{ .vars.stage }}"
@@ -21,15 +21,15 @@ logs:
   file: "/dev/stderr"
   level: Info
 
-# A single aws/emulator identity binds every component to the local sandbox.
-# `atmos emulator up aws -s <stack>` starts the emulator; the provider-config
+# A single aws/emulator identity binds every component to the `local/aws` sandbox.
+# `atmos emulator up aws -s local` starts the emulator; the provider-config
 # contributor and this identity wire Terraform to it — no providers.tf, no
 # endpoint configuration, no hand-rolled docker-compose.
 auth:
   identities:
     local-aws:
       kind: aws/emulator
-      emulator: aws
+      emulator: local/aws
       default: true
 
 # Custom CLI commands
@@ -58,21 +58,17 @@ commands:
     description: "Bring up the sandbox, apply and destroy the demo in each stage, then tear it down"
     steps:
       - atmos validate stacks
+      - atmos emulator up aws -s local
       # dev
-      - atmos emulator up aws -s dev
       - atmos terraform apply demo -s dev -auto-approve
       - atmos terraform destroy demo -s dev -auto-approve
-      - atmos emulator down aws -s dev
       # staging
-      - atmos emulator up aws -s staging
       - atmos terraform apply demo -s staging -auto-approve
       - atmos terraform destroy demo -s staging -auto-approve
-      - atmos emulator down aws -s staging
       # prod
-      - atmos emulator up aws -s prod
       - atmos terraform apply demo -s prod -auto-approve
       - atmos terraform destroy demo -s prod -auto-approve
-      - atmos emulator down aws -s prod
+      - atmos emulator down aws -s local
 
   - name: "terraform"
     commands:

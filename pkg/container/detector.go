@@ -16,7 +16,7 @@ import (
 const (
 	logKeyRuntime = "runtime"
 
-	// Env var that selects the container runtime (docker|podman).
+	// Env var that selects the container runtime (auto|docker|podman).
 	envContainerRuntime = "ATMOS_CONTAINER_RUNTIME"
 
 	// Env var feature flag (bridged from `container.runtime.auto_start`): when
@@ -51,10 +51,12 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 
 	// Check environment variable first.
 	_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
-	if envRuntime := viper.GetString(envContainerRuntime); envRuntime != "" {
+	if envRuntime := strings.TrimSpace(viper.GetString(envContainerRuntime)); envRuntime != "" {
 		log.Debug("Using container runtime from ATMOS_CONTAINER_RUNTIME", logKeyRuntime, envRuntime)
 
 		switch envRuntime {
+		case string(TypeAuto):
+			// Continue to availability-based detection below.
 		case string(TypeDocker):
 			if isAvailable(ctx, TypeDocker) {
 				return NewDockerRuntime(), nil
@@ -91,8 +93,9 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 func DetectRuntimeWithPreference(ctx context.Context, preferred string) (Runtime, error) {
 	defer perf.Track(nil, "container.DetectRuntimeWithPreference")()
 
+	preferred = strings.TrimSpace(preferred)
 	switch preferred {
-	case "":
+	case "", string(TypeAuto):
 		return DetectRuntime(ctx)
 	case string(TypeDocker):
 		if isAvailable(ctx, TypeDocker) {
@@ -122,10 +125,13 @@ func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred strin
 	// Resolve the runtime that DetectRuntime will actually select so recovery
 	// matches the resolution order (preferred flag, then ATMOS_CONTAINER_RUNTIME,
 	// then Docker, then Podman). Reading the env here mirrors DetectRuntime above.
-	selected := preferred
+	selected := strings.TrimSpace(preferred)
 	if selected == "" {
 		_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
 		selected = strings.TrimSpace(viper.GetString(envContainerRuntime))
+	}
+	if selected == string(TypeAuto) {
+		selected = ""
 	}
 
 	// Recover Podman when it is the selected runtime, or when nothing is selected

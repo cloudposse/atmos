@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -152,6 +153,76 @@ func TestHasYqDefault(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := hasYqDefault(tt.yqExpr)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestParseTerraformStateArgs guards the invocation forms used by `!terraform.state`
+// fixtures against the shared function argument parser, including the caller's
+// empty-stack fallback to the current stack.
+func TestParseTerraformStateArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           string
+		currentStack   string
+		wantComponent  string
+		wantStack      string
+		wantExpression string
+	}{
+		{
+			name:           "legacy component and output",
+			args:           "kms-key key_arn",
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: "key_arn",
+		},
+		{
+			name:           "legacy component stack and output",
+			args:           "kms-key plat-ue2-prod key_arn",
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-prod",
+			wantExpression: "key_arn",
+		},
+		{
+			name:           "single quoted expression with a default",
+			args:           `kms-key '.key_arn // "mock-value"'`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+		{
+			name:           "whole YAML value quoted before parsing",
+			args:           `kms-key .key_arn // "mock-value"`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+		{
+			name:           "stack with single quoted expression and a default",
+			args:           `kms-key plat-ue2-prod '.key_arn // "mock-value"'`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-prod",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsed, err := fnparser.ParseTerraform(tt.args)
+
+			assert.NoError(t, err)
+			stack := parsed.Stack
+			if stack == "" {
+				stack = tt.currentStack
+			}
+			assert.Equal(t, tt.wantComponent, parsed.Component)
+			assert.Equal(t, tt.wantStack, stack)
+			assert.Equal(t, tt.wantExpression, parsed.Expression)
 		})
 	}
 }

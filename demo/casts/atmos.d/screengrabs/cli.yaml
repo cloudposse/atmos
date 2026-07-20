@@ -35,13 +35,17 @@ commands:
           atmos lsp --help
           atmos lsp start --help
           atmos mcp --help
+          atmos mcp add --help
           atmos mcp export --help
+          atmos mcp install --help
           atmos mcp list --help
+          atmos mcp remove --help
           atmos mcp restart --help
           atmos mcp start --help
           atmos mcp status --help
           atmos mcp test --help
           atmos mcp tools --help
+          atmos mcp uninstall --help
           atmos packer --help
           atmos packer build --help
           atmos packer init --help
@@ -409,13 +413,17 @@ commands:
           atmos lsp --help
           atmos lsp start --help
           atmos mcp --help
+          atmos mcp add --help
           atmos mcp export --help
+          atmos mcp install --help
           atmos mcp list --help
+          atmos mcp remove --help
           atmos mcp restart --help
           atmos mcp start --help
           atmos mcp status --help
           atmos mcp test --help
           atmos mcp tools --help
+          atmos mcp uninstall --help
           atmos packer --help
           atmos packer build --help
           atmos packer init --help
