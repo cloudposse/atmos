@@ -81,11 +81,11 @@ the plugin cache is intentionally prepared.
 ## Troubleshooting sequence
 
 1. Run `atmos terraform lint <component> --stack <stack>` to reproduce with the
-   component's resolved TFLint version and environment.
+  component's resolved TFLint version and environment.
 2. Check which `.tflint.hcl` wins: component, components base path, repository
-   root, then `components.terraform.lint.config`.
+  root, then `components.terraform.lint.config`.
 3. Confirm `dependencies.tools.tflint` in the resolved stack/component config
-   when versions differ across components.
+  when versions differ across components.
 4. Run `tflint --init` only when the active config declares provider plugins.
 5. Keep `--format=sarif` for hook and CI output; inspect the command output for
-   the rule name before enabling, disabling, or suppressing it.
+  the rule name before enabling, disabling, or suppressing it.
