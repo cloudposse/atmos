@@ -1,12 +1,14 @@
 package provenance
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	xterm "golang.org/x/term"
 
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -187,9 +189,7 @@ func TestGetCommentColumn(t *testing.T) {
 // TestGetCommentColumn_TTYUsesDetectedTerminalWidth covers the TTY branch, which the
 // non-TTY test above never reaches: with --force-tty, getCommentColumn must call
 // templates.GetTerminalWidth() (honoring settings.terminal.max_width as a ceiling) rather
-// than return the plain default. GetTerminalWidth never actually returns <= 0 (it floors at
-// its own 80-column fallback), so the "width <= 0 -> defaultColumn" body a few lines below is
-// unreachable defensive code and is not exercised here.
+// than return the plain default.
 func TestGetCommentColumn_TTYUsesDetectedTerminalWidth(t *testing.T) {
 	origForceTTY := viper.GetBool("force-tty")
 	viper.Set("force-tty", true)
@@ -198,6 +198,25 @@ func TestGetCommentColumn_TTYUsesDetectedTerminalWidth(t *testing.T) {
 	column := getCommentColumn()
 	assert.GreaterOrEqual(t, column, 40, "Comment column should be at least 40")
 	assert.LessOrEqual(t, column, 200, "Comment column should not be unreasonably large")
+}
+
+// TestGetCommentColumn_NonPositiveWidthFallsBackToDefault covers the non-positive-width
+// fallback guard. The underlying templates.GetTerminalWidth() subtracts 2 columns of
+// padding from the detected terminal width (pkg/terminal's fallbackWidth honors an
+// explicit COLUMNS override even under --force-tty), so a COLUMNS value of 1 drives it
+// negative and this branch is reachable, not dead code.
+func TestGetCommentColumn_NonPositiveWidthFallsBackToDefault(t *testing.T) {
+	if xterm.IsTerminal(int(os.Stdout.Fd())) {
+		t.Skip("stdout is a real TTY; COLUMNS override does not apply")
+	}
+
+	origForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", origForceTTY) })
+	t.Setenv("COLUMNS", "1")
+
+	const defaultColumn = 50
+	assert.Equal(t, defaultColumn, getCommentColumn(), "width <= 0 must fall back to the default comment column")
 }
 
 func TestIsProvenanceColorEnabled(t *testing.T) {
