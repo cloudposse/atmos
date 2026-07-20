@@ -12,7 +12,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -85,19 +84,15 @@ func ExecuteValidate(_ context.Context, info *schema.ConfigAndStacksInfo, name s
 	return nil
 }
 
-// ExecuteList lists declared compositions. With a stack, it includes fulfillment
-// details for that stack; without a stack, it lists the declared composition
-// contract without inspecting stack fulfillment.
-func ExecuteList(_ context.Context, info *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(nil, "composition.ExecuteList")()
+// ListRows returns composition inventory rows. Without a stack, every declared
+// composition includes the stacks that fulfill at least one of its services.
+// With a stack, rows include fulfillment diagnostics for that stack.
+func ListRows(_ context.Context, info *schema.ConfigAndStacksInfo) ([]map[string]any, error) {
+	defer perf.Track(nil, "composition.ListRows")()
 
 	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
-		return err
-	}
-
-	if info.Stack == "" {
-		return renderDeclaredCompositions(atmosConfig.Compositions)
+		return nil, err
 	}
 
 	stacksMap, err := describeStacks(
@@ -105,13 +100,22 @@ func ExecuteList(_ context.Context, info *schema.ConfigAndStacksInfo) error {
 		false, false, false, false, nil, nil,
 	)
 	if err != nil {
-		return err
+		if info.Stack != "" || !noStacksError(err) {
+			return nil, err
+		}
+		stacksMap = map[string]any{}
 	}
 	statuses, err := resolveStatuses(stacksMap, info.Stack, "", atmosConfig.Compositions)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return renderStatusTable(statuses)
+	return listRows(statuses, info.Stack != ""), nil
+}
+
+func noStacksError(err error) bool {
+	return errors.Is(err, errUtils.ErrFailedToFindImport) ||
+		errors.Is(err, errUtils.ErrNoStackManifestsFound) ||
+		errors.Is(err, errUtils.ErrNoStacksFound)
 }
 
 // ExecuteLifecycle runs a provider-backed lifecycle/read command against one
@@ -467,36 +471,38 @@ func providerSupports(provider component.ComponentProvider, verb string) bool {
 	return slices.Contains(provider.GetAvailableCommands(), verb)
 }
 
-func renderDeclaredCompositions(compositions map[string]schema.Composition) error {
-	names, err := selectedCompositionNames(compositions, "")
-	if err != nil {
-		return err
-	}
-	var out strings.Builder
-	out.WriteString("COMPOSITION\tSERVICES\tDESCRIPTION\n")
-	for _, name := range names {
-		comp := compositions[name]
-		fmt.Fprintf(&out, "%s\t%s\t%s\n", name, strings.Join(comp.Services, listSeparator), comp.Description)
-	}
-	return data.Write(out.String())
-}
-
-func renderStatusTable(statuses []status) error {
-	var out strings.Builder
-	out.WriteString("COMPOSITION\tFULFILLED\tNOT PROVIDED\tUNKNOWN\tDESCRIPTION\n")
+func listRows(statuses []status, stackScoped bool) []map[string]any {
+	rows := make([]map[string]any, 0, len(statuses))
 	for i := range statuses {
 		s := &statuses[i]
-		fmt.Fprintf(
-			&out,
-			"%s\t%s\t%s\t%s\t%s\n",
-			s.Name,
-			strings.Join(s.Fulfilled, listSeparator),
-			strings.Join(s.NotProvided, listSeparator),
-			memberNames(s.Unknown),
-			s.Description,
-		)
+		row := map[string]any{
+			"composition": s.Name,
+			"services":    strings.Join(s.Services, listSeparator),
+			"description": s.Description,
+		}
+		if stackScoped {
+			row["fulfilled"] = strings.Join(s.Fulfilled, listSeparator)
+			row["not_provided"] = strings.Join(s.NotProvided, listSeparator)
+			row["unknown"] = memberNames(s.Unknown)
+		} else {
+			row["stacks"] = strings.Join(memberStacks(s.Members), listSeparator)
+		}
+		rows = append(rows, row)
 	}
-	return data.Write(out.String())
+	return rows
+}
+
+func memberStacks(members []member) []string {
+	seen := make(map[string]struct{}, len(members))
+	for _, member := range members {
+		seen[member.Stack] = struct{}{}
+	}
+	stacks := make([]string, 0, len(seen))
+	for stack := range seen {
+		stacks = append(stacks, stack)
+	}
+	sort.Strings(stacks)
+	return stacks
 }
 
 func renderStatus(s *status) {

@@ -2293,6 +2293,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
 	var baseComponentTest map[string]any
+	var baseComponentMocks map[string]any
 	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
 	var baseComponentProvider string
@@ -2494,6 +2495,13 @@ func processBaseComponentConfigInternal(
 			baseComponentTest, ok = baseComponentTestSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.test' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
+		if baseComponentMocksSection, baseComponentMocksSectionExist := baseComponentMap[cfg.MocksSectionName]; baseComponentMocksSectionExist {
+			baseComponentMocks, ok = baseComponentMocksSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.mocks' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
 			}
 		}
 
@@ -2721,6 +2729,14 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentTest = merged
+
+		// Base component `mocks` are literal output fixtures and inherit like
+		// other map sections; the concrete component wins on key conflicts.
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentMocks, baseComponentMocks})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentMocks = merged
 
 		// Base component `generate`
 		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})

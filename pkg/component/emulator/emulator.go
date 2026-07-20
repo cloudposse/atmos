@@ -109,10 +109,10 @@ var verbExecutors = map[string]verbExecutor{
 		return ExecuteReset(ctx, &ec.ConfigAndStacksInfo, flagBool(ec.Flags, "force"))
 	},
 	"ps": func(ctx context.Context, ec *component.ExecutionContext) error {
-		return ExecutePs(ctx, &ec.ConfigAndStacksInfo)
+		return ExecutePs(ctx, &ec.ConfigAndStacksInfo, flagBool(ec.Flags, "runtime"))
 	},
 	"list": func(ctx context.Context, ec *component.ExecutionContext) error {
-		return ExecuteList(ctx, &ec.ConfigAndStacksInfo)
+		return ExecuteList(ctx, &ec.ConfigAndStacksInfo, flagBool(ec.Flags, "runtime"))
 	},
 	"logs": func(ctx context.Context, ec *component.ExecutionContext) error {
 		return ExecuteLogs(ctx, &ec.ConfigAndStacksInfo)
