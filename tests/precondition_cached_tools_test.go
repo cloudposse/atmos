@@ -115,7 +115,7 @@ func withFakeCachedTool(t *testing.T, repo, version, binary string) string {
 func TestCachedTestToolBinaryExists(t *testing.T) {
 	t.Run("bare name exists", func(t *testing.T) {
 		binDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(binDir, "faketool"), []byte("fake\n"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedTestToolBinaryName("faketool")), []byte("fake\n"), 0o755))
 		assert.True(t, cachedTestToolBinaryExists(binDir, "faketool"))
 	})
 
