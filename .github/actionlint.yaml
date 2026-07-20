@@ -1,0 +1,6 @@
+self-hosted-runner:
+  labels:
+    - runner=terraform
+    - tag=atmos
+    - extras=s3-cache
+    - private=false

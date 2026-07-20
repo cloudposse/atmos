@@ -91,6 +91,27 @@ Atmos's native CI features rely on the standard GitHub Actions permission scopes
 
 There is no `comments: write` scope — PR comment writes use `pull-requests: write` (PR comments are issue comments under the hood). If you disable a feature in `atmos.yaml` (e.g. `ci.checks.enabled: false`), you can drop the matching permission.
 
+### Validate Workflows
+
+Lint GitHub Actions workflows directly with Atmos before running infrastructure commands:
+
+```yaml title=".github/workflows/validate.yml"
+- name: Validate workflows
+  run: atmos validate ci
+```
+
+`atmos validate ci` is an alias for [`atmos ci validate`](/cli/commands/ci/validate). With no file arguments it checks every `.yml` and `.yaml` workflow under the current working directory's `.github/workflows`. In GitHub Actions it emits inline annotations when `ci.enabled: true` and annotations are enabled. Use `--format=sarif` to write a SARIF document for an explicit code-scanning upload step.
+
+To lint workflow fixtures or another workflow directory, pass `--workflow-path`. The repository includes an intentionally invalid scenario that is useful for a local smoke test:
+
+```shell
+atmos ci validate --workflow-path tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows
+```
+
+The command reports the invalid `branch` key and exits with status 1.
+
+Atmos respects `.github/actionlint.yaml` or `.github/actionlint.yml`, including custom self-hosted runner labels. See [`atmos ci validate`](/cli/commands/ci/validate) for file selection, output formats, and configuration details.
+
 ### Plan on Pull Request
 
 <File title=".github/workflows/plan.yml">
