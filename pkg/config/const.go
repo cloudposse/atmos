@@ -141,6 +141,7 @@ const (
 	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
 	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"
 	TestSectionName                   = "test"
+	MocksSectionName                  = "mocks"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
 	StaticSectionName                 = "static"

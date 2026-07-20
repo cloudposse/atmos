@@ -167,7 +167,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 	}
 	log.Debug("Affected", "components", affectedYaml)
 
-	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+	stacks, err := ExecuteDescribeStacksWithAuthDisabledAndMocks(
 		&atmosConfig,
 		"",  // all stacks; the affected selector already constrains direct matches
 		nil, // all components; graph filtering applies the selected affected set
@@ -180,6 +180,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 		info.Skip,
 		authManager,
 		authDisabled,
+		info.UseMocks,
 	)
 	if err != nil {
 		return err

@@ -23,7 +23,7 @@ var _ = []string{
 
 func TestSelectedIdentity(t *testing.T) {
 	defaultAuth := &schema.AuthConfig{Identities: map[string]schema.Identity{
-		"local-aws": {Kind: types.IdentityKindAWSEmulator, Emulator: "aws", Default: true},
+		"local-aws": {Kind: types.IdentityKindAWSEmulator, Emulator: "local/aws", Default: true},
 		"other":     {Kind: "aws/permission-set"},
 	}}
 	noDefaultAuth := &schema.AuthConfig{Identities: map[string]schema.Identity{
