@@ -28,11 +28,9 @@ components:
         tags:
           Environment: "production"
           Region: "us-west-2"
-      settings:
-        depends_on:
-          1:
-            component: vpc
-          2:
-            # Depends on tgw/hub in the network account in us-east-1
-            component: tgw/hub
+      dependencies:
+        components:
+          - name: vpc
+          # Depends on tgw/hub in the network account in us-east-1
+          - name: tgw/hub
             stack: "ue1-network"
