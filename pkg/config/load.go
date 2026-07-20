@@ -1196,7 +1196,11 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 
 	// Process explicit imports.
 	// This will read the import paths from the config and process them.
-	if err := mergeImports(tempViper); err != nil {
+	_, basePathSource, err := importBasePathDeclaration(content)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parse main config base path: %w", errUtils.ErrMergeConfiguration, err)
+	}
+	if _, err := mergeImports(tempViper, configDir, basePathSource); err != nil {
 		log.Debug("error process explicit imports", "file", tempViper.ConfigFileUsed(), "error", err)
 	}
 
@@ -1508,12 +1512,73 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 	}
 }
 
+func importBasePathDeclaration(content []byte) (bool, string, error) {
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return false, "", err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
+		return false, "", nil
+	}
+	for i := 0; i < len(root.Content[0].Content); i += 2 {
+		if root.Content[0].Content[i].Value != "base_path" {
+			continue
+		}
+		if root.Content[0].Content[i+1].Tag == u.AtmosYamlFuncCwd {
+			return true, basePathSourceRuntime, nil
+		}
+		return true, "", nil
+	}
+	return false, "", nil
+}
+
+// resolveImportBasePath anchors config-sourced empty and dot-relative paths to the declaring config directory.
+func resolveImportBasePath(basePath, configDir, source string) string {
+	if filepath.IsAbs(basePath) || configDir == "" || source == basePathSourceRuntime {
+		return basePath
+	}
+
+	sep := string(filepath.Separator)
+	isDotRelative := basePath == "." ||
+		basePath == ".." ||
+		strings.HasPrefix(basePath, "./") ||
+		strings.HasPrefix(basePath, "."+sep) ||
+		strings.HasPrefix(basePath, "../") ||
+		strings.HasPrefix(basePath, ".."+sep)
+	if basePath != "" && !isDotRelative {
+		return basePath
+	}
+
+	if abs, err := filepath.Abs(configDir); err == nil {
+		configDir = abs
+	}
+	return filepath.Join(configDir, basePath)
+}
+
+// ResolveConfigImportBasePath resolves a base path declared by an imported config file.
+func ResolveConfigImportBasePath(basePath, configFile, fallback string) (string, error) {
+	defer perf.Track(nil, "config.ResolveConfigImportBasePath")()
+
+	content, err := readConfigFileContent(configFile)
+	if err != nil {
+		return "", err
+	}
+	declared, source, err := importBasePathDeclaration(content)
+	if err != nil {
+		return "", err
+	}
+	if !declared {
+		return fallback, nil
+	}
+	return resolveImportBasePath(basePath, filepath.Dir(configFile), source), nil
+}
+
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
-func mergeImports(dst *viper.Viper) error {
+func mergeImports(dst *viper.Viper, configDir, basePathSource string) (string, error) {
 	var src schema.AtmosConfiguration
 	err := dst.Unmarshal(&src, atmosDecodeHook())
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Inject provisioned identity imports before processing.
@@ -1522,10 +1587,16 @@ func mergeImports(dst *viper.Viper) error {
 		// Non-fatal: continue with config loading even if injection fails.
 	}
 
-	if err := processConfigImports(&src, dst); err != nil {
-		return err
+	basePathBeforeImports := src.BasePath
+	src.BasePath = resolveImportBasePath(src.BasePath, configDir, basePathSource)
+	importBasePathDir, err := processConfigImportsWithBasePathSource(&src, dst)
+	if err != nil {
+		return "", err
 	}
-	return nil
+	if basePathBeforeImports != "" || dst.GetString("base_path") == "" {
+		return "", nil
+	}
+	return importBasePathDir, nil
 }
 
 // injectProvisionedIdentityImports adds provisioned identity files to the import list.
@@ -1693,10 +1764,11 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 			return err
 		}
 		importConfig.Import = imports
-		importConfig.BasePath = tempViper.GetString("base_path")
-		if importConfig.BasePath == "" {
-			importConfig.BasePath = filepath.Dir(path)
+		_, basePathSource, sourceErr := importBasePathDeclaration(content)
+		if sourceErr != nil {
+			return fmt.Errorf("%w: parse config base path: %w", errUtils.ErrMergeConfiguration, sourceErr)
 		}
+		importConfig.BasePath = resolveImportBasePath(tempViper.GetString("base_path"), filepath.Dir(path), basePathSource)
 		if err = processConfigImports(&importConfig, v); err != nil {
 			return err
 		}

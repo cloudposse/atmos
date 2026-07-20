@@ -362,7 +362,7 @@ settings:
 
 	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
-	assert.NotEmpty(t, paths)
+	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL})
 }
 
 // TestLocalAdapter_NoNestedImports tests file without nested imports.

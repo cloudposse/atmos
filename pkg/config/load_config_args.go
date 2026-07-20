@@ -72,7 +72,20 @@ func mergeFiles(v *viper.Viper, configFilePaths []string) error {
 	if err != nil {
 		return err
 	}
+	basePathConfigDir := ""
 	for _, configPath := range configFilePaths {
+		configDir := filepath.Dir(configPath)
+		content, readErr := os.ReadFile(configPath)
+		if readErr != nil {
+			return fmt.Errorf("%w: %s: %w", errUtils.ErrReadConfig, configPath, readErr)
+		}
+		declaresBasePath, _, parseErr := importBasePathDeclaration(content)
+		if parseErr != nil {
+			return fmt.Errorf("%w: %s: %w", errUtils.ErrMergeConfiguration, configPath, parseErr)
+		}
+		if declaresBasePath || basePathConfigDir == "" {
+			basePathConfigDir = configDir
+		}
 		err := mergeConfigFile(configPath, v)
 		if err != nil {
 			log.Debug("error loading config file", "path", configPath, "error", err)
@@ -82,8 +95,16 @@ func mergeFiles(v *viper.Viper, configFilePaths []string) error {
 		if err := mergeDefaultImports(configPath, v); err != nil {
 			log.Debug("error process imports", "path", configPath, "error", err)
 		}
-		if err := mergeImports(v); err != nil {
-			log.Debug("error process imports", "file", configPath, "error", err)
+		importConfigDir := basePathConfigDir
+		if v.GetString("base_path") == "" {
+			importConfigDir = configDir
+		}
+		importBasePathDir, importErr := mergeImports(v, importConfigDir, "")
+		if importErr != nil {
+			log.Debug("error process imports", "file", configPath, "error", importErr)
+		}
+		if importBasePathDir != "" {
+			basePathConfigDir = importBasePathDir
 		}
 	}
 	return nil
