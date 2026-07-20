@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-The `--all` flag now executes Terraform components in dependency order. Run `atmos terraform apply --all -s ue2-dev` and components are automatically processed based on their `depends_on` relationships.
+The `--all` flag now executes Terraform components in dependency order. Run `atmos terraform apply --all -s ue2-dev` and components are automatically processed from their `dependencies.components` relationships.
 
 <!--truncate-->
 
@@ -37,18 +37,18 @@ When deploying a complete environment, component order matters. A database compo
 components:
   terraform:
     rds:
-      settings:
-        depends_on:
-          - component: vpc
+      dependencies:
+        components:
+          - name: vpc
     eks:
-      settings:
-        depends_on:
-          - component: vpc
+      dependencies:
+        components:
+          - name: vpc
     app:
-      settings:
-        depends_on:
-          - component: rds
-          - component: eks
+      dependencies:
+        components:
+          - name: rds
+          - name: eks
 ```
 
 ### Destroy in Reverse Order
@@ -81,7 +81,7 @@ Error: circular dependency detected: vpc -> rds -> app -> vpc
 When you run a command with `--all`, Atmos:
 
 1. **Discovers components** - Finds all Terraform components in the specified stack
-2. **Builds dependency graph** - Parses `depends_on` settings to create a directed acyclic graph (DAG)
+2. **Builds dependency graph** - Parses `dependencies.components` to create a directed acyclic graph (DAG)
 3. **Topological sort** - Orders components so dependencies come before dependents
 4. **Executes in order** - Runs the terraform command for each component sequentially
 
@@ -93,9 +93,9 @@ Dependencies can reference components in other stacks:
 components:
   terraform:
     app:
-      settings:
-        depends_on:
-          - component: vpc
+      dependencies:
+        components:
+          - name: vpc
             stack: ue2-network  # Different stack
 ```
 
