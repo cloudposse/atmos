@@ -352,7 +352,7 @@ atmos git push <name-or-path> [--dry-run]
 2. **Go-getter style `git::` URIs**, consistent with the syntax users already write in vendoring and `source` configs:
 
     ```bash
-    atmos git clone git::https://github.com/acme/repo.git?ref=main&depth=1
+    atmos git clone 'git::https://github.com/acme/repo.git?ref=main&depth=1'
     ```
 
     The `git::` forcing prefix is stripped; `?ref=` maps to branch/ref and `?depth=` to clone depth. Precedence: explicit flags > query params > repository config > defaults. Honored query params are `ref` and `depth`; unknown params fail with a clear error. Implementation reuses the existing go-getter URI parsing from the vendoring/downloader code path — no new parser.
