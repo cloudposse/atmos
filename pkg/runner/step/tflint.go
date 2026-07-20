@@ -17,6 +17,8 @@ import (
 
 const tflintStepType = "tflint"
 
+var runTFLint = tflintscanner.Run
+
 type TFLintHandler struct {
 	BaseHandler
 }
@@ -80,7 +82,7 @@ func (h *TFLintHandler) Execute(ctx context.Context, workflowStep *schema.Workfl
 		return nil, fmt.Errorf("step %q: failed to resolve component %q in stack %q: %w", workflowStep.Name, component, stack, err)
 	}
 
-	out, _, err := tflintscanner.Run(ctx, &tflintscanner.Options{
+	out, _, err := runTFLint(ctx, &tflintscanner.Options{
 		Args:          args,
 		Env:           env,
 		BaseEnv:       vars.EnvSlice(),

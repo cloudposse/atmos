@@ -1,6 +1,7 @@
 package step
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/scanners"
+	tflintscanner "github.com/cloudposse/atmos/pkg/scanners/tflint"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,6 +26,81 @@ func TestTFLintHandlerValidateRequiresComponent(t *testing.T) {
 	err := h.Validate(&schema.WorkflowStep{Name: "lint", Type: tflintStepType})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrStepFieldRequired))
+}
+
+func TestTFLintHandlerExecuteResolvesInputsAndBuildsResult(t *testing.T) {
+	original := runTFLint
+	t.Cleanup(func() { runTFLint = original })
+
+	vars := NewVariables()
+	vars.SetFlag("stack", "dev")
+	vars.SetTemplateData(map[string]any{"component": "vpc"})
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		assert.Equal(t, "vpc", component)
+		assert.Equal(t, "dev", stack)
+		assert.Equal(t, "terraform", componentType)
+		return &schema.ConfigAndStacksInfo{Component: component, ComponentFromArg: component, Stack: stack}, nil
+	})
+
+	runTFLint = func(_ context.Context, options *tflintscanner.Options) (*scanners.Output, *scanners.Context, error) {
+		assert.Equal(t, []string{"--chdir=$ATMOS_COMPONENT_PATH", "--format=sarif", "--minimum-failure-severity=warning"}, options.Args)
+		assert.Equal(t, map[string]string{"TFLINT_LOG": "info"}, options.Env)
+		assert.Equal(t, scanners.OnFailureFail, options.OnFailure)
+		return &scanners.Output{Summary: &scanners.Summary{Status: scanners.StatusWarning, Title: "1 finding", Findings: []scanners.Finding{{RuleID: "terraform_unused"}}}}, nil, nil
+	}
+
+	h := &TFLintHandler{BaseHandler: NewBaseHandler(tflintStepType, CategoryCommand, false)}
+	result, err := h.Execute(context.Background(), &schema.WorkflowStep{
+		Name:      "lint",
+		Type:      tflintStepType,
+		Component: "{{ .component }}",
+		Args:      []string{"--minimum-failure-severity=warning"},
+		Env:       map[string]string{"TFLINT_LOG": "info"},
+	}, vars)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "1 finding", result.Value)
+	assert.Equal(t, "vpc", result.Metadata["component"])
+	assert.Equal(t, "dev", result.Metadata["stack"])
+	assert.Equal(t, 1, result.Metadata["findings"])
+}
+
+func TestTFLintHandlerExecuteReturnsScannerErrorWithResult(t *testing.T) {
+	original := runTFLint
+	t.Cleanup(func() { runTFLint = original })
+
+	scannerErr := errors.New("tflint failed")
+	runTFLint = func(_ context.Context, _ *tflintscanner.Options) (*scanners.Output, *scanners.Context, error) {
+		return &scanners.Output{Summary: &scanners.Summary{Title: "lint failed"}}, nil, scannerErr
+	}
+
+	vars := NewVariables()
+	vars.SetFlag("stack", "dev")
+	h := &TFLintHandler{BaseHandler: NewBaseHandler(tflintStepType, CategoryCommand, false)}
+	result, err := h.Execute(context.Background(), &schema.WorkflowStep{Name: "lint", Type: tflintStepType, Component: "vpc"}, vars)
+
+	require.ErrorIs(t, err, scannerErr)
+	require.NotNil(t, result)
+	assert.Equal(t, "lint failed", result.Value)
+	assert.Equal(t, scannerErr.Error(), result.Error)
+}
+
+func TestTFLintHandlerExecuteReturnsResolutionErrors(t *testing.T) {
+	h := &TFLintHandler{BaseHandler: NewBaseHandler(tflintStepType, CategoryCommand, false)}
+
+	t.Run("missing stack", func(t *testing.T) {
+		_, err := h.Execute(context.Background(), &schema.WorkflowStep{Name: "lint", Type: tflintStepType, Component: "vpc"}, NewVariables())
+		require.ErrorIs(t, err, errUtils.ErrStepFieldRequired)
+	})
+
+	t.Run("component template", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetFlag("stack", "dev")
+		vars.SetTemplateRenderer(func(_ string, _ string, _ any) (string, error) { return "", errors.New("template failed") })
+		_, err := h.Execute(context.Background(), &schema.WorkflowStep{Name: "lint", Type: tflintStepType, Component: "{{ .component }}"}, vars)
+		require.ErrorContains(t, err, "failed to resolve component")
+	})
 }
 
 func TestResolveTFLintArgsAppendsUserArgsToDefaults(t *testing.T) {

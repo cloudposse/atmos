@@ -140,19 +140,23 @@ func lintTargets(graph *dependency.Graph, input []*dependency.Node) []*dependenc
 			input = append(input, node)
 		}
 	}
-	sort.Slice(input, func(i, j int) bool {
-		if input[i].Component == input[j].Component {
-			return input[i].Stack < input[j].Stack
+
+	valid := make([]*dependency.Node, 0, len(input))
+	for _, node := range input {
+		if node != nil && node.Component != "" && node.Stack != "" {
+			valid = append(valid, node)
 		}
-		return input[i].Component < input[j].Component
+	}
+	sort.Slice(valid, func(i, j int) bool {
+		if valid[i].Component == valid[j].Component {
+			return valid[i].Stack < valid[j].Stack
+		}
+		return valid[i].Component < valid[j].Component
 	})
 
-	seen := make(map[string]struct{}, len(input))
-	targets := make([]*dependency.Node, 0, len(input))
-	for _, node := range input {
-		if node == nil || node.Component == "" || node.Stack == "" {
-			continue
-		}
+	seen := make(map[string]struct{}, len(valid))
+	targets := make([]*dependency.Node, 0, len(valid))
+	for _, node := range valid {
 		if _, ok := seen[node.Component]; ok {
 			continue
 		}

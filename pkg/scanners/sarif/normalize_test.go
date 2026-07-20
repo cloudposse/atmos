@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -63,6 +64,39 @@ func TestNormalizeAbs_AbsolutePathResolvesToSource(t *testing.T) {
 	assert.Equal(t, wantRel, m.normalize(filepath.ToSlash(abs)))
 }
 
+func TestNormalizeArtifactURIsRewritesNestedSARIFLocations(t *testing.T) {
+	workspace := t.TempDir()
+	sourceRoot := filepath.Join(workspace, "components", "terraform", "bucket")
+	sourceFile := filepath.Join(sourceRoot, "main.tf")
+	require.NoError(t, os.MkdirAll(sourceRoot, 0o755))
+	require.NoError(t, os.WriteFile(sourceFile, []byte("# target\n"), 0o600))
+
+	previousWorkspace := viper.GetString(githubWorkspaceViperKey)
+	viper.Set(githubWorkspaceViperKey, workspace)
+	t.Cleanup(func() { viper.Set(githubWorkspaceViperKey, previousWorkspace) })
+
+	ctx := &scanners.Context{
+		AtmosConfig: &schema.AtmosConfiguration{
+			BasePathAbsolute:         workspace,
+			TerraformDirAbsolutePath: filepath.Join(workspace, "components", "terraform"),
+		},
+		Info: &schema.ConfigAndStacksInfo{ComponentFromArg: "bucket"},
+	}
+	in := []byte(`{"runs":[{"results":[{"locations":[{"physicalLocation":{"artifactLocation":{"uri":"` + filepath.ToSlash(sourceFile) + `"}}}]}]}]}`)
+	out := normalizeArtifactURIs(in, ctx)
+
+	require.NotEqual(t, in, out)
+	assert.Contains(t, string(out), `"uri":"components/terraform/bucket/main.tf"`)
+}
+
+func TestNormalizeArtifactURIsPreservesMalformedAndUnchangedDocuments(t *testing.T) {
+	invalid := []byte("not json")
+	assert.Equal(t, invalid, normalizeArtifactURIs(invalid, nil))
+
+	unchanged := []byte(`{"artifactLocation":"not-an-object"}`)
+	assert.Equal(t, unchanged, normalizeArtifactURIs(unchanged, nil))
+}
+
 func TestPathFromSARIFURI_WindowsDrivePathIsNotURLScheme(t *testing.T) {
 	for _, uri := range []string{
 		`C:/Users/runneradmin/AppData/Local/Temp/repo/main.tf`,
@@ -79,6 +113,12 @@ func TestPathFromSARIFURI_WindowsDrivePathIsNotURLScheme(t *testing.T) {
 func TestPathFromSARIFURI_ExternalURLIsRejected(t *testing.T) {
 	_, ok := pathFromSARIFURI("https://example.com/main.tf")
 	assert.False(t, ok)
+}
+
+func TestPathFromSARIFURI_FileURI(t *testing.T) {
+	got, ok := pathFromSARIFURI("file:///repo/components/main.tf")
+	assert.True(t, ok)
+	assert.Equal(t, "/repo/components/main.tf", got)
 }
 
 func TestIsWindowsDrivePath(t *testing.T) {

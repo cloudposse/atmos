@@ -23,5 +23,5 @@ runs:
     - name: Build Atmos
       shell: bash
       run: |
-        atmos build binary --target=linux --version=test
+        atmos build --target=linux --version=test
         echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
