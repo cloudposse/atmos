@@ -33,6 +33,10 @@ func init() {
 			"--output-file-path", "$ATMOS_OUTPUT_DIR",
 			"--quiet",
 			"--soft-fail",
+			// Atmos generates this file to inject runtime credentials and endpoints.
+			// It is not source configuration to scan, and Checkov's Terraform JSON
+			// parser cannot handle its provider override shape.
+			"--skip-path", "providers_override.tf.json",
 		},
 		// Checkov ships as a PyInstaller-bundled binary with a frozen
 		// `certifi` CA bundle. The frozen bundle frequently can't

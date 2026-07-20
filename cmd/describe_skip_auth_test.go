@@ -425,6 +425,7 @@ func newTestCmdForDescribeComponent(t *testing.T, processFunctions bool, identit
 	cmd.Flags().String("file", "", "")
 	cmd.Flags().Bool("process-templates", true, "")
 	cmd.Flags().Bool("process-functions", true, "")
+	cmd.Flags().Bool("use-mocks", false, "")
 	cmd.Flags().String("query", "", "")
 	cmd.Flags().StringSlice("skip", nil, "")
 	cmd.Flags().Bool("provenance", false, "")

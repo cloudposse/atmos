@@ -663,6 +663,10 @@ func bindEnv(v *viper.Viper, key ...string) {
 // journal entry — only regenerate the snapshot. Projects pinned to an earlier
 // edition get pre-change values re-applied by applyEditionDefaults.
 func setDefaultConfiguration(v *viper.Viper) {
+	// Start or initialize the Podman machine when it is selected and not running.
+	// Docker remains preferred whenever it is already available.
+	v.SetDefault("container.runtime.auto_start", true)
+
 	// EKS is opt-in since PR #1903 (journaled in pkg/edition; previously this
 	// SetDefault contradicted defaultCliConfig and kept the old behavior alive).
 	v.SetDefault("components.helmfile.use_eks", false)

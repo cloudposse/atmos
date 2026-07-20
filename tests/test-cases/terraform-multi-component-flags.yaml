@@ -2,6 +2,67 @@
 # These tests verify that multi-component flags execute without prompting for component selection
 # Related to: PR #1976 - Fix --all flag prompting for component (issue #1945)
 tests:
+  # Quick starts must be able to describe their complete graph before any Terraform state exists.
+  - name: "quick-start-simple terraform plan --all dry-run"
+    enabled: true
+    tty: false
+    description: "Verify the simple quick start supports an aggregate credential-free plan"
+    workdir: "../examples/quick-start-simple"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--all"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would plan"
+        - "station"
+        - "dry run"
+
+  - name: "quick-start-advanced terraform plan --all dry-run fails before scheduling when its emulator is unavailable"
+    enabled: true
+    tty: false
+    description: "Verify graph preflight reports the unavailable required-secret backend before any Terraform component runs"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--all"
+      - "-s"
+      - "plat-ue2-dev"
+      - "--identity=false"
+      - "--dry-run"
+    expect:
+      exit_code: 1
+      stderr:
+        - "Terraform preflight failed"
+        - "failed to resolve emulator"
+
+  - name: "terraform providers lock --all dry-run"
+    enabled: true
+    tty: false
+    description: "Verify provider-lock fleet execution preserves --all on the nested providers lock command without external secret dependencies"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "providers"
+      - "lock"
+      - "--all"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would providers lock"
+        - "vpc"
+        - "eks/cluster"
+        - "dry run"
+
   # Test --all flag with dry-run (no actual terraform execution)
   - name: "terraform plan --all executes without prompting"
     enabled: true

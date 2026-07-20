@@ -69,6 +69,9 @@ FLAGS
   -s, --stack string       The stack flag specifies the environment or configuration set for deployment in Atmos
                            CLI.
 
+      --use-mocks          Resolve Terraform state/output YAML functions from component mocks instead of remote state.
+                           Supported only by plan and describe commands
+
 
 GLOBAL FLAGS
 
@@ -150,5 +153,4 @@ GLOBAL FLAGS
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
                                              information
-
 

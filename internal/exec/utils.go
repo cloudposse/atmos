@@ -826,6 +826,14 @@ func processStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// Component mocks are literal fixture data. Keep them out of template and YAML
+	// function processing so a mock cannot resolve the real dependency it is meant
+	// to replace when --use-mocks is enabled.
+	literalMocks, hasLiteralMocks := configAndStacksInfo.ComponentSection[cfg.MocksSectionName]
+	if hasLiteralMocks {
+		delete(configAndStacksInfo.ComponentSection, cfg.MocksSectionName)
+	}
+
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
@@ -911,6 +919,9 @@ func processStacks(
 
 	if processTemplates || processYamlFunctions {
 		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
+	}
+	if hasLiteralMocks {
+		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
 	}
 
 	// Spacelift stack.

@@ -184,6 +184,9 @@ GLOBAL FLAGS
 
       --tags strings                         Filter by tags (comma-separated, matches any): --tags=production,tier-1
 
+      --use-mocks                            Resolve Terraform state/output YAML functions from component mocks
+                                             instead of remote state. Supported only by plan and describe commands
+
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
@@ -211,4 +214,3 @@ COMPATIBILITY FLAGS
       -target               Target specific resources for planning/applying
       -var                  Set a value for one of the input variables
       -var-file             Load variable values from the given file
-

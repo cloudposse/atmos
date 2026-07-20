@@ -3999,7 +3999,7 @@
               "type": "null"
             }
           ],
-          "description": "Provider selects the container runtime: \"docker\" | \"podman\" | \"\" (auto-detect:\ndocker, then podman). A global default for the per-step `provider:` field."
+          "description": "Provider selects the container runtime: \"auto\" | \"docker\" | \"podman\" | \"\".\n\"auto\" and \"\" auto-detect Docker, then Podman. A global default for the\nper-step `provider:` field."
         },
         "auto_start": {
           "anyOf": [
@@ -4013,7 +4013,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "AutoStart lets Atmos auto-init/start the Podman machine when no running runtime\nis found, instead of failing. A global default for the per-step\n`runtime_auto_start:` field; also settable via ATMOS_CONTAINER_RUNTIME_AUTO_START."
+          "description": "AutoStart lets Atmos auto-init/start the Podman machine when no running runtime\nis found, instead of failing. Enabled by default; a global default for the per-step\n`runtime_auto_start:` field; also settable via ATMOS_CONTAINER_RUNTIME_AUTO_START."
         },
         "host": {
           "anyOf": [
@@ -4031,7 +4031,7 @@
         }
       },
       "type": "object",
-      "description": "ContainerRuntimeConfig configures the container runtime provider (docker/podman)."
+      "description": "ContainerRuntimeConfig configures the container runtime provider (auto/docker/podman)."
     },
     "Dependencies": {
       "properties": {
@@ -10228,7 +10228,7 @@
               "type": "null"
             }
           ],
-          "description": "docker, podman, or empty for auto-detect."
+          "description": "auto, docker, podman, or empty for auto-detect."
         },
         "container": {
           "anyOf": [
@@ -14614,7 +14614,7 @@
               "type": "null"
             }
           ],
-          "description": "docker, podman, or empty for auto-detect."
+          "description": "auto, docker, podman, or empty for auto-detect."
         },
         "container": {
           "anyOf": [

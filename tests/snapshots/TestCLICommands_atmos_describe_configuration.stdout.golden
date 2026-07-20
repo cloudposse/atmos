@@ -140,9 +140,11 @@ auth:
   realm: <hash>
   providers: {}
   identities: {}
+container:
+  runtime:
+    auto_start: true
 list:
   instances:
     format: tree
     columns: []
   error_mode: warn
-

@@ -291,6 +291,11 @@ func TestNormalizeSnapshotOutputUnwrapsMarkdownProse(t *testing.T) {
 				"fence\n" +
 				"```\n",
 		},
+		{
+			name:     "normalizes final blank lines",
+			input:    "Usage:\n\n",
+			expected: "Usage:\n",
+		},
 	}
 
 	for _, tt := range tests {

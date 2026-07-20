@@ -23,11 +23,10 @@ func TestAutoStartFromEnv(t *testing.T) {
 	assert.False(t, autoStartFromEnv())
 }
 
-// TestDetectRuntimeWithPreferenceAndRecovery_EnvEnablesAutoStart verifies the
-// ATMOS_CONTAINER_RUNTIME_AUTO_START feature flag triggers Podman machine recovery
-// even when the per-step autoStart arg is false: Docker is absent and the Podman
-// machine is stopped, so detection must run `podman machine start` and then succeed.
-func TestDetectRuntimeWithPreferenceAndRecovery_EnvEnablesAutoStart(t *testing.T) {
+// TestDetectRuntimeWithPreferenceAndRecovery_AutoProviderRecoversPodman verifies
+// provider: auto takes the same recovery path as an omitted provider. Docker is
+// absent and the Podman machine is stopped, so detection starts it and succeeds.
+func TestDetectRuntimeWithPreferenceAndRecovery_AutoProviderRecoversPodman(t *testing.T) {
 	t.Setenv(envContainerRuntime, "")           // no explicit selector → auto-detect.
 	t.Setenv(envContainerRuntimeAutoStart, "1") // the feature flag under test.
 
@@ -53,7 +52,7 @@ func TestDetectRuntimeWithPreferenceAndRecovery_EnvEnablesAutoStart(t *testing.T
 	setExecutor(m)
 	defer resetExecutor()
 
-	rt, err := DetectRuntimeWithPreferenceAndRecovery(context.Background(), "", false)
+	rt, err := DetectRuntimeWithPreferenceAndRecovery(context.Background(), string(TypeAuto), false)
 	require.NoError(t, err)
 	assert.Equal(t, TypePodman, GetRuntimeType(rt))
 }

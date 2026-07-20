@@ -73,6 +73,18 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform component mocks are literal output values used only when the
+	// caller explicitly selects --use-mocks.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.MocksSectionName]; ok {
+			componentMocks, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.mocks' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentMocks = componentMocks
+		}
+	}
+
 	// Terraform-specific: extract required_providers section (DEV-3124).
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.RequiredProvidersSectionName]; ok {

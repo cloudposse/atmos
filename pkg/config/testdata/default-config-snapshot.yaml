@@ -7,6 +7,7 @@ cast.recording.width: 120
 components.helmfile.use_eks: false
 components.terraform.auto_provision_workdir_for_outputs: true
 components.terraform.plugin_cache: true
+container.runtime.auto_start: true
 describe.component.filter: schema
 describe.error_mode: warn
 describe.provenance: true

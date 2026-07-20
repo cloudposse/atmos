@@ -138,6 +138,71 @@ func TestCustomCommandStepWorkingDirectory(t *testing.T) {
 	assert.Equal(t, stepDir, strings.TrimSpace(string(actual)))
 }
 
+func TestCustomCommandWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "pwd.txt")
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:             "command-workdir",
+				WorkingDirectory: tmpDir,
+				Steps:            stepsFromStrings(fmt.Sprintf("pwd > %q", outputFile)),
+			},
+		},
+	}
+
+	root := &cobra.Command{Use: "atmos", SilenceErrors: true, SilenceUsage: true}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, root))
+	root.SetArgs([]string{"command-workdir"})
+	require.NoError(t, root.Execute())
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir, strings.TrimSpace(string(actual)))
+}
+
+func TestNestedCustomCommandInheritsWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "pwd.txt")
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:             "parent-workdir",
+				WorkingDirectory: tmpDir,
+				Commands: []schema.Command{
+					{
+						Name:  "child",
+						Steps: stepsFromStrings(fmt.Sprintf("pwd > %q", outputFile)),
+					},
+				},
+			},
+		},
+	}
+
+	root := &cobra.Command{Use: "atmos", SilenceErrors: true, SilenceUsage: true}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, root))
+	root.SetArgs([]string{"parent-workdir", "child"})
+	require.NoError(t, root.Execute())
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir, strings.TrimSpace(string(actual)))
+}
+
 func TestCustomCommandDispatchRejectsUnexpectedArgsOnRunnableParent(t *testing.T) {
 	_ = NewTestKit(t)
 
