@@ -428,6 +428,13 @@ settings:
 atmos terraform plan --mask=false
 ```
 
+> [!WARNING]
+> When masking is disabled, Atmos does not register sensitive Terraform/OpenTofu outputs for
+> masking or secret-safe `TF_VAR_` transport. Those output values can therefore be written to the
+> generated `.tfvars.json` file. Use this compatibility/debugging opt-out only when writing those
+> values to disk is acceptable; production consumers should declare explicit structured variable
+> types such as `object(...)` or `map(...)` instead.
+
 ## See Also
 
 - [PRD: I/O Handling Strategy](prd/io-handling-strategy.md) - Architecture and advanced patterns
