@@ -116,19 +116,19 @@ same current value as the journal (or omit the field).
 Two test layers make an unjournaled default change un-mergeable:
 
 1. **Snapshot** (`pkg/config/default_snapshot_test.go` +
-   `pkg/config/testdata/default-config-snapshot.yaml`): flattens `setDefaultConfiguration` and
-   compares against the committed golden file.
-   - Changed value → requires a journal entry whose `Old`/`New` match, **and** snapshot
-     regeneration.
-   - New key → snapshot regeneration only (encodes the new-defaults-aren't-gated rule).
-   - Removed key → fails; removals are out of the journal's scope and need explicit regeneration.
-   - Regenerate: `ATMOS_REGENERATE_DEFAULTS_SNAPSHOT=true go test ./pkg/config -run TestDefaultConfigurationSnapshot`
-   - `components.terraform.append_user_agent` is exempt (embeds the build version).
+    `pkg/config/testdata/default-config-snapshot.yaml`): flattens `setDefaultConfiguration` and
+    compares against the committed golden file.
+    - Changed value → requires a journal entry whose `Old`/`New` match, **and** snapshot
+      regeneration.
+    - New key → snapshot regeneration only (encodes the new-defaults-aren't-gated rule).
+    - Removed key → fails; removals are out of the journal's scope and need explicit regeneration.
+    - Regenerate: `ATMOS_REGENERATE_DEFAULTS_SNAPSHOT=true go test ./pkg/config -run TestDefaultConfigurationSnapshot`
+    - `components.terraform.append_user_agent` is exempt (embeds the build version).
 2. **Invariants** (`pkg/edition/journal_invariants_test.go` and
-   `pkg/config/edition_invariants_test.go`): dates valid and chronological per key; chains
-   consistent (`entry[n+1].Old == entry[n].New`); each key's newest `New` equals the live default;
-   journaled keys absent from the embedded atmos.yaml; `defaultCliConfig` agreement; the `edition`
-   key never journaled.
+    `pkg/config/edition_invariants_test.go`): dates valid and chronological per key; chains
+    consistent (`entry[n+1].Old == entry[n].New`); each key's newest `New` equals the live default;
+    journaled keys absent from the embedded atmos.yaml; `defaultCliConfig` agreement; the `edition`
+    key never journaled.
 
 ### Contributor workflow
 
@@ -136,7 +136,7 @@ Changing a shipped default is now three edits in one PR:
 
 1. Change the literal in `setDefaultConfiguration` (`pkg/config/load.go`).
 2. Append a dated `Entry` to `pkg/edition/journal.go` (date = expected merge date, `Ref` = PR URL,
-   `Old`/`New` in the type the field uses today).
+    `Old`/`New` in the type the field uses today).
 3. Regenerate the snapshot.
 
 Adding a brand-new default needs only edits 1 and 3.
@@ -147,18 +147,18 @@ Building the journal required 12 months of git archaeology over the default laye
 three cases where a declared default change never (fully) took effect because the layers disagreed:
 
 1. **`components.helmfile.use_eks`** — PR #1903 (2026-02-10) flipped the struct default to `false`
-   but left layer (a) at `true`, so every project with an atmos.yaml kept the old behavior. Fixed
-   here (layer (a) now `false`) and journaled, so `edition: "2026-01"` genuinely restores `true`.
+    but left layer (a) at `true`, so every project with an atmos.yaml kept the old behavior. Fixed
+    here (layer (a) now `false`) and journaled, so `edition: "2026-01"` genuinely restores `true`.
 2. **`settings.terminal.pager`** — PR #1642 (2025-10-16) disabled the pager in layer (a), but
-   `defaultCliConfig` still said `"less"`, so no-config-file projects kept a pager. Aligned to
-   `"false"` here and journaled.
+    `defaultCliConfig` still said `"less"`, so no-config-file projects kept a pager. Aligned to
+    `"false"` here and journaled.
 3. **`logs.level`** — PR #1430 declared `Info` → `Warning` in layers (a) and (c), but the embedded
-   atmos.yaml (layer b) set `logs.level: Info` in the config layer, which wins — so the effective
-   default remained `Info` for over nine months after the change was declared. **Resolved in this
-   PR:** the embedded atmos.yaml no longer sets any logging keys (de-shadowed; the journaled-keys-
-   absent invariant test now enforces this), making `Warning` genuinely effective for un-pinned
-   projects, and the change is journaled (dated `2025-09-23`, when PR #1430 declared it, so pins
-   from before that date restore `Info`).
+    atmos.yaml (layer b) set `logs.level: Info` in the config layer, which wins — so the effective
+    default remained `Info` for over nine months after the change was declared. **Resolved in this
+    PR:** the embedded atmos.yaml no longer sets any logging keys (de-shadowed; the journaled-keys-
+    absent invariant test now enforces this), making `Warning` genuinely effective for un-pinned
+    projects, and the change is journaled (dated `2025-09-23`, when PR #1430 declared it, so pins
+    from before that date restore `Info`).
 
 The pager entry also set the precedent that `Old`/`New` are recorded in the type the field uses
 **today** (string `"true"`/`"false"`), because `Old` is re-injected via `SetDefault` against the
