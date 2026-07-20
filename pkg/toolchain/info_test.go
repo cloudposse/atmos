@@ -1,13 +1,66 @@
 package toolchain
 
 import (
+	"strings"
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestCreateVersionsTableDoesNotExpandHeaders(t *testing.T) {
+	t.Parallel()
+
+	table, err := createVersionsTable([][]string{
+		{" ", "X.X.X", "YYYY-MM-DD", "X.X.X"},
+		{" ", "X.X.X", "YYYY-MM-DD", "When the result list is updated, move the cursor to the item with the best score"},
+	}, 72)
+
+	assert.NoError(t, err)
+
+	header := strings.TrimRight(strings.Split(ansi.Strip(table.String()), "\n")[0], " ")
+	assert.Equal(t, "    VERSION  DATE        TITLE", header)
+	assert.NotContains(t, header, "VERSION                DATE")
+}
+
+func TestCreateVersionsTableKeepsIndicatorColumnCompact(t *testing.T) {
+	t.Parallel()
+
+	table, err := createVersionsTable(nil, 72)
+	assert.NoError(t, err)
+
+	header := strings.TrimRight(strings.Split(ansi.Strip(table.String()), "\n")[0], " ")
+	assert.Equal(t, "    VERSION                DATE                   TITLE", header)
+}
+
+// TestCreateVersionsTableIndicatorColumnMatchesPopulatedRows is a regression
+// test: the indicator column must stay pinned to its natural width even when
+// rows are populated. Before this fix, lipgloss/table's auto-expand
+// distributed spare width round-robin across every under-sized column
+// (including the blank indicator column), inflating it and throwing off
+// VERSION/DATE/TITLE header alignment relative to the data rows below it.
+func TestCreateVersionsTableIndicatorColumnMatchesPopulatedRows(t *testing.T) {
+	t.Parallel()
+
+	table, err := createVersionsTable([][]string{
+		{" ", "X.X.X", "YYYY-MM-DD", "Changelog"},
+		{" ", "X.X.X", "YYYY-MM-DD", "Changelog"},
+		{" ", "X.X.X", "YYYY-MM-DD", "Changelog"},
+	}, 72)
+	assert.NoError(t, err)
+
+	lines := strings.Split(ansi.Strip(table.String()), "\n")
+	header := strings.TrimRight(lines[0], " ")
+	firstDataRow := strings.TrimRight(lines[2], " ")
+
+	// Both the header and the data rows must begin with the same indicator
+	// column width (indicatorColumnWidth content + 1 char left padding).
+	assert.True(t, strings.HasPrefix(header, "    VERSION"), "header: %q", header)
+	assert.True(t, strings.HasPrefix(firstDataRow, "    X.X.X"), "first data row: %q", firstDataRow)
+}
 
 func TestInfoCommand_AliasResolution(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{})

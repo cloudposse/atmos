@@ -66,13 +66,23 @@ func TestComponentArgCompletion_NoProjectDegradesGracefully(t *testing.T) {
 }
 
 func TestStackFlagCompletion_ListsStacks(t *testing.T) {
-	// Run from the example project dir so config discovery finds its atmos.yaml.
+	// The initial stack prompt must show only stacks that actually configure an
+	// emulator, even before the user has selected a component.
 	t.Chdir(exampleProjectPath(t))
 	withViperBasePath(t, "")
 
 	stacks, directive := stackFlagCompletion(&cobra.Command{Use: "emulator"}, nil, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	assert.Contains(t, stacks, "dev")
+	assert.Equal(t, []string{"local"}, stacks)
+}
+
+func TestStackFlagCompletion_FiltersForEmulatorComponent(t *testing.T) {
+	t.Chdir(exampleProjectPath(t))
+	withViperBasePath(t, "")
+
+	stacks, directive := stackFlagCompletion(&cobra.Command{Use: "up"}, []string{"aws"}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"local"}, stacks)
 }
 
 func TestComponentArgCompletion_ResolvesProjectPipeline(t *testing.T) {
@@ -96,11 +106,15 @@ func TestComponentArgCompletion_ResolvesProjectPipeline(t *testing.T) {
 }
 
 func TestRegisterEmulatorCompletions(t *testing.T) {
-	// Every subcommand gets the component-arg completion function attached.
+	// Lifecycle subcommands get component-arg completion; inspection verbs do not.
 	parent := &cobra.Command{Use: "emulator"}
 	child := &cobra.Command{Use: "up"}
-	parent.AddCommand(child)
+	list := &cobra.Command{Use: "list"}
+	ps := &cobra.Command{Use: "ps"}
+	parent.AddCommand(child, list, ps)
 
 	RegisterEmulatorCompletions(parent)
 	require.NotNil(t, child.ValidArgsFunction)
+	assert.Nil(t, list.ValidArgsFunction)
+	assert.Nil(t, ps.ValidArgsFunction)
 }
