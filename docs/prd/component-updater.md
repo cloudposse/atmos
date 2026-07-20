@@ -55,17 +55,15 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     steps:
       - uses: actions/checkout@v6
-      - name: Install Atmos
-        run: |
-          curl -fsSL https://atmos.tools/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: atmos vendor update --pull-request
         env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
 ```
 
-The workflow uses checkout plus native Atmos installation and Atmos itself; no third-party action performs updating, committing, pushing, or PR publishing. Migrate legacy options and roll out groups progressively using [from-component-updater.md](../../agent-skills/skills/atmos-migration/references/from-component-updater.md).
+The workflow uses the official `ghcr.io/cloudposse/atmos` container image plus checkout and Atmos itself; no third-party action performs updating, committing, pushing, or PR publishing. Migrate legacy options and roll out groups progressively using [from-component-updater.md](../../agent-skills/skills/atmos-migration/references/from-component-updater.md).
 
 ## Test plan
 
