@@ -40,28 +40,28 @@ These principles override default agent instincts. Internalize them before propo
 user's repo.
 
 1. **Migration is opt-in, not all-or-nothing.** Atmos does not require a filesystem
-   reorganization. Point `base_path` at the user's existing layout (e.g., `base_path: "terraform"`
-   or `base_path: "."`) when preserving layout lowers adoption risk. The `components/terraform/`
-   convention is still the best-practice layout for new or fully migrated repos because Atmos
-   supports multiple toolchains (Terraform, Helmfile, Packer, Ansible); it is not a prerequisite
-   for adopting Atmos in Terraform-only repos.
+    reorganization. Point `base_path` at the user's existing layout (e.g., `base_path: "terraform"`
+    or `base_path: "."`) when preserving layout lowers adoption risk. The `components/terraform/`
+    convention is still the best-practice layout for new or fully migrated repos because Atmos
+    supports multiple toolchains (Terraform, Helmfile, Packer, Ansible); it is not a prerequisite
+    for adopting Atmos in Terraform-only repos.
 2. **Existing `.tfvars` files may be kept during migration.** Use `!include` to pull them into
-   stacks when the user wants minimal disruption. Converting values into native stack YAML remains
-   the best-practice end state when the user wants deep-merge inheritance and richer stack
-   composition, but it can happen progressively.
+    stacks when the user wants minimal disruption. Converting values into native stack YAML remains
+    the best-practice end state when the user wants deep-merge inheritance and richer stack
+    composition, but it can happen progressively.
 3. **No Terraform code changes are required.** Don't rewrite providers, backends, or modules
-   during migration. Atmos generates `backend.tf.json` and `*.auto.tfvars.json` at runtime.
+    during migration. Atmos generates `backend.tf.json` and `*.auto.tfvars.json` at runtime.
 4. **Workspaces are not the enemy.** If the user has `terraform.workspace`-driven environments,
-   Atmos can map onto their existing state via `metadata.terraform_workspace` and
-   `workspace_key_prefix`. They do not have to abandon their workspace state to adopt Atmos.
+    Atmos can map onto their existing state via `metadata.terraform_workspace` and
+    `workspace_key_prefix`. They do not have to abandon their workspace state to adopt Atmos.
 5. **Prefer YAML functions over Gomplate datasources.** When both can express the same thing
-   (`!include` vs `gomplate.datasources` for files, `!exec` vs templated shell, `!env` vs
-   `gomplate getenv`, `!store` vs custom datasource URLs), reach for the YAML function first.
-   YAML functions are type-safe, can't break YAML parsing, produce clear errors, and don't
-   require enabling Gomplate. See the [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md)
-   and [atmos-templates](../atmos-templates/SKILL.md) skills for the boundary.
+    (`!include` vs `gomplate.datasources` for files, `!exec` vs templated shell, `!env` vs
+    `gomplate getenv`, `!store` vs custom datasource URLs), reach for the YAML function first.
+    YAML functions are type-safe, can't break YAML parsing, produce clear errors, and don't
+    require enabling Gomplate. See the [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md)
+    and [atmos-templates](../atmos-templates/SKILL.md) skills for the boundary.
 6. **Crawl → walk → run.** Get the user to a working `atmos terraform plan` in 20 minutes; defer
-   inheritance, catalogs, and multi-account hierarchies until they have a concrete need.
+    inheritance, catalogs, and multi-account hierarchies until they have a concrete need.
 
 ## Decide the Migration Shape First
 
@@ -87,20 +87,20 @@ unless the user's setup requires it.
 
 1. **Install Atmos.** See `atmos.tools/install`.
 2. **Create `atmos.yaml`** at the repo root, pointing `base_path` and `components.terraform.base_path`
-   at the user's existing layout. Do not ask them to move files.
+    at the user's existing layout. Do not ask them to move files.
 3. **Create one stack file** for one environment. Use `!include` of an existing `.tfvars` file so
-   nothing has to be rewritten:
-   ```yaml
-   # stacks/dev.yaml
-   import:
-     - _defaults
-   components:
-     terraform:
-       vpc:
-         vars: !include ../path/to/existing/dev.tfvars
-   ```
+    nothing has to be rewritten:
+    ```yaml
+    # stacks/dev.yaml
+    import:
+      - _defaults
+    components:
+      terraform:
+        vpc:
+          vars: !include ../path/to/existing/dev.tfvars
+    ```
 4. **Run `atmos terraform plan vpc -s dev`** and confirm output matches what `terraform plan
-   -var-file=dev.tfvars` produced before.
+    -var-file=dev.tfvars` produced before.
 
 A working reference for this shape lives at `examples/native-terraform/` in the Atmos repo.
 

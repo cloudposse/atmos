@@ -316,18 +316,18 @@ Spec details (so implementation does not re-decide scope):
 4. **Default sort:** `name:asc`.
 5. **Column configuration** in `atmos.yaml` follows the established `<section>.list.columns` pattern:
 
-   ```yaml
-   git:
-     list:
-       format: table
-       columns:
-         - name: Name
-           value: "{{ .name }}"
-         - name: URI
-           value: "{{ .uri }}"
-   ```
+    ```yaml
+    git:
+      list:
+        format: table
+        columns:
+          - name: Name
+            value: "{{ .name }}"
+          - name: URI
+            value: "{{ .uri }}"
+    ```
 
-   This also feeds dynamic tab completion for `--columns`.
+    This also feeds dynamic tab completion for `--columns`.
 6. **Alias (decided):** `atmos list git-repositories` is registered via the command registry alias mechanism (`CommandAlias` from `GetAliases()`), pointing at `atmos git list` — same pattern as `atmos workflow list` ↔ `atmos list workflows`.
 7. **Filtering:** v1 includes the standard list filter flag, bound to `ATMOS_GIT_LIST_FILTER` (not the shared `ATMOS_LIST_FILTER` key).
 
@@ -351,11 +351,11 @@ atmos git push <name-or-path> [--dry-run]
 1. Plain Git URLs: `https://github.com/acme/repo.git`, `git@github.com:acme/repo.git` (scp-style).
 2. **Go-getter style `git::` URIs**, consistent with the syntax users already write in vendoring and `source` configs:
 
-   ```bash
-   atmos git clone git::https://github.com/acme/repo.git?ref=main&depth=1
-   ```
+    ```bash
+    atmos git clone git::https://github.com/acme/repo.git?ref=main&depth=1
+    ```
 
-   The `git::` forcing prefix is stripped; `?ref=` maps to branch/ref and `?depth=` to clone depth. Precedence: explicit flags > query params > repository config > defaults. Honored query params are `ref` and `depth`; unknown params fail with a clear error. Implementation reuses the existing go-getter URI parsing from the vendoring/downloader code path — no new parser.
+    The `git::` forcing prefix is stripped; `?ref=` maps to branch/ref and `?depth=` to clone depth. Precedence: explicit flags > query params > repository config > defaults. Honored query params are `ref` and `depth`; unknown params fail with a clear error. Implementation reuses the existing go-getter URI parsing from the vendoring/downloader code path — no new parser.
 
 **Ad hoc URI clone destination:** a URI clone with no configured name clones into `<cwd>/<repo-name>` like plain `git clone`; `--workdir` overrides. XDG workdirs are reserved for *named* managed repositories.
 
@@ -418,17 +418,17 @@ Specific requirements discovered against the existing flag registry:
 1. **`--identity` is already a global persistent flag** (bound to `ATMOS_IDENTITY`, with select support). `cmd/git` must NOT re-register it — Cobra panics on redefinition. Read it from the inherited global.
 2. **All git-specific env vars use the `ATMOS_GIT_` prefix** to avoid Viper flat-keyspace collisions with existing bindings (`ATMOS_REPO_PATH` is taken by terraform/list-affected; `ATMOS_WORKDIR_*` is taken by `terraform workdir clean`; `ATMOS_DRY_RUN` is the generic dry-run key; `ATMOS_LIST_FILTER` is the list filter):
 
-   | Flag | Env var |
-   | --- | --- |
-   | `--repo-uri` | `ATMOS_GIT_REPO_URI` |
-   | `--branch` | `ATMOS_GIT_BRANCH` |
-   | `--remote` | `ATMOS_GIT_REMOTE` |
-   | `--workdir` | `ATMOS_GIT_WORKDIR` |
-   | `--depth` | `ATMOS_GIT_DEPTH` |
-   | `--filter` (clone) | `ATMOS_GIT_FILTER` |
-   | `--dry-run` | `ATMOS_GIT_DRY_RUN` |
-   | `--columns` (list) | `ATMOS_GIT_LIST_COLUMNS` |
-   | `--format` (list) | `ATMOS_GIT_LIST_FORMAT` |
+    | Flag | Env var |
+    | --- | --- |
+    | `--repo-uri` | `ATMOS_GIT_REPO_URI` |
+    | `--branch` | `ATMOS_GIT_BRANCH` |
+    | `--remote` | `ATMOS_GIT_REMOTE` |
+    | `--workdir` | `ATMOS_GIT_WORKDIR` |
+    | `--depth` | `ATMOS_GIT_DEPTH` |
+    | `--filter` (clone) | `ATMOS_GIT_FILTER` |
+    | `--dry-run` | `ATMOS_GIT_DRY_RUN` |
+    | `--columns` (list) | `ATMOS_GIT_LIST_COLUMNS` |
+    | `--format` (list) | `ATMOS_GIT_LIST_FORMAT` |
 
 3. **`--sign`/`--no-sign` mutual exclusion** uses the established pattern: register both via `WithBoolFlag`, then `cmd.MarkFlagsMutuallyExclusive("sign", "no-sign")` after `parser.RegisterFlags(cmd)` (precedent: `cmd/devcontainer/shell.go`).
 4. **`--path` is a string-slice flag** (`WithStringSliceFlag`), following existing repeatable-flag plumbing.

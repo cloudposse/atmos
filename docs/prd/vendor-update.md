@@ -16,12 +16,12 @@ also no way to preview what changed between two versions before adopting one.
 ## Goals
 
 1. **`atmos vendor update`** — check Git sources for a newer allowed version and
-   update the `version` field in place, **preserving comments, anchors, and
-   templates** (`{{.Version}}` in source URLs). Dry-run with `--check`.
+    update the `version` field in place, **preserving comments, anchors, and
+    templates** (`{{.Version}}` in source URLs). Dry-run with `--check`.
 2. **`atmos vendor diff`** — show the Git diff between two versions (tags,
-   branches, or commits) of a vendored component, without a local checkout.
+    branches, or commits) of a vendored component, without a local checkout.
 3. **Version constraints** — per-source semver constraints, exclusions, and a
-   no-prereleases toggle.
+    no-prereleases toggle.
 
 ## Non-goals (initial version)
 

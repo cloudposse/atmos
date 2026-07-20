@@ -34,7 +34,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 ## Process
 
 1. Inspect current project behavior with `atmos describe stacks`, `atmos list components`, and
-   `atmos validate stacks`.
+    `atmos validate stacks`.
 2. Replace one class of legacy pattern at a time.
 3. Preserve resolved stack output unless the modernization intentionally changes behavior.
 4. Validate with `atmos describe component <component> -s <stack>` before changing CI.
