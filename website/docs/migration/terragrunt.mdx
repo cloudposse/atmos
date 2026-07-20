@@ -201,7 +201,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
         eks:
           dependencies:
             components:
-              - component: vpc
+              - name: vpc
           vars:
             vpc_id: !terraform.output vpc.vpc_id
             subnet_ids: !terraform.output vpc.private_subnet_ids
