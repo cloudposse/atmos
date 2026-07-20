@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"errors"
 	"runtime"
 	"testing"
@@ -12,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/scanners/tflint"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -75,7 +76,6 @@ func TestTerraformLintAffectedArgsCopiesFlagsAndExecutionInfo(t *testing.T) {
 	assert.Equal(t, "main", args.Ref)
 	assert.Equal(t, "abc123", args.SHA)
 	assert.True(t, args.CloneTargetRef)
-	assert.True(t, args.IncludeDependents)
 	assert.Equal(t, info.Stack, args.Stack)
 	assert.Equal(t, info.Skip, args.Skip)
 	assert.True(t, args.AuthDisabled)
@@ -106,11 +106,14 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"}
 		patches.ApplyFunc(resolveTerraformLintInfo, func(*viper.Viper, []string) (*schema.ConfigAndStacksInfo, error) { return info, nil })
 		called := false
-		patches.ApplyFunc(e.ExecuteTerraformLint, func(got *schema.ConfigAndStacksInfo) error {
+		original := executeTerraformLint
+		t.Cleanup(func() { executeTerraformLint = original })
+		executeTerraformLint = func(_ context.Context, _ *tflint.Runtime, got *schema.ConfigAndStacksInfo, affected *tflint.AffectedOptions) error {
 			called = true
 			assert.Same(t, info, got)
+			assert.Nil(t, affected)
 			return nil
-		})
+		}
 
 		require.NoError(t, runTerraformLint(newCommand(), []string{"vpc"}))
 		assert.True(t, called)
@@ -124,13 +127,16 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{Affected: true, Stack: "dev", ProcessTemplates: true}
 		patches.ApplyFunc(resolveTerraformLintInfo, func(*viper.Viper, []string) (*schema.ConfigAndStacksInfo, error) { return info, nil })
 		called := false
-		patches.ApplyFunc(e.ExecuteTerraformLintAffected, func(args *e.DescribeAffectedCmdArgs, got *schema.ConfigAndStacksInfo) error {
+		original := executeTerraformLint
+		t.Cleanup(func() { executeTerraformLint = original })
+		executeTerraformLint = func(_ context.Context, _ *tflint.Runtime, got *schema.ConfigAndStacksInfo, args *tflint.AffectedOptions) error {
 			called = true
 			assert.Same(t, info, got)
+			require.NotNil(t, args)
 			assert.Equal(t, "dev", args.Stack)
 			assert.True(t, args.ProcessTemplates)
 			return nil
-		})
+		}
 
 		require.NoError(t, runTerraformLint(newCommand(), nil))
 		assert.True(t, called)

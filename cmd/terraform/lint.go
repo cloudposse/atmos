@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -9,11 +10,15 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/scanners/tflint"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var lintParser *flags.StandardParser
+
+var executeTerraformLint = tflint.Execute
 
 // lintCmd represents the Terraform-aware TFLint command. Unlike a Terraform
 // passthrough command, it selects component source directories and runs TFLint
@@ -64,9 +69,9 @@ func runTerraformLint(cmd *cobra.Command, args []string) error {
 	}
 
 	if info.Affected {
-		return e.ExecuteTerraformLintAffected(terraformLintAffectedArgs(cmd, info), info)
+		return executeTerraformLint(context.Background(), terraformLintRuntime(), info, terraformLintAffectedArgs(cmd, info))
 	}
-	return e.ExecuteTerraformLint(info)
+	return executeTerraformLint(context.Background(), terraformLintRuntime(), info, nil)
 }
 
 // bindTerraformLintFlags binds both the shared terraform flags and the
@@ -115,7 +120,7 @@ func checkTerraformLintFlags(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-func terraformLintAffectedArgs(cmd *cobra.Command, info *schema.ConfigAndStacksInfo) *e.DescribeAffectedCmdArgs {
+func terraformLintAffectedArgs(cmd *cobra.Command, info *schema.ConfigAndStacksInfo) *tflint.AffectedOptions {
 	getString := func(name string) string {
 		value, _ := cmd.Flags().GetString(name)
 		return value
@@ -124,18 +129,52 @@ func terraformLintAffectedArgs(cmd *cobra.Command, info *schema.ConfigAndStacksI
 		value, _ := cmd.Flags().GetBool(name)
 		return value
 	}
-	return &e.DescribeAffectedCmdArgs{
+	return &tflint.AffectedOptions{
 		RepoPath:             getString("repo-path"),
 		Ref:                  getString("ref"),
 		SHA:                  getString("sha"),
 		SSHKeyPath:           getString("ssh-key"),
 		SSHKeyPassword:       getString("ssh-key-password"),
 		CloneTargetRef:       getBool("clone-target-ref"),
-		IncludeDependents:    getBool("include-dependents"),
 		Stack:                info.Stack,
 		ProcessTemplates:     info.ProcessTemplates,
 		ProcessYamlFunctions: info.ProcessFunctions,
 		Skip:                 info.Skip,
 		AuthDisabled:         info.AuthDisabled,
+	}
+}
+
+func terraformLintRuntime() *tflint.Runtime {
+	return &tflint.Runtime{
+		SetupAuth:          e.SetupComponentAuthForCLI,
+		DescribeStacks:     e.ExecuteDescribeStacks,
+		ProcessStacks:      e.ProcessStacks,
+		AffectedComponents: resolveTerraformLintAffectedComponents,
+	}
+}
+
+func resolveTerraformLintAffectedComponents(atmosConfig *schema.AtmosConfiguration, options *tflint.AffectedOptions, authManager auth.AuthManager) ([]schema.Affected, error) {
+	switch {
+	case options.RepoPath != "":
+		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
+			atmosConfig, options.RepoPath, false, options.IncludeSettings, options.Stack,
+			options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip, options.ExcludeLocked,
+			authManager, options.AuthDisabled,
+		)
+		return affected, err
+	case options.CloneTargetRef:
+		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(
+			atmosConfig, options.Ref, options.SHA, options.SSHKeyPath, options.SSHKeyPassword,
+			false, options.IncludeSettings, options.Stack, options.ProcessTemplates,
+			options.ProcessYamlFunctions, options.Skip, options.ExcludeLocked, authManager, options.AuthDisabled,
+		)
+		return affected, err
+	default:
+		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
+			atmosConfig, options.Ref, options.SHA, options.TargetBranch, false, options.IncludeSettings,
+			options.Stack, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip,
+			options.ExcludeLocked, authManager, options.AuthDisabled,
+		)
+		return affected, err
 	}
 }
