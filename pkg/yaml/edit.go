@@ -3,24 +3,22 @@ package yaml
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
+	logging "gopkg.in/op/go-logging.v1"
 
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// yqEditSilentLevel sits above any real slog level so yq's internal logger
-// rejects every message during editing. Mirrors pkg/utils.yqSilentLevel; the
-// editor keeps its own copy so it never depends on whatever level the query
-// path last set process-wide.
-const yqEditSilentLevel = slog.Level(1000)
+// yqEditSilentLevel is lower than yq's critical level so its internal logger
+// rejects every message during editing.
+const yqEditSilentLevel logging.Level = -1
 
 // errWrapFmt is the format string for wrapping a sentinel error with an
 // underlying error.
@@ -70,7 +68,7 @@ func evaluateWithOptions(content []byte, expr string, opts editOptions) (string,
 	}
 
 	// Silence yq's internal diagnostics for the duration of the evaluation.
-	yqlib.GetLogger().SetLevel(yqEditSilentLevel)
+	logging.SetLevel(yqEditSilentLevel, "yq-lib")
 
 	pref := editPreferences(opts.indent)
 	encoder := yqlib.NewYamlEncoder(pref)

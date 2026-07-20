@@ -593,7 +593,7 @@ func firstSARIFToolName(sarif []byte) string {
 // ciEnabled reports whether CI integration is enabled in config — the master
 // switch all CI reporting outputs (summary/annotations/results) require.
 func ciEnabled(ctx *ExecContext) bool {
-	return ctx != nil && ctx.AtmosConfig != nil && ctx.AtmosConfig.CI.Enabled
+	return ctx != nil && ci.Enabled(ctx.AtmosConfig)
 }
 
 // ciSummaryEnabled reports whether the job step summary should be written.
@@ -609,22 +609,14 @@ func ciSummaryEnabled(ctx *ExecContext) bool {
 // ciAnnotationsEnabled reports whether inline annotations should be emitted.
 // Defaults to true (nil) when ci.enabled.
 func ciAnnotationsEnabled(ctx *ExecContext) bool {
-	if !ciEnabled(ctx) {
-		return false
-	}
-	e := ctx.AtmosConfig.CI.Annotations.Enabled
-	return e == nil || *e
+	return ctx != nil && ci.AnnotationsEnabled(ctx.AtmosConfig)
 }
 
 // ciResultsEnabled reports whether SARIF should be uploaded to the provider's
 // findings store. Defaults to false (nil) — opt-in, since it has side effects
 // and extra requirements (GitHub Advanced Security, security-events: write).
 func ciResultsEnabled(ctx *ExecContext) bool {
-	if !ciEnabled(ctx) {
-		return false
-	}
-	e := ctx.AtmosConfig.CI.Results.Enabled
-	return e != nil && *e
+	return ctx != nil && ci.ResultsEnabled(ctx.AtmosConfig)
 }
 
 // buildAtmosEnv builds the ATMOS_* env-var map for the subprocess.
