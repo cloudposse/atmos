@@ -163,10 +163,10 @@ func TestManifestSchema_TerraformTestFixturesHookShape(t *testing.T) {
 
 func TestManifestSchema_TerraformComponentMocks(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"stack-config":  loadStackConfigSchemaBytes(t),
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
