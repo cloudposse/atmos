@@ -7,24 +7,20 @@ package utils
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
+	logging "gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// yqSilentLevel sits above any real slog level so yq's internal
-// IsEnabledFor() gate rejects every message. Using a level (rather
-// than swapping the slog.Logger via SetSlogger) keeps the state
-// reversible across repeated configureYqLogger calls — a later
-// Trace-level call can restore verbosity by setting a normal level.
-// SetSlogger has no getter to recover the original, so it would
-// pin the process-wide yq logger at the first level we chose.
-const yqSilentLevel = slog.Level(1000)
+// yqSilentLevel is lower than yq's critical level, so its IsEnabledFor()
+// gate rejects every message. Using a level keeps logger configuration
+// reversible across repeated configureYqLogger calls.
+const yqSilentLevel logging.Level = -1
 
 // configureYqLogger configures the yq logger based on Atmos configuration.
 // Non-Trace log levels suppress yq's internal diagnostics; Trace
@@ -33,12 +29,11 @@ const yqSilentLevel = slog.Level(1000)
 func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "utils.configureYqLogger")()
 
-	logger := yqlib.GetLogger()
 	if atmosConfig == nil || atmosConfig.Logs.Level != LogLevelTrace {
-		logger.SetLevel(yqSilentLevel)
+		logging.SetLevel(yqSilentLevel, "yq-lib")
 		return
 	}
-	logger.SetLevel(slog.LevelDebug)
+	logging.SetLevel(logging.DEBUG, "yq-lib")
 }
 
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
