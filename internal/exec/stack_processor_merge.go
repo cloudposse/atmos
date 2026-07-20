@@ -247,6 +247,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 
 	// Terraform-specific: merge test configuration.
 	var finalComponentTest map[string]any
+	var finalComponentMocks map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
 		var testCtx *m.DeferredMergeContext
 		finalComponentTest, testCtx, err = m.MergeWithDeferred(
@@ -261,6 +262,14 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 
 		if err := m.ApplyDeferredMerges(testCtx, finalComponentTest, mergeConfig, nil); err != nil {
+			return nil, err
+		}
+
+		finalComponentMocks, err = m.Merge(mergeConfig, []map[string]any{
+			result.BaseComponentMocks,
+			result.ComponentMocks,
+		})
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -576,6 +585,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
 		if len(finalComponentTest) > 0 {
 			comp[cfg.TestSectionName] = finalComponentTest
+		}
+		if len(finalComponentMocks) > 0 {
+			comp[cfg.MocksSectionName] = finalComponentMocks
 		}
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType

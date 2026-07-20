@@ -38,8 +38,9 @@ stacks/deploy/dev.yaml          # fulfills frontend + api + database
 
 ## List and validate membership
 
-`atmos composition list` shows declared compositions. Add `-s <stack>` to include
-which services are fulfilled in that stack:
+`atmos composition list` shows declared compositions and the stacks where each has
+fulfilled members. Add `-s <stack>` to include which services are fulfilled in that
+stack:
 
 ```shell
 atmos composition list

@@ -14,7 +14,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/degradation"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // ---------------------------------------------------------------------------
@@ -29,6 +32,7 @@ func TestExtractDescribeComponentSections_AllPresent(t *testing.T) {
 	authMap := map[string]any{"role": "arn:aws"}
 	providers := map[string]any{"aws": map[string]any{}}
 	hooks := map[string]any{"pre_plan": "script.sh"}
+	secrets := map[string]any{"vars": map[string]any{"API_KEY": map[string]any{"store": "app-secrets"}}}
 	overrides := map[string]any{"env": map[string]any{}}
 	backend := map[string]any{"bucket": "my-bucket"}
 
@@ -40,6 +44,7 @@ func TestExtractDescribeComponentSections_AllPresent(t *testing.T) {
 		cfg.AuthSectionName:        authMap,
 		cfg.ProvidersSectionName:   providers,
 		cfg.HooksSectionName:       hooks,
+		cfg.SecretsSectionName:     secrets,
 		cfg.OverridesSectionName:   overrides,
 		cfg.BackendSectionName:     backend,
 		cfg.BackendTypeSectionName: "s3",
@@ -54,6 +59,7 @@ func TestExtractDescribeComponentSections_AllPresent(t *testing.T) {
 	assert.Equal(t, authMap, secs.auth)
 	assert.Equal(t, providers, secs.providers)
 	assert.Equal(t, hooks, secs.hooks)
+	assert.Equal(t, secrets, secs.secrets)
 	assert.Equal(t, overrides, secs.overrides)
 	assert.Equal(t, backend, secs.backend)
 	assert.Equal(t, "s3", secs.backendType)
@@ -102,6 +108,7 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 		auth:        map[string]any{},
 		providers:   map[string]any{},
 		hooks:       map[string]any{},
+		secrets:     map[string]any{"vars": map[string]any{}},
 		overrides:   map[string]any{},
 		backend:     map[string]any{"bucket": "tfstate"},
 		backendType: "s3",
@@ -126,6 +133,7 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 	// ComponentSection mirror.
 	assert.Equal(t, secs.vars, info.ComponentSection[cfg.VarsSectionName])
 	assert.Equal(t, secs.metadata, info.ComponentSection[cfg.MetadataSectionName])
+	assert.Equal(t, secs.secrets, info.ComponentSection[cfg.SecretsSectionName])
 	assert.Equal(t, "s3", info.ComponentSection[cfg.BackendTypeSectionName])
 }
 
@@ -1293,8 +1301,90 @@ func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
 		},
 	}
 
-	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil)
+	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil, false)
 	require.Error(t, err)
+}
+
+func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
+	require.NoError(t, iolib.Initialize())
+
+	tests := []struct {
+		name           string
+		resolveSecrets bool
+		storeValue     any
+		storeErr       error
+		expectError    error
+		expectValue    string
+	}{
+		{
+			name:           "inspection masks without retrieving",
+			resolveSecrets: false,
+			expectValue:    iolib.GetContext().Masker().Replacement(),
+		},
+		{
+			name:           "execution fails for a missing required secret",
+			resolveSecrets: true,
+			storeErr:       errors.New("secret not found"),
+			expectError:    secrets.ErrSecretMissing,
+		},
+		{
+			name:           "execution resolves and registers the secret for masking",
+			resolveSecrets: true,
+			storeValue:     "api-secret-value",
+			expectValue:    "api-secret-value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			secretStore := store.NewMockStore(ctrl)
+			if tt.resolveSecrets {
+				secretStore.EXPECT().Get("dev", "app", "API_KEY").Return(tt.storeValue, tt.storeErr)
+			} else {
+				secretStore.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				StoresConfig: store.StoresConfig{
+					"app-secrets": {Type: "test", Secret: true},
+				},
+				Stores: store.StoreRegistry{"app-secrets": secretStore},
+			}
+			componentSection := map[string]any{
+				cfg.ComponentSectionName: "app",
+				"secrets": map[string]any{
+					"vars": map[string]any{
+						"API_KEY": map[string]any{"store": "app-secrets", "required": true},
+					},
+				},
+				"vars": map[string]any{"api_key": "!secret API_KEY"},
+			}
+			processor := newDescribeStacksProcessor(
+				atmosConfig,
+				"", nil, nil, nil,
+				false, true, false, nil, nil,
+			)
+			processor.resolveSecrets = tt.resolveSecrets
+
+			err := processor.processComponentEntry(
+				"dev", "", cfg.TerraformSectionName,
+				"app", componentSection, map[string]any{"app": componentSection},
+				processComponentTypeOpts{},
+			)
+			if tt.expectError != nil {
+				require.ErrorIs(t, err, tt.expectError)
+				return
+			}
+			require.NoError(t, err)
+
+			resolved := processor.finalStacksMap["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)["vars"].(map[string]any)["api_key"]
+			assert.Equal(t, tt.expectValue, resolved)
+			if tt.resolveSecrets {
+				assert.Equal(t, iolib.GetContext().Masker().Replacement(), iolib.GetContext().Masker().Mask(tt.expectValue))
+			}
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1614,7 +1704,7 @@ func TestProcessComponentSectionYAMLFunctions_Lenient_Warn(t *testing.T) {
 	var warnings []DegradationWarning
 	result, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, func(w DegradationWarning) {
 		warnings = append(warnings, w)
-	})
+	}, false)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
