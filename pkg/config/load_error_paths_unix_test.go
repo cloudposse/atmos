@@ -9,6 +9,9 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestLoadAtmosDFromDirectory_StatPermissionError tests the stat error differentiation path.
@@ -50,4 +53,27 @@ func TestLoadAtmosDFromDirectory_StatPermissionError(t *testing.T) {
 	loadAtmosDFromDirectory(parentDir, v)
 
 	// Function should complete without panic even with permission errors.
+}
+
+// TestMergeFiles_ReadFileError covers the os.ReadFile failure branch in mergeFiles.
+// validatedIsFiles only stats each path, so a file with no read permission passes
+// validation but fails the subsequent read (Unix-only; skipped as root).
+func TestMergeFiles_ReadFileError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(cfg, []byte("base_path: .\n"), 0o000))
+	t.Cleanup(func() {
+		_ = os.Chmod(cfg, 0o644)
+	})
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := mergeFiles(v, []string{cfg})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadConfig)
 }

@@ -222,6 +222,26 @@ func TestMergeFiles_EmptyBasePathUsesImportingConfigDir(t *testing.T) {
 	assert.Equal(t, 173, v.GetInt("settings.terminal.max_width"))
 }
 
+// TestMergeFiles_ImportMergeErrorIsNonFatal covers the branch where mergeImports
+// fails: a base_path declared as a mapping (rather than a string) makes the
+// Unmarshal inside mergeImports fail. mergeFiles logs and tolerates that error,
+// so loading of the file's own settings still succeeds.
+func TestMergeFiles_ImportMergeErrorIsNonFatal(t *testing.T) {
+	setupTestAdapters()
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(
+		cfg,
+		[]byte("base_path:\n  nested: value\nsettings:\n  terminal:\n    max_width: 181\n"),
+		0o644,
+	))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeFiles(v, []string{cfg}))
+	assert.Equal(t, 181, v.GetInt("settings.terminal.max_width"))
+}
+
 func TestResolveConfigImportBasePath(t *testing.T) {
 	dir := t.TempDir()
 

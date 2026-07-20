@@ -122,7 +122,7 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 			continue
 		}
 		log.Trace("successfully merged config from import", "import", sanitizeImport(resolvedPath.ImportPaths), "file_path", resolvedPath.FilePath)
-		content, readErr := os.ReadFile(resolvedPath.FilePath)
+		content, readErr := fs.ReadFile(resolvedPath.FilePath)
 		if readErr != nil {
 			continue
 		}

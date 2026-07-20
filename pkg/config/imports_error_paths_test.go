@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -77,6 +78,44 @@ func TestProcessConfigImports_MkdirTempError_WithMock(t *testing.T) {
 	err := processConfigImportsWithFS(source, v, mockFS)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "disk full")
+}
+
+// TestProcessConfigImports_ProvenanceReadError covers the branch where re-reading a
+// successfully merged import (to detect a base_path declaration) fails. The read
+// failure is tolerated: the import stays merged and processing continues.
+func TestProcessConfigImports_ProvenanceReadError(t *testing.T) {
+	setupTestAdapters()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	root := t.TempDir()
+	importDir := filepath.Join(root, ".atmos")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 191\n"),
+		0o644,
+	))
+
+	// MkdirTemp/RemoveAll use the real filesystem so the import resolves and merges;
+	// only the provenance re-read (ReadFile) is forced to fail.
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().MkdirTemp("", "atmos-import-*").DoAndReturn(os.MkdirTemp)
+	mockFS.EXPECT().RemoveAll(gomock.Any()).DoAndReturn(os.RemoveAll)
+	mockFS.EXPECT().ReadFile(gomock.Any()).Return(nil, errors.New("read failed"))
+
+	source := &schema.AtmosConfiguration{
+		BasePath: root,
+		Import:   []string{filepath.Join(".atmos", "extra.yaml")},
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	basePathDir, err := processConfigImportsWithFSAndBasePathSource(source, v, mockFS)
+	require.NoError(t, err)
+	assert.Empty(t, basePathDir) // Provenance dir not set because the re-read failed.
+	assert.Equal(t, 191, v.GetInt("settings.terminal.max_width"))
 }
 
 // TestProcessImports_EmptyBasePath tests error path at imports.go:108-110.
