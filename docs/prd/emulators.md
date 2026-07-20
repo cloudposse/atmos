@@ -243,14 +243,14 @@ Flow for `atmos terraform apply vpc -s dev` (component has `settings.identity: l
 1. Auth selects `local-aws`; it has `emulator: local/aws`.
 2. Atmos resolves the exact `local/aws` runtime, regardless of the component's `dev` stack.
 3. Validate: identity target (`aws`) == emulator component target; emulator declared in `local` →
-   else hard error with a hint.
+    else hard error with a hint.
 4. The injected resolver (`pkg/emulator.Manager`) discovers the container by label, `Inspect`s the
-   live host port, builds the profile. Not running → actionable error
-   (`atmos emulator up aws -s local`).
+    live host port, builds the profile. Not running → actionable error
+    (`atmos emulator up aws -s local`).
 5. `Profile.Env` is merged into the subprocess env (`PrepareShellEnvironment`); for AWS the live URL
-   also feeds the existing `resolver.url` → `config.WithBaseEndpoint` path so Atmos's own SDK calls
-   (`!terraform.output`, store auth) hit the emulator; `Profile.Provider` is contributed to provider
-   generation (§G).
+    also feeds the existing `resolver.url` → `config.WithBaseEndpoint` path so Atmos's own SDK calls
+    (`!terraform.output`, store auth) hit the emulator; `Profile.Provider` is contributed to provider
+    generation (§G).
 
 `atmos auth shell --identity local-aws -s dev` provides the host shell preconfigured for the
 emulator: it runs the same resolution and exports the same env an emulator identity injects.

@@ -300,7 +300,7 @@ vars:
 2. **Prefer `!store` over `atmos.Component` for outputs** -- Avoids Terraform initialization
 3. **All YAML functions cache results** per execution for repeated calls
 4. **Cold-start errors** -- `!terraform.output` and `!store` fail if the referenced component
-   is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
+    is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
 
 ## Additional Resources
 

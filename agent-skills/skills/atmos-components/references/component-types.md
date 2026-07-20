@@ -269,8 +269,8 @@ For a component with inheritance, Atmos resolves configuration in this order:
 1. Start with the global-scope `vars`, `env`, `settings` from all imports.
 2. Apply component-type scope (`terraform.vars`, etc.).
 3. For each component in the `inherits` list (in order):
-   a. Resolve that base component's full configuration (including its own inheritance chain, recursively).
-   b. Deep-merge it on top of the accumulated result.
+    a. Resolve that base component's full configuration (including its own inheritance chain, recursively).
+    b. Deep-merge it on top of the accumulated result.
 4. Deep-merge the component's own inline configuration on top.
 5. Apply `overrides` sections (global, then type-specific).
 
