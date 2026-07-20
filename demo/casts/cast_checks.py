@@ -79,9 +79,38 @@ def sanitize_paths(text, repo_root):
     roots = {str(repo_root), os.path.realpath(str(repo_root))}
     # macOS: cwd-derived paths may carry the /private prefix for /tmp and /var.
     roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
-    for root in sorted(roots, key=len, reverse=True):
-        text = text.replace(root, placeholder)
-    return text
+
+    def sanitize_value(value):
+        for root in sorted(roots, key=len, reverse=True):
+            value = value.replace(root, placeholder)
+
+        # GitHub-hosted runners can also emit fixture, cache, and temporary
+        # paths outside the repository root. None are meaningful in a
+        # committed cast, so redact every Linux home-directory path.
+        return re.sub(r"/home/[^\s\x1b]+", "/absolute/path/to/external", value)
+
+    # Cast files are newline-delimited JSON. Decode output events before
+    # replacing paths so escaped JSON slashes ("\\/home\\/runner\\/...") do not
+    # bypass the sanitizer.
+    sanitized_lines = []
+    decoded_cast = False
+    try:
+        for line in text.splitlines(keepends=True):
+            newline = "\n" if line.endswith("\n") else ""
+            event = json.loads(line)
+            if isinstance(event, list) and len(event) >= 3 and event[1] in ("o", "e") and isinstance(event[2], str):
+                decoded_cast = True
+                sanitized = sanitize_value(event[2])
+                if sanitized != event[2]:
+                    event[2] = sanitized
+                    line = json.dumps(event, separators=(",", ":")) + newline
+            sanitized_lines.append(line)
+    except (json.JSONDecodeError, TypeError):
+        decoded_cast = False
+
+    if decoded_cast:
+        return "".join(sanitized_lines)
+    return sanitize_value(text)
 
 
 def assert_no_error_output(text):

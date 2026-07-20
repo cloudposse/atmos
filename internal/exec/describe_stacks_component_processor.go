@@ -32,6 +32,7 @@ type componentSections struct {
 	providers   map[string]any
 	hooks       map[string]any
 	test        map[string]any
+	secrets     map[string]any
 	overrides   map[string]any
 	backend     map[string]any
 	backendType string
@@ -72,10 +73,15 @@ type describeStacksProcessor struct {
 	processTemplates     bool
 	processYamlFunctions bool
 	authDisabled         bool
-	includeEmptyStacks   bool
-	skip                 []string
-	authManager          auth.AuthManager
-	finalStacksMap       map[string]any
+	useMocks             bool
+	// resolveSecrets makes this processor retrieve !secret values while it resolves
+	// YAML functions. It is used by Terraform graph execution preflight; inspection
+	// commands retain their mask-only behavior even when output masking is enabled.
+	resolveSecrets     bool
+	includeEmptyStacks bool
+	skip               []string
+	authManager        auth.AuthManager
+	finalStacksMap     map[string]any
 	// componentAuthResolver builds a per-component AuthManager; defaults to
 	// createComponentAuthManager and is overridable in tests.
 	componentAuthResolver componentAuthManagerResolver
@@ -389,6 +395,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 	info.Context = resolvedContext
 	info.AuthDisabled = p.authDisabled
+	info.UseMocks = p.useMocks
 
 	// Filter: skip this component if it does not belong to the requested stack.
 	// Done before resolveComponentAuthManager (below) so out-of-scope components don't trigger a
@@ -445,6 +452,14 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	componentSection[componentInfoKey] = componentInfo
 	info.ComponentSection[componentInfoKey] = componentInfo
 
+	// Mocks are literal fixture data. Do not render templates or resolve YAML
+	// functions within them; doing so could reach the real dependency that the
+	// mock is intended to replace.
+	literalMocks, hasLiteralMocks := componentSection[cfg.MocksSectionName]
+	if hasLiteralMocks {
+		delete(componentSection, cfg.MocksSectionName)
+	}
+
 	// Process Go templates.
 	if p.processTemplates {
 		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings)
@@ -466,10 +481,21 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if !isComponentEnabled(secs.metadata, componentName) {
 			skip = disabledComponentTerraformSkip(p.skip)
 		}
-		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, skip, p.onWarning)
+		componentSection, err = processComponentSectionYAMLFunctions(
+			p.atmosConfig,
+			&info,
+			componentSection,
+			skip,
+			p.onWarning,
+			!p.resolveSecrets && iolib.MaskingEnabled(),
+		)
 		if err != nil {
 			return err
 		}
+	}
+	if hasLiteralMocks {
+		componentSection[cfg.MocksSectionName] = literalMocks
+		info.ComponentSection[cfg.MocksSectionName] = literalMocks
 	}
 
 	// Write the (optionally filtered) sections into the result map.
@@ -553,6 +579,12 @@ func extractDescribeComponentSections(componentSection map[string]any) component
 		s.test = map[string]any{}
 	}
 
+	if v, ok := componentSection[cfg.SecretsSectionName].(map[string]any); ok {
+		s.secrets = v
+	} else {
+		s.secrets = map[string]any{}
+	}
+
 	if v, ok := componentSection[cfg.OverridesSectionName].(map[string]any); ok {
 		s.overrides = v
 	} else {
@@ -600,6 +632,7 @@ func buildConfigAndStacksInfo(
 			cfg.ProvidersSectionName:   secs.providers,
 			cfg.HooksSectionName:       secs.hooks,
 			cfg.TestSectionName:        secs.test,
+			cfg.SecretsSectionName:     secs.secrets,
 			cfg.OverridesSectionName:   secs.overrides,
 			cfg.BackendSectionName:     secs.backend,
 			cfg.BackendTypeSectionName: secs.backendType,
@@ -812,19 +845,18 @@ func processComponentSectionTemplates(
 }
 
 // processComponentSectionYAMLFunctions applies YAML function processing to a component section.
-// When onWarning is non-nil, recoverable per-value errors (e.g. a Terraform backend not yet
-// provisioned) are tolerated — see ProcessCustomYamlTagsLenient.
+// When onWarning is non-nil, recoverable per-value errors are tolerated — see
+// ProcessCustomYamlTagsLenient. For example, a Terraform backend might not yet be provisioned.
+// The secretsMaskOnly parameter selects the inspection behavior that replaces !secret values without a backend lookup.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	skip []string,
 	onWarning func(DegradationWarning),
+	secretsMaskOnly bool,
 ) (map[string]any, error) {
-	// `describe stacks` and the `list` family are inspection commands: when masking is enabled
-	// (the default), resolve `!secret` to the mask replacement WITHOUT contacting the backend,
-	// so inspection needs no credentials for the secret provider.
-	info.SecretsMaskOnly = iolib.MaskingEnabled()
+	info.SecretsMaskOnly = secretsMaskOnly
 	var converted map[string]any
 	var err error
 	if onWarning != nil {

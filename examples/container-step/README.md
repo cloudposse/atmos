@@ -18,7 +18,7 @@ Global container-runtime defaults live under the top-level `container:` namespac
 ```yaml
 container:
   runtime:
-    provider: podman    # docker | podman (default: auto-detect docker, then podman)
+    provider: auto      # auto (default) | docker | podman
     auto_start: true    # auto-init/start the Podman machine when no running runtime is found
 ```
 
