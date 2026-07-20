@@ -3,6 +3,7 @@ package secret
 import (
 	"bytes"
 	stdio "io"
+	"regexp"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,13 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// stripANSI removes formatter styling so tests can assert on visible terminal text.
+func stripANSI(s string) string {
+	return ansiEscapeRE.ReplaceAllString(s, "")
+}
 
 // testStreams is a minimal io.Streams backed by buffers, used to initialize the data/ui channels so
 // handlers that write output (e.g. `secret get`, `secret pull`) do not panic in tests.
@@ -99,6 +107,12 @@ func runSecretSubcommand(t *testing.T, args ...string) error {
 	t.Helper()
 
 	resetSecretFlags(t)
+	// The test runner's stdin is an open pipe. Treat it as a TTY for ordinary
+	// command tests so `secret init` does not wait for ambient test-harness input.
+	// Tests exercising redirected input override this seam explicitly.
+	origInitStdinIsTTY := initStdinIsTTY
+	initStdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { initStdinIsTTY = origInitStdinIsTTY })
 	secretCmd.SetArgs(args)
 	t.Cleanup(func() { secretCmd.SetArgs(nil) })
 	return secretCmd.Execute()

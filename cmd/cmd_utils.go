@@ -99,6 +99,18 @@ func processCustomCommands(
 	commands []schema.Command,
 	parentCommand *cobra.Command,
 ) error {
+	return processCustomCommandsWithWorkingDirectory(&atmosConfig, commands, parentCommand, "")
+}
+
+// processCustomCommandsWithWorkingDirectory registers custom commands recursively.
+// A child command inherits its parent's working_directory unless it explicitly
+// defines one of its own.
+func processCustomCommandsWithWorkingDirectory(
+	atmosConfig *schema.AtmosConfiguration,
+	commands []schema.Command,
+	parentCommand *cobra.Command,
+	parentWorkingDirectory string,
+) error {
 	var command *cobra.Command
 
 	for _, commandCfg := range commands {
@@ -108,6 +120,9 @@ func processCustomCommands(
 		commandConfig, err := cloneCommand(&commandCfg)
 		if err != nil {
 			return err
+		}
+		if commandConfig.WorkingDirectory == "" {
+			commandConfig.WorkingDirectory = parentWorkingDirectory
 		}
 
 		// Check if the parent already has a subcommand with this name (built-in or previously added).
@@ -131,7 +146,7 @@ func processCustomCommands(
 			command = existing
 		} else {
 			// Create new custom command with flag validation.
-			customCommand, err := createCustomCommand(&atmosConfig, commandConfig, parentCommand)
+			customCommand, err := createCustomCommand(atmosConfig, commandConfig, parentCommand)
 			if err != nil {
 				return err
 			}
@@ -139,7 +154,7 @@ func processCustomCommands(
 			command = customCommand
 		}
 
-		err = processCustomCommands(atmosConfig, commandConfig.Commands, command)
+		err = processCustomCommandsWithWorkingDirectory(atmosConfig, commandConfig.Commands, command, commandConfig.WorkingDirectory)
 		if err != nil {
 			return err
 		}

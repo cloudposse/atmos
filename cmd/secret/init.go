@@ -2,6 +2,7 @@ package secret
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,26 +11,77 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 var initParser *flags.StandardParser
 
+var initStdinIsTTY = func() bool { return terminal.New().IsTTY(terminal.Stdin) }
+
+const initPreparationFailed = "Secret initialization preparation failed"
+
+type initOptions struct {
+	force  bool
+	dryRun bool
+	values map[string]string
+	mode   string
+}
+
+// initTarget is one resolved component instance and its preflight secret status.
+type initTarget struct {
+	stack     string
+	component string
+	svc       secretService
+	statuses  []secrets.Status
+}
+
+// initSummary reports the outcome for every selected secret declaration.
+type initSummary struct {
+	initialized int
+	rotated     int
+	unaffected  int
+}
+
+func (s *initSummary) add(outcome initOutcome) {
+	switch outcome {
+	case initOutcomeInitialized:
+		s.initialized++
+	case initOutcomeRotated:
+		s.rotated++
+	default:
+		s.unaffected++
+	}
+}
+
+type initOutcome int
+
+const (
+	initOutcomeUnaffected initOutcome = iota
+	initOutcomeInitialized
+	initOutcomeRotated
+)
+
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Provision (and rotate) declared secrets, prompting for each.",
+	Short: "Provision (and rotate) declared secrets, from prompts or dotenv input.",
 	Long: "Walk the declared secrets for a stack and interactively initialize or rotate them. With " +
 		"--stack alone, the whole stack is provisioned: stack-scoped secrets once each plus every " +
 		"instance's instance-scoped secrets. With --component, only that instance is provisioned. " +
-		"Already-initialized secrets prompt to update (rotate) or skip; --force rotates them all.",
+		"Already-initialized secrets prompt to update (rotate) or skip; --force rotates them all. " +
+		"When stdin is redirected, values are read as dotenv KEY=VALUE entries.",
 	Args: cobra.NoArgs,
 	RunE: runSecretInit,
 }
 
 func init() {
 	initParser = flags.NewStandardParser(
+		flags.WithBoolFlag("all", "", false, "Initialize declared secrets across every stack"),
 		flags.WithBoolFlag("force", "f", false, "Re-prompt and overwrite already-initialized secrets"),
 		flags.WithBoolFlag("dry-run", "", false, "Show what would be initialized without prompting or writing"),
+		flags.WithStringFlag("input", "", "", "Env file to initialize from (use - for stdin)"),
+		flags.WithStringFlag("mode", "", "warn", "Input handling mode: warn or strict for undeclared keys"),
 	)
 	initParser.RegisterFlags(initCmd)
 }
@@ -37,26 +89,74 @@ func init() {
 func runSecretInit(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretInit")()
 
-	facet, err := parseInitScope(cmd, args)
+	all, _ := cmd.Flags().GetBool("all")
+	facet, err := parseInitScope(cmd, args, all)
 	if err != nil {
 		return err
 	}
 	force, _ := cmd.Flags().GetBool("force")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	input, _ := cmd.Flags().GetString("input")
+	mode, _ := cmd.Flags().GetString("mode")
+
+	values, err := readInitInput(input)
+	if err != nil {
+		return err
+	}
+
+	opts := initOptions{force: force, dryRun: dryRun, values: values, mode: mode}
+	if all {
+		if facet.Component != "" {
+			return errUtils.Build(errUtils.ErrValidationFailed).
+				WithExplanation("--all cannot be combined with --component").
+				WithHint("Use --all by itself, or specify --stack and --component for one instance").
+				Err()
+		}
+		return initAllScopes(facet, opts)
+	}
 
 	// Single instance when --component is given; otherwise the whole stack.
 	if facet.Component != "" {
-		return initSingleScope(facet, force, dryRun)
+		return initSingleScope(facet, opts)
 	}
-	return initWholeStack(facet, force, dryRun)
+	return initWholeStack(facet, opts)
+}
+
+// readInitInput uses an explicit --input path when supplied. Otherwise, redirected stdin is a
+// dotenv source, enabling both `atmos secret init < .env.local` and `cat .env.local | atmos secret init`.
+// An empty redirected stream preserves the normal interactive behavior.
+func readInitInput(input string) (map[string]string, error) {
+	if input != "" {
+		return parseSecretsFile(input, "env")
+	}
+	if initStdinIsTTY() {
+		return nil, nil
+	}
+	values, err := parseEnvSecrets(os.Stdin)
+	if err != nil {
+		return nil, err
+	}
+	if len(values) == 0 {
+		return nil, nil
+	}
+	return values, nil
 }
 
 // parseInitScope reads the facets for init. --stack is required (prompted on a TTY); --component is
 // optional — omitting it provisions every instance in the stack.
-func parseInitScope(cmd *cobra.Command, args []string) (secretScope, error) {
+func parseInitScope(cmd *cobra.Command, args []string, all bool) (secretScope, error) {
 	facet, err := parseFacets(cmd)
 	if err != nil {
 		return facet, err
+	}
+	if all {
+		if facet.Stack != "" {
+			return facet, errUtils.Build(errUtils.ErrValidationFailed).
+				WithExplanation("--all cannot be combined with --stack").
+				WithHint("Use --all for every stack, or omit --all to initialize one stack").
+				Err()
+		}
+		return facet, nil
 	}
 	if facet.Stack == "" {
 		chosen, promptErr := flags.PromptForMissingRequired("stack", "Choose a stack", stackCompletion, cmd, args)
@@ -75,74 +175,128 @@ func parseInitScope(cmd *cobra.Command, args []string) (secretScope, error) {
 }
 
 // initSingleScope provisions/rotates the declared secrets for one (stack, component) instance.
-func initSingleScope(scope secretScope, force, dryRun bool) error {
+func initSingleScope(scope secretScope, opts initOptions) error {
+	progress := spinner.New(fmt.Sprintf("Preparing secrets for %s/%s", scope.Stack, scope.Component))
+	progress.Start()
 	svc, err := loadServiceFn(scope)
 	if err != nil {
+		progress.Error(initPreparationFailed)
 		return err
 	}
-	if err := offerKeygen(svc, dryRun); err != nil {
+	progress.Update(fmt.Sprintf("Checking existing secret status for %s/%s", scope.Stack, scope.Component))
+	statuses := svc.Status(true)
+	progress.Success(fmt.Sprintf("Ready to initialize secrets for %s/%s", scope.Stack, scope.Component))
+	if err := validateInitInput([]secretService{svc}, opts.values, opts.mode); err != nil {
 		return err
 	}
-	n, err := rotateDeclaredSecrets(svc, scope.Stack, force, dryRun, nil)
+	if err := offerKeygen(svc, opts.dryRun); err != nil {
+		return err
+	}
+	summary, err := rotateSecretStatuses(svc, statuses, scope.Stack, nil, opts)
 	if err != nil {
 		return err
 	}
-	reportInit(n, dryRun)
+	reportInit(summary, opts.dryRun)
 	return nil
 }
 
 // initWholeStack provisions/rotates every instance in the stack: stack-scoped secrets once each
 // plus each instance's instance-scoped secrets. Stack-scoped secrets are de-duplicated across
 // instances so they are only prompted once.
-func initWholeStack(facet secretScope, force, dryRun bool) error {
+func initWholeStack(facet secretScope, opts initOptions) error {
+	progress := spinner.New(fmt.Sprintf("Discovering declared secrets in stack %s", facet.Stack))
+	progress.Start()
 	entries, _, err := enumerateScopesFn(secretScope{Stack: facet.Stack, Identity: facet.Identity})
 	if err != nil {
+		progress.Error(initPreparationFailed)
 		return err
 	}
+	return initEntries(facet, entries, opts, progress)
+}
+
+// initAllScopes provisions every declared secret instance across every stack.
+func initAllScopes(facet secretScope, opts initOptions) error {
+	progress := spinner.New("Discovering declared secrets across all stacks")
+	progress.Start()
+	entries, _, err := enumerateScopesFn(secretScope{Identity: facet.Identity})
+	if err != nil {
+		progress.Error(initPreparationFailed)
+		return err
+	}
+	return initEntries(facet, entries, opts, progress)
+}
+
+func initEntries(facet secretScope, entries []scopeEntry, opts initOptions, progress *spinner.Spinner) error {
 	if len(entries) == 0 {
+		progress.Success("No declared secrets found")
 		ui.Info(emptyListMessage(facet))
 		return nil
 	}
 
-	seenStackScoped := make(map[string]bool)
-	total := 0
-	for _, entry := range entries {
+	targets := make([]initTarget, 0, len(entries))
+	for index, entry := range entries {
+		progress.Update(fmt.Sprintf("Preparing secret backend for %s/%s (%d/%d)", entry.Stack, entry.Component, index+1, len(entries)))
 		scope := secretScope{Stack: entry.Stack, Component: entry.Component, Identity: facet.Identity}
 		svc, loadErr := loadServiceFn(scope)
 		if loadErr != nil {
+			progress.Error(initPreparationFailed)
 			return loadErr
 		}
-		if err := offerKeygen(svc, dryRun); err != nil {
+		targets = append(targets, initTarget{stack: entry.Stack, component: entry.Component, svc: svc})
+	}
+	progress.Success(fmt.Sprintf("Discovered %d component instance(s) with declared secrets", len(targets)))
+	services := make([]secretService, 0, len(targets))
+	for _, target := range targets {
+		services = append(services, target.svc)
+	}
+	if err := validateInitInput(services, opts.values, opts.mode); err != nil {
+		return err
+	}
+
+	progress = spinner.New("Checking existing secret status")
+	progress.Start()
+	for index := range targets {
+		target := &targets[index]
+		progress.Update(fmt.Sprintf("Checking existing secret status for %s/%s (%d/%d)", target.stack, target.component, index+1, len(targets)))
+		target.statuses = target.svc.Status(true)
+	}
+	progress.Success(fmt.Sprintf("Ready to initialize secrets for %d component instance(s)", len(targets)))
+
+	seenStackScoped := make(map[string]bool)
+	var total initSummary
+	for _, target := range targets {
+		svc := target.svc
+		if err := offerKeygen(svc, opts.dryRun); err != nil {
 			return err
 		}
-		n, rotateErr := rotateDeclaredSecrets(svc, entry.Stack, force, dryRun, seenStackScoped)
+		summary, rotateErr := rotateSecretStatuses(svc, target.statuses, target.stack, seenStackScoped, opts)
 		if rotateErr != nil {
 			return rotateErr
 		}
-		total += n
+		total.initialized += summary.initialized
+		total.rotated += summary.rotated
+		total.unaffected += summary.unaffected
 	}
-	reportInit(total, dryRun)
+	reportInit(total, opts.dryRun)
 	return nil
 }
 
 // reportInit prints the final summary for an init run.
-func reportInit(count int, dryRun bool) {
+func reportInit(summary initSummary, dryRun bool) {
 	if dryRun {
-		ui.Infof("Dry run: %d secret(s) would be initialized or rotated", count)
+		ui.Infof("Dry run: %d secret(s) would be initialized, %d rotated, %d unaffected", summary.initialized, summary.rotated, summary.unaffected)
 		return
 	}
-	ui.Successf("Initialized or rotated %d secret(s)", count)
+	ui.Successf("Initialized %d secret(s), rotated %d, %d unaffected", summary.initialized, summary.rotated, summary.unaffected)
 }
 
-// rotateDeclaredSecrets walks the declared secrets for a service and provisions each: missing
-// secrets are prompted and set; already-initialized secrets prompt to update (rotate) or skip
-// unless --force rotates them all. In dry-run mode it only reports. When seen is non-nil (whole-
-// stack mode), stack-scoped secrets are processed once per (stack, name). Returns the count handled.
-func rotateDeclaredSecrets(svc secretService, stackName string, force, dryRun bool, seen map[string]bool) (int, error) {
-	// init provisions secrets, so it needs an authoritative initialized/not-initialized answer
-	// from every backend (verify=true). Local backends (e.g. SOPS) stay credential-free.
-	statuses := svc.Status(true)
-	count := 0
+// rotateSecretStatuses walks already-checked declared secrets and provisions each: missing secrets
+// are prompted and set; already-initialized secrets prompt to update (rotate) or skip unless --force
+// rotates them all. In dry-run mode it only reports. When seen is non-nil (whole-stack mode),
+// stack-scoped secrets are processed once per (stack, name). Returns the outcome summary. Separating
+// the status check lets multi-scope initialization report backend verification progress before writes.
+func rotateSecretStatuses(svc secretService, statuses []secrets.Status, stackName string, seen map[string]bool, opts initOptions) (initSummary, error) {
+	var summary initSummary
 	for i := range statuses {
 		st := &statuses[i]
 
@@ -155,46 +309,97 @@ func rotateDeclaredSecrets(svc secretService, stackName string, force, dryRun bo
 			seen[key] = true
 		}
 
-		handled, err := provisionSecret(svc, st, force, dryRun)
+		outcome, err := provisionSecret(svc, st, opts)
 		if err != nil {
-			return count, err
+			return summary, err
 		}
-		if handled {
-			count++
-		}
+		summary.add(outcome)
 	}
-	return count, nil
+	return summary, nil
+}
+
+// validateInitInput resolves input keys across every selected service before writes start. Default
+// warn mode mirrors dotenv's permissive workflow; strict mode turns an undeclared key into an error.
+func validateInitInput(services []secretService, values map[string]string, mode string) error {
+	if values == nil {
+		return nil
+	}
+	if mode != "warn" && mode != "strict" {
+		return errUtils.Build(errUtils.ErrValidationFailed).
+			WithExplanationf("unsupported init input mode %q", mode).
+			WithHint("Use --mode=warn or --mode=strict").
+			Err()
+	}
+	for _, name := range sortedKeys(values) {
+		declared := false
+		for _, svc := range services {
+			if svc.IsDeclared(name) {
+				declared = true
+				break
+			}
+		}
+		if declared {
+			continue
+		}
+		if mode == "strict" {
+			return errUtils.Build(errUtils.ErrValidationFailed).
+				WithExplanationf("input key %q is not declared as a secret", name).
+				WithHint("Declare it under the selected component's secrets.vars or remove it from the input").
+				Err()
+		}
+		ui.Warningf("Skipping undeclared input key `%s`", name)
+	}
+	return nil
 }
 
 // provisionSecret provisions a single declared secret: in dry-run it only reports; an already-set
 // secret prompts to update (rotate) or skip unless force; otherwise it prompts for a value and
-// stores it. Returns whether the secret was handled (and should be counted).
-func provisionSecret(svc secretService, st *secrets.Status, force, dryRun bool) (bool, error) {
-	if dryRun {
+// stores it. Returns whether it was initialized, rotated, or left unaffected.
+//
+//nolint:revive // This keeps the prompt, dry-run, and dotenv initialization paths together.
+func provisionSecret(svc secretService, st *secrets.Status, opts initOptions) (initOutcome, error) {
+	value, hasValue := opts.values[st.Declaration.Name]
+	if opts.values != nil && !hasValue {
+		return initOutcomeUnaffected, nil
+	}
+	if opts.dryRun {
 		ui.Infof("Would %s `%s` (%s)", initVerb(st.Initialized), st.Declaration.Name, backendLabel(&st.Declaration))
-		return true, nil
+		return initOutcomeForStatus(st.Initialized), nil
 	}
 
 	// Already set → offer update/skip unless force rotates everything.
-	if st.Initialized && !force {
+	if st.Initialized && !opts.force {
+		if opts.values != nil {
+			return initOutcomeUnaffected, nil
+		}
 		confirmed, confirmErr := confirmActionFn(fmt.Sprintf("Secret `%s` is already set. Update (rotate) it?", st.Declaration.Name))
 		if confirmErr != nil {
-			return false, confirmErr
+			return initOutcomeUnaffected, confirmErr
 		}
 		if !confirmed {
-			return false, nil
+			return initOutcomeUnaffected, nil
 		}
 	}
 
 	ui.Infof("Setting `%s` (%s)", st.Declaration.Name, backendLabel(&st.Declaration))
-	value, promptErr := promptForValueFn()
-	if promptErr != nil {
-		return false, promptErr
+	if opts.values == nil {
+		var promptErr error
+		value, promptErr = promptForValueFn()
+		if promptErr != nil {
+			return initOutcomeUnaffected, promptErr
+		}
 	}
 	if err := svc.Set(st.Declaration.Name, value); err != nil {
-		return false, err
+		return initOutcomeUnaffected, err
 	}
-	return true, nil
+	return initOutcomeForStatus(st.Initialized), nil
+}
+
+func initOutcomeForStatus(initialized bool) initOutcome {
+	if initialized {
+		return initOutcomeRotated
+	}
+	return initOutcomeInitialized
 }
 
 // initVerb returns the dry-run verb for a secret based on whether it is already initialized.
