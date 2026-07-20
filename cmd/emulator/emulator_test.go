@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -9,8 +10,29 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+type capturingEmulatorProvider struct{ execution *component.ExecutionContext }
+
+func (p *capturingEmulatorProvider) GetType() string                               { return cfg.EmulatorComponentType }
+func (p *capturingEmulatorProvider) GetGroup() string                              { return "test" }
+func (p *capturingEmulatorProvider) GetBasePath(*schema.AtmosConfiguration) string { return "" }
+func (p *capturingEmulatorProvider) ListComponents(context.Context, string, map[string]any) ([]string, error) {
+	return nil, nil
+}
+func (p *capturingEmulatorProvider) ValidateComponent(map[string]any) error { return nil }
+func (p *capturingEmulatorProvider) Execute(execution *component.ExecutionContext) error {
+	p.execution = execution
+	return nil
+}
+
+func (p *capturingEmulatorProvider) GenerateArtifacts(*component.ExecutionContext) error { return nil }
+
+func (p *capturingEmulatorProvider) GetAvailableCommands() []string { return nil }
 
 // restoreViperKey snapshots a single Viper key and restores it after the test.
 // Note that cmd.NewTestKit cannot be imported here: cmd/root.go imports
@@ -79,7 +101,7 @@ func TestEmulatorCommandStructure(t *testing.T) {
 
 func TestEmulatorSubcommandsHaveRunEAndValidator(t *testing.T) {
 	wantSubcommands := map[string]bool{
-		"up": true, "down": true, "reset": true, "ps": true, "logs": true, "exec": true,
+		"up": true, "down": true, "reset": true, "logs": true, "exec": true,
 	}
 	seen := map[string]bool{}
 	for _, c := range emulatorCmd.Commands() {
@@ -89,12 +111,22 @@ func TestEmulatorSubcommandsHaveRunEAndValidator(t *testing.T) {
 		seen[c.Name()] = true
 		require.NotNil(t, c.RunE, "subcommand %q should have a RunE", c.Name())
 		require.NotNil(t, c.Args, "subcommand %q should have a positional validator", c.Name())
-		// Each verb requires exactly one component positional argument.
-		require.Error(t, c.Args(c, []string{}), "subcommand %q should require a component", c.Name())
+		// Prompt-aware validation lets RunE ask for a missing component before
+		// the parser enforces the required argument.
+		require.NoError(t, c.Args(c, []string{}), "subcommand %q should defer a missing component to the prompt flow", c.Name())
 		require.NoError(t, c.Args(c, []string{"aws"}), "subcommand %q should accept one component", c.Name())
+		require.Error(t, c.Args(c, []string{"aws", "extra"}), "subcommand %q should reject extra positional arguments", c.Name())
 	}
 	for name := range wantSubcommands {
 		assert.True(t, seen[name], "expected subcommand %q to be registered", name)
+	}
+}
+
+func TestEmulatorInspectionVerbsTakeNoComponent(t *testing.T) {
+	for _, c := range []*cobra.Command{listCmd, psCmd} {
+		require.NoError(t, c.Args(c, []string{}), "%s should not require a component", c.Name())
+		require.Error(t, c.Args(c, []string{"aws"}), "%s should reject a component", c.Name())
+		require.NotNil(t, c.Flags().Lookup(flagRuntime), "%s should support --runtime", c.Name())
 	}
 }
 
@@ -131,6 +163,10 @@ func TestVerbFlags_MapsEphemeralAndForce(t *testing.T) {
 	t.Cleanup(func() { _ = resetCmd.Flags().Set("force", "false") })
 	gotReset := verbFlags(resetCmd)
 	assert.Equal(t, true, gotReset["force"])
+
+	require.NoError(t, listCmd.Flags().Set(flagRuntime, "true"))
+	t.Cleanup(func() { _ = listCmd.Flags().Set(flagRuntime, "false") })
+	assert.Equal(t, true, verbFlags(listCmd)[flagRuntime])
 }
 
 func TestBuildConfigAndStacksInfo_FlagMapping(t *testing.T) {
@@ -194,6 +230,54 @@ func TestInitConfigAndStacksInfo_ComponentThenDashCommand(t *testing.T) {
 	info := initConfigAndStacksInfo(c, "exec", c.Flags().Args())
 	assert.Equal(t, "aws", info.ComponentFromArg)
 	assert.Equal(t, []string{"ls", "-la"}, info.AdditionalArgsAndFlags)
+}
+
+func TestRunVerbParsesOnlyArgsBeforeDash(t *testing.T) {
+	// Cobra retains pass-through arguments in Args(), including flags for the
+	// command inside the emulator. The emulator parsers must never see those.
+	c := &cobra.Command{Use: "exec"}
+	c.Flags().String("stack", "", "")
+	require.NoError(t, c.ParseFlags([]string{"aws", "--", "kubectl", "-n", "demo"}))
+
+	positional, separated := flags.SplitArgsAtDash(c, c.Flags().Args())
+
+	assert.Equal(t, []string{"aws"}, positional)
+	assert.Equal(t, []string{"kubectl", "-n", "demo"}, separated)
+}
+
+func TestRequiresStack(t *testing.T) {
+	for _, subcommand := range []string{"up", "down", "reset", "logs", "exec"} {
+		assert.True(t, requiresStack(subcommand), "%s should require a component stack", subcommand)
+	}
+	assert.False(t, requiresStack("list"))
+	assert.False(t, requiresStack("ps"))
+}
+
+func TestVerbFlagsOmitsRuntimeWhenDisabled(t *testing.T) {
+	require.NoError(t, listCmd.Flags().Set(flagRuntime, "false"))
+	assert.NotContains(t, verbFlags(listCmd), flagRuntime)
+}
+
+func TestRunVerbDispatchesInspectionCommand(t *testing.T) {
+	provider := &capturingEmulatorProvider{}
+	original, hadOriginal := component.GetProvider(cfg.EmulatorComponentType)
+	require.NoError(t, component.Register(provider))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	restoreViperKey(t, "stack")
+	_ = listCmd.Flags().Set(flagRuntime, "false")
+	t.Cleanup(func() { _ = listCmd.Flags().Set(flagRuntime, "false") })
+
+	require.NoError(t, runVerb(listCmd, "list", nil))
+	require.NotNil(t, provider.execution)
+	assert.Equal(t, cfg.EmulatorComponentType, provider.execution.ComponentType)
+	assert.Equal(t, "list", provider.execution.SubCommand)
+	assert.Empty(t, provider.execution.Component)
+	assert.NotContains(t, provider.execution.Flags, flagRuntime)
 }
 
 func TestInitConfigAndStacksInfo_ExtraPositionalArgs(t *testing.T) {

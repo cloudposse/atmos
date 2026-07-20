@@ -412,6 +412,11 @@ func cachedTestToolBinaryNameForOS(binary, goos string) string {
 	return binary
 }
 
+func cachedTestToolBinaryExists(binDir, binary string) bool {
+	_, err := os.Stat(filepath.Join(binDir, cachedTestToolBinaryName(binary)))
+	return err == nil
+}
+
 func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {
 	for _, tool := range cachedTestTools {
 		if tool.Binary == binary {

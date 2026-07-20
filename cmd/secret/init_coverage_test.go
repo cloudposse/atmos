@@ -26,7 +26,7 @@ func TestInitWholeStack_DedupesStackScoped(t *testing.T) {
 	}, nil)
 	overridePromptForValue(t, "value", nil)
 
-	err := initWholeStack(secretScope{Stack: "prod"}, false, false)
+	err := initWholeStack(secretScope{Stack: "prod"}, initOptions{mode: "warn"})
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(svc.setCalls))
@@ -47,7 +47,7 @@ func TestInitWholeStack_DryRun(t *testing.T) {
 	installService(t, svc, nil)
 	overrideEnumerateScopes(t, []scopeEntry{{Stack: "prod", Component: "api"}}, nil)
 
-	require.NoError(t, initWholeStack(secretScope{Stack: "prod"}, false, true))
+	require.NoError(t, initWholeStack(secretScope{Stack: "prod"}, initOptions{dryRun: true, mode: "warn"}))
 	assert.Empty(t, svc.setCalls, "dry-run must not write")
 }
 
@@ -56,7 +56,7 @@ func TestInitWholeStack_NoEntries(t *testing.T) {
 	setupIO(t)
 	overrideEnumerateScopes(t, nil, nil)
 
-	require.NoError(t, initWholeStack(secretScope{Stack: "prod"}, false, false))
+	require.NoError(t, initWholeStack(secretScope{Stack: "prod"}, initOptions{mode: "warn"}))
 }
 
 // TestInitWholeStack_EnumerateError propagates the enumeration error.
@@ -65,7 +65,7 @@ func TestInitWholeStack_EnumerateError(t *testing.T) {
 	sentinel := errors.New("enumerate failed")
 	overrideEnumerateScopes(t, nil, sentinel)
 
-	require.ErrorIs(t, initWholeStack(secretScope{Stack: "prod"}, false, false), sentinel)
+	require.ErrorIs(t, initWholeStack(secretScope{Stack: "prod"}, initOptions{mode: "warn"}), sentinel)
 }
 
 // TestInitWholeStack_LoadServiceError propagates a per-instance service-load failure.
@@ -75,7 +75,24 @@ func TestInitWholeStack_LoadServiceError(t *testing.T) {
 	installService(t, nil, loadErr)
 	overrideEnumerateScopes(t, []scopeEntry{{Stack: "prod", Component: "api"}}, nil)
 
-	require.ErrorIs(t, initWholeStack(secretScope{Stack: "prod"}, false, false), loadErr)
+	require.ErrorIs(t, initWholeStack(secretScope{Stack: "prod"}, initOptions{mode: "warn"}), loadErr)
+}
+
+func TestInitAllScopes_ProvisionsEveryStack(t *testing.T) {
+	setupIO(t)
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}}}
+	svc.declared["API_KEY"] = true
+	installService(t, svc, nil)
+	overrideEnumerateScopes(t, []scopeEntry{
+		{Stack: "dev", Component: "api"},
+		{Stack: "prod", Component: "api"},
+	}, nil)
+
+	require.NoError(t, initAllScopes(secretScope{}, initOptions{values: map[string]string{"API_KEY": "value"}, mode: "warn"}))
+	require.Len(t, svc.setCalls, 2)
+	assert.Equal(t, "API_KEY", svc.setCalls[0].name)
+	assert.Equal(t, "API_KEY", svc.setCalls[1].name)
 }
 
 // TestInitVerb covers the dry-run verb selection.

@@ -410,6 +410,39 @@ func TestNewTerraformPassthroughSubcommand(t *testing.T) {
 		"passthrough subcommand should whitelist unknown flags")
 }
 
+func TestTerraformPassthroughLeafBindsMultiComponentFlags(t *testing.T) {
+	var lockCmd *cobra.Command
+	for _, cmd := range providersCmd.Commands() {
+		if cmd.Name() == "lock" {
+			lockCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, lockCmd)
+	found, _, err := providersCmd.Find([]string{"lock", "--all"})
+	require.NoError(t, err)
+	assert.Same(t, lockCmd, found, "Cobra must route providers lock to its passthrough leaf")
+
+	all := lockCmd.Flags().Lookup("all")
+	require.NotNil(t, all, "providers lock must define --all")
+	originalValue := all.Value.String()
+	originalChanged := all.Changed
+	t.Cleanup(func() {
+		require.NoError(t, all.Value.Set(originalValue))
+		all.Changed = originalChanged
+	})
+
+	require.NoError(t, all.Value.Set("true"))
+	all.Changed = true
+
+	v := viper.New()
+	require.NoError(t, terraformParser.BindFlagsToViper(lockCmd, v))
+	require.NoError(t, providersParser.BindFlagsToViper(lockCmd, v))
+	opts, err := ParseTerraformRunOptions(v)
+	require.NoError(t, err)
+	assert.True(t, opts.All, "the passthrough leaf must preserve --all")
+}
+
 // TestNewWorkspacePassthroughSubcommand tests the workspace-specific helper function
 // that creates Cobra child commands with workspace parser binding.
 func TestNewWorkspacePassthroughSubcommand(t *testing.T) {

@@ -13,7 +13,7 @@ commands:
         output: none
         command: |
           atmos --logs-level=Off terraform backend delete demo -s dev --force || true
-          atmos --logs-level=Off emulator down aws -s dev || true
+          atmos --logs-level=Off emulator down aws -s local || true
           atmos --logs-level=Off terraform reset || true
       - type: cast
         name: lifecycle
@@ -31,9 +31,9 @@ commands:
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
-            text: "# start a local `AWS` emulator, declared as a component in the dev stack"
+            text: "# start a local `AWS` emulator, declared in the local stack"
           - type: simulate
-            text: &emulator_up_cmd atmos emulator up aws -s dev --ephemeral
+            text: &emulator_up_cmd atmos emulator up aws -s local --ephemeral
           - type: shell
             name: emulator-up
             duration: 450ms
@@ -65,7 +65,7 @@ commands:
             interval: 750ms
             command: *backend_delete_cmd
           - type: simulate
-            text: &emulator_down_cmd atmos emulator down aws -s dev
+            text: &emulator_down_cmd atmos emulator down aws -s local
           - type: shell
             name: emulator-down
             when: always
@@ -86,7 +86,7 @@ commands:
               "floci/floci:1.5.23",
               text,
           )
-          text = re.sub(r"(?<=atmos-dev-emulator-aws\t)c88ec20bf221(?=\trunning)", "floci/floci:1.5.23", text)
+          text = re.sub(r"(?<=atmos-local-emulator-aws\t)c88ec20bf221(?=\trunning)", "floci/floci:1.5.23", text)
           path.write_text(text)
           import os, sys
           sys.path.insert(0, os.getcwd())
