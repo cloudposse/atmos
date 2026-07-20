@@ -211,23 +211,23 @@ iolib.UI     // io.Writer for stderr (automatically masked)
 ### Use Cases
 
 1. **Passing to third-party loggers:**
-   ```go
-   logger := log.New(iolib.UI, "[APP] ", log.LstdFlags)
-   logger.Printf("Starting process...") // Goes to stderr, automatically masked
-   ```
+  ```go
+  logger := log.New(iolib.UI, "[APP] ", log.LstdFlags)
+  logger.Printf("Starting process...") // Goes to stderr, automatically masked
+  ```
 
 2. **Custom file handles with masking:**
-   ```go
-   f, _ := os.Create("output.log")
-   maskedFile := iolib.MaskWriter(f)
-   fmt.Fprintf(maskedFile, "Token: %s\n", token) // Automatically masked in file
-   ```
+  ```go
+  f, _ := os.Create("output.log")
+  maskedFile := iolib.MaskWriter(f)
+  fmt.Fprintf(maskedFile, "Token: %s\n", token) // Automatically masked in file
+  ```
 
 3. **Direct usage (simple cases):**
-   ```go
-   fmt.Fprintf(iolib.Data, `{"status":"success"}`) // stdout
-   fmt.Fprintf(iolib.UI, "Processing...\n")        // stderr
-   ```
+  ```go
+  fmt.Fprintf(iolib.Data, `{"status":"success"}`) // stdout
+  fmt.Fprintf(iolib.UI, "Processing...\n")        // stderr
+  ```
 
 ### Registering Secrets Globally
 
