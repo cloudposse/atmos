@@ -242,6 +242,7 @@ Atmos manages its own version through the re-exec pattern in `pkg/version/reexec
 - **Semver**: `1.199.0`, `v1.199.0` — installs from toolchain registry
 - **PR number**: `pr:2040` or just `2040` (auto-detected) — installs from GitHub Actions artifact
 - **Commit SHA**: `sha:ceb7526` or `ceb7526be` (auto-detected, 7-40 hex chars) — installs from GitHub Actions artifact
+- **Git ref**: `ref:main`, `ref:release/v1.199`, or `ref:v1.199.0` — resolves a branch or tag to its latest commit's GitHub Actions artifact
 
 **Architecture** (`pkg/version/reexec.go`):
 - `ReexecConfig` struct with dependency injection for testability (VersionFinder, VersionInstaller, ExecFunc, GetEnv, SetEnv)
