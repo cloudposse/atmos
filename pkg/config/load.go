@@ -390,6 +390,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err := loadEmbeddedConfig(v); err != nil {
 		return atmosConfig, err
 	}
+	// Record any runtime base-path override so import resolution anchors dot-prefixed
+	// values to the current working directory (runtime source) rather than the config
+	// directory. Runtime overrides are otherwise applied after imports are processed.
+	if runtimeBasePath := resolveRuntimeBasePath(configAndStacksInfo); runtimeBasePath != "" {
+		v.Set(runtimeBasePathOverrideKey, runtimeBasePath)
+	}
 	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
 		err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
 		if err != nil {
@@ -1158,7 +1164,7 @@ func readConfigFileContent(configFilePath string) ([]byte, error) {
 }
 
 // processConfigImportsAndReapply processes imports and re-applies the original config for proper precedence.
-func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte) (interface{}, error) {
+func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte, runtimeBasePath string) (interface{}, error) {
 	configDir := path
 	configFileForIncludes := path
 	if info, err := os.Stat(path); err == nil && !info.IsDir() { //nolint:gosec // path is an Atmos config path selected by the loader or tests.
@@ -1200,7 +1206,11 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 
 	// Process explicit imports.
 	// This will read the import paths from the config and process them.
-	if err := mergeImports(tempViper); err != nil {
+	_, basePathSource, err := parseBasePathDeclaration(content)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parse main config base path: %w", errUtils.ErrMergeConfiguration, err)
+	}
+	if _, err := mergeImports(tempViper, configDir, basePathSource, runtimeBasePath); err != nil {
 		log.Debug("error process explicit imports", "file", tempViper.ConfigFileUsed(), "error", err)
 	}
 
@@ -1285,7 +1295,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	// Process imports if requested
 	var processedCommands interface{}
 	if processImports {
-		processedCommands, err = processConfigImportsAndReapply(configFilePath, tempViper, content)
+		processedCommands, err = processConfigImportsAndReapply(configFilePath, tempViper, content, v.GetString(runtimeBasePathOverrideKey))
 		if err != nil {
 			return err
 		}
@@ -1512,12 +1522,91 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 	}
 }
 
+func importBasePathDeclaration(content []byte) (bool, string, error) {
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return false, "", err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
+		return false, "", nil
+	}
+	for i := 0; i < len(root.Content[0].Content); i += 2 {
+		if root.Content[0].Content[i].Value != "base_path" {
+			continue
+		}
+		if root.Content[0].Content[i+1].Tag == u.AtmosYamlFuncCwd {
+			return true, basePathSourceRuntime, nil
+		}
+		return true, "", nil
+	}
+	return false, "", nil
+}
+
+// parseBasePathDeclaration is a seam over importBasePathDeclaration. Call sites that
+// re-parse content Viper has already validated route through it so tests can inject a
+// parse failure and exercise the error-propagation path.
+var parseBasePathDeclaration = importBasePathDeclaration
+
+// ResolveConfigImportBasePath resolves a base path declared by an imported config
+// file through the canonical source-aware category model (see resolveAbsolutePath).
+// When the file declares no base_path, the parent's fallback base path is used.
+func ResolveConfigImportBasePath(basePath, configFile, fallback string) (string, error) {
+	defer perf.Track(nil, "config.ResolveConfigImportBasePath")()
+
+	content, err := readConfigFileContent(configFile)
+	if err != nil {
+		return "", err
+	}
+	declared, source, err := importBasePathDeclaration(content)
+	if err != nil {
+		return "", err
+	}
+	if !declared {
+		return fallback, nil
+	}
+	return resolveAbsolutePath(basePath, filepath.Dir(configFile), source)
+}
+
+// runtimeBasePathOverrideKey is an internal Viper key that carries a runtime base-path
+// override (ATMOS_BASE_PATH, --base-path, or the atmos_base_path provider param) from
+// LoadConfig into import resolution. It lives only on the main Viper instance, which is
+// never marshaled to output, so it does not leak into merged configuration.
+const runtimeBasePathOverrideKey = "__atmos_runtime_base_path_override__"
+
+// resolveRuntimeBasePath returns the base path supplied by a runtime source, or "" when
+// none is set. The AtmosBasePath struct field (--base-path flag or atmos_base_path
+// provider param) takes precedence over the ATMOS_BASE_PATH environment variable, and an
+// empty value is treated as unset.
+func resolveRuntimeBasePath(configAndStacksInfo *schema.ConfigAndStacksInfo) string {
+	if configAndStacksInfo != nil {
+		if bp := strings.TrimSpace(configAndStacksInfo.AtmosBasePath); bp != "" {
+			return bp
+		}
+	}
+	//nolint:forbidigo // Read before Viper env binding, mirroring ConfigSelectionFromEnv.
+	if bp := strings.TrimSpace(os.Getenv("ATMOS_BASE_PATH")); bp != "" {
+		return bp
+	}
+	return ""
+}
+
+// effectiveImportBasePath chooses the base path and source for import resolution. A
+// runtime override wins over a config-file declaration and anchors dot-prefixed values
+// to the current working directory (see resolveAbsolutePath); otherwise the declared
+// value and its source are used unchanged.
+func effectiveImportBasePath(runtimeBasePath, declared, declaredSource string) (string, string) {
+	if runtimeBasePath != "" {
+		return runtimeBasePath, basePathSourceRuntime
+	}
+	return declared, declaredSource
+}
+
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
-func mergeImports(dst *viper.Viper) error {
+func mergeImports(dst *viper.Viper, configDir, basePathSource, runtimeBasePath string) (string, error) {
 	var src schema.AtmosConfiguration
 	err := dst.Unmarshal(&src, atmosDecodeHook())
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Inject provisioned identity imports before processing.
@@ -1526,10 +1615,20 @@ func mergeImports(dst *viper.Viper) error {
 		// Non-fatal: continue with config loading even if injection fails.
 	}
 
-	if err := processConfigImports(&src, dst); err != nil {
-		return err
+	basePath, basePathSource := effectiveImportBasePath(runtimeBasePath, src.BasePath, basePathSource)
+	basePathBeforeImports := basePath
+	src.BasePath, err = resolveAbsolutePath(basePath, configDir, basePathSource)
+	if err != nil {
+		return "", err
 	}
-	return nil
+	importBasePathDir, err := processConfigImportsWithBasePathSource(&src, dst)
+	if err != nil {
+		return "", err
+	}
+	if basePathBeforeImports != "" || dst.GetString("base_path") == "" {
+		return "", nil
+	}
+	return importBasePathDir, nil
 }
 
 // injectProvisionedIdentityImports adds provisioned identity files to the import list.
@@ -1697,9 +1796,14 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 			return err
 		}
 		importConfig.Import = imports
-		importConfig.BasePath = tempViper.GetString("base_path")
-		if importConfig.BasePath == "" {
-			importConfig.BasePath = filepath.Dir(path)
+		_, basePathSource, sourceErr := parseBasePathDeclaration(content)
+		if sourceErr != nil {
+			return fmt.Errorf("%w: parse config base path: %w", errUtils.ErrMergeConfiguration, sourceErr)
+		}
+		basePath, basePathSource := effectiveImportBasePath(v.GetString(runtimeBasePathOverrideKey), tempViper.GetString("base_path"), basePathSource)
+		importConfig.BasePath, err = resolveAbsolutePath(basePath, filepath.Dir(path), basePathSource)
+		if err != nil {
+			return err
 		}
 		if err = processConfigImports(&importConfig, v); err != nil {
 			return err
