@@ -1,0 +1,275 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestMergeImports_ResolvesImportsRelativeToConfigDir(t *testing.T) {
+	setupTestAdapters()
+	root := t.TempDir()
+	importDir := filepath.Join(root, ".atmos")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 137\n"),
+		0o644,
+	))
+
+	t.Chdir(t.TempDir())
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set("base_path", ".")
+	v.Set("import", []string{filepath.Join(".atmos", "extra.yaml")})
+
+	_, err := mergeImports(v, root, "", "")
+	require.NoError(t, err)
+
+	assert.Equal(t, 137, v.GetInt("settings.terminal.max_width"),
+		"import must resolve relative to the config dir, not the cwd")
+}
+
+func TestMergeConfig_GlobRelativeToConfigDir(t *testing.T) {
+	setupTestAdapters()
+	root := t.TempDir()
+	t.Setenv("TEST_GIT_ROOT", root)
+	commandsDir := filepath.Join(root, ".atmos", "commands")
+	require.NoError(t, os.MkdirAll(commandsDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(commandsDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 141\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "atmos.yaml"),
+		[]byte("base_path: ./\nimport:\n  - .atmos/commands/**/*\n"),
+		0o644,
+	))
+
+	sub := filepath.Join(root, "somepath")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	t.Chdir(sub)
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeConfig(v, root, CliConfigFileName, true))
+
+	assert.Equal(t, 141, v.GetInt("settings.terminal.max_width"),
+		"glob import must resolve relative to the config dir, not the cwd")
+}
+
+func TestMergeImports_BareBasePathResolvesViaGitRoot(t *testing.T) {
+	setupTestAdapters()
+	gitRoot := t.TempDir()
+	t.Setenv("TEST_GIT_ROOT", gitRoot)
+	importDir := filepath.Join(gitRoot, "workspace")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 149\n"),
+		0o644,
+	))
+	t.Chdir(t.TempDir())
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set("base_path", "workspace")
+	v.Set("import", []string{"extra.yaml"})
+
+	_, err := mergeImports(v, t.TempDir(), "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 149, v.GetInt("settings.terminal.max_width"),
+		"bare base path must resolve via git root")
+}
+
+func TestMergeImports_EmptyBasePathResolvesViaGitRoot(t *testing.T) {
+	setupTestAdapters()
+	gitRoot := t.TempDir()
+	t.Setenv("TEST_GIT_ROOT", gitRoot)
+	importDir := filepath.Join(gitRoot, ".atmos")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 153\n"),
+		0o644,
+	))
+	t.Chdir(t.TempDir())
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set("base_path", "")
+	v.Set("import", []string{filepath.Join(".atmos", "extra.yaml")})
+
+	_, err := mergeImports(v, t.TempDir(), "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 153, v.GetInt("settings.terminal.max_width"),
+		"empty base path must resolve via git root")
+}
+
+func TestMergeConfig_CwdBasePathRetainsCWDImportResolution(t *testing.T) {
+	setupTestAdapters()
+	configDir := t.TempDir()
+	cwd := t.TempDir()
+	importDir := filepath.Join(cwd, "workspace")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 151\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "atmos.yaml"),
+		[]byte("base_path: !cwd ./workspace\nimport:\n  - extra.yaml\n"),
+		0o644,
+	))
+	t.Chdir(cwd)
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeConfig(v, configDir, CliConfigFileName, true))
+	assert.Equal(t, 151, v.GetInt("settings.terminal.max_width"))
+}
+
+func TestMergeFiles_InheritedBasePathUsesDeclaringConfigDir(t *testing.T) {
+	setupTestAdapters()
+	baseConfigDir := t.TempDir()
+	overlayConfigDir := t.TempDir()
+	importDir := filepath.Join(baseConfigDir, "workspace")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 157\n"),
+		0o644,
+	))
+	baseConfig := filepath.Join(baseConfigDir, "base.yaml")
+	require.NoError(t, os.WriteFile(baseConfig, []byte("base_path: ./workspace\n"), 0o644))
+	overlayConfig := filepath.Join(overlayConfigDir, "overlay.yaml")
+	require.NoError(t, os.WriteFile(overlayConfig, []byte("import:\n  - extra.yaml\n"), 0o644))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeFiles(v, []string{baseConfig, overlayConfig}))
+	assert.Equal(t, 157, v.GetInt("settings.terminal.max_width"))
+}
+
+// mergeFilesImportedBasePathCase writes a two-file `--config` scenario where
+// base.yaml imports imports/defaults.yaml, the overlay imports extra.yaml, and
+// extra.yaml lives under extraSubdir; it asserts the overlay import resolved
+// there (i.e. the effective base_path drove import resolution).
+func mergeFilesImportedBasePathCase(t *testing.T, baseYAML, defaultsYAML, extraSubdir string, wantWidth int) {
+	t.Helper()
+	setupTestAdapters()
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+	baseConfigDir := t.TempDir()
+	overlayConfigDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(baseConfigDir, "imports"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(baseConfigDir, extraSubdir), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(baseConfigDir, extraSubdir, "extra.yaml"),
+		fmt.Appendf(nil, "settings:\n  terminal:\n    max_width: %d\n", wantWidth),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(baseConfigDir, "imports", "defaults.yaml"), []byte(defaultsYAML), 0o644))
+	baseConfig := filepath.Join(baseConfigDir, "base.yaml")
+	require.NoError(t, os.WriteFile(baseConfig, []byte(baseYAML), 0o644))
+	overlayConfig := filepath.Join(overlayConfigDir, "overlay.yaml")
+	require.NoError(t, os.WriteFile(overlayConfig, []byte("import:\n  - extra.yaml\n"), 0o644))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeFiles(v, []string{baseConfig, overlayConfig}))
+	assert.Equal(t, wantWidth, v.GetInt("settings.terminal.max_width"))
+}
+
+func TestMergeFiles_ImportedBasePathUsesImportedConfigDir(t *testing.T) {
+	mergeFilesImportedBasePathCase(t,
+		"import:\n  - imports/defaults.yaml\n",
+		"base_path: ../workspace\n",
+		"workspace", 163)
+}
+
+func TestMergeFiles_DirectBasePathKeepsPrecedenceOverImportedDeclaration(t *testing.T) {
+	mergeFilesImportedBasePathCase(t,
+		"base_path: ./direct\nimport:\n  - imports/defaults.yaml\n",
+		"base_path: ../imported\n",
+		"direct", 167)
+}
+
+func TestMergeFiles_EmptyBasePathUsesImportingConfigDir(t *testing.T) {
+	setupTestAdapters()
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+	baseConfigDir := t.TempDir()
+	overlayConfigDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(baseConfigDir, "base.yaml"), []byte("settings:\n  base: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(overlayConfigDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 173\n"),
+		0o644,
+	))
+	overlayConfig := filepath.Join(overlayConfigDir, "overlay.yaml")
+	require.NoError(t, os.WriteFile(overlayConfig, []byte("import:\n  - extra.yaml\n"), 0o644))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeFiles(v, []string{filepath.Join(baseConfigDir, "base.yaml"), overlayConfig}))
+	assert.Equal(t, 173, v.GetInt("settings.terminal.max_width"))
+}
+
+// TestMergeFiles_ImportMergeErrorIsNonFatal covers the branch where mergeImports fails.
+// A base_path declared as a mapping (rather than a string) makes the Unmarshal inside
+// mergeImports fail; the failure is logged and tolerated, so the file's own settings
+// still load.
+func TestMergeFiles_ImportMergeErrorIsNonFatal(t *testing.T) {
+	setupTestAdapters()
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(
+		cfg,
+		[]byte("base_path:\n  nested: value\nsettings:\n  terminal:\n    max_width: 181\n"),
+		0o644,
+	))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeFiles(v, []string{cfg}))
+	assert.Equal(t, 181, v.GetInt("settings.terminal.max_width"))
+}
+
+func TestResolveConfigImportBasePath(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("declared dot-relative anchors to the config file's directory", func(t *testing.T) {
+		cfg := filepath.Join(dir, "declared.yaml")
+		require.NoError(t, os.WriteFile(cfg, []byte("base_path: ./sub\n"), 0o644))
+		got, err := ResolveConfigImportBasePath("./sub", cfg, filepath.Join(dir, "fallback"))
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(dir, "sub"), got)
+	})
+
+	t.Run("no base_path declaration returns the fallback", func(t *testing.T) {
+		cfg := filepath.Join(dir, "nodecl.yaml")
+		require.NoError(t, os.WriteFile(cfg, []byte("settings:\n  x: 1\n"), 0o644))
+		got, err := ResolveConfigImportBasePath("", cfg, filepath.Join(dir, "fallback"))
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(dir, "fallback"), got)
+	})
+
+	t.Run("missing config file returns an error", func(t *testing.T) {
+		_, err := ResolveConfigImportBasePath("./sub", filepath.Join(dir, "does-not-exist.yaml"), dir)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid yaml returns an error", func(t *testing.T) {
+		cfg := filepath.Join(dir, "invalid.yaml")
+		require.NoError(t, os.WriteFile(cfg, []byte("base_path: [unterminated\n"), 0o644))
+		_, err := ResolveConfigImportBasePath("x", cfg, dir)
+		require.Error(t, err)
+	})
+}
