@@ -33,17 +33,17 @@ literal default when the lookup can't succeed.
 Two things had to both be true:
 
 1. `--identity=false` (`AuthDisabled`) only skips building an Atmos `AuthManager` — it does
-   **not** turn off YAML-function evaluation. `pkg/scanners/tflint/command.go`'s `execute()`/
-   `executeAffected()` still passed `info.ProcessFunctions`/`options.ProcessYamlFunctions`
-   through unchanged, so `!terraform.state`/`!terraform.output` calls still ran, falling through
-   to the AWS SDK's ambient/default credential chain (EC2 IMDS) with no explicit `AuthContext` to
-   short-circuit them.
+  **not** turn off YAML-function evaluation. `pkg/scanners/tflint/command.go`'s `execute()`/
+  `executeAffected()` still passed `info.ProcessFunctions`/`options.ProcessYamlFunctions`
+  through unchanged, so `!terraform.state`/`!terraform.output` calls still ran, falling through
+  to the AWS SDK's ambient/default credential chain (EC2 IMDS) with no explicit `AuthContext` to
+  short-circuit them.
 2. The `//` fallback (`internal/exec/yaml_func_terraform_state.go`'s `isRecoverableTerraformError`)
-   only fires for `ErrTerraformStateNotProvisioned`/`ErrTerraformOutputNotFound` — i.e. "the
-   backend/key genuinely doesn't exist yet" (the normal cold-start case against the example's
-   `local-aws` emulator). A credential-refresh failure surfaces as `ErrGetObjectFromS3` instead,
-   which isn't in that recoverable set, so it propagates as a hard error even though a `//`
-   default is present.
+  only fires for `ErrTerraformStateNotProvisioned`/`ErrTerraformOutputNotFound` — i.e. "the
+  backend/key genuinely doesn't exist yet" (the normal cold-start case against the example's
+  `local-aws` emulator). A credential-refresh failure surfaces as `ErrGetObjectFromS3` instead,
+  which isn't in that recoverable set, so it propagates as a hard error even though a `//`
+  default is present.
 
 `pkg/hooks/hooks.go` already documents and follows the correct pattern for this exact situation
 (`GetHooks` forces `ProcessYamlFunctions: false` because it runs pre-auth), but nothing tied
