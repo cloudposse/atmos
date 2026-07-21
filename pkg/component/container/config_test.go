@@ -109,8 +109,39 @@ func TestContainerSpec_ToBuildConfig(t *testing.T) {
 	assert.Equal(t, []string{"img:1"}, bc.Tags)
 	assert.Equal(t, "prod", bc.Target)
 	assert.True(t, bc.NoCache)
+	assert.Nil(t, bc.Driver)
+	assert.Nil(t, bc.Cache)
 
 	assert.Nil(t, (&ContainerSpec{}).ToBuildConfig())
+}
+
+func TestContainerSpec_ToBuildConfig_DriverAndCache(t *testing.T) {
+	spec := ContainerSpec{Build: &schema.ContainerBuildStep{
+		Context:    "app",
+		Dockerfile: "Dockerfile",
+		Driver: &schema.ContainerDriverConfig{
+			Name:     "atmos",
+			Provider: "docker-container",
+			Opts:     map[string]string{"image": "mirror.gcr.io/moby/buildkit:buildx-stable-1"},
+		},
+		Cache: &schema.ContainerCacheConfig{
+			From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+			To:   []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}},
+		},
+	}}
+	bc := spec.ToBuildConfig()
+	require.NotNil(t, bc)
+
+	require.NotNil(t, bc.Driver)
+	assert.Equal(t, "atmos", bc.Driver.Name)
+	assert.Equal(t, "docker-container", bc.Driver.Provider)
+	assert.Equal(t, "mirror.gcr.io/moby/buildkit:buildx-stable-1", bc.Driver.Opts["image"])
+
+	require.NotNil(t, bc.Cache)
+	require.Len(t, bc.Cache.From, 1)
+	assert.Equal(t, "registry.example.com/app:buildcache", bc.Cache.From[0]["ref"])
+	require.Len(t, bc.Cache.To, 1)
+	assert.Equal(t, "max", bc.Cache.To[0]["mode"])
 }
 
 func TestContainerSpec_CommandArgs(t *testing.T) {
