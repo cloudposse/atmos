@@ -583,8 +583,8 @@ func applyColoredHelpTemplateForTopic(cmd *cobra.Command, topic helpTopicRequest
 	configureEarlyColorProfile(cmd)
 
 	// Bind a renderer to the help writer using the globally detected profile.
-	// The --cast tee (root.go SetHelpFunc) wraps cmd's output before help renders,
-	// so recorded help flows through the same writer.
+	// The root help function starts explicit cast recording before help renders;
+	// cmd's normal masked output writer records the rendered help.
 	renderer := ui.NewRenderer(cmd.OutOrStdout())
 	log.Debug("Help renderer configured", "profile", renderer.ColorProfile())
 
