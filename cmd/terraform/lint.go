@@ -147,7 +147,7 @@ func terraformLintAffectedArgs(cmd *cobra.Command, info *schema.ConfigAndStacksI
 func terraformLintRuntime() *tflint.Runtime {
 	return &tflint.Runtime{
 		SetupAuth:          e.SetupComponentAuthForCLI,
-		DescribeStacks:     e.ExecuteDescribeStacks,
+		DescribeStacks:     e.ExecuteDescribeStacksWithAuthDisabled,
 		ProcessStacks:      e.ProcessStacks,
 		AffectedComponents: resolveTerraformLintAffectedComponents,
 	}

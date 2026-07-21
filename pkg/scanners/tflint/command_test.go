@@ -21,7 +21,7 @@ func testRuntime() *Runtime {
 			return nil, nil
 		},
 		DescribeStacks: func(
-			*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager,
+			*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager, bool,
 		) (map[string]any, error) {
 			return map[string]any{}, nil
 		},
@@ -96,6 +96,35 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	assert.Equal(t, []string{"app:dev", "vpc:dev"}, linted)
 }
 
+func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
+	stubInitCLIConfig(t)
+
+	originalGraph := buildTerraformGraph
+	buildTerraformGraph = func(map[string]any) (*dependency.Graph, error) {
+		return &dependency.Graph{}, nil
+	}
+	t.Cleanup(func() { buildTerraformGraph = originalGraph })
+
+	runtime := testRuntime()
+	runtime.SetupAuth = func(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		assert.True(t, info.AuthDisabled)
+		assert.Equal(t, cfg.IdentityFlagDisabledValue, info.Identity)
+		return nil, nil
+	}
+	called := false
+	runtime.DescribeStacks = func(
+		_ *schema.AtmosConfiguration, _ string, _ []string, _ []string, _ []string, _ bool, _ bool, _ bool, _ bool, _ []string, _ auth.AuthManager, authDisabled bool,
+	) (map[string]any, error) {
+		called = true
+		assert.True(t, authDisabled)
+		return map[string]any{}, nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}
+	require.NoError(t, Execute(context.Background(), runtime, info, nil))
+	assert.True(t, called)
+}
+
 func TestExecuteReturnsSetupErrors(t *testing.T) {
 	t.Run("config initialization", func(t *testing.T) {
 		original := initCLIConfig
@@ -122,7 +151,7 @@ func TestExecuteReturnsSetupErrors(t *testing.T) {
 		want := errors.New("describe failed")
 		runtime := testRuntime()
 		runtime.DescribeStacks = func(
-			*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager,
+			*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager, bool,
 		) (map[string]any, error) {
 			return nil, want
 		}

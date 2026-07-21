@@ -61,6 +61,7 @@ type Runtime struct {
 		bool,
 		[]string,
 		auth.AuthManager,
+		bool,
 	) (map[string]any, error)
 	ProcessStacks func(
 		*schema.AtmosConfiguration,
@@ -99,6 +100,11 @@ func Execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 }
 
 func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacksInfo) error {
+	if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
+		info.Identity = cfg.IdentityFlagDisabledValue
+		info.AuthDisabled = true
+	}
+
 	atmosConfig, err := initCLIConfig(*info, true)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err)
@@ -115,7 +121,7 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	}
 	stacks, err := runtime.DescribeStacks(
 		&atmosConfig, info.Stack, components, []string{cfg.TerraformComponentType}, nil,
-		false, info.ProcessTemplates, info.ProcessFunctions, false, info.Skip, authManager,
+		false, info.ProcessTemplates, info.ProcessFunctions, false, info.Skip, authManager, info.AuthDisabled,
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
