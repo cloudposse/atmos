@@ -1,4 +1,0 @@
-interface:
-  display_name: "Atmos Linting"
-  short_description: "Run component-aware Terraform linting"
-  default_prompt: "Use $atmos-lint to configure TFLint for Atmos components and CI."

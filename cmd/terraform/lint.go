@@ -153,28 +153,31 @@ func terraformLintRuntime() *tflint.Runtime {
 	}
 }
 
+// resolveTerraformLintAffectedComponents reuses the same git-target dispatch
+// `atmos describe affected`/`--affected` already uses (e.GetAffectedComponents)
+// instead of re-implementing the RepoPath/CloneTargetRef/ref-checkout switch
+// here. Terraform-only/not-deleted filtering is deliberately NOT duplicated
+// here — pkg/scanners/tflint/command.go's executeAffected already applies its
+// own filterAffected to whatever any Runtime.AffectedComponents implementation
+// returns (see TestExecuteAffectedFiltersAndDeduplicatesTargets), so this
+// adapter can stay a plain passthrough.
 func resolveTerraformLintAffectedComponents(atmosConfig *schema.AtmosConfiguration, options *tflint.AffectedOptions, authManager auth.AuthManager) ([]schema.Affected, error) {
-	switch {
-	case options.RepoPath != "":
-		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
-			atmosConfig, options.RepoPath, false, options.IncludeSettings, options.Stack,
-			options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip, options.ExcludeLocked,
-			authManager, options.AuthDisabled,
-		)
-		return affected, err
-	case options.CloneTargetRef:
-		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(
-			atmosConfig, options.Ref, options.SHA, options.SSHKeyPath, options.SSHKeyPassword,
-			false, options.IncludeSettings, options.Stack, options.ProcessTemplates,
-			options.ProcessYamlFunctions, options.Skip, options.ExcludeLocked, authManager, options.AuthDisabled,
-		)
-		return affected, err
-	default:
-		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
-			atmosConfig, options.Ref, options.SHA, options.TargetBranch, false, options.IncludeSettings,
-			options.Stack, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip,
-			options.ExcludeLocked, authManager, options.AuthDisabled,
-		)
-		return affected, err
-	}
+	return e.GetAffectedComponents(&e.DescribeAffectedCmdArgs{
+		CLIConfig:            atmosConfig,
+		RepoPath:             options.RepoPath,
+		CloneTargetRef:       options.CloneTargetRef,
+		Ref:                  options.Ref,
+		SHA:                  options.SHA,
+		SSHKeyPath:           options.SSHKeyPath,
+		SSHKeyPassword:       options.SSHKeyPassword,
+		TargetBranch:         options.TargetBranch,
+		IncludeSettings:      options.IncludeSettings,
+		Stack:                options.Stack,
+		ProcessTemplates:     options.ProcessTemplates,
+		ProcessYamlFunctions: options.ProcessYamlFunctions,
+		Skip:                 options.Skip,
+		ExcludeLocked:        options.ExcludeLocked,
+		AuthManager:          authManager,
+		AuthDisabled:         options.AuthDisabled,
+	})
 }

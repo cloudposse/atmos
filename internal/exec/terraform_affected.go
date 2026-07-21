@@ -23,12 +23,16 @@ func extractAffectedNodeIDs(affectedList []schema.Affected) []string {
 	return nodeIDs
 }
 
-// filterTerraformAffected narrows the affected list to items that `atmos terraform
+// FilterTerraformAffected narrows the affected list to items that `atmos terraform
 // plan/apply --affected` should actually execute: terraform components only, and
 // only those that still exist (not deleted in HEAD). Helmfile and Packer items
 // belong to their own subcommands; deleted components have no on-disk module so
-// terraform plan/apply against them would fail or no-op. See issue #2361.
-func filterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
+// terraform plan/apply against them would fail or no-op. See issue #2361. Exported
+// so other terraform-affected dispatchers (e.g. `atmos terraform lint --affected`)
+// reuse the same filter instead of re-declaring it.
+func FilterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
+	defer perf.Track(nil, "exec.FilterTerraformAffected")()
+
 	filtered := affectedList[:0]
 	for i := range affectedList {
 		a := &affectedList[i]
@@ -43,9 +47,14 @@ func filterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
 	return filtered
 }
 
-// getAffectedComponents retrieves the list of affected components based on the provided arguments.
-func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
-	defer perf.Track(nil, "exec.getAffectedComponents")()
+// GetAffectedComponents retrieves the list of affected components based on the
+// provided arguments, dispatching to the right git-target resolution mode
+// (repo path / clone-and-diff / local ref checkout). Exported so other
+// affected-target dispatchers (e.g. `atmos terraform lint --affected`) reuse
+// this switch instead of re-declaring it against the same three
+// ExecuteDescribeAffectedWith* functions.
+func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponents")()
 
 	if args == nil {
 		return nil, errUtils.ErrNilParam
@@ -146,7 +155,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 	args.AuthManager = authManager
 	args.AuthDisabled = authDisabled
 
-	affectedList, err := getAffectedComponents(args)
+	affectedList, err := GetAffectedComponents(args)
 	if err != nil {
 		return err
 	}
@@ -154,7 +163,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 	// Drop non-terraform component types (helmfile, packer) and deleted components
 	// before resolving dependents — `addDependentsToAffected` is expensive and there
 	// is no reason to walk dependency graphs for items we will not execute.
-	affectedList = filterTerraformAffected(affectedList)
+	affectedList = FilterTerraformAffected(affectedList)
 
 	if len(affectedList) == 0 {
 		ui.Success("No components affected")

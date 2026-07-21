@@ -143,7 +143,7 @@ func validateCtx(ctx *ExecContext) error {
 func makeOutputDir() (tmpDir, outputFile string, err error) {
 	tmpDir, err = os.MkdirTemp("", "atmos-hook-*")
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create temp dir for hook output: %w", err)
+		return "", "", fmt.Errorf("%w: hook output directory: %w", errUtils.ErrCreateDirectory, err)
 	}
 	return tmpDir, filepath.Join(tmpDir, "output"), nil
 }

@@ -136,7 +136,7 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 		ui.Success("No Terraform components matched")
 		return nil
 	}
-	return executeTargets(ctx, runtime, &atmosConfig, info, targets, authManager)
+	return executeTargets(ctx, &targetExecution{Runtime: runtime, AtmosConfig: &atmosConfig, BaseInfo: info, AuthManager: authManager}, targets)
 }
 
 func executeAffected(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacksInfo, options *AffectedOptions) error {
@@ -175,7 +175,7 @@ func executeAffected(ctx context.Context, runtime *Runtime, info *schema.ConfigA
 		item := &affected[i]
 		targets = append(targets, &dependency.Node{Component: item.Component, Stack: item.Stack, Type: cfg.TerraformComponentType})
 	}
-	return executeTargets(ctx, runtime, &atmosConfig, info, targetsFor(nil, targets), authManager)
+	return executeTargets(ctx, &targetExecution{Runtime: runtime, AtmosConfig: &atmosConfig, BaseInfo: info, AuthManager: authManager}, targetsFor(nil, targets))
 }
 
 func filterAffected(input []schema.Affected) []schema.Affected {
@@ -223,36 +223,46 @@ func targetsFor(graph *dependency.Graph, input []*dependency.Node) []*dependency
 	return targets
 }
 
-func executeTargets(ctx context.Context, runtime *Runtime, atmosConfig *schema.AtmosConfiguration, baseInfo *schema.ConfigAndStacksInfo, targets []*dependency.Node, authManager auth.AuthManager) error {
+// targetExecution bundles the runtime/config/auth values shared by every
+// target in a single lint run, keeping executeTargets/executeTarget under
+// the 5-argument limit instead of threading each value through separately.
+type targetExecution struct {
+	Runtime     *Runtime
+	AtmosConfig *schema.AtmosConfiguration
+	BaseInfo    *schema.ConfigAndStacksInfo
+	AuthManager auth.AuthManager
+}
+
+func executeTargets(ctx context.Context, exec *targetExecution, targets []*dependency.Node) error {
 	errs := make([]error, 0)
 	for _, target := range targets {
-		if err := runTarget(ctx, runtime, atmosConfig, baseInfo, target, authManager); err != nil {
+		if err := runTarget(ctx, exec, target); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func executeTarget(ctx context.Context, runtime *Runtime, atmosConfig *schema.AtmosConfiguration, baseInfo *schema.ConfigAndStacksInfo, target *dependency.Node, authManager auth.AuthManager) error {
-	info := *baseInfo
+func executeTarget(ctx context.Context, exec *targetExecution, target *dependency.Node) error {
+	info := *exec.BaseInfo
 	info.ComponentType = cfg.TerraformComponentType
 	info.ComponentFromArg = target.Component
 	info.Component = target.Component
 	info.Stack = target.Stack
 	info.SubCommand = "lint"
 
-	processed, err := runtime.ProcessStacks(atmosConfig, info, true, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
+	processed, err := exec.Runtime.ProcessStacks(exec.AtmosConfig, info, true, info.ProcessTemplates, info.ProcessFunctions, info.Skip, exec.AuthManager)
 	if err != nil {
 		return targetError(target, "resolving the stack configuration", err)
 	}
-	if _, err = resolveAndProvisionComponentPath(ctx, atmosConfig, &processed); err != nil {
+	if _, err = resolveAndProvisionComponentPath(ctx, exec.AtmosConfig, &processed); err != nil {
 		return targetError(target, "resolving the component path", err)
 	}
-	tenv, err := dependencies.ForComponent(atmosConfig, cfg.TerraformComponentType, processed.StackSection, processed.ComponentSection)
+	tenv, err := dependencies.ForComponent(exec.AtmosConfig, cfg.TerraformComponentType, processed.StackSection, processed.ComponentSection)
 	if err != nil {
 		return targetError(target, "resolving the TFLint toolchain", err)
 	}
-	if _, _, err = Run(ctx, &Options{AtmosConfig: atmosConfig, Info: &processed, ToolchainPATH: tenv.PATH()}); err != nil {
+	if _, _, err = Run(ctx, &Options{AtmosConfig: exec.AtmosConfig, Info: &processed, ToolchainPATH: tenv.PATH()}); err != nil {
 		return targetError(target, "running TFLint", err)
 	}
 	return nil

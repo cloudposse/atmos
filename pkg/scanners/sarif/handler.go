@@ -40,14 +40,7 @@ func NewResultHandler(opts HandlerOptions) scanners.ResultHandler {
 
 		data, err := os.ReadFile(path)
 		if os.IsNotExist(err) {
-			// Tool didn't produce a SARIF file (clean run, no findings).
-			label := labelOrDefault(opts.Kind, "")
-			return &scanners.Summary{
-				Kind:   label,
-				Status: scanners.StatusSuccess,
-				Title:  "no findings",
-				Body:   fmt.Sprintf("## %s\n\n✅ no findings\n", label),
-			}, nil
+			return missingReportSummary(ctx, opts)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("%s: read SARIF: %w: %w", labelOrDefault(opts.Kind, ""), errUtils.ErrReadFile, err)
@@ -80,6 +73,28 @@ func NewResultHandler(opts HandlerOptions) scanners.ResultHandler {
 			SARIF: data,
 		}, nil
 	}
+}
+
+// missingReportSummary reports a scanner failure when it exited unsuccessfully
+// without writing SARIF; otherwise, a missing report represents a clean run
+// with no findings.
+func missingReportSummary(ctx *scanners.Context, opts HandlerOptions) (*scanners.Summary, error) {
+	label := labelOrDefault(opts.Kind, "")
+	if ctx.ExitCode != 0 {
+		return &scanners.Summary{
+			Kind:   label,
+			Status: scanners.StatusFailure,
+			Title:  "scan failed",
+			Body:   fmt.Sprintf("## %s\n\n⚠ scanner failed before producing a SARIF report (exit code %d)\n", label, ctx.ExitCode),
+		}, nil
+	}
+
+	return &scanners.Summary{
+		Kind:   label,
+		Status: scanners.StatusSuccess,
+		Title:  "no findings",
+		Body:   fmt.Sprintf("## %s\n\n✅ no findings\n", label),
+	}, nil
 }
 
 // labelOrDefault resolves the report label: the configured kind, else the

@@ -85,8 +85,8 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 
 	originalRun := runTarget
 	var linted []string
-	runTarget = func(_ context.Context, _ *Runtime, _ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, target *dependency.Node, _ auth.AuthManager) error {
-		assert.Equal(t, "requested", info.ComponentFromArg)
+	runTarget = func(_ context.Context, exec *targetExecution, target *dependency.Node) error {
+		assert.Equal(t, "requested", exec.BaseInfo.ComponentFromArg)
 		linted = append(linted, target.Component+":"+target.Stack)
 		return nil
 	}
@@ -174,7 +174,7 @@ func TestExecuteAffectedFiltersAndDeduplicatesTargets(t *testing.T) {
 
 	originalRun := runTarget
 	var linted []string
-	runTarget = func(_ context.Context, _ *Runtime, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, target *dependency.Node, _ auth.AuthManager) error {
+	runTarget = func(_ context.Context, _ *targetExecution, target *dependency.Node) error {
 		linted = append(linted, target.Component+":"+target.Stack)
 		return nil
 	}
@@ -214,7 +214,7 @@ func TestExecuteTargetsContinuesAfterFailures(t *testing.T) {
 	secondErr := errors.New("second lint failure")
 	originalRun := runTarget
 	var linted []string
-	runTarget = func(_ context.Context, _ *Runtime, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, target *dependency.Node, _ auth.AuthManager) error {
+	runTarget = func(_ context.Context, _ *targetExecution, target *dependency.Node) error {
 		linted = append(linted, target.Component)
 		switch target.Component {
 		case "first":
@@ -227,11 +227,11 @@ func TestExecuteTargetsContinuesAfterFailures(t *testing.T) {
 	}
 	t.Cleanup(func() { runTarget = originalRun })
 
-	err := executeTargets(context.Background(), testRuntime(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, []*dependency.Node{
+	err := executeTargets(context.Background(), &targetExecution{Runtime: testRuntime(), AtmosConfig: &schema.AtmosConfiguration{}, BaseInfo: &schema.ConfigAndStacksInfo{}}, []*dependency.Node{
 		{Component: "first", Stack: "dev"},
 		{Component: "second", Stack: "dev"},
 		{Component: "third", Stack: "dev"},
-	}, nil)
+	})
 
 	assert.Equal(t, []string{"first", "second", "third"}, linted)
 	require.ErrorIs(t, err, firstErr)

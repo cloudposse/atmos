@@ -85,16 +85,27 @@ func (v *Verifier) verifyCosign(ctx context.Context, req *Request, cfg *registry
 // failures (tampering, expired cert, identity mismatch, missing signature)
 // surface immediately on the first attempt.
 func runCosignWithRetry(ctx context.Context, req *Request, args []string) error {
+	return runVerificationCommandWithRetry(ctx, req, "cosign", args,
+		"cosign verification hit transient Sigstore Rekor error; retrying")
+}
+
+// runVerificationCommandWithRetry invokes a verification command (cosign,
+// gh) with bounded exponential backoff, retrying only on transient
+// transport/service failures — classified by isRetryableCosignError,
+// shared across both callers since both go through Sigstore's Rekor
+// transparency log underneath. All other failures (tampering, missing
+// signature/attestation, identity mismatch) surface immediately.
+func runVerificationCommandWithRetry(ctx context.Context, req *Request, command string, args []string, retryLogMessage string) error {
 	attempt := 0
 	return retry.WithPredicate(ctx, cosignRetryConfig(), func() error {
 		attempt++
-		runErr := classifySignatureVerificationError(runner(req).Run(ctx, "cosign", args...))
+		runErr := classifySignatureVerificationError(runner(req).Run(ctx, command, args...))
 		// Only log the "retrying" warning when a retry will actually happen
 		// — suppress on the terminal attempt where the retry budget is
 		// exhausted and the error is about to surface unchanged.
 		if runErr != nil && isRetryableCosignError(runErr) && attempt < cosignRetryMaxAttempts {
 			log.Warn(
-				"cosign verification hit transient Sigstore Rekor error; retrying",
+				retryLogMessage,
 				"attempt", attempt,
 				"max_attempts", cosignRetryMaxAttempts,
 				"error", runErr.Error(),
@@ -268,20 +279,8 @@ func (v *Verifier) verifyGitHubAttestation(ctx context.Context, req *Request, cf
 // attestation API. Signature verdicts, such as a missing or invalid
 // attestation, are not retried.
 func runGitHubAttestationWithRetry(ctx context.Context, req *Request, args []string) error {
-	attempt := 0
-	return retry.WithPredicate(ctx, cosignRetryConfig(), func() error {
-		attempt++
-		runErr := classifySignatureVerificationError(runner(req).Run(ctx, "gh", args...))
-		if runErr != nil && isRetryableCosignError(runErr) && attempt < cosignRetryMaxAttempts {
-			log.Warn(
-				"GitHub attestation verification hit a transient transport error; retrying",
-				"attempt", attempt,
-				"max_attempts", cosignRetryMaxAttempts,
-				"error", runErr.Error(),
-			)
-		}
-		return runErr
-	}, isRetryableCosignError)
+	return runVerificationCommandWithRetry(ctx, req, "gh", args,
+		"GitHub attestation verification hit a transient transport error; retrying")
 }
 
 type signatureSidecarResolution struct {

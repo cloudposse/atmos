@@ -853,6 +853,19 @@ func executeCustomCommand(
 		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps#interactive-and-tty-steps")
 	}
 
+	// Resolve the toolchain-augmented PATH from the command's already-resolved
+	// dependencies so a `type: tflint` (or other toolchain-aware) step run from
+	// a custom command sees the same pinned binaries a workflow step would,
+	// instead of silently falling back to whatever is on the ambient PATH.
+	toolchainEnv, err := dependencies.NewEnvironmentFromDeps(&atmosConfig, deps)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to resolve toolchain PATH for command '%s'", commandConfig.Name).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 	stepVars := executor.Variables()
@@ -861,7 +874,7 @@ func executeCustomCommand(
 	})
 	stepVars.SetTemplatePasses(3)
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
-	configureCustomCommandScannerContext(stepVars, &atmosConfig, authManager)
+	configureCustomCommandScannerContext(stepVars, &atmosConfig, toolchainEnv.PATH(), authManager)
 
 	// Execute custom command's steps
 	var commandErr error
@@ -1196,11 +1209,12 @@ func executeCustomCommand(
 	errUtils.CheckErrorPrintAndExit(commandErr, "", "")
 }
 
-func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
+func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {
 	if vars == nil {
 		return
 	}
 	vars.SetAtmosConfig(atmosConfig)
+	vars.SetToolchainPATH(toolchainPATH)
 	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
 		info := schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
