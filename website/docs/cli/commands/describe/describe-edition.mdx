@@ -83,6 +83,18 @@ resolved_date: "2026-06-30"
 granularity: month
 source: config
 overrides:
+    - key: describe.component.filter
+      kind: value
+      from_value: full
+      to_value: schema
+      entries:
+        - date: "2026-07-17"
+          key: describe.component.filter
+          kind: value
+          old: full
+          new: schema
+          description: Component descriptions show only stack-manifest sections; set the filter to full for computed internals.
+          ref: https://atmos.tools/changelog/config-editions
     - key: describe.error_mode
       kind: value
       from_value: strict
@@ -121,27 +133,39 @@ overrides:
           ref: https://atmos.tools/changelog/list-describe-graceful-degradation
     - key: list.instances.format
       kind: value
-      from_value: ""
+      from_value: table
       to_value: tree
       entries:
         - date: "2026-07-16"
           key: list.instances.format
           kind: value
-          old: ""
+          old: table
           new: tree
-          description: Instance listings render as a tree by default; an empty format meant a flat table.
+          description: Instance listings render as a tree by default instead of a flat table.
           ref: https://atmos.tools/changelog/config-editions
+    - key: settings.terminal.help.filter
+      kind: value
+      from_value: false
+      to_value: true
+      entries:
+        - date: "2026-07-06"
+          key: settings.terminal.help.filter
+          kind: value
+          old: false
+          new: true
+          description: Bare --help shows a focused view without the GLOBAL FLAGS section; --help=all prints the full output.
+          ref: https://github.com/cloudposse/atmos/pull/2696
     - key: stacks.list.format
       kind: value
-      from_value: ""
+      from_value: table
       to_value: tree
       entries:
         - date: "2026-07-16"
           key: stacks.list.format
           kind: value
-          old: ""
+          old: table
           new: tree
-          description: Stack listings render the import hierarchy as a tree by default; an empty format meant a flat table.
+          description: Stack listings render the import hierarchy as a tree by default instead of a flat table.
           ref: https://atmos.tools/changelog/config-editions
 ```
 </Terminal>

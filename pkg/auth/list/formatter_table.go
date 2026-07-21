@@ -1,19 +1,25 @@
 package list
 
 import (
-	"sort"
+	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-// RenderTable renders providers and identities as formatted tables.
+// RenderTable renders providers and identities as formatted tables, going
+// through the same pkg/list/renderer pipeline every other `atmos list *`
+// table uses (column widths, TTY-vs-piped fallback, styling all live there
+// instead of a separate implementation in this package).
 func RenderTable(
 	authManager authTypes.AuthManager,
 	providers map[string]schema.Provider,
@@ -29,7 +35,10 @@ func RenderTable(
 		Bold(true).
 		Underline(true)
 
-	// Render providers table if we have providers.
+	// Render providers table if we have providers. createProvidersTable's
+	// returned string already carries its own leading/trailing blank-line
+	// padding (from format.CreateStyledTableWithOptions on the TTY path), so
+	// this doesn't add a redundant separator newline after it.
 	if len(providers) > 0 {
 		providerTable, err := createProvidersTable(providers)
 		if err != nil {
@@ -37,8 +46,7 @@ func RenderTable(
 		}
 		output.WriteString(sectionHeaderStyle.Render("PROVIDERS"))
 		output.WriteString(newline)
-		output.WriteString(providerTable.View())
-		output.WriteString(newline)
+		output.WriteString(providerTable)
 	}
 
 	// Render identities table if we have identities.
@@ -53,8 +61,7 @@ func RenderTable(
 		}
 		output.WriteString(sectionHeaderStyle.Render("IDENTITIES"))
 		output.WriteString(newline)
-		output.WriteString(identityTable.View())
-		output.WriteString(newline)
+		output.WriteString(identityTable)
 	}
 
 	// Handle empty result.
@@ -67,50 +74,35 @@ func RenderTable(
 	return output.String(), nil
 }
 
-// createProvidersTable creates a table for providers.
-func createProvidersTable(providers map[string]schema.Provider) (table.Model, error) {
+// createProvidersTable renders the providers section as a table.
+func createProvidersTable(providers map[string]schema.Provider) (string, error) {
 	defer perf.Track(nil, "list.createProvidersTable")()
 
-	// Without a TTY, keep the legacy fixed-size URL truncation so piped output stays stable.
-	urlLimit := 0
-	if !isTTYForTable() {
-		urlLimit = maxURLDisplay
+	selector, err := column.NewSelector(providerColumns(), column.BuildColumnFuncMap())
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCreateColumnSelector, err)
 	}
 
-	rows := buildProviderRows(providers, urlLimit)
+	r := renderer.New(nil, selector, nil, format.FormatTable, "",
+		renderer.WithTableOptions(format.TableOptions{SemanticCellStyling: false}))
 
-	specs := []columnSizingSpec{
-		{title: "NAME", legacy: providerNameWidth, floor: minProviderNameWidth},
-		{title: "KIND", legacy: providerKindWidth, floor: minProviderKindWidth},
-		{title: "REGION", legacy: providerRegionWidth, floor: minProviderRegionWidth},
-		{title: "START URL / URL", legacy: providerURLWidth, floor: minProviderURLWidth},
-		{title: "DEFAULT", legacy: providerDefaultWidth, floor: providerDefaultWidth},
-	}
-	// Under width pressure, shrink the most truncatable columns first: URL, then kind, then name, then region.
-	widths := computeColumnWidths(specs, rows, []int{3, 1, 0, 2})
-	columns := tableColumns(specs, widths)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(rows)+1), // +1 for header row.
-	)
-
-	applyTableStyles(&t)
-
-	return t, nil
+	return r.RenderToString(buildProviderRows(providers))
 }
 
-// buildProviderRows builds table rows from providers.
-// A positive urlLimit pre-truncates URLs to that many characters (the legacy
-// non-TTY behavior); zero or negative keeps URLs at their natural length so
-// the column can size to content.
-func buildProviderRows(providers map[string]schema.Provider, urlLimit int) []table.Row {
-	rows := make([]table.Row, 0, len(providers))
+func providerColumns() []column.Config {
+	return []column.Config{
+		{Name: "NAME", Value: "{{ .name }}"},
+		{Name: "KIND", Value: "{{ .kind }}"},
+		{Name: "REGION", Value: "{{ .region }}"},
+		{Name: "START URL / URL", Value: "{{ .url }}"},
+		{Name: "DEFAULT", Value: "{{ .default }}"},
+	}
+}
 
-	// Sort provider names for consistent output.
+// buildProviderRows builds renderer rows from providers, sorted by name.
+func buildProviderRows(providers map[string]schema.Provider) []map[string]any {
 	names := getSortedProviderNames(providers)
+	rows := make([]map[string]any, 0, len(names))
 
 	for _, name := range names {
 		provider := providers[name]
@@ -121,9 +113,6 @@ func buildProviderRows(providers map[string]schema.Provider, urlLimit int) []tab
 			url = provider.StartURL
 		} else if provider.URL != "" {
 			url = provider.URL
-		}
-		if urlLimit > 0 {
-			url = truncateString(url, urlLimit)
 		}
 
 		// Determine region.
@@ -138,102 +127,65 @@ func buildProviderRows(providers map[string]schema.Provider, urlLimit int) []tab
 			defaultStr = defaultMarker
 		}
 
-		rows = append(rows, table.Row{
-			name,
-			provider.Kind,
-			region,
-			url,
-			defaultStr,
+		rows = append(rows, map[string]any{
+			"name":    name,
+			"kind":    provider.Kind,
+			"region":  region,
+			"url":     url,
+			"default": defaultStr,
 		})
 	}
 
 	return rows
 }
 
-// applyTableStyles applies consistent theme styles to a table.
-func applyTableStyles(t *table.Model) {
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color(theme.ColorWhite)).
-		Background(lipgloss.Color("")).
-		Bold(false)
-
-	t.SetStyles(s)
-}
-
-// createIdentitiesTable creates a table for identities.
-func createIdentitiesTable(authManager authTypes.AuthManager, identities map[string]schema.Identity) (table.Model, error) {
+// createIdentitiesTable renders the identities section as a table.
+func createIdentitiesTable(authManager authTypes.AuthManager, identities map[string]schema.Identity) (string, error) {
 	defer perf.Track(nil, "list.createIdentitiesTable")()
 
-	rows := make([]table.Row, 0, len(identities))
-
-	// Sort identity names for consistent output.
-	names := make([]string, 0, len(identities))
-	for name := range identities {
-		names = append(names, name)
+	selector, err := column.NewSelector(identityColumns(), column.BuildColumnFuncMap())
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCreateColumnSelector, err)
 	}
-	sort.Strings(names)
+
+	r := renderer.New(nil, selector, nil, format.FormatTable, "",
+		renderer.WithTableOptions(format.TableOptions{SemanticCellStyling: false}))
+
+	return r.RenderToString(buildIdentityRows(authManager, identities))
+}
+
+func identityColumns() []column.Config {
+	return []column.Config{
+		// Status indicator: a single space (rather than "") since column.Config
+		// requires a non-empty Name, but the header itself should read as blank.
+		{Name: " ", Value: "{{ .status }}"},
+		{Name: "NAME", Value: "{{ .name }}"},
+		{Name: "KIND", Value: "{{ .kind }}"},
+		{Name: "VIA PROVIDER", Value: "{{ .via_provider }}"},
+		{Name: "VIA IDENTITY", Value: "{{ .via_identity }}"},
+		{Name: "DEFAULT", Value: "{{ .default }}"},
+		{Name: "ALIAS", Value: "{{ .alias }}"},
+		{Name: "EXPIRES", Value: "{{ .expires }}"},
+	}
+}
+
+// buildIdentityRows builds renderer rows from identities, sorted by name.
+func buildIdentityRows(authManager authTypes.AuthManager, identities map[string]schema.Identity) []map[string]any {
+	names := getSortedIdentityNames(identities)
+	rows := make([]map[string]any, 0, len(names))
 
 	for _, name := range names {
 		identity := identities[name]
-		row := buildIdentityTableRow(authManager, &identity, name)
-		rows = append(rows, row)
+		rows = append(rows, buildIdentityRow(authManager, &identity, name))
 	}
 
-	specs := []columnSizingSpec{
-		{title: "", legacy: 1, floor: 1}, // Status indicator column.
-		{title: "NAME", legacy: identityNameWidth, floor: minIdentityNameWidth},
-		{title: "KIND", legacy: identityKindWidth, floor: minIdentityKindWidth},
-		{title: "VIA PROVIDER", legacy: identityViaProviderWidth, floor: minIdentityViaProviderWidth},
-		{title: "VIA IDENTITY", legacy: identityViaIdentityWidth, floor: minIdentityViaIdentityWidth},
-		{title: "DEFAULT", legacy: identityDefaultWidth, floor: identityDefaultWidth},
-		{title: "ALIAS", legacy: identityAliasWidth, floor: minIdentityAliasWidth},
-		{title: "EXPIRES", legacy: identityExpiresWidth, floor: identityExpiresWidth},
-	}
-	// Under width pressure, shrink the most truncatable columns first: kind,
-	// then alias, then via provider/identity, then name.
-	widths := computeColumnWidths(specs, rows, []int{2, 6, 3, 4, 1})
-	columns := tableColumns(specs, widths)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(rows)+1), // +1 for header row.
-	)
-
-	applyTableStyles(&t)
-
-	return t, nil
+	return rows
 }
 
-// buildIdentityTableRow builds a table row for a single identity.
-func buildIdentityTableRow(authManager authTypes.AuthManager, identity *schema.Identity, name string) table.Row {
-	// Get authentication status indicator.
-	status := getIdentityAuthStatus(authManager, name)
-	statusIndicator := getStatusIndicator(status)
-
-	// Determine via provider.
-	viaProvider := emptyMarker
-	if identity.Via != nil && identity.Via.Provider != "" {
-		viaProvider = identity.Via.Provider
-	}
-
-	// Determine via identity.
-	viaIdentity := emptyMarker
-	if identity.Via != nil && identity.Via.Identity != "" {
-		viaIdentity = identity.Via.Identity
-	}
-
-	// For aws/user, show aws-user as provider.
-	if identity.Kind == "aws/user" && viaProvider == emptyMarker {
-		viaProvider = "aws-user"
-	}
+// buildIdentityRow builds one renderer row for a single identity.
+func buildIdentityRow(authManager authTypes.AuthManager, identity *schema.Identity, name string) map[string]any {
+	statusIndicator := getStatusIndicator(getIdentityAuthStatus(authManager, name))
+	viaProvider, viaIdentity := resolveIdentityVia(identity)
 
 	// Default marker.
 	defaultStr := ""
@@ -247,23 +199,46 @@ func buildIdentityTableRow(authManager authTypes.AuthManager, identity *schema.I
 		alias = identity.Alias
 	}
 
-	// Expiration.
-	expiresStr := emptyMarker
-	if authManager != nil {
-		expirationDuration, expirationStatus := getExpirationInfo(authManager, name)
-		if expirationDuration != "" {
-			expiresStr = formatExpirationWithColor(expirationDuration, expirationStatus)
+	return map[string]any{
+		"status":       statusIndicator,
+		"name":         name,
+		"kind":         identity.Kind,
+		"via_provider": viaProvider,
+		"via_identity": viaIdentity,
+		"default":      defaultStr,
+		"alias":        alias,
+		"expires":      resolveIdentityExpiration(authManager, name),
+	}
+}
+
+// resolveIdentityVia determines the via-provider and via-identity display
+// values, special-casing aws/user identities (which have no `via:` config)
+// to show "aws-user" as their provider.
+func resolveIdentityVia(identity *schema.Identity) (viaProvider, viaIdentity string) {
+	viaProvider, viaIdentity = emptyMarker, emptyMarker
+	if identity.Via != nil {
+		if identity.Via.Provider != "" {
+			viaProvider = identity.Via.Provider
+		}
+		if identity.Via.Identity != "" {
+			viaIdentity = identity.Via.Identity
 		}
 	}
-
-	return table.Row{
-		statusIndicator, // Status dot as first column.
-		name,
-		identity.Kind,
-		viaProvider,
-		viaIdentity,
-		defaultStr,
-		alias,
-		expiresStr,
+	if identity.Kind == "aws/user" && viaProvider == emptyMarker {
+		viaProvider = "aws-user"
 	}
+	return viaProvider, viaIdentity
+}
+
+// resolveIdentityExpiration returns the identity's colored, formatted
+// expiration string, or emptyMarker when no expiration info is available.
+func resolveIdentityExpiration(authManager authTypes.AuthManager, name string) string {
+	if authManager == nil {
+		return emptyMarker
+	}
+	duration, status := getExpirationInfo(authManager, name)
+	if duration == "" {
+		return emptyMarker
+	}
+	return formatExpirationWithColor(duration, status)
 }

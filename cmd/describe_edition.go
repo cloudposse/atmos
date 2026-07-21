@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -37,7 +35,7 @@ Use "atmos list editions" to see the journal of default changes.`,
 			return err
 		}
 
-		pin, err := edition.DescribePin(atmosConfig.Edition, editionPinSource(cmd, atmosConfig.Edition))
+		pin, err := edition.DescribePin(atmosConfig.Edition, cfg.EditionPinSource(atmosConfig.Edition))
 		if err != nil {
 			return err
 		}
@@ -47,21 +45,6 @@ Use "atmos list editions" to see the journal of default changes.`,
 		}
 		return data.WriteYAML(pin)
 	},
-}
-
-// editionPinSource reports where the active pin came from, mirroring the
-// precedence in pkg/config: --edition flag > ATMOS_EDITION env > atmos.yaml.
-func editionPinSource(cmd *cobra.Command, pin string) string {
-	if pin == "" {
-		return ""
-	}
-	if cmd.Flags().Changed("edition") {
-		return "flag"
-	}
-	if value, set := os.LookupEnv("ATMOS_EDITION"); set && value != "" {
-		return "env"
-	}
-	return "config"
 }
 
 func init() {

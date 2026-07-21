@@ -102,18 +102,7 @@ func entriesBetween(entries []Entry, from, to *Anchor) []Entry {
 	if lower == nil || (upper != nil && upper.Date.Before(lower.Date)) {
 		lower, upper = upper, lower
 	}
-	var window []Entry
-	for _, entry := range entries {
-		date := entryDate(&entry)
-		if lower != nil && !date.After(lower.Date) {
-			continue
-		}
-		if upper != nil && date.After(upper.Date) {
-			continue
-		}
-		window = append(window, entry)
-	}
-	return window
+	return filterEntriesInRange(entries, lower, upper)
 }
 
 // Between returns the value-kind journal entries dated after `from` and on or
@@ -122,11 +111,23 @@ func entriesBetween(entries []Entry, from, to *Anchor) []Entry {
 func Between(from, to *Anchor) []Entry {
 	defer perf.Track(nil, "edition.Between")()
 
-	var window []Entry
+	var valueEntries []Entry
 	for _, entry := range Journal() {
 		if entry.Kind != KindValue {
 			continue
 		}
+		valueEntries = append(valueEntries, entry)
+	}
+	return filterEntriesInRange(valueEntries, from, to)
+}
+
+// filterEntriesInRange returns the entries dated after `from` and on or before
+// `to`, preserving input order. A nil bound is unbounded. Callers are
+// responsible for any anchor-order normalization before calling this —
+// filterEntriesInRange applies the bounds exactly as given.
+func filterEntriesInRange(entries []Entry, from, to *Anchor) []Entry {
+	var window []Entry
+	for _, entry := range entries {
 		date := entryDate(&entry)
 		if from != nil && !date.After(from.Date) {
 			continue

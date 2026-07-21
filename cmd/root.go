@@ -54,6 +54,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/osargs"
 	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -170,40 +171,10 @@ func parseUseVersionFromArgs() string {
 	return pkgversion.ParseUseVersionFromArgs(os.Args)
 }
 
-// parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
+// parseChdirFromArgsInternal parses --chdir or -C flag from the provided args.
 // This internal version accepts args as a parameter for testability.
 func parseChdirFromArgsInternal(args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-
-		// Check for --chdir=value format.
-		if strings.HasPrefix(arg, "--chdir=") {
-			return strings.TrimPrefix(arg, "--chdir=")
-		}
-
-		// Check for -C=value format.
-		if strings.HasPrefix(arg, "-C=") {
-			return strings.TrimPrefix(arg, "-C=")
-		}
-
-		// Check for -C<value> format (concatenated, e.g., -C../foo).
-		if strings.HasPrefix(arg, "-C") && len(arg) > 2 {
-			return arg[2:]
-		}
-
-		// Check for --chdir value or -C value format (next arg is the value).
-		if arg == "--chdir" || arg == "-C" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		}
-	}
-	return ""
+	return osargs.ParseStringWithShorthand(args, "chdir", "C")
 }
 
 // processEarlyChdirFlag processes --chdir flag before RootCmd is fully initialized.

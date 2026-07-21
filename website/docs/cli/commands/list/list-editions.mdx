@@ -93,24 +93,23 @@ atmos list editions --format=csv
 
 ```shell
 > atmos list editions
-┌────────────┬───────────────────────────────┬─────────────┬─────────────┬─────────────────────────────────────────────┐
-│    Date    │              Key              │     Old     │     New     │                 Description                 │
-├────────────┼───────────────────────────────┼─────────────┼─────────────┼─────────────────────────────────────────────┤
-│ 2026-07-16 │ stacks.list.format            │             │ tree        │ Stack listings render the import hierarc... │
-│ 2026-07-16 │ list.instances.format         │             │ tree        │ Instance listings render as a tree by de... │
-│ 2026-07-17 │ describe.component.filter     │ full        │ schema      │ Component descriptions show only the sec... │
-│ 2026-07-16 │ describe.provenance           │ false       │ true        │ Component descriptions include provenanc... │
-│ 2026-07-13 │ list.error_mode               │ strict      │ warn        │ List commands substitute (computed) for ... │
-│ 2026-07-13 │ describe.error_mode           │ strict      │ warn        │ Describe commands substitute (computed) ... │
-│ 2026-07-06 │ settings.terminal.help.filter │ false       │ true        │ Bare --help shows a focused view without... │
-│ 2026-02-10 │ components.helmfile.use_eks   │ true        │ false       │ Helmfile EKS integration is opt-in; kube... │
-│ 2025-12-06 │ stacks.inherit.metadata       │ false       │ true        │ Component metadata is inherited from bas... │
-│ 2025-10-16 │ settings.terminal.pager       │ true        │ false       │ The built-in pager is disabled by defaul... │
-│ 2025-09-23 │ logs.level                    │ Info        │ Warning     │ The default log level is Warning; inform... │
-│ 2025-02-11 │ logs.file                     │ /dev/stdout │ /dev/stderr │ Logs are written to stderr so they never... │
-└────────────┴───────────────────────────────┴─────────────┴─────────────┴─────────────────────────────────────────────┘
 
-12 default changes journaled. Pin with the top-level `edition` setting in atmos.yaml.
+ Date        Key                            Old          New          Description
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 2026-07-17  describe.component.filter      full         schema       Component descriptions show only stack-manifest sections; set the filter to full for computed internals.
+ 2026-07-16  stacks.list.format             table        tree         Stack listings render the import hierarchy as a tree by default instead of a flat table.
+ 2026-07-16  list.instances.format          table        tree         Instance listings render as a tree by default instead of a flat table.
+ 2026-07-16  describe.provenance            false        true         Component descriptions include provenance annotations (which stack file set each value) by default.
+ 2026-07-13  list.error_mode                strict       warn         List commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+ 2026-07-13  describe.error_mode            strict       warn         Describe commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+ 2026-07-06  settings.terminal.help.filter  false        true         Bare --help shows a focused view without the GLOBAL FLAGS section; --help=all prints the full output.
+ 2026-02-10  components.helmfile.use_eks    true         false        Helmfile EKS integration is opt-in; kubeconfig is no longer downloaded automatically before Helmfile commands.
+ 2025-12-06  stacks.inherit.metadata        false        true         Component metadata is inherited from base components like vars and settings; previously metadata was per-component only.
+ 2025-10-16  settings.terminal.pager        true         false        The built-in pager is disabled by default; long output prints directly to the terminal.
+ 2025-09-23  logs.level                     Info         Warning      The default log level is Warning; informational log messages are hidden unless requested.
+ 2025-02-11  logs.file                      /dev/stdout  /dev/stderr  Logs are written to stderr so they never contaminate pipeable command output on stdout.
+
+12 default changes journaled. Pin with `edition:` in atmos.yaml.
 ```
 
 :::tip

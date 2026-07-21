@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/joho/godotenv"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	goyaml "go.yaml.in/yaml/v3"
 	"gopkg.in/yaml.v3"
@@ -27,6 +25,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/flags/osargs"
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -102,39 +101,18 @@ const (
 	cwdKey = "cwd"
 )
 
-// ParseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
+// ParseProfilesFromOsArgs parses --profile flags from os.Args.
 // This is used both as a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer)
 // and for early profile extraction before Cobra parses flags (same pattern as --chdir).
-// Uses pflag's StringSlice parser to handle all syntax variations correctly.
 func ParseProfilesFromOsArgs(args []string) []string {
-	// Create temporary FlagSet just for parsing --profile.
-	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
-	fs.SetOutput(io.Discard)                    // Suppress usage/error output from leaking to stderr.
-	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
-
-	// Suppress pflag's automatic usage printout. When args contain `--help` or
-	// `-h`, pflag implicitly handles those flags and calls `fs.Usage()` (which
-	// writes "Usage of profile-parser: …" to stderr) before returning ErrHelp.
-	// Because LoadConfig may run multiple times during a single command (once
-	// in Execute() and again in PersistentPreRun), the user would otherwise
-	// see duplicate "Usage of profile-parser:" blocks in `atmos … --help`
-	// output. We only use this FlagSet to extract `--profile` values, so its
-	// usage block is never the right thing to display.
-	fs.Usage = func() {}
-
-	// Register profile flag using pflag's StringSlice (handles comma-separated values).
-	profiles := fs.StringSlice(profileKey, []string{}, "Configuration profiles")
-
-	// Parse args - pflag handles both --profile=value and --profile value syntax.
-	_ = fs.Parse(args) // Ignore errors from unknown flags.
-
-	if profiles == nil || len(*profiles) == 0 {
+	profiles := osargs.ParseStringSlice(args, profileKey)
+	if len(profiles) == 0 {
 		return nil
 	}
 
 	// Post-process: trim whitespace and filter empty values (maintains compatibility with manual parsing).
-	result := make([]string, 0, len(*profiles))
-	for _, profile := range *profiles {
+	result := make([]string, 0, len(profiles))
+	for _, profile := range profiles {
 		trimmed := strings.TrimSpace(profile)
 		if trimmed != "" {
 			result = append(result, trimmed)
@@ -199,38 +177,24 @@ type ConfigSelection struct {
 }
 
 // ParseConfigSelectionFromOsArgs parses --base-path, --config, and --config-path
-// flags from os.Args using pflag. This is used for early extraction before Cobra
-// parses flags, so that InitCliConfig receives the correct config location.
+// flags from os.Args. This is used for early extraction before Cobra parses
+// flags, so that InitCliConfig receives the correct config location.
 func ParseConfigSelectionFromOsArgs(args []string) ConfigSelection {
-	fs := pflag.NewFlagSet("config-selection-parser", pflag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.ParseErrorsAllowlist.UnknownFlags = true
-
-	basePath := fs.String("base-path", "", "Base path")
-	config := fs.StringSlice("config", []string{}, "Config files")
-	configPath := fs.StringSlice("config-path", []string{}, "Config dirs")
-
-	_ = fs.Parse(args)
-
 	var sel ConfigSelection
 
-	if basePath != nil && *basePath != "" {
-		sel.BasePath = strings.TrimSpace(*basePath)
+	if basePath := strings.TrimSpace(osargs.ParseString(args, "base-path")); basePath != "" {
+		sel.BasePath = basePath
 	}
 
-	if config != nil {
-		for _, v := range *config {
-			if trimmed := strings.TrimSpace(v); trimmed != "" {
-				sel.Config = append(sel.Config, trimmed)
-			}
+	for _, v := range osargs.ParseStringSlice(args, "config") {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			sel.Config = append(sel.Config, trimmed)
 		}
 	}
 
-	if configPath != nil {
-		for _, v := range *configPath {
-			if trimmed := strings.TrimSpace(v); trimmed != "" {
-				sel.ConfigPath = append(sel.ConfigPath, trimmed)
-			}
+	for _, v := range osargs.ParseStringSlice(args, "config-path") {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			sel.ConfigPath = append(sel.ConfigPath, trimmed)
 		}
 	}
 

@@ -9,37 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEditionPinSource(t *testing.T) {
-	newCmd := func() *cobra.Command {
-		c := &cobra.Command{Use: "test"}
-		c.Flags().String("edition", "", "")
-		return c
-	}
-
-	t.Run("no pin has no source", func(t *testing.T) {
-		t.Setenv("ATMOS_EDITION", "")
-		require.NoError(t, os.Unsetenv("ATMOS_EDITION"))
-		assert.Empty(t, editionPinSource(newCmd(), ""))
-	})
-
-	t.Run("flag wins", func(t *testing.T) {
-		t.Setenv("ATMOS_EDITION", "2026")
-		c := newCmd()
-		require.NoError(t, c.Flags().Set("edition", "2025"))
-		assert.Equal(t, "flag", editionPinSource(c, "2025"))
-	})
-
-	t.Run("env when flag unset", func(t *testing.T) {
-		t.Setenv("ATMOS_EDITION", "2026")
-		assert.Equal(t, "env", editionPinSource(newCmd(), "2026"))
-	})
-
-	t.Run("config when neither flag nor env", func(t *testing.T) {
-		t.Setenv("ATMOS_EDITION", "")
-		require.NoError(t, os.Unsetenv("ATMOS_EDITION"))
-		assert.Equal(t, "config", editionPinSource(newCmd(), "2026"))
-	})
-}
+// Edition-pin precedence/source detection (flag > env > config) is now owned by
+// pkg/config.EditionPinSource — see TestEditionPinSource in
+// pkg/config/load_edition_test.go for that coverage in isolation.
+// TestDescribeEditionCmdOutputFormats below still asserts the real `source:`
+// field end-to-end through this command's wiring (not just pkg/config's own
+// unit tests), since that wiring — passing atmosConfig.Edition into
+// cfg.EditionPinSource — is exactly where a regression would hide otherwise.
 
 // TestDescribeEditionCmd_FormatFlagWrongType covers the genuinely-forceable return-err
 // branch on cmd.Flags().GetString("format"): registering "format" as a Bool flag (instead
@@ -98,4 +74,23 @@ func TestDescribeEditionCmdOutputFormats(t *testing.T) {
 			assert.Contains(t, stdout, tt.want)
 		})
 	}
+}
+
+// TestDescribeEditionCmdSourceIsConfig guards against a regression where
+// cfg.EditionPinSource was called with the wrong Viper instance (the global
+// singleton, which never has the config file merged into it) and silently
+// dropped the `source` field instead of reporting "config" for a pin that
+// came from atmos.yaml — see cfg.EditionPinSource's doc comment.
+func TestDescribeEditionCmdSourceIsConfig(t *testing.T) {
+	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EDITION", "")
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("edition: \"2026-06\"\n"), 0o600))
+
+	testCmd := &cobra.Command{Use: "edition"}
+	testCmd.Flags().String("format", "yaml", "")
+	stdout, _ := captureStdoutStderr(t, func() {
+		require.NoError(t, describeEditionCmd.RunE(testCmd, nil))
+	})
+	assert.Contains(t, stdout, "source: config")
 }

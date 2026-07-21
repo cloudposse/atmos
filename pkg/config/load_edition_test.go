@@ -258,3 +258,46 @@ func TestParseEditionFromOsArgs(t *testing.T) {
 	assert.Equal(t, "2025-10", parseEditionFromOsArgs([]string{"helmfile", "--unknown", "x", "--edition", " 2025-10 "}))
 	assert.Empty(t, parseEditionFromOsArgs([]string{"terraform", "plan", "--help"}))
 }
+
+// TestEditionPinSource covers EditionPinSource's precedence tiers directly —
+// it shares resolveEditionPin's own flag-detection (editionPinFromFlag), so
+// `atmos describe edition` (cmd/describe_edition.go) never needs its own copy
+// of this precedence. EditionPinSource takes the already-resolved pin value
+// (as cmd/describe_edition.go has it via atmosConfig.Edition) rather than a
+// Viper instance — the caller's local Viper instance (the one LoadConfig used
+// to merge the config file) isn't available in cmd/, only the global one.
+func TestEditionPinSource(t *testing.T) {
+	t.Run("no pin has no source", func(t *testing.T) {
+		t.Setenv("ATMOS_EDITION", "")
+		require.NoError(t, os.Unsetenv("ATMOS_EDITION"))
+		assert.Empty(t, EditionPinSource(""))
+	})
+
+	t.Run("global flag wins over everything", func(t *testing.T) {
+		t.Setenv("ATMOS_EDITION", "2026")
+		viper.GetViper().Set(editionKey, "2026-07")
+		t.Cleanup(func() { viper.GetViper().Set(editionKey, "") })
+
+		assert.Equal(t, "flag", EditionPinSource("2026-07"))
+	})
+
+	t.Run("os.Args fallback counts as flag", func(t *testing.T) {
+		t.Setenv("ATMOS_EDITION", "2026")
+		origArgs := os.Args
+		os.Args = []string{"atmos", "terraform", "plan", "--edition=2025-09"}
+		t.Cleanup(func() { os.Args = origArgs })
+
+		assert.Equal(t, "flag", EditionPinSource("2025-09"))
+	})
+
+	t.Run("env when neither flag nor os.Args fallback is set", func(t *testing.T) {
+		t.Setenv("ATMOS_EDITION", "2026")
+		assert.Equal(t, "env", EditionPinSource("2026"))
+	})
+
+	t.Run("config when neither flag nor env is set", func(t *testing.T) {
+		t.Setenv("ATMOS_EDITION", "")
+		require.NoError(t, os.Unsetenv("ATMOS_EDITION"))
+		assert.Equal(t, "config", EditionPinSource("2026"))
+	})
+}
