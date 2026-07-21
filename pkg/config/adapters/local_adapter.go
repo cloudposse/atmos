@@ -92,9 +92,10 @@ func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams
 	if len(imports) == 0 {
 		return nil
 	}
-	importBasePath := v.GetString("base_path")
-	if importBasePath == "" {
-		importBasePath = p.basePath
+	importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), p.path, p.basePath)
+	if err != nil {
+		log.Debug("failed to resolve nested import base path", "path", p.path, "error", err)
+		return nil
 	}
 	nestedPaths, err := config.ProcessImportsFromAdapter(p.atmosConfig, importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
 	if err != nil {
