@@ -46,7 +46,7 @@ This step type is different from the step-level [`container`](/workflows/steps/c
   <dd>For `action: run`, start the container detached as a long-running service and continue the workflow. See [Background services](#background-services).</dd>
 </dl>
 
-The `provider` (`docker` or `podman`, auto-detected when omitted) and `runtime_auto_start` (start the Podman machine when no runtime is running) keys stay at the top level of the step, alongside `action` and `with`.
+The `provider` (`auto`, `docker`, or `podman`; auto-detected when `auto` or omitted) and `runtime_auto_start` (start the Podman machine when no runtime is running) keys stay at the top level of the step, alongside `action` and `with`.
 
 ## Build
 
@@ -57,7 +57,7 @@ steps:
   - name: build
     type: container
     action: build
-    provider: docker            # docker | podman (auto-detected when omitted)
+    provider: docker            # auto | docker | podman (auto-detected when auto/omitted)
     runtime_auto_start: true    # start the Podman machine if no runtime is running
     with:
       engine: buildx            # buildx (Docker BuildKit) or omit for the default builder
@@ -71,6 +71,15 @@ steps:
       target: runtime           # target stage in a multi-stage build
       no_cache: false           # disable the build cache
       pull: true                # always pull newer base images
+      driver: docker-container  # Buildx builder driver (shorthand — see Driver below)
+      cache:                    # Buildx cache import/export (see Cache below)
+        from:
+          - type: registry
+            ref: registry.example.com/app:buildcache
+        to:
+          - type: registry
+            ref: registry.example.com/app:buildcache
+            mode: max
 ```
 
 <dl>
@@ -100,7 +109,88 @@ steps:
 
   <dt>`bake`</dt>
   <dd>Build with Docker Bake instead of a single Dockerfile. See [Bake](#bake). Requires `provider: docker`.</dd>
+
+  <dt>`driver`</dt>
+  <dd>Buildx builder instance to build (or bake) with. See [Driver](#driver). Requires `provider: docker` and `engine: buildx`.</dd>
+
+  <dt>`cache`</dt>
+  <dd>Buildx cache import/export sources for the plain (non-bake) build path. See [Cache](#cache). Requires `engine: buildx`.</dd>
 </dl>
+
+### Driver
+
+Set `with.driver` to control which Buildx builder instance runs the build. Atmos creates the builder if it doesn't already exist (`docker buildx create`), then selects it explicitly (`--builder <name>`) — it never mutates or depends on the ambient default builder, so concurrent Atmos runs on the same host don't interfere with each other.
+
+The shorthand form sets `provider` with no `opts`:
+
+```yaml
+with:
+  driver: docker-container
+```
+
+The full form also accepts a builder `name` and driver-specific `opts`:
+
+```yaml
+with:
+  driver:
+    name: atmos                  # builder instance name, defaults to "atmos"
+    provider: docker-container   # docker | docker-container | kubernetes | remote
+    opts:
+      image: mirror.gcr.io/moby/buildkit:buildx-stable-1
+```
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Builder instance name. Defaults to `atmos` when omitted. Reusing the same name across runs on the same host makes builder creation idempotent and lets the builder's BuildKit cache persist between builds — an unnamed/randomized builder would leak a fresh, cold container on every run.</dd>
+
+  <dt>`provider`</dt>
+  <dd>Buildx driver: `docker` (the daemon's built-in BuildKit — does not support `opts`), `docker-container` (a dedicated BuildKit container, the usual choice when `opts` is needed), `kubernetes` (a BuildKit Pod/Deployment in a cluster), or `remote` (connect to an already-running `buildkitd`). These are Buildx's own driver names, passed through as-is — see the [Buildx drivers documentation](https://docs.docker.com/build/builders/drivers/).</dd>
+
+  <dt>`opts`</dt>
+  <dd>Map of driver-specific options, passed as repeated `--driver-opt key=value`. Only supported by the `docker-container` and `kubernetes` drivers.</dd>
+</dl>
+
+### Cache
+
+Set `with.cache` to import/export Buildx build cache on the plain (non-bake) build path:
+
+```yaml
+with:
+  cache:
+    from:
+      - type: registry
+        ref: registry.example.com/app:buildcache
+    to:
+      - type: registry
+        ref: registry.example.com/app:buildcache
+        mode: max
+        image-manifest: "true"
+        oci-mediatypes: "true"
+```
+
+<dl>
+  <dt>`from`</dt>
+  <dd>List of cache sources to import from. Each entry is a raw Buildx cache attribute map (`type`, `ref`, and any type-specific keys), passed through as `--cache-from key=value,key=value`.</dd>
+
+  <dt>`to`</dt>
+  <dd>List of cache destinations to export to. Same attribute-map shape as `from`, passed through as `--cache-to key=value,key=value`.</dd>
+</dl>
+
+Each entry's attribute set depends on the Buildx cache backend (`registry`, `local`, `gha`, `s3`, `azblob`, `inline`) — see the [Buildx cache documentation](https://docs.docker.com/build/cache/backends/) for the attributes each backend accepts.
+
+If you build with [`bake`](#bake) instead, define `cache-from`/`cache-to` directly on the bake target — Bake files already support them natively, so `with.cache` isn't needed (or read) in that mode. `with.driver` still applies to bake, since builder selection is independent of build vs. bake.
+
+### Avoiding Docker Hub rate limits
+
+Docker Hub rate-limits anonymous and free-tier pulls, which can throttle both a Dockerfile's `FROM` base images and, when using `engine: buildx` with the `docker-container` driver, the BuildKit image itself. [`mirror.gcr.io`](https://cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images) is a public pull-through cache for Docker Hub that avoids this. There are three independent places you can point at it, depending on what needs to be mirrored:
+
+- **Base images** — change `FROM alpine:latest` to `FROM mirror.gcr.io/library/alpine:latest` in the Dockerfile itself. Simplest option, no Atmos or host configuration needed, but only covers that one Dockerfile.
+- **The BuildKit image** — set `with.driver.opts.image: mirror.gcr.io/moby/buildkit:buildx-stable-1` (see [Driver](#driver) above). Only affects the builder Atmos creates; base image pulls still go straight to Docker Hub unless also mirrored.
+- **Every pull on the host** — configure `registry-mirrors` in the Docker daemon (`/etc/docker/daemon.json`, or your CI runner's daemon config):
+  ```json
+  { "registry-mirrors": ["https://mirror.gcr.io"] }
+  ```
+  This is host/daemon configuration, not something a `container` step can set — configure it once in your runner image or host provisioning, and every `docker pull` on that host benefits, including base images and any other tool that pulls from Docker Hub.
 
 ### Bake
 

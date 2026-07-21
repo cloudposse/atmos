@@ -23,7 +23,7 @@ func (h *ContainerHandler) validateRunAction(step *schema.WorkflowStep) error {
 		return err
 	}
 	if !isValidContainerRuntime(run.Provider) {
-		return invalidContainerField(step, "run.provider", run.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
+		return invalidContainerField(step, "run.provider", run.Provider, "Provider must be `auto`, `docker`, `podman`, or empty for auto-detect")
 	}
 	if !isValidContainerPull(run.Pull) {
 		return invalidContainerField(step, "run.pull", run.Pull, "Pull policy must be `missing`, `always`, `never`, or empty")
