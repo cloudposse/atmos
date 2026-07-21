@@ -43,6 +43,12 @@ Use the CLI flag to disable masking temporarily:
 atmos terraform plan --mask=false
 ```
 
+:::warning Sensitive Terraform/OpenTofu outputs may be written to disk
+Disabling masking with `--mask=false`, `ATMOS_MASK=false`, or `settings.terminal.mask.enabled: false` also disables secret-safe `TF_VAR_` delivery for automatically registered sensitive Terraform/OpenTofu outputs. Those values may be written to generated `.tfvars.json` files.
+
+Use this compatibility and debugging opt-out only when writing those values to disk is acceptable. Declared secrets continue to use the existing no-secrets-on-disk handling.
+:::
+
 ## Configuration
 
 ### Full Configuration Example
@@ -69,6 +75,8 @@ settings:
   <dt>`enabled`</dt>
   <dd>
     Enable or disable secret masking globally.
+
+    Setting this to `false` has the same security implications as `--mask=false`: automatically registered sensitive Terraform/OpenTofu outputs may be written to generated `.tfvars.json` files. See [Disable Masking for Debugging](#disable-masking-for-debugging).
 
     - **Type:** boolean
     - **Default:** `true`
