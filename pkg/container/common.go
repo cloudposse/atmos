@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -276,6 +277,18 @@ func buildBuildArgs(config *BuildConfig) []string {
 	args := []string{"build"}
 	if config.Engine == "buildx" {
 		args = []string{"buildx", "build"}
+
+		if config.Driver != nil {
+			args = append(args, "--builder", effectiveDriverName(config.Driver))
+		}
+		if config.Cache != nil {
+			for _, entry := range config.Cache.From {
+				args = append(args, "--cache-from", joinAttrs(entry))
+			}
+			for _, entry := range config.Cache.To {
+				args = append(args, "--cache-to", joinAttrs(entry))
+			}
+		}
 	}
 
 	if config.NoCache {
@@ -309,6 +322,10 @@ func buildBuildArgs(config *BuildConfig) []string {
 func buildBakeArgs(config *BuildConfig) []string {
 	args := []string{"buildx", "bake"}
 
+	if config.Driver != nil {
+		args = append(args, "--builder", effectiveDriverName(config.Driver))
+	}
+
 	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
 		args = append(args, "--file", file)
 	}
@@ -337,6 +354,35 @@ func buildBakeArgs(config *BuildConfig) []string {
 
 	args = append(args, appendFile(config.Bake.Target, config.Bake.Targets)...)
 	return args
+}
+
+// defaultBuilderName is used for the Buildx builder instance when config.Driver.Name is
+// unset, so buildx create is idempotent (and its BuildKit cache persists) across separate
+// Atmos runs on the same host instead of leaking a freshly-named builder every build.
+const defaultBuilderName = "atmos"
+
+// effectiveDriverName returns the configured builder name, falling back to defaultBuilderName.
+func effectiveDriverName(driver *DriverConfig) string {
+	if driver.Name != "" {
+		return driver.Name
+	}
+	return defaultBuilderName
+}
+
+// joinAttrs joins a Buildx cache/driver-opt attribute map into `key=value,key=value` form.
+// Keys are sorted for deterministic output.
+func joinAttrs(attrs map[string]string) string {
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, fmt.Sprintf(keyValueFormat, k, attrs[k]))
+	}
+	return strings.Join(pairs, ",")
 }
 
 func appendFile(first string, rest []string) []string {

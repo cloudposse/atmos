@@ -49,8 +49,8 @@ publish applied outputs, and `!secret` resolves declared secrets from the SSM/Se
 Everything runs against the local emulator. You need [Atmos](https://atmos.tools/install) and a
 container runtime (Docker or Podman).
 
-The `test` custom command brings up the emulator, seeds secrets, applies the full component DAG in
-dependency order, confirms the cross-component wiring resolves, then tears everything down:
+The `test` custom command brings up the emulator, seeds secrets, plans and applies the full component
+DAG in dependency order, confirms the cross-component wiring resolves, then tears everything down:
 
 ```shell
 atmos test -s plat-ue2-dev
@@ -59,15 +59,23 @@ atmos test -s plat-ue2-dev
 Or run the same steps by hand:
 
 ```shell
-# Start the local AWS emulator for the stack.
-atmos emulator up aws -s plat-ue2-dev
+# Start the shared local AWS emulator.
+atmos emulator up aws -s local
 
 # Lint every stack manifest.
 atmos validate stacks
 
-# Seed the required app-config secrets.
-atmos secret set API_KEY=sk-quickstart-example -s plat-ue2-dev -c app-config
-atmos secret set 'DB_CONFIG={"username":"app","password":"s3cr3t"}' -s plat-ue2-dev -c app-config
+# One-time setup on macOS/Windows: trust the local Terraform registry-cache proxy.
+atmos terraform cache trust
+
+# Seed the required app-config secrets from the committed demo dotenv file.
+# `secret init` also accepts the file through stdin: `atmos secret init < .env.local ...`.
+atmos secret init --input .env.local -s plat-ue2-dev -c app-config
+
+# Plan every component before state exists. `--use-mocks` resolves Terraform lookup
+# functions from literal, component-owned mocks instead of the cold remote state. Exit code 2
+# means Terraform found changes and is expected for a first plan.
+atmos terraform plan --all -s plat-ue2-dev --use-mocks
 
 # Apply every component in dependency order (the S3 state backend is auto-provisioned
 # inside the emulator via `provision.backend.enabled`).
@@ -79,11 +87,11 @@ atmos list instances --format tree --provenance
 
 # Tear down.
 atmos terraform destroy --all -s plat-ue2-dev -auto-approve
-atmos emulator down aws -s plat-ue2-dev
+atmos emulator down aws -s local
 ```
 
-Available stacks: `plat-ue2-{dev,staging,prod}` (us-east-2) and `plat-uw2-{dev,staging,prod}`
-(us-west-2).
+Available stacks: `local` (the emulator), `plat-ue2-{dev,staging,prod}` (us-east-2), and
+`plat-uw2-{dev,staging,prod}` (us-west-2).
 
 ## How the environments differ
 
@@ -123,10 +131,10 @@ atmos list components --tags messaging
 atmos list components --labels tier=foundational
 
 # Plan (or deploy/destroy) only the messaging components for a stack.
-atmos terraform plan --all --tags messaging -s plat-ue2-dev
+atmos terraform plan --all --tags messaging -s plat-ue2-dev --use-mocks
 
 # Plan only the foundational tier — composes with --all the same way --affected does.
-atmos terraform plan --all --labels tier=foundational -s plat-ue2-dev
+atmos terraform plan --all --labels tier=foundational -s plat-ue2-dev --use-mocks
 ```
 
 ## Operator commands

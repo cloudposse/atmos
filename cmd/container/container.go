@@ -1,6 +1,7 @@
 package container
 
 import (
+	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -160,6 +161,16 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	// --stack flag value is silently dropped (only ATMOS_STACK would be read).
 	if err := containerParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
 		return err
+	}
+	if parser, ok := componentPromptParsers[cmd]; ok {
+		parsed, err := parser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+		positional, _ := flags.SplitArgsAtDash(cmd, args)
+		if len(positional) == 0 && len(parsed.GetPositionalArgs()) > 0 {
+			args = append([]string{parsed.Component}, args...)
+		}
 	}
 
 	info := initConfigAndStacksInfo(cmd, subCommand, args)

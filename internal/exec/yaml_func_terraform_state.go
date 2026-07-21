@@ -97,6 +97,10 @@ func processTagTerraformStateWithContext(
 		defer resolutionCtx.Pop(atmosConfig)
 	}
 
+	if value, mocked, mockErr := resolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
+		return value, mockErr
+	}
+
 	// Extract authContext and authManager from stackInfo if available.
 	var authContext *schema.AuthContext
 	var authManager any

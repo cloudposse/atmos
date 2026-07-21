@@ -381,6 +381,24 @@ func (s *Spinner) Start() {
 	}()
 }
 
+// Update replaces the in-progress message. In non-interactive output it emits
+// the message as an informational line so long-running work remains visible.
+func (s *Spinner) Update(message string) {
+	if message == "" {
+		return
+	}
+
+	if !s.isTTY {
+		ui.Info(message)
+		return
+	}
+	if s.program == nil {
+		return
+	}
+
+	s.program.Send(manualUpdateMsg{message: message})
+}
+
 // Stop stops the spinner without displaying a completion message.
 // Use Success() or Error() instead to show a completion status.
 // Stop is idempotent and safe to call multiple times.
@@ -439,6 +457,10 @@ type manualStopMsg struct {
 	success bool
 }
 
+type manualUpdateMsg struct {
+	message string
+}
+
 func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
 	s := newDotSpinner()
 	return manualSpinnerModel{
@@ -464,6 +486,9 @@ func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finalMsg = msg.message
 		m.success = msg.success
 		return m, tea.Quit
+	case manualUpdateMsg:
+		m.progressMsg = msg.message
+		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
