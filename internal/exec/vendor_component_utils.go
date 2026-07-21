@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
@@ -162,6 +163,7 @@ func ExecuteComponentVendorInternal(
 	component string,
 	componentPath string,
 	dryRun bool,
+	refreshLock bool,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
@@ -169,7 +171,7 @@ func ExecuteComponentVendorInternal(
 	if err != nil {
 		return err
 	}
-	if !dryRun {
+	if !dryRun && !refreshLock {
 		packages, err = filterMaterializedComponentVendorPackages(packages, atmosConfig)
 		if err != nil {
 			return err
@@ -194,6 +196,7 @@ func ExecuteComponentVendorPullBatch(
 	components []string,
 	componentType string,
 	dryRun bool,
+	refreshLock bool,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorPullBatch")()
 
@@ -211,7 +214,7 @@ func ExecuteComponentVendorPullBatch(
 		if err != nil {
 			return fmt.Errorf("component %q: %w", component, err)
 		}
-		if !dryRun {
+		if !dryRun && !refreshLock {
 			packages, err = filterMaterializedComponentVendorPackages(packages, atmosConfig)
 			if err != nil {
 				return fmt.Errorf("component %q: verify vendor lock: %w", component, err)
@@ -224,6 +227,44 @@ func ExecuteComponentVendorPullBatch(
 		return nil
 	}
 	return executeVendorModel(allPackages, dryRun, atmosConfig)
+}
+
+// handleVendorPullSweep implements "atmos vendor pull --everything" (and bare "atmos vendor pull",
+// which defaults --everything to true — see setDefaultEverythingFlag) for a repo with no vendor.yaml:
+// it discovers every component.yaml/component.yml manifest under the configured component-type
+// base path(s) — all of terraform/helmfile/packer by default, or just flg.ComponentType when the
+// user passed --type explicitly (flg.TypeChanged) — groups the discovered component names by their
+// own ComponentType (a repo-wide sweep with no explicit --type can mix terraform/helmfile/packer in
+// one run, and ExecuteComponentVendorPullBatch only accepts one componentType per call), and pulls
+// each type-group in its own batched call. Mirrors, for "vendor pull", what
+// cmd/vendor/update.go's runRepoWideUpdate/runVendorPull already do for "vendor update --pull" in
+// the identical repo shape.
+func handleVendorPullSweep(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags) error {
+	defer perf.Track(atmosConfig, "exec.handleVendorPullSweep")()
+
+	found, err := vendoring.DiscoverAllComponentManifests(flg.ComponentType, flg.TypeChanged)
+	if err != nil {
+		return err
+	}
+	if len(found) == 0 {
+		return ErrNoVendorSourcesFound
+	}
+
+	componentsByType := map[string][]string{}
+	for _, rs := range found {
+		if rs == nil || rs.Source == nil {
+			continue
+		}
+		componentsByType[rs.ComponentType] = append(componentsByType[rs.ComponentType], rs.Source.Component)
+	}
+
+	var errs []error
+	for componentType, components := range componentsByType {
+		if err := ExecuteComponentVendorPullBatch(atmosConfig, components, componentType, flg.DryRun, flg.RefreshLock); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func filterMaterializedComponentVendorPackages(packages []pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) ([]pkgComponentVendor, error) {

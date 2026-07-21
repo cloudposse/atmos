@@ -372,7 +372,8 @@ func pullBatchedComponentManifests(components []string, componentType string, dr
 	if err != nil {
 		return err
 	}
-	return e.ExecuteComponentVendorPullBatch(&atmosConfig, components, componentType, dryRun)
+	// vendor update has no --refresh-lock flag today; false preserves this call's existing behavior.
+	return e.ExecuteComponentVendorPullBatch(&atmosConfig, components, componentType, dryRun, false)
 }
 
 // pullUpdatedComponent drives a single "vendor pull --component <component>" call by resetting, on

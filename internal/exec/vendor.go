@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrVendorConfigNotExist       = errors.New("the '--everything' flag is set, but vendor config file does not exist")
+	ErrNoVendorSourcesFound       = errors.New("no vendor.yaml found and no component.yaml manifests were discovered under any component type")
 	ErrValidateComponentFlag      = errors.New("either '--component' or '--tags' flag can be provided, but not both")
 	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
 	ErrValidateEverythingFlag     = errors.New("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
@@ -37,6 +37,9 @@ type VendorFlags struct {
 	Everything    bool
 	ComponentType string
 	RefreshLock   bool
+	// TypeChanged is true only when --type was explicitly passed, distinguishing "sweep only this
+	// type" from "no --type given, sweep every component type" for handleVendorPullSweep.
+	TypeChanged bool
 }
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands.
@@ -113,6 +116,7 @@ func parseVendorFlags(flags *pflag.FlagSet) (VendorFlags, error) {
 		if vendorFlags.ComponentType, err = flags.GetString("type"); err != nil {
 			return vendorFlags, err
 		}
+		vendorFlags.TypeChanged = flags.Changed("type")
 	}
 
 	return vendorFlags, nil
@@ -152,7 +156,7 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 		return err
 	}
 	if !vendorConfigExists && flg.Everything {
-		return fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
+		return handleVendorPullSweep(atmosConfig, flg)
 	}
 	if vendorConfigExists {
 		return ExecuteAtmosVendorInternal(&executeVendorOptions{
@@ -198,5 +202,6 @@ func handleComponentVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 		flg.Component,
 		path,
 		flg.DryRun,
+		flg.RefreshLock,
 	)
 }

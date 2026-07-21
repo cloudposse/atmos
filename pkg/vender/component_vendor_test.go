@@ -39,7 +39,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder.
@@ -61,11 +61,12 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false, false)
 	assert.Nil(t, err)
 
 	// Additional files to check
-	filesToCheck = append(filesToCheck,
+	filesToCheck = append(
+		filesToCheck,
 		"dynamic-roles.tf", "README.md", "remote-state.tf",
 		"modules/iam-roles/context.tf", "modules/iam-roles/main.tf",
 		"modules/iam-roles/outputs.tf", "modules/iam-roles/variables.tf",
