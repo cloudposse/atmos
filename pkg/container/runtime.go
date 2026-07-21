@@ -68,6 +68,22 @@ type BuildConfig struct {
 	NoCache    bool
 	Pull       bool
 	Bake       *BakeConfig
+	Driver     *DriverConfig
+	Cache      *CacheConfig
+}
+
+// DriverConfig represents the Buildx builder instance used for build/bake.
+type DriverConfig struct {
+	Name     string
+	Provider string
+	Opts     map[string]string
+}
+
+// CacheConfig represents Buildx cache import/export sources for a build.
+// Each entry is a raw Buildx cache attribute set (e.g. type, ref, mode, image-manifest, oci-mediatypes).
+type CacheConfig struct {
+	From []map[string]string
+	To   []map[string]string
 }
 
 // BakeConfig represents Docker Buildx Bake configuration.
