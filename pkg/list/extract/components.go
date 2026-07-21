@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"sort"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	perf "github.com/cloudposse/atmos/pkg/perf"
@@ -18,6 +19,8 @@ const (
 	fieldComponent       = "component"
 	fieldComponentFolder = "component_folder"
 	fieldMetadata        = "metadata"
+	fieldTags            = "tags"
+	fieldLabels          = "labels"
 )
 
 // Components transforms stacksMap into structured component data.
@@ -46,6 +49,9 @@ func Components(stacksMap map[string]any) ([]map[string]any, error) {
 		components = append(components, extractComponentType(stackName, "terraform", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "helmfile", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "packer", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "container", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
 
 		// TODO: Add support for plugin component types from schema.Components.Plugins
 	}
@@ -133,6 +139,8 @@ func extractMetadataFields(comp map[string]any, metadata map[string]any) {
 	comp[metadataEnabled] = enabled
 	comp[metadataLocked] = locked
 	comp["component_type"] = getStringWithDefault(metadata, "type", "real")
+	comp[fieldTags] = getStringSliceFromMetadata(metadata, fieldTags)
+	comp[fieldLabels] = getStringMapFromMetadata(metadata, fieldLabels)
 
 	// Compute status indicators for display.
 	// status: Colored dot (●) for table display.
@@ -157,6 +165,8 @@ func setDefaultMetadataFields(comp map[string]any) {
 	comp[metadataEnabled] = true
 	comp[metadataLocked] = false
 	comp["component_type"] = "real"
+	comp[fieldTags] = []string{}
+	comp[fieldLabels] = map[string]string{}
 
 	// Default status indicators for enabled, not locked state.
 	comp["status"] = getStatusIndicator(true, false)
@@ -188,6 +198,47 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 	return defaultValue
 }
 
+// getStringSliceFromMetadata safely extracts a []string from a metadata field
+// that was YAML-decoded as []any. Returns an empty (non-nil) slice if the key
+// is absent or not a list, so callers always get a rangeable value.
+func getStringSliceFromMetadata(m map[string]any, key string) []string {
+	defer perf.Track(nil, "list.extract.getStringSliceFromMetadata")()
+
+	raw, ok := m[key].([]any)
+	if !ok {
+		return []string{}
+	}
+
+	result := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// getStringMapFromMetadata safely extracts a map[string]string from a metadata
+// field that was YAML-decoded as map[string]any. Returns an empty (non-nil)
+// map if the key is absent or not an object, so callers always get a
+// rangeable value.
+func getStringMapFromMetadata(m map[string]any, key string) map[string]string {
+	defer perf.Track(nil, "list.extract.getStringMapFromMetadata")()
+
+	raw, ok := m[key].(map[string]any)
+	if !ok {
+		return map[string]string{}
+	}
+
+	result := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if s, ok := v.(string); ok {
+			result[k] = s
+		}
+	}
+	return result
+}
+
 // UniqueComponents extracts deduplicated components from all stacks.
 // Returns unique component names with aggregated metadata (stack count, types).
 // This is the original behavior of "list components" - showing unique component definitions.
@@ -203,7 +254,19 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 	// Key: "componentName:componentType" (e.g., "vpc:terraform").
 	seen := make(map[string]map[string]any)
 
-	for stackName, stackData := range stacksMap {
+	// Iterate stacks in sorted order so the aggregated component state
+	// (especially metadata fields taken from the first occurrence) is
+	// deterministic. Go map iteration order is randomized; without this,
+	// `--enabled=false` would return inconsistent results across runs
+	// when a component is defined in multiple stacks (issue #2359).
+	stackNames := make([]string, 0, len(stacksMap))
+	for name := range stacksMap {
+		stackNames = append(stackNames, name)
+	}
+	sort.Strings(stackNames)
+
+	for _, stackName := range stackNames {
+		stackData := stacksMap[stackName]
 		// Apply stack filter if provided.
 		if stackPattern != "" {
 			// Stack names are slash-separated; normalize for cross-platform matching.
@@ -230,12 +293,21 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 		extractUniqueComponentType("terraform", componentsMap, seen)
 		extractUniqueComponentType("helmfile", componentsMap, seen)
 		extractUniqueComponentType("packer", componentsMap, seen)
+		extractUniqueComponentType("ansible", componentsMap, seen)
+		extractUniqueComponentType("container", componentsMap, seen)
+		extractUniqueComponentType("emulator", componentsMap, seen)
 	}
 
-	// Convert map to slice.
-	var components []map[string]any
-	for _, comp := range seen {
-		components = append(components, comp)
+	// Convert map to slice in deterministic order, sorted by the
+	// "componentName:componentType" key.
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	components := make([]map[string]any, 0, len(seen))
+	for _, k := range keys {
+		components = append(components, seen[k])
 	}
 
 	return components, nil
@@ -248,10 +320,18 @@ func extractUniqueComponentType(componentType string, componentsMap map[string]a
 		return
 	}
 
-	for componentName, componentData := range typeComponents {
+	// Iterate component names in sorted order so the first-occurrence
+	// metadata (component_folder, vars, etc.) is deterministic.
+	names := make([]string, 0, len(typeComponents))
+	for name := range typeComponents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, componentName := range names {
+		componentData := typeComponents[componentName]
 		key := componentName + ":" + componentType
 
-		// If we haven't seen this component, add it.
 		if _, exists := seen[key]; !exists {
 			comp := map[string]any{
 				fieldComponent: componentName,
@@ -262,6 +342,10 @@ func extractUniqueComponentType(componentType string, componentsMap map[string]a
 			// Extract metadata from first occurrence.
 			enrichUniqueComponentMetadata(comp, componentData)
 			seen[key] = comp
+		} else {
+			// Merge enabled/locked across instances so the aggregate
+			// reflects every stack, not just the first one iterated.
+			updateAggregatedState(seen[key], componentData)
 		}
 
 		// Increment stack count.
@@ -269,6 +353,44 @@ func extractUniqueComponentType(componentType string, componentsMap map[string]a
 			seen[key]["stack_count"] = count + 1
 		}
 	}
+}
+
+// updateAggregatedState merges the enabled/locked state of an additional
+// component instance into the unique component aggregate.
+//
+// Policy:
+//   - enabled: any-disabled-wins. If any stack instance has enabled=false,
+//     the unique component is reported as disabled. This makes
+//     `atmos list components --enabled=false` surface every component that
+//     is disabled somewhere, matching user expectations from issue #2359.
+//   - locked: any-locked-wins. If any stack instance has locked=true, the
+//     unique component is reported as locked.
+//
+// status/status_text are recomputed from the resulting aggregated state.
+func updateAggregatedState(comp map[string]any, componentData any) {
+	compMap, ok := componentData.(map[string]any)
+	if !ok {
+		return
+	}
+
+	metadata, hasMetadata := compMap[fieldMetadata].(map[string]any)
+	// Without metadata, the instance is enabled=true, locked=false by
+	// default — neither weakens an existing aggregate, so nothing to do.
+	if !hasMetadata {
+		return
+	}
+
+	if instanceEnabled := getBoolWithDefault(metadata, metadataEnabled, true); !instanceEnabled {
+		comp[metadataEnabled] = false
+	}
+	if instanceLocked := getBoolWithDefault(metadata, metadataLocked, false); instanceLocked {
+		comp[metadataLocked] = true
+	}
+
+	aggEnabled, _ := comp[metadataEnabled].(bool)
+	aggLocked, _ := comp[metadataLocked].(bool)
+	comp["status"] = getStatusIndicator(aggEnabled, aggLocked)
+	comp["status_text"] = getStatusText(aggEnabled, aggLocked)
 }
 
 // enrichUniqueComponentMetadata adds metadata fields to a unique component.
@@ -316,6 +438,9 @@ func ComponentsForStack(stackName string, stacksMap map[string]any) ([]map[strin
 	components = append(components, extractComponentType(stackName, "terraform", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "helmfile", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "packer", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "container", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
 
 	if len(components) == 0 {
 		return nil, errUtils.ErrNoComponentsFound

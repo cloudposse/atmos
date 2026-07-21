@@ -134,7 +134,7 @@ func formatUIElements(styles *StyleSet) string {
 	output.WriteString(colorColumnSeparator)
 	output.WriteString(styles.Error.Render("✗ Error message"))
 	output.WriteString(colorColumnSeparator)
-	output.WriteString(styles.Info.Render("ℹ Info message"))
+	output.WriteString(styles.Info.Render(IconInfo + " Info message"))
 	output.WriteString(sectionSeparator)
 
 	// Sample table.

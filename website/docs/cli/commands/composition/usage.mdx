@@ -1,0 +1,132 @@
+---
+title: atmos composition
+sidebar_label: composition
+sidebar_class_name: command
+id: usage
+description: List, validate, and operate first-class composition lifecycles.
+---
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use the `atmos composition` subcommands to list declared compositions, validate stack fulfillment,
+and operate every fulfilled member in a composition as one stack-scoped lifecycle.
+</Intro>
+
+A composition is declared once under the top-level `compositions` section and fulfilled by components
+that opt in with the first-class `composition` field. Lifecycle commands operate only the services
+that are fulfilled in the selected stack.
+
+## Usage
+
+<Terminal>
+```shell
+# Discover declared compositions and the stacks where each is available
+atmos composition list
+# Include fulfillment details for one stack
+atmos composition list -s <stack>
+
+# Validate declarations, or validate fulfillment for one stack
+atmos composition validate [composition]
+atmos composition validate [composition] -s <stack>
+
+# Lifecycle and read commands require a stack
+atmos composition up|down|start|stop|restart|rm|ps [composition] -s <stack>
+atmos composition logs [composition] -s <stack> [--follow] [--tail[=N]]
+```
+</Terminal>
+
+The `composition` argument is optional. When omitted from a stack-scoped lifecycle or read command,
+Atmos selects all compositions that have at least one fulfilled member in the selected stack.
+
+## Subcommands
+
+| Command | Stack required | Description |
+|---------|----------------|-------------|
+| `list` | Optional | Shows declared compositions and the stacks where each has fulfilled members. With `-s <stack>`, also shows which declared services are fulfilled in that stack. |
+| `validate` | Optional | Validates one composition or all compositions. With `-s <stack>`, includes stack fulfillment details. |
+| `up` | Yes | Creates or starts fulfilled members. |
+| `down` | Yes | Stops and removes fulfilled members. |
+| `start` | Yes | Starts existing fulfilled members. |
+| `stop` | Yes | Stops fulfilled members. |
+| `restart` | Yes | Restarts fulfilled members. |
+| `rm` | Yes | Removes fulfilled members. |
+| `ps` | Yes | Shows running state for fulfilled members. |
+| `logs` | Yes | Shows logs for fulfilled members. |
+
+Lifecycle and read commands require a stack. Use the `STACKS` column from `atmos composition list` to
+discover valid values. In an interactive terminal with `--interactive`, omitting
+`--stack` opens a picker containing only stacks that fulfill the requested composition (or any
+composition when the argument is omitted). In scripts, CI, and non-interactive terminals, they fail
+clearly when `--stack` is omitted. `list` and `validate` are the exceptions: both can run without a
+stack, and both accept `-s, --stack` when you want stack-specific fulfillment details.
+
+## Ordering
+
+When a command targets more than one composition or more than one service, Atmos uses deterministic
+ordering:
+
+- Startup and read commands (`up`, `start`, `restart`, `ps`, `logs`) process composition names
+  alphabetically, then services in the order declared by the composition.
+- Teardown commands (`down`, `stop`, `rm`) process composition names in reverse alphabetical order,
+  then services in reverse declared order.
+
+This makes startup predictable while tearing down dependents before the earlier services they may
+depend on.
+
+## Logs
+
+Use `logs` to read logs from every fulfilled member in a composition, or from every fulfilled
+composition in the selected stack when the composition argument is omitted.
+
+```shell
+# Show logs for all fulfilled services in the storefront composition
+atmos composition logs storefront -s dev
+
+# Follow logs
+atmos composition logs storefront -s dev --follow
+
+# Show all available log lines
+atmos composition logs storefront -s dev --tail
+
+# Show the last 200 log lines
+atmos composition logs storefront -s dev --tail=200
+```
+
+A bare `--tail` means all available lines. Use `--tail=N` to limit output to the last `N` lines.
+
+## Examples
+
+```shell
+# Show every declared composition and its available stacks
+atmos composition list
+
+# Show declared compositions and fulfillment in the local stack
+atmos composition list -s local
+
+# Validate one composition in one stack
+atmos composition validate storefront -s local
+
+# Validate all compositions in one stack
+atmos composition validate -s local
+
+# Start every fulfilled service in storefront for the local stack
+atmos composition up storefront -s local
+
+# Show running state for every fulfilled composition in the local stack
+atmos composition ps -s local
+
+# Stop and remove every fulfilled composition in the local stack
+atmos composition down -s local
+```
+
+## Provider support
+
+Composition lifecycle commands dispatch to the provider for each fulfilled member. If a provider does
+not support the requested subcommand, Atmos returns a clear error for that member instead of silently
+skipping it.
+
+## See Also
+
+- [Container Components](/components/container) - Configure container services and composition membership
+- [`atmos container`](/cli/commands/container/usage) - Operate individual container components

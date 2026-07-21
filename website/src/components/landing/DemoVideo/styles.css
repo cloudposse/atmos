@@ -1,0 +1,27 @@
+/* DemoVideo reuses the .terminal / .window-bar chrome from
+   src/components/Terminal/index.css; these rules only adapt the viewport so a
+   <video> fills it edge-to-edge instead of the padded, scrollable text viewport
+   used for ANSI screengrabs. */
+
+.terminal .viewport.viewport--video {
+  max-height: none;
+  overflow: hidden;
+  padding: 16px;
+  line-height: 0;
+  background: #111111;
+}
+
+.demo-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 2px;
+}
+
+/* Reserve space before the video lazy-loads so the layout does not jump.
+   2:1 matches the VHS Width/Height (1280x640) in demo/landing/defaults.tape. */
+.demo-video--placeholder {
+  aspect-ratio: 2 / 1;
+  background: var(--atmos-terminal-bg, rgba(255, 255, 255, 0.03));
+}

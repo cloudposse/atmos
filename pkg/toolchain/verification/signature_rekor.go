@@ -1,0 +1,167 @@
+package verification
+
+import (
+	"errors"
+	"strings"
+	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Cosign retry tuning. Mirrors the toolchain downloader retry budget
+// (downloadRetryMaxAttempts/InitialDelay/MaxDelay) so transient cosign
+// failures get the same treatment as transient HTTP failures.
+const (
+	cosignRetryMaxAttempts  = 5
+	cosignRetryInitialDelay = 1 * time.Second
+	cosignRetryMaxDelay     = 10 * time.Second
+)
+
+// rekorFlakeMarkers are substrings in cosign's combined stderr+stdout that
+// indicate a transient Sigstore Rekor transparency-log error (i.e. an
+// upstream-service problem, not a real signature failure). Match must stay
+// narrow: anything not in this allowlist surfaces immediately so that real
+// tampering, expired certs, or identity mismatches are never silently
+// retried away.
+var rekorFlakeMarkers = []string{
+	// Observed: Rekor /api/v1/log/entries/retrieve sometimes returns HTTP 400
+	// with a bogus signature-decode message even for valid signatures. The
+	// generated go-openapi client surfaces this as "searchLogQueryBadRequest".
+	"searchLogQueryBadRequest",
+	// The specific Rekor backend decode error that accompanies the 400 above.
+	// Including this as a secondary marker so a related Rekor regression that
+	// surfaces the same decode message under a different operation name is
+	// still classified as transient.
+	"Invalid IEEE_P1363 encoded bytes",
+}
+
+// transportFlakeMarkers are substrings that indicate the network transport
+// itself failed before any verification verdict was rendered. A broken
+// connection can never represent a signature verdict (tampering, identity
+// mismatch, expired cert), so retrying these can never mask a real failure.
+var transportFlakeMarkers = []string{
+	// Go net/http2 stream errors, e.g.
+	// "stream error: stream ID 1; INTERNAL_ERROR; received from peer".
+	// Matches all HTTP/2 error codes and both send/recv variants.
+	"stream error: stream ID",
+	"connection reset by peer",
+	"TLS handshake timeout",
+	// macOS Security.framework can report this while cosign fetches a remote
+	// certificate sidecar. It is a transport/trust-store operation that happens
+	// before any signature verdict, so retrying it cannot mask bad evidence.
+	"SecPolicyCreateSSL error",
+	// A macOS process can be terminated by its security subsystem before
+	// Cosign reaches a verification verdict. This is transient execution
+	// failure, not evidence that a signature is invalid; a fresh, serialized
+	// invocation (see installer.runTrustedVerifier) is safe to retry.
+	"signal: killed",
+	"i/o timeout",
+	"unexpected EOF",
+}
+
+// rekorTlogEndpointMarker plus a 5xx status code is also treated as
+// transient. We do not match arbitrary 5xx anywhere in the cosign output —
+// only those scoped to Rekor's transparency-log retrieve endpoint, which is
+// the endpoint historically prone to short-window outages.
+const rekorTlogEndpointMarker = "/api/v1/log/entries/retrieve]["
+
+const (
+	rekorSearchLogQueryMarker     = "searching log query"
+	rekorStreamInternalErrMarker  = "INTERNAL_ERROR"
+	rekorStreamReceivedPeerMarker = "received from peer"
+)
+
+var rekorTlog5xxStatuses = []string{"500", "502", "503", "504"}
+
+// cosignHTTPFetchMarker is the literal prefix cosign's own HTTP client uses
+// when a direct fetch (e.g. of a --certificate/--signature URL pointing at a
+// release asset) returns a non-2xx response, such as:
+//
+//	loading cert: loading URL https://.../tofu_1.12.2_SHA256SUMS.pem: server returned HTTP 504
+//
+// This is distinct from rekorTlogEndpointMarker above: cosign fetches
+// --certificate/--signature URLs itself rather than atmos's own downloader
+// pre-fetching them, so the toolchain's asset-download retry logic
+// (pkg/toolchain/installer/download.go) never sees this request. The status
+// codes mirror download.go's isRetryableHTTPStatus so a transient CDN error
+// gets the same treatment whether atmos or cosign made the request.
+const cosignHTTPFetchMarker = "server returned HTTP "
+
+var cosignHTTPFetchRetryableStatuses = []string{"429", "500", "502", "503", "504"}
+
+// classifyCosignError joins ErrSignatureRetryable into err when the cosign
+// output contains a known transient failure marker. Three classes qualify:
+// Sigstore Rekor API flakes (rekorFlakeMarkers, tlog 5xx), transport-level
+// network errors (transportFlakeMarkers), and generic upstream HTTP 5xx/429
+// responses cosign surfaces when it directly fetches a URL
+// (cosignHTTPFetchMarker). Otherwise returns err unchanged.
+//
+// Never broaden what counts as retryable beyond known upstream-service
+// flakes and transport failures — real signature failures (tampering,
+// expired cert, identity mismatch, missing signature) must surface
+// immediately on the first attempt.
+func classifyCosignError(err error) error {
+	defer perf.Track(nil, "verification.classifyCosignError")()
+
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	for _, marker := range rekorFlakeMarkers {
+		if strings.Contains(msg, marker) {
+			return errors.Join(errUtils.ErrSignatureRetryable, err)
+		}
+	}
+	for _, marker := range transportFlakeMarkers {
+		if strings.Contains(msg, marker) {
+			return errors.Join(errUtils.ErrSignatureRetryable, err)
+		}
+	}
+	if strings.Contains(msg, rekorTlogEndpointMarker) {
+		for _, status := range rekorTlog5xxStatuses {
+			if strings.Contains(msg, rekorTlogEndpointMarker+status+"]") {
+				return errors.Join(errUtils.ErrSignatureRetryable, err)
+			}
+		}
+	}
+	if isRekorStreamInternalError(msg) {
+		return errors.Join(errUtils.ErrSignatureRetryable, err)
+	}
+	if strings.Contains(msg, cosignHTTPFetchMarker) {
+		for _, status := range cosignHTTPFetchRetryableStatuses {
+			if strings.Contains(msg, cosignHTTPFetchMarker+status) {
+				return errors.Join(errUtils.ErrSignatureRetryable, err)
+			}
+		}
+	}
+	return err
+}
+
+func isRekorStreamInternalError(msg string) bool {
+	return strings.Contains(msg, rekorSearchLogQueryMarker) &&
+		strings.Contains(msg, rekorStreamInternalErrMarker) &&
+		strings.Contains(msg, rekorStreamReceivedPeerMarker)
+}
+
+// isRetryableCosignError is the predicate handed to retry.WithPredicate.
+func isRetryableCosignError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, errUtils.ErrSignatureRetryable)
+}
+
+// cosignRetryConfig returns the retry budget used when invoking cosign.
+func cosignRetryConfig() *schema.RetryConfig {
+	maxAttempts := cosignRetryMaxAttempts
+	initialDelay := cosignRetryInitialDelay
+	maxDelay := cosignRetryMaxDelay
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+	}
+}

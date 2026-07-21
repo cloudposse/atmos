@@ -5,8 +5,10 @@ import React, { useState } from 'react';
 import Layout from '@theme/Layout';
 import Link from '@docusaurus/Link';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder } from '@fortawesome/free-solid-svg-icons';
+import CastPlayer from '@site/src/components/CastPlayer';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
 
@@ -27,13 +29,75 @@ interface IndexPageProps {
 }
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
-  const { examples, tags } = treeData;
+  const { examples, featured = [], tags } = treeData;
   const { routeBasePath, title, description } = optionsData;
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
   const filteredExamples = activeTag
     ? examples.filter((ex) => ex.tags.includes(activeTag))
     : examples;
+
+  // Group the "All" view into visible sections by each example's primary
+  // (first) tag, in the site's tag order; anything untagged lands in "More".
+  const sections = [
+    ...tags.map((tag) => ({
+      tag,
+      examples: examples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
+    })),
+    { tag: 'More', examples: examples.filter((ex) => ex.tags.length === 0) },
+  ].filter((section) => section.examples.length > 0);
+
+  // Render a single example card. All cards use the friendly English title
+  // (README front matter `title:`), falling back to the directory name.
+  const renderCard = (example: ExamplesTree['examples'][number], displayName: string) => (
+    <article
+      key={example.name}
+      className={styles.exampleCard}
+    >
+      <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardLink}>
+        <div className={styles.exampleCardHeader}>
+          <div className={styles.exampleCardIcon}>
+            <FontAwesomeIcon icon={faFolder} />
+          </div>
+          <h2 className={styles.exampleCardTitle}>{displayName}</h2>
+        </div>
+      </Link>
+      {example.cast?.file && (
+        <Link
+          to={`${routeBasePath}/${example.name}`}
+          className={styles.exampleCardCastLink}
+          aria-label={`Open the ${displayName} example`}
+        >
+          <div className={styles.exampleCardCast}>
+            <CastPlayer
+              src={example.cast.file}
+              title={example.cast.title || displayName}
+              chrome
+              thumbnail
+              controls={false}
+              scrubber={false}
+              showCommand={false}
+            />
+          </div>
+        </Link>
+      )}
+      <div className={styles.exampleCardDescription}>
+        <Markdown components={cardMarkdownComponents} remarkPlugins={[remarkGfm]}>
+          {example.description || 'Explore this example project'}
+        </Markdown>
+      </div>
+      <div className={styles.exampleCardFooter}>
+        <div className={styles.tagList}>
+          {example.tags.map((tag) => (
+            <span key={tag} className={styles.tagBadge}>{tag}</span>
+          ))}
+        </div>
+        <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardCta}>
+          Open
+        </Link>
+      </div>
+    </article>
+  );
 
   return (
     <Layout title={title} description={description}>
@@ -42,6 +106,15 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           <h1 className={styles.indexTitle}>{title}</h1>
           <p className={styles.indexDescription}>{description}</p>
         </header>
+
+        {activeTag === null && featured.length > 0 && (
+          <section className={styles.featuredSection}>
+            <h2 className={styles.featuredHeading}>Featured</h2>
+            <div className={styles.examplesGrid}>
+              {featured.map((example) => renderCard(example, example.title || example.name))}
+            </div>
+          </section>
+        )}
 
         <div className={styles.filterBar}>
           <button
@@ -63,34 +136,20 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           ))}
         </div>
 
-        <div className={styles.examplesGrid}>
-          {filteredExamples.map((example) => (
-            <Link
-              key={example.name}
-              to={`${routeBasePath}/${example.name}`}
-              className={styles.exampleCard}
-            >
-              <div className={styles.exampleCardHeader}>
-                <div className={styles.exampleCardIcon}>
-                  <FontAwesomeIcon icon={faFolder} />
-                </div>
-                <h2 className={styles.exampleCardTitle}>{example.name}</h2>
+        {activeTag === null ? (
+          sections.map(({ tag, examples: sectionExamples }) => (
+            <section key={tag} className={styles.tagSection}>
+              <h2 className={styles.tagSectionHeading}>{tag}</h2>
+              <div className={styles.examplesGrid}>
+                {sectionExamples.map((example) => renderCard(example, example.title || example.name))}
               </div>
-              <div className={styles.exampleCardDescription}>
-                <Markdown components={cardMarkdownComponents}>
-                  {example.description || 'Explore this example project'}
-                </Markdown>
-              </div>
-              <div className={styles.exampleCardFooter}>
-                <div className={styles.tagList}>
-                  {example.tags.map((tag) => (
-                    <span key={tag} className={styles.tagBadge}>{tag}</span>
-                  ))}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+            </section>
+          ))
+        ) : (
+          <div className={styles.examplesGrid}>
+            {filteredExamples.map((example) => renderCard(example, example.title || example.name))}
+          </div>
+        )}
       </div>
     </Layout>
   );

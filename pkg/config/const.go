@@ -5,6 +5,22 @@ const (
 	CliConfigFileName    = "atmos"
 	DotCliConfigFileName = ".atmos"
 
+	// AtmosEnvVarNamespace is the canonical Viper environment-variable
+	// namespace for Atmos. This is the value passed to viper.SetEnvPrefix and
+	// is the single source of truth for "what counts as an Atmos environment
+	// variable" anywhere in the codebase.
+	//
+	// Use AtmosEnvVarPrefix when you need the namespace as an env-var key
+	// prefix (i.e., the namespace followed by an underscore).
+	AtmosEnvVarNamespace = "ATMOS"
+
+	// AtmosEnvVarPrefix is the prefix used to identify Atmos-controlled
+	// environment variables (ATMOS_PROFILE, ATMOS_CLI_CONFIG_PATH,
+	// ATMOS_BASE_PATH, etc.). Always equal to AtmosEnvVarNamespace + "_"
+	// — see TestAtmosEnvVarPrefixMatchesNamespace for the build-time
+	// invariant.
+	AtmosEnvVarPrefix = AtmosEnvVarNamespace + "_"
+
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
@@ -56,10 +72,14 @@ const (
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
 
-	TerraformComponentType = "terraform"
-	HelmfileComponentType  = "helmfile"
-	PackerComponentType    = "packer"
-	AnsibleComponentType   = "ansible"
+	TerraformComponentType  = "terraform"
+	HelmfileComponentType   = "helmfile"
+	PackerComponentType     = "packer"
+	AnsibleComponentType    = "ansible"
+	ContainerComponentType  = "container"
+	EmulatorComponentType   = "emulator"
+	KubernetesComponentType = "kubernetes"
+	HelmComponentType       = "helm"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -68,9 +88,12 @@ const (
 	NameSectionName                   = "name"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
+	ProviderSectionName               = "provider"
 	HooksSectionName                  = "hooks"
+	SecretsSectionName                = "secrets"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
+	VersionSectionName                = "version"
 	LocalsSectionName                 = "locals"
 	EnvSectionName                    = "env"
 	DependenciesSectionName           = "dependencies"
@@ -88,20 +111,37 @@ const (
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
 	AnsibleSectionName                = "ansible"
+	KubernetesSectionName             = "kubernetes"
+	HelmSectionName                   = "helm"
 	AnsiblePlaybookSectionName        = "playbook"
+	ContainerSectionName              = "container"
+	EmulatorSectionName               = "emulator"
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
+	RequiredVersionSectionName        = "required_version"
+	RequiredProvidersSectionName      = "required_providers"
 	GenerateSectionName               = "generate"
 	ProvisionSectionName              = "provision"
+	PathsSectionName                  = "paths"
+	ManifestsSectionName              = "manifests"
+	RenderSectionName                 = "render"
+	ValuesSectionName                 = "values"
+	ValuesFilesSectionName            = "values_files"
+	PluginsSectionName                = "plugins"
+	ChartSectionName                  = "chart"
+	RepositoriesSectionName           = "repositories"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
 	ProcessEnvSectionName             = "process_env"
 	CliArgsSectionName                = "cli_args"
+	RetrySectionName                  = "retry"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
 	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"
+	TestSectionName                   = "test"
+	MocksSectionName                  = "mocks"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
 	StaticSectionName                 = "static"
@@ -145,8 +185,16 @@ const (
 	// Auth flags.
 	IdentityFlagName          = "identity" // Flag name without prefix.
 	IdentityFlag              = "--identity"
+	IdentityFlagShortName     = "i"
+	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Cast recording flag.
+	CastFlagName      = "cast"
+	CastFlag          = "--cast"
+	CastFlagAutoValue = "__AUTO__"
+	CastEnvVarName    = "ATMOS_CAST"
 
 	// EKS/Helmfile flags.
 	ClusterNameFlagName = "cluster-name" // Flag name without prefix.

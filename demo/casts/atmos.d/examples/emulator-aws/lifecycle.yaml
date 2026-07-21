@@ -1,0 +1,136 @@
+commands:
+  - name: casts generate examples emulator-aws lifecycle
+    description: Regenerate the AWS emulator lifecycle cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &emulator_aws_fixture "../../.context/cast-fixtures/emulator-aws"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos --logs-level=Off emulator down aws -s local || true
+          atmos --logs-level=Off terraform reset || true
+      - type: cast
+        name: lifecycle
+        working_directory: *emulator_aws_fixture
+        title: AWS emulator lifecycle
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/emulator-aws/lifecycle.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# start a local `AWS` emulator, declared in the local stack"
+          - type: simulate
+            text: &emulator_up_cmd atmos emulator up aws -s local --ephemeral
+          - type: shell
+            name: emulator-up
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_up_cmd
+          - type: simulate
+            text: &emulator_ps_cmd atmos emulator ps -s local
+          - type: shell
+            name: emulator-ps
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_ps_cmd
+          - type: simulate
+            text: "# run real terraform against it, no `AWS` account needed"
+          - type: simulate
+            text: &terraform_apply_cmd atmos terraform apply demo -s dev -auto-approve
+          - type: shell
+            name: terraform-apply
+            duration: 550ms
+            interval: 900ms
+            command: *terraform_apply_cmd
+          - type: simulate
+            text: &terraform_output_cmd atmos terraform output demo -s dev
+          - type: shell
+            name: terraform-output
+            duration: 450ms
+            interval: 750ms
+            command: *terraform_output_cmd
+          - type: simulate
+            text: "# tear it down when you're done"
+          - type: simulate
+            text: &emulator_down_cmd atmos emulator down aws -s local
+          - type: shell
+            name: emulator-down
+            when: always
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_down_cmd
+      - type: script
+        name: sanitize-runtime-values
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          import re
+
+          path = Path("../../website/static/casts/examples/emulator-aws/lifecycle.cast")
+          text = path.read_text()
+          text = re.sub(
+              r"(?:mirror\\.gcr\\.io/)?floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2",
+              "floci/floci:1.5.23",
+              text,
+          )
+          text = re.sub(r"(?<=atmos-local-emulator-aws\\t)c88ec20bf221(?=\\trunning)", "floci/floci:1.5.23", text)
+          path.write_text(text)
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/examples/emulator-aws/lifecycle.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
+      - type: shell
+        name: validate
+        command: atmos casts validate examples emulator-aws lifecycle
+  - name: casts validate examples emulator-aws lifecycle
+    description: Validate the AWS emulator lifecycle cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/emulator-aws/lifecycle.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "Apply complete!")
+          for needle in [
+              "# start a local `AWS` emulator",
+              "# run real terraform against it, no `AWS` account needed",
+              "emulator aws is up",
+              "emulator aws is up at http://127.0.0.1:",
+              "local/aws",
+              "floci/floci:1.5.23",
+              "running",
+              "Apply complete!",
+              "stage =",
+              "dev",
+              "emulator aws is down",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"emulator aws lifecycle cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:", "[emulator-up]", "[emulator-down]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"emulator aws lifecycle cast contains {bad!r}")
+          for placeholder in ["<image>", "<container>", "<port>"]:
+              if placeholder in plain:
+                  raise SystemExit(f"emulator aws lifecycle cast contains placeholder {placeholder!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

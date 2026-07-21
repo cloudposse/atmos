@@ -46,13 +46,22 @@ builds:
       # https://go.dev/doc/go1.24#ports
       - goos: windows
         goarch: arm
+      # modernc.org/libc (dependency of modernc.org/sqlite used by pkg/ai/session)
+      # has type mismatch bugs on 32-bit FreeBSD that are unresolved upstream.
+      # https://gitlab.com/cznic/libc/-/issues
+      - goos: freebsd
+        goarch: '386'
+      - goos: freebsd
+        goarch: arm
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`
       # -s: strip symbol table
       # -w: strip DWARF debug info
       # Both reduce binary size and disk usage during linking.
-      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}"'
+      # Commit pins the scaffold catalog's distributable templates to this
+      # release's exact commit.
+      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}" -X "github.com/cloudposse/atmos/pkg/version.Commit={{.Commit}}"'
     flags:
       # Remove file system paths from compiled executables for reproducible builds and slightly smaller binaries.
       # This is standard practice for open-source and CI/CD builds (used by Go core team, HashiCorp, Docker, etc.).

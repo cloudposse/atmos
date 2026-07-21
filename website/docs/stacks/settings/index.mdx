@@ -19,7 +19,7 @@ The `settings` section provides a flexible configuration space for integrations,
 - **Template Settings:** Define template engine configuration and data sources.
 - **Custom Metadata:** Store arbitrary metadata that can be referenced in templates or external tools.
 - **Validation Rules:** Configure JSON Schema or OPA policy validation.
-- **Dependencies:** Define component dependencies using `depends_on`.
+- **Dependencies:** Define component dependencies with [`dependencies.components`](/stacks/dependencies/components).
 
 ## Configuration Scopes
 
@@ -69,8 +69,9 @@ components:
           labels:
             - network
             - critical
-        depends_on:
-          - component: account-settings
+      dependencies:
+        components:
+          - name: account-settings
 ```
 
 ## Merge Behavior
@@ -85,7 +86,11 @@ Maps are recursively merged, and lists are replaced (not appended).
 
 ## Common Settings
 
-### Spacelift Integration
+### Legacy Spacelift Settings
+
+:::warning Deprecated
+For existing Spacelift installations only. New projects should use [native CI](/ci); see the [legacy Spacelift reference](/deprecated/spacelift) when maintaining an existing installation.
+:::
 
 Configure Spacelift workspace settings for components:
 
@@ -148,17 +153,7 @@ settings:
 
 ### Component Dependencies
 
-Define dependencies between components using `depends_on`:
-
-```yaml
-settings:
-  depends_on:
-    - component: vpc
-    - component: security-groups
-      namespace: "{{ .namespace }}"
-```
-
-For detailed dependency configuration, see [depends_on](/stacks/settings/depends_on).
+Declare ordering relationships outside `settings` with [`dependencies.components`](/stacks/dependencies/components). The legacy [`settings.depends_on`](/stacks/settings/depends_on) form is retained only for migration reference.
 
 ## Example: Multi-Level Settings
 
@@ -200,12 +195,13 @@ components:
           autodeploy: true
           labels:
             - network
-        depends_on:
-          - component: account-settings
+      dependencies:
+        components:
+          - name: account-settings
 ```
 </File>
 
-The resulting `settings` for the `vpc` component would be:
+The resulting component configuration for `vpc` would include:
 
 ```yaml
 settings:
@@ -214,8 +210,9 @@ settings:
     autodeploy: true         # Overridden at component level
     labels:                  # Replaced at component level
       - network
-  depends_on:
-    - component: account-settings
+dependencies:
+  components:
+    - name: account-settings
 ```
 
 ## Freeform Nature
@@ -248,7 +245,7 @@ settings:
 
 3. **Document Custom Settings:** When adding custom settings, document their purpose and expected values for your team.
 
-4. **Leverage Dependencies:** Use `depends_on` to ensure components are applied in the correct order.
+4. **Leverage Dependencies:** Use `dependencies.components` to ensure components are applied in the correct order.
 
 5. **Validate Settings:** Use JSON Schema validation to enforce required settings and valid values.
 
@@ -257,8 +254,7 @@ settings:
 - [Variables (vars)](/stacks/vars)
 - [Locals](/stacks/locals)
 - [Environment Variables (env)](/stacks/env)
-- [depends_on](/stacks/settings/depends_on)
+- [Component Dependencies](/stacks/dependencies/components)
 - [Imports](/stacks/imports)
 - [Inheritance](/howto/inheritance)
-- [Spacelift Integration](/cli/configuration/integrations/spacelift)
 - [Atlantis Integration](/cli/configuration/integrations/atlantis)

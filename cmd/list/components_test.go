@@ -5,9 +5,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -330,10 +332,38 @@ func TestBuildComponentFilters(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := buildComponentFilters(tc.opts)
+			result, err := buildComponentFilters(tc.opts)
+			require.NoError(t, err)
 			assert.Equal(t, tc.expectedCount, len(result), tc.description)
 		})
 	}
+}
+
+// TestBuildComponentFilters_TagsAndLabels covers the new filter wiring,
+// including that a malformed --labels value surfaces an error.
+func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
+	t.Run("tags filter is added when set", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{Tags: []string{"production"}})
+		require.NoError(t, err)
+		require.Len(t, result, 2) // abstract filter + tags filter
+		tagFilter, ok := result[1].(*filter.TagFilter)
+		require.True(t, ok)
+		assert.Equal(t, []string{"production"}, tagFilter.Tags)
+	})
+
+	t.Run("labels filter is added when set", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "cost-center=platform"})
+		require.NoError(t, err)
+		require.Len(t, result, 2) // abstract filter + labels filter
+		labelFilter, ok := result[1].(*filter.LabelFilter)
+		require.True(t, ok)
+		assert.Equal(t, map[string]string{"cost-center": "platform"}, labelFilter.Labels)
+	})
+
+	t.Run("malformed labels flag surfaces an error", func(t *testing.T) {
+		_, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "not-valid"})
+		require.Error(t, err)
+	})
 }
 
 // TestGetComponentColumns tests column configuration logic.
@@ -1118,3 +1148,26 @@ func TestRenderComponents_TypeFilter(t *testing.T) {
 // TestInitAndExtractComponents is documented in integration tests.
 // Unit testing with nil command is not meaningful as ProcessCommandLineArgs requires a valid command context.
 // See tests/cli_list_commands_test.go for integration tests that exercise the full command flow.
+
+// TestComponentsProcessTemplatesAndFunctionsFlags verifies that
+// --process-templates and --process-functions are registered on the real
+// `components` cobra command with the documented defaults (both true).
+func TestComponentsProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := componentsCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = componentsCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on components command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue)
+	}
+
+	processFunctionsFlag := componentsCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = componentsCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on components command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue)
+	}
+}

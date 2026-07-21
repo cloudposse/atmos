@@ -44,10 +44,11 @@ var problematicAzureEnvVars = []string{
 
 // PrepareEnvironmentConfig holds configuration for Azure environment preparation.
 type PrepareEnvironmentConfig struct {
-	Environ        map[string]string // Current environment variables
-	SubscriptionID string            // Azure subscription ID
-	TenantID       string            // Azure tenant ID
-	Location       string            // Azure location/region (optional)
+	Environ          map[string]string // Current environment variables
+	SubscriptionID   string            // Azure subscription ID
+	TenantID         string            // Azure tenant ID
+	Location         string            // Azure location/region (optional)
+	CloudEnvironment string            // Azure cloud environment name ("public", "usgovernment", "china")
 	// OIDC-specific configuration for Terraform ARM_USE_OIDC support.
 	UseOIDC       bool   // Use OIDC instead of CLI authentication
 	ClientID      string // Azure AD application (client) ID
@@ -115,6 +116,14 @@ func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 	if cfg.Location != "" {
 		result["AZURE_LOCATION"] = cfg.Location
 		result["ARM_LOCATION"] = cfg.Location
+	}
+
+	// Set cloud environment for sovereign clouds (GCC High, China).
+	// Only set when non-public to avoid unnecessary env vars for the default case.
+	if cfg.CloudEnvironment != "" && cfg.CloudEnvironment != "public" {
+		result["ARM_ENVIRONMENT"] = cfg.CloudEnvironment
+		result["AZURE_ENVIRONMENT"] = cfg.CloudEnvironment
+		log.Debug("Set ARM_ENVIRONMENT for sovereign cloud", "environment", cfg.CloudEnvironment)
 	}
 
 	// Set authentication method based on provider type.

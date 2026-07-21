@@ -1,0 +1,47 @@
+base_path: "./"
+
+components:
+  terraform:
+    command: tofu
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+    apply_auto_approve: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+
+stores:
+  secrets/ssm:
+    kind: aws/ssm
+    identity: floci-superuser
+    secret: true
+    options:
+      region: us-east-1
+      prefix: !env FLOCI_SECRETS_SSM_PREFIX
+
+  secrets/asm:
+    kind: aws/asm
+    identity: floci-superuser
+    secret: true
+    options:
+      region: us-east-1
+      prefix: !env FLOCI_SECRETS_ASM_PREFIX
+
+auth:
+  identities:
+    floci-superuser:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+      spec:
+        endpoint_url: !env FLOCI_ENDPOINT_URL
+      default: true
+
+logs:
+  file: /dev/stderr
+  level: Info

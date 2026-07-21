@@ -6,13 +6,13 @@ id: terraform-backend
 description: Manage Terraform state backend infrastructure
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use these commands to manage Terraform state backend infrastructure. This solves the Terraform bootstrap problem by automatically provisioning backend storage with secure defaults, making it compatible with any Terraform-managed backend.
 </Intro>
 
-<Screengrab title="atmos terraform backend --help" slug="atmos-terraform-backend--help" />
+<CastPlayer title="atmos terraform backend --help" src="/casts/screengrabs/atmos-terraform-backend--help.cast" static chrome />
 
 ## Usage
 
@@ -516,7 +516,7 @@ provision:
     enabled: false  # Backend now managed by Terraform
 ```
 
-See the [Automatic Backend Provisioning](/components/terraform/backend-provisioning) docs for more migration patterns.
+See the [Automatic Backend Provisioning](/stacks/components/provision/backend) docs for more migration patterns.
 
 ## Idempotent Operations
 

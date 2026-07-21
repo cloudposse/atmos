@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -461,7 +460,7 @@ spec:
 		Version   string
 	}{source.Component, source.Version}
 
-	processedURI, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+	processedURI, err := processVendorTemplate("test-source", source.Source, tmplData)
 	require.NoError(t, err, "Template processing should succeed")
 
 	// Verify the template was processed correctly
@@ -523,7 +522,7 @@ spec:
 		Version   string
 	}{source.Component, source.Version}
 
-	processedURI, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+	processedURI, err := processVendorTemplate("test-source", source.Source, tmplData)
 	require.NoError(t, err, "Template processing should succeed")
 
 	// Verify version was substituted but no token in URL yet (automatic injection happens in go-getter)
@@ -791,7 +790,7 @@ func TestShouldSkipSource(t *testing.T) {
 	}
 }
 
-func TestValidateTagsAndComponents(t *testing.T) {
+func TestValidateTagsAndComponentsLegacy(t *testing.T) {
 	sources := []schema.AtmosVendorSource{
 		{Component: "vpc", Tags: []string{"network"}},
 		{Component: "rds", Tags: []string{"database"}},
@@ -1250,7 +1249,7 @@ spec:
 				Version   string
 			}{source.Component, source.Version}
 
-			processedURI, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+			processedURI, err := processVendorTemplate("test-source", source.Source, tmplData)
 			require.NoError(t, err, "Template processing should succeed")
 
 			// Verify the expected URI format
@@ -1544,4 +1543,60 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 	assert.Equal(t, "2.0.0", pkgs[1].version)
 	assert.Contains(t, pkgs[1].uri, "ref=2.0.0")
 	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/2.0.0")
+}
+
+func TestValidateTagsAndComponents(t *testing.T) {
+	sources := []schema.AtmosVendorSource{
+		{Component: "vpc", Tags: []string{"network"}},
+		{Component: "eks", Tags: []string{"compute"}},
+	}
+
+	tests := []struct {
+		name      string
+		sources   []schema.AtmosVendorSource
+		component string
+		tags      []string
+		wantErr   error
+	}{
+		{
+			name:      "requested component is defined",
+			sources:   sources,
+			component: "vpc",
+			wantErr:   nil,
+		},
+		{
+			name:      "requested component is not defined",
+			sources:   sources,
+			component: "missing",
+			wantErr:   ErrComponentNotDefined,
+		},
+		{
+			name:    "tag matches at least one source",
+			sources: sources,
+			tags:    []string{"network"},
+			wantErr: nil,
+		},
+		{
+			name:    "no source matches the requested tags",
+			sources: sources,
+			tags:    []string{"nonexistent"},
+			wantErr: ErrNoComponentsWithTags,
+		},
+		{
+			name:    "duplicate component names are rejected",
+			sources: []schema.AtmosVendorSource{{Component: "dup"}, {Component: "dup"}},
+			wantErr: ErrDuplicateComponents,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTagsAndComponents(tt.sources, "vendor.yaml", tt.component, tt.tags)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }

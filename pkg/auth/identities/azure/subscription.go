@@ -114,6 +114,7 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		IsServicePrincipal: azureCreds.IsServicePrincipal, // Preserve auth type for MSAL cache format.
 		TokenFilePath:      azureCreds.TokenFilePath,      // Preserve token file path for OIDC.
 		FederatedToken:     azureCreds.FederatedToken,     // Preserve federated token for Azure CLI.
+		CloudEnvironment:   azureCreds.CloudEnvironment,   // Preserve cloud environment for MSAL cache.
 	}
 
 	// If location not specified in identity, use provider's location.
@@ -198,7 +199,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	// This ensures azuread and azapi providers can authenticate using Azure CLI credentials.
 	azureCreds, ok := params.Credentials.(*authTypes.AzureCredentials)
 	if ok {
-		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID); err != nil {
+		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID, azureCreds.CloudEnvironment); err != nil {
 			log.Debug("Failed to update Azure CLI files", "error", err)
 			// Non-fatal - continue with normal flow.
 		}

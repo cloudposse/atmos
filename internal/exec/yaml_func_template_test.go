@@ -391,7 +391,7 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 		assert.Contains(t, y, "stack_var: nonprod")
 	})
 
-	// Test template with atmos.Component() integration
+	// Test template with atmos.Component() integration.
 	t.Run("atmos.Component integration", func(t *testing.T) {
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-with-atmos-component",

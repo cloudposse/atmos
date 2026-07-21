@@ -193,6 +193,38 @@ func TestUninstallWithNoArgs(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestUninstallFromToolVersionsShowsToolSpec(t *testing.T) {
+	tempDir := t.TempDir()
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	require.NoError(t, SaveToolVersions(toolVersionsPath, &ToolVersions{
+		Tools: map[string][]string{"terraform": {"1.11.4", "1.10.0"}},
+	}))
+
+	installer := NewInstallerWithBinDir(tempDir)
+	binaryPath := installer.GetBinaryPath("hashicorp", "terraform", "1.11.4", "")
+	require.NoError(t, os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions))
+	require.NoError(t, os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions))
+
+	output := captureCleanTestOutput(t, func() {
+		require.NoError(t, uninstallFromToolVersions(toolVersionsPath, installer))
+	})
+	assert.Contains(t, output, "Uninstalled hashicorp/terraform@1.11.4")
+	assert.Contains(t, output, "Skipped hashicorp/terraform@1.10.0 (not installed)")
+}
+
+func TestUninstallSingleToolShowsToolSpec(t *testing.T) {
+	tempDir := t.TempDir()
+	installer := NewInstallerWithBinDir(tempDir)
+	binaryPath := installer.GetBinaryPath("hashicorp", "terraform", "1.11.4", "")
+	require.NoError(t, os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions))
+	require.NoError(t, os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions))
+
+	output := captureCleanTestOutput(t, func() {
+		require.NoError(t, uninstallSingleTool(installer, "hashicorp", "terraform", "1.11.4", true))
+	})
+	assert.Contains(t, output, "hashicorp/terraform@1.11.4 uninstalled")
+}
+
 func TestRunUninstallWithNoArgs(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -284,7 +316,7 @@ func TestRunUninstall(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
-			err := RunUninstall(tc.toolSpec) // might need to allow DI of installer
+			err := RunUninstall(tc.toolSpec, false) // might need to allow DI of installer
 			if tc.expectErr && err == nil {
 				t.Errorf("expected error but got nil")
 			}
@@ -333,7 +365,7 @@ func TestRunUninstall_InvalidToolSpecFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := RunUninstall(tt.toolSpec)
+			err := RunUninstall(tt.toolSpec, false)
 			// Empty toolSpec is handled differently - it triggers uninstall from tool-versions.
 			if tt.toolSpec == "" {
 				// This tests the no-args path which may succeed if no .tool-versions exists.

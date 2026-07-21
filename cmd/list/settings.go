@@ -7,13 +7,14 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
-	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var settingsParser *flags.StandardParser
@@ -28,6 +29,7 @@ type SettingsOptions struct {
 	Query            string
 	ProcessTemplates bool
 	ProcessFunctions bool
+	ErrorMode        string
 }
 
 // settingsCmd lists settings across stacks.
@@ -65,15 +67,16 @@ var settingsCmd = &cobra.Command{
 			Query:            v.GetString("query"),
 			ProcessTemplates: v.GetBool("process-templates"),
 			ProcessFunctions: v.GetBool("process-functions"),
+			ErrorMode:        v.GetString("error-mode"),
 		}
 
-		output, err := listSettingsWithOptions(cmd, v, opts, args)
+		output, collector, err := listSettingsWithOptions(cmd, v, opts, args)
 		if err != nil {
 			return err
 		}
+		defer printErrorModeSummary(opts.ErrorMode, collector)
 
-		utils.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 
@@ -84,6 +87,9 @@ func init() {
 		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+		flags.WithStringFlag("error-mode", "", "", "How to handle recoverable errors (e.g. a Terraform backend not yet provisioned): warn (degrade + summary, default), silent (degrade, no summary), or strict (fail immediately). Defaults to atmos.yaml's list.error_mode, or warn"),
+		flags.WithEnvVars("error-mode", "ATMOS_LIST_ERROR_MODE"),
+		flags.WithValidValues("error-mode", "strict", "warn", "silent"),
 	)
 
 	// Register flags
@@ -121,7 +127,11 @@ func displayNoSettingsFoundMessage(componentFilter string) {
 	}
 }
 
-func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsOptions, args []string) (string, error) {
+// listSettingsWithOptions returns the rendered output, the degradation.Collector used
+// during describe-stacks processing (nil unless opts.ErrorMode is "warn"/"silent"), and an
+// error. Callers should print the collector's summary (see printErrorModeSummary) only
+// after writing output, so the end-of-command warning appears after the data.
+func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsOptions, args []string) (string, *degradation.Collector, error) {
 	// Set default delimiter for CSV.
 	setDefaultCSVDelimiter(&opts.Delimiter, opts.Format)
 
@@ -130,19 +140,25 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	// Initialize CLI config and auth manager (honors --base-path, --config, --config-path, --profile).
 	atmosConfig, authManager, err := initConfigAndAuth(cmd, v)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Validate component exists if filter is specified.
 	if err := validateComponentFilter(&atmosConfig, componentFilter); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// list.error_mode, else "warn".
+	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
+
 	// Execute describe stacks.
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager)
+	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(&atmosConfig, "", nil, nil, nil, false,
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, false,
+		errOpts)
 	if err != nil {
-		return "", &listerrors.DescribeStacksError{Cause: err}
+		return "", nil, &listerrors.DescribeStacksError{Cause: err}
 	}
 
 	log.Debug("Filtering settings",
@@ -157,10 +173,10 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {
 			displayNoSettingsFoundMessage(componentFilter)
-			return "", nil
+			return "", collector, nil
 		}
-		return "", err
+		return "", nil, err
 	}
 
-	return output, nil
+	return output, collector, nil
 }

@@ -1,6 +1,8 @@
 package toolchain
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -60,18 +62,19 @@ var toolchainCmd = &cobra.Command{
 			atmosCfg = &schema.AtmosConfiguration{}
 		}
 
-		// Apply overrides for fields that were explicitly set via CLI flags or environment variables.
-		// This preserves important config like UseToolVersions, UseLockFile, and Registries
-		// from atmos.yaml that was already loaded in root.go Execute().
-		//
-		// We apply values from viper (which has precedence: flag > env > config > default)
-		// unconditionally because:
-		// 1. The config from root.go already has values from atmos.yaml
-		// 2. If viper returns a different value, it's because of a flag or env var override
-		// 3. If viper returns the same value, we're just setting it to itself (no-op)
-		atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
-		atmosCfg.Toolchain.InstallPath = v.GetString("toolchain.path")
-		atmosCfg.Toolchain.ToolsDir = v.GetString("toolchain.path")
+		// Only explicit command-line or environment overrides may replace the
+		// initialized configuration. Applying flag defaults here used to make
+		// `atmos toolchain` use .tools while automatic command dependencies used
+		// the XDG cache default, so the two paths could disagree about what was
+		// installed.
+		if _, envSet := os.LookupEnv("ATMOS_TOOL_VERSIONS"); envSet || cmd.Flags().Changed(flagToolVersions) {
+			atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
+		}
+		if _, envSet := os.LookupEnv("ATMOS_TOOLCHAIN_PATH"); envSet || cmd.Flags().Changed(flagToolchainPath) {
+			path := v.GetString("toolchain.path")
+			atmosCfg.Toolchain.InstallPath = path
+			atmosCfg.Toolchain.ToolsDir = path
+		}
 
 		// Update the toolchain package's config (no-op if we got it from there).
 		toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -90,7 +93,10 @@ func init() {
 		flags.WithStringFlag(flagGitHubToken, "", "", "GitHub token for authenticated requests"),
 		flags.WithStringFlag(flagToolVersions, "", ".tool-versions", "Path to tool-versions file"),
 		flags.WithStringFlag(flagToolchainPath, "", ".tools", "Directory to store installed tools"),
-		flags.WithEnvVars(flagGitHubToken, "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
+		// Prefer the Atmos Pro-brokered token, then ATMOS_GITHUB_TOKEN, then GITHUB_TOKEN.
+		// This matches the go-getter token injector and pkg/http GetGitHubTokenFromEnv so
+		// toolchain installs use the same token as every other GitHub-talking path.
+		flags.WithEnvVars(flagGitHubToken, "ATMOS_PRO_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
 		flags.WithEnvVars(flagToolVersions, "ATMOS_TOOL_VERSIONS"),
 		flags.WithEnvVars(flagToolchainPath, "ATMOS_TOOLCHAIN_PATH"),
 	)
@@ -115,7 +121,6 @@ func init() {
 	if err := v.BindPFlag("toolchain.path", toolchainCmd.PersistentFlags().Lookup(flagToolchainPath)); err != nil {
 		panic(err)
 	}
-
 	// Add all subcommands.
 	toolchainCmd.AddCommand(addCmd)
 	toolchainCmd.AddCommand(cleanCmd)

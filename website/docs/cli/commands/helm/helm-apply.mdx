@@ -1,0 +1,72 @@
+---
+title: atmos helm apply
+sidebar_label: apply
+sidebar_class_name: command
+id: apply
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Install or upgrade a Helm release (`helm upgrade --install`) for a component in
+  a stack, using values resolved from your stack configuration. With `--target`,
+  `apply` instead delivers the rendered manifests to a provision target such as a
+  Git deployment repository.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm apply <component> --stack <stack> [options]
+```
+
+Install or upgrade the release in the cluster:
+
+```shell
+atmos helm apply monitoring -s plat-ue2-dev
+```
+
+Deliver rendered manifests to a provision target instead of the cluster:
+
+```shell
+atmos helm apply monitoring -s plat-ue2-dev --target deployment-repo
+```
+
+Apply all or affected Helm components in dependency order:
+
+```shell
+atmos helm apply --all -s plat-ue2-dev
+atmos helm apply --affected --base origin/main
+```
+
+Apply components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos helm apply --all --tags production,tier-1
+atmos helm apply --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>Provision target to deliver to (e.g. a Git deployment repository). Defaults to `provision.default`, otherwise the cluster.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Apply all Helm components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Apply affected Helm components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Helm components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>

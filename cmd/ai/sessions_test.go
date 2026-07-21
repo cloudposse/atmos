@@ -3,6 +3,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -943,7 +944,7 @@ func TestParseDuration_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestSessionsCommand_CobraIntegration(t *testing.T) {
+func TestSessionsCommand_CobraServer(t *testing.T) {
 	t.Run("list command can be found by name", func(t *testing.T) {
 		found := false
 		for _, cmd := range sessionsCmd.Commands() {
@@ -1542,7 +1543,7 @@ func TestSessionsCommand_UnsupportedFormat(t *testing.T) {
 	})
 }
 
-func TestCheckpointCreation_Integration(t *testing.T) {
+func TestCheckpointCreation_Server(t *testing.T) {
 	// Test creating and validating a checkpoint file with various content.
 	tempDir := t.TempDir()
 
@@ -2398,8 +2399,8 @@ func TestImportSessionCommand_FlagDefaults(t *testing.T) {
 	})
 }
 
-// TestSessionsIntegration tests the session commands with a proper test fixture that has AI enabled.
-func TestSessionsIntegration(t *testing.T) {
+// TestSessionsServer tests the session commands with a proper test fixture that has AI enabled.
+func TestSessionsServer(t *testing.T) {
 	// Get the absolute path to the test fixture.
 	fixtureDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-describe-affected-with-dependents-and-locked"))
 	require.NoError(t, err)
@@ -2577,6 +2578,45 @@ ai:
 			assert.NotContains(t, err.Error(), "AI features are not enabled")
 			assert.NotContains(t, err.Error(), "sessions are not enabled")
 		}
+	})
+
+	t.Run("cleanSessionsCommand deletes old sessions and reports the count", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+		// The shared atmos.yaml above doesn't set stacks.included_paths. The
+		// sibling subtests tolerate any error other than the AI/sessions
+		// disabled messages, so they never noticed; this subtest asserts
+		// require.NoError, so supply the required env var explicitly.
+		t.Setenv("ATMOS_STACKS_INCLUDED_PATHS", "**/*")
+
+		// Seed the session store with a session old enough to be swept by a
+		// 30-day retention window, so CleanOldSessions returns count > 0 and
+		// exercises the "Deleted N session(s)" branch (as opposed to the
+		// "No sessions to clean" branch covered by the sibling subtest above).
+		storagePath := filepath.Join(tempDir, ".atmos", "sessions", "sessions.db")
+		storage, err := session.NewSQLiteStorage(storagePath)
+		require.NoError(t, err)
+
+		oldTime := time.Now().AddDate(0, 0, -40)
+		require.NoError(t, storage.CreateSession(context.Background(), &session.Session{
+			ID:          "old-session-for-clean-count-test",
+			Name:        "old",
+			ProjectPath: tempDir,
+			Model:       "gpt-4",
+			Provider:    "openai",
+			CreatedAt:   oldTime,
+			UpdatedAt:   oldTime,
+		}))
+		require.NoError(t, storage.Close())
+
+		testCmd := &cobra.Command{
+			Use:  "clean",
+			RunE: cleanSessionsCommand,
+		}
+		testCmd.Flags().String("older-than", "30d", "Duration")
+
+		err = cleanSessionsCommand(testCmd, []string{})
+		require.NoError(t, err, "cleanSessionsCommand should succeed once the 40-day-old session is deleted")
 	})
 
 	t.Run("cleanSessionsCommand with various duration formats", func(t *testing.T) {
@@ -3824,9 +3864,9 @@ ai:
 	})
 }
 
-// TestSessionsCommand_StandardParserIntegration tests that session subcommands use StandardParser
+// TestSessionsCommand_StandardParserServer tests that session subcommands use StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestSessionsCommand_StandardParserIntegration(t *testing.T) {
+func TestSessionsCommand_StandardParserServer(t *testing.T) {
 	t.Run("parsers are initialized", func(t *testing.T) {
 		require.NotNil(t, cleanParser, "cleanParser should be initialized by init()")
 		require.NotNil(t, exportParser, "exportParser should be initialized by init()")

@@ -25,6 +25,7 @@ tests:
     preconditions:
       - "github_token"
     expect:
+      timeout: "5m"
       file_exists:
         - "./components/terraform/github/stargazers/main/main.tf"
         - "./components/terraform/github/stargazers/main/outputs.tf"
@@ -59,6 +60,7 @@ tests:
     preconditions:
       - "github_token"
     expect:
+      timeout: "5m"
       file_exists:
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
         - "./components/terraform/myapp1/main.tf"

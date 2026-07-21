@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: chat
 description: Start an interactive AI chat session with the Atmos AI assistant
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -26,7 +26,7 @@ Use this command to start an interactive chat session with the Atmos AI assistan
     </div>
 </ActionCard>
 
-<Screengrab title="atmos ai chat --help" slug="atmos-ai-chat--help" />
+<CastPlayer title="atmos ai chat --help" src="/casts/screengrabs/atmos-ai-chat--help.cast" static chrome />
 
 ## Description
 
@@ -50,7 +50,14 @@ atmos ai chat [flags]
 <dl>
   <dt>`--session <name>`</dt>
   <dd>Start or resume a named session. If the session doesn't exist, it will be created. If it exists, the conversation history will be loaded.</dd>
+
+  <dt>`--mcp <servers>`</dt>
+  <dd>MCP servers to use (comma-separated). Starts only the specified servers instead of all configured servers. Can be repeated: `--mcp aws-iam --mcp aws-billing`. Use [`atmos mcp list`](/cli/commands/mcp/list) to see available server names. Environment variable: `ATMOS_AI_MCP`</dd>
 </dl>
+
+:::tip MCP in Chat Mode
+In chat mode, automatic server routing is skipped because the question isn't known when servers start. Use `--mcp` to select specific servers, or all configured servers will be started.
+:::
 
 ### Examples
 
@@ -63,6 +70,10 @@ atmos ai chat --session vpc-refactor
 
 # Resume existing session
 atmos ai chat --session my-session
+
+# Start with specific MCP servers
+atmos ai chat --mcp aws-billing
+atmos ai chat --mcp aws-iam,aws-security
 ```
 
 ## Examples

@@ -1,0 +1,131 @@
+name: landing-demos
+# Render the landing-page demos (demo/landing/*.tape) with VHS against real local
+# cloud emulators, then publish the rendered videos to S3/CDN. The binaries are
+# NEVER committed — they are uploaded as a workflow artifact and (when the demo
+# bucket is configured) synced to S3. The site references the remote URL.
+#
+# Manual / label-gated only: this spins up emulators and pulls charts, so it should
+# not run on every push. The same entrypoint runs locally: `cd demo/landing &&
+# atmos demo record all` — local = CI.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  id-token: write # for AWS OIDC (S3 publish)
+
+jobs:
+  render:
+    # Only on manual dispatch or when the PR carries the `landing-demos` label.
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'landing-demos'
+    runs-on: ubuntu-latest
+    env:
+      ATMOS_BOOTSTRAP_VERSION: "1.223.0"
+      TERM: xterm-256color
+      COLORTERM: truecolor
+      LANG: en_US.UTF-8
+      ATMOS_PAGER: "false"
+      ATMOS_DIAGNOSTICS_FILE: ${{ github.workspace }}/diag/atmos-events.jsonl
+      ATMOS_DIAGNOSTICS_LEVEL: debug
+      ATMOS_DIAGNOSTICS_SINK: file
+      ATMOS_DIAGNOSTICS_OUTPUT: "true"
+      # Container runtime for the emulator-backed tapes (ubuntu runners have Docker).
+      ATMOS_CONTAINER_RUNTIME: docker
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
+      # Build atmos from THIS branch — the emulator commands the tapes use are not
+      # in any published release yet.
+      - name: Build atmos
+        run: |
+          sh scripts/build-atmos.sh default test
+          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+
+      # Fonts only. Most CLI tooling comes from the Atmos toolchain: `atmos demo record`
+      # auto-installs vhs/ffmpeg from the command's `dependencies.tools` (pinned in
+      # demo/landing/atmos.yaml), and the Kubernetes tape's helm/helmfile/kubectl are
+      # auto-installed by `atmos helmfile` from the landing fixture's component dependencies.
+      # Fonts are the one thing the toolchain can't provide (aqua ships binaries, not fonts).
+      - name: Install Nerd Font
+        run: |
+          set -euo pipefail
+          # FiraCode Nerd Font (matches demo/landing/defaults.tape) — pinned.
+          NERD_FONTS_VERSION=v3.4.0
+          mkdir -p ~/.local/share/fonts
+          curl -fsSL -o /tmp/FiraCode.zip \
+            "https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONTS_VERSION}/FiraCode.zip"
+          unzip -o /tmp/FiraCode.zip -d ~/.local/share/fonts >/dev/null
+          fc-cache -f
+
+      # VHS needs ttyd at runtime. The aqua package is Linux/Windows only, so it is not
+      # a command dependency (that would fail before the recorder can use the system
+      # Homebrew ttyd on macOS). CI is Linux, so install it explicitly here.
+      - name: Install ttyd via Atmos toolchain
+        working-directory: demo/landing
+        run: |
+          atmos toolchain install tsl0922/ttyd
+          atmos toolchain env --format=github
+
+      # The tapes run `atmos terraform …` against the emulators, so install the
+      # toolchain-pinned terraform up front. Unlike `atmos helmfile` (which auto-installs
+      # helm/helmfile) and `atmos demo record` (vhs/ffmpeg), `atmos terraform`
+      # expects terraform already on PATH — without it, `atmos terraform init` in dx.tape
+      # HANGS forever under VHS's interactive TTY (it fast-fails "executable not found"
+      # non-interactively), so the demos never render.
+      - name: Install Terraform via Atmos toolchain
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
+
+      - name: Prepare diagnostics dir
+        run: mkdir -p "${{ github.workspace }}/diag"
+
+      - name: Record all demos
+        working-directory: demo/landing
+        run: atmos demo record all
+
+      - name: Upload diagnostics as an artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: landing-demos-diagnostics
+          path: diag/
+          if-no-files-found: warn
+
+      # Always make the renders downloadable, even before S3 is wired up.
+      - name: Upload renders as an artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: landing-demos
+          path: website/static/img/demos/
+          if-no-files-found: error
+
+      # Publish the rendered demos to the same origin bucket the docs site is served
+      # from, under the /img/demos path the site references (website/static/img/demos/
+      # → /img/demos/). Reuses the existing prod docs OIDC role — no separate bucket,
+      # role, or secret. Runs whenever the job runs, i.e. on the `landing-demos` PR label
+      # AND on manual dispatch (see the job-level `if`). The site deploy excludes
+      # img/demos/* from its --delete sync, so the videos published here survive
+      # subsequent website deploys.
+      #
+      # AWS auth is handled by Atmos, not aws-actions/configure-aws-credentials: the
+      # `demo publish` command declares `identity: docs/publish` (a github/oidc →
+      # aws/assume-role identity in demo/landing/atmos.yaml). Atmos assumes the role and
+      # injects the credentials into the publish step — no separate credentials step.
+      - name: Publish demos to S3
+        working-directory: demo/landing
+        run: atmos demo publish

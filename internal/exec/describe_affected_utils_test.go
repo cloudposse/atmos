@@ -893,6 +893,9 @@ func TestExecuteDescribeAffected(t *testing.T) {
 				tc.processYamlFunctions,
 				tc.skip,
 				false,
+				nil,
+				false,
+				DescribeStacksErrorOptions{},
 			)
 
 			if tc.expectedErr != "" {
@@ -1234,6 +1237,9 @@ func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 			false,
 			nil,
 			false,
+			nil,
+			false,
+			DescribeStacksErrorOptions{},
 		)
 
 		assert.Error(t, err)
@@ -1270,6 +1276,9 @@ func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 			false,
 			nil,
 			false,
+			nil,
+			false,
+			DescribeStacksErrorOptions{},
 		)
 
 		assert.Error(t, err)

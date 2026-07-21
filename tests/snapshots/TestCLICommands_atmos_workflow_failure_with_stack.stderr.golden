@@ -1,22 +1,18 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-ℹ Executing command: atmos terraform plan idontexist
+▶ Executing command: atmos terraform plan idontexist
+
 # Error
 
 **Error:** invalid component
 
-## Explanation
+Could not find the component idontexist in the stack prod. Check that all the context variables are correctly defined in
+the stack manifests. Are the component and stack names correct? Did you forget an import?
 
-Could not find the component idontexist in the stack prod. Check that all the
-context variables are correctly defined in the stack manifests. Are the
-component and stack names correct? Did you forget an import?
 # Workflow Error
 
-**Error:** workflow step execution failed: max attempts (1) exceeded, last
-error: subcommand exited with code 1
+**Error:** workflow step execution failed: max attempts (1) exceeded, last error: subcommand exited with code 1
 
-## Hints
-
-💡 The following command failed to execute:
+The following command failed to execute:
 
  atmos terraform plan idontexist -s 'prod'
 

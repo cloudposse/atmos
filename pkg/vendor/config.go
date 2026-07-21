@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -164,7 +165,7 @@ func processVendorImports(
 ) ([]schema.AtmosVendorSource, []string, error) {
 	var mergedSources []schema.AtmosVendorSource
 	for _, imp := range imports {
-		if u.SliceContainsString(allImports, imp) {
+		if slices.Contains(allImports, imp) {
 			return nil, nil, fmt.Errorf("%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
 				ErrDuplicateImport,
 				imp,
@@ -179,7 +180,7 @@ func processVendorImports(
 			return nil, nil, err
 		}
 
-		if u.SliceContainsString(vendorResult.Config.Spec.Imports, imp) {
+		if slices.Contains(vendorResult.Config.Spec.Imports, imp) {
 			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
 		}
 
@@ -261,7 +262,7 @@ func validateTagsAndComponents(
 			ErrDuplicateComponents, duplicates, vendorConfigFileName)
 	}
 
-	if component != "" && !u.SliceContainsString(components, component) {
+	if component != "" && !slices.Contains(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
 			ErrComponentNotDefined, component, vendorConfigFileName)
 	}

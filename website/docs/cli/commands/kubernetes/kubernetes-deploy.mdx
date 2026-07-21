@@ -1,0 +1,140 @@
+---
+title: atmos kubernetes deploy
+sidebar_label: deploy
+sidebar_class_name: command
+id: deploy
+description: Deploy a stack-configured Kubernetes component to the target cluster (workflow-friendly alias for apply).
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+  Run a Kubernetes deployment using Atmos language. `deploy` is the
+  workflow-friendly alias for applying a stack-configured Kubernetes component,
+  useful when your automation treats Kubernetes resources as deployable
+  services.
+</Intro>
+
+<CastPlayer title="atmos kubernetes deploy --help" src="/casts/screengrabs/atmos-kubernetes-deploy--help.cast" static chrome />
+
+<ActionCard title="Configure Kubernetes Components">
+  `deploy` uses the same stack and `atmos.yaml` settings as `apply`, including
+  manifest paths, variables, credentials, hooks, and dependency ordering.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+    <PrimaryCTA to="/cli/configuration/components/kubernetes">
+      atmos.yaml Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes deploy <component> --stack <stack>
+atmos kubernetes deploy --affected --base origin/main --include-dependents
+```
+
+In v1, `deploy` is an alias of
+[`atmos kubernetes apply`](/cli/commands/kubernetes/apply). It renders the final
+manifests and applies them through the Kubernetes Go SDK using server-side
+apply.
+
+Use `deploy` when you want command language that matches an application deployment workflow. Use `apply` when you want command language that mirrors Kubernetes API behavior.
+
+## Example
+
+```shell
+atmos kubernetes deploy argocd -s plat-ue2-dev
+```
+
+Deploy components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos kubernetes deploy --all --tags production,tier-1
+atmos kubernetes deploy --affected --labels cost-center=platform
+```
+
+## Deployment repositories (GitOps)
+
+By default `deploy`/`apply` applies the rendered manifests to the cluster. A
+component can instead publish them to a Git deployment repository (the
+source-of-truth that Argo CD or Flux reconciles) by declaring delivery targets
+under `provision.targets`:
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments        # references git.repositories.<name>
+            path: "clusters/{{ .vars.cluster }}/argocd"
+            commit:
+              message: "Render {{ .vars.app_name }} for {{ .vars.stage }}"
+```
+
+Selecting the git target renders the manifests once and commits them to the
+configured repository instead of applying to the cluster:
+
+```shell
+atmos kubernetes deploy argocd -s plat-ue2-dev --target=deployment-repo
+```
+
+When `--target` is omitted, `provision.default` is used, otherwise the cluster.
+Credentials for cloning and pushing come from Atmos Auth (GitHub STS), so no
+tokens are stored in the manifests.
+
+## Flags
+
+<dl>
+  <dt>
+    `--stack`, `-s` <em>(optional)</em>
+  </dt>
+  <dd>Atmos stack. Required when deploying a named component; not required with `--affected`.</dd>
+
+<dt>
+  `--target` <em>(optional)</em>
+</dt>
+<dd>
+  Provision target to deliver to (a named `provision.targets` entry, e.g. a git
+  deployment repository). Defaults to `provision.default`, otherwise the cluster.
+</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Deploy all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Deploy affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+
+<dt>
+  `--tags` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>
+  `--labels` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
+</dl>

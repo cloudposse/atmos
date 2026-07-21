@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,6 +110,24 @@ components:
 			}
 		})
 	}
+}
+
+func TestLoadConfig_YAMLKeyDelimiterFromAtmosYAML(t *testing.T) {
+	tempDir, cleanup := setupTestFiles(t)
+	defer cleanup()
+
+	configPath := createTestConfig(t, tempDir, `
+settings:
+  yaml:
+    key_delimiter: "."
+`)
+
+	config, err := LoadConfig(&schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, ".", config.Settings.YAML.KeyDelimiter)
 }
 
 func TestLoadConfigFromDifferentSources(t *testing.T) {
@@ -614,7 +633,7 @@ components: {
 			v.SetConfigFile(configPath)
 
 			// Call the function - should return error on malformed YAML
-			err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent))
+			_, err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent))
 
 			// Assert that an error was returned
 			assert.Error(t, err, tt.description)
@@ -1712,8 +1731,53 @@ func TestParseProfilesFromOsArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromOsArgs(tt.args)
+			result := ParseProfilesFromOsArgs(tt.args)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestParseProfilesFromOsArgs_HelpFlagIsSilent is a regression guard:
+// ParseProfilesFromOsArgs creates a temporary pflag.FlagSet that pflag would,
+// by default, print a "Usage of profile-parser:" block from to stderr whenever
+// args contain --help or -h. Because LoadConfig runs more than once during a
+// command's lifecycle (Execute + PersistentPreRun), this caused 2–4 duplicate
+// "Usage of profile-parser:" blocks to leak into the stderr of any
+// `atmos … --help` invocation. The fix is `fs.Usage = func() {}` in
+// ParseProfilesFromOsArgs; this test makes sure nobody removes it.
+func TestParseProfilesFromOsArgs_HelpFlagIsSilent(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "long --help", args: []string{"atmos", "auth", "validate", "--help"}},
+		{name: "short -h", args: []string{"atmos", "auth", "validate", "-h"}},
+		{name: "help with profile", args: []string{"atmos", "--profile=dev", "auth", "validate", "--help"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Redirect stderr so we can assert pflag wrote nothing to it.
+			origStderr := os.Stderr
+			r, w, err := os.Pipe()
+			require.NoError(t, err)
+			os.Stderr = w
+			t.Cleanup(func() { os.Stderr = origStderr })
+
+			// Run in a goroutine so a full pipe buffer can't deadlock the test.
+			done := make(chan struct{})
+			var captured []byte
+			go func() {
+				defer close(done)
+				captured, _ = io.ReadAll(r)
+			}()
+
+			_ = ParseProfilesFromOsArgs(tc.args)
+			require.NoError(t, w.Close())
+			<-done
+
+			assert.NotContains(t, string(captured), "Usage of profile-parser:",
+				"ParseProfilesFromOsArgs must not leak its temp FlagSet's usage block to stderr when --help is in args")
 		})
 	}
 }
@@ -1819,8 +1883,21 @@ func TestParseProfilesFromEnvString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromEnvString(tt.envValue)
+			result := ParseProfilesFromEnvString(tt.envValue)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestAutoProvisionWorkdirForOutputsEnvVarBinding(t *testing.T) {
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS", "false")
+	tempDir := t.TempDir()
+	configPath := createTestConfig(t, tempDir, "base_path: .")
+	configInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+	cfg, err := LoadConfig(configInfo)
+	require.NoError(t, err)
+	assert.False(t, cfg.Components.Terraform.AutoProvisionWorkdirForOutputs,
+		"ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS=false should override default true")
 }

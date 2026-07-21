@@ -1,0 +1,64 @@
+commands:
+  - name: casts generate examples workflow-retries retry-failure
+    description: Regenerate the Workflow Retries example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: retry-failure
+        working_directory: "../../.context/cast-fixtures/workflow-retries"
+        title: "Workflow Retries: retry a failing step before surfacing the error"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/workflow-retries/retry-failure.cast"
+        steps:
+          - type: simulate
+            text: "# the step retries before the workflow reports failure"
+          - type: simulate
+            text: &retry_cmd atmos workflow retry-demo -f retries || true
+          - type: shell
+            name: retry-demo
+            duration: 450ms
+            interval: 750ms
+            command: *retry_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples workflow-retries retry-failure
+  - name: casts validate examples workflow-retries retry-failure
+    description: Validate the Workflow Retries example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/workflow-retries/retry-failure.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          attempts = [line for line in plain.splitlines() if line.strip() == "Attempting deployment..."]
+          if len(attempts) != 3:
+              raise SystemExit("workflow-retries cast should show exactly three attempts")
+          for needle in [
+              "atmos workflow retry-demo -f retries || true",
+              "Workflow Error",
+              "max attempts (3) exceeded",
+              "resume",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"workflow-retries cast missing {needle!r}")
+          for bad in ["Incorrect Usage", "unknown flag", "panic", "[retry-demo]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"workflow-retries cast contains {bad!r}")
+          assert_no_local_paths(text)

@@ -1,30 +1,25 @@
 package exec
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
-	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const commandStr = "command"
-
-// affectedDepOrderParams holds parameters for executing an affected component in dependency order.
-type affectedDepOrderParams struct {
-	AffectedComponent string
-	AffectedStack     string
-	ParentComponent   string
-	ParentStack       string
-	Dependents        []schema.Dependent
-}
 
 // shouldProcessStacks determines whether to process stacks and check stack configuration.
 // Based on the command type and provided arguments.
@@ -95,6 +90,50 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	}
 }
 
+// isTerraformCurrentWorkspace reports whether the given workspace name matches the workspace
+// recorded in the .terraform/environment file inside componentPath.
+// This is used to detect the edge case where the environment file already names the target
+// workspace but the corresponding state directory was deleted (e.g. by a previous test or a
+// partial cleanup on Windows).  In that scenario `terraform workspace new <name>` returns exit
+// code 1 even though we are already in the right workspace, so we should not treat the failure
+// as a fatal error.
+//
+// TF_DATA_DIR resolution: the envList parameter carries the subprocess env vars (typically
+// info.ComponentEnvList).  If TF_DATA_DIR is set there, it takes precedence over the parent
+// process env, ensuring this helper reads the same data directory that the terraform subprocess
+// would use.  A relative TF_DATA_DIR is joined to componentPath, matching Terraform's own
+// resolution relative to the process working directory.
+func isTerraformCurrentWorkspace(componentPath, workspace string, envList []string) bool {
+	tfDataDir := envVarFromList(envList, "TF_DATA_DIR")
+	if tfDataDir == "" {
+		//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos config var.
+		tfDataDir = os.Getenv("TF_DATA_DIR")
+	}
+	if tfDataDir == "" {
+		tfDataDir = ".terraform"
+	}
+	if !filepath.IsAbs(tfDataDir) {
+		tfDataDir = filepath.Join(componentPath, tfDataDir)
+	}
+	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
+	data, err := os.ReadFile(envFile) //nolint:gosec // Path is constructed from componentPath + TF_DATA_DIR, not user input.
+	if err != nil {
+		// Only treat a missing file as "default workspace active".
+		// Other errors (permission denied, I/O error) are not equivalent
+		// to the workspace being "default" and must return false.
+		if errors.Is(err, os.ErrNotExist) && workspace == "default" {
+			return true
+		}
+		return false
+	}
+	// An empty file also indicates the default workspace.
+	recorded := strings.TrimSpace(string(data))
+	if recorded == "" {
+		return workspace == "default"
+	}
+	return recorded == workspace
+}
+
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Auto-generate backend file
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
@@ -119,7 +158,16 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 }
 
 func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	// Let registered provider-config contributors (e.g. an emulator binding) deep-merge
+	// provider fragments UNDER the explicit `providers:` section before generation.
+	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
+	if merged, err := generator.ApplyProviderContributors(context.Background(), genCtx); err != nil {
+		return err
+	} else if merged != nil {
+		info.ComponentProvidersSection = merged
+	}
+
+	// Generate `providers_override.tf.json` file if the `providers` section is configured.
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
@@ -132,6 +180,31 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		}
 	}
 	return nil
+}
+
+// generateRequiredProviders generates the terraform_override.tf.json file with required_version
+// and required_providers blocks from stack configuration (DEV-3124).
+func generateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	defer perf.Track(atmosConfig, "exec.generateRequiredProviders")()
+
+	// Skip if no required_version or required_providers configured.
+	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
+		return nil
+	}
+
+	requiredProvidersFileName := filepath.Join(workingDir, required_providers.DefaultFilenameConst)
+
+	log.Debug("Writing the required_providers to file.", "file", requiredProvidersFileName)
+
+	if info.DryRun {
+		return nil
+	}
+
+	// Create generator context.
+	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
+
+	// Generate and write using the generator package.
+	return generator.Generate(context.Background(), required_providers.Name, genCtx, generator.NewFileWriter())
 }
 
 // needProcessTemplatesAndYamlFunctions checks if a Terraform command requires the `Go` templates and Atmos YAML functions to be processed.
@@ -162,7 +235,7 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"state rm",
 		"state show",
 	}
-	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
+	return slices.Contains(commandsThatNeedFuncProcessing, command)
 }
 
 // isWorkspacesEnabled checks if Terraform workspaces are enabled for a component.
@@ -226,130 +299,81 @@ func walkTerraformComponents(
 	return nil
 }
 
-// processTerraformComponent performs filtering and execution logic for a single Terraform component.
-// Returns true if the component was processed (passed all filters), false otherwise.
-func processTerraformComponent(
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	stackName, componentName string,
-	componentSection map[string]any,
-	logFunc func(msg any, keyvals ...any),
-) (bool, error) {
-	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
-	if !ok {
-		return false, nil
+// ComponentStack identifies a concrete terraform component in a stack.
+type ComponentStack struct {
+	Component string
+	Stack     string
+}
+
+// ListTerraformComponentTargets returns the concrete, enabled terraform components
+// to act on, filtered by stack, an explicit component list, and an optional YQ query.
+// Order is unspecified — it suits order-independent operations like cache mirroring
+// (which, unlike plan/apply, has no inter-component dependencies). Auth and YAML
+// functions are disabled: only structural component selection is needed.
+func ListTerraformComponentTargets(atmosConfig *schema.AtmosConfiguration, filterStack string, components []string, query string) ([]ComponentStack, error) {
+	defer perf.Track(atmosConfig, "exec.ListTerraformComponentTargets")()
+
+	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+		atmosConfig, filterStack, components, []string{cfg.TerraformComponentType},
+		nil, false, false, false, false, nil, nil, true,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	// Skip abstract components.
-	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-		return false, nil
-	}
-
-	// Skip disabled components.
-	if !isComponentEnabled(metadataSection, componentName) {
-		return false, nil
-	}
-
-	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
-
-	if info.Query != "" {
-		queryResult, err := u.EvaluateYqExpression(atmosConfig, componentSection, info.Query)
+	var targets []ComponentStack
+	walkErr := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		include, err := mirrorTargetIncluded(atmosConfig, componentName, componentSection, query)
 		if err != nil {
-			return false, err
+			return err
 		}
+		if include {
+			targets = append(targets, ComponentStack{Component: componentName, Stack: stackName})
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
 
-		if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
-			logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
+	// targets are built from map iteration, whose order varies across processes. Sort
+	// them so mirror execution order and --format json|yaml output are deterministic
+	// (and snapshot-stable).
+	sortComponentStacks(targets)
+
+	return targets, nil
+}
+
+// sortComponentStacks orders targets deterministically by stack, then component.
+func sortComponentStacks(targets []ComponentStack) {
+	sort.Slice(targets, func(i, j int) bool {
+		if targets[i].Stack != targets[j].Stack {
+			return targets[i].Stack < targets[j].Stack
+		}
+		return targets[i].Component < targets[j].Component
+	})
+}
+
+// mirrorTargetIncluded reports whether a component should be a mirror target: it must
+// be concrete (not abstract), enabled, and match the optional YQ query.
+func mirrorTargetIncluded(atmosConfig *schema.AtmosConfiguration, componentName string, componentSection map[string]any, query string) (bool, error) {
+	if metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
+		if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+			return false, nil
+		}
+		if !isComponentEnabled(metadataSection, componentName) {
 			return false, nil
 		}
 	}
-
-	logFunc("Executing", commandStr, command)
-
-	// Show user-facing progress for dry-run mode.
-	if info.DryRun {
-		ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, componentName, stackName)
+	if query == "" {
 		return true, nil
 	}
-
-	info.Component = componentName
-	info.ComponentFromArg = componentName
-	info.Stack = stackName
-	info.StackFromArg = stackName
-
-	if err := ExecuteTerraform(*info); err != nil {
-		return true, err
+	queryResult, err := u.EvaluateYqExpression(atmosConfig, componentSection, query)
+	if err != nil {
+		return false, err
 	}
-
-	return true, nil
-}
-
-// logFuncForDryRun returns log.Info for dry-run mode, log.Debug otherwise.
-func logFuncForDryRun(dryRun bool) func(msg any, keyvals ...any) {
-	if dryRun {
-		return log.Info
-	}
-	return log.Debug
-}
-
-// shouldProcessDependent checks if a dependent should be processed.
-func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affected, includeDependents bool) bool {
-	if dep.IncludedInDependents {
-		return false
-	}
-	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
-}
-
-// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
-func executeTerraformAffectedComponentInDepOrder(
-	info *schema.ConfigAndStacksInfo,
-	affectedList []schema.Affected,
-	params *affectedDepOrderParams,
-	args *DescribeAffectedCmdArgs,
-) error {
-	logFunc := logFuncForDryRun(info.DryRun)
-
-	info.Component = params.AffectedComponent
-	info.ComponentFromArg = params.AffectedComponent
-	info.Stack = params.AffectedStack
-
-	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, params.AffectedComponent, params.AffectedStack)
-
-	if args.IncludeDependents && params.ParentComponent != "" && params.ParentStack != "" {
-		logFunc("Executing", commandStr, command, "dependency of component", params.ParentComponent, "in stack", params.ParentStack)
-	} else {
-		logFunc("Executing", commandStr, command)
-	}
-
-	if !info.DryRun {
-		if err := ExecuteTerraform(*info); err != nil {
-			return err
-		}
-	}
-
-	for i := 0; i < len(params.Dependents); i++ {
-		dep := &params.Dependents[i]
-		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
-			continue
-		}
-		err := executeTerraformAffectedComponentInDepOrder(
-			info,
-			affectedList,
-			&affectedDepOrderParams{
-				AffectedComponent: dep.Component,
-				AffectedStack:     dep.Stack,
-				ParentComponent:   params.AffectedComponent,
-				ParentStack:       params.AffectedStack,
-				Dependents:        dep.Dependents,
-			},
-			args,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	passed, ok := queryResult.(bool)
+	return ok && passed, nil
 }
 
 // parseUploadStatusFlag parses the upload status flag from the arguments.
@@ -359,7 +383,7 @@ func parseUploadStatusFlag(args []string, flagName string) bool {
 	flagPrefix := "--" + flagName + "="
 
 	// Check for --flag (without value, defaults to true).
-	if u.SliceContainsString(args, "--"+flagName) {
+	if slices.Contains(args, "--"+flagName) {
 		return true
 	}
 

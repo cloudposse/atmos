@@ -12,8 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-
-	"github.com/cloudposse/atmos/internal/exec"
 )
 
 // Pull vendors dependencies based on options.
@@ -183,12 +181,12 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		}{params.sources[indexSource].Component, params.sources[indexSource].Version}
 
 		// Parse 'source' template.
-		uri, err := exec.ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
+		uri, err := processVendorTemplate(fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData)
 		if err != nil {
 			return nil, err
 		}
 		// Normalize the URI to handle triple-slash pattern (///).
-		uri = normalizeVendorURI(uri)
+		uri = NormalizeURI(uri)
 
 		srcType, err := determineSourceType(&uri, params.vendorConfigFilePath)
 		if err != nil {
@@ -245,7 +243,7 @@ func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 		}
 
 		// Template-expand the target path.
-		target, err := exec.ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt.Path, tmplData, false)
+		target, err := processVendorTemplate(fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt.Path, tmplData)
 		if err != nil {
 			return nil, err
 		}
@@ -277,17 +275,15 @@ func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt sc
 	}
 
 	// Re-template the source URL with the target-specific version.
-	effectiveURI, err := exec.ProcessTmpl(
-		params.AtmosConfig,
+	effectiveURI, err := processVendorTemplate(
 		fmt.Sprintf("source-%d-target-%d", params.IndexSource, indexTarget),
 		params.SourceTemplate,
 		tmplData,
-		false,
 	)
 	if err != nil {
 		return nil, err
 	}
-	effectiveURI = normalizeVendorURI(effectiveURI)
+	effectiveURI = NormalizeURI(effectiveURI)
 
 	// Recompute source classification from the re-resolved URI, since per-target version
 	// overrides may produce a URI with a different scheme or locality than the source-level URI.

@@ -44,7 +44,10 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},
@@ -74,18 +77,22 @@ func newWorkspacePassthroughSubcommand(name, short string) *cobra.Command {
 		Use:                name + " [component] -s [stack]",
 		Short:              short,
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(leaf *cobra.Command, args []string) error {
 			v := viper.GetViper()
 
-			// Bind flags using workspaceCmd to read persistent flags.
-			if err := terraformParser.BindFlagsToViper(workspaceCmd, v); err != nil {
+			// Cobra parses inherited flags on this leaf command. Bind from it so
+			// shared multi-component flags such as --all are retained.
+			if err := terraformParser.BindFlagsToViper(leaf, v); err != nil {
 				return err
 			}
-			if err := workspaceParser.BindFlagsToViper(workspaceCmd, v); err != nil {
+			if err := workspaceParser.BindFlagsToViper(leaf, v); err != nil {
 				return err
 			}
 
-			opts := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v)
+			if err != nil {
+				return err
+			}
 			argsForWorkspace := append([]string{name}, args...)
 			return terraformRunWithOptions(terraformCmd, workspaceCmd, argsForWorkspace, opts)
 		},

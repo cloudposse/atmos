@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -158,16 +160,29 @@ func newCommonListParser(additionalOptions ...flags.Option) *flags.StandardParse
 func getIdentityFromCommand(cmd *cobra.Command) string {
 	var value string
 
-	// Check if flag was explicitly set.
-	if cmd.Flags().Changed("identity") {
-		value, _ = cmd.Flags().GetString("identity")
-	} else {
-		// Fall back to environment variable via Viper.
-		value = viper.GetString("identity")
+	if flag := lookupChangedIdentityFlag(cmd); flag != nil {
+		value = flag.Value.String()
+		return normalizeIdentityValue(value)
 	}
 
-	// Normalize boolean false representations to disabled sentinel value.
+	// Fall back to environment variable via Viper.
+	value = viper.GetString(cfg.IdentityFlagName)
 	return normalizeIdentityValue(value)
+}
+
+func lookupChangedIdentityFlag(cmd *cobra.Command) *pflag.Flag {
+	for current := cmd; current != nil; current = current.Parent() {
+		for _, flagSet := range []*pflag.FlagSet{
+			current.Flags(),
+			current.InheritedFlags(),
+			current.PersistentFlags(),
+		} {
+			if flag := flagSet.Lookup(cfg.IdentityFlagName); flag != nil && flag.Changed {
+				return flag
+			}
+		}
+	}
+	return nil
 }
 
 // normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
@@ -179,16 +194,18 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
-// createAuthManagerForList creates an AuthManager for list commands.
-// It uses the identity from --identity flag or ATMOS_IDENTITY env var.
-// If no identity is specified, it loads stack configs for default identity.
-// Returns nil AuthManager if no auth is configured (which is valid for many use cases).
+// createAuthManagerForList creates an AuthManager only when list commands are
+// explicitly asked to authenticate. Inventory commands such as `list stacks`,
+// `list components`, and `list instances` can span many stacks; implicitly
+// resolving default identities for every stack makes discovery fail when one
+// unrelated emulator or external provider is offline.
 func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
+	if identityName == "" || identityName == cfg.IdentityFlagDisabledValue {
+		return nil, nil
+	}
 
-	// Create AuthManager with stack-level default identity loading.
-	// When identityName is empty, this loads stack configs for auth.identities.*.default: true.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
@@ -199,6 +216,41 @@ func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfi
 	}
 
 	return authManager, nil
+}
+
+func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
+	if authManager != nil {
+		return skip
+	}
+
+	merged := append([]string{}, skip...)
+	for _, functionName := range []string{
+		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncSecret,
+		u.AtmosYamlFuncAwsAccountID,
+		u.AtmosYamlFuncAwsCallerIdentityArn,
+		u.AtmosYamlFuncAwsCallerIdentityUserID,
+		u.AtmosYamlFuncAwsRegion,
+		u.AtmosYamlFuncAwsOrganizationID,
+	} {
+		name := strings.TrimPrefix(functionName, "!")
+		if !containsString(merged, name) {
+			merged = append(merged, name)
+		}
+	}
+	return merged
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // setDefaultCSVDelimiter sets the delimiter to comma if CSV format is used and delimiter is default TSV.
@@ -269,7 +321,7 @@ func renderWithPager(atmosConfig *schema.AtmosConfiguration, title string, r *re
 		}
 
 		// Try to use pager - it handles TTY detection and falls back to direct print.
-		pageCreator := pager.NewWithAtmosConfig(true)
+		pageCreator := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 		if err := pageCreator.Run(title, content); err != nil {
 			// Pager failed, fall back to direct render.
 			return r.Render(data)

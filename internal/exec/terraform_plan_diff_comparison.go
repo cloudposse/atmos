@@ -3,10 +3,9 @@ package exec
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // sortMapKeys recursively sorts map keys for consistent comparison.
@@ -444,7 +443,7 @@ func processPriorityAttributes(diff *strings.Builder, origAttrs, newAttrs map[st
 func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, skipAttrs map[string]bool) {
 	for attrK, origAttrV := range origAttrs {
 		// Skip priority attributes (already processed) and attributes in the skip list
-		if u.SliceContainsString(priorityAttrs, attrK) || skipAttrs[attrK] {
+		if slices.Contains(priorityAttrs, attrK) || skipAttrs[attrK] {
 			continue
 		}
 
@@ -459,7 +458,7 @@ func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs m
 // processAddedAttributes handles new attributes that didn't exist before.
 func processAddedAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, skipAttrs map[string]bool) {
 	for attrK, newAttrV := range newAttrs {
-		if _, exists := origAttrs[attrK]; !exists && !u.SliceContainsString(priorityAttrs, attrK) && !skipAttrs[attrK] {
+		if _, exists := origAttrs[attrK]; !exists && !slices.Contains(priorityAttrs, attrK) && !skipAttrs[attrK] {
 			diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
 		}
 	}

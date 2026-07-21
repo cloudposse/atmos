@@ -1,13 +1,18 @@
 package dependencies
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +20,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
 // Sentinel errors for test mocks.
@@ -83,7 +89,8 @@ func TestNewInstaller(t *testing.T) {
 		mockInstall := func(string, bool, bool, bool, bool) error { return nil }
 		mockFileExists := func(string) bool { return true }
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(mockRes),
 			WithInstallFunc(mockInstall),
 			WithFileExistsFunc(mockFileExists),
@@ -398,7 +405,8 @@ func TestIsToolInstalled(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver, finder := tt.setupMock()
 
-			inst := NewInstaller(tt.config,
+			inst := NewInstaller(
+				tt.config,
 				WithResolver(resolver),
 				WithBinaryPathFinder(finder),
 			)
@@ -689,7 +697,8 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 		Toolchain: schema.Toolchain{InstallPath: toolsDir},
 	}
 
-	inst := NewInstaller(config,
+	inst := NewInstaller(
+		config,
 		WithResolver(resolver),
 		WithBatchInstallFunc(batchInstallFunc),
 		WithBinaryPathFinder(finder),
@@ -724,7 +733,8 @@ func TestEnsureTool(t *testing.T) {
 			},
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
 			WithBinaryPathFinder(finder),
@@ -753,7 +763,8 @@ func TestEnsureTool(t *testing.T) {
 			},
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
 			WithBinaryPathFinder(finder),
@@ -782,7 +793,8 @@ func TestEnsureTool(t *testing.T) {
 			},
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
 			WithBinaryPathFinder(finder),
@@ -976,4 +988,830 @@ func TestBuildToolchainPATH_SkipsInvalidTools(t *testing.T) {
 	// Verify invalid tool doesn't cause empty PATH.
 	assert.NotEqual(t, testPath, result,
 		"PATH should include terraform path, not just original PATH")
+}
+
+func TestResolveExecutablePath(t *testing.T) {
+	t.Run("returns absolute path unchanged", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{}),
+		)
+		result := inst.ResolveExecutablePath(map[string]string{"opentofu": "1.8.0"}, "/usr/bin/tofu")
+		assert.Equal(t, "/usr/bin/tofu", result)
+	})
+
+	t.Run("resolves bare executable from toolchain", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					if toolName == "opentofu" {
+						return "opentofu", "opentofu", nil
+					}
+					return "", "", errToolNotFound
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					if owner == "opentofu" && repo == "opentofu" && version == "1.8.0" {
+						return "/home/user/.local/share/atmos/toolchain/bin/opentofu/opentofu/1.8.0/tofu", nil
+					}
+					return "", errToolNotFound
+				},
+			}),
+		)
+
+		deps := map[string]string{"opentofu": "1.8.0"}
+		result := inst.ResolveExecutablePath(deps, "tofu")
+		assert.Equal(t, "/home/user/.local/share/atmos/toolchain/bin/opentofu/opentofu/1.8.0/tofu", result)
+	})
+
+	t.Run("returns original name when not found in toolchain or PATH", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "opentofu", "opentofu", nil
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					return "", errToolNotFound
+				},
+			}),
+		)
+
+		deps := map[string]string{"opentofu": "1.8.0"}
+		result := inst.ResolveExecutablePath(deps, "nonexistent-binary")
+		assert.Equal(t, "nonexistent-binary", result)
+	})
+
+	t.Run("skips deps with resolver errors", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "", "", errInvalidTool
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{}),
+		)
+
+		deps := map[string]string{"badtool": "1.0.0"}
+		result := inst.ResolveExecutablePath(deps, "somebinary")
+		assert.Equal(t, "somebinary", result)
+	})
+
+	t.Run("no-op with empty deps", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{}),
+		)
+		result := inst.ResolveExecutablePath(map[string]string{}, "terraform")
+		// Falls through to exec.LookPath, which should find terraform if on PATH,
+		// otherwise returns original name.
+		assert.NotEmpty(t, result)
+	})
+
+	t.Run("matches binary with platform extension against bare executable name", func(t *testing.T) {
+		// On Windows, FindBinaryPath returns a path like /path/tofu.exe but the
+		// executable is specified as bare "tofu". The comparison should still match.
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					if toolName == "opentofu" {
+						return "opentofu", "opentofu", nil
+					}
+					return "", "", errToolNotFound
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					if owner == "opentofu" && repo == "opentofu" && version == "1.8.0" {
+						return "/home/user/.atmos/bin/opentofu/opentofu/1.8.0/tofu.exe", nil
+					}
+					return "", errToolNotFound
+				},
+			}),
+		)
+
+		deps := map[string]string{"opentofu": "1.8.0"}
+		result := inst.ResolveExecutablePath(deps, "tofu")
+		assert.Equal(t, "/home/user/.atmos/bin/opentofu/opentofu/1.8.0/tofu.exe", result)
+	})
+}
+
+// mockVersionLister is a mock implementation of VersionLister for testing.
+type mockVersionLister struct {
+	getAvailableVersionsFunc func(owner, repo string) ([]string, error)
+}
+
+func (m *mockVersionLister) GetAvailableVersions(owner, repo string) ([]string, error) {
+	if m.getAvailableVersionsFunc != nil {
+		return m.getAvailableVersionsFunc(owner, repo)
+	}
+	return nil, errors.New("not implemented")
+}
+
+// mockInstalledVersionLister is a mock implementation of InstalledVersionLister for testing.
+type mockInstalledVersionLister struct {
+	listInstalledVersionsFunc func(owner, repo string) ([]string, error)
+}
+
+func (m *mockInstalledVersionLister) ListInstalledVersions(owner, repo string) ([]string, error) {
+	if m.listInstalledVersionsFunc != nil {
+		return m.listInstalledVersionsFunc(owner, repo)
+	}
+	return nil, errors.New("not implemented")
+}
+
+// TestIsConstraint tests the isConstraint helper function.
+func TestIsConstraint(t *testing.T) {
+	tests := []struct {
+		version string
+		want    bool
+	}{
+		{"", false},
+		{"latest", false},
+		{"1.10.0", false},
+		{"v1.10.0", false},
+		{"0.1.0", false},
+		{"^1.10.0", true},
+		{"~> 1.10.0", true},
+		{">= 1.9.0", true},
+		{">= 1.9.0, < 2.0.0", true},
+		{"1.10.0 || 1.11.0", true},
+		{"> 1.0.0", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("version=%q", tt.version), func(t *testing.T) {
+			got := isConstraint(tt.version)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestHighestMatch tests the highestMatch helper function.
+func TestHighestMatch(t *testing.T) {
+	tests := []struct {
+		name       string
+		candidates []string
+		constraint string
+		want       string
+		wantErr    bool
+	}{
+		{
+			name:       "finds highest matching version",
+			candidates: []string{"1.10.0", "1.10.1", "1.10.3", "1.9.0"},
+			constraint: "^1.10.0",
+			want:       "1.10.3",
+		},
+		{
+			name:       "handles v-prefixed versions",
+			candidates: []string{"v1.10.0", "v1.10.1"},
+			constraint: "^1.10.0",
+			want:       "1.10.1",
+		},
+		{
+			name:       "no matching version returns error",
+			candidates: []string{"2.0.0", "3.0.0"},
+			constraint: "^1.10.0",
+			wantErr:    true,
+		},
+		{
+			name:       "empty candidates returns error",
+			candidates: []string{},
+			constraint: "^1.10.0",
+			wantErr:    true,
+		},
+		{
+			name:       "all unparseable candidates returns error",
+			candidates: []string{"invalid", "not-semver"},
+			constraint: "^1.0.0",
+			wantErr:    true,
+		},
+		{
+			name:       "skips unparseable candidates and finds match",
+			candidates: []string{"1.10.0", "invalid", "1.10.3"},
+			constraint: "^1.10.0",
+			want:       "1.10.3",
+		},
+		{
+			name:       "sorts correctly regardless of input order",
+			candidates: []string{"1.10.3", "1.10.1", "1.10.0"},
+			constraint: "^1.10.0",
+			want:       "1.10.3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			constraint, err := semver.NewConstraint(tt.constraint)
+			require.NoError(t, err)
+
+			got, err := highestMatch(tt.candidates, constraint)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.True(t, cockroachErrors.Is(err, errUtils.ErrDependencyConstraint))
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
+// TestIsRetryableHTTPError tests the isRetryableHTTPError predicate.
+func TestIsRetryableHTTPError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"non-HTTP error", errors.New("random error"), false},
+		{"non-HTTP sentinel error", errUtils.ErrDependencyConstraint, false},
+		{"HTTP connection reset", fmt.Errorf("%w: connection reset by peer", registry.ErrHTTPRequest), true},
+		{"HTTP timeout", fmt.Errorf("%w: request timeout", registry.ErrHTTPRequest), true},
+		{"HTTP connection refused", fmt.Errorf("%w: connection refused", registry.ErrHTTPRequest), true},
+		{"HTTP EOF", fmt.Errorf("%w: unexpected EOF", registry.ErrHTTPRequest), true},
+		{"HTTP too many requests", fmt.Errorf("%w: too many requests", registry.ErrHTTPRequest), true},
+		{"HTTP service unavailable", fmt.Errorf("%w: service unavailable", registry.ErrHTTPRequest), true},
+		{"HTTP bad gateway", fmt.Errorf("%w: bad gateway", registry.ErrHTTPRequest), true},
+		{"HTTP gateway timeout", fmt.Errorf("%w: gateway timeout", registry.ErrHTTPRequest), true},
+		{"HTTP internal server error", fmt.Errorf("%w: internal server error", registry.ErrHTTPRequest), true},
+		{"HTTP failed to read response body", fmt.Errorf("%w: failed to read response body", registry.ErrHTTPRequest), true},
+		{"HTTP TLS error", fmt.Errorf("%w: tls handshake failure", registry.ErrHTTPRequest), true},
+		{"HTTP rate limit", fmt.Errorf("%w: rate limit exceeded", registry.ErrHTTPRequest), true},
+		{"HTTP 404 not retryable", fmt.Errorf("%w: HTTP 404: not found", registry.ErrHTTPRequest), false},
+		{"HTTP 403 not retryable", fmt.Errorf("%w: HTTP 403: forbidden", registry.ErrHTTPRequest), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRetryableHTTPError(tt.err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestFindInstalledMatch tests the findInstalledMatch method.
+func TestFindInstalledMatch(t *testing.T) {
+	tests := []struct {
+		name          string
+		tool          string
+		constraintStr string
+		setupMock     func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder)
+		wantVersion   string
+		wantFound     bool
+	}{
+		{
+			name:          "invalid constraint returns not found",
+			tool:          "hashicorp/terraform",
+			constraintStr: "not-a-valid-constraint[",
+			setupMock: func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder) {
+				return &mockResolver{}, &mockInstalledVersionLister{}, &mockBinaryPathFinder{}
+			},
+			wantFound: false,
+		},
+		{
+			name:          "resolver error returns not found",
+			tool:          "unknown-tool",
+			constraintStr: "^1.10.0",
+			setupMock: func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder) {
+				resolver := &mockResolver{
+					resolveFunc: func(toolName string) (string, string, error) {
+						return "", "", errToolNotFound
+					},
+				}
+				return resolver, &mockInstalledVersionLister{}, &mockBinaryPathFinder{}
+			},
+			wantFound: false,
+		},
+		{
+			name:          "no installed versions returns not found",
+			tool:          "hashicorp/terraform",
+			constraintStr: "^1.10.0",
+			setupMock: func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder) {
+				resolver := &mockResolver{
+					resolveFunc: func(toolName string) (string, string, error) {
+						return "hashicorp", "terraform", nil
+					},
+				}
+				lister := &mockInstalledVersionLister{
+					listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+						return nil, nil
+					},
+				}
+				return resolver, lister, &mockBinaryPathFinder{}
+			},
+			wantFound: false,
+		},
+		{
+			name:          "installed versions don't satisfy constraint",
+			tool:          "hashicorp/terraform",
+			constraintStr: "^1.10.0",
+			setupMock: func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder) {
+				resolver := &mockResolver{
+					resolveFunc: func(toolName string) (string, string, error) {
+						return "hashicorp", "terraform", nil
+					},
+				}
+				lister := &mockInstalledVersionLister{
+					listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+						return []string{"1.9.0", "1.8.0"}, nil
+					},
+				}
+				return resolver, lister, &mockBinaryPathFinder{}
+			},
+			wantFound: false,
+		},
+		{
+			name:          "binary not found despite version match (corrupt install)",
+			tool:          "hashicorp/terraform",
+			constraintStr: "^1.10.0",
+			setupMock: func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder) {
+				resolver := &mockResolver{
+					resolveFunc: func(toolName string) (string, string, error) {
+						return "hashicorp", "terraform", nil
+					},
+				}
+				lister := &mockInstalledVersionLister{
+					listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+						return []string{"1.10.3"}, nil
+					},
+				}
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "", errToolNotFound
+					},
+				}
+				return resolver, lister, finder
+			},
+			wantFound: false,
+		},
+		{
+			name:          "happy path - finds highest installed match",
+			tool:          "hashicorp/terraform",
+			constraintStr: "^1.10.0",
+			setupMock: func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder) {
+				resolver := &mockResolver{
+					resolveFunc: func(toolName string) (string, string, error) {
+						return "hashicorp", "terraform", nil
+					},
+				}
+				lister := &mockInstalledVersionLister{
+					listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+						return []string{"1.10.0", "1.10.3", "1.9.0"}, nil
+					},
+				}
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "/path/to/terraform", nil
+					},
+				}
+				return resolver, lister, finder
+			},
+			wantVersion: "1.10.3",
+			wantFound:   true,
+		},
+		{
+			name:          "ListInstalledVersions error returns not found",
+			tool:          "hashicorp/terraform",
+			constraintStr: "^1.10.0",
+			setupMock: func() (*mockResolver, *mockInstalledVersionLister, *mockBinaryPathFinder) {
+				resolver := &mockResolver{
+					resolveFunc: func(toolName string) (string, string, error) {
+						return "hashicorp", "terraform", nil
+					},
+				}
+				lister := &mockInstalledVersionLister{
+					listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+						return nil, errors.New("disk error")
+					},
+				}
+				return resolver, lister, &mockBinaryPathFinder{}
+			},
+			wantFound: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver, lister, finder := tt.setupMock()
+
+			inst := NewInstaller(
+				nil,
+				WithResolver(resolver),
+				WithInstalledVersionLister(lister),
+				WithBinaryPathFinder(finder),
+			)
+
+			version, found := inst.findInstalledMatch(tt.tool, tt.constraintStr)
+			assert.Equal(t, tt.wantFound, found)
+			assert.Equal(t, tt.wantVersion, version)
+		})
+	}
+}
+
+// TestResolveConstraints tests the resolveConstraints method.
+func TestResolveConstraints(t *testing.T) {
+	t.Run("no constraints leaves deps unchanged", func(t *testing.T) {
+		deps := map[string]string{
+			"hashicorp/terraform": "1.10.0",
+			"opentofu/opentofu":   "1.8.0",
+		}
+
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{}),
+		)
+
+		err := inst.resolveConstraints(deps)
+		require.NoError(t, err)
+		assert.Equal(t, "1.10.0", deps["hashicorp/terraform"])
+		assert.Equal(t, "1.8.0", deps["opentofu/opentofu"])
+	})
+
+	t.Run("fast path - installed version satisfies constraint", func(t *testing.T) {
+		deps := map[string]string{
+			"hashicorp/terraform": "^1.10.0",
+		}
+
+		versionListerCalled := false
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "hashicorp", "terraform", nil
+				},
+			}),
+			WithInstalledVersionLister(&mockInstalledVersionLister{
+				listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+					return []string{"1.10.0", "1.10.3"}, nil
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					return "/path/to/terraform", nil
+				},
+			}),
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					versionListerCalled = true
+					return nil, errors.New("should not be called")
+				},
+			}),
+		)
+
+		err := inst.resolveConstraints(deps)
+		require.NoError(t, err)
+		assert.Equal(t, "1.10.3", deps["hashicorp/terraform"])
+		assert.False(t, versionListerCalled, "VersionLister should not be called on fast path")
+	})
+
+	t.Run("mixed constraints and concrete versions", func(t *testing.T) {
+		deps := map[string]string{
+			"hashicorp/terraform": "^1.10.0",
+			"cloudposse/atmos":    "1.0.0", // Concrete, should not change.
+		}
+
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					parts := strings.Split(toolName, "/")
+					if len(parts) == 2 {
+						return parts[0], parts[1], nil
+					}
+					return "", "", errToolNotFound
+				},
+			}),
+			WithInstalledVersionLister(&mockInstalledVersionLister{
+				listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+					if repo == "terraform" {
+						return []string{"1.10.5"}, nil
+					}
+					return nil, nil
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					return "/path/to/" + repo, nil
+				},
+			}),
+		)
+
+		err := inst.resolveConstraints(deps)
+		require.NoError(t, err)
+		assert.Equal(t, "1.10.5", deps["hashicorp/terraform"])
+		assert.Equal(t, "1.0.0", deps["cloudposse/atmos"])
+	})
+}
+
+// TestResolveOneConstraint tests the resolveOneConstraint method.
+func TestResolveOneConstraint(t *testing.T) {
+	t.Run("invalid constraint returns error", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{}),
+		)
+
+		_, err := inst.resolveOneConstraint("terraform", "invalid[constraint")
+		require.Error(t, err)
+		assert.True(t, cockroachErrors.Is(err, errUtils.ErrDependencyConstraint))
+	})
+
+	t.Run("resolver error returns error", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "", "", errToolNotFound
+				},
+			}),
+		)
+
+		_, err := inst.resolveOneConstraint("unknown-tool", "^1.0.0")
+		require.Error(t, err)
+		assert.True(t, cockroachErrors.Is(err, errUtils.ErrDependencyResolution))
+	})
+
+	t.Run("happy path resolves highest matching version", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "hashicorp", "terraform", nil
+				},
+			}),
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					return []string{"1.10.0", "1.10.1", "1.10.3", "1.9.0"}, nil
+				},
+			}),
+		)
+
+		resolved, err := inst.resolveOneConstraint("terraform", "^1.10.0")
+		require.NoError(t, err)
+		assert.Equal(t, "1.10.3", resolved)
+	})
+
+	t.Run("no matching version returns error", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "hashicorp", "terraform", nil
+				},
+			}),
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					return []string{"2.0.0", "3.0.0"}, nil
+				},
+			}),
+		)
+
+		_, err := inst.resolveOneConstraint("terraform", "^1.10.0")
+		require.Error(t, err)
+		assert.True(t, cockroachErrors.Is(err, errUtils.ErrDependencyConstraint))
+	})
+
+	t.Run("version lister error returns error", func(t *testing.T) {
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "hashicorp", "terraform", nil
+				},
+			}),
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					return nil, errors.New("network error")
+				},
+			}),
+		)
+
+		_, err := inst.resolveOneConstraint("terraform", "^1.10.0")
+		require.Error(t, err)
+		assert.True(t, cockroachErrors.Is(err, errUtils.ErrDependencyResolution))
+	})
+}
+
+// TestFetchAvailableVersionsWithRetry tests retry logic for version fetching.
+func TestFetchAvailableVersionsWithRetry(t *testing.T) {
+	t.Run("success on first attempt", func(t *testing.T) {
+		expected := []string{"1.10.0", "1.10.3"}
+		inst := NewInstaller(
+			nil,
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					return expected, nil
+				},
+			}),
+		)
+
+		versions, err := inst.fetchAvailableVersionsWithRetry("hashicorp", "terraform", "^1.10.0")
+		require.NoError(t, err)
+		assert.Equal(t, expected, versions)
+	})
+
+	t.Run("non-retryable error fails immediately", func(t *testing.T) {
+		callCount := int32(0)
+		inst := NewInstaller(
+			nil,
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					atomic.AddInt32(&callCount, 1)
+					// Non-HTTP error: isRetryableHTTPError returns false.
+					return nil, errors.New("permanent error")
+				},
+			}),
+		)
+
+		_, err := inst.fetchAvailableVersionsWithRetry("hashicorp", "terraform", "^1.10.0")
+		require.Error(t, err)
+		assert.True(t, cockroachErrors.Is(err, errUtils.ErrDependencyResolution))
+		// Should only be called once since error is not retryable.
+		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
+	})
+
+	t.Run("HTTP 404 not retried", func(t *testing.T) {
+		callCount := int32(0)
+		inst := NewInstaller(
+			nil,
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					atomic.AddInt32(&callCount, 1)
+					return nil, fmt.Errorf("%w: HTTP 404: not found", registry.ErrHTTPRequest)
+				},
+			}),
+		)
+
+		_, err := inst.fetchAvailableVersionsWithRetry("hashicorp", "terraform", "^1.10.0")
+		require.Error(t, err)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
+	})
+}
+
+// TestEnsureTools_WithConstraints tests EnsureTools with version constraint resolution.
+func TestEnsureTools_WithConstraints(t *testing.T) {
+	t.Run("constraint resolved and installed", func(t *testing.T) {
+		var installedSpecs []string
+
+		inst := NewInstaller(
+			nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "hashicorp", "terraform", nil
+				},
+			}),
+			WithInstalledVersionLister(&mockInstalledVersionLister{
+				listInstalledVersionsFunc: func(owner, repo string) ([]string, error) {
+					// No installed versions matching the constraint.
+					return nil, nil
+				},
+			}),
+			WithVersionLister(&mockVersionLister{
+				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
+					return []string{"1.10.0", "1.10.3"}, nil
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					return "", errToolNotFound // Not installed yet.
+				},
+			}),
+			WithBatchInstallFunc(func(toolSpecs []string, _ bool) error {
+				installedSpecs = toolSpecs
+				return nil
+			}),
+		)
+
+		deps := map[string]string{"hashicorp/terraform": "^1.10.0"}
+		err := inst.EnsureTools(deps)
+		require.NoError(t, err)
+
+		// Constraint should be resolved to concrete version.
+		assert.Equal(t, "1.10.3", deps["hashicorp/terraform"])
+		// The resolved version should have been passed to batch install.
+		require.Len(t, installedSpecs, 1)
+		assert.Equal(t, "hashicorp/terraform@1.10.3", installedSpecs[0])
+	})
+}
+
+// TestBuildToolchainPATH_Onedir verifies that a onedir (multi-file) tool's nested
+// entrypoint directory is placed on PATH (so its executable is resolvable), while a
+// flat single-binary tool still contributes its version directory. This exercises
+// the onedir-aware resolution shared with `atmos toolchain env`.
+func TestBuildToolchainPATH_Onedir(t *testing.T) {
+	// Isolate PATH to a non-existent directory so LookPath resolves only via the
+	// toolchain directories we build (no system node/kubectl can mask the result).
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-base"))
+
+	toolsDir := t.TempDir()
+	binDir := filepath.Join(toolsDir, "bin")
+
+	exe := func(name string) string {
+		if runtime.GOOS == "windows" {
+			return name + ".exe"
+		}
+		return name
+	}
+
+	// Fake onedir install: nodejs/node with the executable nested under .pkg, its
+	// real location recorded in the .atmos-onedir.json manifest.
+	nodeVersionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+	pkgName := fmt.Sprintf("node-v24.18.0-%s-%s", runtime.GOOS, runtime.GOARCH)
+	nodeRel := filepath.Join(".pkg", pkgName, "bin", exe("node"))
+	nodeBinPath := filepath.Join(nodeVersionDir, nodeRel)
+	// npm ships in the same nested bin directory as node; two entrypoints resolving
+	// to one directory must collapse to a single PATH entry.
+	npmRel := filepath.Join(".pkg", pkgName, "bin", exe("npm"))
+	npmBinPath := filepath.Join(nodeVersionDir, npmRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(nodeBinPath), 0o755))
+	require.NoError(t, os.WriteFile(nodeBinPath, []byte("#!/bin/sh\necho v24.18.0\n"), 0o755))
+	require.NoError(t, os.WriteFile(npmBinPath, []byte("#!/bin/sh\necho npm\n"), 0o755))
+	manifest, err := json.Marshal(map[string]any{
+		"entrypoints": map[string]string{"node": nodeRel, "npm": npmRel},
+		"primary":     "node",
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(nodeVersionDir, ".atmos-onedir.json"), manifest, 0o644))
+
+	// Fake flat install: kubernetes/kubectl with the binary directly in the version dir.
+	kubectlVersionDir := filepath.Join(binDir, "kubernetes", "kubectl", "1.31.0")
+	kubectlBinPath := filepath.Join(kubectlVersionDir, exe("kubectl"))
+	require.NoError(t, os.MkdirAll(kubectlVersionDir, 0o755))
+	require.NoError(t, os.WriteFile(kubectlBinPath, []byte("#!/bin/sh\necho kubectl\n"), 0o755))
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{InstallPath: toolsDir},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"nodejs/node":        "24.18.0",
+		"kubernetes/kubectl": "1.31.0",
+	})
+	require.NoError(t, err)
+
+	entries := strings.Split(result, string(os.PathListSeparator))
+
+	// The onedir node executable's NESTED directory must be on PATH, not the bare
+	// version directory (which holds no executable).
+	assert.Contains(t, entries, filepath.Dir(nodeBinPath), "onedir node entrypoint dir must be on PATH")
+	assert.NotContains(t, entries, nodeVersionDir, "bare version dir must not be the node PATH entry")
+
+	// node and npm share a directory, so it must appear exactly once (deduplicated).
+	nodeDirCount := 0
+	for _, e := range entries {
+		if e == filepath.Dir(nodeBinPath) {
+			nodeDirCount++
+		}
+	}
+	assert.Equal(t, 1, nodeDirCount, "shared onedir entrypoint directory must be deduplicated")
+
+	// The flat kubectl tool still contributes its version directory.
+	assert.Contains(t, entries, kubectlVersionDir, "flat kubectl version dir must be on PATH")
+
+	// The built PATH must actually resolve both executables.
+	t.Setenv("PATH", result)
+
+	resolvedNode, err := osexec.LookPath("node")
+	require.NoError(t, err, "node must be resolvable on the built PATH")
+	assert.Equal(t, nodeBinPath, resolvedNode)
+
+	resolvedKubectl, err := osexec.LookPath("kubectl")
+	require.NoError(t, err, "kubectl must still be resolvable on the built PATH")
+	assert.Equal(t, kubectlBinPath, resolvedKubectl)
+}
+
+// TestBuildToolchainPATH_EmptyPATHNoTrailingSeparator verifies that when the
+// current PATH is empty, the built PATH does not end with a list separator and
+// contains no empty component. A trailing separator is interpreted as "." by
+// exec lookups, which would allow running a binary from the working directory.
+func TestBuildToolchainPATH_EmptyPATHNoTrailingSeparator(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{InstallPath: t.TempDir()},
+	}
+
+	// terraform is not installed here, so it falls back to the bare version dir;
+	// the point is that `paths` is non-empty while the current PATH is empty.
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, result)
+	assert.NotEqual(t, string(os.PathListSeparator), result[len(result)-1:],
+		"built PATH must not end with a list separator")
+	for _, entry := range strings.Split(result, string(os.PathListSeparator)) {
+		assert.NotEmpty(t, entry, "built PATH must not contain an empty component")
+	}
 }

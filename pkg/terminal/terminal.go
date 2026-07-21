@@ -3,6 +3,7 @@ package terminal
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -57,6 +58,9 @@ type Terminal interface {
 
 	// IsTTY returns whether the given stream is a TTY.
 	IsTTY(stream Stream) bool
+
+	// IsPiped returns whether the given stream is piped to/from another process.
+	IsPiped(stream Stream) bool
 
 	// ColorProfile returns the terminal's color capabilities.
 	ColorProfile() ColorProfile
@@ -129,6 +133,7 @@ type Config struct {
 	EnvCLIColorForce bool   // CLICOLOR_FORCE
 	EnvTerm          string // TERM
 	EnvColorTerm     string // COLORTERM
+	EnvCI            bool   // CI
 
 	// From atmos.yaml
 	AtmosConfig schema.AtmosConfiguration
@@ -167,30 +172,28 @@ func New(opts ...Option) Terminal {
 		opt(t)
 	}
 
-	// Detect color profile once at initialization.
-	// Priority order (highest to lowest):
-	// 1. NO_COLOR env var - always disables color (overrides --force-color)
-	// 2. --force-color flag - forces TrueColor
-	// 3. Standard detection via DetectColorProfile
+	t.initializeColorProfile()
+
+	return t
+}
+
+func (t *terminal) initializeColorProfile() {
 	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)
 	if !isTTYOut {
 		isTTYOut = t.IsTTY(Stdout)
 	}
 
-	// Determine color profile based on precedence
 	switch {
-	case cfg.EnvNoColor:
+	case t.config.EnvNoColor:
 		// NO_COLOR always wins, even over --force-color
 		t.colorProfile = ColorNone
 	case t.forceColor:
 		// Force color profile if --force-color is set (but NO_COLOR takes precedence)
 		t.colorProfile = ColorTrue
 	default:
-		t.colorProfile = cfg.DetectColorProfile(isTTYOut)
+		t.colorProfile = t.config.DetectColorProfile(isTTYOut)
 	}
-
-	return t
 }
 
 // Option configures Terminal.
@@ -226,7 +229,7 @@ func (t *terminal) Write(content string) error {
 
 	// Fallback: write directly to stderr (no masking)
 	// This should only happen in tests or when terminal is created without I/O
-	_, err := fmt.Fprint(os.Stderr, content)
+	_, err := os.Stderr.Write([]byte(content))
 	return err
 }
 
@@ -245,6 +248,22 @@ func (t *terminal) IsTTY(stream Stream) bool {
 	return term.IsTerminal(fd)
 }
 
+func (t *terminal) IsPiped(stream Stream) bool {
+	defer perf.Track(nil, "terminal.IsPiped")()
+
+	file := streamToFile(stream)
+	if file == nil {
+		return false
+	}
+
+	stat, err := file.Stat()
+	if err != nil {
+		return false
+	}
+
+	return stat.Mode()&os.ModeNamedPipe != 0
+}
+
 func (t *terminal) ColorProfile() ColorProfile {
 	defer perf.Track(nil, "terminal.ColorProfile")()
 
@@ -256,23 +275,37 @@ func (t *terminal) Width(stream Stream) int {
 
 	fd := streamToFd(stream)
 	if fd < 0 {
-		// If --force-tty is set, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	width, _, err := term.GetSize(fd)
 	if err != nil {
-		// If --force-tty is set and detection fails, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	return width
+}
+
+// fallbackWidth returns the terminal width when no real TTY size is available.
+// An explicit COLUMNS value is honored for piped output and CI, allowing callers
+// to request deterministic layout. Recording pipelines can override it with
+// ATMOS_CAST_RECORDING_WIDTH under --force-tty; otherwise --force-tty uses its
+// sane default and regular non-TTY output returns 0 for its caller to default.
+func (t *terminal) fallbackWidth() int {
+	if t.forceTTY {
+		//nolint:forbidigo // ATMOS_CAST_RECORDING_WIDTH is a deliberate, purpose-specific override read before/without config.
+		if width, err := strconv.Atoi(os.Getenv("ATMOS_CAST_RECORDING_WIDTH")); err == nil && width > 0 {
+			return width
+		}
+	}
+	//nolint:forbidigo // COLUMNS is the conventional explicit terminal-width override for piped commands and CI.
+	if width, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && width > 0 {
+		return width
+	}
+	if t.forceTTY {
+		return defaultForcedWidth
+	}
+	return 0
 }
 
 func (t *terminal) Height(stream Stream) int {
@@ -327,7 +360,7 @@ func (t *terminal) SetTitle(title string) {
 		_ = t.io.Write(int(IOStreamUI), titleSeq)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, titleSeq)
+		_, _ = os.Stderr.Write([]byte(titleSeq))
 	}
 }
 
@@ -341,7 +374,7 @@ func (t *terminal) RestoreTitle() {
 		if t.io != nil {
 			_ = t.io.Write(int(IOStreamUI), titleSeq)
 		} else {
-			fmt.Fprint(os.Stderr, titleSeq)
+			_, _ = os.Stderr.Write([]byte(titleSeq))
 		}
 	}
 }
@@ -364,7 +397,7 @@ func (t *terminal) Alert() {
 		_ = t.io.Write(int(IOStreamUI), escBEL)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, escBEL)
+		_, _ = os.Stderr.Write([]byte(escBEL))
 	}
 }
 
@@ -383,6 +416,19 @@ func streamToFd(stream Stream) int {
 	}
 }
 
+func streamToFile(stream Stream) *os.File {
+	switch stream {
+	case Stdin:
+		return os.Stdin
+	case Stdout:
+		return os.Stdout
+	case Stderr:
+		return os.Stderr
+	default:
+		return nil
+	}
+}
+
 // buildConfig constructs Config from all sources.
 func buildConfig() *Config {
 	cfg := &Config{
@@ -398,6 +444,7 @@ func buildConfig() *Config {
 		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "", //nolint:forbidigo // Standard terminal env var
 		EnvTerm:          os.Getenv("TERM"),                 //nolint:forbidigo // Standard terminal env var
 		EnvColorTerm:     os.Getenv("COLORTERM"),            //nolint:forbidigo // Standard terminal env var
+		EnvCI:            os.Getenv("CI") != "",             //nolint:forbidigo // Standard CI env var
 	}
 
 	// Load atmos.yaml config (if available)
@@ -421,7 +468,8 @@ func buildConfig() *Config {
 // 6. --color flag - enables color (only if TTY)
 // 7. Atmos.yaml terminal.no_color (deprecated) - disables color
 // 8. Atmos.yaml terminal.color - enables color (only if TTY)
-// 9. Default (true for TTY, false for non-TTY).
+// 9. CI=true env var - enables color (CI systems support ANSI color)
+// 10. Default (true for TTY, false for non-TTY).
 //
 //nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
@@ -463,7 +511,12 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 		return true
 	}
 
-	// 9. Default based on TTY
+	// 9. CI environment enables color by default (most CI systems support ANSI color).
+	if c.EnvCI {
+		return true
+	}
+
+	// 10. Default based on TTY.
 	return isTTY
 }
 
@@ -503,8 +556,8 @@ func (c *Config) DetectColorProfile(isTTY bool) ColorProfile {
 		return Color16
 	}
 
-	// Default to 16 colors if TTY and color enabled
-	if isTTY {
+	// Default to 16 colors if TTY or CI environment.
+	if isTTY || c.EnvCI {
 		return Color16
 	}
 

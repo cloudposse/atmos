@@ -47,6 +47,7 @@ type Flags struct {
 
 	// Output configuration.
 	Pager PagerSelector
+	Cast  string // Record command output as an asciinema cast (--cast).
 
 	// Authentication.
 	Identity IdentitySelector
@@ -71,8 +72,17 @@ type Flags struct {
 	RedirectStderr string
 	Version        bool
 
+	// AI integration.
+	AI    bool     // Enable AI-powered analysis of command output (--ai).
+	Skill []string // Specify skills for AI analysis context (--skill, comma-separated or repeated).
+
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
+
+	// SettingsListMergeStrategy overrides settings.list_merge_strategy for
+	// this invocation. Controls how lists are merged in Atmos stack manifests
+	// (replace, append, merge).
+	SettingsListMergeStrategy string
 }
 
 // NewFlags creates a Flags with default values.
@@ -89,11 +99,13 @@ func NewFlags() Flags {
 		Mask:         true,       // Enabled by default for security.
 		Interactive:  true,       // Enabled by default for better UX.
 		Profile:      []string{}, // No profiles active by default.
+		Cast:         "",
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",
 		ProfileType:  "cpu",
 		Heatmap:      false,
 		HeatmapMode:  "bar",
+		Skill:        []string{}, // No skills active by default.
 	}
 }
 

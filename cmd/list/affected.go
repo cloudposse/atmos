@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
@@ -39,6 +40,10 @@ type AffectedOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	ErrorMode        string
+
+	// Auth flags.
+	IdentityName string
 }
 
 // affectedCmd lists affected Atmos components and stacks.
@@ -59,6 +64,15 @@ var affectedCmd = &cobra.Command{
 			return err
 		}
 
+		// Read identity from flag (inherited from listCmd PersistentFlags) or env var.
+		var identityName string
+		if cmd.Flags().Changed(cfg.IdentityFlagName) {
+			identityName, _ = cmd.Flags().GetString(cfg.IdentityFlagName)
+		} else {
+			identityName = v.GetString(cfg.IdentityFlagName)
+		}
+		identityName = cfg.NormalizeIdentityValue(identityName)
+
 		opts := &AffectedOptions{
 			Flags:             flags.ParseGlobalFlags(cmd, v),
 			Format:            v.GetString("format"),
@@ -77,6 +91,8 @@ var affectedCmd = &cobra.Command{
 			ProcessTemplates:  v.GetBool("process-templates"),
 			ProcessFunctions:  v.GetBool("process-functions"),
 			Skip:              v.GetStringSlice("skip"),
+			ErrorMode:         v.GetString("error-mode"),
+			IdentityName:      identityName,
 		}
 
 		return executeListAffectedCmd(cmd, args, opts)
@@ -104,7 +120,8 @@ func init() {
 		WithExcludeLockedFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
-		WithSkipFlag,
+		WithAffectedSkipFlag,
+		WithErrorModeFlag,
 	)
 
 	// Register flags.
@@ -147,5 +164,7 @@ func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOpt
 		ProcessFunctions:  opts.ProcessFunctions,
 		Skip:              opts.Skip,
 		ExcludeLocked:     opts.ExcludeLocked,
+		ErrorMode:         opts.ErrorMode,
+		IdentityName:      opts.IdentityName,
 	})
 }

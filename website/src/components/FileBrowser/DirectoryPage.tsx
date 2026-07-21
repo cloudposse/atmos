@@ -9,6 +9,8 @@ import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
 import { findExampleByName, getExampleNameFromPath } from './utils';
+import GistDisclaimer from '@site/src/components/GistDisclaimer';
+import CastPlayer from '@site/src/components/CastPlayer';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
 
@@ -40,9 +42,12 @@ export default function DirectoryPage({
     );
   }
 
+  const sectionName = optionsData.title || 'Examples';
   const pageTitle = dirData.path === exampleName
-    ? `${exampleName} - Examples`
+    ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
+  const isExampleRoot = dirData.path === exampleName;
+  const showCast = isExampleRoot && !!example.cast?.file;
 
   return (
     <Layout title={pageTitle}>
@@ -53,7 +58,23 @@ export default function DirectoryPage({
           currentPath={dirData.path}
         />
         <main className={styles.mainContent}>
-          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} />
+          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+
+          {optionsData.disclaimer && (
+            <GistDisclaimer text={optionsData.disclaimer} />
+          )}
+
+          {showCast && (
+            <div className={styles.castSection}>
+              <CastPlayer
+                src={example.cast!.file!}
+                title={example.cast!.title || example.name}
+                chrome
+                controls
+                scrubber
+              />
+            </div>
+          )}
 
           {/* Show README if present */}
           {dirData.readme && (

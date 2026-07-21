@@ -15,6 +15,13 @@ import (
 
 const (
 	logKeyRuntime = "runtime"
+
+	// Env var that selects the container runtime (auto|docker|podman).
+	envContainerRuntime = "ATMOS_CONTAINER_RUNTIME"
+
+	// Env var feature flag (bridged from `container.runtime.auto_start`): when
+	// truthy, Atmos may auto-init/start the Podman machine during detection.
+	envContainerRuntimeAutoStart = "ATMOS_CONTAINER_RUNTIME_AUTO_START"
 )
 
 // RuntimeStatus represents the availability status of a container runtime.
@@ -43,11 +50,13 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 	defer perf.Track(nil, "container.DetectRuntime")()
 
 	// Check environment variable first.
-	_ = viper.BindEnv("ATMOS_CONTAINER_RUNTIME", "ATMOS_CONTAINER_RUNTIME")
-	if envRuntime := viper.GetString("ATMOS_CONTAINER_RUNTIME"); envRuntime != "" {
+	_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
+	if envRuntime := strings.TrimSpace(viper.GetString(envContainerRuntime)); envRuntime != "" {
 		log.Debug("Using container runtime from ATMOS_CONTAINER_RUNTIME", logKeyRuntime, envRuntime)
 
 		switch envRuntime {
+		case string(TypeAuto):
+			// Continue to availability-based detection below.
 		case string(TypeDocker):
 			if isAvailable(ctx, TypeDocker) {
 				return NewDockerRuntime(), nil
@@ -78,6 +87,67 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 	}
 
 	return nil, fmt.Errorf("%w: neither docker nor podman is available", errUtils.ErrRuntimeNotAvailable)
+}
+
+// DetectRuntimeWithPreference detects a runtime, optionally requiring a specific runtime.
+func DetectRuntimeWithPreference(ctx context.Context, preferred string) (Runtime, error) {
+	defer perf.Track(nil, "container.DetectRuntimeWithPreference")()
+
+	preferred = strings.TrimSpace(preferred)
+	switch preferred {
+	case "", string(TypeAuto):
+		return DetectRuntime(ctx)
+	case string(TypeDocker):
+		if isAvailable(ctx, TypeDocker) {
+			return NewDockerRuntime(), nil
+		}
+		return nil, fmt.Errorf("%w: docker is not available or not running", errUtils.ErrRuntimeNotAvailable)
+	case string(TypePodman):
+		if isAvailable(ctx, TypePodman) {
+			return NewPodmanRuntime(), nil
+		}
+		return nil, fmt.Errorf("%w: podman is not available or not running", errUtils.ErrRuntimeNotAvailable)
+	default:
+		return nil, fmt.Errorf("%w: unknown runtime type '%s'", errUtils.ErrRuntimeNotAvailable, preferred)
+	}
+}
+
+// DetectRuntimeWithPreferenceAndRecovery detects a runtime and optionally
+// initializes/starts Podman when Podman is the selected runtime.
+func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred string, autoStart bool) (Runtime, error) {
+	defer perf.Track(nil, "container.DetectRuntimeWithPreferenceAndRecovery")()
+
+	// The global ATMOS_CONTAINER_RUNTIME_AUTO_START feature flag (bridged from
+	// container.runtime.auto_start) enables recovery for every container operation,
+	// so users need not set runtime_auto_start on each step.
+	autoStart = autoStart || autoStartFromEnv()
+
+	// Resolve the runtime that DetectRuntime will actually select so recovery
+	// matches the resolution order (preferred flag, then ATMOS_CONTAINER_RUNTIME,
+	// then Docker, then Podman). Reading the env here mirrors DetectRuntime above.
+	selected := strings.TrimSpace(preferred)
+	if selected == "" {
+		_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
+		selected = strings.TrimSpace(viper.GetString(envContainerRuntime))
+	}
+	if selected == string(TypeAuto) {
+		selected = ""
+	}
+
+	// Recover Podman when it is the selected runtime, or when nothing is selected
+	// and Docker is unavailable (so detection falls through to Podman).
+	if autoStart && (selected == string(TypePodman) || (selected == "" && !isAvailable(ctx, TypeDocker))) {
+		_ = TryRecoverPodmanRuntime(ctx)
+	}
+
+	return DetectRuntimeWithPreference(ctx, preferred)
+}
+
+// autoStartFromEnv reports whether the ATMOS_CONTAINER_RUNTIME_AUTO_START feature
+// flag is enabled. Mirrors the envContainerRuntime viper pattern above.
+func autoStartFromEnv() bool {
+	_ = viper.BindEnv(envContainerRuntimeAutoStart, envContainerRuntimeAutoStart)
+	return viper.GetBool(envContainerRuntimeAutoStart)
 }
 
 // isAvailable checks if a container runtime is available and running.
@@ -227,7 +297,8 @@ func initializePodmanMachine(ctx context.Context) error {
 				return fmt.Errorf("failed to initialize: %w: %s", err, string(output))
 			}
 			return nil
-		})
+		},
+	)
 }
 
 // startPodmanMachine starts the Podman machine with spinner UI.
@@ -244,7 +315,8 @@ func startPodmanMachine(ctx context.Context) error {
 				return fmt.Errorf("failed to start: %w: %s", err, string(output))
 			}
 			return nil
-		})
+		},
+	)
 }
 
 // GetRuntimeType returns the type of a runtime instance.

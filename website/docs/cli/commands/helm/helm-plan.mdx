@@ -1,0 +1,48 @@
+---
+title: atmos helm plan
+sidebar_label: plan
+sidebar_class_name: command
+id: plan
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Preview the changes a Helm apply would make. `plan` is an alias for
+  [`diff`](/cli/commands/helm/diff): it renders the chart client-side and shows a
+  unified diff against a baseline (the deployed release, a local manifest file, or
+  a GitOps deployment repository). See [`diff`](/cli/commands/helm/diff) for the
+  full description of baselines and flags.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm plan <component> --stack <stack> [options]
+
+# Diff against the deployed release (requires cluster access).
+atmos helm plan monitoring -s plat-ue2-dev
+
+# Diff offline against a local manifest or the GitOps deployment repository.
+atmos helm plan monitoring -s plat-ue2-dev --from-manifest=current.yaml
+atmos helm plan monitoring -s plat-ue2-dev --against=target
+
+# Plan all components tagged "production" (composes with --all/--affected)
+atmos helm plan --all --tags production
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--against=<source>` / `--from-manifest=<path>` / `--context=<n>` <em>(optional)</em></dt>
+  <dd>Select and tune the diff baseline. See [`diff`](/cli/commands/helm/diff#flags).</dd>
+
+  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
+  <dd>Process multiple Helm components in dependency order.</dd>
+
+  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+</dl>

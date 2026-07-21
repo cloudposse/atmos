@@ -1,0 +1,131 @@
+---
+title: parallel
+sidebar_label: parallel
+slug: /workflows/steps/type/parallel
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `parallel` step type runs its child steps concurrently instead of one after another, with bounded concurrency, sibling dependencies, configurable failure behavior, and parent-owned output rendering. It turns independent checks, tests, and plans into a dependency-aware group that finishes faster while keeping output readable.
+</Intro>
+
+List the work under `steps`. Each child runs concurrently up to `max_concurrency`, and a child with a `needs` list waits for the siblings it names before it starts. Child steps must be non-interactive command steps — `shell`, `atmos`, or `sleep`.
+
+```yaml
+steps:
+  - name: checks
+    type: parallel
+    max_concurrency: 2
+    fail:
+      mode: wait_all
+    output:
+      mode: grouped
+      order: completion
+      show_summary: true
+      prefix: "{{ .step.name }}"
+    steps:
+      - name: lint
+        type: shell
+        command: echo "lint started"; sleep 1; echo "lint passed"
+
+      - name: unit
+        type: shell
+        command: echo "unit tests started"; sleep 1; echo "unit tests passed"
+
+      - name: package
+        type: shell
+        needs: [lint, unit]
+        command: echo "packaging after lint and unit"
+```
+
+The [`matrix`](/workflows/steps/type/matrix) step type shares the same scheduler, failure, and output fields, but first expands a set of axes into generated child steps.
+
+## Fields
+
+<dl>
+  <dt>`steps`</dt>
+  <dd>Required. List of child steps to run concurrently. Each child must be a `shell`, `atmos`, or `sleep` step.</dd>
+
+  <dt>`max_concurrency`</dt>
+  <dd>Maximum number of child steps to run at once. Defaults to unbounded (all eligible children start together).</dd>
+
+  <dt>`fail`</dt>
+  <dd>Failure behavior for the group. See [Failure behavior](#failure-behavior).</dd>
+
+  <dt>`output`</dt>
+  <dd>How the parent renders child output. Accepts a string mode or a structured block. See [Output](#output).</dd>
+</dl>
+
+Each child step may also declare `needs` to order it after named siblings.
+
+<dl>
+  <dt>`needs`</dt>
+  <dd>List of sibling step names that must complete successfully before this child starts. A child whose dependency fails or is skipped is itself skipped.</dd>
+</dl>
+
+## Failure behavior
+
+`fail` controls what happens when a child fails:
+
+```yaml
+fail:
+  mode: wait_all       # wait_all (default) | fail_fast | best_effort
+  max_failures: 0      # 0 (default) means no limit
+```
+
+<dl>
+  <dt>`mode`</dt>
+  <dd>
+    Failure mode:
+    <ul>
+      <li><code>wait_all</code> (default): let running children finish, skip dependents of failed children, then fail the parent if any child failed.</li>
+      <li><code>fail_fast</code>: cancel pending and running children as soon as the failure threshold is reached.</li>
+      <li><code>best_effort</code>: record failures but let the parent succeed.</li>
+    </ul>
+  </dd>
+
+  <dt>`max_failures`</dt>
+  <dd>Number of child failures tolerated before `fail_fast` cancels the group. `0` (default) means no limit.</dd>
+</dl>
+
+## Output
+
+The parent step owns rendering for the whole group so concurrent output stays readable. Set `output` to a string for the mode, or to a block for full control:
+
+```yaml
+output:
+  mode: grouped        # grouped (default) | prefixed | none
+  order: completion    # completion | definition (grouped only)
+  show_summary: true   # print the success/failed/skipped/canceled summary
+  prefix: "{{ .step.name }}"
+```
+
+<dl>
+  <dt>`mode`</dt>
+  <dd>
+    Rendering mode:
+    <ul>
+      <li><code>grouped</code> (default): capture each child's output and print it in a labeled block once the child finishes.</li>
+      <li><code>prefixed</code>: stream child output live, prefixing every line with the child's label.</li>
+      <li><code>none</code>: suppress child output.</li>
+    </ul>
+  </dd>
+
+  <dt>`order`</dt>
+  <dd>For `grouped` mode, the order blocks are printed: `completion` (as children finish) or `definition` (in declared order).</dd>
+
+  <dt>`show_summary`</dt>
+  <dd>Print a summary line with success, failed, skipped, and canceled counts after the group completes.</dd>
+
+  <dt>`prefix`</dt>
+  <dd>Go template for the per-child label, evaluated with the child step context (for example `{{ .step.name }}`).</dd>
+</dl>
+
+## Example
+
+A runnable example lives in [`examples/parallel-steps`](https://github.com/cloudposse/atmos/tree/main/examples/parallel-steps):
+
+```shell
+atmos workflow checks -f parallel
+```

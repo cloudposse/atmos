@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -12,6 +13,7 @@ import (
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -71,7 +73,7 @@ func ExecuteAtmosCmd() error {
 	lo.ForEach(componentsSet, func(c string, _ int) {
 		var stacksForComponent []string
 		for k, v := range stacksComponentsMap {
-			if u.SliceContainsString(v, c) {
+			if slices.Contains(v, c) {
 				stacksForComponent = append(stacksForComponent, k)
 			}
 		}
@@ -84,7 +86,7 @@ func ExecuteAtmosCmd() error {
 
 	// Start the UI
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
-	fmt.Println()
+	ui.Writeln("")
 	if err != nil {
 		return err
 	}

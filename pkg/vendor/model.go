@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -16,10 +17,10 @@ import (
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -352,7 +353,9 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 
 	case pkgTypeOci:
 		// Process OCI images
-		if err := exec.ProcessOciImage(atmosConfig, p.uri, *tempDir); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if err := oci.ProcessImage(ctx, atmosConfig, p.uri, *tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image: %w", err)
 		}
 
@@ -364,7 +367,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 			OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 		}
 		if p.sourceIsLocalFile {
-			*tempDir = filepath.Join(*tempDir, exec.SanitizeFileName(p.uri))
+			*tempDir = filepath.Join(*tempDir, SanitizeFileName(p.uri))
 		}
 		if err := cp.Copy(p.uri, *tempDir, copyOptions); err != nil {
 			return fmt.Errorf("failed to copy package: %w", err)
@@ -547,7 +550,7 @@ func copyToTargetWithPatterns(tempDir, targetPath string, s *schema.AtmosVendorS
 	// Adjust the target path if it's a local file with no extension
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
 		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := exec.SanitizeFileName(s.Source)
+		sanitizedBase := SanitizeFileName(s.Source)
 		targetPath = filepath.Join(targetPath, sanitizedBase)
 	}
 

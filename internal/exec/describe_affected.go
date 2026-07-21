@@ -5,35 +5,41 @@ import (
 	"fmt"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--base', '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
 type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
 type DescribeAffectedCmdArgs struct {
 	CLIConfig                   *schema.AtmosConfiguration
+	Base                        string // Unified base commit (ref or SHA). Takes precedence over Ref/SHA.
 	CloneTargetRef              bool
 	Format                      string
 	IncludeDependents           bool
 	IncludeSettings             bool
 	IncludeSpaceliftAdminStacks bool
 	OutputFile                  string
+	GithubOutputFile            string // Output file for $GITHUB_OUTPUT format (key=value).
 	Ref                         string
 	RepoPath                    string
 	SHA                         string
@@ -48,6 +54,11 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
+	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
+	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
+	ErrorMode                   string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -67,6 +78,9 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -81,11 +95,15 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
+		targetBranch string,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -93,6 +111,9 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -102,6 +123,9 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		onlyInStack string,
+		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -121,9 +145,9 @@ func NewDescribeAffectedExec(
 
 	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
-		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
-		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefClone,
-		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckout,
+		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPathWithOptions,
+		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefCloneWithOptions,
+		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions,
 		addDependentsToAffected:                      addDependentsToAffected,
 		printOrWriteToFile:                           printOrWriteToFile,
 		IsTTYSupportForStdout:                        term.IsTTYSupportForStdout,
@@ -152,11 +176,18 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
 
-	if result.Format != "yaml" && result.Format != "json" {
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// describe.error_mode, else "warn".
+	result.ErrorMode = ResolveErrorMode(result.ErrorMode, atmosConfig.Describe.ErrorMode)
+
+	if result.Format != "yaml" && result.Format != "json" && result.Format != "matrix" {
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
-	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
+	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
 		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
+	}
+	if result.ErrorMode != "strict" && result.ErrorMode != "warn" && result.ErrorMode != "silent" {
+		return DescribeAffectedCmdArgs{}, fmt.Errorf("%w: %q", ErrInvalidErrorMode, result.ErrorMode)
 	}
 
 	return result, nil
@@ -167,6 +198,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	defer perf.Track(nil, "exec.SetDescribeAffectedFlagValueInCliArgs")()
 
 	flagsKeyValue := map[string]any{
+		"base":                           &describe.Base,
 		"ref":                            &describe.Ref,
 		"sha":                            &describe.SHA,
 		"repo-path":                      &describe.RepoPath,
@@ -184,9 +216,11 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"stack":                          &describe.Stack,
 		"format":                         &describe.Format,
 		"file":                           &describe.OutputFile,
+		"output-file":                    &describe.GithubOutputFile,
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
+		"error-mode":                     &describe.ErrorMode,
 	}
 
 	// By default, process templates and YAML functions
@@ -211,7 +245,21 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	// When uploading, always include dependents and settings for all affected components
+	// Resolve --base flag: auto-detect ref vs SHA and populate the appropriate field.
+	if describe.Base != "" {
+		if ci.IsCommitSHA(describe.Base) {
+			describe.SHA = describe.Base
+		} else {
+			describe.Ref = describe.Base
+		}
+	}
+
+	// Auto-detect base from CI environment when ci.enabled is true and no explicit base provided.
+	if describe.Ref == "" && describe.SHA == "" && describe.CLIConfig != nil && describe.CLIConfig.CI.Enabled {
+		resolveBaseFromCI(describe)
+	}
+
+	// When uploading, always include dependents and settings for all affected components.
 	if describe.Upload {
 		describe.IncludeDependents = true
 		describe.IncludeSettings = true
@@ -219,6 +267,58 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
+}
+
+// resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.
+//
+// This function is only invoked when `ci.enabled: true` in atmos.yaml and no
+// explicit base flag was provided (see the call site above). Because the user
+// has opted into CI auto-detect, it is appropriate to mutate the runner's git
+// config (via `EnsureGitSafeDirectory`) so that downstream git commands —
+// `merge-base`, the targeted `git fetch` for shallow clones, and the
+// `HEAD~1` lookup for closed PRs — do not fail with "dubious ownership in
+// repository" inside GitHub Actions container jobs. The helper is a no-op
+// outside GitHub Actions, so it does nothing when running locally.
+func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
+	defer perf.Track(nil, "exec.resolveBaseFromCI")()
+
+	p := ci.Detect()
+	if p == nil {
+		return
+	}
+
+	// Trust the GitHub Actions workspace before any git operation the
+	// provider is about to run. Gated by `ci.enabled` via the call site.
+	if err := atmosgit.EnsureGitSafeDirectory(); err != nil {
+		// Non-fatal: subsequent git commands will surface a clearer error
+		// if this actually matters. We log so the cause is visible.
+		log.Warn("Failed to configure git safe.directory for GitHub Actions workspace", "error", err)
+	}
+
+	resolution, err := p.ResolveBase()
+	if err != nil {
+		log.Warn("Failed to auto-detect CI base", "provider", p.Name(), "error", err)
+		return
+	}
+	if resolution == nil {
+		return
+	}
+
+	describe.Ref = resolution.Ref
+	describe.SHA = resolution.SHA
+	describe.HeadSHAOverride = resolution.HeadSHA
+	describe.CIEventType = resolution.EventType
+	describe.TargetBranch = resolution.TargetBranch
+
+	base := resolution.SHA
+	if base == "" {
+		base = resolution.Ref
+	}
+	log.Info("Auto-detected CI base",
+		"provider", p.Name(),
+		"event", resolution.EventType,
+		"base", base,
+		"source", resolution.Source)
 }
 
 // Execute executes `describe affected` command.
@@ -229,6 +329,11 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
 	var err error
+
+	// Built once and reused across every describe-stacks call this command makes (HEAD,
+	// BASE, and any dependents resolution) so the end-of-command summary reports one
+	// combined count instead of one per call site.
+	errOptions, collector := ErrorOptionsFromMode(a.ErrorMode)
 
 	switch {
 	case a.RepoPath != "":
@@ -242,6 +347,9 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
+			a.AuthDisabled,
+			errOptions,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -257,12 +365,16 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
+			a.AuthDisabled,
+			errOptions,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
+			a.TargetBranch,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
@@ -270,6 +382,9 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
+			a.AuthDisabled,
+			errOptions,
 		)
 	}
 	if err != nil {
@@ -278,7 +393,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
 		if err != nil {
 			return err
 		}
@@ -290,10 +405,32 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		affected = StripAffectedForUpload(affected)
 	}
 
-	return d.view(a, repoUrl, headHead, baseHead, affected)
+	if err := d.view(a, repoUrl, headHead, baseHead, affected); err != nil {
+		return err
+	}
+
+	PrintErrorModeSummary(a.ErrorMode, collector)
+	return nil
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+	// Handle matrix format specially - it bypasses the normal view flow.
+	if a.Format == "matrix" {
+		entries := convertAffectedToMatrix(affected)
+
+		// Resolve output file: explicit flag > CI auto-detect > stdout.
+		outputFile := a.GithubOutputFile
+		if outputFile == "" && d.atmosConfig.CI.Enabled {
+			outputFile = ghactions.GetOutputPath()
+		}
+		return matrix.WriteOutput(entries, outputFile)
+	}
+
+	// Reject --output-file for non-matrix formats — it would be silently ignored.
+	if a.GithubOutputFile != "" {
+		return fmt.Errorf("%w: --output-file is only supported with --format=matrix", errUtils.ErrInvalidFlag)
+	}
+
 	if a.Query == "" {
 		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
@@ -315,16 +452,35 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	log.Debug("Affected components and stacks:")
 
-	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
-	if err != nil {
-		return err
+	// When uploading, suppress the large JSON dump unless verbose mode or file output is requested.
+	if !args.Upload || args.Verbose || args.OutputFile != "" {
+		err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
+		if err != nil {
+			return err
+		}
 	}
 
 	if !args.Upload {
 		return nil
 	}
-	// Parse the repo URL
-	gitURL, err := giturl.NewGitURL(repoUrl)
+
+	// Validate that the CI event is one Atmos Pro can correlate when uploading.
+	// Supported events: pull_request, pull_request_target, and merge_group (GitHub merge queue).
+	// Push events and other ad-hoc triggers cannot be correlated to a check run.
+	if args.CIEventType != "" &&
+		args.CIEventType != "pull_request" &&
+		args.CIEventType != "pull_request_target" &&
+		args.CIEventType != "merge_group" {
+		return errUtils.Build(
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request, pull_request_target, and merge_group events", errUtils.ErrUploadRequiresSupportedEvent, args.CIEventType),
+		).
+			WithHint("Trigger your workflow on pull_request, pull_request_target, or merge_group events when using --upload.").
+			WithHint("Push events and other ad-hoc triggers cannot be correlated to an Atmos Pro check run.").
+			WithHint("See https://atmos.tools/cli/configuration/settings/pro for supported CI configurations.").
+			Err()
+	}
+
+	repoURLParts, err := atmosgit.ParseRepoURL(repoUrl)
 	if err != nil {
 		return err
 	}
@@ -332,22 +488,44 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Creating API client")
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
-		return err
+		return errUtils.Build(
+			fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateAPIClient, err),
+		).
+			WithHint("Ensure your GitHub Actions workflow has `id-token: write` permission for OIDC authentication.").
+			WithHint("Verify that `ATMOS_PRO_WORKSPACE_ID` is set to the correct workspace ID for this repository.").
+			WithHint("See https://atmos.tools/pro for authentication setup.").
+			Err()
+	}
+
+	// Use the PR head SHA from the CI event payload when available.
+	// This ensures the upload SHA matches what Atmos Pro indexed from the webhook,
+	// regardless of which commit the workflow has checked out (e.g., merge commit vs PR head).
+	headSHA := headHead.Hash().String()
+	if args.HeadSHAOverride != "" {
+		headSHA = args.HeadSHAOverride
+		log.Debug("Using PR head SHA for upload correlation", "headSHA", headSHA, "localHEAD", headHead.Hash().String())
 	}
 
 	req := dtos.UploadAffectedStacksRequest{
-		HeadSHA:   headHead.Hash().String(),
+		HeadSHA:   headSHA,
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
-		RepoName:  gitURL.GetRepoName(),
-		RepoOwner: gitURL.GetOwnerName(),
-		RepoHost:  gitURL.GetHostName(),
+		RepoName:  repoURLParts.Name,
+		RepoOwner: repoURLParts.Owner,
+		RepoHost:  repoURLParts.Host,
 		Stacks:    affected,
 	}
 
 	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	return apiClient.UploadAffectedStacks(&req)
+	if uploadErr := apiClient.UploadAffectedStacks(&req); uploadErr != nil {
+		ui.Error("Failed to upload affected stacks to Atmos Pro")
+		return uploadErr
+	}
+
+	ui.Successf("Uploaded %d affected component(s) to Atmos Pro", len(affected))
+
+	return nil
 }
 
 type viewWithScrollProps struct {
@@ -416,4 +594,19 @@ func viewConfig(v *viewConfigProps) error {
 		return err
 	}
 	return nil
+}
+
+// convertAffectedToMatrix converts the affected list to matrix entries.
+func convertAffectedToMatrix(affected []schema.Affected) []matrix.Entry {
+	entries := make([]matrix.Entry, 0, len(affected))
+	for i := range affected {
+		a := &affected[i]
+		entries = append(entries, matrix.Entry{
+			Stack:         a.Stack,
+			Component:     a.Component,
+			ComponentPath: a.ComponentPath,
+			ComponentType: a.ComponentType,
+		})
+	}
+	return entries
 }

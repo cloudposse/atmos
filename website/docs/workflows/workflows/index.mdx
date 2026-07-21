@@ -1,0 +1,171 @@
+---
+title: workflows
+sidebar_label: workflows
+slug: /workflows
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Atmos workflows are versioned runbooks for infrastructure operations. Use them to turn repeatable deployment, validation, maintenance, and release procedures into YAML that runs the same way on a laptop, in CI, or from a Git hook.
+</Intro>
+
+Workflow manifests live under the directory configured by [`workflows.base_path`](/cli/configuration/workflows) in `atmos.yaml`. Each manifest has a top-level `workflows` map. Each key under that map is a named [workflow](/workflows/workflow) that Atmos can run with [`atmos workflow`](/cli/commands/workflow).
+
+<File title="stacks/workflows/deploy.yaml">
+```yaml
+workflows:
+  deploy-platform:
+    description: Deploy the platform foundation in dependency order.
+    stack: plat-ue2-prod
+    show:
+      header: true
+      count: true
+    steps:
+      - command: terraform apply vpc -auto-approve
+      - command: terraform apply eks/cluster -auto-approve
+      - command: terraform apply eks/alb-controller -auto-approve
+```
+</File>
+
+Run it by name:
+
+```shell
+atmos workflow deploy-platform --stack plat-ue2-prod
+```
+
+## Why Workflows
+
+Workflows are useful when an operation has more than one step, has to run in a specific order, or needs the same guardrails every time:
+
+- Multi-component deploys that apply networking, clusters, services, and verification in order.
+- Validation flows that run Terraform, policy checks, smoke tests, and formatting checks as one command.
+- Maintenance runbooks for backups, rotation, cleanup, or repair tasks.
+- Guided release flows that collect input, confirm production changes, and render status as the run progresses.
+
+Because workflows are YAML, they are reviewable, reusable, and easy to run from CI without turning operational process into one-off shell scripts.
+
+## Manifest Shape
+
+Each workflow file must define a `workflows` map:
+
+```yaml
+workflows:
+  <workflow-name>:
+    description: <description>
+    steps: []
+```
+
+The keys under `workflows` are workflow names. Each value is a single [workflow](/workflows/workflow) object.
+
+## File Discovery
+
+Atmos searches the directory configured by `workflows.base_path` for YAML files. The path is configured in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+workflows:
+  base_path: stacks/workflows
+```
+</File>
+
+When a workflow name is unique, the file can be omitted:
+
+```shell
+atmos workflow eks-up --stack tenant1-ue2-dev
+```
+
+Use `--file` when multiple files contain the same workflow name or when a script should be explicit:
+
+```shell
+atmos workflow eks-up --file deploy --stack tenant1-ue2-dev
+```
+
+The `--file` value is relative to `workflows.base_path`; the `.yaml` extension is optional.
+
+## Workflows vs Custom Commands
+
+| Use | Workflows | Custom commands |
+| --- | --- | --- |
+| Configuration location | Workflow manifests under `workflows.base_path` | The `commands` section in `atmos.yaml` |
+| How users run them | `atmos workflow <name>` | `atmos <command>` |
+| Best for | Versioned runbooks and multi-step orchestration | Extending the CLI with team-specific commands, arguments, and flags |
+| Step support | Uses workflow `steps` and step types | Can use the same step types in command `steps` |
+| Composition | Can call custom commands | Can call workflows |
+
+Use workflows when the operation is an orchestration unit: deploy these components, validate this stack, rotate this credential, run this release sequence. Use [custom commands](/cli/configuration/commands) when you want a first-class Atmos command with its own arguments, flags, help text, and CLI completion behavior.
+
+## Common Patterns
+
+### Multi-component deploy
+
+```yaml
+workflows:
+  deploy-networking:
+    description: Deploy shared networking components.
+    steps:
+      - command: terraform apply vpc -s plat-ue2-prod -auto-approve
+      - command: terraform apply dns -s plat-ue2-prod -auto-approve
+      - command: terraform apply transit-gateway -s plat-ue2-prod -auto-approve
+```
+
+### Validation gate
+
+```yaml
+workflows:
+  validate-platform:
+    description: Run checks before a platform release.
+    steps:
+      - command: terraform validate vpc -s plat-ue2-prod
+      - type: shell
+        command: make policy-check
+        working_directory: !repo-root
+      - type: toast
+        level: success
+        content: Validation complete.
+```
+
+### Guided release flow
+
+```yaml
+workflows:
+  release:
+    description: Collect release input, confirm, then deploy.
+    steps:
+      - name: version
+        type: input
+        prompt: Release version
+      - name: confirm
+        type: confirm
+        prompt: "Release {{ .steps.version.value }} to production?"
+      - command: workflow deploy-platform
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/workflow', label: 'atmos workflow', description: 'Run a workflow or open the interactive workflow UI'},
+  {type: 'link', href: '/cli/commands/list/list-workflows', label: 'atmos list workflows', description: 'List available workflow names'},
+  {type: 'link', href: '/cli/commands/describe/workflows', label: 'atmos describe workflows', description: 'Inspect workflow definitions and source files'},
+  {type: 'link', href: '/cli/configuration/commands', label: 'Custom commands', description: 'Define first-class Atmos commands in atmos.yaml'},
+]} />
+
+## Related
+
+- [workflow](/workflows/workflow) describes one named entry under `workflows`.
+- [steps](/workflows/steps) describes the workflow's ordered step array.
+- [CLI workflow configuration](/cli/configuration/workflows) describes the `atmos.yaml` `workflows.base_path` setting.
+
+<span id="step-types" />
+<span id="retry-configuration" />
+<span id="workflow-containers" />
+<span id="using-authentication-with-workflows" />
+
+Older section links now point to YAML-shaped pages:
+
+- [steps type](/workflows/steps/type)
+- [steps retry](/workflows/steps/retry)
+- [workflow container](/workflows/container)
+- [steps identity](/workflows/steps/identity)

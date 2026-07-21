@@ -1,0 +1,43 @@
+components:
+  terraform:
+    s3-bucket:
+      metadata:
+        component: s3-bucket
+        description: "Encrypted S3 bucket for application assets."
+        tags: [storage, security]
+        labels:
+          tier: foundational
+      settings:
+        validation:
+          validate-s3-bucket-with-jsonschema:
+            schema_type: jsonschema
+            schema_path: "s3-bucket/validate-s3-bucket-component.json"
+            description: Validate 's3-bucket' variables using JSON Schema
+          check-s3-bucket-with-opa-policy:
+            schema_type: opa
+            schema_path: "s3-bucket/validate-s3-bucket-component.rego"
+            module_paths:
+              - "catalog/constants"
+            description: Check 's3-bucket' configuration using OPA policy
+            timeout: 10
+      # https://atmos.tools/stacks/dependencies/components
+      dependencies:
+        components:
+          - name: kms-key
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            bucket_id: .bucket_id
+      vars:
+        name: assets
+        # Safe default. Per-environment overrides live in each region manifest:
+        # dev/staging set `force_destroy: true` for easy teardown; prod keeps it `false`
+        # and the OPA policy requires `versioning_enabled: true` in prod.
+        versioning_enabled: true
+        # Real state supersedes this deterministic plan-time placeholder
+        # (a provider-valid mock ARN so a cold `terraform plan --all` succeeds).
+        kms_key_arn: !terraform.state kms-key .key_arn // "arn:aws:kms:{{ .vars.region }}:000000000000:key/00000000-0000-0000-0000-000000000000"

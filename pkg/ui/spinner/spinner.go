@@ -6,15 +6,27 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const newline = "\n"
+
+// newDotSpinner builds the shared Dot spinner used by every spinner variant here.
+// Apply honors the ATMOS_SPINNER_FPS override (for VHS demo recordings).
+func newDotSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
+	return s
+}
 
 // ExecWithSpinner runs an operation with a spinner UI.
 // ProgressMsg is shown while operation is running (e.g., "Starting container").
@@ -39,25 +51,55 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 	model := newSpinnerModel(progressMsg, completedMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
-	// Run operation in background.
+	// goroutineDone is closed once the operation finishes, guaranteeing that any
+	// side effects of the operation have completed before ExecWithSpinner returns.
+	goroutineDone := make(chan struct{})
 	go func() {
+		defer close(goroutineDone)
 		err := operation()
 		p.Send(opCompleteMsg{err: err})
 	}()
 
-	finalModel, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("spinner error: %w", err)
+	finalModel, spinnerErr := p.Run()
+
+	// Always wait for the operation goroutine to finish before returning.
+	<-goroutineDone
+
+	return evaluateSpinnerResult(finalModel, spinnerErr)
+}
+
+// evaluateSpinnerResult interprets the outcome of a finished ExecWithSpinner run.
+// It returns a spinner-level error, the operation's own error, or
+// ErrSpinnerOperationInterrupted if the spinner exited before the operation
+// reported completion (e.g. the user pressed ctrl+c).
+func evaluateSpinnerResult(finalModel tea.Model, spinnerErr error) error {
+	if spinnerErr != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrTUIRun, spinnerErr)
+	}
+	if finalModel == nil {
+		return errUtils.ErrSpinnerReturnedNilModel
 	}
 
-	if m, ok := finalModel.(spinnerModel); ok && m.err != nil {
+	m, ok := finalModel.(spinnerModel)
+	if !ok {
+		return fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
+	}
+	if m.err != nil {
 		return m.err
+	}
+	if !m.done {
+		return errUtils.ErrSpinnerOperationInterrupted
 	}
 
 	return nil
@@ -118,9 +160,7 @@ func (m spinnerModel) View() string {
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return spinnerModel{
 		spinner:      s,
 		progressMsg:  progressMsg,
@@ -157,25 +197,59 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 	model := newDynamicSpinnerModel(progressMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
-	// Run operation in background.
+	// goroutineDone is closed once the operation finishes, guaranteeing that any
+	// values the operation wrote (e.g. via a closure) are visible to the caller
+	// after ExecWithSpinnerDynamic returns.
+	goroutineDone := make(chan struct{})
 	go func() {
+		defer close(goroutineDone)
 		completedMsg, err := operation()
 		p.Send(opCompleteDynamicMsg{completedMsg: completedMsg, err: err})
 	}()
 
-	finalModel, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("spinner error: %w", err)
+	finalModel, spinnerErr := p.Run()
+
+	// Always wait for the operation goroutine to finish before returning.
+	// This prevents callers from reading uninitialized closure variables when
+	// the bubbletea program exits before the operation completes (e.g. ctrl+c).
+	<-goroutineDone
+
+	return evaluateDynamicSpinnerResult(finalModel, spinnerErr)
+}
+
+// evaluateDynamicSpinnerResult interprets the outcome of a finished
+// ExecWithSpinnerDynamic run. It returns a spinner-level error, the
+// operation's own error, or ErrSpinnerOperationInterrupted if the spinner
+// exited before the operation reported completion (e.g. the user pressed
+// ctrl+c).
+func evaluateDynamicSpinnerResult(finalModel tea.Model, spinnerErr error) error {
+	if spinnerErr != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrTUIRun, spinnerErr)
+	}
+	if finalModel == nil {
+		return errUtils.ErrSpinnerReturnedNilModel
 	}
 
-	if m, ok := finalModel.(dynamicSpinnerModel); ok && m.err != nil {
+	m, ok := finalModel.(dynamicSpinnerModel)
+	if !ok {
+		return fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
+	}
+	if m.err != nil {
 		return m.err
+	}
+	if !m.done {
+		return errUtils.ErrSpinnerOperationInterrupted
 	}
 
 	return nil
@@ -242,9 +316,7 @@ func (m dynamicSpinnerModel) View() string {
 }
 
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return dynamicSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
@@ -291,17 +363,40 @@ func (s *Spinner) Start() {
 	}
 
 	model := newManualSpinnerModel(s.progressMsg)
-	s.program = tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	s.program = tea.NewProgram(model, opts...)
 	s.done = make(chan struct{})
 
 	go func() {
 		defer close(s.done)
 		_, _ = s.program.Run()
 	}()
+}
+
+// Update replaces the in-progress message. In non-interactive output it emits
+// the message as an informational line so long-running work remains visible.
+func (s *Spinner) Update(message string) {
+	if message == "" {
+		return
+	}
+
+	if !s.isTTY {
+		ui.Info(message)
+		return
+	}
+	if s.program == nil {
+		return
+	}
+
+	s.program.Send(manualUpdateMsg{message: message})
 }
 
 // Stop stops the spinner without displaying a completion message.
@@ -362,10 +457,12 @@ type manualStopMsg struct {
 	success bool
 }
 
+type manualUpdateMsg struct {
+	message string
+}
+
 func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return manualSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
@@ -389,6 +486,9 @@ func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finalMsg = msg.message
 		m.success = msg.success
 		return m, tea.Quit
+	case manualUpdateMsg:
+		m.progressMsg = msg.message
+		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)

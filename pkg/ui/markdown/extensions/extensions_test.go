@@ -587,6 +587,18 @@ func TestStrictLinkifyExtension(t *testing.T) {
 			mustContain:    "github.com/user/repo@v1.2.3",
 			mustNotContain: "mailto:",
 		},
+		{
+			name:           "tool spec in sentence context",
+			input:          "Skipped jqlang/jq@1.7.1 (not installed)",
+			mustContain:    "jqlang/jq@1.7.1",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "tool spec with parenthetical suffix",
+			input:          "Skipped mikefarah/yq@4.45.1 (not installed)",
+			mustContain:    "mikefarah/yq@4.45.1",
+			mustNotContain: "mailto:",
+		},
 	}
 
 	for _, tt := range tests {

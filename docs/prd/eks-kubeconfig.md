@@ -65,7 +65,7 @@ $ kubectl get pods
 ## Design Goals
 
 1. **Seamless integration**: EKS kubeconfig setup should happen automatically during `atmos auth login` when configured
-2. **Use AWS Go SDK**: Eliminate dependency on AWS CLI entirely — use `eks.DescribeCluster()` for kubeconfig generation and `atmos auth eks-token` as the exec credential plugin
+2. **Use AWS Go SDK**: Eliminate dependency on AWS CLI entirely — use `eks.DescribeCluster()` for kubeconfig generation and `atmos aws eks token` as the exec credential plugin
 3. **XDG compliance**: Store kubeconfig in XDG-compliant locations (`~/.config/atmos/kube/config`)
 4. **Merge support**: Append cluster configurations to existing kubeconfig without overwriting
 5. **Multiple clusters**: Support multiple EKS integrations linking to the same identity
@@ -336,8 +336,9 @@ users:
       apiVersion: client.authentication.k8s.io/v1beta1
       command: atmos
       args:
-      - auth
-      - eks-token
+      - aws
+      - eks
+      - token
       - --cluster-name
       - dev-cluster
       - --region
@@ -352,9 +353,9 @@ users:
 
 #### Exec Credential Plugin
 
-The kubeconfig uses `atmos auth eks-token` as the exec plugin for authentication:
+The kubeconfig uses `atmos aws eks token` as the exec plugin for authentication:
 
-- **Command**: `atmos auth eks-token --cluster-name <name> --region <region> --identity <name>`
+- **Command**: `atmos aws eks token --cluster-name <name> --region <region> --identity <name>`
 - **API Version**: `client.authentication.k8s.io/v1beta1`
 - **Token Lifetime**: ~15 minutes (refreshed automatically by kubectl on expiration)
 - **Credential Source**: Uses Atmos-managed AWS credentials via the specified identity
@@ -374,12 +375,12 @@ time from the integration's `via.identity` field.
 2. Uses Atmos-managed credentials directly (identity-aware)
 3. Consistent with the Atmos auth system — credentials flow through `atmos auth`
 
-**Implementation:** The `atmos auth eks-token` command needs to be implemented as a new
+**Implementation:** The `atmos aws eks token` command needs to be implemented as a new
 subcommand that outputs an `ExecCredential` JSON object compatible with
 `client.authentication.k8s.io/v1beta1`. It should use the AWS STS `GetCallerIdentity`
 pre-signed URL approach (same as `aws eks get-token`) to generate a bearer token.
 
-**Flags for `atmos auth eks-token`:**
+**Flags for `atmos aws eks token`:**
 - `--cluster-name` (required) — EKS cluster name
 - `--region` (required) — AWS region
 - `--identity` (optional) — Atmos identity name for credential resolution
@@ -487,7 +488,7 @@ to `ATMOS_PROFILE` (Atmos configuration profile overlays). The EKS command uses
 `flags.WithViperPrefix("eks")` to namespace its Viper keys under `eks.*`, preventing collision
 (see PR #2077).
 
-The `--identity` flag is available on all `atmos auth` subcommands (including `atmos auth eks-token`)
+The `--identity` flag is available on all `atmos auth` subcommands (including `atmos aws eks token`)
 as a PersistentFlag inherited from `authCmd`. It is **not** available on
 `atmos aws eks update-kubeconfig` because this command lives under the `aws` command tree, not
 `auth`. When using the `--integration` flag, identity resolution happens automatically from the
@@ -626,7 +627,7 @@ pkg/auth/
       eks_test.go         # NEW: Unit tests
 
 cmd/
-  auth_eks_token.go         # NEW: `atmos auth eks-token` exec credential plugin subcommand
+  auth_eks_token.go         # NEW: `atmos aws eks token` exec credential plugin subcommand
   auth_eks_token_test.go    # NEW: Unit tests (follows existing auth subcommand pattern)
 
 cmd/aws/eks/
@@ -642,7 +643,7 @@ internal/exec/
 #### 1. EKS SDK Wrapper (`pkg/auth/cloud/aws/eks.go`)
 
 - `DescribeCluster()` - Get cluster endpoint and CA certificate
-- `GetToken()` - Generate EKS bearer token via STS pre-signed URL (for `atmos auth eks-token`)
+- `GetToken()` - Generate EKS bearer token via STS pre-signed URL (for `atmos aws eks token`)
 - `EKSClusterInfo` struct - Cluster data needed for kubeconfig
 
 #### 2. Kubeconfig Manager (`pkg/auth/cloud/kube/config.go`)
@@ -653,7 +654,7 @@ internal/exec/
 
 #### 3. EKS Token Command (`cmd/auth_eks_token.go`)
 
-- Implements `atmos auth eks-token` as a subcommand of `authCmd`
+- Implements `atmos aws eks token` as a subcommand of `authCmd`
 - Follows the existing auth subcommand pattern (see `cmd/auth_ecr_login.go` for reference) — added via `authCmd.AddCommand()`, not `CommandProvider` (which is for top-level commands only; no auth subcommand uses it)
 - Outputs `ExecCredential` JSON (`client.authentication.k8s.io/v1beta1`)
 - Generates EKS bearer token using STS pre-signed `GetCallerIdentity` URL
@@ -847,7 +848,7 @@ auth:
 
 ### Terraform Kubernetes Provider
 
-Once Atmos provisions the kubeconfig, Terraform components that use the `kubernetes`, `helm`, or `kubectl` providers can authenticate to EKS without any additional configuration. The generated kubeconfig contains an exec credential plugin spec with `command: atmos` and `args: [auth, eks-token, ...]` (see [Output Format](#output-format)). When the Terraform provider reads this kubeconfig, it invokes `atmos auth eks-token` on demand to obtain short-lived tokens — the same mechanism kubectl uses. This means token refresh is handled automatically, even during long Terraform runs, as long as `atmos` is on PATH and the underlying AWS credentials are valid.
+Once Atmos provisions the kubeconfig, Terraform components that use the `kubernetes`, `helm`, or `kubectl` providers can authenticate to EKS without any additional configuration. The generated kubeconfig contains an exec credential plugin spec with `command: atmos` and `args: [auth, eks-token, ...]` (see [Output Format](#output-format)). When the Terraform provider reads this kubeconfig, it invokes `atmos aws eks token` on demand to obtain short-lived tokens — the same mechanism kubectl uses. This means token refresh is handled automatically, even during long Terraform runs, as long as `atmos` is on PATH and the underlying AWS credentials are valid.
 
 **Provider configuration using kubeconfig (recommended):**
 
@@ -870,7 +871,7 @@ provider "helm" {
 
 **Provider configuration using exec (alternative):**
 
-Components can also call `atmos auth eks-token` directly, bypassing kubeconfig entirely. This is useful when the component needs to target a specific cluster without relying on kubeconfig context:
+Components can also call `atmos aws eks token` directly, bypassing kubeconfig entirely. This is useful when the component needs to target a specific cluster without relying on kubeconfig context:
 
 ```hcl
 provider "kubernetes" {
@@ -880,7 +881,7 @@ provider "kubernetes" {
   exec {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "atmos"
-    args        = ["auth", "eks-token", "--cluster-name", var.cluster_name, "--region", var.region]
+    args        = ["aws", "eks", "token", "--cluster-name", var.cluster_name, "--region", var.region]
   }
 }
 ```
@@ -923,7 +924,7 @@ This pattern means `atmos auth login dev-admin` authenticates to AWS *and* confi
 1. **Token caching**: Cache EKS tokens to reduce API calls
 2. **Namespace support**: Set default namespace in kubeconfig context
 3. **Role ARN in exec plugin**: Embed `--role-arn` in the kubeconfig exec plugin args so kubectl token refresh assumes a role at runtime. This is distinct from the existing `--role-arn` flag on `atmos aws eks update-kubeconfig`, which applies role assumption at kubeconfig generation time only
-4. **CI/CD workflow**: Define how `atmos auth eks-token` works in CI environments where AWS credentials come from OIDC/instance profiles rather than `atmos auth login`
+4. **CI/CD workflow**: Define how `atmos aws eks token` works in CI environments where AWS credentials come from OIDC/instance profiles rather than `atmos auth login`
 
 ## References
 
@@ -940,7 +941,7 @@ This pattern means `atmos auth login dev-admin` authenticates to AWS *and* confi
 | 1.0 | 2025-12-17 | AI Assistant | Initial PRD |
 | 1.1 | 2025-12-18 | AI Assistant | Updated based on review: CLI uses `atmos aws eks` namespace, improved kubeconfig schema structure, clarified exec plugin format |
 | 1.2 | 2026-02-17 | AI Assistant | Synced PRD with codebase after rebase: fixed Integration interface, corrected architecture diagram, updated file paths, noted `buildAWSConfigFromCreds` reuse, updated dependency status |
-| 1.3 | 2026-02-17 | AI Assistant | Changed exec credential plugin from `aws` to `atmos auth eks-token` (eliminates AWS CLI dependency), added `GetToken()` to package structure, simplified XDG path section, moved "Atmos as exec plugin" from Future Enhancements to core design |
+| 1.3 | 2026-02-17 | AI Assistant | Changed exec credential plugin from `aws` to `atmos aws eks token` (eliminates AWS CLI dependency), added `GetToken()` to package structure, simplified XDG path section, moved "Atmos as exec plugin" from Future Enhancements to core design |
 | 1.4 | 2026-02-18 | AI Assistant | Added identity flag and `interactiveMode: Never` to exec plugin spec, specified KUBECONFIG colon-separated append semantics (idempotent), fixed command path to `cmd/auth_eks_token.go` (follows existing auth subcommand pattern), specified `KubeconfigSettings.Mode` octal parsing with `strconv.ParseUint`, replaced custom `MergeKubeconfig` with `k8s.io/client-go/tools/clientcmd` merge |
 | 1.5 | 2026-02-18 | AI Assistant | Synced with codebase review: updated KubeconfigSettings.Update validation, added k8s.io/client-go and PR #1903 to Dependencies, fixed `atmos auth env` format |
 | 1.6 | 2026-03-03 | AI Assistant | Rewrote executive summary and problem statement, added Terraform Kubernetes provider section |

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	_ "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -112,14 +111,35 @@ type S3API interface {
 // It's a map[string]S3API.
 var s3ClientCache sync.Map
 
-func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext) (S3API, error) {
+func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext, envOverlay map[string]string) (S3API, error) {
 	region := GetBackendAttribute(backend, "region")
 	roleArn := GetS3BackendAssumeRoleArn(backend)
 
 	// Build a deterministic cache key including auth profile if present.
 	cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
 	if authContext != nil && authContext.AWS != nil {
-		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
+		// Include the identity endpoint so an emulator-backed read and a real-AWS
+		// read (same region/role/profile) never alias to the same cached client.
+		cacheKey += fmt.Sprintf(";profile=%s;auth_endpoint=%s", authContext.AWS.Profile, authContext.AWS.EndpointURL)
+	}
+	if envOverlay != nil {
+		// Two components with different env profiles/credentials/endpoints must
+		// produce distinct cache entries — otherwise cross-namespace or
+		// cross-endpoint reads alias each other in the cache. Include every
+		// whitelisted key that affects client behavior; FIPS, endpoint URL,
+		// and region variants all change which network endpoint the client
+		// targets and therefore must participate in the cache key.
+		cacheKey += fmt.Sprintf(
+			";env_profile=%s;env_region=%s;env_default_region=%s;env_config=%s;env_creds=%s;env_s3_endpoint=%s;env_sts_endpoint=%s;env_fips=%s",
+			envOverlay["AWS_PROFILE"],
+			envOverlay["AWS_REGION"],
+			envOverlay["AWS_DEFAULT_REGION"],
+			envOverlay["AWS_CONFIG_FILE"],
+			envOverlay["AWS_SHARED_CREDENTIALS_FILE"],
+			envOverlay["AWS_ENDPOINT_URL_S3"],
+			envOverlay["AWS_ENDPOINT_URL_STS"],
+			envOverlay["AWS_USE_FIPS_ENDPOINT"],
+		)
 	}
 
 	// Check the cache.
@@ -139,12 +159,29 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext)
 	}
 
 	// The minimum `assume role` duration allowed by AWS is 15 minutes.
-	cfg, err := awsIdentity.LoadConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
+	cfg, err := awsIdentity.LoadConfigWithAuthAndEnv(ctx, region, roleArn, 15*time.Minute, awsAuthContext, envOverlay)
 	if err != nil {
 		return nil, err
 	}
 
-	s3Client := s3.NewFromConfig(cfg)
+	// Resolve the S3 endpoint. SDK v2 endpoint URLs are per-service options, not a
+	// global config setting, so we apply it at client construction. Precedence:
+	// the component env overlay (AWS_ENDPOINT_URL_S3) wins, then the active
+	// identity's endpoint (e.g. an emulator). Without this, an emulator-backed
+	// `!terraform.state` read silently targets real AWS — the identity endpoint is
+	// injected into the Terraform subprocess but was never honored in-process.
+	s3Endpoint := ""
+	if envOverlay != nil {
+		s3Endpoint = envOverlay["AWS_ENDPOINT_URL_S3"]
+	}
+	if s3Endpoint == "" && authContext != nil && authContext.AWS != nil {
+		s3Endpoint = authContext.AWS.EndpointURL
+	}
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if s3Endpoint != "" {
+			o.BaseEndpoint = aws.String(s3Endpoint)
+		}
+	})
 	s3ClientCache.Store(cacheKey, s3Client)
 	return s3Client, nil
 }
@@ -160,7 +197,12 @@ func ReadTerraformBackendS3(
 
 	backend := GetComponentBackend(componentSections)
 
-	s3Client, err := getCachedS3Client(&backend, authContext)
+	// Honor the target component's `env` section for AWS credential resolution,
+	// matching `!terraform.output`'s subprocess behavior. nil overlay preserves
+	// the existing default-credential-chain behavior unchanged.
+	envOverlay := ExtractComponentEnvOverlay(componentSections, ComponentEnvKeysAWS)
+
+	s3Client, err := getCachedS3Client(&backend, authContext, envOverlay)
 	if err != nil {
 		return nil, err
 	}
@@ -230,12 +272,25 @@ func ReadTerraformBackendS3Internal(
 				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
 				return nil, nil
 			}
+			// A missing backend bucket means nothing in this backend has been
+			// provisioned yet (e.g. a fresh emulator, or before the state-backend is
+			// bootstrapped). Treat it the same as a missing state object so that
+			// cross-component `!terraform.state` reads resolve to `null` instead of
+			// hard-failing the whole stack describe. NoSuchBucket is not a modeled
+			// error for GetObject, so it arrives as a generic smithy.APIError (code
+			// "NoSuchBucket") rather than *types.NoSuchBucket — match on the code.
+			var apiErr smithy.APIError
+			if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucket" {
+				log.Debug("Terraform state S3 bucket doesn't exist; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
+				return nil, nil
+			}
 
 			lastErr = err
 			if attempt < maxRetryCount {
 				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
 				backoff := time.Second * time.Duration(1<<attempt)
-				log.Debug("Failed to read Terraform state file from the S3 bucket",
+				log.Debug(
+					"Failed to read Terraform state file from the S3 bucket",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
 					log.FieldBucket, bucket,

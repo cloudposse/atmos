@@ -1,0 +1,12 @@
+components:
+  terraform:
+    kms-key:
+      metadata:
+        component: kms-key
+        description: "Customer-managed KMS key that encrypts the application backend."
+        tags: [security, encryption]
+        labels:
+          tier: foundational
+      vars:
+        name: app
+        enable_key_rotation: true

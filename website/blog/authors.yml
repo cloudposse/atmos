@@ -5,6 +5,12 @@ atmos:
   url: https://github.com/cloudposse/atmos
   image_url: https://github.com/cloudposse/atmos/raw/main/docs/img/atmos-logo-128.svg
 
+nitrocode:
+  name: nitrocode
+  title: CEO of Infralicious
+  url: https://github.com/nitrocode
+  image_url: https://github.com/nitrocode.png
+
 osterman:
   name: Erik Osterman
   title: Founder @ Cloud Posse
@@ -70,3 +76,15 @@ gitbluf:
   title: Mission Critical Engineer @ SchubergPhilis
   url: https://github.com/gitbluf
   image_url: https://github.com/gitbluf.png
+
+sgtoj:
+  name: Brian Ojeda
+  title: Contributor
+  url: https://github.com/sgtoj
+  image_url: https://github.com/sgtoj.png
+
+zack-is-cool:
+  name: Zack A
+  title: Contributor
+  url: https://github.com/zack-is-cool
+  image_url: https://github.com/zack-is-cool.png

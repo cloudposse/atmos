@@ -3,13 +3,11 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/alecthomas/chroma/v2/styles"
 
 	"github.com/cloudposse/atmos/internal/tui/templates"
@@ -59,21 +57,6 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 	return settings
 }
 
-// HighlightCode highlights the given code using chroma with the specified lexer and theme
-func HighlightCode(code string, lexerName string, theme string) (string, error) {
-	defer perf.Track(nil, "utils.HighlightCode")()
-
-	if !termUtils.IsTTYSupportForStdout() {
-		return code, nil
-	}
-	var buf bytes.Buffer
-	err := quick.Highlight(&buf, code, lexerName, "terminal", theme)
-	if err != nil {
-		return code, err
-	}
-	return buf.String(), nil
-}
-
 // HighlightCodeWithConfig highlights the given code using the provided configuration.
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
@@ -83,10 +66,12 @@ func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, for
 		return code, nil
 	}
 
-	// Check if either stdout or stderr is a terminal (provenance goes to stderr).
+	// Check if stdout is a terminal. Only stdout matters because highlighted
+	// output goes to the data channel (stdout). Stderr may still be a TTY when
+	// stdout is piped, so checking it would defeat pipe detection.
 	// Note: This must be checked dynamically, not at package init time.
 	// Some environments (like VHS) set up the TTY after the binary is loaded.
-	isTerm := termUtils.IsTTYSupportForStdout() || termUtils.IsTTYSupportForStderr()
+	isTerm := termUtils.IsTTYSupportForStdout()
 
 	// Check if color is forced via ForceColor (ATMOS_FORCE_COLOR).
 	// ForceColor acts like isTTY=true for color support checking.
@@ -175,50 +160,4 @@ func getFormatter(settings *schema.SyntaxHighlighting) chroma.Formatter {
 		return formatters.TTY256
 	}
 	return formatters.Get(settings.Formatter)
-}
-
-// HighlightWriter returns an io.Writer that highlights code written to it
-type HighlightWriter struct {
-	config schema.AtmosConfiguration
-	writer io.Writer
-	format string
-}
-
-// NewHighlightWriter creates a new HighlightWriter
-func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ...string) *HighlightWriter {
-	defer perf.Track(&config, "utils.NewHighlightWriter")()
-
-	var f string
-	if len(format) > 0 {
-		f = format[0]
-	}
-	return &HighlightWriter{
-		config: config,
-		writer: w,
-		format: f,
-	}
-}
-
-// Write implements io.Writer
-// The returned byte count n is the length of p regardless of whether the highlighting
-// process changes the actual number of bytes written to the underlying writer.
-// This maintains compatibility with the io.Writer interface contract while still
-// providing syntax highlighting functionality.
-func (h *HighlightWriter) Write(p []byte) (n int, err error) {
-	highlighted, err := HighlightCodeWithConfig(&h.config, string(p), h.format)
-	if err != nil {
-		return 0, err
-	}
-
-	// Write the highlighted content, ignoring the actual number of bytes written
-	// since we'll return the original input length
-	_, err = h.writer.Write([]byte(highlighted))
-	if err != nil {
-		// If there's an error, we can't be sure how many bytes were actually written
-		return 0, err
-	}
-
-	// Return the original length of p as required by io.Writer interface
-	// This ensures that the caller knows all bytes from p were processed
-	return len(p), nil
 }

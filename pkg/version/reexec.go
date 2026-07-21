@@ -4,21 +4,19 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
-	"syscall"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
-	// ReexecGuardEnvVar prevents infinite re-exec loops.
-	ReexecGuardEnvVar = "ATMOS_REEXEC_GUARD"
-
 	// VersionEnvVar is the environment variable for specifying the Atmos version to use.
 	// This is a convenience alias that matches common conventions (e.g., tfenv, goenv).
 	VersionEnvVar = "ATMOS_VERSION"
@@ -27,6 +25,10 @@ const (
 	// This matches the config path `version.use` in atmos.yaml.
 	// The --use-version flag also sets this env var.
 	VersionUseEnvVar = "ATMOS_VERSION_USE"
+
+	// UseVersionEnvVar is the public env var bound to the --use-version flag.
+	// Documented as the primary way to pin the Atmos version via environment.
+	UseVersionEnvVar = "ATMOS_USE_VERSION"
 
 	// LogFieldPR is the log field name for PR numbers.
 	logFieldPR = "pr"
@@ -46,7 +48,10 @@ type VersionInstaller interface {
 }
 
 // ExecFunc is the function signature for syscall.Exec.
-type ExecFunc func(argv0 string, argv []string, envv []string) error
+//
+// Deprecated: use reexec.ExecFunc. Kept here for source compatibility with
+// callers that still reference this alias.
+type ExecFunc = reexec.ExecFunc
 
 // PRCacheChecker checks PR cache status.
 type PRCacheChecker func(prNumber int) (toolchain.PRCacheStatus, string)
@@ -62,6 +67,9 @@ type SHACacheChecker func(sha string) (exists bool, binaryPath string)
 
 // SHAInstaller installs from a SHA artifact.
 type SHAInstaller func(sha string, showProgress bool) (string, error)
+
+// RefResolver resolves a git ref (branch or tag) to its full commit SHA.
+type RefResolver func(ctx context.Context, ref string) (string, error)
 
 // ReexecConfig holds dependencies for version re-execution.
 type ReexecConfig struct {
@@ -79,6 +87,9 @@ type ReexecConfig struct {
 	InstallFromPR  PRInstaller
 	CheckSHACache  SHACacheChecker
 	InstallFromSHA SHAInstaller
+
+	// Ref (branch/tag) version support (injectable for testing).
+	ResolveRef RefResolver
 }
 
 // DefaultReexecConfig returns the default production configuration.
@@ -89,7 +100,7 @@ func DefaultReexecConfig() *ReexecConfig {
 	return &ReexecConfig{
 		Finder:         installer,
 		Installer:      &defaultInstaller{},
-		ExecFn:         syscall.Exec,
+		ExecFn:         reexec.Exec,
 		GetEnv:         getEnvWrapper,
 		SetEnv:         os.Setenv,
 		Args:           os.Args,
@@ -99,6 +110,7 @@ func DefaultReexecConfig() *ReexecConfig {
 		InstallFromPR:  toolchain.InstallFromPR,
 		CheckSHACache:  toolchain.CheckSHACacheStatus,
 		InstallFromSHA: toolchain.InstallFromSHA,
+		ResolveRef:     toolchain.ResolveRef,
 	}
 }
 
@@ -108,6 +120,52 @@ func DefaultReexecConfig() *ReexecConfig {
 //nolint:forbidigo // Intentional os.Getenv wrapper for DI testing pattern.
 func getEnvWrapper(key string) string {
 	return os.Getenv(key)
+}
+
+// ParseUseVersionFromArgs returns the value supplied to --use-version, if any.
+func ParseUseVersionFromArgs(args []string) string {
+	defer perf.Track(nil, "version.ParseUseVersionFromArgs")()
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return ""
+		}
+		if strings.HasPrefix(arg, "--use-version=") {
+			return strings.TrimPrefix(arg, "--use-version=")
+		}
+		if arg == "--use-version" {
+			if i+1 < len(args) && args[i+1] != "--" {
+				return args[i+1]
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// ExplicitVersionOverride returns the explicit version override requested by
+// env vars or --use-version, using the same precedence as version re-exec.
+func ExplicitVersionOverride(args []string) string {
+	defer perf.Track(nil, "version.ExplicitVersionOverride")()
+
+	return explicitVersionOverride(getEnvWrapper, args)
+}
+
+func explicitVersionOverride(getEnv func(string) string, args []string) string {
+	if requested := getEnv(VersionUseEnvVar); requested != "" {
+		return requested
+	}
+	if requested := ParseUseVersionFromArgs(args); requested != "" {
+		return requested
+	}
+	if requested := getEnv(UseVersionEnvVar); requested != "" {
+		return requested
+	}
+	if requested := getEnv(VersionEnvVar); requested != "" {
+		return requested
+	}
+	return ""
 }
 
 // defaultInstaller wraps toolchain.RunInstall.
@@ -148,9 +206,16 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 }
 
 // resolveRequestedVersion determines the version to use with precedence:
-// ATMOS_VERSION_USE > ATMOS_VERSION > version.use in config.
+// ATMOS_VERSION_USE > ATMOS_USE_VERSION > ATMOS_VERSION > version.use in config.
+//
+// ATMOS_VERSION_USE is the internal var set by the --use-version flag.
+// ATMOS_USE_VERSION is the public, documented env var bound to --use-version.
+// ATMOS_VERSION is a convenience alias.
 func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *ReexecConfig) string {
 	if v := cfg.GetEnv(VersionUseEnvVar); v != "" {
+		return v
+	}
+	if v := cfg.GetEnv(UseVersionEnvVar); v != "" {
 		return v
 	}
 	if v := cfg.GetEnv(VersionEnvVar); v != "" {
@@ -161,11 +226,11 @@ func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *Reexec
 
 // shouldSkipReexec checks if re-exec should be skipped due to guard or version match.
 func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
-	// Check re-exec guard to prevent infinite loops.
-	if cfg.GetEnv(ReexecGuardEnvVar) == requestedVersion {
-		log.Debug("Re-exec guard active, skipping version switch",
+	// Depth guard — already inside a re-exec'd child, don't loop.
+	if reexec.Depth(cfg.GetEnv(reexec.DepthEnvVar)) > 0 {
+		log.Debug("Re-exec depth > 0, skipping version switch",
 			"requested_version", requestedVersion,
-			"guard_value", cfg.GetEnv(ReexecGuardEnvVar))
+			"depth", cfg.GetEnv(reexec.DepthEnvVar))
 		return true
 	}
 
@@ -178,6 +243,13 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 	// SHA versions (sha:ceb7526 or hex strings) always need re-exec - never skip.
 	if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
 		log.Debug("SHA version requested, will re-exec", "requested", requestedVersion)
+		return false
+	}
+
+	// Ref versions (ref:main, ref:v1.2.3) always need re-exec - never skip.
+	// The ref is resolved to a commit SHA at install time.
+	if _, isRef := toolchain.IsRefVersion(requestedVersion); isRef {
+		log.Debug("Ref version requested, will re-exec", "requested", requestedVersion)
 		return false
 	}
 
@@ -203,7 +275,7 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 //
 //nolint:revive // os.Exit is intentional for hard failures.
 func fatalFormattedErr(formatted string) {
-	ui.Writeln(formatted)
+	ui.Writeln(strings.TrimRight(formatted, "\n"))
 	os.Exit(1)
 }
 
@@ -226,6 +298,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
+		// For ref versions, fail hard - don't continue with wrong version.
+		if _, isRef := toolchain.IsRefVersion(requestedVersion); isRef {
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		}
+
 		// Check if this is an invalid version format error - fail hard for those too.
 		_, _, parseErr := toolchain.ParseVersionSpec(requestedVersion)
 		if parseErr != nil {
@@ -238,9 +315,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 		return false
 	}
 
-	// Set re-exec guard to prevent loops.
-	if err := cfg.SetEnv(ReexecGuardEnvVar, requestedVersion); err != nil {
-		log.Warn("Failed to set re-exec guard", "error", err)
+	// Increment re-exec depth so the child knows it's inside a re-exec and
+	// must not attempt another version switch.
+	nextDepth := reexec.Depth(cfg.GetEnv(reexec.DepthEnvVar)) + 1
+	if err := cfg.SetEnv(reexec.DepthEnvVar, strconv.Itoa(nextDepth)); err != nil {
+		log.Warn("Failed to set re-exec depth", "error", err)
 		return false
 	}
 
@@ -248,7 +327,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	ui.Successf("Switching to Atmos version `%s`", requestedVersion)
 
 	// Strip flags that shouldn't be passed to the target version.
-	args := stripChdirFlags(cfg.Args)
+	// --chdir was already applied by the parent; leaving it in argv would
+	// cause the child to re-apply a relative path against the already-changed
+	// cwd. --use-version is dropped so older target binaries don't see an
+	// unknown flag.
+	args := reexec.StripChdirArgs(cfg.Args)
 	args = stripUseVersionFlags(args)
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
@@ -270,7 +353,7 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrVersionFormatInvalid).
 			WithExplanationf("Version '%s' is not a valid format", version).
-			WithHint("Version must be a PR number, pr:NNNN, sha:XXXXXXX, or semver (e.g., 1.2.3)").
+			WithHint("Version must be a PR number, `pr:NNNN`, `sha:XXXXXXX`, `ref:<name>` (e.g., `ref:main`), or semver (e.g., `1.2.3`)").
 			WithCause(err).
 			WithExitCode(1).
 			Err()
@@ -285,6 +368,12 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	// Handle SHA versions (sha:XXXXXXX or auto-detected hex strings) - install from SHA artifact.
 	if vType == toolchain.VersionTypeSHA {
 		return findOrInstallSHAVersionWithConfig(normalizedVersion, cfg)
+	}
+
+	// Handle ref versions (ref:main, ref:v1.2.3) - resolve the ref to a commit SHA,
+	// then reuse the SHA install/cache path.
+	if vType == toolchain.VersionTypeRef {
+		return findOrInstallRefVersionWithConfig(normalizedVersion, cfg)
 	}
 
 	// For semver versions, try to find existing installation.
@@ -367,7 +456,6 @@ func findOrInstallPRVersionWithConfig(prNumber int, cfg *ReexecConfig) (string, 
 		return "", errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install Atmos from PR #%d", prNumber).
-			WithHint("Check GitHub Actions artifacts availability and authentication").
 			Err()
 	}
 
@@ -395,45 +483,26 @@ func findOrInstallSHAVersionWithConfig(sha string, cfg *ReexecConfig) (string, e
 		return "", errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install Atmos from SHA %s", sha).
-			WithHint("Check GitHub Actions artifacts availability and authentication").
 			Err()
 	}
 
 	return binaryPath, nil
 }
 
-// stripChdirFlags removes --chdir, -C flags and their values from args.
-// This prevents double directory changes when re-exec'ing after chdir has already been applied.
-func stripChdirFlags(args []string) []string {
-	defer perf.Track(nil, "version.stripChdirFlags")()
+// findOrInstallRefVersionWithConfig resolves a git ref to a commit SHA, then finds
+// or installs the binary for that SHA. The ref is resolved on every invocation so
+// that mutable refs (e.g. "main") pick up new commits; the SHA-keyed cache underneath
+// avoids reinstalling when the ref has not moved.
+func findOrInstallRefVersionWithConfig(ref string, cfg *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallRefVersionWithConfig")()
 
-	result := make([]string, 0, len(args))
-	skipNext := false
-
-	for i, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-
-		// Handle --chdir=value or -C=value (combined form).
-		if strings.HasPrefix(arg, "--chdir=") || strings.HasPrefix(arg, "-C=") {
-			continue
-		}
-
-		// Handle --chdir value or -C value (separate form).
-		if arg == "--chdir" || arg == "-C" {
-			// Skip this arg and the next one (the value).
-			if i+1 < len(args) {
-				skipNext = true
-			}
-			continue
-		}
-
-		result = append(result, arg)
+	sha, err := cfg.ResolveRef(context.Background(), ref)
+	if err != nil {
+		return "", err
 	}
 
-	return result
+	log.Debug("Resolved ref to SHA", "ref", ref, "sha", sha)
+	return findOrInstallSHAVersionWithConfig(sha, cfg)
 }
 
 // stripUseVersionFlags removes --use-version flags and their values from args.

@@ -1,9 +1,21 @@
 package terraform
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
+)
+
+const (
+	terraformFailureModeFailFast  = "fail-fast"
+	terraformFailureModeKeepGoing = "keep-going"
+	terraformLogOrderStream       = "stream"
+	terraformLogOrderGrouped      = "grouped"
 )
 
 // TerraformRunOptions contains shared flags from terraformParser.
@@ -12,6 +24,7 @@ type TerraformRunOptions struct {
 	// Processing flags.
 	ProcessTemplates bool
 	ProcessFunctions bool
+	UseMocks         bool
 	Skip             []string
 
 	// Execution flags.
@@ -31,17 +44,37 @@ type TerraformRunOptions struct {
 	// Multi-component flags.
 	Query      string
 	Components []string
+	Tags       []string
+	Labels     map[string]string
 	All        bool
 	Affected   bool
+
+	// Graph-backed Terraform concurrency.
+	MaxConcurrency    int
+	FailureMode       string
+	LogOrder          string
+	PlanHide          []string
+	PlanHideNoChanges bool
+	PlanSummaryFile   string
+
+	// Status upload flag.
+	UploadStatus bool
+
+	// AppendArgs are extra terraform pass-through flags injected by the caller
+	// (e.g. `-json` for `terraform test` in CI). They are appended to
+	// info.AdditionalArgsAndFlags so they reach the terraform command directly,
+	// bypassing Cobra positional-arg parsing.
+	AppendArgs []string
 }
 
-// ParseTerraformRunOptions parses shared terraform flags from Viper.
-func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
+// ParseTerraformRunOptions parses and validates shared terraform flags from Viper.
+func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 	defer perf.Track(nil, "terraform.ParseTerraformRunOptions")()
 
-	return &TerraformRunOptions{
+	opts := &TerraformRunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
+		UseMocks:                v.GetBool("use-mocks"),
 		Skip:                    v.GetStringSlice("skip"),
 		DryRun:                  v.GetBool("dry-run"),
 		SkipInit:                v.GetBool("skip-init"),
@@ -53,7 +86,59 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		DeployRunInit:           v.GetBool("deploy-run-init"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
+		Tags:                    v.GetStringSlice("tags"),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
+		MaxConcurrency:          v.GetInt("max-concurrency"),
+		FailureMode:             v.GetString("failure-mode"),
+		LogOrder:                v.GetString("log-order"),
+		PlanHide:                v.GetStringSlice("hide"),
+		PlanHideNoChanges:       terraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
+		PlanSummaryFile:         v.GetString("execution-summary-file"),
+		UploadStatus:            v.GetBool("upload-status"),
 	}
+	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+	if err != nil {
+		return nil, err
+	}
+	opts.Labels = labels
+
+	if err := validateTerraformRunOptions(opts); err != nil {
+		return nil, err
+	}
+	return opts, nil
+}
+
+func validateTerraformRunOptions(opts *TerraformRunOptions) error {
+	if opts == nil {
+		return nil
+	}
+
+	if mode := strings.ToLower(strings.TrimSpace(opts.FailureMode)); mode != "" {
+		switch mode {
+		case terraformFailureModeFailFast, terraformFailureModeKeepGoing:
+			opts.FailureMode = mode
+		default:
+			return fmt.Errorf("%w: invalid --failure-mode %q: supported values are %q, %q", errUtils.ErrInvalidFlagValue, opts.FailureMode, terraformFailureModeFailFast, terraformFailureModeKeepGoing)
+		}
+	}
+
+	if logOrder := strings.ToLower(strings.TrimSpace(opts.LogOrder)); logOrder != "" {
+		switch logOrder {
+		case terraformLogOrderStream, terraformLogOrderGrouped:
+			opts.LogOrder = logOrder
+		default:
+			return fmt.Errorf("%w: invalid --log-order %q: supported values are %q, %q", errUtils.ErrInvalidFlagValue, opts.LogOrder, terraformLogOrderStream, terraformLogOrderGrouped)
+		}
+	}
+	return nil
+}
+
+func terraformPlanHideContains(values []string, target string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
 }

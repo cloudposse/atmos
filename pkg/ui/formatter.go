@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	stdio "io"
 	"strings"
 	"sync"
 
@@ -70,6 +71,22 @@ func InitFormatter(ioCtx io.Context) {
 	Format = globalFormatter // Also expose for advanced use
 }
 
+// ReinitFormatter re-creates the global formatter with a fresh I/O context.
+// This is needed after output capture (os.Pipe) is stopped, because the original
+// InitFormatter() ran while pipes were active — terminal detection saw pipes instead
+// of the real terminal and cached ColorNone. After capture restores os.Stdout/os.Stderr,
+// calling ReinitFormatter() re-detects the real terminal and restores color support.
+func ReinitFormatter() {
+	defer perf.Track(nil, "ui.ReinitFormatter")()
+
+	ioCtx, err := io.NewContext()
+	if err != nil {
+		log.Debug("ui.ReinitFormatter: failed to create I/O context", "error", err)
+		return
+	}
+	InitFormatter(ioCtx)
+}
+
 // Reset clears all UI globals (formatter, I/O, terminal).
 // This is primarily used in tests to ensure clean state between test executions.
 func Reset() {
@@ -133,6 +150,21 @@ func setColorProfileInternal(profile termenv.Profile) {
 //	ui.SetColorProfile(termenv.Ascii)
 func SetColorProfile(profile termenv.Profile) {
 	setColorProfileInternal(profile)
+
+	// The global formatter caches theme.GetCurrentStyles() as a snapshot at
+	// InitFormatter() time (see NewFormatter below). theme.InvalidateStyleCache
+	// (called by setColorProfileInternal) regenerates that package-level cache
+	// under a new pointer, but doesn't reach the formatter's already-captured
+	// copy — so ui.Success/Error/Warning/Info (which read the formatter's
+	// cached styles) would otherwise keep rendering with the pre-change
+	// profile even though direct theme.GetCurrentStyles() callers (e.g. step
+	// headers) pick up the change immediately. Refresh it here so every
+	// ui.* output function reflects the new profile right away.
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	if globalFormatter != nil {
+		globalFormatter.styles = theme.GetCurrentStyles()
+	}
 }
 
 // GetColorProfile returns the configured termenv color profile.
@@ -153,6 +185,36 @@ func GetColorProfile() termenv.Profile {
 	defer perf.Track(nil, "ui.GetColorProfile")()
 
 	return lipgloss.DefaultRenderer().ColorProfile()
+}
+
+// NewRenderer returns a lipgloss renderer bound to w that uses the globally
+// detected color profile (terminal detection plus force flags) with a dark
+// background assumed. Use this instead of lipgloss.NewRenderer so per-writer
+// renderers share the single Atmos color-detection pipeline instead of
+// re-detecting capabilities from the writer (which degrades to 16 colors on
+// pipes and breaks the --force-color TrueColor contract).
+func NewRenderer(w stdio.Writer) *lipgloss.Renderer {
+	defer perf.Track(nil, "ui.NewRenderer")()
+
+	renderer := lipgloss.NewRenderer(w)
+	renderer.SetColorProfile(GetColorProfile())
+	renderer.SetHasDarkBackground(true)
+	return renderer
+}
+
+// TerminalWidth returns the stdout width from the global terminal detection:
+// the real TTY size when available, or 0 when unknown (non-TTY streams ignore
+// COLUMNS so CI snapshots and piped output keep stable wrapping; callers apply
+// their own defaults). Returns 0 when the formatter has not been initialized.
+func TerminalWidth() int {
+	defer perf.Track(nil, "ui.TerminalWidth")()
+
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+	if globalTerminal == nil {
+		return 0
+	}
+	return globalTerminal.Width(terminal.Stdout)
 }
 
 // getFormatter returns the global formatter instance.
@@ -225,6 +287,37 @@ func MarkdownMessage(content string) {
 func MarkdownMessagef(format string, a ...interface{}) {
 	content := fmt.Sprintf(format, a...)
 	MarkdownMessage(content)
+}
+
+// MarkdownMessageNoWrap writes rendered markdown to stderr (UI channel) without
+// word-wrapping long lines. Use for deterministic, snapshot-stable single-line
+// notices where wrapping would otherwise vary by terminal width.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func MarkdownMessageNoWrap(content string) {
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalFormatter == nil || globalIO == nil {
+		log.Debug("ui.MarkdownMessageNoWrap called before InitFormatter")
+		return
+	}
+
+	rendered, err := globalFormatter.MarkdownNoWrap(content)
+	if err != nil {
+		// Degrade gracefully - MarkdownNoWrap already returns trimmed
+		// content with a trailing newline on render failure.
+		log.Debug("ui.MarkdownMessageNoWrap render failed, using fallback", "error", err)
+	}
+
+	if _, writeErr := fmt.Fprint(globalIO.UI(), rendered); writeErr != nil {
+		log.Debug("ui.MarkdownMessageNoWrap write failed", "error", writeErr)
+	}
+}
+
+// MarkdownMessageNoWrapf writes formatted markdown to stderr (UI channel) without word-wrapping.
+func MarkdownMessageNoWrapf(format string, a ...interface{}) {
+	content := fmt.Sprintf(format, a...)
+	MarkdownMessageNoWrap(content)
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
@@ -512,6 +605,22 @@ func FormatExperimentalBadge() string {
 	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
 }
 
+// FormatComponentLabel renders a short colored badge for a per-item label (e.g. a
+// container log prefix), cycling background colors by index so each item gets a
+// distinct, stable color in the log-level label style. When color is
+// unsupported (non-TTY, NO_COLOR, dumb terminal) it degrades to a plain `[name]`
+// label so output stays readable in pipes and CI.
+func FormatComponentLabel(name string, index int) string {
+	f, err := getFormatter()
+	if err != nil || !f.SupportsColor() {
+		return "[" + name + "]"
+	}
+	if index < 0 {
+		index = 0
+	}
+	return theme.ComponentLabelStyle(index).Render(name)
+}
+
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Writef(format string, a ...interface{}) {
@@ -588,6 +697,22 @@ func (f *formatter) SupportsColor() bool {
 
 func (f *formatter) ColorProfile() terminal.ColorProfile {
 	return f.terminal.ColorProfile()
+}
+
+// termenvProfile maps the formatter's terminal color profile to a termenv.Profile.
+func (f *formatter) termenvProfile() termenv.Profile {
+	switch f.terminal.ColorProfile() {
+	case terminal.ColorNone:
+		return termenv.Ascii
+	case terminal.Color16:
+		return termenv.ANSI
+	case terminal.Color256:
+		return termenv.ANSI256
+	case terminal.ColorTrue:
+		return termenv.TrueColor
+	default:
+		return termenv.Ascii
+	}
 }
 
 // StatusMessage formats a message with an icon and color.
@@ -720,8 +845,8 @@ func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesh
 		opts = append(opts, markdown.WithWordWrap(0))
 	}
 
-	// Set color profile using lipgloss's detected profile.
-	opts = append(opts, markdown.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
+	// Set color profile based on the formatter's terminal detection.
+	opts = append(opts, markdown.WithColorProfile(f.termenvProfile()))
 
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
@@ -803,7 +928,7 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	result, _ := f.toastMarkdown("ℹ", &f.styles.Info, text)
+	result, _ := f.toastMarkdown(theme.IconInfo, &f.styles.Info, text)
 	return result
 }
 
@@ -919,42 +1044,65 @@ func (f *formatter) Label(text string) string {
 // Markdown returns the rendered markdown string (pure function, no I/O).
 // For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
 func (f *formatter) Markdown(content string) (string, error) {
-	return f.renderMarkdown(content, false)
+	return f.renderMarkdown(content, false, false)
 }
 
-// renderMarkdown is the internal markdown rendering implementation.
-func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (string, error) {
-	// Determine max width from config or terminal
+// MarkdownNoWrap returns rendered markdown without word-wrapping long lines.
+// Use for deterministic, snapshot-stable single-line notices where wrapping
+// would otherwise vary by terminal width.
+func (f *formatter) MarkdownNoWrap(content string) (string, error) {
+	rendered, err := f.renderMarkdown(content, false, true)
+	// Glamour's document rendering pads output with a leading/trailing blank
+	// line, which is fine for multi-line documents but wrong for the
+	// single-line, snapshot-stable notices this method exists for (see
+	// MarkdownMessageNoWrap). Trim them, then restore exactly one trailing
+	// newline so the next line of output doesn't run into this one.
+	trimmed := strings.TrimSpace(rendered) + newline
+	return trimmed, err
+}
+
+// markdownRenderWidth determines the word-wrap width from config or terminal,
+// accounting for the glamour stylesheet's document left indent so wrapped
+// text doesn't overflow. Must match the Indent value in
+// pkg/ui/theme/converter.go.
+func (f *formatter) markdownRenderWidth() int {
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
-		// Use terminal width if available
-		termWidth := f.terminal.Width(terminal.Stdout)
-		if termWidth > 0 {
+		// Use terminal width if available.
+		if termWidth := f.terminal.Width(terminal.Stdout); termWidth > 0 {
 			maxWidth = termWidth
 		}
 	}
 
-	// Account for document left indent to prevent text overflow.
-	// The glamour stylesheet adds theme.DocumentIndent spaces on the left.
-	// Must match the Indent value in pkg/ui/theme/converter.go.
 	const documentIndent = 2
 	if maxWidth > documentIndent {
 		maxWidth -= documentIndent
 	}
+	return maxWidth
+}
 
-	// Build glamour options with theme-aware styling
+// buildMarkdownRenderOptions builds theme-aware glamour render options for
+// renderMarkdown.
+func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []glamour.TermRendererOption {
 	var opts []glamour.TermRendererOption
 
-	if maxWidth > 0 {
+	if noWrap {
+		// Explicitly disable word wrap rather than omitting the option, since
+		// glamour otherwise falls back to its own default wrap width.
+		opts = append(opts, glamour.WithWordWrap(0))
+	} else if maxWidth := f.markdownRenderWidth(); maxWidth > 0 {
 		opts = append(opts, glamour.WithWordWrap(maxWidth))
 	}
 
-	// Preserve newlines if requested
 	if preserveNewlines {
 		opts = append(opts, glamour.WithPreservedNewLines())
 	}
 
-	// Use theme-aware glamour styles
+	// Use atmos-configured color profile (not glamour's auto-detection) to ensure
+	// consistent color rendering across all output paths.
+	opts = append(opts, glamour.WithColorProfile(f.termenvProfile()))
+
+	// Use theme-aware glamour styles.
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
 		if themeName == "" {
@@ -964,10 +1112,17 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		if err == nil {
 			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 		}
-		// Fallback to notty style if theme conversion fails
+		// Fallback to notty style if theme conversion fails.
 	} else {
 		opts = append(opts, glamour.WithStylePath("notty"))
 	}
+
+	return opts
+}
+
+// renderMarkdown is the internal markdown rendering implementation.
+func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
 	renderer, err := glamour.NewTermRenderer(opts...)
 	if err != nil {

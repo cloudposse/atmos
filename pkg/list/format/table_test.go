@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/degradation"
 )
 
 func TestTryExpandScalarArray(t *testing.T) {
@@ -289,6 +291,7 @@ func TestSplitLines(t *testing.T) {
 }
 
 func TestRenderInlineMarkdown(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name     string
 		input    string
@@ -909,6 +912,11 @@ func TestFormatTableCellValue(t *testing.T) {
 			name:     "Float",
 			input:    3.14159,
 			expected: "3.14",
+		},
+		{
+			name:     "AtmosComputedValue renders as (computed), not a JSON dump or struct summary",
+			input:    degradation.AtmosComputedValue{},
+			expected: "(computed)",
 		},
 	}
 

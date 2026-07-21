@@ -1,0 +1,245 @@
+---
+title: atmos kubernetes
+sidebar_label: kubernetes
+sidebar_class_name: command
+id: usage
+description: Render, validate, diff, plan, apply, deploy, and delete Kubernetes components in Atmos stacks.
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+
+<Intro>
+  Manage raw Kubernetes manifests and Kustomize overlays with the same
+  stack-based workflow you use for the rest of your Atmos project. Render,
+  preview, deploy, and delete Kubernetes objects from one configuration model,
+  with credentials, hooks, and dependency ordering handled by Atmos.
+</Intro>
+
+<ActionCard title="Configure Kubernetes Components">
+  Set the default component location in `atmos.yaml`, then describe what each
+  stack should deploy with `provider`, `paths`, `manifests`, `vars`, `env`,
+  hooks, and dependencies.
+  <div>
+    <PrimaryCTA to="/cli/configuration/components/kubernetes">
+      atmos.yaml Configuration
+    </PrimaryCTA>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes render <component> --stack <stack>
+atmos kubernetes validate <component> --stack <stack>
+atmos kubernetes diff <component> --stack <stack>
+atmos kubernetes plan <component> --stack <stack>
+atmos kubernetes apply <component> --stack <stack>
+atmos kubernetes deploy <component> --stack <stack>
+atmos kubernetes delete <component> --stack <stack>
+
+atmos kubernetes plan --affected --base origin/main
+atmos kubernetes apply --all --stack <stack>
+```
+
+## Examples
+
+Render manifests to a file, then validate them offline:
+
+```shell
+atmos kubernetes render argocd -s plat-ue2-dev --output /tmp/argocd.yaml
+atmos kubernetes validate argocd -s plat-ue2-dev
+```
+
+Apply every component in a stack in dependency order:
+
+```shell
+atmos kubernetes apply --all -s plat-ue2-dev --include-dependents
+```
+
+Plan only components affected by changes against `origin/main`:
+
+```shell
+atmos kubernetes plan --affected --base origin/main
+```
+
+Apply only affected components that are also tagged `production`:
+
+```shell
+atmos kubernetes apply --affected --tags production
+```
+
+Deploy to an EKS cluster after Atmos Auth writes kubeconfig:
+
+```shell
+ATMOS_COMPONENT=argocd atmos kubernetes deploy argocd -s plat-ue2-prod
+```
+
+## Native CI
+
+When `ci.enabled: true` and Atmos runs in a supported CI provider, Kubernetes commands write a
+compact job summary to the provider summary file (`$GITHUB_STEP_SUMMARY` on GitHub Actions).
+The summary includes object action counts and an error section on failure. For `plan`/`diff` it
+also adds a collapsible **Kubernetes Diff** block with the per-object unified diff (`Secret`
+objects are omitted).
+
+Kubernetes CI support is summary-only in v1. It does not emit `$GITHUB_OUTPUT` variables, commit
+statuses, PR comments, or stored artifacts.
+
+## Providers
+
+Choose the provider that matches how your Kubernetes files are organized:
+
+<dl>
+  <dt>`kubectl`</dt>
+  <dd>Loads plain YAML or JSON manifests and applies kubectl-compatible manifest behavior through Kubernetes Go clients.</dd>
+
+  <dt>`kustomize`</dt>
+  <dd>Renders Kustomize directories through the Kustomize Go API, then uses the same Kubernetes Go clients.</dd>
+</dl>
+
+These provider names describe manifest behavior. Both providers are implemented
+with Go SDKs, so Atmos does not require the matching `kubectl` or `kustomize`
+CLI binary to be installed.
+
+## Component Configuration
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      provider: kustomize
+      paths:
+        - overlays/dev
+      vars:
+        namespace: argocd
+      env:
+        KUBECONFIG: /tmp/kubeconfig
+```
+
+`paths` can reference manifest files or directories relative to the component
+directory. `manifests` can define inline Kubernetes objects that Atmos renders
+and deploys with the files from `paths`.
+
+```yaml
+components:
+  kubernetes:
+    namespace:
+      provider: kubectl
+      manifests:
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ .vars.namespace }}"
+```
+
+## Auth
+
+Kubernetes operations use the kubeconfig and client configuration visible to the
+Go Kubernetes client. Atmos Auth runs before the SDK client is created, so an
+identity can prepare credentials, write kubeconfig, or export environment
+variables used by the Kubernetes client.
+
+For local clusters, use an ambient identity to pass through the existing
+environment:
+
+```yaml
+auth:
+  identities:
+    local-k3s:
+      kind: ambient
+
+components:
+  kubernetes:
+    app:
+      env:
+        KUBECONFIG: /path/to/kubeconfig
+```
+
+For EKS, model authentication as an Atmos Auth integration linked to the
+identity used for the command. For example, an AWS identity can use an
+`aws/eks` integration to resolve the cluster and write a kubeconfig before
+Atmos renders, diffs, applies, deploys, or deletes the Kubernetes component.
+
+```yaml
+auth:
+  identities:
+    platform-admin:
+      kind: aws
+
+  integrations:
+    prod/eks:
+      kind: aws/eks
+      via:
+        identity: platform-admin
+      spec:
+        cluster:
+          name: acme-prod-eks
+          region: us-east-1
+          kubeconfig:
+            path: /tmp/acme-prod-kubeconfig
+            update: replace
+```
+
+See the [EKS kubeconfig authentication tutorial](/tutorials/eks-kubeconfig-authentication)
+and [`atmos aws eks update-kubeconfig`](/cli/commands/aws/eks/update-kubeconfig)
+for the full integration contract.
+
+## Bulk And Affected Runs
+
+Run Kubernetes changes across more than one component when you need a full
+environment rollout or a CI job scoped to changed components:
+
+<dl>
+  <dt>`--all`</dt>
+  <dd>Process all Kubernetes components in dependency order. Use `--stack` to scope execution to one stack.</dd>
+
+<dt>`--affected`</dt>
+<dd>
+  Select changed Kubernetes components using affected detection, include their
+  dependencies, then process them in dependency order.
+</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>When used with `--affected`, also include downstream Kubernetes components that depend on the affected components.</dd>
+
+<dt>`--tags`</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>`--labels`</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
+</dl>
+
+Affected detection supports `--base`, `--ref`, `--sha`, `--repo-path`,
+`--clone-target-ref`, `--ssh-key`, and `--ssh-key-password`, matching
+`atmos describe affected`.
+
+## Hooks
+
+Kubernetes commands support dotted lifecycle hook events:
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      hooks:
+        notify:
+          events:
+            - after.kubernetes.apply
+          command: echo "applied argocd"
+```
+
+Supported events include `before.kubernetes.render`, `after.kubernetes.render`,
+`before.kubernetes.validate`, `after.kubernetes.validate`,
+`before.kubernetes.plan`, `after.kubernetes.plan`, `before.kubernetes.diff`,
+`after.kubernetes.diff`, `before.kubernetes.apply`, `after.kubernetes.apply`,
+`before.kubernetes.deploy`, `after.kubernetes.deploy`,
+`before.kubernetes.delete`, and `after.kubernetes.delete`.

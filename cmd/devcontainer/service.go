@@ -2,12 +2,12 @@ package devcontainer
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Service coordinates devcontainer operations.
@@ -17,16 +17,6 @@ type Service struct {
 	ui          UIProvider
 	atmosConfig *schema.AtmosConfiguration
 	logOutput   io.Writer // Writer for log output (defaults to os.Stdout).
-}
-
-// NewService creates a service with default providers.
-func NewService() *Service {
-	return &Service{
-		config:    &DefaultConfigProvider{},
-		runtime:   NewDockerRuntimeProvider(),
-		ui:        &DefaultUIProvider{},
-		logOutput: os.Stdout,
-	}
 }
 
 // NewTestableService creates a Service configured with the provided config, runtime, and UI providers for use in tests.
@@ -55,14 +45,6 @@ func NewTestableServiceWithLogOutput(
 		runtime:   runtime,
 		ui:        ui,
 		logOutput: logOutput,
-	}
-}
-
-// SetLogOutput sets the writer for log output.
-// This allows tests and alternative frontends to capture or redirect log output.
-func (s *Service) SetLogOutput(w io.Writer) {
-	if w != nil {
-		s.logOutput = w
 	}
 }
 
@@ -140,7 +122,7 @@ func (s *Service) ResolveDevcontainerName(ctx context.Context, args []string) (s
 			Err()
 	}
 
-	fmt.Fprintf(s.ui.Output(), "\nSelected devcontainer: %s\n\n", selected)
+	ui.Writef("\nSelected devcontainer: %s\n\n", selected)
 	return selected, nil
 }
 

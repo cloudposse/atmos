@@ -1,0 +1,96 @@
+---
+title: atmos helm template
+sidebar_label: template
+sidebar_class_name: command
+id: template
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Render a Helm chart to Kubernetes manifests without touching a cluster.
+  `template` resolves the stack's `values`, `values_files`, chart reference, and
+  version, then renders the chart in-process with the Helm Go SDK (equivalent to
+  `helm template`). Output goes to stdout, to files, or to a provision target.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm template <component> --stack <stack> [options]
+```
+
+By default, `template` writes a multi-document YAML stream to stdout:
+
+```shell
+atmos helm template monitoring -s plat-ue2-dev
+```
+
+Write a single multi-document YAML file:
+
+```shell
+atmos helm template monitoring -s plat-ue2-dev --output rendered/monitoring.yaml
+```
+
+Write one file per object:
+
+```shell
+atmos helm template monitoring -s plat-ue2-dev --output-dir rendered/monitoring --split
+```
+
+Deliver the rendered manifests to a provision target (e.g. a Git/ArgoCD repo):
+
+```shell
+atmos helm template monitoring -s plat-ue2-dev --target deployment-repo
+```
+
+Render all or affected Helm components in dependency order:
+
+```shell
+atmos helm template --all -s plat-ue2-dev
+atmos helm template --affected --base origin/main
+```
+
+Render components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos helm template --all --tags production,tier-1
+atmos helm template --affected --labels cost-center=platform
+```
+
+`--output` and `--output-dir` are only supported when rendering one component.
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--output` <em>(optional)</em></dt>
+  <dd>Write rendered manifests to a single multi-document YAML file.</dd>
+
+  <dt>`--output-dir` <em>(optional)</em></dt>
+  <dd>Write rendered manifests to a directory. Without `--split`, Atmos writes `manifest.yaml` in that directory.</dd>
+
+  <dt>`--split` <em>(optional)</em></dt>
+  <dd>Write one YAML file per object. Requires `--output-dir`.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Render all Helm components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Render affected Helm components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Helm components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`render` is accepted as an alias for `template`.
+:::

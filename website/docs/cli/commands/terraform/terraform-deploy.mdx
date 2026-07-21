@@ -5,14 +5,17 @@ sidebar_class_name: command
 id: deploy
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to deploy Terraform changes for an Atmos component in a stack with auto-approval. This combines plan and apply operations in a single command.
 </Intro>
 
-<Screengrab title="atmos terraform deploy --help" slug="atmos-terraform-deploy--help" />
+<CastPlayer src="/casts/demo/fixtures/native-terraform/deploy.cast" title="atmos terraform deploy" chrome controls scrubber />
+
+<CastPlayer title="atmos terraform deploy --help" src="/casts/screengrabs/atmos-terraform-deploy--help.cast" static chrome />
 
 ## Usage
 
@@ -184,7 +187,113 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
         atmos terraform deploy <component> -s <stack> --skip=terraform.output,include
         ```
     </dd>
+
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of components to deploy concurrently when running with `--all`, `--affected`, `--components`, or `--query`. Default is `1` (sequential).
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_MAX_CONCURRENCY`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4
+        ```
+    </dd>
+
+    <dt>`--failure-mode` <em>(optional)</em></dt>
+    <dd>
+        Controls how the concurrent scheduler handles a failed component when using `--all`, `--affected`, `--components`, or `--query` with `--max-concurrency > 1`.
+
+        Supported values:
+        - `fail-fast` *(default)* — stop scheduling new components as soon as one fails
+        - `keep-going` — continue deploying independent graph branches even after a failure
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_FAILURE_MODE`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4 --failure-mode keep-going
+        ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_LOG_ORDER`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4 --log-order grouped
+        ```
+    </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.
+
+        In CI mode, deploy also downloads stored planfiles and verifies them against fresh plans before applying, ensuring no infrastructure drift has occurred since the plan was reviewed.
+
+        CI mode is auto-detected when `CI=true` or `GITHUB_ACTIONS=true` environment variables are set.
+
+        **Environment variables:** `ATMOS_CI`, `CI`
+
+        ```shell
+        atmos terraform deploy <component> -s <stack> --ci
+        ```
+    </dd>
+
+    <dt>`--verify-plan` <em>(optional)</em></dt>
+    <dd>
+        Force planfile drift verification (fail on drift) before applying, overriding the
+        [`planfiles.verify`](/components/terraform/planfiles#drift-verification) config and the CI default.
+
+        Verification is **automatic** under `--ci` when planfile storage is configured (default behavior is `fail`); this flag is only needed to force it on outside CI or override `verify: warn`/`off`.
+
+        This flag **requires planfile storage** to be configured under
+        [`components.terraform.planfiles`](/ci/planfile-storage) in `atmos.yaml` — without it there is
+        no stored plan to verify against, and the deploy errors instead of silently applying an
+        unverified fresh plan.
+
+        Pass `--verify-plan=false` to **disable** verification, overriding both the `planfiles.verify` config and the CI default. The stored planfile is not downloaded and no drift check runs; `deploy` performs a normal plan-and-apply.
+
+        **Environment variables:** `ATMOS_TERRAFORM_VERIFY_PLAN` (set to `false` to disable)
+
+        ```shell
+        atmos terraform deploy <component> -s <stack> --ci --verify-plan
+        atmos terraform deploy <component> -s <stack> --ci --verify-plan=false
+        ```
+    </dd>
 </dl>
+
+## Automatic Plan Verification in CI
+
+When planfile storage is configured and `deploy` runs in CI mode, Atmos automatically downloads the
+planfile that `atmos terraform plan --ci` uploaded, generates a fresh plan, compares them, and applies
+the fresh plan after verification — failing on drift by default. Control this with
+[`components.terraform.planfiles.verify`](/components/terraform/planfiles#drift-verification)
+(`fail` | `warn` | `off`) or the `--verify-plan` flag (`--verify-plan` forces `fail`, `--verify-plan=false` forces `off`; CLI overrides config).
+
+If **no stored plan is found** (the `plan` job never uploaded one),
+[`components.terraform.planfiles.required`](/components/terraform/planfiles#missing-stored-plan) decides
+what happens. It defaults to tracking `verify` strictness, so a fail-by-default CI deploy fails loudly
+rather than silently applying an unverified fresh plan — a green `deploy` therefore proves verification
+ran. Set `required: false` to allow a fresh apply when the stored plan is absent.
+
+With the `github/artifacts` store, the automatic download talks to the GitHub Artifacts runtime API, so
+the workflow must surface the runner's `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` with the
+[`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action before
+`deploy` — the same requirement as the upload on `plan` (see
+[Planfile Storage](/ci/planfile-storage#using-github-artifacts-in-github-actions)):
+
+```yaml
+steps:
+  - uses: cloudposse/atmos/actions/github-runtime@v1   # surfaces ACTIONS_RUNTIME_TOKEN/RESULTS_URL
+    with:
+      mode: env
+  - run: atmos terraform deploy mycomponent -s prod --ci   # auto-downloads, verifies, then applies
+```
 
 ## Native Terraform Flags
 
@@ -256,6 +365,21 @@ atmos terraform deploy --query '.settings.context.account_id == 12345'
 atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
 ```
 
+### Deploy Components by Tags and Labels
+
+Filter components by `metadata.tags`/`metadata.labels`. These flags compose with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further, rather than being mutually exclusive with them:
+
+```shell
+# Deploy components tagged production or tier-1 (matches any)
+atmos terraform deploy --tags production,tier-1
+
+# Deploy components labeled cost-center=platform (matches all given labels)
+atmos terraform deploy --labels cost-center=platform
+
+# Narrow an --affected run to only production-tagged components
+atmos terraform deploy --affected --tags production
+```
+
 ### Multi-Component Flags
 
 <dl>
@@ -271,6 +395,12 @@ atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
     <dt>`--query`</dt>
     <dd>Deploy components matching a YQ expression. All Atmos sections are available: `vars`, `settings`, `env`, `metadata`, etc.</dd>
 
+    <dt>`--tags`</dt>
+    <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+    <dt>`--labels`</dt>
+    <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+
     <dt>`--include-dependents`</dt>
     <dd>With `--affected`, also deploy components that depend on affected components, recursively.</dd>
 
@@ -284,8 +414,33 @@ atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
     <dd>Clone the target reference instead of checking it out locally.</dd>
 </dl>
 
+## CI Integration
+
+<Experimental/>
+
+When running in CI mode (`--ci` flag or auto-detected), the `deploy` command provides a complete CI-native apply workflow:
+
+1. **Before deploy** — Downloads stored planfiles from configured storage (S3, GitHub Artifacts, or local)
+2. **Verification** — Generates a fresh plan and compares it against the stored plan to detect drift
+3. **Apply** — Applies the **fresh** plan (built with the apply-time state and credentials) once the diff confirms it matches the reviewed plan, or fails with a drift error. This reconciles rather than replays the stored binary, avoiding a saved plan going stale when state moves and the base credentials differing between plan time (PR) and apply time (merge). To replay the stored planfile directly instead, use `--from-plan` / `--planfile`.
+4. **After deploy** — Writes job summaries, CI output variables, and updates status checks
+
+```shell
+# In GitHub Actions (auto-detected)
+atmos terraform deploy vpc -s dev
+
+# Explicit CI mode
+atmos terraform deploy vpc -s dev --ci
+```
+
+:::info
+See [CI Configuration](/cli/configuration/ci) for full configuration options and [Planfile Storage](/cli/commands/terraform/planfile) for storage backend setup.
+:::
+
 ## Related Commands
 
 - [terraform plan](/cli/commands/terraform/plan) - Generate an execution plan
 - [terraform apply](/cli/commands/terraform/apply) - Apply changes with confirmation
 - [terraform destroy](/cli/commands/terraform/destroy) - Destroy infrastructure
+- [terraform planfile](/cli/commands/terraform/planfile) - Manage stored planfiles
+- [Native CI](/ci) - CI/CD integration overview

@@ -104,7 +104,7 @@ dependencies:
 steps:
   - command: string              # Required: Command to execute
     name: string                 # Optional: Step identifier
-    type: atmos | shell          # Optional: Step type (default: atmos)
+    type: atmos | shell | ...    # Optional: Step type (default: atmos)
     stack: string                # Optional: Stack override for this step
     identity: string             # Optional: Authentication identity for this step
     working_directory: string    # Optional: Working directory override
@@ -138,10 +138,10 @@ For **shell** type: Any shell command or script. Supports YAML multiline strings
 
 ```yaml
 steps:
-  - command: echo "Hello"
-    type: shell
+  - type: toast
+    level: info
+    content: Starting checks
   - command: |
-      echo "Multi-line script"
       aws sts get-caller-identity
       if [ $? -eq 0 ]; then
         echo "Auth OK"
@@ -152,6 +152,11 @@ steps:
       joins to single line"
     type: shell
 ```
+
+Use shell for external CLIs, short glue commands, terminal-native tools, or repo scripts. If the
+script mostly prints status, formats output, loops over stacks/components, waits, starts background
+services, or writes CI metadata, prefer native step types such as `toast`, `table`, `format`,
+`parallel`, `matrix`, `wait`, `container`, or `emulator`.
 
 ### name
 
@@ -171,20 +176,25 @@ steps:
 
 ### type
 
-Step type. Two values are supported:
+Step type. Atmos supports native command, orchestration, interactive, UI, and output step types:
 
 | Type | Description | Implicit |
 |------|-------------|----------|
 | `atmos` | Atmos CLI command (atmos prefix auto-prepended) | Yes (default) |
 | `shell` | Shell command or script | Must be explicit |
+| `exec` | Replace Atmos with a terminal-native process | No |
+| `container`, `emulator`, `http` | Native container, emulator, or HTTP operations | No |
+| `parallel`, `matrix`, `wait`, `wait-all`, `cancel` | Native orchestration | No |
+| `toast`, `markdown`, `table`, `pager`, `format`, `log`, `spin` | UI and output rendering | No |
 
 ```yaml
 steps:
   - command: terraform plan vpc              # type: atmos (implicit)
   - command: terraform apply vpc             # type: atmos (implicit)
     type: atmos                              # Explicit (optional)
-  - command: echo "Hello"
-    type: shell                              # Required for shell commands
+  - type: toast
+    level: success
+    content: Done
 ```
 
 ### stack

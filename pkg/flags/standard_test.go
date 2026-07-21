@@ -86,6 +86,35 @@ func TestStandardFlagParser_Parse(t *testing.T) {
 	assert.NotNil(t, cfg.Flags)
 }
 
+// TestStandardFlagParser_Parse_ZeroArgsBindsChangedFlags is a regression test for
+// https://github.com/cloudposse/atmos/issues/2505: commands with zero leftover
+// positional args after Cobra's own flag parsing (e.g. Args: cobra.NoArgs, or any
+// command invoked as `cmd --stack dev` with no other positional args) must still
+// have CLI-supplied flag values reflected in Parse()'s result, even though the
+// args slice Parse() receives is empty.
+func TestStandardFlagParser_Parse_ZeroArgsBindsChangedFlags(t *testing.T) {
+	parser := NewStandardFlagParser(WithStackFlag())
+	cmd := &cobra.Command{Use: "test", Args: cobra.NoArgs}
+	parser.RegisterFlags(cmd)
+
+	v := viper.New()
+	// Deliberately bind only env-vars/defaults here, not pflags — this proves
+	// Parse() is self-sufficient for CLI-supplied values without a caller also
+	// having to remember an explicit BindFlagsToViper() call.
+	require.NoError(t, parser.BindToViper(v))
+
+	// Simulate Cobra having already parsed "--stack dev" before RunE/Parse runs.
+	// Cobra strips recognized flags out of args, so for a NoArgs command the
+	// leftover positional args slice passed to Parse() is empty.
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
+	result, err := parser.Parse(context.Background(), []string{})
+
+	require.NoError(t, err)
+	assert.Equal(t, "dev", GetString(result.Flags, "stack"),
+		"CLI-supplied --stack value must be reflected even when len(args)==0")
+}
+
 func TestStandardFlagParser_GetIdentityFromCmd(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1318,6 +1347,39 @@ func TestStandardFlagParser_BindFlagsToViper_WithPrefix(t *testing.T) {
 	})
 }
 
+func TestStandardFlagParser_BindFlagsToViper_BindsRegistryPersistentFlagOnChildCommand(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		addChildBeforeReg bool
+	}{
+		{name: "child added before persistent flags", addChildBeforeReg: true},
+		{name: "child added after persistent flags", addChildBeforeReg: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			parser := NewStandardFlagParser(
+				WithStringFlag("stack", "s", "", "Stack name"),
+				WithEnvVars("stack", "ATMOS_STACK"),
+			)
+
+			parent := &cobra.Command{Use: "parent"}
+			child := &cobra.Command{Use: "child"}
+			if tt.addChildBeforeReg {
+				parent.AddCommand(child)
+			}
+			parser.RegisterPersistentFlags(parent)
+			if !tt.addChildBeforeReg {
+				parent.AddCommand(child)
+			}
+			require.NoError(t, parser.BindToViper(v))
+			require.NoError(t, parent.PersistentFlags().Set("stack", "local"))
+
+			require.NoError(t, parser.BindFlagsToViper(child, v))
+			assert.Equal(t, "local", v.GetString("stack"))
+		})
+	}
+}
+
 // TestStringFlag_GetValidValues tests the GetValidValues method.
 func TestStringFlag_GetValidValues(t *testing.T) {
 	t.Run("returns valid values when set", func(t *testing.T) {
@@ -1412,4 +1474,131 @@ func TestStandardFlagParser_PromptForOptionalValueFlags_MultipleFlagsOrder(t *te
 		assert.Equal(t, "m-default", result.Flags["mango"])
 		assert.Equal(t, "z-default", result.Flags["zebra"])
 	})
+}
+
+// TestStandardFlagParser_Registry verifies that Registry() returns the underlying flag registry.
+func TestStandardFlagParser_Registry(t *testing.T) {
+	parser := NewStandardFlagParser(
+		WithStringFlag("stack", "s", "", "Stack name"),
+		WithBoolFlag("dry-run", "", false, "Dry run mode"),
+	)
+
+	registry := parser.Registry()
+	require.NotNil(t, registry)
+	assert.Equal(t, 2, registry.Count())
+	assert.True(t, registry.Has("stack"))
+	assert.True(t, registry.Has("dry-run"))
+}
+
+// TestRegisterCompletionRecursive verifies that registerCompletionRecursive propagates
+// completion functions to all descendant commands that have the named flag.
+func TestRegisterCompletionRecursive(t *testing.T) {
+	completionFn := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "staging", "prod"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Build a command tree where child1 and grandchild each own the --stack flag
+	// (persistent flags from root are NOT visible via child.Flags().Lookup, so each
+	// descendant that should receive the completion must register the flag itself).
+	//
+	// root
+	//   └── child1 (owns --stack as a persistent flag)
+	//       └── grandchild (owns --stack as a local flag)
+	root := &cobra.Command{Use: "root"}
+
+	child1 := &cobra.Command{Use: "child1"}
+	child1.PersistentFlags().String("stack", "", "Stack name")
+	root.AddCommand(child1)
+
+	grandchild := &cobra.Command{Use: "grandchild"}
+	grandchild.Flags().String("stack", "", "Stack name")
+	child1.AddCommand(grandchild)
+
+	// Call registerCompletionRecursive starting from root.
+	registerCompletionRecursive(root, "stack", completionFn)
+
+	// Verify child1 has the completion function registered and it returns expected values.
+	gotFn, found := child1.GetFlagCompletionFunc("stack")
+	require.True(t, found, "child1 should have the completion function registered")
+	results, directive := gotFn(child1, nil, "")
+	assert.Equal(t, []string{"dev", "staging", "prod"}, results)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	// Verify grandchild also has the completion function registered.
+	gotFn2, found2 := grandchild.GetFlagCompletionFunc("stack")
+	require.True(t, found2, "grandchild should have the completion function registered")
+	results2, directive2 := gotFn2(grandchild, nil, "")
+	assert.Equal(t, []string{"dev", "staging", "prod"}, results2)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive2)
+}
+
+// TestStandardParser_Registry verifies that StandardParser.Registry() delegates correctly.
+func TestStandardParser_Registry(t *testing.T) {
+	parser := NewStandardParser(
+		WithStringFlag("format", "f", "yaml", "Output format"),
+	)
+
+	registry := parser.Registry()
+	require.NotNil(t, registry)
+	assert.True(t, registry.Has("format"))
+}
+
+// TestStandardParser_SetPositionalArgs verifies that StandardParser.SetPositionalArgs
+// correctly configures positional argument handling.
+func TestStandardParser_SetPositionalArgs(t *testing.T) {
+	parser := NewStandardParser(
+		WithStringFlag("stack", "s", "", "Stack name"),
+	)
+
+	specs := []*PositionalArgSpec{
+		{
+			Name:        "component",
+			Description: "Component name",
+			Required:    true,
+			TargetField: "Component",
+		},
+	}
+	validator := cobra.ExactArgs(1)
+
+	// Should not panic.
+	assert.NotPanics(t, func() {
+		parser.SetPositionalArgs(specs, validator, "component")
+	})
+
+	// Verify that positional args are actually extracted during Parse.
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	v := viper.New()
+	require.NoError(t, parser.BindToViper(v))
+
+	opts, err := parser.Parse(context.Background(), []string{"vpc"})
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", opts.Component, "positional arg should be mapped to Component field")
+}
+
+func TestConditionalPositionalPromptSkipsWhenPredicateIsFalse(t *testing.T) {
+	predicateCalled := false
+	argsBuilder := NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&PositionalArgSpec{Name: "component", Required: true, TargetField: "Component"})
+	specs, validator, usage := argsBuilder.Build()
+
+	parser := NewStandardFlagParser(WithConditionalPositionalArgPrompt(
+		"component",
+		"Choose a component",
+		func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+			return []string{"api"}, cobra.ShellCompDirectiveNoFileComp
+		},
+		func(*ParsedConfig) bool {
+			predicateCalled = true
+			return false
+		},
+	))
+	parser.SetPositionalArgs(specs, validator, usage)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	_, err := parser.Parse(context.Background(), nil)
+	require.Error(t, err, "the normal required-argument validator should run when prompting is skipped")
+	assert.True(t, predicateCalled)
 }

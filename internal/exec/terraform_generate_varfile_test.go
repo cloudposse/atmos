@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -101,36 +102,6 @@ func TestEnsureTerraformComponentExists_WorkdirPathSet(t *testing.T) {
 	assert.NoError(t, err, "component with workdir path set should pass")
 }
 
-// TestTryJITProvision_NoSource tests that tryJITProvision returns nil when no source is configured.
-func TestTryJITProvision_NoSource(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentSection: map[string]any{},
-	}
-
-	err := tryJITProvision(atmosConfig, info)
-	assert.NoError(t, err, "no source should return nil without error")
-}
-
-// TestTryJITProvision_WithEmptySource tests that empty source config is handled.
-func TestTryJITProvision_WithEmptySource(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentSection: map[string]any{
-			"source": map[string]any{},
-		},
-	}
-
-	err := tryJITProvision(atmosConfig, info)
-	assert.NoError(t, err, "empty source should return nil without error")
-}
-
 // TestEnsureTerraformComponentExists_WithFolderPrefix tests component resolution with a folder prefix.
 func TestEnsureTerraformComponentExists_WithFolderPrefix(t *testing.T) {
 	tempDir := t.TempDir()
@@ -182,84 +153,6 @@ func TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing-comp")
 	assert.Contains(t, err.Error(), filepath.Join("components", "terraform"))
-}
-
-// TestTryJITProvision_NilComponentSection tests that tryJITProvision handles nil ComponentSection.
-func TestTryJITProvision_NilComponentSection(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentSection: nil,
-	}
-
-	err := tryJITProvision(atmosConfig, info)
-	assert.NoError(t, err, "nil component section should return nil without error")
-}
-
-// TestTryJITProvision_WithNonSourceKeys tests that component sections without source are handled.
-func TestTryJITProvision_WithNonSourceKeys(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentSection: map[string]any{
-			"vars":     map[string]any{"name": "test"},
-			"settings": map[string]any{"enabled": true},
-			"metadata": map[string]any{"component": "vpc"},
-		},
-	}
-
-	err := tryJITProvision(atmosConfig, info)
-	assert.NoError(t, err, "section without source should return nil without error")
-}
-
-// TestTryJITProvision_WithSourceURI tests that tryJITProvision exercises AutoProvisionSource
-// when a valid source URI is configured (but fails because the URI is unreachable).
-func TestTryJITProvision_WithSourceURI(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentSection: map[string]any{
-			"source": map[string]any{
-				"uri": "file:///nonexistent/path/to/source",
-			},
-		},
-	}
-
-	err := tryJITProvision(atmosConfig, info)
-	// Should return an error because the source URI is unreachable.
-	assert.Error(t, err, "should fail when source URI is unreachable")
-	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
-}
-
-// TestCheckDirectoryExists tests all branches of the checkDirectoryExists function.
-func TestCheckDirectoryExists(t *testing.T) {
-	t.Run("existing directory returns true", func(t *testing.T) {
-		tempDir := t.TempDir()
-		exists, err := checkDirectoryExists(tempDir)
-		assert.NoError(t, err)
-		assert.True(t, exists)
-	})
-
-	t.Run("non-existing directory returns false", func(t *testing.T) {
-		exists, err := checkDirectoryExists(filepath.Join(t.TempDir(), "nonexistent"))
-		assert.NoError(t, err)
-		assert.False(t, exists)
-	})
-
-	t.Run("file path returns false", func(t *testing.T) {
-		tempDir := t.TempDir()
-		filePath := filepath.Join(tempDir, "file.txt")
-		require.NoError(t, os.WriteFile(filePath, []byte("test"), 0o644))
-		exists, err := checkDirectoryExists(filePath)
-		assert.NoError(t, err)
-		assert.False(t, exists)
-	})
 }
 
 // TestExecuteTerraformGenerateVarfileCmd_Deprecated tests the deprecated command returns an error.
@@ -462,4 +355,33 @@ func TestExecuteGenerateBackend_Integration(t *testing.T) {
 	content, err := os.ReadFile(backendFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "nonprod-tfstate")
+}
+
+func TestVarfileVarsToWrite(t *testing.T) {
+	const secret = "genvarfile-secret-aa11bb22"
+	iolib.RegisterSecret(secret)
+
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{
+			ComponentVarsSection: map[string]any{
+				"db_password": secret,
+				"region":      "us-east-1-genvarfile",
+			},
+		}
+	}
+
+	t.Run("default omits secrets", func(t *testing.T) {
+		info := newInfo()
+		got := varfileVarsToWrite(info, false, "test.tfvars.json")
+		_, hasSecret := got["db_password"]
+		assert.False(t, hasSecret, "secret var must be omitted from the varfile by default")
+		assert.Equal(t, "us-east-1-genvarfile", got["region"], "non-secret var must remain")
+	})
+
+	t.Run("with-secrets includes secrets", func(t *testing.T) {
+		info := newInfo()
+		got := varfileVarsToWrite(info, true, "test.tfvars.json")
+		assert.Equal(t, secret, got["db_password"], "secret var must be written with --with-secrets")
+		assert.Equal(t, "us-east-1-genvarfile", got["region"])
+	})
 }

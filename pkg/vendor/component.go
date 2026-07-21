@@ -14,10 +14,11 @@ import (
 	"github.com/hairyhenderson/gomplate/v3"
 	cp "github.com/otiai10/copy"
 
+	"github.com/Masterminds/sprig/v3"
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -74,7 +75,7 @@ func ExecuteComponentVendorInternal(
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
-		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(exec.GetSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
+		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
 			return err
 		}
@@ -120,6 +121,26 @@ func ExecuteComponentVendorInternal(
 	}
 	if len(packages) > 0 {
 		return executeVendorModel(packages, dryRun, atmosConfig)
+	}
+	return nil
+}
+
+// ExecuteComponentVendorPullBatch pulls multiple component manifests after a
+// vendor update. Components are processed in order so errors retain their
+// originating component context.
+func ExecuteComponentVendorPullBatch(
+	atmosConfig *schema.AtmosConfiguration,
+	components []string,
+	componentType string,
+	dryRun bool,
+) error {
+	for _, component := range components {
+		if err := VendorComponent(atmosConfig, component,
+			WithComponentComponentType(componentType),
+			WithComponentDryRun(dryRun),
+		); err != nil {
+			return fmt.Errorf("component %q: %w", component, err)
+		}
 	}
 	return nil
 }
@@ -214,7 +235,7 @@ func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
 		return mixin.Uri, nil
 	}
 
-	tmpl, err := template.New("mixin-uri").Funcs(exec.GetSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
+	tmpl, err := template.New("mixin-uri").Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
 	if err != nil {
 		return "", err
 	}
@@ -242,7 +263,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		tempDir = filepath.Join(tempDir, exec.SanitizeFileName(p.uri))
+		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
 		opts := []downloader.GoGetterOption{}
 		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
@@ -254,7 +275,9 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		if err := exec.ProcessOciImage(atmosConfig, p.uri, tempDir); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if err := oci.ProcessImage(ctx, atmosConfig, p.uri, tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image %s: %w", p.name, err)
 		}
 
@@ -286,7 +309,7 @@ func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor) error {
 
 	tempDir2 := tempDir
 	if p.sourceIsLocalFile {
-		tempDir2 = filepath.Join(tempDir, exec.SanitizeFileName(p.uri))
+		tempDir2 = filepath.Join(tempDir, SanitizeFileName(p.uri))
 	}
 
 	if err := cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
@@ -316,7 +339,9 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		if err := exec.ProcessOciImage(atmosConfig, p.uri, tempDir); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if err := oci.ProcessImage(ctx, atmosConfig, p.uri, tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image %s: %w", p.name, err)
 		}
 
@@ -401,7 +426,7 @@ func copyComponentToDestination(tempDir, componentPath string, vendorComponentSp
 	componentPath2 := componentPath
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, exec.SanitizeFileName(uri))
+			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
 		}
 	}
 

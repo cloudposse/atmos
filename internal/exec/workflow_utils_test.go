@@ -1,19 +1,29 @@
 package exec
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -104,6 +114,33 @@ func TestIsKnownWorkflowError(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExecuteExtendedStepInitializesExecutorAndLoadsEnv(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	step := &schema.WorkflowStep{
+		Name:  "blank",
+		Type:  "linebreak",
+		Count: 1,
+	}
+	err := executeExtendedStep(
+		context.Background(),
+		step,
+		&schema.WorkflowDefinition{Output: "none"},
+		[]string{"ATMOS_TEST_EXTENDED_ENV=loaded", "malformed"},
+		extendedStepOptions{
+			DryRun:     true,
+			FinalStack: "plat-ue2-dev",
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stepExecutorState)
+	assert.Equal(t, "loaded", stepExecutorState.Variables().Env["ATMOS_TEST_EXTENDED_ENV"])
+	assert.Equal(t, "plat-ue2-dev", stepExecutorState.Variables().Flags["stack"])
+	_, ok := stepExecutorState.GetResult("blank")
+	assert.True(t, ok)
 }
 
 // TestCheckAndMergeDefaultIdentity tests the checkAndMergeDefaultIdentity function.
@@ -849,6 +886,47 @@ func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 	assert.Nil(t, env)
 }
 
+func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
+	showSummary := false
+	ctrl := gomock.NewController(t)
+	authManager := authTypes.NewMockAuthManager(ctrl)
+	gomock.InOrder(
+		authManager.EXPECT().
+			GetCachedCredentials(gomock.Any(), "parent-id").
+			Return(&authTypes.WhoamiInfo{Identity: "parent-id"}, nil),
+		authManager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "parent-id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
+				assert.Equal(t, "parent-id", identityName)
+				assert.Contains(t, currentEnv, "BASE_VAR=base-value")
+				return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
+			}),
+	)
+	parent := &schema.WorkflowStep{
+		Name: "checks",
+		Type: schema.TaskTypeParallel,
+		ParallelOutput: &schema.ParallelOutputConfig{
+			Mode:        "none",
+			ShowSummary: &showSummary,
+		},
+		Steps: []schema.WorkflowStep{{
+			Name:    "child",
+			Type:    schema.TaskTypeShell,
+			Command: "echo child",
+		}},
+	}
+
+	err := executeWorkflowControlStep(context.Background(), &workflowControlContext{
+		workflowDefinition:  &schema.WorkflowDefinition{},
+		dryRun:              true,
+		commandLineIdentity: "parent-id",
+		baseEnv:             []string{"BASE_VAR=base-value"},
+		authManager:         authManager,
+	}, parent)
+
+	require.NoError(t, err)
+}
+
 // TestWorkflowMatch tests the WorkflowMatch struct.
 func TestWorkflowMatch(t *testing.T) {
 	match := WorkflowMatch{
@@ -984,6 +1062,27 @@ func TestPrepareStepEnvironment_WithWorkflowEnv(t *testing.T) {
 	// Check that base env and workflow env vars are included.
 	assert.Contains(t, env, "BASE_VAR=base-value")
 	assert.Contains(t, env, "WORKFLOW_VAR=workflow-value")
+}
+
+func TestPrepareStepEnvironment_PreservesToolchainPathWithWorkflowPathOverride(t *testing.T) {
+	separator := string(os.PathListSeparator)
+	systemPath := strings.Join([]string{"/usr/local/bin", "/usr/bin"}, separator)
+	baseEnv := []string{
+		"PATH=" + systemPath,
+		"PATH=" + strings.Join([]string{"/toolchain/bat", systemPath}, separator),
+	}
+	workflowEnv := map[string]string{
+		"PATH": strings.Join([]string{"/workspace/.context/bin", systemPath}, separator),
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil)
+
+	require.NoError(t, err)
+	assert.Contains(t, env, "PATH="+strings.Join([]string{
+		"/workspace/.context/bin",
+		"/toolchain/bat",
+		systemPath,
+	}, separator))
 }
 
 // TestPrepareStepEnvironment_WithStepEnv tests prepareStepEnvironment with step-level env.
@@ -1130,6 +1229,10 @@ func TestShellFieldsParseErrors(t *testing.T) {
 // TestExecuteWorkflow_ShellFieldsFallback tests that ExecuteWorkflow falls back to
 // strings.Fields when shell.Fields fails to parse the command.
 func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
+	}
+
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -1158,6 +1261,101 @@ func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
 	// This should succeed - version command works.
 	err = ExecuteWorkflow(atmosConfig, "test-fallback", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_SkipsStepWhenConditionIsFalse(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test when skip",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "skip",
+				Command: "exit 77",
+				Type:    "shell",
+				When:    schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+
+	workflowDefWithIdentity := &schema.WorkflowDefinition{
+		Description: "Test when skip with identity",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:     "skip-auth",
+				Command:  "exit 77",
+				Type:     "shell",
+				Identity: "missing-identity",
+				When:     schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip-auth", "/path/to/workflow.yaml", workflowDefWithIdentity, false, "", "", "")
+	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test failure condition continuation",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "fail-step",
+				Command:          "echo fail > fail.txt && exit 7",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "implicit-success",
+				Command:          "echo skipped > skipped.txt",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "failure-handler",
+				Command:          "echo failure > failure.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateFailure),
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "always-handler",
+				Command:          "echo always > always.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateAlways),
+				WorkingDirectory: tmpDir,
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-failure-continuation", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
+	formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, strings.ReplaceAll(formattedErr, "\n", ""), "fail-step")
+
+	for _, name := range []string{"fail.txt", "failure.txt", "always.txt"} {
+		_, statErr := os.Stat(filepath.Join(tmpDir, name))
+		assert.NoError(t, statErr, "expected %s to be written", name)
+	}
+	_, statErr := os.Stat(filepath.Join(tmpDir, "skipped.txt"))
+	assert.True(t, os.IsNotExist(statErr), "implicit success step should be skipped after failure")
 }
 
 // TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand tests the fallback path
@@ -1271,6 +1469,216 @@ func TestExecuteWorkflow_DryRunShell(t *testing.T) {
 	// Dry run should not execute the command.
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
 	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	counterFile := filepath.Join(t.TempDir(), "script-ran")
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test script dry run",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "script-step",
+				Type:        schema.TaskTypeScript,
+				Interpreter: exe,
+				Script:      "echo should-not-run",
+				Env: map[string]string{
+					"_ATMOS_TEST_COUNTER_FILE": counterFile,
+				},
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-dryrun-script", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	assert.NoError(t, err)
+	_, err = os.Stat(counterFile)
+	assert.True(t, os.IsNotExist(err), "dry-run script step executed the helper process")
+}
+
+func TestExecuteWorkflow_DryRunShellWithCILogGrouping(t *testing.T) {
+	groupOutput := registerGitHubLogGroupingForWorkflowTest(t)
+
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	atmosConfig.CI.Enabled = true
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test dry run with CI log grouping",
+		Steps: []schema.WorkflowStep{{
+			Name:    "step1",
+			Command: "echo hello",
+			Type:    schema.TaskTypeShell,
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-dryrun-ci-group", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+	assert.Contains(t, groupOutput.String(), "::group::step1\n")
+	assert.Contains(t, groupOutput.String(), "::endgroup::\n")
+}
+
+func TestExecuteWorkflow_DryRunBackgroundAndControlSteps(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	showSummary := false
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test background and control step dispatch in dry run",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:            "svc",
+				Type:            "container",
+				BackgroundAsync: true,
+				Run: &schema.ContainerRunStep{
+					Image:   "busybox:latest",
+					Command: "sleep 1",
+				},
+			},
+			{Name: "wait-svc", Type: schema.TaskTypeWait, For: []string{"svc"}},
+			{Name: "wait-all", Type: schema.TaskTypeWaitAll},
+			{Name: "cancel-svc", Type: schema.TaskTypeCancel, For: []string{"svc"}},
+			{
+				Name: "checks",
+				Type: schema.TaskTypeParallel,
+				ParallelOutput: &schema.ParallelOutputConfig{
+					Mode:        "none",
+					ShowSummary: &showSummary,
+				},
+				Steps: []schema.WorkflowStep{{
+					Name:    "pause",
+					Type:    "sleep",
+					Timeout: "1ms",
+				}},
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-control-dispatch", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunShellStepContainerOverride(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test shell step container override in dry run",
+		Steps: []schema.WorkflowStep{{
+			Name:    "step-container",
+			Type:    schema.TaskTypeShell,
+			Command: "echo in step container",
+			Container: &schema.WorkflowContainer{
+				Image: "alpine:latest",
+			},
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-step-container", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunShellWorkflowContainer(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test workflow container shell step in dry run",
+		Container: &schema.WorkflowContainer{
+			Image: "alpine:latest",
+		},
+		Output: "none",
+		Steps: []schema.WorkflowStep{{
+			Name:    "workflow-container",
+			Type:    schema.TaskTypeShell,
+			Command: "echo in workflow container",
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-workflow-container", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunAtmosStepStackBeforeSeparator(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test atmos step stack insertion before separator",
+		Steps: []schema.WorkflowStep{{
+			Name:    "plan",
+			Type:    schema.TaskTypeAtmos,
+			Command: "terraform plan vpc -- -target=module.example",
+			Stack:   "tenant1-ue2-dev",
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-atmos-stack-before-separator", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+type workflowRecordingGitHubProvider struct {
+	*githubprovider.Provider
+	output *bytes.Buffer
+}
+
+func (p *workflowRecordingGitHubProvider) StartLogGroup(name string) error {
+	_, err := fmt.Fprintf(p.output, "::group::%s\n", name)
+	return err
+}
+
+func (p *workflowRecordingGitHubProvider) EndLogGroup() error {
+	_, err := fmt.Fprintln(p.output, "::endgroup::")
+	return err
+}
+
+func registerGitHubLogGroupingForWorkflowTest(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	restore := ci.SwapRegistryForTest()
+	t.Cleanup(restore)
+	output := &bytes.Buffer{}
+	ci.Register(&workflowRecordingGitHubProvider{
+		Provider: githubprovider.NewProvider(),
+		output:   output,
+	})
+	t.Setenv("GITHUB_ACTIONS", "true")
+	// This test binary can itself run as a child of a CI-grouped step (this
+	// repo's own atmos.yaml sets ci.enabled: true, and CI runs `go test` via
+	// an `atmos test acceptance` custom-command step), in which case the ci
+	// package's nesting sentinel is already present in the process
+	// environment and would make grouping silently no-op below. Clear it so
+	// the caller's assertions on emitted markers are deterministic regardless
+	// of how the test binary itself was launched.
+	t.Setenv("ATMOS_CI_LOG_GROUP_ACTIVE", "")
+	return output
 }
 
 // TestExecuteWorkflow_DryRunAtmos tests ExecuteWorkflow with dry run for atmos commands.
@@ -1400,6 +1808,9 @@ func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
+	}
 
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -1502,8 +1913,8 @@ func TestExecuteWorkflow_AutoGeneratedStepNames(t *testing.T) {
 	assert.Equal(t, "step3", workflowDef.Steps[2].Name)
 }
 
-// TestEnsureWorkflowToolchainDependencies_NoDependencies tests with no dependencies.
-func TestEnsureWorkflowToolchainDependencies_NoDependencies(t *testing.T) {
+// TestForWorkflow_NoDependencies tests with no dependencies.
+func TestForWorkflow_NoDependencies(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir) // Change to temp dir to avoid picking up project .tool-versions.
@@ -1527,51 +1938,13 @@ func TestEnsureWorkflowToolchainDependencies_NoDependencies(t *testing.T) {
 	}
 
 	// Should succeed with empty PATH when no dependencies.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
+	tenv, err := dependencies.ForWorkflow(atmosConfig, workflowDef)
 	assert.NoError(t, err)
-	assert.Empty(t, path)
+	assert.Empty(t, tenv.PATH())
 }
 
-// TestEnsureWorkflowToolchainDependencies_WithWorkflowDeps tests with workflow-level dependencies.
-func TestEnsureWorkflowToolchainDependencies_WithWorkflowDeps(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Chdir(tempDir) // Isolate from project .tool-versions.
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Toolchain: schema.Toolchain{
-			InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
-		},
-	}
-
-	workflowDef := &schema.WorkflowDefinition{
-		Description: "Test workflow with dependencies",
-		Dependencies: &schema.Dependencies{
-			Tools: map[string]string{
-				"terraform": "1.11.4",
-			},
-		},
-		Steps: []schema.WorkflowStep{
-			{
-				Name:    "step1",
-				Command: "terraform version",
-				Type:    "shell",
-			},
-		},
-	}
-
-	// Should succeed (may fail to install if network is unavailable, but that's expected).
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
-	// If installation succeeded, path should be non-empty.
-	if err == nil {
-		assert.NotEmpty(t, path, "expected non-empty PATH when tools are installed")
-	}
-	// Error is acceptable in CI without network - code path is exercised either way.
-}
-
-// TestEnsureWorkflowToolchainDependencies_NilWorkflowDef tests with nil workflow definition.
-func TestEnsureWorkflowToolchainDependencies_NilWorkflowDef(t *testing.T) {
+// TestForWorkflow_NilWorkflowDef tests with nil workflow definition.
+func TestForWorkflow_NilWorkflowDef(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir) // Change to temp dir to avoid picking up project .tool-versions.
@@ -1584,13 +1957,13 @@ func TestEnsureWorkflowToolchainDependencies_NilWorkflowDef(t *testing.T) {
 	}
 
 	// Should succeed with empty PATH when workflow def is nil.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, nil)
+	tenv, err := dependencies.ForWorkflow(atmosConfig, nil)
 	assert.NoError(t, err)
-	assert.Empty(t, path)
+	assert.Empty(t, tenv.PATH())
 }
 
-// TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef tests with empty workflow definition.
-func TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef(t *testing.T) {
+// TestForWorkflow_EmptyWorkflowDef tests with empty workflow definition.
+func TestForWorkflow_EmptyWorkflowDef(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir) // Change to temp dir to avoid picking up project .tool-versions.
@@ -1605,9 +1978,9 @@ func TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef(t *testing.T) {
 	workflowDef := &schema.WorkflowDefinition{}
 
 	// Should succeed with empty PATH when no dependencies specified.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
+	tenv, err := dependencies.ForWorkflow(atmosConfig, workflowDef)
 	assert.NoError(t, err)
-	assert.Empty(t, path)
+	assert.Empty(t, tenv.PATH())
 }
 
 // TestDoubleHyphenStackInsertion tests the stack insertion logic with double-hyphen separator.
@@ -1724,41 +2097,98 @@ func TestDoubleHyphenIssue1967(t *testing.T) {
 	assert.Equal(t, "-consolidate-warnings=false", args[6], "seventh arg should be -consolidate-warnings=false")
 }
 
-// TestEnsureWorkflowToolchainDependencies_WithToolVersionsFile tests with .tool-versions file present.
-func TestEnsureWorkflowToolchainDependencies_WithToolVersionsFile(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Chdir(tempDir) // Ensure we read the test's .tool-versions, not the project's.
+func TestExecuteWorkflowExecStep_ValidationViaSchema(t *testing.T) {
+	// The workflow runner validates exec steps before executing anything.
+	err := schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeExec, Command: "psql"},
+		{Type: schema.TaskTypeShell, Command: "echo never runs"},
+	})
+	require.ErrorIs(t, err, schema.ErrExecStepNotLast)
 
-	// Create a .tool-versions file.
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	content := "terraform 1.11.4\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
+	err = schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeShell, Command: "echo first"},
+		{Type: schema.TaskTypeExec, Command: "psql"},
+	})
+	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ExecStepDryRun(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Toolchain: schema.Toolchain{
-			InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
-		},
-	}
-
-	workflowDef := &schema.WorkflowDefinition{
-		Description: "Test workflow with .tool-versions",
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step as the final step",
 		Steps: []schema.WorkflowStep{
-			{
-				Name:    "step1",
-				Command: "terraform version",
-				Type:    "shell",
-			},
+			{Name: "prep", Type: "shell", Command: "echo preparing"},
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
 		},
 	}
 
-	// Should try to install tools from .tool-versions.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
-	// If installation succeeded, path should be non-empty.
-	if err == nil {
-		assert.NotEmpty(t, path, "expected non-empty PATH when tools are installed")
+	// Dry-run exercises validation and the exec routing without replacing the process.
+	err = ExecuteWorkflow(atmosConfig, "exec-dry-run", "test.yaml", workflowDefinition, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step in the wrong position",
+		Steps: []schema.WorkflowStep{
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
+			{Name: "after", Type: "shell", Command: "echo never runs"},
+		},
 	}
-	// Error is acceptable in CI without network - code path is exercised either way.
+
+	// Validation must fail before any step executes, even in dry-run.
+	err = ExecuteWorkflow(atmosConfig, "exec-not-last", "test.yaml", workflowDefinition, true, "", "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
+}
+
+// TestExecuteWorkflowUI_TUIStartFailureIsReturned covers the line in
+// ExecuteWorkflowUI right after `w.Execute(...)` (`_ = data.Writeln("")`),
+// which unconditionally runs whether or not the TUI started successfully.
+//
+// In a headless test process there is no controlling TTY, so Bubble Tea's
+// Program.Run() cannot open one (see charmbracelet/bubbletea's
+// openInputTTY, which falls back to opening /dev/tty and fails fast when
+// none is available) and returns an error immediately instead of blocking on
+// input. That lets this test reach the `data.Writeln("")` line and the
+// subsequent `if err != nil { return ..., err }` branch without needing a
+// real interactive session.
+//
+// This fails-fast behavior is Unix-specific: on Windows, Bubble Tea reads
+// input via syscall.ReadConsole against the process's console handle, which
+// blocks waiting for real input instead of erroring when there's no
+// interactive session, hanging this test (and the whole package's test
+// binary) until the CI job's 40-minute timeout kills it.
+func TestExecuteWorkflowUI_TUIStartFailureIsReturned(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: Bubble Tea's console input read blocks instead of failing fast without a TTY")
+	}
+
+	tmpDir := t.TempDir()
+	workflowsDir := filepath.Join(tmpDir, "workflows")
+	require.NoError(t, os.MkdirAll(workflowsDir, 0o755))
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Workflows: schema.Workflows{
+			BasePath: "workflows",
+		},
+	}
+
+	_, _, _, err := ExecuteWorkflowUI(atmosConfig)
+
+	require.Error(t, err)
 }

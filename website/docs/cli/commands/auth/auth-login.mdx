@@ -6,7 +6,7 @@ sidebar_position: 3
 id: login
 description: Authenticate to cloud providers using an identity defined in atmos.yaml.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -16,12 +16,12 @@ Authenticate with a configured identity using SSO, SAML, OIDC, or static credent
 
 <DemoVideo id="auth-login" title="atmos auth login" showCaption={false} />
 
-<Screengrab title="atmos auth login --help" slug="atmos-auth-login--help" />
+<CastPlayer title="atmos auth login --help" src="/casts/screengrabs/atmos-auth-login--help.cast" static chrome />
 
 ## Usage
 
 ```shell
-atmos auth login [--identity <name>]
+atmos auth login [--identity <name>] [--tags <tags>]
 ```
 
 ## Examples
@@ -41,6 +41,9 @@ atmos auth login -i admin
 
 # Interactive selection with short form
 atmos auth login -i
+
+# Login using tags (auto-selects if exactly one identity matches, otherwise shows a picker)
+atmos auth login --tags admin,production
 ```
 
 ## Arguments
@@ -79,6 +82,19 @@ atmos auth login -i
     falls back to provider authentication: a single provider is auto-selected, multiple providers
     prompt for selection (interactive) or require `--provider` flag (non-interactive).
   </dd>
+
+  <dt>`--tags`</dt>
+  <dd>
+    Filter identities by tags (comma-separated, matches any): `--tags admin,production`. Identities are tagged via an optional `tags: [...]` list in `atmos.yaml`.
+
+    - **Exactly one match**: Atmos automatically authenticates with that identity
+    - **Multiple matches**: Shows an interactive picker restricted to the matching identities
+    - **No matches**: Returns an error listing the available tags
+
+    ```shell
+    atmos auth login --tags admin,production
+    ```
+  </dd>
 </dl>
 
 ## Interactive Identity Selection
@@ -98,13 +114,9 @@ The interactive selector displays all configured identities with arrow key navig
 - Configure a default identity in your `atmos.yaml`
 - Explicitly specify the identity using `--identity <name>` or environment variable
 
-## Integrations (ECR)
+## Integrations (ECR & EKS)
 
-When you authenticate with an identity, Atmos automatically triggers any **integrations** linked to that identity (when `auto_provision` is enabled, which is the default). Integrations provide client-only credential materializations for services like ECR.
-
-:::note EKS Integration Coming Soon
-EKS integration is planned but not yet implemented. Currently only ECR integrations are supported.
-:::
+When you authenticate with an identity, Atmos automatically triggers any **integrations** linked to that identity (when `auto_provision` is enabled, which is the default). Integrations provide client-only credential materializations for services like ECR and EKS.
 
 ```yaml
 auth:
@@ -117,22 +129,33 @@ auth:
     dev/ecr:
       kind: aws/ecr
       via:
-        identity: dev-admin    # Links to the identity above
+        identity: dev-admin
       spec:
         registry:
           account_id: "123456789012"
           region: us-east-2
+
+    dev/eks:
+      kind: aws/eks
+      via:
+        identity: dev-admin
+      spec:
+        cluster:
+          name: dev-cluster
+          region: us-east-2
+          alias: dev-eks
 ```
 
 ```bash
 $ atmos auth login dev-admin
 Successfully authenticated as dev-admin
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 11h59m)
+✓ EKS kubeconfig: dev-eks → ~/.config/atmos/kube/config
 ```
 
-Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos auth ecr-login`](/cli/commands/auth/ecr-login).
+Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos aws ecr login`](/cli/commands/aws/ecr-login) or [`atmos aws eks update-kubeconfig --integration`](/cli/commands/aws/eks/update-kubeconfig).
 
-See [ECR Authentication Tutorial](/tutorials/ecr-authentication) for detailed configuration examples.
+See [ECR Authentication Tutorial](/tutorials/ecr-authentication) and [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication) for detailed configuration examples.
 
 ## Notes
 
@@ -155,6 +178,7 @@ Atmos supports multiple authentication methods for different cloud providers:
 - IAM Roles Anywhere (certificate-based)
 - OIDC (GitHub Actions, GitLab CI)
 - Static credentials
+- Browser-based OAuth2 PKCE (automatic fallback for `aws/user` identities)
 
 See [Migrating from Leapp](/tutorials/migrating-from-leapp) for AWS examples.
 
@@ -167,6 +191,8 @@ See [Azure Authentication](/tutorials/azure-authentication) for detailed Azure c
 
 ## See Also
 
-- [Auth ECR Login Command](/cli/commands/auth/ecr-login) — Login to AWS ECR registries
+- [AWS ECR Login Command](/cli/commands/aws/ecr-login) — Login to AWS ECR registries
+- [AWS EKS Token Command](/cli/commands/aws/eks-token) — Generate EKS bearer tokens for kubectl
 - [ECR Authentication Tutorial](/tutorials/ecr-authentication) — Step-by-step ECR setup guide
+- [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication) — Step-by-step EKS setup guide
 - [Auth Providers Configuration](/cli/configuration/auth/providers) — Configure AWS SSO, SAML, and OIDC providers (including IAM permissions for identity provisioning)

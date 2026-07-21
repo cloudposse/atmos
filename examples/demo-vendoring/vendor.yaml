@@ -20,6 +20,10 @@ spec:
       tags:
         - demo
         - github
+      retry:
+        max_attempts: 3
+        initial_delay: 2s
+        backoff_strategy: exponential
 
     - component: "weather"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
@@ -28,6 +32,10 @@ spec:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       tags:
         - demo
+      retry:
+        max_attempts: 3
+        initial_delay: 2s
+        backoff_strategy: exponential
 
     - component: "ipinfo"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
@@ -36,3 +44,7 @@ spec:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       tags:
         - demo
+      retry:
+        max_attempts: 3
+        initial_delay: 2s
+        backoff_strategy: exponential

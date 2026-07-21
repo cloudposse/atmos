@@ -1,0 +1,48 @@
+---
+title: atmos version track diff
+sidebar_position: 100
+sidebar_label: diff
+sidebar_class_name: command
+description: Show unlocked entries and policy-eligible updates.
+---
+
+Show the subset of status entries that are unlocked or have a policy-eligible update available. These are the entries that `atmos version track update` would change.
+
+## Usage
+
+```shell
+atmos version track diff [track] [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit the diff to entries in the named version group.</dd>
+
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show all entries that need lock changes in prod
+atmos version track diff prod
+
+# Show only infrastructure group changes
+atmos version track diff prod --group=infrastructure
+```
+
+## Example Output
+
+In an interactive terminal, `--format=table` (the default) renders a styled table.
+Use `--format=csv` or `--format=tsv` for delimited output; piped table output remains a table.
+
+```shell
+> atmos version track diff prod --format=csv
+Track,Name,Group,Desired,Locked,Resolved,Status,Message
+prod,checkout,infrastructure,v6,v6.1.0,v6.2.0,update-available,
+```
+
+Use `--format=yaml` or `--format=json` for the full-fidelity result.

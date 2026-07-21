@@ -1,0 +1,79 @@
+name: Validation E2E
+
+# Home for CI-validation E2E scenarios that need a real GitHub Actions runner
+# (workflow-command annotations, Checks/SARIF integration, etc.) and can't be
+# exercised by a Go unit test. Add new scenarios here as additional jobs
+# rather than new one-off *-e2e.yml workflow files.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "cmd/ci/validate.go"
+      - "pkg/ci/**"
+      - "pkg/validation/**"
+      - "atmos.yaml"
+      - "tests/fixtures/scenarios/invalid-github-actions-workflows/**"
+      - ".github/workflows/validation-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validation-annotations:
+    name: Validation annotations E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: "1.223.0"
+
+      # atmos emits GitHub Actions workflow commands (::error file=...,line=...,title=...::message),
+      # which populate the Actions UI and inline PR diff comments. Those never reach the Checks REST
+      # API's output.annotations (a separate mechanism only the Checks API itself populates via
+      # checks:write), so assert directly against the emitted command instead of polling check-run
+      # annotations, which this token cannot see and this command never writes to anyway.
+      - name: Assert the validation annotation
+        shell: bash
+        run: |
+          set +e
+          output="$(atmos ci validate \
+            --workflow-path tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows \
+            --format rich 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+
+          if [ "$status" -ne 1 ]; then
+            echo "Expected the intentionally invalid workflow fixture to exit 1; got $status." >&2
+            exit 1
+          fi
+
+          expected_path='tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows/invalid.yml'
+          expected_message='unexpected key "branch" for "push" section'
+
+          error_line="$(printf '%s\n' "$output" | grep -F "::error file=${expected_path}," || true)"
+          if [ -z "$error_line" ]; then
+            echo "Expected a GitHub Actions error annotation for ${expected_path}." >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$error_line" | grep -q ',line=5,'; then
+            echo "Expected the annotation to anchor at line 5: ${error_line}" >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$error_line" | grep -q 'title=syntax-check'; then
+            echo "Expected the annotation title to be syntax-check: ${error_line}" >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$error_line" | grep -qF "$expected_message"; then
+            echo "Expected annotation message to contain: ${expected_message}" >&2
+            exit 1
+          fi

@@ -3,38 +3,78 @@ package merge
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
-
-	"dario.cat/mergo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
 	ListMergeStrategyReplace = "replace"
 	ListMergeStrategyAppend  = "append"
 	ListMergeStrategyMerge   = "merge"
+
+	// MaxSliceCapacity is the maximum safe capacity for slice allocation to prevent overflow.
+	// This is 2^30 (about 1 billion elements), providing a safe margin below the int max.
+	maxSliceCapacity = 1 << 30
 )
+
+// mapKeyCollisionPanic carries a deliberate, expected error through Go's panic/recover
+// mechanism, raised by normalizeMapReflect when two distinct original keys stringify to the
+// same string but cannot be safely merged (see normalizeMapReflect for details). The
+// deepCopyValue function has ~20 call sites across this package's hot merge path, so threading
+// an error return through all of them would add a return-value check to every recursive step;
+// recover-and-convert at this package's two independent entry points (DeepCopyMap,
+// deepMergeNativeTopLevel) achieves the same "abort the whole merge on ambiguous data" outcome
+// without that cost. No value of this type is ever allowed to escape the merge package — see
+// recoveredMapKeyCollision.
+type mapKeyCollisionPanic struct {
+	err error
+}
+
+// recoveredMapKeyCollision inspects a recover()'d panic value and, if it is a
+// mapKeyCollisionPanic raised by normalizeMapReflect, returns its wrapped error. Returns nil
+// for a nil input (no panic occurred). Any other panic value is re-panicked immediately: this
+// must never mask a genuine bug (e.g. a nil-map SetMapIndex panic) as a merge-collision error,
+// and genuine bugs should still reach Atmos's global panic handler (pkg/panics) with their real
+// value and stack trace.
+func recoveredMapKeyCollision(r any) error {
+	if r == nil {
+		return nil
+	}
+	collision, ok := r.(mapKeyCollisionPanic)
+	if !ok {
+		panic(r)
+	}
+	return collision.err
+}
 
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
 // This custom implementation avoids reflection overhead for common cases (maps, slices, primitives)
 // and uses reflection-based normalization for rare complex types (typed slices/maps).
 // Preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
 // generic reflection-based copying. The data is already in Go map format with custom tags already processed,
-// so we only need structural copying to work around mergo's pointer mutation bug.
+// so structural copying is needed to ensure accumulated merge results are independent of their inputs.
 // Uses properly-sized allocations to reduce GC pressure during high-volume operations (118k+ calls per run).
-func DeepCopyMap(m map[string]any) (map[string]any, error) {
+func DeepCopyMap(m map[string]any) (result map[string]any, err error) {
 	defer perf.Track(nil, "merge.DeepCopyMap")()
+	defer func() {
+		if e := recoveredMapKeyCollision(recover()); e != nil {
+			result = nil
+			err = e
+		}
+	}()
 
 	if m == nil {
 		return nil, nil
 	}
 
 	// Allocate map with exact size to avoid resizing.
-	result := make(map[string]any, len(m))
+	result = make(map[string]any, len(m))
 
 	// Copy all key-value pairs.
 	for k, v := range m {
@@ -201,30 +241,68 @@ func copyMapValue(value reflect.Value, elemType reflect.Type) reflect.Value {
 	return value
 }
 
-// normalizeMapReflect converts a typed map to map[string]any (for string keys) or deep copies it (for non-string keys).
+// normalizeMapReflect converts a typed map to map[string]any (for string or interface{} keys)
+// or deep copies it (for other concrete non-string keys).
 func normalizeMapReflect(rv reflect.Value) any {
 	keyKind := rv.Type().Key().Kind()
 
 	// Empty map - return properly typed empty map.
 	if rv.Len() == 0 {
-		if keyKind != reflect.String {
+		if keyKind != reflect.String && keyKind != reflect.Interface {
 			return reflect.MakeMapWithSize(rv.Type(), 0).Interface()
 		}
 		return make(map[string]any, 0)
 	}
 
 	iter := rv.MapRange()
-	_ = iter // We'll iterate below using Next().
 
-	// Non-string keys: copy to same type, ensuring value type matches Elem().
-	if keyKind != reflect.String {
+	// Concrete non-string, non-interface keys (e.g. map[int]schema.Provider): copy to the same
+	// type, preserving the key type — there is no map[string]any shape to merge into.
+	if keyKind != reflect.String && keyKind != reflect.Interface {
 		return copyNonStringKeyMap(rv, iter)
 	}
 
-	// String keys: convert to map[string]any.
+	// String keys, or interface{} keys (e.g. yaml.v3 decodes a mapping with an unquoted
+	// non-string key like `1:` as map[interface{}]interface{}, not map[string]interface{}):
+	// stringify every key so this collapses onto the same map[string]any shape as an
+	// all-string-keyed sibling map, letting deepMergeNative's map[string]any fast path recurse
+	// into it instead of treating it as an opaque leaf that gets replaced wholesale.
+	//
+	// Distinct original keys can still stringify to the same string (e.g. YAML `1` and `1.0`,
+	// or `true` and a differently-quoted equivalent) — this is the same collision risk any
+	// YAML-to-map[string]any normalization has. Map[interface{}]interface{} iteration order is
+	// unspecified, so a plain overwrite would silently and non-deterministically drop one
+	// entry's data. If both colliding values are maps, merge them instead of dropping either.
+	// Otherwise the collision is genuinely ambiguous — there is no safe way to combine two
+	// scalars (or a scalar and a map) without picking one arbitrarily — so abort the merge via
+	// mapKeyCollisionPanic rather than silently dropping data; DeepCopyMap and
+	// deepMergeNativeTopLevel recover it into a normal returned error.
 	result := make(map[string]any, rv.Len())
 	for iter.Next() {
-		result[iter.Key().String()] = deepCopyValue(iter.Value().Interface())
+		key := iter.Key()
+		var keyStr string
+		if key.Kind() == reflect.String {
+			keyStr = key.String()
+		} else {
+			keyStr = fmt.Sprintf("%v", key.Interface())
+		}
+		normalizedVal := deepCopyValue(iter.Value().Interface())
+		if existing, collided := result[keyStr]; collided {
+			existingMap, existingIsMap := existing.(map[string]any)
+			newMap, newIsMap := normalizedVal.(map[string]any)
+			if existingIsMap && newIsMap {
+				_ = deepMergeNative(existingMap, newMap, false, false)
+				continue
+			}
+			panic(mapKeyCollisionPanic{
+				err: errUtils.Build(errUtils.ErrMergeKeyCollision).
+					WithExplanationf("multiple keys normalize to %q but are not both maps, so they cannot be merged safely", keyStr).
+					WithHint("quote ambiguous scalar keys (e.g. \"1\" instead of 1, or \"1.0\" instead of 1.0) so they don't collide after normalization").
+					WithContext("key", keyStr).
+					Err(),
+			})
+		}
+		result[keyStr] = normalizedVal
 	}
 	return result
 }
@@ -341,48 +419,124 @@ func MergeWithOptions(
 	}
 
 	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
+	// Still resolve any !append wrappers against an empty accumulator — a lone !append
+	// has nothing to append to, so it becomes a plain list — otherwise the wrapper would
+	// leak into the result instead of being resolved.
 	if len(nonEmptyInputs) == 1 {
-		return DeepCopyMap(nonEmptyInputs[0])
-	}
-
-	// Standard merge path for multiple non-empty inputs.
-	merged := map[string]any{}
-
-	for index := range nonEmptyInputs {
-		current := nonEmptyInputs[index]
-
-		// Due to a bug in `mergo.Merge`
-		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
-		// not only the destination of the current loop iteration),
-		// we don't give it our maps directly; we deep copy them using our custom DeepCopyMap (faster than YAML serialization),
-		// so `mergo` does not have access to the original pointers.
-		// Deep copy preserves types and is sufficient because the data is already in Go map format with custom tags already processed.
-		dataCurrent, err := DeepCopyMap(current)
+		copied, err := DeepCopyMap(nonEmptyInputs[0])
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
 		}
+		return processAppendTags(copied, map[string]any{}, appendSlice), nil
+	}
 
-		var opts []func(*mergo.Config)
-		opts = append(opts, mergo.WithOverride, mergo.WithTypeCheck)
+	// Standard merge path for multiple non-empty inputs.
+	//
+	// Strategy: deep-copy the first input to create the initial accumulator, then
+	// merge each subsequent input into it using deepMergeNative.  deepMergeNative
+	// only copies values that are placed as leaves in the accumulator, so it avoids
+	// the full pre-copy that the old mergo-based loop required on every iteration.
+	// This reduces the number of full DeepCopyMap calls from N to 1 and eliminates
+	// reflection overhead from mergo for every subsequent merge.
+	merged, err := DeepCopyMap(nonEmptyInputs[0])
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
+	}
 
-		// This was fixed/broken in https://github.com/imdario/mergo/pull/231/files
-		// It was released in https://github.com/imdario/mergo/releases/tag/v0.3.14
-		// It was not working before in `github.com/imdario/mergo` so we need to disable it in our code
-		// opts = append(opts, mergo.WithOverwriteWithEmptyValue)
+	// Resolve !append-tagged lists in the base input. At the base there is nothing
+	// to append to, so an !append list simply becomes a plain list.
+	merged = processAppendTags(merged, map[string]any{}, appendSlice)
 
-		if sliceDeepCopy {
-			opts = append(opts, mergo.WithSliceDeepCopy)
-		} else if appendSlice {
-			opts = append(opts, mergo.WithAppendSlice)
-		}
-
-		if err := mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			// Return the error without debug logging.
-			return nil, fmt.Errorf("%w: mergo merge failed: %w", errUtils.ErrMerge, err)
+	for _, current := range nonEmptyInputs[1:] {
+		// Resolve !append-tagged lists against the accumulator before merging.
+		// With the global append strategy (appendSlice), processAppendTags returns only
+		// the new items so deepMergeNative's append adds them without duplication; otherwise
+		// it returns existing+new concatenated so the override replaces with the appended list.
+		current = processAppendTags(current, merged, appendSlice)
+		if err := deepMergeNativeTopLevel(merged, current, appendSlice, sliceDeepCopy); err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
 		}
 	}
 
 	return merged, nil
+}
+
+// processAppendTags handles special !append tagged lists during merging.
+// It processes any values wrapped with __atmos_append__ metadata and appends them to existing lists.
+// When appendNewOnly is true (global append strategy), it returns only the new items so that
+// deepMergeNative's append strategy performs the append without duplication.
+func processAppendTags(current map[string]any, merged map[string]any, appendNewOnly bool) map[string]any {
+	result := make(map[string]any)
+
+	for key, value := range current {
+		result[key] = processValue(key, value, merged, appendNewOnly)
+	}
+
+	return result
+}
+
+// processValue processes a single value for append tags.
+func processValue(key string, value any, merged map[string]any, appendNewOnly bool) any {
+	// Check if this is an append-tagged list.
+	if list, isAppend := u.ExtractAppendListValue(value); isAppend {
+		return processAppendList(key, list, merged, appendNewOnly)
+	}
+
+	// Check if this is a nested map.
+	if nestedMap, ok := value.(map[string]any); ok {
+		return processNestedMap(key, nestedMap, merged, appendNewOnly)
+	}
+
+	// Regular value, pass through.
+	return value
+}
+
+// processAppendList handles appending a list to existing values.
+// If appendNewOnly is true, return only the new items so deepMergeNative's append strategy
+// can append them to the existing list without duplication.
+func processAppendList(key string, list []any, merged map[string]any, appendNewOnly bool) []any {
+	if appendNewOnly {
+		return list
+	}
+
+	var existingList []any
+	if existingValue, exists := merged[key]; exists {
+		if el, ok := existingValue.([]any); ok {
+			existingList = el
+		}
+	}
+
+	// Create a new slice to avoid modifying the original.
+	// Overflow guard: ensure existingLen+newLen stays within int range before computing
+	// it, so the make() below cannot overflow. Falling back to just the new list is safe.
+	existingLen := len(existingList)
+	newLen := len(list)
+	if newLen > math.MaxInt-existingLen {
+		return list
+	}
+	totalLen := existingLen + newLen
+	// Sanity cap: avoid absurdly large allocations even when within int range.
+	if totalLen > maxSliceCapacity {
+		return list
+	}
+	result := make([]any, existingLen, totalLen)
+	copy(result, existingList)
+	result = append(result, list...)
+	return result
+}
+
+// processNestedMap recursively processes nested maps for append tags.
+func processNestedMap(key string, nestedMap map[string]any, merged map[string]any, appendNewOnly bool) map[string]any {
+	var mergedNested map[string]any
+	if existingNested, exists := merged[key]; exists {
+		if mn, ok := existingNested.(map[string]any); ok {
+			mergedNested = mn
+		}
+	}
+	if mergedNested == nil {
+		mergedNested = make(map[string]any)
+	}
+	return processAppendTags(nestedMap, mergedNested, appendNewOnly)
 }
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents.

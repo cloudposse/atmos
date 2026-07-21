@@ -62,6 +62,18 @@
   gap: 0.5rem;
 }
 
+/* Featured Section */
+.featuredSection {
+  margin-bottom: 3rem;
+}
+
+.featuredHeading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: var(--ifm-heading-color);
+}
+
 /* Filter Bar */
 .filterBar {
   display: flex;
@@ -103,6 +115,18 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Tag Sections (grouped "All" view) */
+.tagSection {
+  margin-bottom: 3rem;
+}
+
+.tagSectionHeading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: var(--ifm-heading-color);
+}
+
 /* Examples Grid */
 .examplesGrid {
   display: grid;
@@ -118,6 +142,9 @@
 
 /* Example Card */
 .exampleCard {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   background: white;
   border-radius: 12px;
   padding: 1.5rem;
@@ -135,6 +162,17 @@
   box-shadow: 0 4px 16px rgba(30, 91, 184, 0.1);
   text-decoration: none;
   transform: translateY(-2px);
+}
+
+.exampleCardLink {
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.exampleCardLink:hover {
+  color: inherit;
+  text-decoration: none;
 }
 
 :global(html[data-theme='dark']) .exampleCard {
@@ -180,11 +218,43 @@
 }
 
 .exampleCardDescription {
+  min-width: 0;
   font-size: 0.9rem;
   color: var(--ifm-color-emphasis-600);
   line-height: 1.5;
   margin: 0 0 1rem 0;
   flex: 1;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+/* The cast preview is a link to the example; the player itself must not
+   swallow clicks (thumbnail mode, controls off), so navigation always wins. */
+.exampleCardCastLink {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.exampleCardCastLink:hover {
+  text-decoration: none;
+}
+
+.exampleCardCast {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 0 1rem;
+  overflow: hidden;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.exampleCardCast > div {
+  min-width: 0;
+  width: 100%;
+  max-width: none;
 }
 
 .exampleCardDescription code {
@@ -199,6 +269,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
   font-size: 0.8rem;
@@ -213,6 +284,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .tagBadge {
@@ -227,6 +299,19 @@
 :global(html[data-theme='dark']) .tagBadge {
   background: rgba(83, 140, 233, 0.2);
   color: #538ce9;
+}
+
+.exampleCardCta {
+  flex: 0 0 auto;
+  color: var(--ifm-color-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.exampleCardCta:hover {
+  color: var(--ifm-color-primary-dark);
+  text-decoration: none;
 }
 
 /* Sidebar / File Tree */
@@ -577,6 +662,11 @@
   margin-bottom: 1.5rem;
 }
 
+.castSection {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
 /* Empty State */
 .emptyState {
   text-align: center;
@@ -727,4 +817,64 @@
   .exampleCardTitle {
     font-size: 1rem;
   }
+}
+
+/*
+ * GitHub-flavored admonitions (alerts) rendered by remark-github-blockquote-alert.
+ * The plugin emits global classes (.markdown-alert, .markdown-alert-<type>, .markdown-alert-title)
+ * with an inline Octicon SVG in the title. We style them with Infima color variables so the
+ * accent and tint follow the site's light/dark theme automatically (the plugin's own CSS keys
+ * off prefers-color-scheme, which does not track Docusaurus's class-based dark toggle).
+ */
+:global(.markdown-alert) {
+  --alert-color: var(--ifm-color-info);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-left: 0.25rem solid var(--alert-color);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--alert-color) 8%, transparent);
+}
+
+:global(.markdown-alert) > :last-child {
+  margin-bottom: 0;
+}
+
+:global(.markdown-alert-title) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--alert-color);
+}
+
+:global(.markdown-alert-title) svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+
+:global(.markdown-alert-note) {
+  --alert-color: var(--ifm-color-info);
+}
+
+:global(.markdown-alert-tip) {
+  --alert-color: var(--ifm-color-success);
+}
+
+:global(.markdown-alert-important) {
+  --alert-color: #8957e5;
+}
+
+:global(.markdown-alert-warning) {
+  --alert-color: var(--ifm-color-warning);
+}
+
+:global(.markdown-alert-caution) {
+  --alert-color: var(--ifm-color-danger);
+}
+
+:global(html[data-theme='dark'] .markdown-alert-important) {
+  --alert-color: #a371f7;
 }

@@ -1,7 +1,10 @@
 package helmfile
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -139,4 +142,84 @@ func TestHelmfileRun_HelpRequest(t *testing.T) {
 
 	err = helmfileRun(helmfileCmd, "apply", []string{"help"})
 	assert.NoError(t, err)
+}
+
+// newHelmfileRunTestCmd builds a minimal command carrying the global flags
+// getConfigAndStacksInfo/ProcessCommandLineArgs expect (base-path, config,
+// stack, ...) — mirroring newHookTestCmd in cmd/terraform's hook tests. These
+// flags are normally inherited from RootCmd; helmfileRun is exercised here
+// without going through RootCmd.Execute(), so they must be registered
+// directly.
+func newHelmfileRunTestCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "diff"}
+	cmd.Flags().String("base-path", "", "base path")
+	cmd.Flags().StringSlice("config", nil, "config")
+	cmd.Flags().StringSlice("config-path", nil, "config path")
+	cmd.Flags().StringSlice("profile", nil, "profile")
+	cmd.Flags().StringP("stack", "s", "", "stack flag")
+	cmd.Flags().Bool("ci", false, "ci flag")
+	return cmd
+}
+
+// TestHelmfileRun_NodeHooksFallbackOnEarlyFailure is a regression test for
+// the helmfileRun fallback (err != nil && !nodeHooks.called): when
+// ExecuteHelmfile fails before ever reaching info.NodeHooks.Before/After
+// (here, a `use_eks: true` component with no kubeconfig_path configured,
+// which checkHelmfileConfig rejects deterministically before any hook is
+// touched), helmfileRun must still fire the after-hook itself so CI/user
+// hooks see the failure. Since helmfileRun constructs its own
+// helmfileNodeHooks internally (not injectable), this proves the fallback
+// actually ran — not just that an error was returned — via an observable
+// side effect: a real `hooks:` after-helmfile-diff hook that writes a marker
+// file, using this package's own test binary (TestMain in testmain_test.go)
+// as a cross-platform stand-in for a "write a file" command. This also
+// exercises helmfileNodeHooks.After's execErr != nil branch through the real
+// call path (not just the direct-call unit test), since the underlying error
+// is non-nil here.
+func TestHelmfileRun_NodeHooksFallbackOnEarlyFailure(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	markerPath := filepath.Join(tempDir, "after-hook-fired.marker")
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(`base_path: "./"
+components:
+  helmfile:
+    base_path: "components/helmfile"
+    use_eks: true
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+logs:
+  level: Info
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(fmt.Sprintf(`vars:
+  stage: dev
+components:
+  helmfile:
+    myapp:
+      vars: {}
+      hooks:
+        observe-after-diff:
+          events:
+            - after-helmfile-diff
+          when: always
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_WRITE_MARKER: %s
+`, exe, markerPath)), 0o644))
+	t.Chdir(tempDir)
+
+	err = helmfileRun(newHelmfileRunTestCmd(), "diff", []string{"myapp", "-s", "dev"})
+
+	require.Error(t, err, "diff should fail: use_eks is true but kubeconfig_path is unset")
+	markerBody, readErr := os.ReadFile(markerPath)
+	require.NoError(t, readErr, "the fallback must have invoked the after-helmfile-diff hook, which writes this marker file")
+	assert.Equal(t, "after-hook-fired", string(markerBody))
 }

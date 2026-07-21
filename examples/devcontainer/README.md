@@ -1,3 +1,11 @@
+---
+title: Devcontainer
+tags: [DX]
+cast:
+  file: /casts/examples/devcontainer/config.cast
+  title: atmos devcontainer config
+---
+
 # Devcontainer Example
 
 This example demonstrates how to configure devcontainers in Atmos as a replacement for the Geodesic shell wrapper.

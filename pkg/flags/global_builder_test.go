@@ -36,6 +36,7 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("force-tty"), "force-tty flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("mask"), "mask flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("pager"), "pager flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("cast"), "cast flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("interactive"), "interactive flag should be registered")
 
 		// Authentication flags.
@@ -52,6 +53,10 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		// Performance heatmap flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("heatmap"), "heatmap flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("heatmap-mode"), "heatmap-mode flag should be registered")
+
+		// AI integration flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("ai"), "ai flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("skill"), "skill flag should be registered")
 
 		// System flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("redirect-stderr"), "redirect-stderr flag should be registered")
@@ -116,6 +121,16 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		identity := cmd.PersistentFlags().Lookup("identity")
 		assert.NotNil(t, identity)
 		assert.Equal(t, "__SELECT__", identity.NoOptDefVal)
+	})
+
+	t.Run("handles NoOptDefVal for cast", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterPersistentFlags(cmd)
+
+		cast := cmd.PersistentFlags().Lookup("cast")
+		assert.NotNil(t, cast)
+		assert.Equal(t, "__AUTO__", cast.NoOptDefVal)
 	})
 }
 

@@ -25,13 +25,14 @@ var vendorCmd = &cobra.Command{
 	Long: `The vendor command downloads remote artifacts (such as Terraform modules, Helm charts, or other configurations) and stores them locally in your project.
 
 Use this command to fetch and manage external dependencies for your infrastructure components.`,
-	Args: cobra.NoArgs,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 }
 
 func init() {
-	// Add subcommands.
+	// The diff, update, config, edit, and other vendor subcommands register
+	// themselves from their own files. Pull is implemented in this branch.
 	vendorCmd.AddCommand(pullCmd)
-	vendorCmd.AddCommand(diffCmd)
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.

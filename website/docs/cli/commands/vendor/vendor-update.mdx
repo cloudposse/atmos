@@ -1,0 +1,105 @@
+---
+title: atmos vendor update
+sidebar_label: update
+sidebar_class_name: command
+id: vendor-update
+description: Update vendored component versions to the latest allowed release, preserving comments, anchors, and templates.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Check each Git-backed source in your `vendor.yaml` for a newer version — honoring any
+per-source constraints — and update the `version` field in place, preserving comments,
+anchors, and Go templates such as `{{.Version}}` in source URLs.
+</Intro>
+
+<CastPlayer title="atmos vendor update --help" src="/casts/screengrabs/atmos-vendor-update--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos vendor update [--check] [--pull] [--component <name>] [--tags <a,b>] [--outdated] [--component-manifests]
+```
+
+Sources whose version is templated (`{{...}}`) or whose source is not a Git repository
+are skipped and reported. Updates are written to the file that declares each source,
+including imported manifests — a component declared in `vendor.yaml` has its
+`spec.sources[].version` updated, while a component resolved from a per-component
+`component.yaml` has its `spec.source.version` updated instead.
+
+If `--component` isn't declared in `vendor.yaml` — or no `vendor.yaml` exists — Atmos falls
+back to the component's own `component.yaml`/`component.yml` manifest, matching
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s existing precedence:
+`vendor.yaml` wins whenever it declares the component. Without `--component`, a repo-wide
+sweep of every `component.yaml` found under each component type's base path runs
+automatically whenever no `vendor.yaml` exists — a repo that vendors exclusively via
+`component.yaml` works with no extra flag. Add `--component-manifests` to also run that
+sweep alongside an existing `vendor.yaml` (for repos that mix both manifest styles).
+
+## Examples
+
+```shell
+# Dry run: show what would be updated.
+atmos vendor update --check
+
+# Update all Git-backed sources.
+atmos vendor update
+
+# Update versions and then pull the new components.
+atmos vendor update --pull
+
+# Update a single component, or by tags.
+atmos vendor update --component vpc
+atmos vendor update --tags networking,aws
+
+# Show only sources with an available update.
+atmos vendor update --check --outdated
+
+# Also sweep per-component component.yaml manifests alongside an existing vendor.yaml.
+atmos vendor update --check --component-manifests
+```
+
+## Version constraints
+
+Per-source constraints control which upstream versions are eligible:
+
+```yaml
+sources:
+  - component: "vpc"
+    source: "github.com/cloudposse/terraform-aws-components"
+    version: "1.323.0"
+    constraints:
+      version: "^1.0.0"            # semver constraint (Masterminds/semver)
+      excluded_versions:
+        - "1.2.3"                  # a specific bad version
+        - "1.5.*"                  # an entire broken series
+      no_prereleases: true         # skip alpha/beta/rc
+```
+
+## Flags
+
+<dl>
+  <dt>`--check`</dt>
+  <dd>Dry run: show available updates without modifying any files.</dd>
+  <dt>`--pull`</dt>
+  <dd>After updating versions, run <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>.</dd>
+  <dt>`--component` / `-c` (string)</dt>
+  <dd>Update only this component.</dd>
+  <dt>`--tags` (string)</dt>
+  <dd>Update only components carrying any of these comma-separated tags.</dd>
+  <dt>`--outdated`</dt>
+  <dd>Show only sources with an available update.</dd>
+  <dt>`--type` / `-t` (string, default `terraform`)</dt>
+  <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`, or to restrict a `--component-manifests` sweep to one type.</dd>
+  <dt>`--component-manifests`</dt>
+  <dd>Also check per-component `component.yaml` manifests when a `vendor.yaml` is present (this sweep runs automatically when no `vendor.yaml` exists). Only applies when `--component` is not set.</dd>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest to start from (imports are followed).</dd>
+</dl>
+
+:::note
+Version detection is supported for Git sources only (tags via `git ls-remote`), which
+covers GitHub, GitLab, Bitbucket, and self-hosted Git. OCI, S3, GCS, and HTTP sources
+are skipped. Private repositories are not yet supported.
+:::

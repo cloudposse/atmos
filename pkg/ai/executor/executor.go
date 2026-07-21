@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	// MaxToolIterations is the maximum number of tool execution loops to prevent infinite loops.
-	MaxToolIterations = 10
+	// DefaultMaxToolIterations is the default maximum number of tool execution loops.
+	DefaultMaxToolIterations = 25
 )
 
 // Executor handles non-interactive AI execution with tool support.
@@ -32,6 +32,14 @@ func NewExecutor(client ai.Client, toolExecutor *tools.Executor, atmosConfig *sc
 		toolExecutor: toolExecutor,
 		atmosConfig:  atmosConfig,
 	}
+}
+
+// maxToolIterations returns the configured or default max tool iterations.
+func (e *Executor) maxToolIterations() int {
+	if e.atmosConfig != nil && e.atmosConfig.AI.MaxToolIterations > 0 {
+		return e.atmosConfig.AI.MaxToolIterations
+	}
+	return DefaultMaxToolIterations
 }
 
 // Options contains execution options.
@@ -175,7 +183,11 @@ Prefer specific tools over generic ones:
 - Use search_files for searching
 - Only use execute_atmos_command for commands that don't have a dedicated tool
 
-Always use tools when needed rather than describing what you would do.`
+Always use tools when needed rather than describing what you would do.
+
+If atmos_list_stacks returns zero stacks, this is a new Atmos project that doesn't have any
+stacks written yet. Treat this as an opportunity, not an error: proactively offer to help the
+user create their first stack and component rather than just reporting that none exist.`
 
 // executeWithTools executes a prompt with tool support, handling multiple tool execution rounds.
 func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *formatter.ExecutionResult) {
@@ -194,7 +206,8 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 	var accumulatedResponse string
 	var totalUsage *types.Usage
 
-	for iteration := 0; iteration < MaxToolIterations; iteration++ {
+	maxIter := e.maxToolIterations()
+	for iteration := 0; iteration < maxIter; iteration++ {
 		response, err := e.client.SendMessageWithSystemPromptAndTools(ctx, toolSystemPrompt, atmosMemory, messages, availableTools)
 		if err != nil {
 			result.Success = false
@@ -219,7 +232,7 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 
 	result.Success = false
 	result.Error = &formatter.ErrorInfo{
-		Message: fmt.Sprintf("exceeded maximum tool execution iterations (%d)", MaxToolIterations),
+		Message: fmt.Sprintf("exceeded maximum tool execution iterations (%d)", maxIter),
 		Type:    "tool_error",
 	}
 }
@@ -234,9 +247,10 @@ func (e *Executor) executeTools(ctx context.Context, toolCalls []types.ToolCall,
 		toolResult, err := e.toolExecutor.Execute(ctx, call.Name, call.Input)
 
 		results[i] = formatter.ToolCallResult{
-			Tool:       call.Name,
-			Args:       call.Input,
-			DurationMs: time.Since(startTime).Milliseconds(),
+			Tool:        call.Name,
+			DisplayName: e.toolExecutor.DisplayName(call.Name),
+			Args:        call.Input,
+			DurationMs:  time.Since(startTime).Milliseconds(),
 		}
 
 		if err != nil {

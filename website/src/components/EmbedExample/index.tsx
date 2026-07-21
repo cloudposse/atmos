@@ -15,6 +15,8 @@ import {
   faChevronDown,
   faArrowRight,
 } from '@fortawesome/free-solid-svg-icons';
+import CastPlayer from '@site/src/components/CastPlayer';
+import { stripFrontmatter } from '@site/src/components/frontmatter';
 import type { ExampleProject, TreeNode, FileBrowserOptions } from '../FileBrowser/types';
 import styles from './styles.module.css';
 
@@ -25,6 +27,8 @@ interface EmbedExampleProps {
   showReadme?: boolean;
   /** Whether to show the file listing. Default: true. */
   showFiles?: boolean;
+  /** Whether to show the example cast from README frontmatter. Default: true. */
+  showCast?: boolean;
   /** Override the display title. */
   title?: string;
   /** Maximum number of files to show. Default: 10. */
@@ -55,22 +59,24 @@ function collectFiles(node: TreeNode, limit: number, collected: TreeNode[] = [])
 }
 
 /**
- * Strips frontmatter from README content.
- */
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith('---')) return content;
-
-  const endIndex = content.indexOf('---', 3);
-  if (endIndex === -1) return content;
-
-  return content.slice(endIndex + 3).trim();
-}
-
-/**
  * Markdown components for rendering README content.
+ *
+ * Heading levels are demoted by one (h1→h2, h2→h3, …) so that an embedded
+ * README's top-level `# Heading` does not produce a second `<h1>` on the host
+ * page. The host page's own H1 (frontmatter title or first `#` directive)
+ * stays the only H1, preserving valid HTML5 semantics and clean Algolia
+ * hierarchy extraction.
  */
 const markdownComponents = {
-  code({ className, children, ...props }: { className?: string; children?: React.ReactNode }) {
+  h1: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => (
+    <h2 {...props} className={styles.embeddedH1}>{children}</h2>
+  ),
+  h2: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h3 {...props}>{children}</h3>,
+  h3: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h4 {...props}>{children}</h4>,
+  h4: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h5 {...props}>{children}</h5>,
+  h5: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h6 {...props}>{children}</h6>,
+  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  code({ className, children, node, ...props }: { className?: string; children?: React.ReactNode; node?: unknown }) {
     const match = /language-(\w+)/.exec(className || '');
     const isInline = !match;
     return isInline ? (
@@ -87,6 +93,7 @@ export default function EmbedExample({
   example,
   showReadme = true,
   showFiles = true,
+  showCast = true,
   title,
   maxFiles = 10,
 }: EmbedExampleProps): JSX.Element | null {
@@ -114,6 +121,7 @@ export default function EmbedExample({
   const readmeContent = exampleData.root.readme?.content;
   const files = collectFiles(exampleData.root, maxFiles);
   const exampleUrl = `${options.routeBasePath}/${exampleData.name}`;
+  const shouldShowCast = showCast && !!exampleData.cast?.file;
 
   return (
     <div className={styles.embedExample}>
@@ -129,6 +137,18 @@ export default function EmbedExample({
           View full example <FontAwesomeIcon icon={faArrowRight} />
         </Link>
       </div>
+
+      {shouldShowCast && (
+        <div className={styles.castSection}>
+          <CastPlayer
+            src={exampleData.cast!.file!}
+            title={exampleData.cast!.title || displayTitle}
+            chrome
+            controls
+            scrubber
+          />
+        </div>
+      )}
 
       {/* README Section */}
       {showReadme && readmeContent && (

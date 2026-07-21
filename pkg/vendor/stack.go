@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -17,6 +16,18 @@ import (
 
 // metadataComponentKey is the key for the component in metadata.
 const metadataComponentKey = "component"
+
+// StackResolver loads a processed stack map for stack-based vendoring.
+// It is injected by the command layer to keep pkg/vendor independent of the
+// executor package, which also depends on vendor helpers.
+type StackResolver func(*schema.AtmosConfiguration, string) (map[string]any, error)
+
+var stackResolver StackResolver
+
+// SetStackResolver configures stack loading for VendorStack.
+func SetStackResolver(resolver StackResolver) {
+	stackResolver = resolver
+}
 
 // executeStackVendorInternal executes the command to vendor all components in an Atmos stack.
 func executeStackVendorInternal(
@@ -28,20 +39,10 @@ func executeStackVendorInternal(
 
 	log.Info("Vendoring components for stack", "stack", stack)
 
-	// 1. Load the stack using ExecuteDescribeStacks
-	stacksMap, err := exec.ExecuteDescribeStacks(
-		atmosConfig,
-		stack,      // filterByStack
-		nil,        // components
-		[]string{}, // componentTypes - empty to get all
-		nil,        // sections
-		false,      // ignoreMissingFiles
-		false,      // processTemplates - don't process templates for vendoring
-		false,      // processYamlFunctions
-		false,      // includeEmptyStacks
-		nil,        // skip
-		nil,        // authManager
-	)
+	if stackResolver == nil {
+		return fmt.Errorf("%w: stack resolver is not configured", errors.ErrStackNotFound)
+	}
+	stacksMap, err := stackResolver(atmosConfig, stack)
 	if err != nil {
 		return fmt.Errorf("failed to describe stack '%s': %w", stack, err)
 	}

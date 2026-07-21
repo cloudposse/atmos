@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -149,6 +150,13 @@ func parsePullOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*PullO
 }
 
 func init() {
+	pkgvendor.SetStackResolver(func(atmosConfig *schema.AtmosConfiguration, stack string) (map[string]any, error) {
+		return exec.ExecuteDescribeStacks(
+			atmosConfig, stack, nil, []string{}, nil,
+			false, false, false, false, nil, nil,
+		)
+	})
+
 	// Create parser with pull-specific flags using functional options.
 	pullParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Only vendor the specified component"),

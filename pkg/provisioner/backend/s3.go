@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -43,22 +44,23 @@ type S3ClientAPI interface {
 // s3TestMu protects test-only variables for concurrent test execution.
 var s3TestMu sync.RWMutex
 
-// s3ClientFactory creates S3 clients from AWS config.
+// s3ClientFactory creates S3 clients from AWS config and functional options
+// (e.g. BaseEndpoint, UsePathStyle from s3ClientOptions).
 // Override in tests to inject fake S3 clients.
 // Protected by s3TestMu for thread-safe concurrent test execution.
-var s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
-	return s3.NewFromConfig(cfg)
+var s3ClientFactory = func(cfg aws.Config, optFns ...func(*s3.Options)) S3ClientAPI {
+	return s3.NewFromConfig(cfg, optFns...)
 }
 
 // getS3ClientFactory returns the current S3 client factory with thread-safe read access.
-func getS3ClientFactory() func(aws.Config) S3ClientAPI {
+func getS3ClientFactory() func(aws.Config, ...func(*s3.Options)) S3ClientAPI {
 	s3TestMu.RLock()
 	defer s3TestMu.RUnlock()
 	return s3ClientFactory
 }
 
 // SetS3ClientFactory sets a custom S3 client factory for testing.
-func SetS3ClientFactory(f func(aws.Config) S3ClientAPI) {
+func SetS3ClientFactory(f func(aws.Config, ...func(*s3.Options)) S3ClientAPI) {
 	defer perf.Track(nil, "backend.SetS3ClientFactory")()
 
 	s3TestMu.Lock()
@@ -72,9 +74,47 @@ func ResetS3ClientFactory() {
 
 	s3TestMu.Lock()
 	defer s3TestMu.Unlock()
-	s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
-		return s3.NewFromConfig(cfg)
+	s3ClientFactory = func(cfg aws.Config, optFns ...func(*s3.Options)) S3ClientAPI {
+		return s3.NewFromConfig(cfg, optFns...)
 	}
+}
+
+// newS3Client builds an S3 client that honors any custom endpoint, path-style
+// addressing, and static credentials declared in the backend config, falling
+// back to the active identity's resolved endpoint when the backend config
+// doesn't declare one explicitly. This lets the provisioner create state
+// buckets on any S3-compatible endpoint (MinIO, other S3-compatible object
+// stores, local emulators) exactly the way Terraform's own S3 backend does —
+// it is not specific to any one emulator.
+func newS3Client(awsConfig *aws.Config, config *s3Config, authContext *schema.AuthContext) S3ClientAPI {
+	if config.accessKey != "" && config.secretKey != "" {
+		awsConfig.Credentials = credentials.NewStaticCredentialsProvider(config.accessKey, config.secretKey, "")
+	}
+	return getS3ClientFactory()(*awsConfig, s3ClientOptions(config, authContext)...)
+}
+
+// s3ClientOptions builds AWS SDK v2 S3 client functional options from the backend
+// config's custom-endpoint fields and, as a fallback, the identity's auth context.
+// SDK v2 endpoint overrides are per-service client options, not part of aws.Config,
+// so they must be applied at client construction time. Without BaseEndpoint, an
+// emulator-backed identity (aws/emulator) silently targets real AWS instead of the
+// local emulator endpoint — the endpoint is injected into the Terraform subprocess
+// but was never honored by this in-process S3 client. Mirrors
+// internal/terraform_backend/terraform_backend_s3.go's getCachedS3Client. An
+// explicit backend.s3 endpoint takes priority over the identity's endpoint.
+func s3ClientOptions(config *s3Config, authContext *schema.AuthContext) []func(*s3.Options) {
+	var optFns []func(*s3.Options)
+	endpoint := config.endpoint
+	if endpoint == "" && authContext != nil && authContext.AWS != nil {
+		endpoint = authContext.AWS.EndpointURL
+	}
+	if endpoint != "" {
+		optFns = append(optFns, func(o *s3.Options) { o.BaseEndpoint = aws.String(endpoint) })
+	}
+	if config.usePathStyle {
+		optFns = append(optFns, func(o *s3.Options) { o.UsePathStyle = true })
+	}
+	return optFns
 }
 
 // s3SkipUnsupportedTestOps skips S3 operations not supported by gofakes3.
@@ -104,6 +144,14 @@ type s3Config struct {
 	bucket  string
 	region  string
 	roleArn string
+	// Custom-endpoint support (standard Terraform S3 backend settings). These
+	// let the provisioner target any S3-compatible endpoint, not just AWS.
+	// When endpoint is empty, newS3Client falls back to the active identity's
+	// resolved endpoint (schema.AWSAuthContext.EndpointURL).
+	endpoint     string
+	usePathStyle bool
+	accessKey    string
+	secretKey    string
 }
 
 func init() {
@@ -164,8 +212,8 @@ func CreateS3Backend(
 			Err()
 	}
 
-	// Create S3 client using factory (allows test injection).
-	client := getS3ClientFactory()(awsConfig)
+	// Create S3 client (honors custom endpoint / path-style / static creds).
+	client := newS3Client(&awsConfig, config, authContext)
 
 	// Check if bucket exists and create if needed.
 	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
@@ -206,11 +254,45 @@ func extractS3Config(backendConfig map[string]any) (*s3Config, error) {
 		}
 	}
 
+	accessKey, _ := backendConfig["access_key"].(string)
+	secretKey, _ := backendConfig["secret_key"].(string)
+
 	return &s3Config{
-		bucket:  bucketVal,
-		region:  regionVal,
-		roleArn: roleArnVal,
+		bucket:       bucketVal,
+		region:       regionVal,
+		roleArn:      roleArnVal,
+		endpoint:     extractS3Endpoint(backendConfig),
+		usePathStyle: extractS3PathStyle(backendConfig),
+		accessKey:    accessKey,
+		secretKey:    secretKey,
 	}, nil
+}
+
+// extractS3Endpoint reads a custom S3 endpoint from the backend config,
+// supporting both the modern `endpoints { s3 = ... }` block and the legacy
+// top-level `endpoint` key (matching Terraform's S3 backend).
+func extractS3Endpoint(backendConfig map[string]any) string {
+	if endpoints, ok := backendConfig["endpoints"].(map[string]any); ok {
+		if s3Endpoint, ok := endpoints["s3"].(string); ok && s3Endpoint != "" {
+			return s3Endpoint
+		}
+	}
+	if endpoint, ok := backendConfig["endpoint"].(string); ok {
+		return endpoint
+	}
+	return ""
+}
+
+// extractS3PathStyle reads the path-style addressing flag from the backend
+// config, supporting the modern `use_path_style` key and the legacy
+// `force_path_style`/`s3_use_path_style` spellings.
+func extractS3PathStyle(backendConfig map[string]any) bool {
+	for _, key := range []string{"use_path_style", "force_path_style", "s3_use_path_style"} {
+		if v, ok := backendConfig[key].(bool); ok && v {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureBucket checks if bucket exists and creates it if needed.
@@ -336,8 +418,8 @@ func S3BackendExists(
 			Err()
 	}
 
-	// Create S3 client using factory (allows test injection).
-	client := getS3ClientFactory()(awsConfig)
+	// Create S3 client (honors custom endpoint / path-style / static creds).
+	client := newS3Client(&awsConfig, config, authContext)
 
 	// Check if bucket exists.
 	return bucketExists(ctx, client, config.bucket)

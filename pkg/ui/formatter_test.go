@@ -137,6 +137,7 @@ func TestFormatter_Success(t *testing.T) {
 }
 
 func TestFormatter_Warning(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -151,6 +152,7 @@ func TestFormatter_Warning(t *testing.T) {
 }
 
 func TestFormatter_Error(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -165,6 +167,7 @@ func TestFormatter_Error(t *testing.T) {
 }
 
 func TestFormatter_Info(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -395,6 +398,66 @@ func TestFormatter_Markdown_MaxWidth(t *testing.T) {
 	}
 }
 
+func TestFormatter_MarkdownNoWrap(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	input := "This is a very long single line of prose that would normally be word-wrapped " +
+		"across multiple terminal-width lines when rendered as markdown, but must stay on one " +
+		"line here since word wrap is explicitly disabled for this render."
+
+	got, err := f.MarkdownNoWrap(input)
+	if err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+	if got == "" {
+		t.Error("MarkdownNoWrap() returned empty string")
+	}
+
+	// Glamour wraps rendered paragraphs in leading/trailing blank lines regardless
+	// of word-wrap; strip those to check the prose itself stayed on one line.
+	trimmed := strings.TrimSpace(got)
+	if strings.Contains(trimmed, "\n") {
+		t.Errorf("MarkdownNoWrap() introduced line breaks for a no-wrap render: %q", got)
+	}
+
+	// Must end with EXACTLY one newline: none would run into whatever the
+	// caller writes next (this broke the telemetry disclosure notice, which
+	// glued onto the following debug log line); more than one would
+	// reintroduce the leading/trailing blank-line padding this method exists
+	// to strip.
+	if !strings.HasSuffix(got, "\n") || strings.HasSuffix(got, "\n\n") {
+		t.Errorf("MarkdownNoWrap() must end with exactly one newline, got %q", got)
+	}
+}
+
+// TestFormatter_MarkdownWidth_FromTerminal verifies markdownRenderWidth falls
+// back to the detected terminal width (rather than staying 0, which disables
+// wrapping) when Settings.Terminal.MaxWidth is unset, and that
+// buildMarkdownRenderOptions applies that width as the glamour word-wrap
+// width for the word-wrapped (non-no-wrap) render path.
+func TestFormatter_MarkdownWidth_FromTerminal(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := &mockTerminal{profile: terminal.ColorNone, width: 40}
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	width := f.markdownRenderWidth()
+	if width <= 0 {
+		t.Fatalf("markdownRenderWidth() = %d, want > 0 when terminal width is set", width)
+	}
+
+	// Long enough that word-wrap at the detected width forces a line break.
+	input := strings.Repeat("word ", 30)
+	got, err := f.Markdown(input)
+	if err != nil {
+		t.Fatalf("Markdown() error = %v", err)
+	}
+	if !strings.Contains(got, "\n") {
+		t.Errorf("Markdown() with terminal width %d should wrap long content, got %q", width, got)
+	}
+}
+
 // Helper functions for testing.
 
 func createTestIOContext() iolib.Context {
@@ -421,6 +484,10 @@ func (m *mockTerminal) Write(content string) error {
 
 func (m *mockTerminal) IsTTY(stream terminal.Stream) bool {
 	return m.isTTY
+}
+
+func (m *mockTerminal) IsPiped(stream terminal.Stream) bool {
+	return false
 }
 
 func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
@@ -519,7 +586,7 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 		{
 			name:         "Info includes info icon",
 			method:       func(f Formatter, text string) string { return f.Info(text) },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			text:         "information message",
 		},
 	}
@@ -585,7 +652,7 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 		{
 			name:         "Infof formats with arguments",
 			method:       func(f Formatter) string { return f.Infof("Loading configuration from %s", "/etc/atmos.yaml") },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			expectedText: "Loading configuration from /etc/atmos.yaml",
 		},
 	}
@@ -855,6 +922,7 @@ func TestToastf_Integration(t *testing.T) {
 }
 
 func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1136,7 +1204,7 @@ func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
 			name:    "Info multiline",
 			fn:      func(f *formatter, msg string) string { return f.Info(msg) },
 			message: "Processing\nStep 1 of 3",
-			icon:    "ℹ",
+			icon:    "▶",
 		},
 	}
 
@@ -1238,6 +1306,7 @@ func TestFormatter_LipglossWidth(t *testing.T) {
 }
 
 func TestFormatter_Successf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1258,7 +1327,60 @@ func TestFormatter_Successf_Multiline(t *testing.T) {
 	}
 }
 
+// TestFormatter_Successf_ToolSpec verifies that tool specs like owner/repo@version
+// are preserved through the full glamour markdown rendering pipeline.
+// Regression test: glamour's GFM linkify strips tool specs by interpreting
+// the @ as an email autolink (e.g., jq@1.7.1 → mailto:jq@1.7.1 → stripped).
+// The fix is to wrap tool specs in backticks which prevents autolink parsing.
+func TestFormatter_Successf_ToolSpec(t *testing.T) {
+	tests := []struct {
+		name     string
+		format   string
+		args     []interface{}
+		contains string
+	}{
+		{
+			name:     "backtick-wrapped tool spec preserved",
+			format:   "Skipped `%s/%s@%s` (not installed)",
+			args:     []interface{}{"jqlang", "jq", "1.7.1"},
+			contains: "jqlang/jq@1.7.1",
+		},
+		{
+			name:     "backtick-wrapped different org preserved",
+			format:   "Uninstalled `%s/%s@%s`",
+			args:     []interface{}{"mikefarah", "yq", "4.45.1"},
+			contains: "mikefarah/yq@4.45.1",
+		},
+		{
+			name:     "tool spec owner/repo without version preserved",
+			format:   "Tool `%s/%s` is not installed",
+			args:     []interface{}{"opentofu", "opentofu"},
+			contains: "opentofu/opentofu",
+		},
+		{
+			name:     "backtick-wrapped constraint message preserved",
+			format:   "Using `%s` %s (satisfies %s)",
+			args:     []interface{}{"opentofu", "1.11.5", "^1.10.0"},
+			contains: "opentofu",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(terminal.ColorNone)
+			f := NewFormatter(ioCtx, term).(*formatter)
+
+			result := f.Successf(tt.format, tt.args...)
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("Successf() = %q, should contain %q (tool spec was stripped by markdown rendering)", result, tt.contains)
+			}
+		})
+	}
+}
+
 func TestFormatter_Errorf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1280,6 +1402,7 @@ func TestFormatter_Errorf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Warningf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1301,6 +1424,7 @@ func TestFormatter_Warningf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Infof_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1322,6 +1446,7 @@ func TestFormatter_Infof_Multiline(t *testing.T) {
 }
 
 func TestFormatSuccessAndError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name         string
 		text         string
@@ -1454,6 +1579,53 @@ func TestSetColorProfile(t *testing.T) {
 	SetColorProfile(termenv.ANSI)
 	SetColorProfile(termenv.ANSI256)
 	SetColorProfile(termenv.TrueColor)
+}
+
+func TestNewRenderer(t *testing.T) {
+	// NewRenderer must inherit the globally detected profile instead of
+	// re-detecting from the writer (a pipe/buffer would degrade to Ascii and
+	// break the --force-color TrueColor contract for recorded help output).
+	original := GetColorProfile()
+	defer SetColorProfile(original)
+
+	var buf strings.Builder
+
+	SetColorProfile(termenv.TrueColor)
+	renderer := NewRenderer(&buf)
+	if renderer.ColorProfile() != termenv.TrueColor {
+		t.Errorf("NewRenderer profile = %v, want TrueColor from global profile", renderer.ColorProfile())
+	}
+	if !renderer.HasDarkBackground() {
+		t.Error("NewRenderer should assume a dark background")
+	}
+
+	SetColorProfile(termenv.Ascii)
+	renderer = NewRenderer(&buf)
+	if renderer.ColorProfile() != termenv.Ascii {
+		t.Errorf("NewRenderer profile = %v, want Ascii from global profile", renderer.ColorProfile())
+	}
+}
+
+func TestTerminalWidth(t *testing.T) {
+	// Uninitialized formatter returns 0 (callers apply their own defaults).
+	Reset()
+	if width := TerminalWidth(); width != 0 {
+		t.Errorf("TerminalWidth() = %d before InitFormatter, want 0", width)
+	}
+
+	if terminal.New().IsTTY(terminal.Stdout) {
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
+	}
+
+	// After initialization, the global terminal supplies the width. Stdout is
+	// a pipe here, so COLUMNS provides an explicit deterministic fallback.
+	t.Setenv("COLUMNS", "97")
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+	defer Reset()
+	if width := TerminalWidth(); width != 97 {
+		t.Errorf("TerminalWidth() = %d, want 97 for non-TTY COLUMNS fallback", width)
+	}
 }
 
 func TestHint(t *testing.T) {
@@ -1813,6 +1985,71 @@ func TestFormatExperimentalBadge_NoColorSupport(t *testing.T) {
 	expected := "[EXPERIMENTAL]"
 	if result != expected {
 		t.Errorf("FormatExperimentalBadge() with no color = %q, want %q", result, expected)
+	}
+}
+
+func TestFormatComponentLabel_FormatterNotInitialized(t *testing.T) {
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter, Format, globalTerminal = nil, nil, nil
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Degrades to a plain [name] label when the formatter is not initialized.
+	if got := FormatComponentLabel("api", 0); got != "[api]" {
+		t.Errorf("FormatComponentLabel() fallback = %q, want %q", got, "[api]")
+	}
+}
+
+func TestFormatComponentLabel_NoColorSupport(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// No color support => plain [name], no ANSI escapes.
+	got := FormatComponentLabel("worker", 2)
+	if got != "[worker]" {
+		t.Errorf("FormatComponentLabel() no-color = %q, want %q", got, "[worker]")
+	}
+}
+
+func TestFormatComponentLabel_WithColor(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorTrue)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// With color support the name is present and styled (contains ANSI escapes),
+	// not the plain bracketed fallback.
+	got := FormatComponentLabel("api", 0)
+	if !strings.Contains(got, "api") {
+		t.Errorf("FormatComponentLabel() = %q, want it to contain %q", got, "api")
+	}
+	if got == "[api]" {
+		t.Errorf("FormatComponentLabel() with color should be styled, got plain %q", got)
 	}
 }
 
@@ -2204,6 +2441,7 @@ func TestWriteln_PackageLevel(t *testing.T) {
 
 // TestFormatInline tests the FormatInline package-level function.
 func TestFormatInline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	t.Run("plain text passes through", func(t *testing.T) {
 		ioCtx := createTestIOContext()
 		term := createMockTerminal(terminal.ColorNone)

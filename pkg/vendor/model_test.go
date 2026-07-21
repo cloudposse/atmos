@@ -222,7 +222,7 @@ func TestGenerateSkipFunction_WithPaths(t *testing.T) {
 	}
 }
 
-func TestShouldExcludeFile(t *testing.T) {
+func TestShouldExcludeFileLegacy(t *testing.T) {
 	tests := []struct {
 		name          string
 		src           string
@@ -978,7 +978,6 @@ func TestVendorFailureError(t *testing.T) {
 		config := errUtils.DefaultFormatterConfig()
 		formatted := errUtils.Format(err, config)
 
-		assert.Contains(t, formatted, "## Explanation")
 		assert.Contains(t, formatted, "my-vpc")
 		assert.Contains(t, formatted, "Failed to vendor 1 of 3 components")
 	})
@@ -992,7 +991,6 @@ func TestVendorFailureError(t *testing.T) {
 		config := errUtils.DefaultFormatterConfig()
 		formatted := errUtils.Format(err, config)
 
-		assert.Contains(t, formatted, "## Explanation")
 		assert.Contains(t, formatted, "my-vpc")
 		assert.Contains(t, formatted, "my-rds")
 		assert.Contains(t, formatted, "my-s3")

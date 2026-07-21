@@ -1,6 +1,7 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -32,11 +33,15 @@ var stacksParser *flags.StandardParser
 // StacksOptions contains parsed flags for the stacks command.
 type StacksOptions struct {
 	global.Flags
-	Component  string
-	Format     string
-	Columns    []string
-	Sort       string
-	Provenance bool
+	Component        string
+	Format           string
+	Columns          []string
+	Sort             string
+	Provenance       bool
+	ProcessTemplates bool
+	ProcessFunctions bool
+	Skip             []string
+	ErrorMode        string
 }
 
 // stacksCmd lists atmos stacks.
@@ -50,7 +55,10 @@ var stacksCmd = &cobra.Command{
 		v := viper.GetViper()
 
 		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
-		if err := checkAtmosConfig(cmd, v); err != nil {
+		// Skip the stacks-directory-exists check here: listStacksWithOptions below already
+		// reports a friendly "No stacks found" message when there are no stack manifests yet,
+		// whether the stacks directory is missing or simply empty (a brand-new project).
+		if err := checkAtmosConfig(cmd, v, true); err != nil {
 			return err
 		}
 
@@ -59,17 +67,28 @@ var stacksCmd = &cobra.Command{
 			return err
 		}
 
-		opts := &StacksOptions{
-			Flags:      flags.ParseGlobalFlags(cmd, v),
-			Component:  v.GetString("component"),
-			Format:     v.GetString("format"),
-			Columns:    v.GetStringSlice("columns"),
-			Sort:       v.GetString("sort"),
-			Provenance: v.GetBool("provenance"),
-		}
+		opts := parseStacksOptions(cmd, v)
 
 		return listStacksWithOptions(cmd, args, opts)
 	},
+}
+
+// parseStacksOptions maps viper state into a StacksOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
+	return &StacksOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Component:        v.GetString("component"),
+		Format:           v.GetString("format"),
+		Columns:          v.GetStringSlice("columns"),
+		Sort:             v.GetString("sort"),
+		Provenance:       v.GetBool("provenance"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
+		ErrorMode:        v.GetString("error-mode"),
+	}
 }
 
 // columnsCompletionForStacks provides dynamic tab completion for --columns flag.
@@ -109,6 +128,10 @@ func init() {
 		WithSortFlag,
 		WithComponentFlag,
 		WithProvenanceFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
+		WithSkipFlag,
+		WithErrorModeFlag,
 	)
 
 	// Register flags.
@@ -136,11 +159,23 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 	// Initialize configuration and auth.
 	atmosConfig, authManager, err := initStacksConfig(cmd, args, opts)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrFailedToFindImport) || errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			ui.Info("No stacks found")
+			return nil
+		}
 		return err
 	}
 
+	// Build the error-mode options once and share the same Collector across every
+	// describe-stacks call this command makes (table path, and the tree path's
+	// re-processing pass below), so the end-of-command summary reports one combined
+	// count instead of printing separately per call site. Deferred so it fires after
+	// whichever render path below has finished writing its output.
+	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
+	defer printErrorModeSummary(opts.ErrorMode, collector)
+
 	// Execute describe stacks and extract results.
-	stacks, stacksMap, err := executeAndExtractStacks(&atmosConfig, opts, authManager)
+	stacks, stacksMap, err := executeAndExtractStacks(&atmosConfig, opts, authManager, errOpts)
 	if err != nil {
 		return err
 	}
@@ -151,7 +186,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 
 	// Handle tree format specially - it shows import hierarchies.
 	if opts.Format == string(format.FormatTree) {
-		return renderStacksTreeFormat(&atmosConfig, stacks, opts.Provenance, authManager)
+		return renderStacksTreeFormat(&atmosConfig, stacks, opts, authManager, errOpts)
 	}
 	_ = stacksMap // Unused in non-tree format.
 
@@ -190,6 +225,10 @@ func initStacksConfig(
 		opts.Format = atmosConfig.Stacks.List.Format
 	}
 
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// list.error_mode, else "warn".
+	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
+
 	// Validate provenance after resolving format from config.
 	if opts.Provenance && opts.Format != string(format.FormatTree) {
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
@@ -208,10 +247,22 @@ func executeAndExtractStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	opts *StacksOptions,
 	authManager auth.AuthManager,
+	errOpts e.DescribeStacksErrorOptions,
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		skip,
+		authManager,
+		authManager == nil,
+		errOpts,
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
@@ -303,8 +354,9 @@ func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []strin
 func renderStacksTreeFormat(
 	atmosConfig *schema.AtmosConfiguration,
 	stacks []map[string]any,
-	showProvenance bool,
+	opts *StacksOptions,
 	authManager auth.AuthManager,
+	errOpts e.DescribeStacksErrorOptions,
 ) error {
 	defer perf.Track(nil, "list.stacks.renderStacksTreeFormat")()
 
@@ -316,8 +368,21 @@ func renderStacksTreeFormat(
 	e.ClearFindStacksMapCache()
 	log.Trace("Caches cleared, re-processing with provenance")
 
-	// Re-process stacks with provenance tracking enabled.
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	// Re-process stacks with provenance tracking enabled. Honor the
+	// caller-supplied template/function flags so tree output is consistent with
+	// non-tree runs of the same command invocation.
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		skip,
+		authManager,
+		authManager == nil,
+		errOpts,
+	)
 	if err != nil {
 		return fmt.Errorf("error re-processing stacks with provenance: %w", err)
 	}
@@ -329,7 +394,7 @@ func renderStacksTreeFormat(
 	}
 
 	// Render and output the tree.
-	output := format.RenderStacksTree(importTrees, showProvenance)
+	output := format.RenderStacksTree(importTrees, opts.Provenance)
 	_ = data.Writeln(output)
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -156,11 +157,81 @@ func TestHasYqDefault(t *testing.T) {
 	}
 }
 
+// TestParseTerraformStateArgs guards the invocation forms used by `!terraform.state`
+// fixtures against the shared function argument parser, including the caller's
+// empty-stack fallback to the current stack.
+func TestParseTerraformStateArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           string
+		currentStack   string
+		wantComponent  string
+		wantStack      string
+		wantExpression string
+	}{
+		{
+			name:           "legacy component and output",
+			args:           "kms-key key_arn",
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: "key_arn",
+		},
+		{
+			name:           "legacy component stack and output",
+			args:           "kms-key plat-ue2-prod key_arn",
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-prod",
+			wantExpression: "key_arn",
+		},
+		{
+			name:           "single quoted expression with a default",
+			args:           `kms-key '.key_arn // "mock-value"'`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+		{
+			name:           "whole YAML value quoted before parsing",
+			args:           `kms-key .key_arn // "mock-value"`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-dev",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+		{
+			name:           "stack with single quoted expression and a default",
+			args:           `kms-key plat-ue2-prod '.key_arn // "mock-value"'`,
+			currentStack:   "plat-ue2-dev",
+			wantComponent:  "kms-key",
+			wantStack:      "plat-ue2-prod",
+			wantExpression: `.key_arn // "mock-value"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsed, err := fnparser.ParseTerraform(tt.args)
+
+			assert.NoError(t, err)
+			stack := parsed.Stack
+			if stack == "" {
+				stack = tt.currentStack
+			}
+			assert.Equal(t, tt.wantComponent, parsed.Component)
+			assert.Equal(t, tt.wantStack, stack)
+			assert.Equal(t, tt.wantExpression, parsed.Expression)
+		})
+	}
+}
+
 // TestTerraformState_YqDefaultWhenBackendReturnsNil verifies that YQ default
 // values work when the backend returns nil (component not provisioned).
 // The mock returns the ErrTerraformStateNotProvisioned sentinel error to simulate
 // the real behavior when a component is not provisioned.
-func TestTerraformState_YqDefaultWhenBackendReturnsNil(t *testing.T) {
+func TestTerraformState_LegacyCSVCompatibility(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -194,9 +265,7 @@ func TestTerraformState_YqDefaultWhenBackendReturnsNil(t *testing.T) {
 		Return(nil, fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)).
 		Times(1)
 
-	// Input using YAML-style double quotes for escaping (like the fixture files).
-	// In YAML: !terraform.state vpc test-stack ".bucket_name // ""default-bucket"""
-	// The CSV parser handles the outer quotes and unescapes inner double quotes.
+	// Compatibility-only fixture: legacy CSV escaping remains supported at runtime.
 	input := schema.AtmosSectionMapType{
 		"bucket": `!terraform.state vpc test-stack ".bucket_name // ""default-bucket"""`,
 	}
@@ -243,7 +312,7 @@ func TestTerraformState_APIErrorReturnsError(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": `!terraform.state vpc test-stack ".bucket_name // ""default-bucket"""`,
+		"bucket": `!terraform.state vpc test-stack .bucket_name // "default-bucket"`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -287,7 +356,7 @@ func TestTerraformState_YqDefaultWithListFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"subnets": `!terraform.state vpc test-stack ".subnets // [""subnet-1"", ""subnet-2""]"`,
+		"subnets": `!terraform.state vpc test-stack .subnets // ["subnet-1", "subnet-2"]`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -375,7 +444,7 @@ func TestTerraformState_OutputNotFoundWithDefaultUsesDefault(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"value": `!terraform.state vpc test-stack ".missing_output // ""fallback-value"""`,
+		"value": `!terraform.state vpc test-stack .missing_output // "fallback-value"`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -419,7 +488,7 @@ func TestTerraformState_YqDefaultWithMapFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"tags": `!terraform.state config test-stack ".tags // {""env"": ""dev"", ""team"": ""platform""}"`,
+		"tags": `!terraform.state config test-stack .tags // {"env": "dev", "team": "platform"}`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -464,7 +533,7 @@ func TestTerraformState_YqDefaultWithNumericFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"replicas": `!terraform.state app test-stack ".replicas // 3"`,
+		"replicas": `!terraform.state app test-stack .replicas // 3`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -508,7 +577,7 @@ func TestTerraformState_YqDefaultWithEmptyListFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"security_groups": `!terraform.state vpc test-stack ".security_groups // []"`,
+		"security_groups": `!terraform.state vpc test-stack .security_groups // []`,
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)

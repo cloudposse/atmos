@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -1340,6 +1341,133 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 		result := buildConfigAndStacksInfo(cmd)
 		// Result may have empty values since we didn't bind to viper.
 		_ = result
+	})
+}
+
+// TestPromptForStack_FlagPersistence verifies that PromptForStack writes the
+// selected stack back to the Cobra "stack" flag so PostRunE hooks can read it.
+func TestPromptForStack_FlagPersistence(t *testing.T) {
+	// Save/restore the interactive-selection seams.
+	origInteractive := isInteractiveFn
+	origSelect := selectFromOptions
+	origDescribe := executeDescribeStacks
+	origInit := initCliConfig
+	defer func() {
+		isInteractiveFn = origInteractive
+		selectFromOptions = origSelect
+		executeDescribeStacks = origDescribe
+		initCliConfig = origInit
+	}()
+
+	// Stub config init so the list functions don't touch the real filesystem.
+	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Force interactive mode and make the picker always see a non-empty stack list
+	// so we exercise the selection + persistence path (not the no-options branch).
+	isInteractiveFn = func() bool { return true }
+	executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+		return map[string]any{
+			"dev-us-east-1": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{"vpc": map[string]any{}},
+				},
+			},
+		}, nil
+	}
+
+	t.Run("selected stack is persisted to flag", func(t *testing.T) {
+		selectFromOptions = func(_, _ string, _ []string) (string, error) {
+			return "dev-us-east-1", nil
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "", "Stack flag")
+
+		stack, err := PromptForStack(cmd, "vpc")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "dev-us-east-1", stack)
+
+		flagVal, _ := cmd.Flags().GetString("stack")
+		assert.Equal(t, "dev-us-east-1", flagVal, "stack flag should be set to the selected value")
+	})
+
+	t.Run("empty stack does not modify flag", func(t *testing.T) {
+		selectFromOptions = func(_, _ string, _ []string) (string, error) {
+			return "", nil
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "original", "Stack flag")
+
+		stack, err := PromptForStack(cmd, "vpc")
+
+		assert.NoError(t, err)
+		assert.Empty(t, stack)
+
+		flagVal, _ := cmd.Flags().GetString("stack")
+		assert.Equal(t, "original", flagVal, "stack flag should not be modified when selection is empty")
+	})
+
+	t.Run("prompt error skips flag persistence", func(t *testing.T) {
+		selectFromOptions = func(_, _ string, _ []string) (string, error) {
+			return "", errors.New("prompt failed")
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "original", "Stack flag")
+
+		_, err := PromptForStack(cmd, "vpc")
+
+		assert.Error(t, err)
+
+		flagVal, _ := cmd.Flags().GetString("stack")
+		assert.Equal(t, "original", flagVal, "stack flag should not be modified on error")
+	})
+
+	t.Run("works when cmd has no stack flag", func(t *testing.T) {
+		selectFromOptions = func(_, _ string, _ []string) (string, error) {
+			return "dev-us-east-1", nil
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+
+		stack, err := PromptForStack(cmd, "vpc")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "dev-us-east-1", stack, "should still return the selected value")
+	})
+
+	t.Run("non-interactive returns empty without prompting", func(t *testing.T) {
+		isInteractiveFn = func() bool { return false }
+		defer func() { isInteractiveFn = func() bool { return true } }()
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "original", "Stack flag")
+
+		stack, err := PromptForStack(cmd, "vpc")
+
+		assert.NoError(t, err)
+		assert.Empty(t, stack, "non-interactive must defer to required-arg validation")
+		flagVal, _ := cmd.Flags().GetString("stack")
+		assert.Equal(t, "original", flagVal)
+	})
+
+	t.Run("empty options yields a clear no-stacks error", func(t *testing.T) {
+		isInteractiveFn = func() bool { return true }
+		executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+			return map[string]any{}, nil
+		}
+		defer func() {
+			executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+				return map[string]any{"dev-us-east-1": map[string]any{"components": map[string]any{"terraform": map[string]any{"vpc": map[string]any{}}}}}, nil
+			}
+		}()
+
+		_, err := PromptForStack(&cobra.Command{Use: "test"}, "vpc")
+		require.ErrorIs(t, err, errUtils.ErrNoStacksToSelect)
 	})
 }
 
