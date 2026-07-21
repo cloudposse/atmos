@@ -106,7 +106,7 @@ func TestMergeImports_ResolveAbsolutePathError(t *testing.T) {
 	v.SetConfigType("yaml")
 	v.Set("base_path", "locked/child")
 
-	_, err := mergeImports(v, gitRoot, "")
+	_, err := mergeImports(v, gitRoot, "", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrStatFile)
 }

@@ -29,7 +29,7 @@ func TestMergeImports_ResolvesImportsRelativeToConfigDir(t *testing.T) {
 	v.Set("base_path", ".")
 	v.Set("import", []string{filepath.Join(".atmos", "extra.yaml")})
 
-	_, err := mergeImports(v, root, "")
+	_, err := mergeImports(v, root, "", "")
 	require.NoError(t, err)
 
 	assert.Equal(t, 137, v.GetInt("settings.terminal.max_width"),
@@ -83,7 +83,7 @@ func TestMergeImports_BareBasePathResolvesViaGitRoot(t *testing.T) {
 	v.Set("base_path", "workspace")
 	v.Set("import", []string{"extra.yaml"})
 
-	_, err := mergeImports(v, t.TempDir(), "")
+	_, err := mergeImports(v, t.TempDir(), "", "")
 	require.NoError(t, err)
 	assert.Equal(t, 149, v.GetInt("settings.terminal.max_width"),
 		"bare base path must resolve via git root")
@@ -107,7 +107,7 @@ func TestMergeImports_EmptyBasePathResolvesViaGitRoot(t *testing.T) {
 	v.Set("base_path", "")
 	v.Set("import", []string{filepath.Join(".atmos", "extra.yaml")})
 
-	_, err := mergeImports(v, t.TempDir(), "")
+	_, err := mergeImports(v, t.TempDir(), "", "")
 	require.NoError(t, err)
 	assert.Equal(t, 153, v.GetInt("settings.terminal.max_width"),
 		"empty base path must resolve via git root")

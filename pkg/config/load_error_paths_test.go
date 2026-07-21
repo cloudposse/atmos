@@ -243,7 +243,7 @@ components:
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
+	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse main config")
 	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
@@ -266,7 +266,7 @@ components:
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
+	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML, "")
 	// The error handling path exists, but may not always trigger with this input
 	// This tests that the function handles errors from MergeConfig
 	if err != nil {
@@ -613,7 +613,7 @@ func TestProcessConfigImportsAndReapply_BasePathDeclarationError(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType(yamlType)
 
-	_, err := processConfigImportsAndReapply(t.TempDir(), v, []byte("base_path: .\n"))
+	_, err := processConfigImportsAndReapply(t.TempDir(), v, []byte("base_path: .\n"), "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
 	assert.Contains(t, err.Error(), "parse main config base path")
@@ -662,7 +662,7 @@ func TestMergeImports_ProcessImportsError(t *testing.T) {
 	v.Set("base_path", dir) // Absolute, so resolveAbsolutePath returns it unchanged.
 	v.Set("import", []string{"x.yaml"})
 
-	_, err := mergeImports(v, dir, "")
+	_, err := mergeImports(v, dir, "", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mkdir failed")
 }

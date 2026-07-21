@@ -26,13 +26,20 @@ paths; bare paths keep git-root search; absolute paths pass through unchanged.
 
 ## Changes
 
-- `pkg/config/load.go`: add `resolveImportBasePath` (anchors config-sourced
-  empty and dot-relative base paths to the config directory; leaves bare,
-  absolute, and runtime paths untouched) and `ResolveConfigImportBasePath` (a
-  file-aware resolver for nested imports). `mergeImports` takes the config
-  directory and base-path source and returns the directory that declared the
-  effective base path. A `base_path: !cwd` provenance is detected from the raw
+- `pkg/config/load.go`: `mergeImports` and `ResolveConfigImportBasePath` (the
+  file-aware resolver for nested imports) route the import base path through the
+  canonical `resolveAbsolutePath` source-aware category model: config-sourced
+  empty and dot-relative paths anchor to the config directory, bare paths use
+  git-root search, absolute paths pass through, and runtime/`!cwd` dot paths
+  anchor to the CWD. A `base_path: !cwd` provenance is detected from the raw
   YAML tag via `importBasePathDeclaration`.
+- `pkg/config/load.go`: a runtime base-path override (`ATMOS_BASE_PATH`,
+  `--base-path`, or the `atmos_base_path` provider param) is recorded on the
+  main Viper instance by `LoadConfig` and honored during import resolution, so
+  its dot-relative values anchor imports to the CWD. Previously runtime
+  overrides were applied only after imports were processed, so top-level imports
+  could not distinguish a runtime dot base path from a config-file
+  `base_path: .`.
 - `pkg/config/imports.go`: import processing reports the directory of an
   imported file that declares `base_path`, so provenance follows imported
   declarations.
@@ -43,12 +50,16 @@ paths; bare paths keep git-root search; absolute paths pass through unchanged.
   `pkg/config/adapters/gogetter_adapter.go`: nested imports resolve a declared
   relative `base_path` against the importing file's directory via the shared
   `ResolveConfigImportBasePath` helper.
-- Tests: new `pkg/config/import_base_path_test.go` covering the helper, the
+- Tests: `pkg/config/import_base_path_test.go` covers the resolver, the
   CWD-independent `.atmos/commands/**/*`-from-a-subdirectory reproduction,
-  bare-path and `!cwd` compatibility, and multi-`--config` provenance. The
-  import-merge tests in `config_import_test.go` now register the local adapter
-  and assert the real deep-merge behavior; the nested-import assertion in
-  `adapters/adapters_test.go` was tightened.
+  bare-path and `!cwd` compatibility, and multi-`--config` provenance;
+  `pkg/config/import_base_path_runtime_test.go` covers runtime override
+  detection (flag/provider/env precedence) and end-to-end CWD anchoring of
+  imports for `ATMOS_BASE_PATH`, contrasted with the config-file case. The
+  import-merge tests in `config_import_test.go` register the local adapter and
+  assert the real deep-merge behavior; the nested-import assertion in
+  `adapters/adapters_test.go` was tightened. Error-path tests exercise the
+  resolver, temp-dir, and base-path-parse failure branches.
 
 ## Validation
 

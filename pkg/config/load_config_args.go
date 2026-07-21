@@ -99,7 +99,7 @@ func mergeFiles(v *viper.Viper, configFilePaths []string) error {
 		if v.GetString("base_path") == "" {
 			importConfigDir = configDir
 		}
-		importBasePathDir, importErr := mergeImports(v, importConfigDir, "")
+		importBasePathDir, importErr := mergeImports(v, importConfigDir, "", v.GetString(runtimeBasePathOverrideKey))
 		if importErr != nil {
 			log.Debug("error process imports", "file", configPath, "error", importErr)
 		}
