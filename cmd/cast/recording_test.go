@@ -724,7 +724,7 @@ func TestStartRecorderRemovesIntermediateCastOnFailure(t *testing.T) {
 	}
 }
 
-func TestStartHelpRecordingReturnsWriterWhenAlreadyActive(t *testing.T) {
+func TestStartHelpRecordingReportsActiveRecording(t *testing.T) {
 	activeCast = nil
 	castPath := filepath.Join(t.TempDir(), "help.cast")
 	t.Cleanup(func() {
@@ -744,26 +744,10 @@ func TestStartHelpRecordingReturnsWriterWhenAlreadyActive(t *testing.T) {
 		t.Fatal("expected active recording before StartHelpRecording")
 	}
 
-	writer := StartHelpRecording(cmd, &schema.AtmosConfiguration{})
-	if writer == nil {
-		t.Fatal("expected a non-nil writer when a recording is already active")
-	}
-	n, err := writer.Write([]byte("help text"))
-	if err != nil {
-		t.Fatalf("write to help recorder: %v", err)
-	}
-	if n != len("help text") {
-		t.Fatalf("write count = %d, want %d", n, len("help text"))
+	if !StartHelpRecording(cmd, &schema.AtmosConfiguration{}) {
+		t.Fatal("expected active help recording to be reported")
 	}
 	FinalizeRecording()
-
-	content, err := os.ReadFile(castPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(content), "help text") {
-		t.Fatalf("recorded cast missing help text:\n%s", content)
-	}
 }
 
 func TestStartHelpRecordingStartsRecordingWhenNoneActive(t *testing.T) {
@@ -779,9 +763,8 @@ func TestStartHelpRecordingStartsRecordingWhenNoneActive(t *testing.T) {
 	if err := cmd.Flags().Set(FlagName, castPath); err != nil {
 		t.Fatal(err)
 	}
-	writer := StartHelpRecording(cmd, &schema.AtmosConfiguration{})
-	if writer == nil {
-		t.Fatal("expected StartHelpRecording to start a recording and return a writer")
+	if !StartHelpRecording(cmd, &schema.AtmosConfiguration{}) {
+		t.Fatal("expected StartHelpRecording to start a recording")
 	}
 	if activeCast == nil {
 		t.Fatal("expected StartHelpRecording to populate activeCast")
@@ -806,9 +789,8 @@ func TestStartHelpRecordingReturnsNilOnStartError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writer := StartHelpRecording(cmd, &schema.AtmosConfiguration{})
-	if writer != nil {
-		t.Fatal("expected nil writer when starting the recording fails")
+	if StartHelpRecording(cmd, &schema.AtmosConfiguration{}) {
+		t.Fatal("expected no active recording when starting the recording fails")
 	}
 	if activeCast != nil {
 		t.Fatal("expected no active recording after a start failure")
@@ -823,12 +805,30 @@ func TestStartHelpRecordingReturnsNilWhenNoRecordingRequested(t *testing.T) {
 		}
 	})
 
-	writer := StartHelpRecording(newRecordingTestCommand("about"), &schema.AtmosConfiguration{})
-	if writer != nil {
-		t.Fatal("expected nil writer when no recording is requested")
+	if StartHelpRecording(newRecordingTestCommand("about"), &schema.AtmosConfiguration{}) {
+		t.Fatal("expected no active recording when none is requested")
 	}
 	if activeCast != nil {
 		t.Fatal("expected no active recording")
+	}
+}
+
+func TestStartHelpRecordingStartsFromEnvironment(t *testing.T) {
+	activeCast = nil
+	castPath := filepath.Join(t.TempDir(), "env-help.cast")
+	t.Setenv(EnvName, castPath)
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	if !StartHelpRecording(newRecordingTestCommand("about"), &schema.AtmosConfiguration{}) {
+		t.Fatal("expected ATMOS_CAST to start help recording")
+	}
+	FinalizeRecording()
+	if _, err := os.Stat(castPath); err != nil {
+		t.Fatalf("cast file missing: %v", err)
 	}
 }
 
