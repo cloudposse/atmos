@@ -397,6 +397,7 @@ commands:
               assert_no_error_output,
               assert_no_local_paths,
               assert_body_color,
+              strip_ansi,
           )
 
           REPO = Path("..", "..").resolve()
@@ -735,6 +736,10 @@ commands:
               assert_no_error_output(text)
               assert_no_local_paths(text)
               assert_body_color(text)
+              if command.endswith(" --help") and len(re.findall(r"(?m)^USAGE$", strip_ansi(text))) != 1:
+                  raise SystemExit(
+                      f"help cast must contain exactly one USAGE heading: {path.name}"
+                  )
 
           # Every cast referenced by the docs must exist so pages never embed
           # a broken player.

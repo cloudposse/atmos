@@ -2328,8 +2328,7 @@ func renderFlagHelp(command *cobra.Command) {
 
 	if pagerExplicitlySet && pagerEnabled {
 		// User explicitly requested pager for flag help.
-		// Restore the original writer (which may carry the --cast tee, see
-		// rootHelpFunc) after buffering, so it isn't left pointed at a
+		// Restore the original writer after buffering so it isn't left pointed at a
 		// discarded buffer for any output written after this function returns.
 		originalOut := command.OutOrStdout()
 		defer command.SetOut(originalOut)
@@ -2350,8 +2349,7 @@ func renderFlagHelp(command *cobra.Command) {
 // renderInteractiveHelp renders help for interactive 'atmos help' invocations,
 // buffering into a pager when configured (via flag, env, or config).
 func renderInteractiveHelp(command *cobra.Command) {
-	// Restore the original writer (which may carry the --cast tee, see
-	// rootHelpFunc) after buffering, so it isn't left pointed at a discarded
+	// Restore the original writer after buffering so it isn't left pointed at a discarded
 	// buffer for any output written after this function returns.
 	originalOut := command.OutOrStdout()
 	defer command.SetOut(originalOut)
@@ -2411,10 +2409,9 @@ func rootHelpFunc(command *cobra.Command, args []string) {
 	}
 
 	// Cobra renders help before the persistent pre-run hooks fire, so an
-	// explicit --cast flag starts its recording here and tees the rendered
-	// help output into the cast (used by the docs screengrab pipeline).
-	if recordWriter := castcmd.StartHelpRecording(command, &atmosConfig); recordWriter != nil {
-		command.SetOut(io.MultiWriter(command.OutOrStdout(), recordWriter))
+	// explicit --cast flag starts its recording here. Cobra's output writer is
+	// already the masked I/O stream, which records the help output exactly once.
+	if castcmd.StartHelpRecording(command, &atmosConfig) {
 		defer castcmd.FinalizeRecording()
 	}
 
