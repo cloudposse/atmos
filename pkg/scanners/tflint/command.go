@@ -103,6 +103,13 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
 		info.Identity = cfg.IdentityFlagDisabledValue
 		info.AuthDisabled = true
+		// Lint only needs static HCL/backend config, not resolved remote values.
+		// With auth disabled there's no AuthManager to reach a real backend with,
+		// so leaving YAML functions on lets !terraform.state/!terraform.output
+		// fall through to an unauthenticated AWS call instead of being skipped —
+		// and their `//` fallback only covers "not yet provisioned" errors, not
+		// credential failures. See docs/fixes/2026-07-21-terraform-lint-auth-disabled-yaml-functions.md.
+		info.ProcessFunctions = false
 	}
 
 	atmosConfig, err := initCLIConfig(*info, true)
@@ -148,6 +155,11 @@ func executeAffected(ctx context.Context, runtime *Runtime, info *schema.ConfigA
 	if authDisabled {
 		info.Identity = cfg.IdentityFlagDisabledValue
 		info.AuthDisabled = true
+		// See the matching comment in execute(): with auth disabled, YAML
+		// functions that read remote state must be skipped rather than left
+		// to hit AWS unauthenticated.
+		info.ProcessFunctions = false
+		options.ProcessYamlFunctions = false
 	}
 
 	atmosConfig, err := initCLIConfig(*info, true)

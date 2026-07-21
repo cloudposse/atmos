@@ -113,14 +113,18 @@ func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
 	}
 	called := false
 	runtime.DescribeStacks = func(
-		_ *schema.AtmosConfiguration, _ string, _ []string, _ []string, _ []string, _ bool, _ bool, _ bool, _ bool, _ []string, _ auth.AuthManager, authDisabled bool,
+		_ *schema.AtmosConfiguration, _ string, _ []string, _ []string, _ []string, _ bool, _ bool, processFunctions bool, _ bool, _ []string, _ auth.AuthManager, authDisabled bool,
 	) (map[string]any, error) {
 		called = true
 		assert.True(t, authDisabled)
+		// With auth disabled there's no AuthManager to reach a real backend
+		// with, so !terraform.state/!terraform.output must not be evaluated —
+		// they'd otherwise hit AWS unauthenticated instead of being skipped.
+		assert.False(t, processFunctions, "ProcessFunctions must be forced off when auth is disabled")
 		return map[string]any{}, nil
 	}
 
-	info := &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}
+	info := &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue, ProcessFunctions: true}
 	require.NoError(t, Execute(context.Background(), runtime, info, nil))
 	assert.True(t, called)
 }
@@ -164,6 +168,7 @@ func TestExecuteAffectedFiltersAndDeduplicatesTargets(t *testing.T) {
 	runtime := testRuntime()
 	runtime.AffectedComponents = func(_ *schema.AtmosConfiguration, options *AffectedOptions, _ auth.AuthManager) ([]schema.Affected, error) {
 		assert.True(t, options.AuthDisabled)
+		assert.False(t, options.ProcessYamlFunctions, "ProcessYamlFunctions must be forced off when auth is disabled")
 		return []schema.Affected{
 			{Component: "vpc", Stack: "prod", ComponentType: cfg.TerraformComponentType},
 			{Component: "vpc", Stack: "dev", ComponentType: cfg.TerraformComponentType},
@@ -181,7 +186,7 @@ func TestExecuteAffectedFiltersAndDeduplicatesTargets(t *testing.T) {
 	t.Cleanup(func() { runTarget = originalRun })
 
 	info := &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}
-	require.NoError(t, Execute(context.Background(), runtime, info, &AffectedOptions{}))
+	require.NoError(t, Execute(context.Background(), runtime, info, &AffectedOptions{ProcessYamlFunctions: true}))
 	assert.Equal(t, []string{"vpc:dev"}, linted)
 	assert.True(t, info.AuthDisabled)
 }
