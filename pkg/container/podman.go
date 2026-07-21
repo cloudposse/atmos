@@ -64,7 +64,7 @@ func (p *PodmanRuntime) command(ctx context.Context, args ...string) *exec.Cmd {
 func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Build")()
 
-	if config.Engine == "buildx" || config.Bake != nil {
+	if config.Engine == "buildx" || config.Bake != nil || config.Driver != nil {
 		return fmt.Errorf("%w: Docker Buildx requires Docker in V1; Podman uses the native `podman build` path", errUtils.ErrContainerRuntimeOperation)
 	}
 

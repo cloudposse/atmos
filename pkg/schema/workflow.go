@@ -11,6 +11,9 @@ import (
 // ErrInvalidWorkflowContainer is returned when a workflow `container` value cannot be decoded.
 var ErrInvalidWorkflowContainer = errors.New("invalid workflow container configuration")
 
+// ErrInvalidContainerDriver is returned when a container build step's `driver` value cannot be decoded.
+var ErrInvalidContainerDriver = errors.New("invalid container build driver configuration")
+
 // DescribeWorkflowsItem represents a workflow item in the describe workflows output.
 type DescribeWorkflowsItem struct {
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
@@ -126,6 +129,46 @@ type ContainerBuildStep struct {
 	NoCache          bool                    `yaml:"no_cache,omitempty" json:"no_cache,omitempty" mapstructure:"no_cache"`
 	Pull             bool                    `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
 	Bake             *ContainerBuildBakeStep `yaml:"bake,omitempty" json:"bake,omitempty" mapstructure:"bake"`
+	Driver           *ContainerDriverConfig  `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
+	Cache            *ContainerCacheConfig   `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+}
+
+// ContainerDriverConfig configures the Buildx builder instance used for build/bake.
+// A bare string value sets Provider with no Opts (see UnmarshalYAML), e.g. `driver: docker-container`.
+type ContainerDriverConfig struct {
+	Name     string            `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Provider string            `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
+	Opts     map[string]string `yaml:"opts,omitempty" json:"opts,omitempty" mapstructure:"opts"`
+}
+
+// UnmarshalYAML supports both object syntax and a bare provider string, e.g. `driver: docker-container`.
+func (d *ContainerDriverConfig) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		var provider string
+		if err := value.Decode(&provider); err != nil {
+			return fmt.Errorf("%w: driver must be a mapping or string: %w", ErrInvalidContainerDriver, err)
+		}
+		d.Provider = provider
+		return nil
+	case yaml.MappingNode:
+		type containerDriverConfig ContainerDriverConfig
+		var decoded containerDriverConfig
+		if err := value.Decode(&decoded); err != nil {
+			return fmt.Errorf("%w: driver must be a mapping or string: %w", ErrInvalidContainerDriver, err)
+		}
+		*d = ContainerDriverConfig(decoded)
+		return nil
+	default:
+		return fmt.Errorf("%w: driver must be a mapping or string, got YAML node kind %d", ErrInvalidContainerDriver, value.Kind)
+	}
+}
+
+// ContainerCacheConfig configures Buildx cache import/export sources for a build.
+// Each entry is a raw Buildx cache attribute set (e.g. type, ref, mode, image-manifest, oci-mediatypes).
+type ContainerCacheConfig struct {
+	From []map[string]string `yaml:"from,omitempty" json:"from,omitempty" mapstructure:"from"`
+	To   []map[string]string `yaml:"to,omitempty" json:"to,omitempty" mapstructure:"to"`
 }
 
 // ContainerPushStep configures a container image push action.
