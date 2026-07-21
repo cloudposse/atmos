@@ -1056,6 +1056,83 @@ func TestBuildBuildArgs(t *testing.T) {
 				"worker",
 			},
 		},
+		{
+			name: "buildx bake with driver",
+			config: &BuildConfig{
+				Driver: &DriverConfig{Name: "my-builder", Provider: "docker-container"},
+				Bake: &BakeConfig{
+					File:   "docker-bake.hcl",
+					Target: "app",
+				},
+			},
+			expected: []string{
+				"buildx", "bake",
+				"--builder", "my-builder",
+				"--file", "docker-bake.hcl",
+				"app",
+			},
+		},
+		{
+			name: "buildx build with driver shorthand",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Driver:     &DriverConfig{Provider: "docker-container"},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--builder", "atmos",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "buildx build with named driver",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Driver:     &DriverConfig{Name: "my-builder", Provider: "docker-container"},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--builder", "my-builder",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "buildx build with cache from and to",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Cache: &CacheConfig{
+					From: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache"},
+					},
+					To: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"},
+					},
+				},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--cache-from", "ref=registry.example.com/app:buildcache,type=registry",
+				"--cache-to", "mode=max,ref=registry.example.com/app:buildcache,type=registry",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "cache is ignored on plain docker build",
+			config: &BuildConfig{
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Cache: &CacheConfig{
+					From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+				},
+			},
+			expected: []string{"build", "-f", "Dockerfile", "."},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1076,6 +1153,45 @@ func TestBuildBuildArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestJoinAttrs(t *testing.T) {
+	tests := []struct {
+		name     string
+		attrs    map[string]string
+		expected string
+	}{
+		{
+			name:     "empty map",
+			attrs:    map[string]string{},
+			expected: "",
+		},
+		{
+			name:     "single attribute",
+			attrs:    map[string]string{"type": "registry"},
+			expected: "type=registry",
+		},
+		{
+			name: "multiple attributes are sorted for determinism",
+			attrs: map[string]string{
+				"type": "registry",
+				"ref":  "registry.example.com/app:buildcache",
+				"mode": "max",
+			},
+			expected: "mode=max,ref=registry.example.com/app:buildcache,type=registry",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, joinAttrs(tt.attrs))
+		})
+	}
+}
+
+func TestEffectiveDriverName(t *testing.T) {
+	assert.Equal(t, "atmos", effectiveDriverName(&DriverConfig{}))
+	assert.Equal(t, "my-builder", effectiveDriverName(&DriverConfig{Name: "my-builder"}))
 }
 
 func TestBuildRemoveArgs(t *testing.T) {
