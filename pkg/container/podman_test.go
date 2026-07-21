@@ -941,6 +941,16 @@ func TestPodmanRuntime_BuildBakeUnsupported(t *testing.T) {
 	assert.Contains(t, err.Error(), "Docker Buildx requires Docker")
 }
 
+func TestPodmanRuntime_BuildDriverUnsupported(t *testing.T) {
+	runtime := NewPodmanRuntime()
+	err := runtime.Build(context.Background(), &BuildConfig{
+		Driver: &DriverConfig{Provider: "docker-container"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Docker Buildx requires Docker")
+}
+
 func TestParsePodmanPorts(t *testing.T) {
 	tests := []struct {
 		name     string

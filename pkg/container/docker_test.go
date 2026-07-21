@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -423,6 +424,35 @@ RUN echo "test build"
 	}
 
 	require.NoError(t, err, "Build should succeed")
+}
+
+func TestDockerRuntime_EnsureBuilder_Integration(t *testing.T) {
+	// Integration test - creating the same named builder twice must be idempotent
+	// ("existing instance" treated as success), not a hard failure.
+	runtime := NewDockerRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+	cfg := &DriverConfig{Name: "atmos-test-builder", Provider: "docker-container"}
+
+	err := ensureBuilder(ctx, runtime, cfg)
+	if err != nil {
+		t.Skipf("Docker Buildx not available, skipping: %v", err)
+		return
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "buildx", "rm", cfg.Name).Run()
+	})
+
+	// Second call targets the same name and must not error.
+	err = ensureBuilder(ctx, runtime, cfg)
+	require.NoError(t, err, "second ensureBuilder call should be idempotent")
+}
+
+func TestDockerRuntime_EnsureBuilder_DefaultName(t *testing.T) {
+	// Unit test - verifies the default name is applied without requiring Docker.
+	cfg := &DriverConfig{Provider: "docker-container"}
+	assert.Equal(t, "atmos", effectiveDriverName(cfg))
 }
 
 func TestDockerRuntime_Logs_Integration(t *testing.T) {
