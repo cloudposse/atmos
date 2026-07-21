@@ -163,6 +163,31 @@ func (s *ContainerSpec) ToBuildConfig() *ctr.BuildConfig {
 		Target:     s.Build.Target,
 		NoCache:    s.Build.NoCache,
 		Pull:       s.Build.Pull,
+		Driver:     toDriverConfig(s.Build.Driver),
+		Cache:      toCacheConfig(s.Build.Cache),
+	}
+}
+
+// toDriverConfig maps the schema driver spec onto a runtime DriverConfig.
+func toDriverConfig(d *schema.ContainerDriverConfig) *ctr.DriverConfig {
+	if d == nil {
+		return nil
+	}
+	return &ctr.DriverConfig{
+		Name:     d.Name,
+		Provider: d.Provider,
+		Opts:     d.Opts,
+	}
+}
+
+// toCacheConfig maps the schema cache spec onto a runtime CacheConfig.
+func toCacheConfig(c *schema.ContainerCacheConfig) *ctr.CacheConfig {
+	if c == nil {
+		return nil
+	}
+	return &ctr.CacheConfig{
+		From: c.From,
+		To:   c.To,
 	}
 }
 
