@@ -435,7 +435,11 @@ func assertReportedSameStackOrder(t *testing.T, summaryPath, stack string) {
 	for dependent, prerequisites := range dependencies {
 		for _, prerequisite := range prerequisites {
 			require.Less(t, positions[prerequisite], positions[dependent], "%s must execute before %s", prerequisite, dependent)
-			require.True(t, finishedAt[prerequisite].Before(startedAt[dependent]), "%s must finish before %s starts", prerequisite, dependent)
+			// A dry-run step can start and finish within one Windows clock tick, so
+			// equality is valid here. The result positions above establish the
+			// required execution order; this check ensures the timing data does not
+			// contradict it.
+			require.False(t, finishedAt[prerequisite].After(startedAt[dependent]), "%s must finish no later than %s starts", prerequisite, dependent)
 		}
 	}
 }
