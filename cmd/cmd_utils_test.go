@@ -2769,14 +2769,15 @@ func TestAppendComponentEnvVars_CommandEnvOverrides(t *testing.T) {
 // back to whatever tflint happens to be on the ambient PATH.
 func TestConfigureCustomCommandScannerContext_SetsToolchainPATH(t *testing.T) {
 	vars := stepPkg.NewStepExecutor().Variables()
+	toolchainPath := filepath.Join("opt", "toolchain", "bin")
 
-	configureCustomCommandScannerContext(vars, &schema.AtmosConfiguration{}, "/opt/toolchain/bin", nil)
+	configureCustomCommandScannerContext(vars, &schema.AtmosConfiguration{}, toolchainPath, nil)
 
-	assert.Equal(t, "/opt/toolchain/bin", vars.ToolchainPATH)
+	assert.Equal(t, toolchainPath, vars.ToolchainPATH)
 }
 
 func TestConfigureCustomCommandScannerContext_NilVarsNoPanic(t *testing.T) {
 	assert.NotPanics(t, func() {
-		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, "/opt/toolchain/bin", nil)
+		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, filepath.Join("opt", "toolchain", "bin"), nil)
 	})
 }

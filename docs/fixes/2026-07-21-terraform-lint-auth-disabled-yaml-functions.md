@@ -14,7 +14,7 @@ with a comment explaining the intent: "Lint reads static HCL only. Disable the q
 stack's emulator identity because this CI job intentionally does not start the emulator." The
 job failed anyway:
 
-```
+```text
 WARN Failed to read Terraform state after all retries exhausted file=kms-key/plat-ue2-dev/terraform.tfstate ...
 error="operation error S3: GetObject, get identity: get credentials: failed to refresh cached
 credentials, no EC2 IMDS role found, ..."
