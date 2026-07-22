@@ -237,6 +237,8 @@ func TestCustomCommandOutputNoneCapturesWithoutStreaming(t *testing.T) {
 				require.NotPanics(t, func() { customCmd.Run(customCmd, nil) })
 			})
 			assert.NotContains(t, stdout, "produced")
+			assert.NotContains(t, stdout, "warning")
+			assert.NotContains(t, stderr, "produced")
 			assert.NotContains(t, stderr, "warning")
 
 			envContent, err := os.ReadFile(resultPath)
