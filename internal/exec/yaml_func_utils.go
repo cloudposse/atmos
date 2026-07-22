@@ -132,10 +132,22 @@ func processNodesWithContext(
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
 				if onWarning != nil && isRecoverableTerraformError(err) {
+					function := ""
+					if fields := strings.Fields(v); len(fields) > 0 {
+						function = fields[0]
+					}
 					component := ""
 					if stackInfo != nil {
 						component = stackInfo.Component
 					}
+					log.Debug(
+						"Degrading unresolved YAML function to computed value",
+						"function", function,
+						"value", v,
+						"stack", currentStack,
+						"component", component,
+						"error", err.Error(),
+					)
 					onWarning(DegradationWarning{
 						Stack:     currentStack,
 						Component: component,
@@ -233,12 +245,24 @@ func processCustomTags(
 }
 
 // matchesTag reports whether input starts with prefix as a complete YAML tag.
+// Any character that could extend the tag name (letters, digits, '.', '-', '_')
+// disqualifies the match; anything else (whitespace, but also punctuation like
+// '[', '{', '"' that unambiguously starts a value) is a valid boundary. The
+// whitespace-only check this replaced broke values whose Go template rendering
+// trims the separator (e.g. a `{{-` marker), producing `!template[...]` with no
+// space before the content.
 func matchesTag(input, prefix string) bool {
 	if !strings.HasPrefix(input, prefix) {
 		return false
 	}
 	rest := strings.TrimPrefix(input, prefix)
-	return rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n'
+	if rest == "" {
+		return true
+	}
+	c := rest[0]
+	isNameContinuation := c == '.' || c == '-' || c == '_' ||
+		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+	return !isNameContinuation
 }
 
 // matchesPrefix checks if input has the given tag prefix and the function is not skipped.
