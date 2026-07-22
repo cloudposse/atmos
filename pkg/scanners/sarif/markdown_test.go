@@ -1,10 +1,13 @@
 package sarif
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRenderMarkdownEscapesLocationsAndCapsFindings(t *testing.T) {
@@ -152,4 +155,25 @@ func TestLocationCell_ComponentRelative(t *testing.T) {
 			assert.Equal(t, "`"+tt.wantDisplay+"`", cell)
 		})
 	}
+}
+
+// TestLocationCell_ComponentRelative_ChdirRelativePath covers tflint's --chdir mode,
+// which reports paths relative to the scanning process's own working directory rather
+// than a bare filename (e.g. "../../tmp/x/components/terraform/foo/main.tf"). Since
+// componentDir is always absolute, a relative finding path must resolve against the
+// process cwd before the component-relative comparison, or it always falls back to the
+// full (messy) path unchanged.
+func TestLocationCell_ComponentRelative_ChdirRelativePath(t *testing.T) {
+	componentDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(componentDir, "components", "terraform", "foo"), 0o755))
+	fullComponentDir := filepath.Join(componentDir, "components", "terraform", "foo")
+
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	relFile, err := filepath.Rel(cwd, filepath.Join(fullComponentDir, "main.tf"))
+	require.NoError(t, err)
+
+	cell := locationCell(&Finding{File: relFile, Line: 1}, fullComponentDir, "")
+	assert.Equal(t, "`main.tf:1`", cell)
 }

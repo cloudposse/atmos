@@ -137,7 +137,7 @@ func TestConfigPathUsesConfiguredGlobalFallback(t *testing.T) {
 	require.Equal(t, filepath.Join(base, ".tflint.hcl"), ConfigPath(config, info))
 	require.Equal(
 		t,
-		[]string{"--format=sarif", "$ATMOS_COMPONENT_PATH", "--config=" + filepath.Join(base, ".tflint.hcl")},
+		[]string{"--format=sarif", "--chdir=$ATMOS_COMPONENT_PATH", "--config=" + filepath.Join(base, ".tflint.hcl")},
 		ResolveArgs(DefaultArgs(), config, info),
 	)
 }

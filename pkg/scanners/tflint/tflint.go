@@ -22,16 +22,16 @@ const (
 	OutputFormatRich     = "rich"
 )
 
-// DefaultArgs returns tflint's default CLI arguments. TFLint has no `--chdir` flag
-// (unlike terraform/tofu) — it takes the target directory as a positional
-// [FILE or DIR...] argument, so $ATMOS_COMPONENT_PATH is passed positionally rather
-// than as a flag value.
+// DefaultArgs returns tflint's default CLI arguments. TFLint 0.47+ dropped support for
+// positional [FILE or DIR...] arguments ("Command line arguments support was dropped in
+// v0.47. Use --chdir or --filter instead."), so $ATMOS_COMPONENT_PATH must be passed via
+// --chdir rather than positionally.
 func DefaultArgs() []string {
 	defer perf.Track(nil, "tflint.DefaultArgs")()
 
 	return []string{
 		"--format=sarif",
-		"$ATMOS_COMPONENT_PATH",
+		"--chdir=$ATMOS_COMPONENT_PATH",
 	}
 }
 

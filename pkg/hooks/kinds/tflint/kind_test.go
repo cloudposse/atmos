@@ -24,7 +24,7 @@ func TestKindIsRegistered(t *testing.T) {
 	assert.Equal(t, "tflint", kind.Command)
 	assert.Equal(t, []string{
 		"--format=sarif",
-		"$ATMOS_COMPONENT_PATH",
+		"--chdir=$ATMOS_COMPONENT_PATH",
 	}, kind.DefaultArgs)
 	assert.Equal(t, hooks.OnFailureWarn, kind.OnFailure)
 	assert.True(t, kind.CaptureStdout, "tflint emits SARIF to stdout with no file-output flag")

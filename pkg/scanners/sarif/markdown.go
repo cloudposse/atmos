@@ -294,7 +294,20 @@ func shortenToComponent(file, componentDir string) string {
 	if componentDir == "" {
 		return file
 	}
-	rel, err := filepath.Rel(componentDir, file)
+	// tflint's --chdir mode reports paths relative to the scanning process's own
+	// working directory rather than the --chdir target (e.g.
+	// "../../private/tmp/x/components/terraform/foo/main.tf"), not just a bare
+	// filename. filepath.Rel needs both sides absolute or both relative to the
+	// same base to compare correctly, and componentDir is always absolute, so
+	// resolve a relative file against the process cwd (the same cwd the
+	// subprocess inherited, since scanners never set cmd.Dir) before comparing.
+	absFile := file
+	if !filepath.IsAbs(absFile) {
+		if resolved, err := filepath.Abs(absFile); err == nil {
+			absFile = resolved
+		}
+	}
+	rel, err := filepath.Rel(componentDir, absFile)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return file
 	}

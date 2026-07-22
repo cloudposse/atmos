@@ -326,7 +326,7 @@ type dynamicSpinnerModel struct {
 	completedMsg string // Message shown when done (set dynamically).
 	done         bool
 	err          error
-	width        int // Terminal width, from tea.WindowSizeMsg; 0 until the first resize event arrives.
+	width        int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
 type opCompleteDynamicMsg struct {
@@ -526,7 +526,7 @@ type manualSpinnerModel struct {
 	finalMsg    string
 	success     bool
 	done        bool
-	width       int // Terminal width, from tea.WindowSizeMsg; 0 until the first resize event arrives.
+	width       int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
 type manualStopMsg struct {
