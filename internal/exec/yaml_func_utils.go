@@ -233,12 +233,14 @@ func processCustomTags(
 }
 
 // matchesTag reports whether input starts with prefix as a complete YAML tag.
+// JSON array and object delimiters are valid boundaries because Go-template whitespace
+// trimming can remove the separator between a YAML function and rendered JSON output.
 func matchesTag(input, prefix string) bool {
 	if !strings.HasPrefix(input, prefix) {
 		return false
 	}
 	rest := strings.TrimPrefix(input, prefix)
-	return rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n'
+	return rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' || rest[0] == '[' || rest[0] == '{'
 }
 
 // matchesPrefix checks if input has the given tag prefix and the function is not skipped.
