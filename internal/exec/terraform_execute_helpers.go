@@ -18,6 +18,7 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -34,7 +35,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/terraform/rc"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
+
+var errUnresolvedComputedTerraformVar = errors.New("terraform variable contains an unresolved computed value")
 
 // resolveTerraformCommand sets info.Command from atmosConfig if not already set.
 // Falls back to the cfg.TerraformComponentType default when neither is configured.
@@ -347,15 +351,87 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 // varfile-write and env-assembly steps partition the variables identically.
 func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 	_, secret := tfvars.Partition(info.ComponentVarsSection, atmosio.ContainsSecret)
-	if len(secret) == 0 {
-		info.TerraformSecretVarKeys = nil
-		return
-	}
 	keys := make(map[string]bool, len(secret))
 	for k := range secret {
 		keys[k] = true
 	}
+
+	// Terraform's `sensitive = true` is an explicit declaration that an input must
+	// not be persisted in a generated tfvars file. When masking is disabled, retain
+	// the established compatibility behavior that keeps typed sensitive values in
+	// JSON rather than coercing them through TF_VAR_ environment variables.
+	if atmosio.MaskingEnabled() {
+		for k := range terraformSensitiveVarKeys(info) {
+			if _, supplied := info.ComponentVarsSection[k]; supplied {
+				keys[k] = true
+			}
+		}
+	}
+
+	if len(keys) == 0 {
+		info.TerraformSecretVarKeys = nil
+		return
+	}
 	info.TerraformSecretVarKeys = keys
+}
+
+// terraformSensitiveVarKeys returns the root-module variable names declared
+// `sensitive = true`. Component metadata is populated during stack processing
+// with terraform-config-inspect, so this adds no extra filesystem parsing on
+// the execution hot path.
+func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool {
+	if info == nil {
+		return nil
+	}
+	componentInfo, ok := info.ComponentSection[componentInfoKey].(map[string]any)
+	if !ok {
+		return nil
+	}
+	module, ok := componentInfo[terraformConfigKey].(*tfconfig.Module)
+	if !ok || module == nil {
+		return nil
+	}
+
+	keys := make(map[string]bool)
+	for name, variable := range module.Variables {
+		if variable != nil && variable.Sensitive {
+			keys[name] = true
+		}
+	}
+	return keys
+}
+
+// rejectComputedTerraformVars ensures display-only degraded values cannot cross
+// into Terraform through either tfvars JSON or TF_VAR_ environment variables.
+func rejectComputedTerraformVars(vars map[string]any) error {
+	for key, value := range vars {
+		if containsComputedTerraformValue(value) {
+			return fmt.Errorf("%w: %q", errUnresolvedComputedTerraformVar, key)
+		}
+	}
+	return nil
+}
+
+func containsComputedTerraformValue(value any) bool {
+	switch v := value.(type) {
+	case degradation.AtmosComputedValue:
+		return true
+	case *degradation.AtmosComputedValue:
+		return v != nil
+	case map[string]any:
+		for _, child := range v {
+			if containsComputedTerraformValue(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range v {
+			if containsComputedTerraformValue(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // diskSafeVars returns ComponentVarsSection with secret-bearing top-level keys removed,
@@ -375,6 +451,21 @@ func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
 			continue
 		}
 		safe[k] = v
+	}
+	return safe
+}
+
+func varsWithoutKeys(vars map[string]any, excluded map[string]bool) map[string]any {
+	if len(excluded) == 0 {
+		return vars
+	}
+	// `excluded` can include declared inputs that this stack does not supply, so
+	// use the source size as the allocation hint rather than subtracting it.
+	safe := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if !excluded[k] {
+			safe[k] = v
+		}
 	}
 	return safe
 }

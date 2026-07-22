@@ -9,11 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -673,6 +675,72 @@ func TestTerraformSecretVars_NoSecrets(t *testing.T) {
 	env, err := secretVarEnv(info)
 	require.NoError(t, err)
 	assert.Empty(t, env, "no TF_VAR_ entries expected when no secrets present")
+}
+
+func TestTerraformSensitiveDeclaredVars_NeverHitDisk(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{
+			"sensitive_value": "ordinary-resolved-value",
+			"region":          "us-east-1-sensitive-declaration",
+		},
+		ComponentSection: map[string]any{
+			componentInfoKey: map[string]any{
+				terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+					"sensitive_value": {Name: "sensitive_value", Sensitive: true},
+					"not_supplied":    {Name: "not_supplied", Sensitive: true},
+					"region":          {Name: "region", Sensitive: false},
+				}},
+			},
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+	require.True(t, info.TerraformSecretVarKeys["sensitive_value"])
+	assert.False(t, info.TerraformSecretVarKeys["region"])
+	assert.NotContains(t, diskSafeVars(info), "sensitive_value")
+	assert.Equal(t, "us-east-1-sensitive-declaration", diskSafeVars(info)["region"])
+	assert.NotContains(t, varfileVarsToWrite(info, true, "test.tfvars.json"), "sensitive_value")
+	assert.Equal(t, "us-east-1-sensitive-declaration", varfileVarsToWrite(info, true, "test.tfvars.json")["region"])
+
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(env, "\n"), "TF_VAR_sensitive_value=ordinary-resolved-value")
+}
+
+func TestTerraformSensitiveDeclaredVars_MaskingDisabledPreservesJSONCompatibility(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	atmosio.GetContext().Masker().SetEnabled(false)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"sensitive_value": map[string]any{"id": "typed-value"}},
+		ComponentSection: map[string]any{
+			componentInfoKey: map[string]any{
+				terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+					"sensitive_value": {Name: "sensitive_value", Sensitive: true},
+				}},
+			},
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+	assert.Nil(t, info.TerraformSecretVarKeys)
+	assert.Equal(t, info.ComponentVarsSection, diskSafeVars(info))
+}
+
+func TestRejectComputedTerraformVars(t *testing.T) {
+	assert.NoError(t, rejectComputedTerraformVars(map[string]any{"region": "us-east-1"}))
+	err := rejectComputedTerraformVars(map[string]any{"value": degradation.AtmosComputedValue{}})
+	assert.ErrorIs(t, err, errUnresolvedComputedTerraformVar)
+	err = rejectComputedTerraformVars(map[string]any{
+		"nested": []any{map[string]any{"value": degradation.AtmosComputedValue{}}},
+	})
+	assert.ErrorIs(t, err, errUnresolvedComputedTerraformVar)
 }
 
 func TestHandleDeploySubcommand(t *testing.T) {
