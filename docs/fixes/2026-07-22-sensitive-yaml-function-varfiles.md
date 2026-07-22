@@ -57,6 +57,15 @@ suite traversed the raw decode-to-map-to-YAML transformation that discarded the 
 Because the resulting arguments formed a valid ordinary string, the resolver and
 Terraform had no syntax error to expose the loss early.
 
+### Why the blast radius was limited
+
+The unsafe map conversion ran only when stack processing had a non-empty template/import
+context. Ordinary stack decoding, YAML functions without that context, and template files
+without context bypassed it and continued through the normal tag-aware decoder. Context
+can come from an import or from file-scoped values such as locals, settings, vars, or env,
+so the affected set is narrower than all YAML-function users but broader than explicitly
+templated files alone.
+
 ## Changes
 
 - Inspect the component's Terraform module metadata and treat supplied `sensitive = true`
