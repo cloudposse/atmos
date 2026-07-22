@@ -699,6 +699,55 @@ func TestBuildTerraformGraphSupportsCanonicalAndLegacyComponentDependencyNames(t
 	require.ElementsMatch(t, []string{"canonical-dev", "legacy-dev"}, app.Dependencies)
 }
 
+// TestBuildTerraformGraphSupportsCrossStackNameAliasDependency covers the
+// scenario reported in #2782: a `name:`-keyed dependency pointing at a
+// component in a *different* stack (via the `stack:` sibling key), chained
+// with a same-stack `name:`-keyed dependency. The existing coverage above
+// (TestBuildTerraformGraphSupportsCanonicalAndLegacyComponentDependencyNames)
+// only exercises `name:` within a single stack, so it would not have caught
+// a regression specific to the cross-stack case.
+func TestBuildTerraformGraphSupportsCrossStackNameAliasDependency(t *testing.T) {
+	stacks := map[string]any{
+		"dev_platform": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"iam": terraformAdapterComponent("selected", nil, nil),
+				},
+			},
+		},
+		"dev_app": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"bootstrap": terraformAdapterComponent(
+						"selected",
+						[]any{map[string]any{"name": "iam", "stack": "dev_platform"}},
+						nil,
+					),
+					"base": terraformAdapterComponent(
+						"selected",
+						[]any{map[string]any{"name": "bootstrap"}},
+						nil,
+					),
+				},
+			},
+		},
+	}
+
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, graph.Size())
+	require.Len(t, graph.Roots, 1, "expected a single root (iam-dev_platform); got roots=%v", graph.Roots)
+
+	bootstrap, ok := graph.GetNode("bootstrap-dev_app")
+	require.True(t, ok)
+	require.Equal(t, []string{"iam-dev_platform"}, bootstrap.Dependencies)
+
+	base, ok := graph.GetNode("base-dev_app")
+	require.True(t, ok)
+	require.Equal(t, []string{"bootstrap-dev_app"}, base.Dependencies)
+}
+
 func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
