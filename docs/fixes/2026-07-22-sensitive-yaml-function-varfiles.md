@@ -47,6 +47,16 @@ function validation: commit `c1fd583de7` added the structured pre-pass on 2026-0
 after those releases. That commit is the change that made a raw explicit tag pass through
 plain map decoding before the normal tag-aware stack decoder.
 
+### Why existing coverage missed it
+
+Existing YAML-function coverage exercised normal stack decoding, where the tag-aware
+decoder preserves explicit tags. Template coverage exercised rendering and context
+substitution, but did not combine an explicit YAML function with a non-empty import or
+template context. The new structured pre-pass only runs for that combination, so neither
+suite traversed the raw decode-to-map-to-YAML transformation that discarded the tag.
+Because the resulting arguments formed a valid ordinary string, the resolver and
+Terraform had no syntax error to expose the loss early.
+
 ## Changes
 
 - Inspect the component's Terraform module metadata and treat supplied `sensitive = true`
@@ -60,6 +70,8 @@ plain map decoding before the normal tag-aware stack decoder.
   state resolution, JSON exclusion, and `TF_VAR_*` transport.
 - Preserve explicit YAML function tags through the context/import template pre-processing
   path that previously stripped them.
+- Add regression coverage for the previously untested combination of explicit YAML
+  functions and non-empty template/import context.
 
 ## Validation
 
