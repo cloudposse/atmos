@@ -229,7 +229,8 @@
     "ci": {
       "pull_request": {},
       "summary": {}
-    }
+    },
+    "lock": {}
   },
   "initialized": true,
   "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",

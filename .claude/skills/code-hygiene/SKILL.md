@@ -54,59 +54,59 @@ after reporting.
 For each touched file/package, check for:
 
 1. **Duplicated "shared" abstraction.** Near-identical logic (same loop/branch structure, same
-   algorithm) appears two or more times inside a package whose entire purpose is to be *the*
-   shared implementation — e.g. two separate tree-walk-and-hash functions in a package that only
-   needs one, parameterized by what varies between the call sites.
+  algorithm) appears two or more times inside a package whose entire purpose is to be *the*
+  shared implementation — e.g. two separate tree-walk-and-hash functions in a package that only
+  needs one, parameterized by what varies between the call sites.
 
 2. **Missing sentinel errors.** A new or heavily-touched package returns errors but has zero
-   `errors.New`/sentinel `var` declarations backing them — every error site is an ad-hoc
-   `fmt.Errorf("... %w", err)` string literal instead of a wrapped static sentinel, violating
-   CLAUDE.md's "All errors MUST be wrapped using static errors" mandate.
+  `errors.New`/sentinel `var` declarations backing them — every error site is an ad-hoc
+  `fmt.Errorf("... %w", err)` string literal instead of a wrapped static sentinel, violating
+  CLAUDE.md's "All errors MUST be wrapped using static errors" mandate.
 
 3. **A generic that discards its own type.** `func f[T A | B](...)` whose body immediately does a
-   runtime type-switch/type-assert on `T` (`switch any(x).(type) { case A: ...; case B: ... }`) on
-   every call path — the generic buys nothing over just accepting `any` or, better, unifying `A`
-   and `B` into one real type. This is a strong "these two types should be one type" signal, not a
-   legitimate use of generics.
+  runtime type-switch/type-assert on `T` (`switch any(x).(type) { case A: ...; case B: ... }`) on
+  every call path — the generic buys nothing over just accepting `any` or, better, unifying `A`
+  and `B` into one real type. This is a strong "these two types should be one type" signal, not a
+  legitimate use of generics.
 
 4. **Self-aware suppression of a mandated rule.** A `//nolint`, `//revive:disable`, `#nosec`, or
-   similar suppression comment that turns off a rule CLAUDE.md explicitly mandates (Options
-   Pattern, cyclomatic complexity, file-length limits, sentinel errors) — especially one whose own
-   comment text admits the violation ("too many params", "TODO: refactor", "temporary").
+  similar suppression comment that turns off a rule CLAUDE.md explicitly mandates (Options
+  Pattern, cyclomatic complexity, file-length limits, sentinel errors) — especially one whose own
+  comment text admits the violation ("too many params", "TODO: refactor", "temporary").
 
 5. **Business logic in the wrong layer.** A `cmd/*.go` file containing loops, external API/network
-   calls (git, GitHub, HTTP), or non-trivial branching beyond flag parsing and dispatch — that
-   logic belongs in `pkg/`. Also flag any *new* file added under `internal/exec/` — this repo has a
-   standing direction to stop growing that package; new abstractions belong under `pkg/`.
+  calls (git, GitHub, HTTP), or non-trivial branching beyond flag parsing and dispatch — that
+  logic belongs in `pkg/`. Also flag any *new* file added under `internal/exec/` — this repo has a
+  standing direction to stop growing that package; new abstractions belong under `pkg/`.
 
 6. **Admitted-but-unshipped gap.** A `TODO`/`FIXME`/"not yet"/"doesn't support X yet" comment on a
-   code path reachable from a documented, non-experimental command or config field, where the gap
-   itself is *not* reflected anywhere a user would see it (`--help`, Docusaurus docs, error
-   message) as "not supported."
+  code path reachable from a documented, non-experimental command or config field, where the gap
+  itself is *not* reflected anywhere a user would see it (`--help`, Docusaurus docs, error
+  message) as "not supported."
 
 7. **Fake/stub feature — validates but doesn't work.** A config field or CLI flag that passes
-   schema/flag validation but whose only runtime behavior is a hardcoded no-op or an unconditional
-   error — the schema is lying about what's usable today.
+  schema/flag validation but whose only runtime behavior is a hardcoded no-op or an unconditional
+  error — the schema is lying about what's usable today.
 
 8. **Implemented but never wired up.** An exported function with real test coverage but zero
-   non-test callers anywhere in the repo, especially one whose name implies it backs a user-facing
-   command that doesn't actually expose it.
+  non-test callers anywhere in the repo, especially one whose name implies it backs a user-facing
+  command that doesn't actually expose it.
 
 9. **Documentation/code mismatch, either direction.** Check every command, flag, or config field
-   this patch adds, changes, or removes against the docs that describe it (Docusaurus pages under
-   `website/docs/`, `docs/prd/*.md`, agent-skill reference docs, `--help` text) for all four
-   failure modes:
-   - **Docs describe a feature that isn't actually implemented** — aspirational/promised
-     documentation for something that doesn't exist yet, or no longer exists, in the code.
-   - **Docs describe how something used to work** — accurate once, but a later change in this
-     patch (or a recent one) shifted the real behavior and nobody updated the prose describing it.
-   - **Missing documentation** — a new, shipped, non-experimental command/flag/config field with
-     no corresponding doc update at all, per CLAUDE.md's own "All new commands/flags/parameters
-     MUST have Docusaurus documentation" and "Update all schemas... when adding config options"
-     mandates.
-   - **Implemented but undocumented** — the same failure as above, viewed from the code side: a
-     capability that's fully built and reachable, but a user reading the docs would never learn it
-     exists.
+  this patch adds, changes, or removes against the docs that describe it (Docusaurus pages under
+  `website/docs/`, `docs/prd/*.md`, agent-skill reference docs, `--help` text) for all four
+  failure modes:
+  - **Docs describe a feature that isn't actually implemented** — aspirational/promised
+    documentation for something that doesn't exist yet, or no longer exists, in the code.
+  - **Docs describe how something used to work** — accurate once, but a later change in this
+    patch (or a recent one) shifted the real behavior and nobody updated the prose describing it.
+  - **Missing documentation** — a new, shipped, non-experimental command/flag/config field with
+    no corresponding doc update at all, per CLAUDE.md's own "All new commands/flags/parameters
+    MUST have Docusaurus documentation" and "Update all schemas... when adding config options"
+    mandates.
+  - **Implemented but undocumented** — the same failure as above, viewed from the code side: a
+    capability that's fully built and reachable, but a user reading the docs would never learn it
+    exists.
 
 ## What NOT to flag (avoid false positives)
 

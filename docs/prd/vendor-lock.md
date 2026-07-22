@@ -28,14 +28,14 @@ it already is for those other ecosystems.
 ## Goals
 
 1. Record a verifiable receipt — declared source, resolved identity, and a per-file digest — for
-   every artifact vendoring materializes on disk, across every discovery path.
+  every artifact vendoring materializes on disk, across every discovery path.
 2. Detect drift (a missing or modified lock-owned file) without any network access, and let a user
-   choose how loudly that drift is reported before a `pull` silently re-fetches it
-   (`vendor.lock.enforcement`).
+  choose how loudly that drift is reported before a `pull` silently re-fetches it
+  (`vendor.lock.enforcement`).
 3. Expose drift detection directly, as a CI-friendly command (`atmos vendor verify`), not just as a
-   side effect of `pull`.
+  side effect of `pull`.
 4. Support a semver-range `version:` as an alternative to an exact pin, without reintroducing an
-   unconditional network dependency at every `pull`.
+  unconditional network dependency at every `pull`.
 
 ## Non-goals
 

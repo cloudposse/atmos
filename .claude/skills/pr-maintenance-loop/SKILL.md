@@ -33,12 +33,12 @@ notifications that govern it) lives in `fix-all`; this skill only owns the sched
 ## Step 0 — preconditions
 
 1. `gh pr view --json number,state,mergeStateStatus` for the current branch. If there's no open
-   PR, tell the user and stop — don't create one.
+  PR, tell the user and stop — don't create one.
 2. Check whether a loop is already running this session (list scheduled jobs; look for the
-   sentinel first line `[PR-MAINTENANCE-LOOP pr=#<number> repo=cloudposse/atmos started=<ts>]`).
-   If found for this PR, don't start a second one — report it's already active. A fresh session
-   never inherits a stale job, since the old one died with the old process, so this only guards
-   against double-starting within one session.
+  sentinel first line `[PR-MAINTENANCE-LOOP pr=#<number> repo=cloudposse/atmos started=<ts>]`).
+  If found for this PR, don't start a second one — report it's already active. A fresh session
+  never inherits a stale job, since the old one died with the old process, so this only guards
+  against double-starting within one session.
 
 ## Step 1 — announce and start
 
@@ -69,14 +69,14 @@ This is the literal text re-enqueued every cycle via `/loop 60m`:
 [PR-MAINTENANCE-LOOP pr=#<number> repo=cloudposse/atmos started=<ts>]
 
 1. Self-expiry: if more than ~6.5 days have passed since `started=`, say so in the summary
-   (approaching the 7-day CronCreate expiry) but keep running.
+  (approaching the 7-day CronCreate expiry) but keep running.
 
 2. `gh pr view <number> --json state,mergeStateStatus`. If state != OPEN, report it and cancel
-   this recurring job — don't keep firing no-ops after merge/close.
+  this recurring job — don't keep firing no-ops after merge/close.
 
 3. Invoke the `fix-all` skill (`Skill({skill: "fix-all"})`) — it owns steps 3-10 of what used to
-   be inlined here: sync, CI check, CodeRabbit threads, lint, coverage, code-hygiene, and the
-   security model / audible-notification rules governing all of it.
+  be inlined here: sync, CI check, CodeRabbit threads, lint, coverage, code-hygiene, and the
+  security model / audible-notification rules governing all of it.
 
 4. Always end with a one-line cycle summary, even on the no-op path, for auditability.
 ```
