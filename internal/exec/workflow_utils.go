@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -640,6 +642,9 @@ func ExecuteWorkflow(
 			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
 		}
 
+		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
+			return stepPkg.ExecuteAndStoreCommandResult(workflowVars, step.Name, step.Outputs, run)
+		}
 		executeStep := func() error {
 			// Background steps (start/wait/wait-all/cancel) are coordinated by the
 			// run-scoped registry; everything else falls through to the normal switch.
@@ -704,17 +709,21 @@ func ExecuteWorkflow(
 				switch {
 				case workflowPkg.StepContainerOverride(&step):
 					err = retry.Do(context.Background(), step.Retry, func() error {
-						return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
-							Workflow:     workflow,
-							WorkflowPath: workflowPath,
-							BasePath:     atmosConfig.BasePath,
-							WorkflowDef:  workflowDefinition,
-							Step:         &step,
-							HostWorkDir:  workDir,
-							Command:      command,
-							StepEnv:      stepEnv,
-							RuntimeEnv:   stepEnv,
-							DryRun:       dryRun,
+						return runCommandStep(func(stdout, stderr io.Writer) error {
+							return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+								Workflow:      workflow,
+								WorkflowPath:  workflowPath,
+								BasePath:      atmosConfig.BasePath,
+								WorkflowDef:   workflowDefinition,
+								Step:          &step,
+								HostWorkDir:   workDir,
+								Command:       command,
+								StepEnv:       stepEnv,
+								RuntimeEnv:    stepEnv,
+								DryRun:        dryRun,
+								StdoutCapture: stdout,
+								StderrCapture: stderr,
+							})
 						})
 					})
 				case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
@@ -732,26 +741,40 @@ func ExecuteWorkflow(
 						}
 					}
 					err = retry.Do(context.Background(), step.Retry, func() error {
-						return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
-							Step:        &step,
-							WorkflowDef: workflowDefinition,
-							HostWorkDir: workDir,
-							Command:     command,
-							StepEnv:     stepEnv,
+						return runCommandStep(func(stdout, stderr io.Writer) error {
+							return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
+								Step:          &step,
+								WorkflowDef:   workflowDefinition,
+								HostWorkDir:   workDir,
+								Command:       command,
+								StepEnv:       stepEnv,
+								StdoutCapture: stdout,
+								StderrCapture: stderr,
+							})
 						})
 					})
 				default:
 					err = retry.Do(context.Background(), step.Retry, func() error {
-						return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-							Command:     command,
-							Name:        commandName,
-							Dir:         workDir,
-							Env:         stepEnv,
-							TTY:         step.Tty,
-							Interactive: step.Interactive,
-							DryRun:      dryRun,
-						}, func() error {
-							return ExecuteShell(command, commandName, workDir, stepEnv, dryRun)
+						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+							return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+								Command:     command,
+								Name:        commandName,
+								Dir:         workDir,
+								Env:         stepEnv,
+								TTY:         step.Tty,
+								Interactive: step.Interactive,
+								DryRun:      dryRun,
+							}, func() error {
+								return ExecuteShellWithWriters(&ExecuteShellSpec{
+									Command: command,
+									Name:    commandName,
+									Dir:     workDir,
+									EnvVars: stepEnv,
+									DryRun:  dryRun,
+									Stdout:  io.MultiWriter(ioLayer.MaskWriter(os.Stdout), stdoutCapture),
+									Stderr:  io.MultiWriter(ioLayer.MaskWriter(os.Stderr), stderrCapture),
+								})
+							})
 						})
 					})
 				}
@@ -799,7 +822,19 @@ func ExecuteWorkflow(
 
 				ui.Infof("Executing command: `atmos %s`", command)
 				err = retry.Do(context.Background(), step.Retry, func() error {
-					return ExecuteShellCommand(atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
+					return runCommandStep(func(stdout, stderr io.Writer) error {
+						return ExecuteShellCommand(
+							atmosConfig,
+							"atmos",
+							args,
+							".",
+							stepEnv,
+							dryRun,
+							"",
+							WithStdoutCapture(stdout),
+							WithStderrCapture(stderr),
+						)
+					})
 				})
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).

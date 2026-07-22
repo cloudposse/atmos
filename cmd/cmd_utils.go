@@ -33,6 +33,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -1098,6 +1099,9 @@ func executeCustomCommand(
 		// The dispatch is wrapped in a collapsible CI log group (no-op outside
 		// CI / when disabled), labeled with the step name or command. Exec steps
 		// run bare because a successful Unix exec never returns to close a group.
+		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
+			return stepPkg.ExecuteAndStoreCommandResult(stepVars, step.Name, step.Outputs, run)
+		}
 		runStep := func() error {
 			switch stepType {
 			case "shell":
@@ -1105,25 +1109,30 @@ func executeCustomCommand(
 				// Steps with tty/interactive attach the user's terminal so commands
 				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-					Command:     commandToRun,
-					Name:        commandName,
-					Dir:         stepWorkDir,
-					Env:         env,
-					TTY:         step.Tty,
-					Interactive: step.Interactive,
-				}, func() error {
-					if step.Output == string(stepPkg.OutputModeNone) {
+				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+						Command:     commandToRun,
+						Name:        commandName,
+						Dir:         stepWorkDir,
+						Env:         env,
+						TTY:         step.Tty,
+						Interactive: step.Interactive,
+					}, func() error {
+						stdout := ioLayer.MaskWriter(os.Stdout)
+						stderr := ioLayer.MaskWriter(os.Stderr)
+						if step.Output == string(stepPkg.OutputModeNone) {
+							stdout = io.Discard
+							stderr = io.Discard
+						}
 						return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
 							Command: commandToRun,
 							Name:    commandName,
 							Dir:     stepWorkDir,
 							EnvVars: env,
-							Stdout:  io.Discard,
-							Stderr:  io.Discard,
+							Stdout:  io.MultiWriter(stdout, stdoutCapture),
+							Stderr:  io.MultiWriter(stderr, stderrCapture),
 						})
-					}
-					return e.ExecuteShell(commandToRun, commandName, stepWorkDir, env, false)
+					})
 				})
 			case schema.TaskTypeExec:
 				// Replace the Atmos process with the command (shell exec semantics).
@@ -1140,7 +1149,19 @@ func executeCustomCommand(
 				if execErr != nil {
 					return execErr
 				}
-				return e.ExecuteShellCommand(atmosConfig, execPath, args, stepWorkDir, env, false, "")
+				return runCommandStep(func(stdout, stderr io.Writer) error {
+					return e.ExecuteShellCommand(
+						atmosConfig,
+						execPath,
+						args,
+						stepWorkDir,
+						env,
+						false,
+						"",
+						e.WithStdoutCapture(stdout),
+						e.WithStderrCapture(stderr),
+					)
+				})
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
 				if stepPkg.IsExtendedStepType(stepType) {

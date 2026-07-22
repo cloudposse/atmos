@@ -30,6 +30,19 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 
+	wroteOutput := false
+	if stdout := os.Getenv("_ATMOS_TEST_STDOUT"); stdout != "" {
+		_, _ = os.Stdout.WriteString(stdout)
+		wroteOutput = true
+	}
+	if stderr := os.Getenv("_ATMOS_TEST_STDERR"); stderr != "" {
+		_, _ = os.Stderr.WriteString(stderr)
+		wroteOutput = true
+	}
+	if wroteOutput {
+		os.Exit(0)
+	}
+
 	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
 	// (used throughout cmd/root.go and its helpers) don't panic or silently
 	// no-op during tests.
