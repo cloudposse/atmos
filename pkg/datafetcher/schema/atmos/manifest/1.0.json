@@ -3367,6 +3367,7 @@
                       "checkov",
                       "kics",
                       "trivy",
+                      "tflint",
                       "git",
                       "step",
                       "steps",
