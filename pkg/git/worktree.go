@@ -138,26 +138,29 @@ func CreateWorktreeWithFetchRecovery(repoDir, targetCommit, targetBranch string)
 }
 
 const (
-	removeWorktreeMaxAttempts  = 5
-	removeWorktreeInitialDelay = 150 * time.Millisecond
-	removeWorktreeMaxDelay     = 1 * time.Second
-	removeWorktreeMultiplier   = 2.0
+	removeWorktreeInitialDelay   = 200 * time.Millisecond
+	removeWorktreeMaxDelay       = 2 * time.Second
+	removeWorktreeMultiplier     = 2.0
+	removeWorktreeMaxElapsedTime = 20 * time.Second
 )
 
-// removeWorktreeRetryConfig bounds the transient-failure retry in RemoveWorktree: a handful of
-// short, exponentially-backed-off attempts is enough for a lingering file handle to be released
-// without materially slowing down normal cleanup (the common case succeeds on the first attempt).
+// removeWorktreeRetryConfig bounds the transient-failure retry in RemoveWorktree by elapsed time
+// rather than attempt count: on Windows CI runners the lock observed in practice is most likely an
+// antivirus/real-time-scan hold on the worktree's administrative directory, which can outlast a
+// handful of sub-second attempts (a fixed 5-attempt budget was observed to exhaust in ~3s and still
+// fail in CI). Retrying every couple of seconds for up to removeWorktreeMaxElapsedTime gives that
+// scan time to finish without materially slowing down the common case, which succeeds immediately.
 func removeWorktreeRetryConfig() *schema.RetryConfig {
-	maxAttempts := removeWorktreeMaxAttempts
 	initialDelay := removeWorktreeInitialDelay
 	maxDelay := removeWorktreeMaxDelay
 	multiplier := removeWorktreeMultiplier
+	maxElapsedTime := removeWorktreeMaxElapsedTime
 	return &schema.RetryConfig{
-		MaxAttempts:     &maxAttempts,
 		BackoffStrategy: schema.BackoffExponential,
 		InitialDelay:    &initialDelay,
 		MaxDelay:        &maxDelay,
 		Multiplier:      &multiplier,
+		MaxElapsedTime:  &maxElapsedTime,
 	}
 }
 
