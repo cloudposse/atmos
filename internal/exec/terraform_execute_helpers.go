@@ -38,8 +38,6 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
 
-var errUnresolvedComputedTerraformVar = errors.New("terraform variable contains an unresolved computed value")
-
 // resolveTerraformCommand sets info.Command from atmosConfig if not already set.
 // Falls back to the cfg.TerraformComponentType default when neither is configured.
 func resolveTerraformCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
@@ -406,7 +404,7 @@ func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool
 func rejectComputedTerraformVars(vars map[string]any) error {
 	for key, value := range vars {
 		if containsComputedTerraformValue(value) {
-			return fmt.Errorf("%w: %q", errUnresolvedComputedTerraformVar, key)
+			return fmt.Errorf("%w: %q", errUtils.ErrUnresolvedComputedTerraformVar, key)
 		}
 	}
 	return nil

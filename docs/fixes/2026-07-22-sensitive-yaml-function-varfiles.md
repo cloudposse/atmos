@@ -59,12 +59,13 @@ Terraform had no syntax error to expose the loss early.
 
 ### Why the blast radius was limited
 
-The unsafe map conversion ran only when stack processing had a non-empty template/import
+The unsafe map conversion ran only when stack processing had a non-empty in-memory
 context. Ordinary stack decoding, YAML functions without that context, and template files
 without context bypassed it and continued through the normal tag-aware decoder. Context
-can come from an import or from file-scoped values such as locals, settings, vars, or env,
-so the affected set is narrower than all YAML-function users but broader than explicitly
-templated files alone.
+can be supplied by an import's `context:` map or created by a file-scoped `locals:` section
+(including an empty locals map); settings, vars, and env consume that context but do not
+independently create it. The affected set is therefore narrower than all YAML-function
+users and does not require a `.tmpl` file.
 
 ## Changes
 
@@ -85,6 +86,8 @@ templated files alone.
 ## Validation
 
 - `go test ./internal/exec ./pkg/utils -count=1`
+- `atmos lint --changed`
+- `go build ./... && atmos test`
 - Repository pre-commit hooks: go-fumpt, Go build, `go mod tidy`, and golangci-lint.
 - Manual local-state reproduction with `atmos --use-version=1.221.0` and
   `atmos --use-version=1.223.0`.

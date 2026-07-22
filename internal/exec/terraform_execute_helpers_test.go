@@ -736,11 +736,11 @@ func TestTerraformSensitiveDeclaredVars_MaskingDisabledPreservesJSONCompatibilit
 func TestRejectComputedTerraformVars(t *testing.T) {
 	assert.NoError(t, rejectComputedTerraformVars(map[string]any{"region": "us-east-1"}))
 	err := rejectComputedTerraformVars(map[string]any{"value": degradation.AtmosComputedValue{}})
-	assert.ErrorIs(t, err, errUnresolvedComputedTerraformVar)
+	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
 	err = rejectComputedTerraformVars(map[string]any{
 		"nested": []any{map[string]any{"value": degradation.AtmosComputedValue{}}},
 	})
-	assert.ErrorIs(t, err, errUnresolvedComputedTerraformVar)
+	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
 }
 
 func TestHandleDeploySubcommand(t *testing.T) {
