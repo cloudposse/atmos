@@ -79,6 +79,10 @@ semantics in this document remain the local primitive used by that workflow.
 
 - `update --check` is a dry run; `--pull` runs `atmos vendor pull` after writing;
   `--outdated` shows only sources with an available update.
+- `atmos vendor pull`'s `--stack <stack>` flag has been removed. It was never implemented (its
+  handler unconditionally returned "not implemented") and was never a documented, working
+  capability — removing an always-erroring flag is not a breaking change to any working workflow.
+  See [`docs/prd/vendor-lock.md`](./vendor-lock.md) for the current lock/pull surface.
 - `diff` defaults `--from` to the source's current pinned version and `--to` to
   the latest tag.
 

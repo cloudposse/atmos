@@ -1,0 +1,53 @@
+---
+title: atmos vendor verify
+sidebar_label: verify
+sidebar_class_name: command
+id: vendor-verify
+description: Verify vendored files match vendor.lock.yaml, reporting drift for CI.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Compare every lock-owned file on disk against its recorded `vendor.lock.yaml` receipt and
+report drift — missing files, or files whose contents no longer match what was last vendored.
+Exits non-zero when any drift is found, for use in CI.
+</Intro>
+
+## Usage
+
+```shell
+atmos vendor verify [--component <name>] [--format table|json]
+```
+
+This never checks for a newer version upstream — see
+<a href="/cli/commands/vendor/update">`atmos vendor update --check`</a> for that. `vendor verify`
+is purely a read-only, on-disk integrity check against what's already recorded in the lock file:
+it never fetches, writes, or modifies anything.
+
+## Examples
+
+```shell
+# Verify every vendored artifact.
+atmos vendor verify
+
+# Verify only one component.
+atmos vendor verify --component vpc
+
+# Machine-readable output for CI.
+atmos vendor verify --format json
+```
+
+## Flags
+
+<dl>
+  <dt>`--component` / `-c` (string)</dt>
+  <dd>Verify only this component. Omit to verify every artifact recorded in the lock file.</dd>
+  <dt>`--format` (string, default `table`)</dt>
+  <dd>Output format: `table` or `json`.</dd>
+</dl>
+
+:::note
+`atmos vendor verify` reports drift; it never fixes it. Re-run `atmos vendor pull --refresh-lock`
+(or `atmos vendor pull --component <name> --refresh-lock` for a single component) to re-fetch and
+reconcile drifted sources.
+:::

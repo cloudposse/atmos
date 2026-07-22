@@ -25,9 +25,11 @@ ETags and modification times are cache metadata only. Missing evidence is
 reported as incomplete, never fabricated as a package URL or checksum.
 
 Domain locks remain authoritative: `vendor.lock.yaml`,
-`.tools/toolchain.lock.yaml`, and `versions.lock.yaml`. Vendor locks also own
-the exact materialized-file manifest. Workdir receipts remain local metadata
-and are never presented as a committed project lock.
+`.tools/toolchain.lock.yaml`, and `versions.lock.yaml`. Workdir receipts remain
+local metadata and are never presented as a committed project lock. See
+[`docs/prd/vendor-lock.md`](./vendor-lock.md) for `vendor.lock.yaml`'s own
+schema, coverage, and enforcement design — this document only covers how it
+feeds the "Atmos sources" adapter below, not its full semantics.
 
 ## Initial Adapter Matrix
 

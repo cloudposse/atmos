@@ -10,7 +10,7 @@ Implemented design for native, opt-in pull-request publishing from `atmos vendor
 vendor:
   update:
     execution: { mode: current } # current | worktree
-    batching: { mode: scope } # scope | component; component requires worktree
+    batching: { mode: scope } # scope is the only supported value today
     groups:
       platform:
         include: ["terraform/vpc", "terraform/eks/*"]
@@ -35,7 +35,35 @@ Use `atmos vendor update --pull-request`, optionally with repeatable `--componen
 
 `cmd/vendor` binds flags and renders results. `pkg/vendoring` owns discovery, version edits, and pulling. `pkg/vendoring/updater` owns structured results and pure Markdown summaries. `pkg/git` owns branch safety and a provider-neutral `PullRequestPublisher` registry. The CLI provider performs local Git; `pkg/git/providers/github` uses `pkg/ci/providers/github.Client` and `go-github`. GitLab and Bitbucket can add publishers without changing the command.
 
-Atmos discovers before branch creation: no updates means no branch, commit, push, or PR. The current checkout must be clean, the configured or remote-default base is fetched, and that base is never written. Scope names are deterministic: `<prefix>/all`, `<prefix>/group-<name>`, and `<prefix>/components-<stable-selection-hash>`; component batching reserves `<prefix>/component/<name>` in isolated linked worktrees. Existing remote feature branches are reused and pushed fast-forward only. PR reconciliation updates title/body and additively requests labels, reviewers, and assignees while preserving draft state after creation. Provisioner and lifecycle-hook PR support remain unsupported.
+Atmos discovers before branch creation: no updates means no branch, commit, push, or PR. The current checkout must be clean, the configured or remote-default base is fetched, and that base is never written. Scope names are deterministic: `<prefix>/all`, `<prefix>/group-<name>`, and `<prefix>/components-<stable-selection-hash>`. Existing remote feature branches are reused and pushed fast-forward only. PR reconciliation updates title/body and additively requests labels, reviewers, and assignees while preserving draft state after creation. Provisioner and lifecycle-hook PR support remain unsupported.
+
+### `execution.mode: worktree`
+
+By default (`execution.mode: current`), the discover → bump → branch → commit → push cycle runs
+directly in the invoking checkout: `version:` edits land in the actual working tree files, and a
+feature branch is checked out there before pushing. `execution.mode: worktree` instead runs that
+entire cycle inside a brand-new, isolated `git` worktree (`pkg/vendoring/updater.PrepareUpdateWorktree`,
+reusing `pkg/git`'s existing worktree lifecycle helpers), checked out at the resolved base branch
+with a detached `HEAD` — leaving the invoking checkout's working tree, branch, and index completely
+untouched: no modified files, no branch switch, no new local branch, even while the update runs.
+One worktree is created per `atmos vendor update --pull-request` invocation (whole-run isolation,
+not per-component) and always removed afterward, success or failure.
+
+Only the `--pull-request` publish path uses worktree mode — a plain `atmos vendor update` (no
+`--pull-request`) edits files that are already meant to be edited in the current checkout, so there
+is nothing to isolate. Redirecting every discovery/resolve/write call into the worktree requires
+two mechanisms together, not either alone: temporarily pointing `ATMOS_BASE_PATH` at the worktree
+(covers every `cfg.InitCliConfig`-based path resolution), and temporarily changing the process's
+actual working directory to the worktree (required because the default `vendor.yaml` lookup checks
+`./vendor.yaml` relative to the real process cwd *before* consulting `atmosConfig.BasePath` at all).
+
+## Known limitations
+
+Per-component batching (one isolated branch/PR per updated component, requiring concurrent
+linked-worktree lifecycle management, per-component PR fan-out, and GitHub rate-limit handling) is
+not implemented. `vendor.update.batching.mode` accepts only `scope` today — one branch/PR per
+update run, regardless of how many components changed. This is deferred future work, not
+in-progress; no GitHub issue tracks it, per this repo's PRD-as-tracking-mechanism convention.
 
 ## Auth, permissions, and summaries
 
