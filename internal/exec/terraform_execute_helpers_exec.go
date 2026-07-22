@@ -102,6 +102,12 @@ func runPreExecutionSteps(
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
 ) error {
+	// `(computed)` is an inspection-only degradation marker. Never permit it to
+	// reach Terraform via a generated tfvars file or TF_VAR_ environment value.
+	if err := rejectComputedTerraformVars(info.ComponentVarsSection); err != nil {
+		return err
+	}
+
 	// Partition variables into disk-safe vs. secret-bearing BEFORE writing the varfile or
 	// assembling env vars (and before the auth pre-hook registers credentials with the
 	// masker), so secrets are kept off disk and injected as TF_VAR_* env vars instead.
