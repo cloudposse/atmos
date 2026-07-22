@@ -1,15 +1,19 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const worktreeSubdir = "worktree"
@@ -133,17 +137,68 @@ func CreateWorktreeWithFetchRecovery(repoDir, targetCommit, targetBranch string)
 	return CreateWorktree(repoDir, targetCommit)
 }
 
+const (
+	removeWorktreeMaxAttempts  = 5
+	removeWorktreeInitialDelay = 150 * time.Millisecond
+	removeWorktreeMaxDelay     = 1 * time.Second
+	removeWorktreeMultiplier   = 2.0
+)
+
+// removeWorktreeRetryConfig bounds the transient-failure retry in RemoveWorktree: a handful of
+// short, exponentially-backed-off attempts is enough for a lingering file handle to be released
+// without materially slowing down normal cleanup (the common case succeeds on the first attempt).
+func removeWorktreeRetryConfig() *schema.RetryConfig {
+	maxAttempts := removeWorktreeMaxAttempts
+	initialDelay := removeWorktreeInitialDelay
+	maxDelay := removeWorktreeMaxDelay
+	multiplier := removeWorktreeMultiplier
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		Multiplier:      &multiplier,
+	}
+}
+
+// isTransientWorktreeRemoveError reports whether output from a failed `git worktree remove`
+// indicates a lingering file handle rather than a genuine failure -- observed on Windows CI
+// runners, where a just-exited git subprocess can still hold the worktree's administrative
+// directory (.git/worktrees/<name>) open for a short window, causing git itself to fail deleting
+// it with "Invalid argument" (Windows ERROR_INVALID_PARAMETER surfacing through git-for-windows)
+// or the OS to report the path as still in use.
+func isTransientWorktreeRemoveError(output string) bool {
+	lower := strings.ToLower(output)
+	transientPatterns := []string{
+		"invalid argument",
+		"being used by another process",
+		"resource busy",
+		"device or resource busy",
+	}
+	for _, p := range transientPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // RemoveWorktree removes a git worktree using `git worktree remove`.
 // This properly unregisters the worktree from git's tracking in addition to removing the directory.
 // The repoDir parameter should be the path to any directory in the repository (main worktree or any linked worktree).
 func RemoveWorktree(repoDir, worktreePath string) {
 	defer perf.Track(nil, "git.RemoveWorktree")()
 
-	cmd := exec.Command("git", "worktree", "remove", "--force", worktreePath)
-	cmd.Dir = repoDir
-	output, err := cmd.CombinedOutput()
+	var lastOutput string
+	err := retry.WithPredicate(context.Background(), removeWorktreeRetryConfig(), func() error {
+		cmd := exec.Command("git", "worktree", "remove", "--force", worktreePath)
+		cmd.Dir = repoDir
+		output, runErr := cmd.CombinedOutput()
+		lastOutput = string(output)
+		return runErr
+	}, func(err error) bool { return isTransientWorktreeRemoveError(lastOutput) })
 	if err != nil {
-		log.Warn("Failed to remove git worktree", "path", worktreePath, "error", err.Error(), "output", string(output))
+		log.Warn("Failed to remove git worktree", "path", worktreePath, "error", err.Error(), "output", lastOutput)
 	}
 }
 

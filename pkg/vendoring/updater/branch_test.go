@@ -33,6 +33,11 @@ func newGitFixture(t *testing.T) (remote, workdir string) {
 	run(workdir, "config", "user.name", "Atmos Test")
 	run(workdir, "config", "user.email", "atmos-test@example.com")
 	run(workdir, "config", "commit.gpgSign", "false")
+	// Windows' git default (core.autocrlf=true) rewrites LF to CRLF on checkout, which would
+	// corrupt this fixture's exact-content assertions (e.g. TestPrepareUpdateWorktreeResolvesDefaultBase
+	// reading "before\n" back after a worktree checkout). Pin it off so committed content round-trips
+	// byte-for-byte on every platform.
+	run(workdir, "config", "core.autocrlf", "false")
 	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("before\n"), 0o644))
 	run(workdir, "add", "vendor.yaml")
 	run(workdir, "commit", "-m", "base")
