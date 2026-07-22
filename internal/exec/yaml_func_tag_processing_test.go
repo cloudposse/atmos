@@ -500,10 +500,12 @@ func TestProcessNodes_TemplateTagNoSeparator(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	data := map[string]any{
-		"generated": `!template["one","two"]`,
+		"generated":     `!template["one","two"]`,
+		"generated_map": `!template{"key":"value"}`,
 	}
 
 	result, err := processNodes(atmosConfig, data, "test-stack", nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, []interface{}{"one", "two"}, result["generated"])
+	assert.Equal(t, map[string]interface{}{"key": "value"}, result["generated_map"])
 }
