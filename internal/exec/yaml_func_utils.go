@@ -132,10 +132,22 @@ func processNodesWithContext(
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
 				if onWarning != nil && isRecoverableTerraformError(err) {
+					function := ""
+					if fields := strings.Fields(v); len(fields) > 0 {
+						function = fields[0]
+					}
 					component := ""
 					if stackInfo != nil {
 						component = stackInfo.Component
 					}
+					log.Debug(
+						"Degrading unresolved YAML function to computed value",
+						"function", function,
+						"value", v,
+						"stack", currentStack,
+						"component", component,
+						"error", err.Error(),
+					)
 					onWarning(DegradationWarning{
 						Stack:     currentStack,
 						Component: component,

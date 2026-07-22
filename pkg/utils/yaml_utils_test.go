@@ -285,6 +285,24 @@ value: 123
 	assert.Equal(t, 123, result.Value)
 }
 
+// TestUnmarshalYAML_ExplicitFunctionTagsPreserveFunctionAndArguments verifies that
+// explicit YAML tags remain complete function expressions after raw decoding. Runtime
+// function resolvers receive these strings later, so dropping the tag here would make
+// them receive only the arguments and could transport those arguments as a value.
+func TestUnmarshalYAML_ExplicitFunctionTagsPreserveFunctionAndArguments(t *testing.T) {
+	input := `
+mapping_value: !terraform.state producer ".fields.PRIVATE_KEY"
+list_values:
+  - !env DEMO_EXPLICIT_TAG_VALUE
+`
+
+	result, err := UnmarshalYAML[map[string]any](input)
+	require.NoError(t, err)
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, result["mapping_value"])
+	require.Len(t, result["list_values"], 1)
+	assert.Equal(t, "!env DEMO_EXPLICIT_TAG_VALUE", result["list_values"].([]any)[0])
+}
+
 // TestUnmarshalYAMLFromFile_BasicFunctionality tests the UnmarshalYAMLFromFile function.
 func TestUnmarshalYAMLFromFile_BasicFunctionality(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}

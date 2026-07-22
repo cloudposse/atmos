@@ -1,0 +1,6 @@
+components:
+  terraform:
+    consumer:
+      vars:
+        sensitive_value: !terraform.state producer ".fields.PRIVATE_KEY"
+        ordinary_value: ordinary-value
