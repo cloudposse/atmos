@@ -4,7 +4,7 @@
 
 ## Summary
 
-Atmos now recognizes JSON array and object delimiters immediately following a YAML function tag, restoring `!template` decoding when Go-template whitespace trimming removes the separator.
+Atmos now recognizes any non-tag-name character immediately following a YAML function tag, restoring `!template` decoding when Go-template whitespace trimming removes the separator.
 
 ## Context
 
@@ -12,7 +12,7 @@ Unsupported-tag validation required whitespace or end-of-string after a function
 
 ## Changes
 
-- Treat `[` and `{` as valid YAML function tag boundaries in the shared matcher.
+- Treat any character that cannot continue a YAML function tag name as a valid boundary in the shared matcher.
 - Add template fixture coverage for whitespace-trimmed JSON list and map output.
 - Cover zero-argument tags, JSON delimiters, and rejected near-miss tag names.
 
