@@ -1,6 +1,6 @@
 ---
 name: pr-maintenance-loop
-description: "Start an hourly background loop that keeps the current branch's PR rebased, its addressed CodeRabbit threads resolved, its CI checks passing, its lint clean, and its tests passing with adequate patch coverage — working toward autonomous merge-readiness. Invoke at the start of a session on a branch with an open PR, or on explicit requests like \"set up the hourly PR loop\" / \"auto-rebase this PR\". For a one-shot run instead of a recurring loop, use the `fix-all` skill directly."
+description: "Start an hourly background loop that keeps the current branch's PR rebased, its addressed CodeRabbit threads resolved, its CI checks passing, its lint clean, its tests passing with adequate patch coverage, and its code free of architectural-smell (code-hygiene) findings — working toward autonomous merge-readiness. Invoke at the start of a session on a branch with an open PR, or on explicit requests like \"set up the hourly PR loop\" / \"auto-rebase this PR\". For a one-shot run instead of a recurring loop, use the `fix-all` skill directly."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -11,8 +11,8 @@ metadata:
 Schedules the [`fix-all`](../fix-all/SKILL.md) skill to run every hour via Claude Code's native
 `/loop` primitive (`CronCreate`/`ScheduleWakeup`) — not GitHub Actions, no new external service,
 no secrets beyond the local `git`/`gh` session already in use. All the actual check/fix logic
-(sync, CI, CodeRabbit threads, lint, coverage — the security model and audible notifications that
-govern it) lives in `fix-all`; this skill only owns the scheduling.
+(sync, CI, CodeRabbit threads, lint, coverage, code-hygiene — the security model and audible
+notifications that govern it) lives in `fix-all`; this skill only owns the scheduling.
 
 ## Known limitations (surface these, don't hide them)
 
@@ -75,8 +75,8 @@ This is the literal text re-enqueued every cycle via `/loop 60m`:
    this recurring job — don't keep firing no-ops after merge/close.
 
 3. Invoke the `fix-all` skill (`Skill({skill: "fix-all"})`) — it owns steps 3-10 of what used to
-   be inlined here: sync, CI check, CodeRabbit threads, lint, coverage, and the security model /
-   audible-notification rules governing all of it.
+   be inlined here: sync, CI check, CodeRabbit threads, lint, coverage, code-hygiene, and the
+   security model / audible-notification rules governing all of it.
 
 4. Always end with a one-line cycle summary, even on the no-op path, for auditability.
 ```

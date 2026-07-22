@@ -2,7 +2,7 @@
 
 Use `atmos vendor update --pull-request` for scheduled, reviewable component updates. It is opt-in: ordinary `atmos vendor update` remains a local update command.
 
-Configure source selection under `vendor.update`. A group has `include` and optional `exclude` glob lists; exclusions win. Invoke one group with `--group platform`, select components with repeatable `--component`, or omit both for all sources. Use scope batching on the current checkout by default. Component batching requires an isolated linked-worktree execution mode.
+Configure source selection under `vendor.update`. A group has `include` and optional `exclude` glob lists; exclusions win. Invoke one group with `--group platform`, select components with repeatable `--component`, or omit both for all sources. Updates batch as a single scope (one branch/PR for the whole run) on the current checkout by default, or in an isolated linked worktree with `execution.mode: worktree`.
 
 Put PR behavior under `vendor.ci.pull_request`: `provider: github`, optional `base_branch`, `branch_prefix`, title/body templates, labels, draft, reviewers, and assignees. Branches are deterministic and never force-pushed. Atmos discovers updates before branch creation, so no update makes no branch, commit, push, or PR. `--pull-request` implies `--pull`; `--check` never writes.
 

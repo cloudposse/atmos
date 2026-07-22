@@ -1,6 +1,6 @@
 ---
 name: fix-all
-description: "Run one full merge-readiness pass on the current branch's PR right now: sync with origin/main, check CI, address CodeRabbit threads, lint, and test coverage — fixing what's safely fixable. Mirrors `atmos fix --all` at the CLI, plus the agent-delegated fixing atmos itself can't do. This is exactly what pr-maintenance-loop runs every hour; invoke this directly for an on-demand check without starting a recurring loop. Invoke on explicit requests like \"fix all\" / \"check this PR\" / \"is this PR merge-ready\"."
+description: "Run one full merge-readiness pass on the current branch's PR right now: sync with origin/main, check CI, address CodeRabbit threads, lint, test coverage, and a code-hygiene architectural-smell check — fixing what's safely fixable. Mirrors `atmos fix --all` at the CLI, plus the agent-delegated fixing atmos itself can't do. This is exactly what pr-maintenance-loop runs every hour; invoke this directly for an on-demand check without starting a recurring loop. Invoke on explicit requests like \"fix all\" / \"check this PR\" / \"is this PR merge-ready\"."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -13,7 +13,10 @@ same checks, the same fixes, the same safety model, just run once instead of on 
 this when you want an answer right now, or don't want a recurring `/loop` job at all. Named to
 match `atmos fix --all` at the CLI, which runs the mechanical half of the same sequence (sync, ci,
 threads, lint, coverage) — this skill adds the agent-delegated fixing (CodeRabbit threads, lint
-findings, test/coverage gaps) that a plain CLI command can't do on its own.
+findings, test/coverage gaps) that a plain CLI command can't do on its own, plus a
+[`code-hygiene`](../code-hygiene/SKILL.md) pass (step 8) that a plain CLI command structurally
+can't do either — catching architectural smells (duplicated abstractions, missing sentinel errors,
+fake/stub features) that lint, tests, and a normal correctness-focused review all miss.
 
 Every check stays scoped to the **patch relative to `origin/main`** in *which packages it looks
 at* — this never goes hunting for trouble in the other 340+ packages this PR's diff never touched.
@@ -40,9 +43,9 @@ Hard prohibitions for every run:
 - Never `gh pr merge`. Merge is human-gated, full stop.
 - Never `gh pr edit --base` (retargeting the PR's base branch), `--add-reviewer`/`--remove-reviewer`,
   or `--milestone`. Autonomous `gh pr edit` usage in this skill is: rewriting `--title`/`--body`/
-  `--body-file` to keep the PR description in sync with the patch's actual scope (step 8), and
+  `--body-file` to keep the PR description in sync with the patch's actual scope (step 9), and
   applying the semver label via `--add-label`/`--remove-label` per the `pull-request` skill's
-  decision tree (step 2 when CI's required-labels check is failing, step 8 as a second net for
+  decision tree (step 2 when CI's required-labels check is failing, step 9 as a second net for
   drift that check doesn't catch). `gh pr close` is also allowed — see `.claude/settings.json`.
 - Never bypass commit signing (`--no-gpg-sign`, `-c commit.gpgsign=false`).
 - Never `git add -A` / `git add .` / `git add --all`. Add only the specific files touched.
@@ -78,8 +81,8 @@ change.
 
 Every "report for human attention" exit path below also invokes the
 [`say` skill](../say/SKILL.md) (`Skill({skill: "say", args: "..."})`) so the user gets an audible
-nudge, not just a written summary. Six of the seven triggers below are blocking (something needs a
-human to unblock it); the seventh is positive (nothing needs unblocking — the PR needs a human to
+nudge, not just a written summary. Seven of the eight triggers below are blocking (something needs
+a human to unblock it); the eighth is positive (nothing needs unblocking — the PR needs a human to
 give it final review/merge). Don't assume every `say` call from this skill means something is
 wrong. Trigger points:
 
@@ -101,10 +104,13 @@ wrong. Trigger points:
 6. **Lint finding skipped** by `lint-fix` as requiring a broader refactor than patch scope
    (step 6, including a CI-sourced lint finding from step 2) — `"PR <number> has a lint finding
    needing your input."`
-7. **Fully clean cycle: CI green, coverage satisfied, CodeRabbit approved** (step 8) — the positive
-   case, not a blocking one, but still fits the `say` skill's own "task finished in a way that
-   needs human review" trigger, since final review/merge is still a human action —
-   `"PR <number> is ready for final review."`
+7. **Code-hygiene finding reported** (step 8) — an architectural smell that isn't in this skill's
+   narrow auto-fix policy (see `code-hygiene`'s own doc) — `"PR <number> has a code-hygiene finding
+   that needs your review."`
+8. **Fully clean cycle: CI green, coverage satisfied, CodeRabbit approved, code-hygiene clean**
+   (step 9) — the positive case, not a blocking one, but still fits the `say` skill's own "task
+   finished in a way that needs human review" trigger, since final review/merge is still a human
+   action — `"PR <number> is ready for final review."`
 
 The `say` skill owns the phrasing rule and the defensive invocation wrapper — this list only says
 *when* to call it, not *how*.
@@ -203,11 +209,21 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
    one-line no-op. Gaps get fixed per that skill's process; anything judged genuinely untestable,
    or a fix attempt that caps out still red, triggers `say` trigger 5.
 
-8. Check readiness for final human review. This only fires on an otherwise-fully-clean cycle — skip
-   it entirely if any of `say` triggers 1-6 above fired this cycle (a merge conflict, a failing
+8. Invoke the [`code-hygiene` skill](../code-hygiene/SKILL.md) (default patch-aware mode). It
+   dedups against an unchanged diff on its own (see that skill's state-hash section), so this step
+   is cheap on a cycle where nothing changed since the last review. Zero findings (fresh or cached):
+   one-line no-op, move to step 9. Any finding: attempt only the narrow auto-fixable class that
+   skill's own policy defines (a mechanical dynamic-error-to-sentinel conversion); everything else
+   is architectural judgment, not this loop's to guess at — leave it unfixed, add it to the final
+   summary, and invoke `say` trigger 7. A code-hygiene finding is not resolved by the loop itself;
+   it stays reported each cycle until a human's own commit changes the diff enough that a fresh
+   review no longer flags it.
+
+9. Check readiness for final human review. This only fires on an otherwise-fully-clean cycle — skip
+   it entirely if any of `say` triggers 1-7 above fired this cycle (a merge conflict, a failing
    non-lint/test CI check, a CodeRabbit finding skipped as invalid, an unfixable-this-cycle test
-   failure, an untestable coverage gap, or an unfixable lint finding all mean the PR is NOT ready).
-   Otherwise check all five of:
+   failure, an untestable coverage gap, an unfixable lint finding, or an unresolved code-hygiene
+   finding all mean the PR is NOT ready). Otherwise check all six of:
 
    - Re-run `atmos fix ci` for a fresh read — not the cached step-2 result, since steps 4/6/7 may
      have pushed new commits since then, and a fresh push means new CI runs that are likely still
@@ -216,6 +232,8 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      `STATUS: ALL_CHECKS_GREEN`.
    - Zero unresolved, non-outdated CodeRabbit threads remain (same signal as step 3, re-verified
      after any step 4/5 resolutions this cycle).
+   - Step 8 found zero code-hygiene findings this cycle (fresh or cached) — same signal as step 8,
+     re-verified here rather than re-run, since step 8 already ran earlier in this same cycle.
    - CodeRabbit's own review verdict is APPROVED against the PR's *current* head commit, not just
      "no open threads" and not a stale APPROVED left over from an earlier commit that CodeRabbit
      hasn't re-reviewed since (a review's `state` alone can't tell the two apart — its `commit.oid`
@@ -250,7 +268,7 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      that got committed but not pushed, or leftover local edits from a prior interrupted run, not
      a routine expectation.
 
-   Once all five hold, reconcile the PR title and description before announcing anything — a PR
+   Once all six hold, reconcile the PR title and description before announcing anything — a PR
    that's technically green but whose description no longer matches what it does isn't actually
    ready for a human's final pass:
 
@@ -277,13 +295,13 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      undetected until this step.
    - Already accurate (title, body, and label): no-op, don't call `gh pr edit` just to touch it.
 
-   With the five conditions holding and the description reconciled, invoke `say` trigger 7
-   (`"PR <number> is ready for final review."`) and make sure the step-9 summary carries a matching
-   banner: `✅ PR #<number> is ready for final review.`
+   With the six conditions holding and the description reconciled, invoke `say` trigger 8
+   (`"PR <number> is ready for final review."`) and make sure the step-10 summary carries a
+   matching banner: `✅ PR #<number> is ready for final review.`
 
-9. Always end with a clear summary of what was found and fixed, even on the all-clean path. If
-   step 8 fired, the summary must include its `✅ PR #<number> is ready for final review.` banner
-   alongside the normal fixed/skipped rundown.
+10. Always end with a clear summary of what was found and fixed, even on the all-clean path. If
+    step 9 fired, the summary must include its `✅ PR #<number> is ready for final review.` banner
+    alongside the normal fixed/skipped rundown.
 
 ## Related
 
@@ -300,13 +318,17 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
 - **[`test-coverage` skill](../test-coverage/SKILL.md)** — patch-scoped test-failure and
   coverage-gap check and fix (step 7, and reused directly by step 2 for CI-sourced Acceptance
   Tests failures).
+- **[`code-hygiene` skill](../code-hygiene/SKILL.md)** — patch-scoped architectural-smell check
+  (step 8): duplicated abstractions, missing sentinel errors, fake/stub features, and the rest of
+  the CLAUDE.md-mandate checklist that `lint` can't express as a syntactic rule.
 - **[`say` skill](../say/SKILL.md)** — invoked on every human-attention exit path above.
 - **[`pull-request` skill](../pull-request/SKILL.md)** — owns the label decision tree this skill
-  applies autonomously (steps 2 and 8), plus the still human-attended parts of the PR workflow
+  applies autonomously (steps 2 and 9), plus the still human-attended parts of the PR workflow
   (blog posts, signing setup).
 - `atmos fix sync` / `atmos fix ci` / `atmos fix threads` / `atmos fix comments` / `atmos fix
   --all` (`.atmos.d/fix.yaml`) — the custom commands this skill's steps run. `atmos fix --all`
-  runs steps 1, 2, 3, 6, 7 in one shot (everything except the agent-delegated CodeRabbit-thread
-  and merge-conflict handling, which need an agent, not just a CLI command).
+  runs steps 1, 2, 3, 6, 7 in one shot (everything except the agent/skill-delegated CodeRabbit-
+  thread, merge-conflict, and code-hygiene handling, which need an agent or an LLM-driven skill
+  pass, not just a CLI command).
 - `.claude/settings.json` — the permissions allowlist that enforces the hard prohibitions above
   when this skill runs unattended from `pr-maintenance-loop`.
