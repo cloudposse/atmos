@@ -91,7 +91,7 @@ jobs:
         env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
 ```
 
-The workflow uses the official `ghcr.io/cloudposse/atmos` container image plus checkout and Atmos itself; no third-party action performs updating, committing, pushing, or PR publishing. Migrate legacy options and roll out groups progressively using [from-component-updater.md](../../agent-skills/skills/atmos-migration/references/from-component-updater.md).
+The workflow uses the official `ghcr.io/cloudposse/atmos` container image plus checkout and Atmos itself; no third-party action performs updating, committing, pushing, or PR publishing. `ATMOS_VERSION` is a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) you must define (e.g. set to `1.200.0`) — we don't publish a `latest` tag, so an unset variable resolves to an empty image tag and the job fails before checkout even runs. Migrate legacy options and roll out groups progressively using [from-component-updater.md](../../agent-skills/skills/atmos-migration/references/from-component-updater.md).
 
 ## Test plan
 
