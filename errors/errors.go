@@ -647,6 +647,7 @@ var (
 	ErrInvalidTerraformDependencies       = errors.New("invalid terraform dependencies section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
+	ErrUnresolvedComputedTerraformVar     = errors.New("terraform variable contains an unresolved computed value")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand      = errors.New("invalid helmfile command")
