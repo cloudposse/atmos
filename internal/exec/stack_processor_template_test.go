@@ -178,6 +178,58 @@ metadata:
 	}
 }
 
+// TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag verifies that
+// the structured template pre-processing path does not discard a YAML function tag.
+func TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag(t *testing.T) {
+	tempDir := t.TempDir()
+	stackPath := filepath.Join(tempDir, "stack.yaml.tmpl")
+	require.NoError(t, os.WriteFile(stackPath, []byte(`
+components:
+  terraform:
+    consumer:
+      vars:
+        state_lookup: !terraform.state producer ".fields.PRIVATE_KEY"
+        output_lookup: !terraform.output producer private_key
+        store_lookup: !store secure-store consumer private_key
+        environment_lookup: !env PRIVATE_KEY
+        template_value: "{{ .value }}"
+`), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+	}
+
+	result, _, err := ProcessYAMLConfigFileWithContext(
+		atmosConfig,
+		tempDir,
+		stackPath,
+		map[string]map[string]any{},
+		map[string]any{"value": "resolved-template-value"},
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+
+	require.NoError(t, err)
+	vars := result.DeepMergedConfig["components"].(map[string]any)["terraform"].(map[string]any)["consumer"].(map[string]any)["vars"].(map[string]any)
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, vars["state_lookup"])
+	assert.Equal(t, "!terraform.output producer private_key", vars["output_lookup"])
+	assert.Equal(t, "!store secure-store consumer private_key", vars["store_lookup"])
+	assert.Equal(t, "!env PRIVATE_KEY", vars["environment_lookup"])
+	assert.Equal(t, "resolved-template-value", vars["template_value"])
+}
+
 // TestProcessImportSectionWithTemplates tests that imports correctly identify template files.
 func TestProcessImportSectionWithTemplates(t *testing.T) {
 	testCases := []struct {
