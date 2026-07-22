@@ -112,120 +112,138 @@ func TestCustomCommandLegacyStepOutputAvailableToMarkdown(t *testing.T) {
 	}
 }
 
-func TestCustomCommandShellMasksLiveAndStoredOutput(t *testing.T) {
+func TestCustomCommandMasksLiveAndStoredOutput(t *testing.T) {
 	if !t.Run("subprocess prerequisite", requireCustomCommandOutputHelper) {
 		return
 	}
 
-	_ = NewTestKit(t)
+	for _, stepType := range []string{"shell", "atmos"} {
+		t.Run(stepType, func(t *testing.T) {
+			_ = NewTestKit(t)
+			t.Cleanup(iolib.Reset)
 
-	iolib.ApplyMaskingConfig(&iolib.Config{DisableMasking: false})
-	secret := "step-live-secret-8f14a2"
-	iolib.GetContext().Masker().RegisterValue(secret)
-	maskedSecret := iolib.MaskString(secret)
-	exePath, err := os.Executable()
-	require.NoError(t, err)
-	resultPath := filepath.Join(t.TempDir(), "result.env")
-	commandConfig := schema.Command{
-		Name:        "test-masked-step-output",
-		Description: "Mask live and stored shell output",
-		Steps: schema.Tasks{
-			{
-				Name:    "produce",
-				Type:    "shell",
-				Command: fmt.Sprintf("%q", exePath),
-				Env: map[string]string{
-					"_ATMOS_TEST_STDOUT": secret,
-					"_ATMOS_TEST_STDERR": secret,
+			iolib.ApplyMaskingConfig(&iolib.Config{DisableMasking: false})
+			secret := "step-live-secret-8f14a2"
+			iolib.GetContext().Masker().RegisterValue(secret)
+			maskedSecret := iolib.MaskString(secret)
+			exePath, err := os.Executable()
+			require.NoError(t, err)
+			stepCommand := fmt.Sprintf("%q", exePath)
+			if stepType == "atmos" {
+				stepCommand = "version"
+			}
+			resultPath := filepath.Join(t.TempDir(), "result.env")
+			commandConfig := schema.Command{
+				Name:        "test-masked-step-output-" + stepType,
+				Description: "Mask live and stored command output",
+				Steps: schema.Tasks{
+					{
+						Name:    "produce",
+						Type:    stepType,
+						Command: stepCommand,
+						Env: map[string]string{
+							"_ATMOS_TEST_STDOUT": secret,
+							"_ATMOS_TEST_STDERR": secret,
+						},
+					},
+					{
+						Type:    stepType,
+						Command: stepCommand,
+						Output:  "none",
+						Env: map[string]string{
+							"_ATMOS_TEST_DUMP_ENV": resultPath,
+							"CAPTURED_RESULT":      "{{ .steps.produce.value }}|{{ .steps.produce.metadata.stderr }}",
+						},
+					},
 				},
-			},
-			{
-				Type:    "shell",
-				Command: fmt.Sprintf("%q", exePath),
-				Output:  "none",
-				Env: map[string]string{
-					"_ATMOS_TEST_DUMP_ENV": resultPath,
-					"CAPTURED_RESULT":      "{{ .steps.produce.value }}|{{ .steps.produce.metadata.stderr }}",
-				},
-			},
-		},
+			}
+			atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir(), Commands: []schema.Command{commandConfig}}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
+
+			originalOsExit := errUtils.OsExit
+			t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+			errUtils.OsExit = func(code int) { panic(fmt.Sprintf("unexpected custom command exit %d", code)) }
+			customCmd := findSubcommand(parentCmd, commandConfig.Name)
+			require.NotNil(t, customCmd)
+
+			stdout, stderr := captureStdoutStderr(t, func() {
+				require.NotPanics(t, func() { customCmd.Run(customCmd, nil) })
+			})
+			assert.NotContains(t, stdout, secret)
+			assert.NotContains(t, stderr, secret)
+			assert.Equal(t, 1, strings.Count(stdout, maskedSecret))
+			assert.Equal(t, 1, strings.Count(stderr, maskedSecret))
+
+			envContent, err := os.ReadFile(resultPath)
+			require.NoError(t, err)
+			assert.Equal(t, maskedSecret+"|"+maskedSecret, extractEnvVar(string(envContent), "CAPTURED_RESULT"))
+		})
 	}
-	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir(), Commands: []schema.Command{commandConfig}}
-	parentCmd := &cobra.Command{Use: "atmos"}
-	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
-
-	originalOsExit := errUtils.OsExit
-	t.Cleanup(func() { errUtils.OsExit = originalOsExit })
-	errUtils.OsExit = func(code int) { panic(fmt.Sprintf("unexpected custom command exit %d", code)) }
-	customCmd := findSubcommand(parentCmd, commandConfig.Name)
-	require.NotNil(t, customCmd)
-
-	stdout, stderr := captureStdoutStderr(t, func() {
-		require.NotPanics(t, func() { customCmd.Run(customCmd, nil) })
-	})
-	assert.NotContains(t, stdout, secret)
-	assert.NotContains(t, stderr, secret)
-	assert.Equal(t, 1, strings.Count(stdout, maskedSecret))
-	assert.Equal(t, 1, strings.Count(stderr, maskedSecret))
-
-	envContent, err := os.ReadFile(resultPath)
-	require.NoError(t, err)
-	assert.Equal(t, maskedSecret+"|"+maskedSecret, extractEnvVar(string(envContent), "CAPTURED_RESULT"))
 }
 
-func TestCustomCommandShellOutputNoneCapturesWithoutStreaming(t *testing.T) {
+func TestCustomCommandOutputNoneCapturesWithoutStreaming(t *testing.T) {
 	if !t.Run("subprocess prerequisite", requireCustomCommandOutputHelper) {
 		return
 	}
-	_ = NewTestKit(t)
 
-	exePath, err := os.Executable()
-	require.NoError(t, err)
-	resultPath := filepath.Join(t.TempDir(), "result.env")
-	commandConfig := schema.Command{
-		Name:        "test-cross-platform-output-none",
-		Description: "Capture a suppressed shell result",
-		Steps: schema.Tasks{
-			{
-				Name:    "produce",
-				Type:    "shell",
-				Command: fmt.Sprintf("%q", exePath),
-				Output:  "none",
-				Env: map[string]string{
-					"_ATMOS_TEST_STDOUT": "produced",
-					"_ATMOS_TEST_STDERR": "warning",
+	for _, stepType := range []string{"shell", "atmos"} {
+		t.Run(stepType, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			exePath, err := os.Executable()
+			require.NoError(t, err)
+			stepCommand := fmt.Sprintf("%q", exePath)
+			if stepType == "atmos" {
+				stepCommand = "version"
+			}
+			resultPath := filepath.Join(t.TempDir(), "result.env")
+			commandConfig := schema.Command{
+				Name:        "test-cross-platform-output-none-" + stepType,
+				Description: "Capture a suppressed command result",
+				Steps: schema.Tasks{
+					{
+						Name:    "produce",
+						Type:    stepType,
+						Command: stepCommand,
+						Output:  "none",
+						Env: map[string]string{
+							"_ATMOS_TEST_STDOUT": "produced",
+							"_ATMOS_TEST_STDERR": "warning",
+						},
+					},
+					{
+						Type:    stepType,
+						Command: stepCommand,
+						Output:  "none",
+						Env: map[string]string{
+							"_ATMOS_TEST_DUMP_ENV": resultPath,
+							"CAPTURED_RESULT":      "{{ .steps.produce.value }}|{{ .steps.produce.metadata.stdout }}|{{ .steps.produce.metadata.stderr }}",
+						},
+					},
 				},
-			},
-			{
-				Type:    "shell",
-				Command: fmt.Sprintf("%q", exePath),
-				Output:  "none",
-				Env: map[string]string{
-					"_ATMOS_TEST_DUMP_ENV": resultPath,
-					"CAPTURED_RESULT":      "{{ .steps.produce.value }}|{{ .steps.produce.metadata.stdout }}|{{ .steps.produce.metadata.stderr }}",
-				},
-			},
-		},
+			}
+			atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir(), Commands: []schema.Command{commandConfig}}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
+
+			originalOsExit := errUtils.OsExit
+			t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+			errUtils.OsExit = func(code int) { panic(fmt.Sprintf("unexpected custom command exit %d", code)) }
+			customCmd := findSubcommand(parentCmd, commandConfig.Name)
+			require.NotNil(t, customCmd)
+
+			stdout, stderr := captureStdoutStderr(t, func() {
+				require.NotPanics(t, func() { customCmd.Run(customCmd, nil) })
+			})
+			assert.NotContains(t, stdout, "produced")
+			assert.NotContains(t, stderr, "warning")
+
+			envContent, err := os.ReadFile(resultPath)
+			require.NoError(t, err)
+			assert.Equal(t, "produced|produced|warning", extractEnvVar(string(envContent), "CAPTURED_RESULT"))
+		})
 	}
-	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir(), Commands: []schema.Command{commandConfig}}
-	parentCmd := &cobra.Command{Use: "atmos"}
-	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
-
-	originalOsExit := errUtils.OsExit
-	t.Cleanup(func() { errUtils.OsExit = originalOsExit })
-	errUtils.OsExit = func(code int) { panic(fmt.Sprintf("unexpected custom command exit %d", code)) }
-	customCmd := findSubcommand(parentCmd, commandConfig.Name)
-	require.NotNil(t, customCmd)
-
-	stdout, stderr := captureStdoutStderr(t, func() {
-		require.NotPanics(t, func() { customCmd.Run(customCmd, nil) })
-	})
-	assert.NotContains(t, stdout, "produced")
-	assert.NotContains(t, stderr, "warning")
-
-	envContent, err := os.ReadFile(resultPath)
-	require.NoError(t, err)
-	assert.Equal(t, "produced|produced|warning", extractEnvVar(string(envContent), "CAPTURED_RESULT"))
 }
 
 func TestCustomCommandOutputEvaluationFailureDoesNotRetryCommand(t *testing.T) {

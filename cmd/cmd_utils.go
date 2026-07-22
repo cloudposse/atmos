@@ -1153,6 +1153,17 @@ func executeCustomCommand(
 					return execErr
 				}
 				return runCommandStep(func(stdout, stderr io.Writer) error {
+					execOpts := []e.ShellCommandOption{
+						e.WithStdoutCapture(stdout),
+						e.WithStderrCapture(stderr),
+					}
+					if step.Output == string(stepPkg.OutputModeNone) {
+						execOpts = append(execOpts, e.WithProcessStreams(process.Streams{
+							Stdin:  os.Stdin,
+							Stdout: io.Discard,
+							Stderr: io.Discard,
+						}))
+					}
 					return e.ExecuteShellCommand(
 						atmosConfig,
 						execPath,
@@ -1161,8 +1172,7 @@ func executeCustomCommand(
 						env,
 						false,
 						"",
-						e.WithStdoutCapture(stdout),
-						e.WithStderrCapture(stderr),
+						execOpts...,
 					)
 				})
 			default:

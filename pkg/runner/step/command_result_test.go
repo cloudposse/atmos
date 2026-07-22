@@ -15,6 +15,7 @@ var errCommandResultRun = errors.New("command result runner failed")
 
 func TestCommandResult(t *testing.T) {
 	t.Run("stores masked command output and declared outputs", func(t *testing.T) {
+		t.Cleanup(iolib.Reset)
 		iolib.ApplyMaskingConfig(&iolib.Config{DisableMasking: false})
 		secret := "step-output-secret-4d2793"
 		iolib.GetContext().Masker().RegisterValue(secret)

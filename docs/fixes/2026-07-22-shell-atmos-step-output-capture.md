@@ -22,7 +22,7 @@ successfully. The defect is tracked by
   existing cross-platform execution paths.
 - Stored trimmed stdout as the primary value, preserved masked stdout, stderr,
   and exit code as result metadata, and evaluated declared outputs separately.
-- Preserved live output, retries, custom-command shell `output: none`,
+- Preserved live output, retries, custom-command `shell`/`atmos` `output: none`,
   terminal-attached sessions, process cleanup, and failure propagation.
 - Evaluated declared outputs once after a successful command, outside the retry
   envelope, so an output-template error cannot repeat a completed command.
@@ -35,6 +35,8 @@ successfully. The defect is tracked by
   custom commands and workflows.
 - Added custom-command and workflow regressions proving output-template errors
   do not retry successful `shell` or `atmos` commands.
+- Added custom-command masking and `output: none` regressions for both `shell`
+  and `atmos` steps.
 - Audited the implementation against the step-output contract in
   `container-actions-and-step-outputs.md` and the command-step behavior in
   `workflow-step-types.md`.
