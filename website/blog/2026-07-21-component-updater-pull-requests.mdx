@@ -1,0 +1,91 @@
+---
+slug: component-updater-pull-requests
+title: "Native Pull Requests for Vendored Component Updates"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-21T12:00:00.000Z
+---
+
+Keeping vendored components current across dozens of repositories doesn't scale as a manual habit.
+Someone has to notice a new upstream release, edit the right `version:` field without breaking a
+comment or a template, commit, push, and open a pull request — for every component, on some kind of
+schedule, forever. Most teams either let it slip until something forces an update, or bolt on a
+third-party GitHub Action just to automate the commit-and-PR part.
+
+<!--truncate-->
+
+## The Problem
+
+The `atmos vendor update` command already finds and writes newer versions locally. Turning that
+into a reviewable pull request meant scripting Git branch/commit/push logic and a GitHub API client
+yourself, or reaching for an external action with its own permissions model, its own config format,
+and its own release cadence to track.
+
+## The Fix
+
+The `--pull-request` flag does the whole cycle natively: discover available updates, write them
+with the same format-preserving editor `vendor update` already uses, create or reuse a branch,
+commit, push, and open or update a pull request — through a provider-neutral Git registry (GitHub
+today; GitLab and Bitbucket can register without any command changes).
+
+```shell
+atmos vendor update --pull-request
+```
+
+Nothing happens unless there's actually an update: no updates means no branch, no commit, no push,
+no PR. The base branch is fetched but never written to, and an existing feature branch for the same
+scope is reused and pushed fast-forward only — repeated runs update the same PR instead of piling
+up duplicates.
+
+## How to Use It
+
+Scope updates to a named group instead of updating everything at once:
+
+```yaml
+vendor:
+  update:
+    groups:
+      platform:
+        include: ["terraform/vpc", "terraform/eks/*"]
+        exclude: ["terraform/eks/legacy"]
+  ci:
+    pull_request:
+      branch_prefix: atmos/component-updater
+      title: "chore(components): update {{ .scope.name }}"
+      labels: [component-update]
+```
+
+```shell
+atmos vendor update --group platform --pull-request
+```
+
+For a scheduled run, the official container image is all a workflow needs — no third-party action
+performs the update, commit, push, or PR creation:
+
+```yaml
+on:
+  schedule: [{ cron: "17 3 * * 1" }]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - uses: actions/checkout@v6
+      - run: atmos vendor update --pull-request
+        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+```
+
+Set `execution.mode: worktree` when you'd rather the whole discover-branch-commit-push cycle ran in
+an isolated checkout instead of the workflow's own working tree — useful if other steps in the same
+job depend on an unmodified checkout while the update runs. In GitHub Actions, every run also
+appends a summary showing scope, counts, and the resulting PR link, independent of whether an
+update was found.
+
+## Get Involved
+
+Questions about scopes, groups, or CI publishing are welcome in the
+[Atmos GitHub repository](https://github.com/cloudposse/atmos) and the community Slack.

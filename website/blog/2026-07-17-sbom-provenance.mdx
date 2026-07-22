@@ -6,7 +6,7 @@ tags: [feature, experimental]
 date: 2026-07-17T12:00:00.000Z
 ---
 
-Compliance reviews often start with a deceptively simple question: what exactly is in this infrastructure release? Answering it by hand means reconciling vendored sources, provider locks, module downloads, and registry artifacts—then hoping no missing evidence is mistaken for an empty dependency set. Atmos now makes that evidence visible in one SBOM while keeping coverage boundaries explicit.
+Compliance reviews often start with a deceptively simple question: what exactly is in this infrastructure release? Answering it by hand means reconciling vendored sources, provider locks, module downloads, and registry artifacts—then hoping no missing evidence is mistaken for an empty dependency set. Atmos now makes that evidence visible in one SBOM while keeping coverage boundaries explicit, and integrates with native CI to upload it as a GitHub Actions workflow artifact when enabled.
 
 <!--truncate-->
 
@@ -71,7 +71,7 @@ If your project configures `tofu`, Atmos honors that choice. It does not parse T
 
 ### What's Next
 
-This is the foundation for broader dependency coverage, not the end state. Helm and Helmfile locks, typed deployed-container image discovery, OCI SBOM attestations or scanner integration for image contents, and OpenTofu module graphs are next adapters. The shared graph and coverage contract mean those additions will extend both CycloneDX and SPDX consistently.
+This is the foundation for broader dependency coverage — it's not yet feature complete. Helm and Helmfile locks, Kubernetes manifests, typed deployed-container image discovery, OCI SBOM attestations or scanner integration for image contents, and OpenTofu module graphs are next adapters, extending coverage across the other component types Atmos already supports. The shared graph and coverage contract mean those additions will extend both CycloneDX and SPDX consistently.
 
 Read the full [SBOM command reference](/cli/commands/sbom/usage) and the [provenance design](https://github.com/cloudposse/atmos/blob/main/docs/prd/sbom-provenance.md).
 
