@@ -654,24 +654,30 @@ func rightAlignInstallProgress(left string, downloaded, total int64, terminalWid
 func installToolListConcurrently(toolList []toolInfo, reinstallFlag, showHint bool, maxConcurrency int) error {
 	events := startBatchInstallWorkers(toolList, reinstallFlag, maxConcurrency)
 	display := newBatchDisplay(len(toolList))
+	counts := collectBatchInstallEvents(events, display, len(toolList))
+	display.clear()
+	return counts.finish(len(toolList), showHint)
+}
+
+func collectBatchInstallEvents(events <-chan batchEvent, display *batchDisplay, total int) batchInstallCounts {
 	ticker := time.NewTicker(80 * time.Millisecond)
 	defer ticker.Stop()
 
 	var counts batchInstallCounts
-	for counts.completed < len(toolList) {
+	for counts.completed < total {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				counts.completed = len(toolList)
+				counts.failed += total - counts.completed
+				counts.completed = total
 				break
 			}
-			counts.handle(&event, display, len(toolList))
+			counts.handle(&event, display, total)
 		case <-ticker.C:
 			display.tick()
 		}
 	}
-	display.clear()
-	return counts.finish(len(toolList), showHint)
+	return counts
 }
 
 func startBatchInstallWorkers(toolList []toolInfo, reinstallFlag bool, maxConcurrency int) <-chan batchEvent {

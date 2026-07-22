@@ -41,12 +41,17 @@ func processOutputs(outputMeta map[string]tfexec.OutputMeta, atmosConfig *schema
 			return k, nil
 		}
 
-		// Terraform marks sensitive outputs with `sensitive = true`. Register every secret-
-		// bearing representation (strings plus nested map/list leaves) with the I/O masker so
-		// the value is redacted everywhere it flows: !terraform.output, atmos.Component(),
-		// `atmos describe component`, and `atmos terraform output`. Non-sensitive outputs are
-		// intentionally left unregistered to avoid over-masking common values (e.g. VPC IDs).
-		if v.Sensitive {
+		// Terraform marks sensitive outputs with `sensitive = true`. When masking is enabled,
+		// register every secret-bearing representation (strings plus nested map/list leaves)
+		// with the I/O masker so the value is redacted everywhere it flows: !terraform.output,
+		// atmos.Component(), `atmos describe component`, and `atmos terraform output`.
+		//
+		// Do not register values when the user has explicitly disabled masking. Registration
+		// also classifies a consuming Terraform variable as secret-bearing, which moves it from
+		// the JSON varfile to TF_VAR_. Terraform cannot infer an object type from that string
+		// transport when the consumer omits a type constraint. Keeping the value unregistered
+		// preserves its JSON structure in that explicit opt-out mode.
+		if v.Sensitive && iolib.MaskingEnabled() {
 			iolib.RegisterSecretValue(d)
 		}
 

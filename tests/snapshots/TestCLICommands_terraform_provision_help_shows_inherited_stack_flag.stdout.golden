@@ -140,9 +140,11 @@ GLOBAL FLAGS
 
       --upload-status                        Upload plan status to Atmos Pro
 
+      --use-mocks                            Resolve Terraform state/output YAML functions from component mocks
+                                             instead of remote state. Supported only by plan and describe commands
+
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
                                              information
-
 

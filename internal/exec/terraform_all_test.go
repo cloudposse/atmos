@@ -1,20 +1,25 @@
 package exec
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 func TestBuildTerraformDependencyGraph(t *testing.T) {
@@ -337,6 +342,163 @@ func TestExecuteTerraformAll_DryRunHappyPath(t *testing.T) {
 		}
 		assert.NoError(t, ExecuteTerraformAll(info))
 	})
+}
+
+// TestExecuteTerraformAll_ReportedSameStackOrder reproduces the reported
+// eight-component same-stack graph with the real describe-stacks and scheduler pipeline. Each
+// declaration variant must produce the same dependency-safe execution order.
+// DryRun keeps the test hermetic: no Terraform binary, backend, or state is used.
+func TestExecuteTerraformAll_ReportedSameStackOrder(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-all-dependencies"))
+
+	for _, stack := range []string{"reported-order", "reported-order-alias", "reported-order-legacy"} {
+		t.Run(stack, func(t *testing.T) {
+			summaryPath := filepath.Join(t.TempDir(), "execution-summary.json")
+			info := &schema.ConfigAndStacksInfo{
+				All:                      true,
+				Stack:                    stack,
+				ComponentType:            config.TerraformComponentType,
+				SubCommand:               "plan",
+				DryRun:                   true,
+				MaxConcurrency:           1,
+				TerraformPlanSummaryFile: summaryPath,
+			}
+
+			require.NoError(t, ExecuteTerraformAll(info))
+			assertReportedSameStackOrder(t, summaryPath, stack)
+		})
+	}
+}
+
+type reportedTerraformExecutionSummary struct {
+	Results []reportedTerraformExecutionResult `json:"results"`
+}
+
+type reportedTerraformExecutionResult struct {
+	Component  string `json:"component"`
+	Stack      string `json:"stack"`
+	StartedAt  string `json:"started_at"`
+	FinishedAt string `json:"finished_at"`
+}
+
+func assertReportedSameStackOrder(t *testing.T, summaryPath, stack string) {
+	t.Helper()
+
+	data, err := os.ReadFile(summaryPath)
+	require.NoError(t, err)
+
+	var summary reportedTerraformExecutionSummary
+	require.NoError(t, json.Unmarshal(data, &summary))
+	require.Len(t, summary.Results, 8)
+
+	expectedComponents := []string{
+		"platform-kms",
+		"platform-efs",
+		"uds-rds",
+		"cloudposse-irsa-dbeaver-external-secrets",
+		"cloudposse-irsa-external-secrets",
+		"platform-cluster-codepipeline-app",
+		"platform-datasync",
+		"platform-uds-pkg-dbeaver",
+	}
+	positions := make(map[string]int, len(summary.Results))
+	startedAt := make(map[string]time.Time, len(summary.Results))
+	finishedAt := make(map[string]time.Time, len(summary.Results))
+	for index, result := range summary.Results {
+		require.Equal(t, stack, result.Stack)
+		positions[result.Component] = index
+
+		startedAt[result.Component], err = time.Parse(time.RFC3339Nano, result.StartedAt)
+		require.NoError(t, err, "missing start time for %s", result.Component)
+		finishedAt[result.Component], err = time.Parse(time.RFC3339Nano, result.FinishedAt)
+		require.NoError(t, err, "missing finish time for %s", result.Component)
+	}
+	require.Len(t, positions, len(expectedComponents))
+	for _, component := range expectedComponents {
+		require.Contains(t, positions, component)
+	}
+
+	dependencies := map[string][]string{
+		"uds-rds": {"platform-kms"},
+		"cloudposse-irsa-dbeaver-external-secrets": {"platform-kms", "uds-rds"},
+		"cloudposse-irsa-external-secrets":         {"platform-kms", "uds-rds"},
+		"platform-cluster-codepipeline-app":        {"platform-efs", "platform-kms", "uds-rds"},
+		"platform-datasync":                        {"platform-efs"},
+		"platform-uds-pkg-dbeaver":                 {"cloudposse-irsa-dbeaver-external-secrets", "uds-rds"},
+	}
+
+	for dependent, prerequisites := range dependencies {
+		for _, prerequisite := range prerequisites {
+			require.Less(t, positions[prerequisite], positions[dependent], "%s must execute before %s", prerequisite, dependent)
+			// A dry-run step can start and finish within one Windows clock tick, so
+			// equality is valid here. The result positions above establish the
+			// required execution order; this check ensures the timing data does not
+			// contradict it.
+			require.False(t, finishedAt[prerequisite].After(startedAt[dependent]), "%s must finish no later than %s starts", prerequisite, dependent)
+		}
+	}
+}
+
+// TestExecuteTerraformAll_MissingSecretFailsDuringPreflight proves that graph execution
+// resolves !secret before it hands any node to the scheduler. DryRun would otherwise make
+// this fixture succeed without invoking Terraform, so the store-resolution error can only
+// originate from the describe-stacks preflight.
+func TestExecuteTerraformAll_MissingSecretFailsDuringPreflight(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "terraform", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`
+components:
+  terraform:
+    app:
+      secrets:
+        vars:
+          API_KEY:
+            store: missing-secrets-store
+            required: true
+      vars:
+        api_key: !secret API_KEY
+`), 0o600))
+
+	t.Chdir(root)
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+
+	err := ExecuteTerraformAll(&schema.ConfigAndStacksInfo{
+		ComponentType:    config.TerraformComponentType,
+		SubCommand:       "plan",
+		DryRun:           true,
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	})
+	require.ErrorIs(t, err, secrets.ErrStoreNotFound)
+}
+
+func TestTerraformPreflightDescribeError_MissingSecretIsActionable(t *testing.T) {
+	cause := errors.Join(secrets.ErrSecretMissing, errors.New("API_KEY is absent from its configured backend"))
+	err := terraformPreflightDescribeError(cause)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrExecuteDescribeStacks)
+	assert.ErrorIs(t, err, secrets.ErrSecretMissing)
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "TITLE:Terraform preflight failed")
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Initialize the reported secret, then rerun the Terraform command.")
+	assert.Contains(t, cockroachErrors.GetAllDetails(err), "A required `!secret` could not be resolved before Terraform started.")
 }
 
 // TestExecuteTerraformAll_AuthManagerResolverWired exercises the

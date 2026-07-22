@@ -23,6 +23,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
@@ -1112,13 +1113,21 @@ func TestProcessOutputs_WithInvalidJSON(t *testing.T) {
 func TestProcessOutputs_RegistersSensitive(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
 	require.NoError(t, iolib.Initialize())
-	iolib.GetContext().Masker().Clear()
+	masker := iolib.GetContext().Masker()
+	masker.Clear()
+	masker.SetEnabled(true)
 
 	outputMeta := map[string]tfexec.OutputMeta{
 		"password": {
 			Sensitive: true,
 			Value:     []byte(`"hunter2-super-secret"`),
+		},
+		"thing": {
+			Sensitive: true,
+			Value:     []byte(`{"id":"fluffy-dog","name":"small-dog"}`),
 		},
 		"vpc_id": {
 			Sensitive: false,
@@ -1126,13 +1135,48 @@ func TestProcessOutputs_RegistersSensitive(t *testing.T) {
 		},
 	}
 
-	_ = processOutputs(outputMeta, atmosConfig)
+	outputs := processOutputs(outputMeta, atmosConfig)
 
-	masker := iolib.GetContext().Masker()
 	assert.Contains(t, masker.Mask("value is hunter2-super-secret"), iolib.MaskReplacement,
 		"sensitive output value should be masked")
 	assert.Equal(t, "the vpc is vpc-abc123", masker.Mask("the vpc is vpc-abc123"),
 		"non-sensitive output value must not be masked")
+
+	thing, ok := outputs["thing"].(map[string]any)
+	require.True(t, ok, "sensitive output must remain an object before environment rendering")
+	_, secret := tfvars.Partition(map[string]any{"thing": thing}, iolib.ContainsSecret)
+	assert.Equal(t, map[string]any{"thing": thing}, secret,
+		"masked sensitive output must use secret-safe TF_VAR_ transport")
+}
+
+// TestProcessOutputs_MaskingDisabledKeepsSensitiveObjectInVarfile reproduces #2768. A sensitive
+// object resolved through !terraform.output must retain its structure for an untyped consumer
+// when the user has explicitly disabled masking. Registering its leaves would classify the
+// variable as secret-bearing and route it through TF_VAR_, which Terraform treats as a string.
+func TestProcessOutputs_MaskingDisabledKeepsSensitiveObjectInVarfile(t *testing.T) {
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+
+	masker := iolib.GetContext().Masker()
+	masker.Clear()
+	masker.SetEnabled(false)
+
+	outputs := processOutputs(map[string]tfexec.OutputMeta{
+		"thing": {
+			Sensitive: true,
+			Value:     []byte(`{"id":"fluffy-dog","name":2}`),
+		},
+	}, validAtmosConfig())
+
+	thing, ok := outputs["thing"].(map[string]any)
+	require.True(t, ok, "sensitive output must remain an object")
+	assert.Equal(t, "fluffy-dog", thing["id"])
+	assert.Equal(t, float64(2), thing["name"])
+
+	safe, secret := tfvars.Partition(map[string]any{"thing": thing}, iolib.ContainsSecret)
+	assert.Equal(t, map[string]any{"thing": thing}, safe)
+	assert.Empty(t, secret, "unmasked sensitive output must not be routed through TF_VAR_")
 }
 
 // TestExecutor_ExecuteWithSections_InitWithReconfigure tests init with reconfigure option.

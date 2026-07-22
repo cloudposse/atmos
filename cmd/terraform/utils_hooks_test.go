@@ -270,6 +270,33 @@ func TestTerraformNodeHooksAfter_ApplyDemoStacks(t *testing.T) {
 	assert.NoError(t, nodeHooks.After(context.Background(), info, "", errUtils.ExitCodeError{Code: 1}))
 }
 
+// TestTerraformNodeHooksAfter_ReinjectsStoreAuthResolver verifies that graph-mode
+// after-hooks restore the auth resolver after loading their fresh configuration.
+// The resolver derives the inherited store identity from the node AuthManager;
+// without this wiring GetChain is never called and identity-aware store hooks
+// fail because their newly constructed stores have no resolver.
+func TestTerraformNodeHooksAfter_ReinjectsStoreAuthResolver(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+	e.ClearLastAuthContext()
+	t.Cleanup(e.ClearLastAuthContext)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	authManager.EXPECT().GetChain().Return([]string{"local-aws"}).Times(1)
+
+	nodeHooks := &terraformNodeHooks{cmd: newHookTestCmd(), afterEvent: hooks.AfterTerraformApply}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Component:        "myapp",
+		ComponentFromArg: "myapp",
+		ComponentType:    "terraform",
+		AuthManager:      authManager,
+	}
+
+	require.NoError(t, nodeHooks.After(context.Background(), info, "apply output", nil))
+	assert.Equal(t, "local-aws", info.Identity)
+}
+
 // TestRunCIHooksForNode_RunCIHooksError covers runCIHooksForNode's RunCIHooks
 // error branch (log.Warn). Constructing an AtmosConfiguration directly with
 // CI.Enabled=true and Settings.Experimental="disable" makes checkExperimental

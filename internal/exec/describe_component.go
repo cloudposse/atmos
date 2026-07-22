@@ -29,6 +29,7 @@ type DescribeComponentParams struct {
 	Stack                string
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
+	UseMocks             bool
 	Skip                 []string
 	Query                string
 	Format               string
@@ -109,6 +110,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processYamlFunctions,
+			UseMocks:             describeComponentParams.UseMocks,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
 			AuthDisabled:         describeComponentParams.AuthDisabled,
@@ -130,6 +132,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processYamlFunctions,
+			UseMocks:             describeComponentParams.UseMocks,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
 			AuthDisabled:         describeComponentParams.AuthDisabled,
@@ -235,6 +238,7 @@ type ExecuteDescribeComponentParams struct {
 	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
+	UseMocks             bool
 	Skip                 []string
 	AuthManager          auth.AuthManager
 	AuthDisabled         bool
@@ -251,6 +255,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 		ComponentType:        params.ComponentType,
 		ProcessTemplates:     params.ProcessTemplates,
 		ProcessYamlFunctions: params.ProcessYamlFunctions,
+		UseMocks:             params.UseMocks,
 		Skip:                 params.Skip,
 		AuthManager:          params.AuthManager,
 		AuthDisabled:         params.AuthDisabled,
@@ -411,6 +416,7 @@ type DescribeComponentContextParams struct {
 	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
+	UseMocks             bool
 	Skip                 []string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management.
 	AuthDisabled         bool
@@ -507,6 +513,7 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	configAndStacksInfo.CliArgs = []string{"describe", "component"}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
 	configAndStacksInfo.AuthDisabled = params.AuthDisabled
+	configAndStacksInfo.UseMocks = params.UseMocks
 
 	var err error
 	atmosConfig := params.AtmosConfig

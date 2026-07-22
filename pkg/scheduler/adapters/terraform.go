@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -39,6 +40,10 @@ const (
 	terraformSubCommandDestroy = "destroy"
 	terraformSubCommandInit    = "init"
 )
+
+// startTerraformCacheForExecution is a seam for testing the bulk execution
+// lifecycle without binding a real loopback proxy.
+var startTerraformCacheForExecution = tfcache.StartForExecution
 
 const (
 	terraformFailureModeFailFast  = "fail-fast"
@@ -171,6 +176,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return err
 	}
 
+	closeCache, err := startSharedTerraformCache(ctx, opts.AtmosConfig, opts.Info)
+	if err != nil {
+		return err
+	}
+	defer closeCache()
+
 	dispatcher := &TerraformDispatcher{
 		atmosConfig:        opts.AtmosConfig,
 		info:               opts.Info,
@@ -193,6 +204,9 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 	finalizeTerraformCIResults(opts.Info, result, timings)
 	if result.Err != nil {
+		if skipped := skippedResultCount(result); skipped > 0 {
+			ui.Warningf("%d component(s) skipped after an earlier failure", skipped)
+		}
 		return result.Err
 	}
 
@@ -203,6 +217,37 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
+}
+
+// startSharedTerraformCache starts one registry cache proxy for the complete
+// graph-backed invocation. The scheduler copies info for each node, so marking the
+// parent as externally managed makes every worker reuse the same Setup and prevents
+// ExecuteTerraform from starting and reporting a separate proxy per component.
+func startSharedTerraformCache(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (func(), error) {
+	if info.TerraformCacheExternal {
+		return func() {}, nil
+	}
+
+	setup, cleanup, err := startTerraformCacheForExecution(ctx, atmosConfig)
+	if err != nil {
+		return func() {}, err
+	}
+	info.TerraformCache = setup
+	info.TerraformCacheExternal = true
+	return cleanup, nil
+}
+
+func skippedResultCount(result *scheduler.AggregateResult) int {
+	if result == nil {
+		return 0
+	}
+	count := 0
+	for i := range result.Results {
+		if result.Results[i].Status == scheduler.StatusSkipped {
+			count++
+		}
+	}
+	return count
 }
 
 // BuildTerraformGraph builds a Terraform component graph from described stacks.
@@ -611,12 +656,17 @@ func (d *TerraformDispatcher) runAfterNodeHooks(ctx context.Context, nodeInfo *s
 }
 
 func terraformExecutionError(node *dependency.Node, result TerraformExecutionResult, err error) error {
-	baseErr := fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
+	cause := fmt.Errorf("component=%s stack=%s: %w", node.Component, node.Stack, err)
 	detail := terraformFailureOutputDetail(result)
-	if detail == "" {
-		return baseErr
+	if detail != "" {
+		cause = fmt.Errorf("%w\n\nterraform output:\n```text\n%s\n```", cause, detail)
 	}
-	return fmt.Errorf("%w\n\nterraform output:\n```text\n%s\n```", baseErr, detail)
+	return errUtils.Build(errUtils.ErrTerraformExecFailed).
+		WithCause(cause).
+		WithExplanationf("Terraform execution failed for component %q in stack %q.", node.Component, node.Stack).
+		WithContext("component", node.Component).
+		WithContext("stack", node.Stack).
+		Err()
 }
 
 func terraformFailureOutputDetail(result TerraformExecutionResult) string {
@@ -722,9 +772,12 @@ func addTerraformDependencies(
 	componentSection map[string]any,
 ) error {
 	fromID := terraformNodeID(componentName, stackName)
-	deps := terraformDependencies(componentSection)
-	for i := range deps {
-		dep := &deps[i]
+	dependencies, err := terraformDependencies(componentSection)
+	if err != nil {
+		return fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
+	}
+	for dependencyIndex := range dependencies {
+		dep := &dependencies[dependencyIndex]
 		if !dep.IsComponentDependency() {
 			continue
 		}
@@ -751,49 +804,56 @@ func addTerraformDependencies(
 }
 
 // terraformDependencies extracts modern or legacy dependency declarations from a component.
-func terraformDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	if deps, ok := modernTerraformDependencies(componentSection); ok {
-		return deps
+func terraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
+	dependencies, found, err := modernTerraformDependencies(componentSection)
+	if err != nil || found {
+		return dependencies, err
 	}
 
-	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
-	if !ok {
-		return nil
-	}
-	return legacyTerraformDependencies(settingsSection)
+	return legacyTerraformDependencies(componentSection)
 }
 
-// modernTerraformDependencies extracts dependencies.components declarations, when present and
-// non-empty.
-func modernTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, bool) {
+func modernTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, bool, error) {
 	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
 	if !ok {
-		return nil, false
+		return nil, false, nil
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
-		return nil, false
+		return nil, false, nil
 	}
+
 	var deps schema.Dependencies
-	if err := mapstructure.Decode(depsSection, &deps); err != nil || len(deps.Components) == 0 {
-		return nil, false
+	if err := mapstructure.Decode(depsSection, &deps); err != nil {
+		return nil, false, err
 	}
-	return deps.Components, true
+	if len(deps.Components) == 0 {
+		return nil, false, nil
+	}
+	if err := deps.Normalize(); err != nil {
+		return nil, true, err
+	}
+	return deps.Components, true, nil
 }
 
-// legacyTerraformDependencies extracts settings.depends_on declarations (deprecated in favor of
-// dependencies.components), trying the string-keyed legacy shorthand before falling back to the
-// full schema.Settings decode.
-func legacyTerraformDependencies(settingsSection map[string]any) []schema.ComponentDependency {
+func legacyTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
+	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
 	if dependsOn, ok := settingsSection["depends_on"]; ok {
-		if deps := parseLegacyDependsOn(dependsOn); len(deps) > 0 {
+		deps := parseLegacyDependsOn(dependsOn)
+		if len(deps) > 0 {
 			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
-			return deps
+			return deps, nil
 		}
 	}
 
 	var settings schema.Settings
-	if err := mapstructure.Decode(settingsSection, &settings); err != nil || len(settings.DependsOn) == 0 {
-		return nil
+	if err := mapstructure.Decode(settingsSection, &settings); err != nil {
+		return nil, err
+	}
+	if len(settings.DependsOn) == 0 {
+		return nil, nil
 	}
 
 	log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
@@ -809,7 +869,7 @@ func legacyTerraformDependencies(settingsSection map[string]any) []schema.Compon
 			Stage:       ctx.Stage,
 		})
 	}
-	return deps
+	return deps, nil
 }
 
 // parseLegacyDependsOn normalizes settings.depends_on into component dependencies.
