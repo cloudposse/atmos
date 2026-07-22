@@ -1082,6 +1082,11 @@ func customCommandAttemptHelperCommand(t *testing.T, path string) string {
 	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", exe, encodedPath)
 }
 
+func customCommandAtmosAttemptHelperArgs(path string) string {
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("-test.run=TestCustomCommandIntegrationAttemptHelper -- %s", encodedPath)
+}
+
 func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
 	separator := -1
 	for i, arg := range os.Args {

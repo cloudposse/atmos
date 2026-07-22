@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -225,4 +226,60 @@ func TestCustomCommandShellOutputNoneCapturesWithoutStreaming(t *testing.T) {
 	envContent, err := os.ReadFile(resultPath)
 	require.NoError(t, err)
 	assert.Equal(t, "produced|produced|warning", extractEnvVar(string(envContent), "CAPTURED_RESULT"))
+}
+
+func TestCustomCommandOutputEvaluationFailureDoesNotRetryCommand(t *testing.T) {
+	for _, stepType := range []string{"shell", "atmos"} {
+		t.Run(stepType, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			attemptsFile := filepath.Join(t.TempDir(), "attempts.txt")
+			producerCommand := customCommandAttemptHelperCommand(t, attemptsFile)
+			if stepType == "atmos" {
+				producerCommand = customCommandAtmosAttemptHelperArgs(attemptsFile)
+			}
+			maxAttempts := 3
+			initialDelay := time.Millisecond
+			commandConfig := &schema.Command{
+				Name:        "test-output-evaluation-no-retry-" + stepType,
+				Description: "Do not retry successful commands when output evaluation fails",
+				Steps: schema.Tasks{
+					{
+						Name:    "produce",
+						Type:    stepType,
+						Command: producerCommand,
+						Outputs: map[string]string{"broken": "{{"},
+						Retry: &schema.RetryConfig{
+							MaxAttempts:     &maxAttempts,
+							InitialDelay:    &initialDelay,
+							BackoffStrategy: "constant",
+						},
+					},
+				},
+			}
+
+			originalOsExit := errUtils.OsExit
+			t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+			var exitCode int
+			errUtils.OsExit = func(code int) {
+				exitCode = code
+				panic(code)
+			}
+
+			assert.Panics(t, func() {
+				executeCustomCommand(
+					schema.AtmosConfiguration{BasePath: t.TempDir()},
+					&cobra.Command{Use: commandConfig.Name, Annotations: map[string]string{}},
+					nil,
+					&cobra.Command{Use: "atmos"},
+					commandConfig,
+				)
+			})
+			assert.Equal(t, 1, exitCode)
+
+			attempts, err := os.ReadFile(attemptsFile)
+			require.NoError(t, err)
+			assert.Equal(t, "1", strings.TrimSpace(string(attempts)))
+		})
+	}
 }

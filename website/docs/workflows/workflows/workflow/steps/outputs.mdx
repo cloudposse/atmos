@@ -37,6 +37,8 @@ Later steps can read declared outputs with `{{ .steps.<name>.outputs.<key> }}`.
 
 Successful named `shell` and `atmos` steps expose their captured output to later steps. The primary `value` is trimmed, while `metadata.stdout` and `metadata.stderr` preserve the captured streams.
 
+Declared outputs are evaluated once after the command succeeds. A failed command attempt can be retried, but an invalid output template fails the step without running the successful command again.
+
 ```yaml
 steps:
   - name: discover

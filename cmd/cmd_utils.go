@@ -1099,8 +1099,11 @@ func executeCustomCommand(
 		// The dispatch is wrapped in a collapsible CI log group (no-op outside
 		// CI / when disabled), labeled with the step name or command. Exec steps
 		// run bare because a successful Unix exec never returns to close a group.
+		var commandResult *stepPkg.StepResult
 		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
-			return stepPkg.ExecuteAndStoreCommandResult(stepVars, step.Name, step.Outputs, run)
+			var runErr error
+			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
+			return runErr
 		}
 		runStep := func() error {
 			switch stepType {
@@ -1196,9 +1199,13 @@ func executeCustomCommand(
 		}
 		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
 			if step.Retry != nil {
-				return retry.Do(context.Background(), step.Retry, runStep)
+				if retryErr := retry.Do(context.Background(), step.Retry, runStep); retryErr != nil {
+					return retryErr
+				}
+			} else if runErr := runStep(); runErr != nil {
+				return runErr
 			}
-			return runStep()
+			return stepPkg.StoreCommandResult(stepVars, step.Name, step.Outputs, commandResult)
 		})
 		if err != nil {
 			var silentExit errUtils.ExitCodeError

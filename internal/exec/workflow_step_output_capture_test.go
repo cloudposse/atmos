@@ -158,6 +158,60 @@ func TestWorkflowShellStepStoresOnlySuccessfulRetryOutput(t *testing.T) {
 	assert.Equal(t, "2", strings.TrimSpace(string(attempts)))
 }
 
+func TestWorkflowOutputEvaluationFailureDoesNotRetryCommand(t *testing.T) {
+	for _, stepType := range []string{"shell", "atmos"} {
+		t.Run(stepType, func(t *testing.T) {
+			ResetStepExecutorState()
+			t.Cleanup(ResetStepExecutorState)
+
+			attemptsFile := filepath.Join(t.TempDir(), "attempts.txt")
+			producerCommand := workflowOutputAttemptHelperCommand(t, attemptsFile)
+			if stepType == "atmos" {
+				exePath, err := os.Executable()
+				require.NoError(t, err)
+				installWorkflowAtmosTestBinary(t, exePath)
+				producerCommand = workflowOutputAttemptHelperArgs(attemptsFile)
+			}
+			maxAttempts := 3
+			initialDelay := time.Millisecond
+			workflowDef := &schema.WorkflowDefinition{
+				Description: "Do not retry successful commands when output evaluation fails",
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "produce",
+						Type:    stepType,
+						Command: producerCommand,
+						Outputs: map[string]string{"broken": "{{"},
+						Retry: &schema.RetryConfig{
+							MaxAttempts:     &maxAttempts,
+							InitialDelay:    &initialDelay,
+							BackoffStrategy: "constant",
+						},
+					},
+				},
+			}
+			tmpDir := t.TempDir()
+			err := ExecuteWorkflow(
+				schema.AtmosConfiguration{BasePath: tmpDir},
+				"test-output-evaluation-no-retry-"+stepType,
+				filepath.Join(tmpDir, "workflow.yaml"),
+				workflowDef,
+				false,
+				"",
+				"",
+				"",
+			)
+			require.ErrorContains(t, err, "failed to resolve output broken")
+
+			attempts, readErr := os.ReadFile(attemptsFile)
+			require.NoError(t, readErr)
+			assert.Equal(t, "1", strings.TrimSpace(string(attempts)))
+			_, stored := stepExecutorState.GetResult("produce")
+			assert.False(t, stored)
+		})
+	}
+}
+
 func TestWorkflowContainerShellOutputAvailableToMarkdown(t *testing.T) {
 	for _, mode := range []string{"step", "workflow"} {
 		t.Run(mode, func(t *testing.T) {
@@ -238,6 +292,19 @@ func workflowRetryOutputHelperCommand(t *testing.T, path string) string {
 	return fmt.Sprintf("%q -test.run=TestWorkflowStepOutputRetryHelper -- %s", exePath, encodedPath)
 }
 
+func workflowOutputAttemptHelperCommand(t *testing.T, path string) string {
+	t.Helper()
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	return fmt.Sprintf("%q %s", exePath, workflowOutputAttemptHelperArgs(path))
+}
+
+func workflowOutputAttemptHelperArgs(path string) string {
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("-test.run=TestWorkflowStepOutputAttemptHelper -- %s", encodedPath)
+}
+
 func TestWorkflowStepOutputRetryHelper(t *testing.T) {
 	separator := slices.Index(os.Args, "--")
 	if separator == -1 {
@@ -263,4 +330,26 @@ func TestWorkflowStepOutputRetryHelper(t *testing.T) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+func TestWorkflowStepOutputAttemptHelper(t *testing.T) {
+	separator := slices.Index(os.Args, "--")
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 1)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	path := string(pathBytes)
+
+	attempt := 1
+	if existing, readErr := os.ReadFile(path); readErr == nil {
+		parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(existing)))
+		require.NoError(t, parseErr)
+		attempt = parsed + 1
+	}
+	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
+	_, _ = fmt.Fprint(os.Stdout, "complete")
 }

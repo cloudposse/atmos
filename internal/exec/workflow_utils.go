@@ -642,8 +642,11 @@ func ExecuteWorkflow(
 			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
 		}
 
+		var commandResult *stepPkg.StepResult
 		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
-			return stepPkg.ExecuteAndStoreCommandResult(workflowVars, step.Name, step.Outputs, run)
+			var runErr error
+			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
+			return runErr
 		}
 		executeStep := func() error {
 			// Background steps (start/wait/wait-all/cancel) are coordinated by the
@@ -905,7 +908,10 @@ func ExecuteWorkflow(
 					AtmosConfig: &atmosConfig,
 				})
 			}
-			return err
+			if err != nil {
+				return err
+			}
+			return stepPkg.StoreCommandResult(workflowVars, step.Name, step.Outputs, commandResult)
 		}
 
 		// Wrap each step's output in a collapsible CI log group when grouping is
