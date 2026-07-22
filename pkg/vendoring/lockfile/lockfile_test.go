@@ -16,6 +16,58 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// mustArtifactID wraps ArtifactID for tests, using the same kind/target/writers shape throughout
+// this file and failing the test immediately on error instead of threading one through every call
+// site individually.
+func mustArtifactID(t *testing.T, config *schema.AtmosConfiguration, kind, target string, writers ...string) string {
+	t.Helper()
+	id, err := ArtifactID(config, kind, target, writers...)
+	require.NoError(t, err)
+	return id
+}
+
+// TestArtifactID_StableAcrossAbsoluteCheckoutPaths proves the same logical artifact (same kind,
+// same target relative to the project base, same writers) hashes to the same ID regardless of the
+// checkout's absolute filesystem path -- e.g. two different developers' clones, or a developer's
+// clone versus a CI runner's clone.
+//
+// Found via real-world verification. ResolveComponentPath deliberately returns an absolute path
+// (see its own doc comment), and before this fix ArtifactID hashed that absolute path verbatim, so
+// a vendor.lock.yaml committed to git -- its entire purpose -- would never match on any checkout
+// other than the one that originally ran `vendor pull`.
+func TestArtifactID_StableAcrossAbsoluteCheckoutPaths(t *testing.T) {
+	base1 := t.TempDir()
+	base2 := t.TempDir()
+	config1 := &schema.AtmosConfiguration{BasePath: base1}
+	config2 := &schema.AtmosConfiguration{BasePath: base2}
+
+	// Same relative target ("components/terraform/vpc"), but resolved to two different absolute
+	// paths -- exactly what ResolveComponentPath produces on two different checkouts.
+	target1 := filepath.Join(base1, "components", "terraform", "vpc")
+	target2 := filepath.Join(base2, "components", "terraform", "vpc")
+	require.NotEqual(t, target1, target2, "test setup: the two absolute targets must actually differ")
+
+	id1, err := ArtifactID(config1, "remote", target1, "vpc")
+	require.NoError(t, err)
+	id2, err := ArtifactID(config2, "remote", target2, "vpc")
+	require.NoError(t, err)
+
+	require.Equal(t, id1, id2, "the same logical artifact must hash to the same ID regardless of the checkout's absolute path")
+}
+
+// TestArtifactID_RejectsTargetOutsideProjectBase proves a target that can't be expressed relative
+// to the project base (escapes it, e.g. via "..") is rejected with an error rather than silently
+// hashing something unexpected.
+func TestArtifactID_RejectsTargetOutsideProjectBase(t *testing.T) {
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	outside := filepath.Join(filepath.Dir(base), "not-the-project")
+
+	_, err := ArtifactID(config, "remote", outside, "vpc")
+
+	require.Error(t, err)
+}
+
 // skipUnlessWritablePermissionsWork skips read-only-directory error-injection
 // tests on platforms/execution contexts where Unix permission bits don't
 // actually block writes: Windows (different ACL model) and root (bypasses
@@ -188,7 +240,7 @@ func TestIsMaterializedRequiresMatchingSourceAndFiles(t *testing.T) {
 
 	config := &schema.AtmosConfiguration{BasePath: base}
 	artifact := Artifact{Kind: "local", Target: target, Source: Source{Declared: "file:///source"}, Files: files}
-	id := ArtifactID(artifact.Kind, artifact.Target)
+	id := mustArtifactID(t, config, artifact.Kind, artifact.Target)
 	require.NoError(t, Replace(config, id, artifact))
 
 	check, err := IsMaterialized(config, MaterializationParams{ID: id, Declared: "file:///source", Target: target})
@@ -242,7 +294,7 @@ func TestIsMaterializedDetectsIncludedExcludedPathsDrift(t *testing.T) {
 			Files:         files,
 			IncludedPaths: []string{"*.tf"},
 		}
-		id := ArtifactID(artifact.Kind, artifact.Target, "patterned")
+		id := mustArtifactID(t, config, artifact.Kind, artifact.Target, "patterned")
 		require.NoError(t, Replace(config, id, artifact))
 
 		// Same declared source and files, unchanged included patterns: still materialized.
@@ -276,7 +328,7 @@ func TestIsMaterializedDetectsIncludedExcludedPathsDrift(t *testing.T) {
 		require.NoError(t, err)
 
 		artifact := Artifact{Kind: "local", Target: target, Source: Source{Declared: declared}, Files: files}
-		id := ArtifactID(artifact.Kind, artifact.Target, "unfiltered")
+		id := mustArtifactID(t, config, artifact.Kind, artifact.Target, "unfiltered")
 		require.NoError(t, Replace(config, id, artifact))
 
 		check, err := IsMaterialized(config, MaterializationParams{ID: id, Declared: declared, Target: target})
@@ -308,12 +360,12 @@ func TestRecordPopulatesHTTPMetadataOnlyWhenProvided(t *testing.T) {
 	lock, err := Load(config)
 	require.NoError(t, err)
 
-	httpArtifact, ok := lock.Artifacts[ArtifactID("remote", httpTarget, "http-source")]
+	httpArtifact, ok := lock.Artifacts[mustArtifactID(t, config, "remote", httpTarget, "http-source")]
 	require.True(t, ok)
 	require.Equal(t, `"abc123"`, httpArtifact.Source.ETag)
 	require.Equal(t, "Wed, 21 Oct 2015 07:28:00 GMT", httpArtifact.Source.LastModified)
 
-	localArtifact, ok := lock.Artifacts[ArtifactID("local", localTarget, "local-source")]
+	localArtifact, ok := lock.Artifacts[mustArtifactID(t, config, "local", localTarget, "local-source")]
 	require.True(t, ok)
 	require.Empty(t, localArtifact.Source.ETag)
 	require.Empty(t, localArtifact.Source.LastModified)
@@ -345,12 +397,12 @@ func TestRecordPopulatesVersionResolutionOnlyWhenProvided(t *testing.T) {
 	lock, err := Load(config)
 	require.NoError(t, err)
 
-	rangeArtifact, ok := lock.Artifacts[ArtifactID("remote", rangeTarget, "range-source")]
+	rangeArtifact, ok := lock.Artifacts[mustArtifactID(t, config, "remote", rangeTarget, "range-source")]
 	require.True(t, ok)
 	require.Equal(t, "^1.0.0", rangeArtifact.Source.VersionConstraint)
 	require.Equal(t, "1.2.3", rangeArtifact.Source.ResolvedVersion)
 
-	pinnedArtifact, ok := lock.Artifacts[ArtifactID("remote", pinnedTarget, "pinned-source")]
+	pinnedArtifact, ok := lock.Artifacts[mustArtifactID(t, config, "remote", pinnedTarget, "pinned-source")]
 	require.True(t, ok)
 	require.Empty(t, pinnedArtifact.Source.VersionConstraint)
 	require.Empty(t, pinnedArtifact.Source.ResolvedVersion)
@@ -386,13 +438,13 @@ func TestIsMaterializedAndVerifyIgnoreETagAndLastModified(t *testing.T) {
 		Source: Source{Declared: declared, Digest: "sha256:deadbeef", ETag: `"etag-1"`, LastModified: "Mon, 01 Jan 2024 00:00:00 GMT"},
 		Files:  files,
 	}
-	idWith := ArtifactID(withETag.Kind, withETag.Target, "with-etag")
+	idWith := mustArtifactID(t, config, withETag.Kind, withETag.Target, "with-etag")
 	require.NoError(t, Replace(config, idWith, withETag))
 
 	withoutETag := withETag
 	withoutETag.Source.ETag = ""
 	withoutETag.Source.LastModified = ""
-	idWithout := ArtifactID(withoutETag.Kind, withoutETag.Target, "without-etag")
+	idWithout := mustArtifactID(t, config, withoutETag.Kind, withoutETag.Target, "without-etag")
 	require.NoError(t, Replace(config, idWithout, withoutETag))
 
 	checkWith, err := IsMaterialized(config, MaterializationParams{ID: idWith, Declared: declared, Target: target})
@@ -662,7 +714,7 @@ func TestReplacePrunesStaleFilesAndHandlesEdgeCases(t *testing.T) {
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		artifact := Artifact{Kind: "source", Target: target, Files: files}
-		id := ArtifactID(artifact.Kind, artifact.Target)
+		id := mustArtifactID(t, config, artifact.Kind, artifact.Target)
 		require.NoError(t, Replace(config, id, artifact))
 
 		var keptOnly []File
@@ -693,7 +745,7 @@ func TestReplacePrunesStaleFilesAndHandlesEdgeCases(t *testing.T) {
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		artifact := Artifact{Kind: "source", Target: target, Files: files}
-		id := ArtifactID(artifact.Kind, artifact.Target)
+		id := mustArtifactID(t, config, artifact.Kind, artifact.Target)
 		require.NoError(t, Replace(config, id, artifact))
 
 		// Remove the file out from under the lock before replacing the receipt.
@@ -720,7 +772,7 @@ func TestReplacePrunesStaleFilesAndHandlesEdgeCases(t *testing.T) {
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		artifact := Artifact{Kind: "source", Target: target, Files: files}
-		id := ArtifactID(artifact.Kind, artifact.Target)
+		id := mustArtifactID(t, config, artifact.Kind, artifact.Target)
 		require.NoError(t, Replace(config, id, artifact))
 
 		require.NoError(t, os.WriteFile(filepath.Join(target, "stale.txt"), []byte("tampered"), 0o644))
@@ -757,8 +809,8 @@ func TestReplacePrunesStaleFilesAndHandlesEdgeCases(t *testing.T) {
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		artifactA := Artifact{Kind: "source", Target: target, Files: files}
-		idA := ArtifactID(artifactA.Kind, artifactA.Target, "a")
-		idB := ArtifactID(artifactA.Kind, artifactA.Target, "b")
+		idA := mustArtifactID(t, config, artifactA.Kind, artifactA.Target, "a")
+		idB := mustArtifactID(t, config, artifactA.Kind, artifactA.Target, "b")
 		require.NoError(t, Replace(config, idA, artifactA))
 		require.NoError(t, Replace(config, idB, artifactA))
 
@@ -1294,7 +1346,7 @@ func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T
 			}
 		}
 		artifactWithGhost := Artifact{Kind: "source", Target: target, Files: append(append([]File{}, keptOnly...), File{Path: "blocker/nested.txt", Type: "file", SHA256: "ignored"})}
-		id := ArtifactID(artifactWithGhost.Kind, artifactWithGhost.Target)
+		id := mustArtifactID(t, config, artifactWithGhost.Kind, artifactWithGhost.Target)
 		require.NoError(t, Replace(config, id, artifactWithGhost))
 
 		err = Replace(config, id, Artifact{Kind: "source", Target: target, Files: keptOnly})
@@ -1314,7 +1366,7 @@ func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		artifact := Artifact{Kind: "source", Target: target, Files: files}
-		id := ArtifactID(artifact.Kind, artifact.Target)
+		id := mustArtifactID(t, config, artifact.Kind, artifact.Target)
 		require.NoError(t, Replace(config, id, artifact))
 
 		require.NoError(t, os.Chmod(target, 0o555))

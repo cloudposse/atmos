@@ -88,7 +88,10 @@ func ResolveDeclaredVersion(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return params.RawVersion, nil
 	}
 
-	id := versionResolveArtifactID(params.Name, params.Discriminator, version.ExtractGitURI(params.SourceForGitURI))
+	id, err := versionResolveArtifactID(atmosConfig, params.Name, params.Discriminator, version.ExtractGitURI(params.SourceForGitURI))
+	if err != nil {
+		return "", err
+	}
 
 	if !params.RefreshLock {
 		resolved, found, err := lookupResolvedVersion(atmosConfig, id, params.RawVersion)
@@ -146,13 +149,13 @@ func resolveVersionRangeFresh(ctx context.Context, params *VersionResolveParams)
 // versionResolveArtifactID reuses lockfile.ArtifactID for the version-resolution lock cache key
 // (versionResolveKind/versionResolveTarget as the fixed kind/target, name+discriminator+gitURI as
 // the writer list), matching this package's other artifact-key derivations.
-func versionResolveArtifactID(name, discriminator, gitURI string) string {
+func versionResolveArtifactID(atmosConfig *schema.AtmosConfiguration, name, discriminator, gitURI string) (string, error) {
 	writers := []string{name}
 	if discriminator != "" {
 		writers = append(writers, discriminator)
 	}
 	writers = append(writers, gitURI)
-	return lockfile.ArtifactID(versionResolveKind, versionResolveTarget, writers...)
+	return lockfile.ArtifactID(atmosConfig, versionResolveKind, versionResolveTarget, writers...)
 }
 
 // lookupResolvedVersion returns the previously recorded resolution for id, when one exists and was

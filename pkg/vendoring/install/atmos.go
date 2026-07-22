@@ -101,8 +101,8 @@ func (p *atmosVendorInstaller) dryRunCheck(_ context.Context, atmosConfig *schem
 
 func (p *atmosVendorInstaller) isMixin() bool { return false }
 
-func (p *atmosVendorInstaller) artifactID() string {
-	return lockfile.ArtifactID(p.pType.String(), p.targetPath, p.name)
+func (p *atmosVendorInstaller) artifactID(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	return lockfile.ArtifactID(atmosConfig, p.pType.String(), p.targetPath, p.name)
 }
 
 // isMaterialized returns Materialized true only for a copy mode with an exact receipt whose
@@ -110,8 +110,12 @@ func (p *atmosVendorInstaller) artifactID() string {
 // filtered or file copy modes have no exact destination plan yet and are intentionally left
 // eligible for re-install.
 func (p *atmosVendorInstaller) isMaterialized(atmosConfig *schema.AtmosConfiguration) (lockfile.MaterializationCheck, error) {
+	id, err := p.artifactID(atmosConfig)
+	if err != nil {
+		return lockfile.MaterializationCheck{}, err
+	}
 	return lockfile.IsMaterialized(atmosConfig, lockfile.MaterializationParams{
-		ID:            p.artifactID(),
+		ID:            id,
 		Declared:      lockDeclaredSource(p.pType, p.srcURI),
 		Target:        p.targetPath,
 		IncludedPaths: p.source.IncludedPaths,

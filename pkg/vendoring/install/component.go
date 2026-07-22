@@ -175,12 +175,12 @@ func (p *componentVendorInstaller) isMixin() bool { return p.mixin }
 // artifactID matches lockfile.Record's own writer-list computation (name alone for a component,
 // name+mixin filename for a mixin), so the materialization check (isMaterialized, below) and the
 // lock write (install, via lockfile.Record) always agree on the same key.
-func (p *componentVendorInstaller) artifactID() string {
+func (p *componentVendorInstaller) artifactID(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	writers := []string{p.name}
 	if p.mixin {
 		writers = append(writers, p.mixinFile)
 	}
-	return lockfile.ArtifactID(p.pType.String(), p.componentPath, writers...)
+	return lockfile.ArtifactID(atmosConfig, p.pType.String(), p.componentPath, writers...)
 }
 
 // isMaterialized compares the component's own copy-filter patterns against the receipt only for a
@@ -190,8 +190,12 @@ func (p *componentVendorInstaller) artifactID() string {
 // otherwise report every mixin as spuriously drifted whenever the component itself declares
 // include/exclude patterns.
 func (p *componentVendorInstaller) isMaterialized(atmosConfig *schema.AtmosConfiguration) (lockfile.MaterializationCheck, error) {
+	id, err := p.artifactID(atmosConfig)
+	if err != nil {
+		return lockfile.MaterializationCheck{}, err
+	}
 	params := lockfile.MaterializationParams{
-		ID:       p.artifactID(),
+		ID:       id,
 		Declared: lockDeclaredSource(p.pType, p.srcURI),
 		Target:   p.componentPath,
 	}

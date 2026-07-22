@@ -311,10 +311,21 @@ func FilesDigest(files []File) string {
 // ArtifactID returns a stable key for the writer that owns a target. The
 // declared source is deliberately not part of the key: a new declared ref for
 // the same target replaces the old receipt and can safely prune its stale files.
-func ArtifactID(kind, target string, writers ...string) string {
-	identity := strings.Join(append([]string{kind, filepath.Clean(target)}, writers...), "\x00")
+//
+// Target is relativized against config's project base before hashing (the same
+// projectRelativeTarget normalization Replace/IsMaterialized already apply to the stored Target
+// field) so the same logical artifact hashes to the same ID regardless of the checkout's absolute
+// path. Without this, a vendor.lock.yaml committed to git -- its entire purpose -- would never
+// match on a different developer's or CI runner's checkout, since every installer computes this ID
+// from an absolute path (see ResolveComponentPath's own doc comment on why that path is absolute).
+func ArtifactID(config *schema.AtmosConfiguration, kind, target string, writers ...string) (string, error) {
+	relTarget, err := projectRelativeTarget(config, target)
+	if err != nil {
+		return "", err
+	}
+	identity := strings.Join(append([]string{kind, relTarget}, writers...), "\x00")
 	hash := sha256.Sum256([]byte(identity))
-	return hex.EncodeToString(hash[:])
+	return hex.EncodeToString(hash[:]), nil
 }
 
 // RecordOptions configures how Record inventories and identifies a materialized artifact.
@@ -401,7 +412,11 @@ func Record(ctx context.Context, atmosConfig *schema.AtmosConfiguration, kind, n
 	if opts.Mixin {
 		writers = append(writers, opts.MixinFilename)
 	}
-	return Replace(atmosConfig, ArtifactID(kind, target, writers...), artifact)
+	id, err := ArtifactID(atmosConfig, kind, target, writers...)
+	if err != nil {
+		return err
+	}
+	return Replace(atmosConfig, id, artifact)
 }
 
 // MaterializationParams identifies the artifact IsMaterialized checks and the source's
