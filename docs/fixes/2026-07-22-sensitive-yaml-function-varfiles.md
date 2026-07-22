@@ -42,8 +42,10 @@ The pre-pass now uses Atmos's tag-aware YAML decoder, which reconstructs custom 
 expression reaches final configuration. Other raw YAML parsing in stack processing is
 either node-only diagnostics or display-only inspection; normal stack configuration
 decoding already uses the tag-aware decoder. Controlled `1.221.0` and `1.223.0` runs took
-a simpler route and therefore resolved correctly; the faulty structured pre-pass was
-introduced after those releases.
+a simpler route and therefore resolved correctly. This was not introduced by YAML
+function validation: commit `c1fd583de7` added the structured pre-pass on 2026-07-08,
+after those releases. That commit is the change that made a raw explicit tag pass through
+plain map decoding before the normal tag-aware stack decoder.
 
 ## Changes
 
