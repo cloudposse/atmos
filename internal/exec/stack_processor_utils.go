@@ -1166,8 +1166,10 @@ func processYAMLConfigFileWithContextInternal(
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
 		stackManifestTemplateInput := stackYamlConfig
 		if len(context) > 0 {
-			var rawStackConfig map[string]any
-			if err := yaml.Unmarshal([]byte(stackYamlConfig), &rawStackConfig); err == nil {
+			// Preserve explicit YAML function tags while evaluating structured template references.
+			// A plain yaml.Unmarshal drops a scalar's custom tag and leaves only its arguments,
+			// which would prevent the later YAML-function resolver from recognizing it.
+			if rawStackConfig, err := u.UnmarshalYAMLFromFile[map[string]any](atmosConfig, stackYamlConfig, filePath); err == nil {
 				if processedStructured, ok := processStructuredTemplateRefs(rawStackConfig, context).(map[string]any); ok {
 					if renderedStructured, err := u.ConvertToYAML(processedStructured); err == nil {
 						stackManifestTemplateInput = renderedStructured
