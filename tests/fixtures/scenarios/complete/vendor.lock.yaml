@@ -1,0 +1,162 @@
+version: 1
+artifacts:
+    24946bd8c43e89c67574220d27180f170426aae58be75150a9a7839d55ef2b8d:
+        name: infra/vpc-flow-logs-bucket
+        kind: remote
+        target: components/terraform/infra/vpc-flow-logs-bucket
+        source:
+            declared: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket
+            resolved: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket
+            digest: sha256:ef7574609d82d5b761598deb9feddfa809ddaf5a2edd354c8b34c8b14ab7b22c
+        files:
+            - path: main.tf
+              type: file
+              mode: 420
+              sha256: 23d8ed384d9f53b9a4bbee678fb141bedc491b59aa6e06d8dcf5f2272bd4bece
+            - path: outputs.tf
+              type: file
+              mode: 420
+              sha256: aa5a203b7740e6f68e644ce965af306fbdf3c1066cac029f61dccc7db8d6edd8
+            - path: providers.tf
+              type: file
+              mode: 420
+              sha256: 34c1fca4eb9a64f37e130374076f66a6de05001cdf6ed343199a5b21274319e5
+            - path: variables.tf
+              type: file
+              mode: 420
+              sha256: 8c5673fee06cd6328d746fbcf079684dc80ddd2c5b37ea9a6f304f6e9f399710
+            - path: versions.tf
+              type: file
+              mode: 420
+              sha256: 4f84dfb10312cf1aafbeef6137d972a76a9f31b398b2a393061f48946e847377
+        order: 1
+        included_paths:
+            - '**/*.tf'
+        excluded_paths:
+            - '**/context.tf'
+    dfdd56c6af9026ee9c2aa2e611fa77c53c752b0f25079de31d2cef31ae1bfe3e:
+        name: infra/account-map
+        kind: remote
+        target: components/terraform/infra/account-map
+        source:
+            declared: github.com/cloudposse/terraform-aws-components.git//modules/account-map
+            resolved: github.com/cloudposse/terraform-aws-components.git//modules/account-map
+            digest: sha256:396f3a0ac4065dafd0b4c31d7b0f2308f4a8628d3be10cc59b2131061fd44e4e
+        files:
+            - path: README.md
+              type: file
+              mode: 420
+              sha256: 6855d99638ae9c9103dd0163c9a0fdd5c4e81922397860e2d127d3711cd6d25b
+            - path: context.tf
+              type: file
+              mode: 420
+              sha256: b9644bbd7706d9359fc27ad06c48aabd96a4d255815859c2906ce1b5a7d49d56
+            - path: dynamic-roles.tf
+              type: file
+              mode: 420
+              sha256: 585434337e8bc8839cfda889a6bd9fb02a12f97d3b2275b197aa9568bdf96f3c
+            - path: main.tf
+              type: file
+              mode: 420
+              sha256: a2aaf06614bba3bfef92ad09a9c4fe4cf150525cad7361bbf1317c886789a020
+            - path: modules/iam-roles/README.md
+              type: file
+              mode: 420
+              sha256: e126c1a515511d282bf328851bdeb2e62976101bf955749fedf6c54f6b616400
+            - path: modules/iam-roles/context.tf
+              type: file
+              mode: 420
+              sha256: b9644bbd7706d9359fc27ad06c48aabd96a4d255815859c2906ce1b5a7d49d56
+            - path: modules/iam-roles/main.tf
+              type: file
+              mode: 420
+              sha256: 3894fd9c4a5f4d227d6a2ef3a1b9adb3d5587e96d1fdbc1cb59d322ba77f78ff
+            - path: modules/iam-roles/outputs.tf
+              type: file
+              mode: 420
+              sha256: 52c0b8638ff504a1e9f2977e3db592d236666a4ab982967c4f77add59c44678e
+            - path: modules/iam-roles/providers.tf
+              type: file
+              mode: 420
+              sha256: bb0df5413538082311f0228d5c93db84930cf56a9ccb9e015701b5d273a15153
+            - path: modules/iam-roles/variables.tf
+              type: file
+              mode: 420
+              sha256: 8d9ecd27e50867c371c9dfd67d91d5b02b7bac5f354d998bb76ef6f3f5d2e470
+            - path: modules/iam-roles/versions.tf
+              type: file
+              mode: 420
+              sha256: 8448df51bc37ca669bfb848c45390876ff46cd480444053ed91071273621ffa7
+            - path: modules/roles-to-principals/README.md
+              type: file
+              mode: 420
+              sha256: b34bcdf8a9ce3b8a3597b2f03d7559c070a689bb8a154eea2e6883a90c7ded59
+            - path: modules/roles-to-principals/context.tf
+              type: file
+              mode: 420
+              sha256: b9644bbd7706d9359fc27ad06c48aabd96a4d255815859c2906ce1b5a7d49d56
+            - path: modules/roles-to-principals/main.tf
+              type: file
+              mode: 420
+              sha256: e906ef7f952009d5382de842fe11600dfc79111e7127b04ba656395c2a93da31
+            - path: modules/roles-to-principals/outputs.tf
+              type: file
+              mode: 420
+              sha256: 2dbfeb1bd54fddd7af31370daaca63aaee29dc7a3561903d5b0880e1ea5d18bc
+            - path: modules/roles-to-principals/variables.tf
+              type: file
+              mode: 420
+              sha256: d75333703520b7adc3e175915d24f1efb0f6ec6e2691b0b349e17676a8ebe629
+            - path: modules/team-assume-role-policy/README.md
+              type: file
+              mode: 420
+              sha256: 13f238fbacba96d2fd59de4ef32d250819cc43501aec2c37f0280ccfc549baab
+            - path: modules/team-assume-role-policy/context.tf
+              type: file
+              mode: 420
+              sha256: b9644bbd7706d9359fc27ad06c48aabd96a4d255815859c2906ce1b5a7d49d56
+            - path: modules/team-assume-role-policy/github-assume-role-policy.mixin.tf
+              type: file
+              mode: 420
+              sha256: 5fbdb520217f6e383d1fb27927bf9b0565949c73d77bc57fe29714028c68dc5d
+            - path: modules/team-assume-role-policy/main.tf
+              type: file
+              mode: 420
+              sha256: 3b0f4798a459037ffeab9ecad577bd5f4120057d730a0b7f7a72a314605c4e1c
+            - path: modules/team-assume-role-policy/outputs.tf
+              type: file
+              mode: 420
+              sha256: 01fab43e4a89232853410e7ba82b86ccd3b6236160c4b3c93836cf59a0b83f24
+            - path: modules/team-assume-role-policy/variables.tf
+              type: file
+              mode: 420
+              sha256: b5ae66e5bef7b66af093bde49d560a9635df118029178179d3724109591ea82d
+            - path: outputs.tf
+              type: file
+              mode: 420
+              sha256: 06b3820edf5001449d0baebe667e9a6503974c17ab05e6f48b7882018a78068c
+            - path: providers.tf
+              type: file
+              mode: 420
+              sha256: a8f88a5f66e11e9ac5a11b7a8e9e48008a053ba7b9e6457561adb605512427fb
+            - path: remote-state.tf
+              type: file
+              mode: 420
+              sha256: 951a04b0f7eb9ba1cd3d88c8a0c499254443a88a47992290001a588931f6b83d
+            - path: variables.tf
+              type: file
+              mode: 420
+              sha256: 0e33e2e936b0dab6d939de5859fa64b91efc39c9c2ae96059c441a46a405ef10
+            - path: versions.tf
+              type: file
+              mode: 420
+              sha256: 8dc27f2b1e5f0fcfa6090431caae25b363d79a6bebb278e9d3e35ecb90f999e5
+        order: 2
+        included_paths:
+            - '**/*.tf'
+            - '**/*.tfvars'
+            - '**/*.md'
+            - '**/modules/**'
+            - '**/modules/**/*.tf'
+            - '**/modules/**/*.tfvars'
+            - '**/modules/**/*.md'

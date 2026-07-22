@@ -5,14 +5,18 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 var errModifiedVendorFiles = errors.New("modified vendor files were preserved; rerun with --force to delete them")
+
+var vendorCleanParser *flags.StandardParser
 
 // vendorCleanCmd removes files recorded in vendor.lock.yaml. It intentionally
 // defaults to all artifacts because the lock gives it an exact ownership list.
@@ -63,8 +67,15 @@ var vendorCleanCmd = &cobra.Command{
 }
 
 func init() {
-	vendorCleanCmd.Flags().StringP("component", "c", "", "Clean only this component")
-	vendorCleanCmd.Flags().Bool("force", false, "Delete modified lock-owned files")
-	vendorCleanCmd.Flags().Bool("dry-run", false, "Show files that would be removed")
+	vendorCleanParser = flags.NewStandardParser(
+		flags.WithStringFlag("component", "c", "", "Clean only this component"),
+		flags.WithBoolFlag("force", "", false, "Delete modified lock-owned files"),
+		flags.WithBoolFlag("dry-run", "", false, "Show files that would be removed"),
+	)
+	vendorCleanParser.RegisterFlags(vendorCleanCmd)
+	if err := vendorCleanParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	vendorCmd.AddCommand(vendorCleanCmd)
 }

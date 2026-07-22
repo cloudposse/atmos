@@ -289,6 +289,83 @@ func TestFileDownloader_FetchData_ReadError(t *testing.T) {
 	assert.Equal(t, readErr, err)
 }
 
+// fakeMetadataDownloadClient is a DownloadClient that also implements Metadata(), so
+// FetchWithMetadata's type-assertion picks it up -- mirroring how *goGetterClient exposes
+// captured HTTP headers after Get() runs.
+type fakeMetadataDownloadClient struct {
+	getErr   error
+	metadata FetchMetadata
+}
+
+func (f *fakeMetadataDownloadClient) Get() error { return f.getErr }
+
+func (f *fakeMetadataDownloadClient) Metadata() FetchMetadata { return f.metadata }
+
+func TestFileDownloader_FetchWithMetadata_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	fakeClient := &fakeMetadataDownloadClient{metadata: FetchMetadata{ETag: `"abc"`, LastModified: "yesterday"}}
+	mockFactory := NewMockClientFactory(ctrl)
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(fakeClient, nil)
+
+	fd := NewFileDownloader(mockFactory)
+	metadata, err := fd.FetchWithMetadata("src", "dest", ClientModeFile, 10*time.Second)
+	assert.NoError(t, err)
+	assert.Equal(t, FetchMetadata{ETag: `"abc"`, LastModified: "yesterday"}, metadata)
+}
+
+// TestFileDownloader_FetchWithMetadata_NonHTTPClientYieldsEmptyMetadata proves a DownloadClient
+// that doesn't implement Metadata() (e.g. git, OCI, or a plain test mock) yields a zero-value
+// FetchMetadata rather than an error -- the type-assertion fallback described in
+// FetchWithMetadata's doc comment.
+func TestFileDownloader_FetchWithMetadata_NonHTTPClientYieldsEmptyMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(nil)
+
+	fd := NewFileDownloader(mockFactory)
+	metadata, err := fd.FetchWithMetadata("src", "dest", ClientModeFile, 10*time.Second)
+	assert.NoError(t, err)
+	assert.Empty(t, metadata)
+}
+
+func TestFileDownloader_FetchWithMetadata_CreateClientError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFactory := NewMockClientFactory(ctrl)
+	expectedErr := errors.New("invalid URL")
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(nil, expectedErr)
+
+	fd := NewFileDownloader(mockFactory)
+	metadata, err := fd.FetchWithMetadata("src", "dest", ClientModeFile, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCreateDownloadClient)
+	assert.Empty(t, metadata)
+}
+
+func TestFileDownloader_FetchWithMetadata_GetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+	expectedErr := errors.New("network error")
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(expectedErr)
+
+	fd := NewFileDownloader(mockFactory)
+	metadata, err := fd.FetchWithMetadata("src", "dest", ClientModeFile, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
+	assert.Empty(t, metadata)
+}
+
 func TestFileDownloader_Fetch_GetError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -1,4 +1,4 @@
-package exec
+package install
 
 import (
 	"errors"
@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 var (
@@ -921,7 +922,7 @@ func TestGetLocalFinalTarget_Directory(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	expectedPath := filepath.Join(targetPath, SanitizeFileName(filepath.Base(srcDir)))
+	expectedPath := filepath.Join(targetPath, vendor.SanitizeFileName(filepath.Base(srcDir)))
 	if finalTarget != expectedPath {
 		t.Errorf("Expected %q, got %q", expectedPath, finalTarget)
 	}

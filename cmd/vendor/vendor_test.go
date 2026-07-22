@@ -154,12 +154,11 @@ spec:
       targets: ["components/terraform/vpc"]
 `)
 
-	oldFileFlag := vendorFileFlag
-	vendorFileFlag = file
-	t.Cleanup(func() {
-		vendorFileFlag = oldFileFlag
-		data.Reset()
-	})
+	resetCommandFlags(t, vendorSetCmd)
+	resetCommandFlags(t, vendorGetCmd)
+	t.Cleanup(data.Reset)
+	require.NoError(t, vendorSetCmd.Flags().Set("file", file))
+	require.NoError(t, vendorGetCmd.Flags().Set("file", file))
 
 	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"}))
 	path, err := vendoring.ComponentVersionPath(file, "vpc")
@@ -243,6 +242,19 @@ spec:
 	eksVersion, err := atmosyaml.GetFile(file, "spec.sources[0].version")
 	require.NoError(t, err)
 	assert.Equal(t, "v1.0.0", eksVersion)
+}
+
+// TestVendorGetSetCmd_FileFlagsIndependent proves vendor get/set's --file flags are backed by
+// independent per-command StandardParsers (vendorGetParser/vendorSetParser), not a shared
+// package-level var: setting one command's --file must not leak into the other's default.
+func TestVendorGetSetCmd_FileFlagsIndependent(t *testing.T) {
+	resetCommandFlags(t, vendorGetCmd)
+	resetCommandFlags(t, vendorSetCmd)
+
+	require.NoError(t, vendorGetCmd.Flags().Set("file", "get-only.yaml"))
+
+	assert.Equal(t, "get-only.yaml", vendorGetCmd.Flags().Lookup("file").Value.String())
+	assert.Equal(t, "", vendorSetCmd.Flags().Lookup("file").Value.String(), "set's --file must not pick up get's value")
 }
 
 func TestResolveVendorFileWithOverrideAndDefault(t *testing.T) {
@@ -388,11 +400,13 @@ spec:
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
 }
 
-// TestVendorUpdateCommand_HonorsVendorBasePath reproduces the reported bug: "atmos --chdir=<dir>
-// vendor update --check" failed with "No vendor.yaml found in the current directory" whenever the
-// target directory's atmos.yaml configured vendor.base_path to something other than a literal
-// ./vendor.yaml (e.g. the common infra-live layout), because repo-wide vendor.yaml discovery only
-// ever checked the process cwd and ignored atmos.yaml entirely.
+// TestVendorUpdateCommand_HonorsVendorBasePath proves repo-wide vendor.yaml discovery honors
+// atmos.yaml's configured vendor.base_path instead of only ever checking the process cwd.
+//
+// Historical note: reproduces a reported bug where "atmos --chdir=<dir> vendor update --check"
+// failed with "No vendor.yaml found in the current directory" whenever the target directory's
+// atmos.yaml configured vendor.base_path to something other than a literal ./vendor.yaml (e.g. the
+// common infra-live layout).
 func TestVendorUpdateCommand_HonorsVendorBasePath(t *testing.T) {
 	resetCommandFlags(t, vendorUpdateCmd)
 	chdirTest(t, t.TempDir()) // simulates having --chdir'd into a repo with no ./vendor.yaml.
@@ -524,9 +538,9 @@ func TestVendorUpdateCommand_NeitherManifestExists_ReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrVendorSourceNotFound)
 }
 
-// TestVendorUpdateCommand_ErrorsWhenNothingToUpdate is a regression test: a --component-less
-// "vendor update" in a repo with neither a vendor.yaml nor any component.yaml manifests anywhere
-// must still return a helpful error, rather than silently doing nothing.
+// TestVendorUpdateCommand_ErrorsWhenNothingToUpdate proves a --component-less "vendor update" in a
+// repo with neither a vendor.yaml nor any component.yaml manifests anywhere still returns a
+// helpful error, rather than silently doing nothing.
 func TestVendorUpdateCommand_ErrorsWhenNothingToUpdate(t *testing.T) {
 	resetCommandFlags(t, vendorUpdateCmd)
 	chdirTest(t, t.TempDir())
@@ -552,11 +566,11 @@ func TestVendorUpdateCommand_AutoSweepsComponentManifestsWithoutVendorYaml(t *te
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
 }
 
-// TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough is a regression test for
-// runRepoWideUpdate's typeChanged branch: passing --type explicitly (even set to its own default
-// value, "terraform") must still thread updateType through to vendoring.Update's Type param,
-// distinguishing "the user asked for this type" from "no --type was given at all" (typeChanged
-// stays false and Type is left blank, letting Update infer per-source types on its own).
+// TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough proves passing --type explicitly (even set
+// to its own default value, "terraform") still threads updateType through to vendoring.Update's
+// Type param, distinguishing "the user asked for this type" from "no --type was given at all"
+// (typeChanged stays false and Type is left blank, letting Update infer per-source types on its
+// own) -- runRepoWideUpdate's typeChanged branch.
 func TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough(t *testing.T) {
 	resetCommandFlags(t, vendorUpdateCmd)
 	chdirTest(t, t.TempDir())
@@ -644,7 +658,6 @@ func newVendorPullTestCmd() *cobra.Command {
 	c.Flags().StringP("component", "c", "", "")
 	c.Flags().StringP("type", "t", "terraform", "")
 	c.Flags().Bool("everything", false, "")
-	c.Flags().StringP("stack", "s", "", "")
 	c.Flags().String("tags", "", "")
 	c.Flags().Bool("dry-run", false, "")
 	c.Flags().String("base-path", "", "")
@@ -654,19 +667,18 @@ func newVendorPullTestCmd() *cobra.Command {
 	return c
 }
 
-// TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedComponents is a regression test for
-// the reported bug: a component.yaml-only repo (no vendor.yaml anywhere) running
-// "vendor update --pull" updated every component successfully, then the automatic follow-up pull
-// hard-failed with "the '--everything' flag is set, but vendor config file does not exist" -
-// because the old runVendorPull always set --everything=true for a component-less "--pull", and
-// --everything only knows how to enumerate a vendor.yaml's sources (internal/exec/vendor.go's
-// handleVendorConfig), which doesn't exist in this repo shape at all.
+// TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedComponents proves that in a
+// component.yaml-only repo (no vendor.yaml anywhere), runVendorPull drives one "--component X" pull
+// per StatusUpdated result -- the same code path "vendor pull --component X" already uses
+// successfully against component.yaml sources -- so an unchanged source with no receipt gets
+// materialized just like an updated source, with no ErrVendorConfigNotExist (or any other error).
 //
-// The fixed runVendorPull now drives one "--component X" pull per StatusUpdated result instead -
-// the same code path "vendor pull --component X" already uses successfully against component.yaml
-// sources.
-// This proves end to end that an unchanged source with no receipt is materialized as well as an
-// updated source, and no ErrVendorConfigNotExist (or any other error) is returned.
+// Historical note: reproduces a reported bug where "vendor update --pull" updated every component
+// successfully, then the automatic follow-up pull hard-failed with "the '--everything' flag is
+// set, but vendor config file does not exist" -- the old runVendorPull always set
+// --everything=true for a component-less "--pull", and --everything only knows how to enumerate a
+// vendor.yaml's sources (internal/exec/vendor.go's handleVendorConfig), which doesn't exist in
+// this repo shape at all.
 func TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedComponents(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot) // no vendor.yaml anywhere in this repo.
@@ -699,17 +711,64 @@ func TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedCompone
 	assert.FileExists(t, filepath.Join(untouchedDir, "main.tf"), "an unmaterialized component must be reconciled even when its version is current")
 }
 
-// TestRunVendorPull_ClearsStackAndTagsBetweenIterations proves the per-component pull loop clears
-// "stack" and "tags" (left over from vendor update's own --stack/--tags flags, shared with the pull
-// path on the same cmd) before each "vendor pull --component X" call. Without this,
-// "vendor update --tags foo --pull" or "--stack bar --pull" would fail validateVendorFlags'
-// mutually-exclusive checks (component+stack, component+tags), even though the top-level update
-// already resolved exactly which components to pull. It also proves "stack" is cleared via
-// resetUnchangedFlag (marking Changed=false), not cmd.Flags().Set (which always marks Changed=true):
-// ExecuteVendorPullCommand reads flags.Changed("stack") - not its value - to decide whether to
-// process stacks at all, so a spuriously "changed" empty stack flag would force stack processing in
-// a repo with no stack configuration and fail for an unrelated reason.
-func TestRunVendorPull_ClearsStackAndTagsBetweenIterations(t *testing.T) {
+// TestRunVendorPull_RefreshLockAndLockEnforcementFlowToBatchedComponentPull proves vendor update's
+// own --refresh-lock/--lock-enforcement flags (added because the batched component.yaml pull path
+// previously always hardcoded RefreshLock: false, ignoring vendor update's flags entirely) actually
+// reach pullBatchedComponentManifests' install.InstallOptions, not just vendorPullParams: first, a
+// drifted component under --lock-enforcement strict with refreshLock left false is blocked
+// (ErrLockDriftBlocked, matching install.FilterPending's documented strict behavior); then the same
+// drifted component with refreshLock true succeeds and re-pulls the changed source.
+func TestRunVendorPull_RefreshLockAndLockEnforcementFlowToBatchedComponentPull(t *testing.T) {
+	repoRoot := t.TempDir()
+	chdirTest(t, repoRoot)
+
+	base := filepath.Join(repoRoot, "components", "terraform")
+	require.NoError(t, os.MkdirAll(base, 0o755))
+
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# v1\n"), 0o644))
+	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
+
+	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
+		{
+			Component:     "vpc",
+			Status:        vendoring.StatusUpdated,
+			File:          filepath.Join(componentDir, "component.yaml"),
+			ComponentType: "terraform",
+		},
+	}}
+
+	// Materialize cleanly first (no enforcement override needed: nothing has drifted yet).
+	require.NoError(t, runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{componentType: "terraform"}))
+	assert.FileExists(t, componentDir+"/main.tf")
+
+	// Drift the already-materialized target without touching the declared source/version.
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# manually edited\n"), 0o644))
+
+	err := runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{
+		componentType:   "terraform",
+		lockEnforcement: "strict",
+	})
+	require.Error(t, err, "strict enforcement must block a drifted batched pull when refreshLock is false")
+	assert.ErrorContains(t, err, "vendor lock drift blocked")
+
+	err = runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{
+		componentType:   "terraform",
+		lockEnforcement: "strict",
+		refreshLock:     true,
+	})
+	require.NoError(t, err, "refreshLock must bypass strict enforcement and re-pull the drifted component")
+	content, readErr := os.ReadFile(filepath.Join(componentDir, "main.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# v1\n", string(content), "refreshLock must re-fetch from the declared source, overwriting the manual edit")
+}
+
+// TestRunVendorPull_ClearsTagsBetweenIterations proves the per-component pull loop clears "tags"
+// (left over from vendor update's own --tags flag, shared with the pull path on the same cmd)
+// before each "vendor pull --component X" call. Without this, "vendor update --tags foo --pull"
+// would fail validateVendorFlags' component+tags mutual-exclusivity check, even though the
+// top-level update already resolved exactly which components to pull.
+func TestRunVendorPull_ClearsTagsBetweenIterations(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot)
 
@@ -723,33 +782,28 @@ func TestRunVendorPull_ClearsStackAndTagsBetweenIterations(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# updated\n"), 0o644))
 	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
 
-	// Simulate "vendor update --tags foo --stack bar --pull": both flags are Changed on the shared
-	// cmd before the per-component pull loop runs.
+	// Simulate "vendor update --tags foo --pull": the flag is Changed on the shared cmd before the
+	// per-component pull loop runs.
 	cmd := newVendorPullTestCmd()
 	require.NoError(t, cmd.Flags().Set("tags", "foo"))
-	require.NoError(t, cmd.Flags().Set("stack", "bar"))
-	require.True(t, cmd.Flags().Changed("stack"))
 
 	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
 		{Component: "vpc", Status: vendoring.StatusUpdated},
 	}}
 
 	err := runVendorPull(cmd, nil, report, vendorPullParams{componentType: "terraform"})
-	require.NoError(t, err, "stale --tags/--stack from vendor update must not fail the per-component pull")
+	require.NoError(t, err, "stale --tags from vendor update must not fail the per-component pull")
 
 	assert.FileExists(t, filepath.Join(componentDir, "main.tf"))
-	assert.False(t, cmd.Flags().Changed("stack"),
-		"'stack' must end up unchanged so a later flags.Changed(\"stack\") check doesn't force stack processing")
 	assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
 }
 
-// TestRunVendorPull_SingleComponent_ClearsStackAndTags is
-// TestRunVendorPull_ClearsStackAndTagsBetweenIterations's counterpart for the single-component
-// "--component X --pull" path (p.component != ""): a regression test proving "vendor update
-// --component vpc --stack bar --tags foo --pull" doesn't fail validateVendorFlags'
-// component+stack/component+tags mutual-exclusivity checks, since --stack/--tags are vendor
-// update's own flags of the same name, shared with the pull path on the same cmd.
-func TestRunVendorPull_SingleComponent_ClearsStackAndTags(t *testing.T) {
+// TestRunVendorPull_SingleComponent_ClearsTags is TestRunVendorPull_ClearsTagsBetweenIterations's
+// counterpart for the single-component "--component X --pull" path (p.component != ""): it proves
+// "vendor update --component vpc --tags foo --pull" doesn't fail validateVendorFlags'
+// component+tags mutual-exclusivity check, since --tags is vendor update's own flag of the same
+// name, shared with the pull path on the same cmd.
+func TestRunVendorPull_SingleComponent_ClearsTags(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot)
 
@@ -760,36 +814,32 @@ func TestRunVendorPull_SingleComponent_ClearsStackAndTags(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# updated\n"), 0o644))
 	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
 
-	// Simulate "vendor update --component vpc --tags foo --stack bar --pull": all three flags are
-	// Changed on the shared cmd before runVendorPull's single-component path delegates to
-	// ExecuteVendorPullCmd.
+	// Simulate "vendor update --component vpc --tags foo --pull": both flags are Changed on the
+	// shared cmd before runVendorPull's single-component path delegates to ExecuteVendorPullCmd.
 	cmd := newVendorPullTestCmd()
 	require.NoError(t, cmd.Flags().Set("component", "vpc"))
 	require.NoError(t, cmd.Flags().Set("tags", "foo"))
-	require.NoError(t, cmd.Flags().Set("stack", "bar"))
-	require.True(t, cmd.Flags().Changed("stack"))
 
 	err := runVendorPull(cmd, nil, nil, vendorPullParams{component: "vpc", componentType: "terraform"})
-	require.NoError(t, err, "stale --tags/--stack from vendor update must not fail the single-component pull")
+	require.NoError(t, err, "stale --tags from vendor update must not fail the single-component pull")
 
 	assert.FileExists(t, filepath.Join(componentDir, "main.tf"))
-	assert.False(t, cmd.Flags().Changed("stack"),
-		"'stack' must end up unchanged so a later flags.Changed(\"stack\") check doesn't force stack processing")
 	assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
 }
 
-// TestRunVendorPull_BatchesMultipleComponentManifestUpdates is a regression test for the reported
-// UX bug: "atmos vendor update --pull" against a component.yaml-only repo rendered one separate
-// "0/1" progress-bar-and-completion block per updated component instead of a single unified
-// "0/N" -> "N/N" run. Real SourceUpdateResult.File values (unlike the synthetic
+// TestRunVendorPull_BatchesMultipleComponentManifestUpdates proves that given three updated
+// components whose SourceUpdateResult.File values point at the real "component.yaml" manifest that
+// declared each source (the File basename partitionReportResults uses to route every
+// component.yaml-declared update into a single ExecuteComponentVendorPullBatch call), all three
+// land on disk from one batched call, without ever going through the per-component
+// pullUpdatedComponent/e.ExecuteVendorPullCmd fallback path. (Unlike the synthetic
 // TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents/
 // TestRunVendorPull_ClearsStackAndTagsBetweenIterations reports above, which leave File empty and
-// so exercise only the pre-existing per-component fallback loop) point at the real
-// "component.yaml" manifest that declared the source, and that File basename is what
-// partitionReportResults uses to route every component.yaml-declared update into a single
-// ExecuteComponentVendorPullBatch call. This test proves that: given three updated components,
-// all three land on disk from one batched call, without ever going through the noisy
-// per-component pullUpdatedComponent/e.ExecuteVendorPullCmd path.
+// so exercise only that fallback loop.)
+//
+// Historical note: reproduces a reported UX bug where "atmos vendor update --pull" against a
+// component.yaml-only repo rendered one separate "0/1" progress-bar-and-completion block per
+// updated component instead of a single unified "0/N" -> "N/N" run.
 func TestRunVendorPull_BatchesMultipleComponentManifestUpdates(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot) // no vendor.yaml anywhere in this repo.
@@ -875,14 +925,16 @@ func TestRunVendorPull_MixedManifestAndVendorYamlUpdates(t *testing.T) {
 	assert.FileExists(t, filepath.Join(fallbackDir, "main.tf"), "the fallback component must have been pulled")
 }
 
-// TestRunVendorPull_BatchesByComponentType is a regression test for a reported bug: a repo-wide
-// "vendor update --pull" with no explicit --type sweeps every configured component type
-// (DiscoverAllComponentManifests), so a single batch of StatusUpdated results can mix
-// terraform and helmfile component.yaml updates. ExecuteComponentVendorPullBatch only accepts one
-// componentType per call (it resolves every entry's directory under that one type's base path),
-// so forwarding a mixed batch under a single type would resolve the non-matching type's components
-// under the wrong components/<type>/<name> path. PartitionUpdatedResults must group by
-// SourceUpdateResult.ComponentType so each type gets its own ExecuteComponentVendorPullBatch call.
+// TestRunVendorPull_BatchesByComponentType proves PartitionUpdatedResults groups by
+// SourceUpdateResult.ComponentType so each type gets its own ExecuteComponentVendorPullBatch call
+// -- required because that function only accepts one componentType per call (it resolves every
+// entry's directory under that one type's base path), so forwarding a mixed batch under a single
+// type would resolve the non-matching type's components under the wrong
+// components/<type>/<name> path.
+//
+// Historical note: reproduces a reported bug where a repo-wide "vendor update --pull" with no
+// explicit --type sweeps every configured component type (DiscoverAllComponentManifests), so a
+// single batch of StatusUpdated results could mix terraform and helmfile component.yaml updates.
 func TestRunVendorPull_BatchesByComponentType(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot)
@@ -940,15 +992,15 @@ func TestResetUnchangedFlag(t *testing.T) {
 
 	t.Run("clears value and Changed", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "x"}
-		cmd.Flags().String("stack", "", "")
-		require.NoError(t, cmd.Flags().Set("stack", "bar"))
-		require.True(t, cmd.Flags().Changed("stack"))
+		cmd.Flags().String("tags", "", "")
+		require.NoError(t, cmd.Flags().Set("tags", "bar"))
+		require.True(t, cmd.Flags().Changed("tags"))
 
-		err := resetUnchangedFlag(cmd, "stack")
+		err := resetUnchangedFlag(cmd, "tags")
 
 		require.NoError(t, err)
-		assert.Equal(t, "", cmd.Flags().Lookup("stack").Value.String())
-		assert.False(t, cmd.Flags().Changed("stack"))
+		assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
+		assert.False(t, cmd.Flags().Changed("tags"))
 	})
 
 	t.Run("propagates the underlying flag's Set error", func(t *testing.T) {

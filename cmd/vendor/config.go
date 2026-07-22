@@ -6,8 +6,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	listpkg "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -15,11 +17,16 @@ import (
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
+// Each vendor config subcommand owns an independent StandardParser: earlier revisions shared
+// package-level vars (vendorConfigFileFlag, vendorConfigType, vendorConfigFormat,
+// vendorConfigDelimiter) across commands, which meant setting one subcommand's flag could leak
+// into another's default.
 var (
-	vendorConfigFileFlag  string
-	vendorConfigType      string
-	vendorConfigFormat    string
-	vendorConfigDelimiter string
+	vendorConfigGetParser    *flags.StandardParser
+	vendorConfigSetParser    *flags.StandardParser
+	vendorConfigDeleteParser *flags.StandardParser
+	vendorConfigFormatParser *flags.StandardParser
+	vendorConfigListParser   *flags.StandardParser
 )
 
 var vendorConfigCmd = &cobra.Command{
@@ -38,7 +45,7 @@ var vendorConfigGetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.config.getRunE")()
 
-		file, err := resolveVendorConfigFile()
+		file, err := resolveVendorFileFromCmd(cmd)
 		if err != nil {
 			return err
 		}
@@ -67,11 +74,15 @@ strings; use --type for int, bool, float, null, or raw YAML literals.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.config.setRunE")()
 
-		file, err := resolveVendorConfigFile()
+		file, err := resolveVendorFileFromCmd(cmd)
 		if err != nil {
 			return err
 		}
-		return runVendorConfigSet(file, args[0], args[1], vendorConfigType)
+		valueType, err := cmd.Flags().GetString("type")
+		if err != nil {
+			return err
+		}
+		return runVendorConfigSet(file, args[0], args[1], valueType)
 	},
 }
 
@@ -99,7 +110,7 @@ var vendorConfigDeleteCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.config.deleteRunE")()
 
-		file, err := resolveVendorConfigFile()
+		file, err := resolveVendorFileFromCmd(cmd)
 		if err != nil {
 			return err
 		}
@@ -127,7 +138,7 @@ preserving comments, anchors, YAML functions, and templates.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.config.formatRunE")()
 
-		file, err := resolveVendorConfigFile()
+		file, err := resolveVendorFileFromCmd(cmd)
 		if err != nil {
 			return err
 		}
@@ -148,7 +159,15 @@ var vendorConfigListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.config.listRunE")()
 
-		file, err := resolveVendorConfigFile()
+		file, err := resolveVendorFileFromCmd(cmd)
+		if err != nil {
+			return err
+		}
+		format, err := cmd.Flags().GetString("format")
+		if err != nil {
+			return err
+		}
+		delimiter, err := cmd.Flags().GetString("delimiter")
 		if err != nil {
 			return err
 		}
@@ -156,7 +175,7 @@ var vendorConfigListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		output, err := listpkg.RenderPathRowsWithPattern(rows, vendorConfigFormat, vendorConfigDelimiter, vendorPathPatternArg(args))
+		output, err := listpkg.RenderPathRowsWithPattern(rows, format, delimiter, vendorPathPatternArg(args))
 		if err != nil {
 			return err
 		}
@@ -172,13 +191,48 @@ func vendorPathPatternArg(args []string) string {
 }
 
 func init() {
-	for _, c := range []*cobra.Command{vendorConfigGetCmd, vendorConfigSetCmd, vendorConfigDeleteCmd, vendorConfigFormatCmd, vendorConfigListCmd} {
-		c.Flags().StringVar(&vendorConfigFileFlag, "file", "", "Vendor manifest file (default: ./vendor.yaml)")
+	vendorConfigGetParser = flags.NewStandardParser(
+		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
+	)
+	vendorConfigGetParser.RegisterFlags(vendorConfigGetCmd)
+	if err := vendorConfigGetParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
 	}
-	vendorConfigSetCmd.Flags().StringVar(&vendorConfigType, "type", atmosyaml.TypeString,
-		"Value type: string, int, bool, float, null, or yaml (raw literal)")
-	vendorConfigListCmd.Flags().StringVarP(&vendorConfigFormat, "format", "f", "paths", "Output format: paths, table, json, yaml, csv, tsv")
-	vendorConfigListCmd.Flags().StringVar(&vendorConfigDelimiter, "delimiter", "", "Delimiter for csv/tsv output")
+
+	vendorConfigSetParser = flags.NewStandardParser(
+		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
+		flags.WithStringFlag("type", "", atmosyaml.TypeString, "Value type: string, int, bool, float, null, or yaml (raw literal)"),
+	)
+	vendorConfigSetParser.RegisterFlags(vendorConfigSetCmd)
+	if err := vendorConfigSetParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	vendorConfigDeleteParser = flags.NewStandardParser(
+		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
+	)
+	vendorConfigDeleteParser.RegisterFlags(vendorConfigDeleteCmd)
+	if err := vendorConfigDeleteParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	vendorConfigFormatParser = flags.NewStandardParser(
+		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
+	)
+	vendorConfigFormatParser.RegisterFlags(vendorConfigFormatCmd)
+	if err := vendorConfigFormatParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	vendorConfigListParser = flags.NewStandardParser(
+		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
+		flags.WithStringFlag("format", "f", "paths", "Output format: paths, table, json, yaml, csv, tsv"),
+		flags.WithStringFlag("delimiter", "", "", "Delimiter for csv/tsv output"),
+	)
+	vendorConfigListParser.RegisterFlags(vendorConfigListCmd)
+	if err := vendorConfigListParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	vendorConfigCmd.AddCommand(vendorConfigGetCmd)
 	vendorConfigCmd.AddCommand(vendorConfigSetCmd)
@@ -186,10 +240,6 @@ func init() {
 	vendorConfigCmd.AddCommand(vendorConfigFormatCmd)
 	vendorConfigCmd.AddCommand(vendorConfigListCmd)
 	vendorCmd.AddCommand(vendorConfigCmd)
-}
-
-func resolveVendorConfigFile() (string, error) {
-	return resolveVendorFileWithOverride(vendorConfigFileFlag)
 }
 
 func buildVendorConfigPathRows(rootFile string) ([]listpkg.PathRow, error) {

@@ -10,7 +10,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
 // writeLocalComponentVendorConfig writes a component.yaml under <basePath>/<component> whose
@@ -49,7 +49,7 @@ func TestExecuteComponentVendorInternal_PullsLocalSource(t *testing.T) {
 		Source: schema.VendorComponentSource{Uri: sourceDir},
 	}
 
-	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{BasePath: basePath}, spec, "vpc", componentPath, false, false)
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{BasePath: basePath}, spec, "vpc", componentPath, install.InstallOptions{})
 
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
@@ -58,15 +58,15 @@ func TestExecuteComponentVendorInternal_PullsLocalSource(t *testing.T) {
 // TestExecuteComponentVendorInternal_PropagatesBuildError proves an unresolvable spec (missing
 // source URI) fails before executeVendorModel is ever invoked.
 func TestExecuteComponentVendorInternal_PropagatesBuildError(t *testing.T) {
-	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, &schema.VendorComponentSpec{}, "vpc", t.TempDir(), false, false)
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, &schema.VendorComponentSpec{}, "vpc", t.TempDir(), install.InstallOptions{})
 
 	assert.Error(t, err)
 }
 
 // TestExecuteComponentVendorInternal_RefreshLock_ForcesReDownload proves refreshLock=true bypasses
-// filterMaterializedComponentVendorPackages, forcing an already-materialized component through
-// executeVendorModel again - mirroring internal/exec/vendor_utils.go's
-// "!params.dryRun && !params.refreshLock" gate already used by the vendor.yaml path. This is the
+// install.FilterPending, forcing an already-materialized component through executeVendorModel
+// again - mirroring internal/exec/vendor_utils.go's ExecuteAtmosVendorInternal, which already used
+// the same DryRun/RefreshLock-skips-FilterPending behavior for the vendor.yaml path. This is the
 // single-"--component"-path companion to
 // TestExecuteVendorPullCommand_Everything_NoVendorFile_RefreshLock_ForcesReDownload
 // (vendor_pull_sweep_test.go), which proves the same behavior through the repo-wide sweep.
@@ -84,7 +84,7 @@ func TestExecuteComponentVendorInternal_RefreshLock_ForcesReDownload(t *testing.
 	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
 
 	// First pull: materializes and records a lock entry.
-	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, false, false))
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{}))
 	content, err := os.ReadFile(targetFile)
 	require.NoError(t, err)
 	require.Equal(t, "# v1\n", string(content))
@@ -93,13 +93,13 @@ func TestExecuteComponentVendorInternal_RefreshLock_ForcesReDownload(t *testing.
 	require.NoError(t, os.WriteFile(sourceFile, []byte("# v2\n"), 0o644))
 
 	// Second pull without refreshLock: already-materialized target, must be skipped.
-	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, false, false))
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{}))
 	content, err = os.ReadFile(targetFile)
 	require.NoError(t, err)
 	assert.Equal(t, "# v1\n", string(content), "without refreshLock, an already-materialized component must not be re-pulled")
 
 	// Third pull with refreshLock: must bypass the materialization filter and re-pull.
-	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, false, true))
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{RefreshLock: true}))
 	content, err = os.ReadFile(targetFile)
 	require.NoError(t, err)
 	assert.Equal(t, "# v2\n", string(content), "refreshLock must force a re-download even when already materialized")
@@ -128,7 +128,7 @@ func TestExecuteComponentVendorPullBatch_PullsAllComponentsInOneCall(t *testing.
 		},
 	}
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, names, cfg.TerraformComponentType, false, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, names, cfg.TerraformComponentType, install.InstallOptions{})
 	require.NoError(t, err, "batched pull of multiple component.yaml-declared components must succeed")
 
 	for _, name := range names {
@@ -139,7 +139,7 @@ func TestExecuteComponentVendorPullBatch_PullsAllComponentsInOneCall(t *testing.
 // TestExecuteComponentVendorPullBatch_EmptyComponents_NoOp proves an empty component list is a
 // pure no-op: no atmosConfig-dependent resolution is even attempted.
 func TestExecuteComponentVendorPullBatch_EmptyComponents_NoOp(t *testing.T) {
-	err := ExecuteComponentVendorPullBatch(&schema.AtmosConfiguration{}, nil, cfg.TerraformComponentType, false, false)
+	err := ExecuteComponentVendorPullBatch(&schema.AtmosConfiguration{}, nil, cfg.TerraformComponentType, install.InstallOptions{})
 	assert.NoError(t, err)
 }
 
@@ -158,7 +158,7 @@ func TestExecuteComponentVendorPullBatch_PropagatesResolutionError(t *testing.T)
 		},
 	}
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"does-not-exist"}, cfg.TerraformComponentType, false, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"does-not-exist"}, cfg.TerraformComponentType, install.InstallOptions{})
 	assert.Error(t, err, "an unresolvable component must fail the batch")
 }
 
@@ -183,7 +183,7 @@ spec: {}
 		},
 	}
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, false, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `component "vpc"`, "the failing component's name must be identifiable in a multi-component batch")
@@ -208,14 +208,14 @@ func TestExecuteComponentVendorPullBatch_AllMaterialized_NoOp(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, false, false))
+	require.NoError(t, ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{}))
 	assert.FileExists(t, filepath.Join(dir, "main.tf"))
 
 	// Add a new file to the source after the first pull; if the second call re-pulls instead of
 	// skipping the already-materialized component, this file would show up too.
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "extra.tf"), []byte("# added later\n"), 0o644))
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, false, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{})
 	require.NoError(t, err)
 	assert.NoFileExists(t, filepath.Join(dir, "extra.tf"), "an already-materialized component must be skipped in a batch pull too")
 }
@@ -242,7 +242,7 @@ func TestExecuteComponentVendorPullBatch_PropagatesMaterializationCheckError(t *
 		},
 	}
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, false, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "verify vendor lock")
@@ -251,8 +251,8 @@ func TestExecuteComponentVendorPullBatch_PropagatesMaterializationCheckError(t *
 // TestBuildComponentVendorPackages_ComponentAndMixins proves buildComponentVendorPackages (the
 // helper extracted from ExecuteComponentVendorInternal so ExecuteComponentVendorPullBatch can
 // build package lists for multiple components without executing each one) returns the same shape
-// ExecuteComponentVendorInternal used to build inline: the component package first, IsComponent
-// true, followed by one entry per mixin with IsMixins true.
+// ExecuteComponentVendorInternal used to build inline: the component package first (IsMixin
+// false), followed by one entry per mixin (IsMixin true).
 func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
 	componentPath := t.TempDir()
 
@@ -268,24 +268,22 @@ func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(nil, spec, "vpc", componentPath)
+	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: componentPath})
 	require.NoError(t, err)
 	require.Len(t, packages, 2)
 
-	assert.Equal(t, "vpc", packages[0].name)
-	assert.True(t, packages[0].IsComponent)
-	assert.False(t, packages[0].IsMixins)
+	assert.Equal(t, "vpc", packages[0].Name)
+	assert.False(t, packages[0].IsMixin())
 
-	assert.True(t, packages[1].IsMixins)
-	assert.False(t, packages[1].IsComponent)
-	assert.Equal(t, "context.tf", packages[1].mixinFilename)
+	assert.True(t, packages[1].IsMixin())
+	assert.Equal(t, "context.tf", packages[1].MixinFilename())
 }
 
 // TestBuildComponentVendorPackages_MissingUri proves an empty source URI is rejected before any
 // package is built, matching ExecuteComponentVendorInternal's pre-refactor behavior.
 func TestBuildComponentVendorPackages_MissingUri(t *testing.T) {
 	spec := &schema.VendorComponentSpec{}
-	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
+	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
 	assert.Error(t, err)
 	assert.Nil(t, packages)
 }
@@ -301,7 +299,7 @@ func TestBuildComponentVendorPackages_InvalidUriTemplate(t *testing.T) {
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
+	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
 
 	assert.Error(t, err)
 	assert.Nil(t, packages)
@@ -319,7 +317,7 @@ func TestBuildComponentVendorPackages_PropagatesMixinError(t *testing.T) {
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
+	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrMissingMixinURI)
@@ -328,14 +326,16 @@ func TestBuildComponentVendorPackages_PropagatesMixinError(t *testing.T) {
 
 // TestFilterMaterializedComponentVendorPackages_PropagatesError proves a package whose
 // componentPath cannot be related back to the project root (the vendor lock's target-containment
-// check) surfaces lockfile.IsMaterialized's error, rather than silently treating it as pending.
+// check) surfaces install.FilterPending's error, rather than silently treating it as pending.
 func TestFilterMaterializedComponentVendorPackages_PropagatesError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
-	packages := []pkgComponentVendor{
-		{name: "vpc", componentPath: t.TempDir(), pkgType: pkgTypeLocal, uri: t.TempDir(), IsComponent: true},
+	packages := []install.VendorPackage{
+		install.NewComponentVendorPackage(&install.ComponentPackageParams{
+			Name: "vpc", ComponentPath: t.TempDir(), PkgType: install.PkgTypeLocal, URI: t.TempDir(),
+		}),
 	}
 
-	pending, err := filterMaterializedComponentVendorPackages(packages, atmosConfig)
+	pending, err := install.FilterPending(atmosConfig, packages, install.InstallOptions{})
 
 	require.Error(t, err)
 	assert.Nil(t, pending)
@@ -358,7 +358,7 @@ func TestExecuteComponentVendorInternal_PropagatesMaterializationCheckError(t *t
 		Source: schema.VendorComponentSource{Uri: sourceDir},
 	}
 
-	err := ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, false, false)
+	err := ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "vendor lock target")
@@ -381,132 +381,14 @@ func TestExecuteComponentVendorInternal_AlreadyMaterialized_SkipsReinstall(t *te
 		Source: schema.VendorComponentSource{Uri: sourceDir},
 	}
 
-	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, false, false))
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{}))
 	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
 
 	// Add a new file to the source after the first install. If the second call re-installs
 	// instead of skipping, this file would be copied into componentPath too.
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "extra.tf"), []byte("# added later\n"), 0o644))
 
-	err := ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, false, false)
+	err := ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{})
 	require.NoError(t, err)
 	assert.NoFileExists(t, filepath.Join(componentPath, "extra.tf"), "an already-materialized component must be skipped, not re-copied from source")
-}
-
-// TestInstallMixin_LocalFileSource proves installMixin materializes a mixin whose pkgType is
-// pkgTypeRemote (resolveMixinPackage never reclassifies a local file the way component sources
-// do via handleLocalFileScheme) by fetching a plain local file path through go-getter's built-in
-// local-file support - no network access involved - copying it to componentPath, and recording a
-// vendor lock entry for it.
-func TestInstallMixin_LocalFileSource(t *testing.T) {
-	sourceFile := filepath.Join(t.TempDir(), "context.tf")
-	require.NoError(t, os.WriteFile(sourceFile, []byte("# mixin\n"), 0o644))
-
-	basePath := t.TempDir()
-	componentPath := filepath.Join(basePath, "components", "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(componentPath, 0o755))
-
-	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
-	pkg := &pkgComponentVendor{
-		uri:           sourceFile,
-		name:          "mixin " + sourceFile,
-		componentPath: componentPath,
-		pkgType:       pkgTypeRemote,
-		IsMixins:      true,
-		mixinFilename: "context.tf",
-	}
-
-	err := installMixin(pkg, atmosConfig)
-
-	require.NoError(t, err)
-	data, readErr := os.ReadFile(filepath.Join(componentPath, "context.tf"))
-	require.NoError(t, readErr)
-	assert.Equal(t, "# mixin\n", string(data))
-
-	lock, err := lockfile.Load(atmosConfig)
-	require.NoError(t, err)
-	assert.Len(t, lock.Artifacts, 1, "installMixin must record a vendor lock entry for the mixin")
-}
-
-// TestInstallMixin_LocalPkgType_MissingUri proves the pkgTypeLocal branch's guard against an empty
-// uri returns a descriptive sentinel error instead of proceeding into an unimplemented code path.
-func TestInstallMixin_LocalPkgType_MissingUri(t *testing.T) {
-	pkg := &pkgComponentVendor{pkgType: pkgTypeLocal, IsMixins: true, name: "mixin"}
-
-	err := installMixin(pkg, &schema.AtmosConfiguration{})
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrMixinEmpty)
-}
-
-// TestInstallMixin_LocalPkgType_NotImplemented proves a non-empty local mixin uri surfaces the
-// "not implemented" sentinel rather than silently no-op-ing.
-func TestInstallMixin_LocalPkgType_NotImplemented(t *testing.T) {
-	pkg := &pkgComponentVendor{pkgType: pkgTypeLocal, IsMixins: true, name: "mixin", uri: "some/local/path"}
-
-	err := installMixin(pkg, &schema.AtmosConfiguration{})
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrMixinNotImplemented)
-}
-
-// TestInstallMixin_RecordVendorLockErrorSurfaced proves a vendor-lock recording failure after a
-// successful copy is surfaced as an error naming the mixin (rather than reporting success despite
-// no receipt ever having been written).
-func TestInstallMixin_RecordVendorLockErrorSurfaced(t *testing.T) {
-	sourceFile := filepath.Join(t.TempDir(), "context.tf")
-	require.NoError(t, os.WriteFile(sourceFile, []byte("# mixin\n"), 0o644))
-
-	// componentPath deliberately lives outside atmosConfig.BasePath's tree, so
-	// recordComponentVendorLock's lockfile.Replace can't relate it back to the project root, even
-	// though the preceding copy to componentPath itself succeeds.
-	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
-	componentPath := t.TempDir()
-
-	pkg := &pkgComponentVendor{
-		uri:           sourceFile,
-		name:          "mixin " + sourceFile,
-		componentPath: componentPath,
-		pkgType:       pkgTypeRemote,
-		IsMixins:      true,
-		mixinFilename: "context.tf",
-	}
-
-	err := installMixin(pkg, atmosConfig)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "record mixin vendor lock")
-	// The copy itself must have succeeded before the lock recording failed.
-	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
-}
-
-// TestInstallComponent_RecordVendorLockErrorSurfaced proves a vendor-lock recording failure after
-// a successful component copy is surfaced as an error naming the component (rather than reporting
-// success despite no receipt ever having been written).
-func TestInstallComponent_RecordVendorLockErrorSurfaced(t *testing.T) {
-	sourceDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
-
-	// componentPath deliberately lives outside atmosConfig.BasePath's tree, so
-	// recordComponentVendorLock's lockfile.Replace can't relate it back to the project root, even
-	// though the preceding copy to componentPath itself succeeds.
-	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
-	componentPath := t.TempDir()
-
-	pkg := &pkgComponentVendor{
-		uri:                 sourceDir,
-		name:                "vpc",
-		componentPath:       componentPath,
-		pkgType:             pkgTypeLocal,
-		sourceIsLocalFile:   false,
-		IsComponent:         true,
-		vendorComponentSpec: &schema.VendorComponentSpec{Source: schema.VendorComponentSource{Uri: sourceDir}},
-	}
-
-	err := installComponent(pkg, atmosConfig)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "record component vendor lock")
-	// The copy itself must have succeeded before the lock recording failed.
-	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
 }

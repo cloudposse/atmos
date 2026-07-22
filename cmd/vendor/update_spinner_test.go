@@ -59,15 +59,15 @@ func TestRunUpdateWithSpinner_NonTTY_PropagatesError(t *testing.T) {
 	assert.Nil(t, report)
 }
 
-// TestUpdateSpinnerModel_View_NeverWraps is a regression test for the sibling of
-// internal/exec/vendor_model.go's mixin line-stacking bug: a long, unbroken component name (no
-// spaces to word-wrap at) must never make the live "Checking <name>" status line contain a hard
-// line break, since bubbletea's single-line, carriage-return-based redraw corrupts (stacks
-// duplicate lines in the scrollback) if the rendered line wraps in the real terminal. At widths
-// that exceed the fixed spinner+bar+count overhead the whole composed line must also fit strictly
-// within the terminal width (never equal to it -- see liveLineMargin); at extremely narrow widths
-// (smaller than that fixed overhead, which this fix doesn't shrink) only the no-wrap guarantee is
-// checked.
+// TestUpdateSpinnerModel_View_NeverWraps proves a long, unbroken component name (no spaces to
+// word-wrap at) never makes the live "Checking <name>" status line contain a hard line break,
+// since bubbletea's single-line, carriage-return-based redraw corrupts (stacks duplicate lines in
+// the scrollback) if the rendered line wraps in the real terminal. At widths that exceed the fixed
+// spinner+bar+count overhead the whole composed line must also fit strictly within the terminal
+// width (never equal to it -- see liveLineMargin); at extremely narrow widths (smaller than that
+// fixed overhead, which this fix doesn't shrink) only the no-wrap guarantee is checked.
+//
+// Historical note: this is the sibling of internal/exec/vendor_model.go's mixin line-stacking bug.
 func TestUpdateSpinnerModel_View_NeverWraps(t *testing.T) {
 	longName := "https://raw.githubusercontent.com/cloudposse/terraform-components/mixins/v0.3.2/src/mixins/account-verification.mixin.tf"
 
@@ -92,11 +92,12 @@ func TestUpdateSpinnerModel_View_NeverWraps(t *testing.T) {
 	}
 }
 
-// TestUpdateSpinnerModel_View_NeverTouchesLastColumn is a boundary-focused regression test for the
-// "cursor overlapping the progress bar" bug: at widths exactly matching the fixed
-// spinner+bar+count overhead (so the padded gap saturates the line), the rendered line must still
-// stop at least liveLineMargin columns short of the terminal's true last column, never landing
+// TestUpdateSpinnerModel_View_NeverTouchesLastColumn proves that at widths exactly matching the
+// fixed spinner+bar+count overhead (so the padded gap saturates the line), the rendered line still
+// stops at least liveLineMargin columns short of the terminal's true last column, never landing
 // exactly on it.
+//
+// Historical note: boundary case for the "cursor overlapping the progress bar" bug.
 func TestUpdateSpinnerModel_View_NeverTouchesLastColumn(t *testing.T) {
 	for _, width := range []int{60, 61, 79, 80, 81, 120, 200, 250} {
 		m := &updateSpinnerModel{

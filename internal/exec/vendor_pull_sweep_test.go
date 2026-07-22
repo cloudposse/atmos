@@ -40,7 +40,6 @@ func newVendorPullSweepTestCmd() *cobra.Command {
 	cmd := newTestCommandWithGlobalFlags("pull")
 	flags := cmd.Flags()
 	flags.StringP("component", "c", "", "")
-	flags.StringP("stack", "s", "", "")
 	flags.StringP("type", "t", "terraform", "")
 	flags.Bool("dry-run", false, "")
 	flags.String("tags", "", "")

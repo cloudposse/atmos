@@ -38,7 +38,6 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 
 	flags := cmd.Flags()
 	flags.String("component", "s3-bucket", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")
@@ -122,7 +121,6 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 
 	flags := cmd.Flags()
 	flags.String("component", "", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "aws", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")

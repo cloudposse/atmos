@@ -68,7 +68,7 @@ current pinned version and --to to the latest tag.`,
 func init() {
 	vendorDiffParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Component to diff (required)"),
-		flags.WithStringFlag("type", "t", "terraform", "Component type (terraform, helmfile, or packer)"),
+		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("from", "", "", "Starting ref (default: current pinned version)"),
 		flags.WithStringFlag("to", "", "", "Ending ref (default: latest tag)"),
 		flags.WithStringFlag("diff-file", "", "", "Restrict the diff to a single file path within the component"),

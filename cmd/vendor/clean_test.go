@@ -57,10 +57,10 @@ func writeCleanLockFixture(t *testing.T) (filePath string) {
 
 	lock := lockfile.New()
 	lock.Artifacts["artifact-mock"] = lockfile.Artifact{
-		Component: "mock",
-		Kind:      "source",
-		Target:    "vendor",
-		Files:     files,
+		Name:   "mock",
+		Kind:   "source",
+		Target: "vendor",
+		Files:  files,
 	}
 	require.NoError(t, lockfile.Save(config, lock))
 
@@ -168,8 +168,8 @@ func TestVendorCleanCmd_ComponentFilterScopesRemoval(t *testing.T) {
 	require.NoError(t, err)
 
 	lock := lockfile.New()
-	lock.Artifacts["artifact-first"] = lockfile.Artifact{Component: "first", Kind: "source", Target: "vendor-first", Files: firstFiles}
-	lock.Artifacts["artifact-second"] = lockfile.Artifact{Component: "second", Kind: "source", Target: "vendor-second", Files: secondFiles}
+	lock.Artifacts["artifact-first"] = lockfile.Artifact{Name: "first", Kind: "source", Target: "vendor-first", Files: firstFiles}
+	lock.Artifacts["artifact-second"] = lockfile.Artifact{Name: "second", Kind: "source", Target: "vendor-second", Files: secondFiles}
 	require.NoError(t, lockfile.Save(config, lock))
 
 	setupVendorUICapture(t)

@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,8 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
+	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 func TestReadAndProcessComponentVendorConfigFile(t *testing.T) {
@@ -660,7 +664,7 @@ func TestProcessTargets_BackwardCompatible(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -668,17 +672,17 @@ func TestProcessTargets_BackwardCompatible(t *testing.T) {
 	require.Len(t, pkgs, 2)
 
 	// Both packages should use the source-level URI and version.
-	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[0].uri)
-	assert.Equal(t, "1.398.0", pkgs[0].version)
-	assert.Equal(t, "vpc", pkgs[0].name)
-	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
-	assert.False(t, pkgs[0].sourceIsLocalFile)
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc")
+	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[0].URI())
+	assert.Equal(t, "1.398.0", pkgs[0].Version)
+	assert.Equal(t, "vpc", pkgs[0].Name)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[0].PkgType())
+	assert.False(t, pkgs[0].SourceIsLocalFile())
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "components/terraform/vpc")
 
-	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[1].uri)
-	assert.Equal(t, "1.398.0", pkgs[1].version)
-	assert.Equal(t, pkgTypeRemote, pkgs[1].pkgType)
-	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "components/terraform/vpc-backup")
+	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[1].URI())
+	assert.Equal(t, "1.398.0", pkgs[1].Version)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[1].PkgType())
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "components/terraform/vpc-backup")
 }
 
 func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
@@ -702,7 +706,7 @@ func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -710,16 +714,16 @@ func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// URI should be re-resolved with the target's version.
-	assert.Contains(t, pkgs[0].uri, "ref=2.0.0")
-	assert.NotContains(t, pkgs[0].uri, "ref=1.398.0")
+	assert.Contains(t, pkgs[0].URI(), "ref=2.0.0")
+	assert.NotContains(t, pkgs[0].URI(), "ref=1.398.0")
 	// Version should be the target override.
-	assert.Equal(t, "2.0.0", pkgs[0].version)
+	assert.Equal(t, "2.0.0", pkgs[0].Version)
 	// Target path should use the target's version.
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "vpc/2.0.0")
-	assert.Equal(t, "vpc", pkgs[0].name)
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "vpc/2.0.0")
+	assert.Equal(t, "vpc", pkgs[0].Name)
 	// Package type should be recomputed as remote.
-	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
-	assert.False(t, pkgs[0].sourceIsLocalFile)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[0].PkgType())
+	assert.False(t, pkgs[0].SourceIsLocalFile())
 }
 
 func TestProcessTargets_MixedTargets(t *testing.T) {
@@ -747,7 +751,7 @@ func TestProcessTargets_MixedTargets(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  resolvedURI,
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -755,20 +759,20 @@ func TestProcessTargets_MixedTargets(t *testing.T) {
 	require.Len(t, pkgs, 3)
 
 	// First target: plain string, uses source-level URI and version.
-	assert.Equal(t, resolvedURI, pkgs[0].uri)
-	assert.Equal(t, "2.1.0", pkgs[0].version)
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc")
+	assert.Equal(t, resolvedURI, pkgs[0].URI())
+	assert.Equal(t, "2.1.0", pkgs[0].Version)
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "components/terraform/vpc")
 
 	// Second target: per-target version override, URI re-resolved with 3.0.0.
-	assert.Contains(t, pkgs[1].uri, "ref=3.0.0")
-	assert.NotContains(t, pkgs[1].uri, "ref=2.1.0")
-	assert.Equal(t, "3.0.0", pkgs[1].version)
-	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/3.0.0")
+	assert.Contains(t, pkgs[1].URI(), "ref=3.0.0")
+	assert.NotContains(t, pkgs[1].URI(), "ref=2.1.0")
+	assert.Equal(t, "3.0.0", pkgs[1].Version)
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "vpc/3.0.0")
 
 	// Third target: plain string, uses source-level URI and version.
-	assert.Equal(t, resolvedURI, pkgs[2].uri)
-	assert.Equal(t, "2.1.0", pkgs[2].version)
-	assert.Contains(t, filepath.ToSlash(pkgs[2].targetPath), "components/terraform/vpc-legacy")
+	assert.Equal(t, resolvedURI, pkgs[2].URI())
+	assert.Equal(t, "2.1.0", pkgs[2].Version)
+	assert.Contains(t, filepath.ToSlash(pkgs[2].Target()), "components/terraform/vpc-legacy")
 }
 
 func TestProcessTargets_TargetPathTemplating(t *testing.T) {
@@ -792,7 +796,7 @@ func TestProcessTargets_TargetPathTemplating(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/org/repo.git//modules/vpc?ref=1.0.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -800,7 +804,7 @@ func TestProcessTargets_TargetPathTemplating(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// Path should have templates expanded.
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc/1.0.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "components/terraform/vpc/1.0.0")
 }
 
 func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
@@ -824,7 +828,7 @@ func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  uri,
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -832,7 +836,7 @@ func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// Name should be the URI since Component is empty.
-	assert.Equal(t, uri, pkgs[0].name)
+	assert.Equal(t, uri, pkgs[0].Name)
 }
 
 func TestProcessTargets_LocalFileTarget(t *testing.T) {
@@ -864,7 +868,7 @@ func TestProcessTargets_LocalFileTarget(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  localFile,
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeLocal,
+		PkgType:              install.PkgTypeLocal,
 		SourceIsLocalFile:    true,
 	})
 
@@ -872,8 +876,8 @@ func TestProcessTargets_LocalFileTarget(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// Source classification should detect the local file.
-	assert.Equal(t, pkgTypeLocal, pkgs[0].pkgType)
-	assert.True(t, pkgs[0].sourceIsLocalFile)
+	assert.Equal(t, install.PkgTypeLocal, pkgs[0].PkgType())
+	assert.True(t, pkgs[0].SourceIsLocalFile())
 }
 
 func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
@@ -902,7 +906,7 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/org/terraform-aws-vpc.git//modules/vpc?ref=1.0.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -910,16 +914,222 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 	require.Len(t, pkgs, 2)
 
 	// First target: uses source-level defaults.
-	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
-	assert.False(t, pkgs[0].sourceIsLocalFile)
-	assert.Equal(t, "1.0.0", pkgs[0].version)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[0].PkgType())
+	assert.False(t, pkgs[0].SourceIsLocalFile())
+	assert.Equal(t, "1.0.0", pkgs[0].Version)
 
 	// Second target: version override, classification recomputed (still remote in this case).
-	assert.Equal(t, pkgTypeRemote, pkgs[1].pkgType)
-	assert.False(t, pkgs[1].sourceIsLocalFile)
-	assert.Equal(t, "2.0.0", pkgs[1].version)
-	assert.Contains(t, pkgs[1].uri, "ref=2.0.0")
-	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/2.0.0")
+	assert.Equal(t, install.PkgTypeRemote, pkgs[1].PkgType())
+	assert.False(t, pkgs[1].SourceIsLocalFile())
+	assert.Equal(t, "2.0.0", pkgs[1].Version)
+	assert.Contains(t, pkgs[1].URI(), "ref=2.0.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "vpc/2.0.0")
+}
+
+// fakeTagLister is a version.RemoteLister returning canned tags for unit tests, letting
+// vendor_utils_test.go exercise a semver-range `version:`'s end-to-end resolution (source-URI and
+// target-path templating alike) without any real network access.
+type fakeTagLister struct {
+	tags []string
+}
+
+func (f *fakeTagLister) ListTags(context.Context, string) ([]string, error) {
+	return f.tags, nil
+}
+
+// TestProcessAtmosVendorSourceEntry_SemverRangeResolvesAndTemplatesConcreteVersion is the positive
+// end-to-end counterpart to the non-Git-source error tests below: a source-level `version:` that is
+// a semver range resolves (via the injected fakeTagLister, so no real network access) to a concrete
+// version, that concrete version -- not the literal range string -- is what's templated into both
+// the source URI and the target path, and the resolution is recorded in vendor.lock.yaml.
+func TestProcessAtmosVendorSourceEntry_SemverRangeResolvesAndTemplatesConcreteVersion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	lister := &fakeTagLister{tags: []string{"v1.0.0", "v1.2.3", "v1.5.0", "v2.0.0"}}
+
+	params := &vendorSourceParams{
+		atmosConfig: atmosConfig,
+		sources: []schema.AtmosVendorSource{
+			{
+				Component: "vpc",
+				Source:    "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref={{.Version}}",
+				Version:   "^1.0.0",
+				Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc/{{.Version}}"}},
+			},
+		},
+		vendorConfigFileName: "vendor.yaml",
+		lister:               lister,
+	}
+
+	pkgs, skip, err := processAtmosVendorSourceEntry(params, 0)
+
+	require.NoError(t, err)
+	require.False(t, skip)
+	require.Len(t, pkgs, 1)
+	assert.Equal(t, "v1.5.0", pkgs[0].Version)
+	assert.Equal(t, "^1.0.0", pkgs[0].RawVersion)
+	assert.Contains(t, pkgs[0].URI(), "ref=v1.5.0")
+	assert.NotContains(t, pkgs[0].URI(), "^1.0.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "vpc/v1.5.0")
+
+	// The resolution is recorded in vendor.lock.yaml, so a second call with an unchanged range
+	// reuses it (proven at the pkg/vendoring/install layer's dedicated cache-reuse test; here we
+	// only confirm the entry lands as expected).
+	lock, err := lockfile.Load(atmosConfig)
+	require.NoError(t, err)
+	found := false
+	for _, artifact := range lock.Artifacts {
+		if artifact.Source.VersionConstraint == "^1.0.0" {
+			found = true
+			assert.Equal(t, "v1.5.0", artifact.Source.ResolvedVersion)
+		}
+	}
+	assert.True(t, found, "expected a version-range resolution artifact in vendor.lock.yaml")
+}
+
+// TestProcessTargets_PerTargetSemverRangeResolvesAndTemplatesConcreteVersion proves a per-target
+// `targets[].version` override that is a semver range resolves independently of the source-level
+// version and templates its own resolved concrete version into that target's URI/path.
+func TestProcessTargets_PerTargetSemverRangeResolvesAndTemplatesConcreteVersion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	lister := &fakeTagLister{tags: []string{"v1.0.0", "v1.5.0", "v2.0.0", "v2.5.0"}}
+
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref={{.Version}}",
+		Version:   "v1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/vpc"},
+			{Path: "components/terraform/vpc/{{.Version}}", Version: "^2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "v1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref=v1.0.0",
+		SourceTemplate:       source.Source,
+		PkgType:              install.PkgTypeRemote,
+		SourceIsLocalFile:    false,
+		Lister:               lister,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 2)
+
+	// First target: no override, source-level exact pin unaffected.
+	assert.Equal(t, "v1.0.0", pkgs[0].Version)
+	assert.Empty(t, pkgs[0].RawVersion)
+
+	// Second target: range override resolves independently to the highest tag satisfying ^2.0.0.
+	assert.Equal(t, "v2.5.0", pkgs[1].Version)
+	assert.Equal(t, "^2.0.0", pkgs[1].RawVersion)
+	assert.Contains(t, pkgs[1].URI(), "ref=v2.5.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "vpc/v2.5.0")
+}
+
+// TestProcessTargets_PerTargetSemverRangeOnNonGitSourceReturnsClearError proves a per-target
+// version override that is a semver range (e.g. "^2.0.0") on a source with no tag-listing
+// mechanism (a local file here) fails resolveTargetOverride with a clear, wrapped error instead of
+// silently templating the literal range string into the URI or hanging on a network call.
+func TestProcessTargets_PerTargetSemverRangeOnNonGitSourceReturnsClearError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	localFile := filepath.Join(t.TempDir(), "module.tar.gz")
+	require.NoError(t, os.WriteFile(localFile, []byte("fake-archive"), 0o644))
+
+	source := schema.AtmosVendorSource{
+		Component: "local-mod",
+		Source:    localFile,
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/local-mod", Version: "^2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"local-mod", "1.0.0"}
+
+	_, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  localFile,
+		SourceTemplate:       source.Source,
+		PkgType:              install.PkgTypeLocal,
+		SourceIsLocalFile:    true,
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, install.ErrVersionRangeRequiresGitSource)
+}
+
+// TestProcessAtmosVendorSourceEntry_SemverRangeOnNonGitSourceReturnsClearError proves the
+// source-level (not per-target) semver-range resolution path -- exercised earlier, inside
+// processAtmosVendorSourceEntry, before any URI templating -- surfaces the same clear error for a
+// non-Git source, network-free (ResolveDeclaredVersion never reaches the Lister for a non-Git
+// source, so this never touches the network despite using the real, unmocked default Lister).
+func TestProcessAtmosVendorSourceEntry_SemverRangeOnNonGitSourceReturnsClearError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	localFile := filepath.Join(t.TempDir(), "module.tar.gz")
+	require.NoError(t, os.WriteFile(localFile, []byte("fake-archive"), 0o644))
+
+	params := &vendorSourceParams{
+		atmosConfig: atmosConfig,
+		sources: []schema.AtmosVendorSource{
+			{
+				Component: "local-mod",
+				Source:    localFile,
+				Version:   "^1.0.0",
+				Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/local-mod"}},
+			},
+		},
+		vendorConfigFileName: "vendor.yaml",
+		vendorConfigFilePath: "",
+	}
+
+	_, _, err := processAtmosVendorSourceEntry(params, 0)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, install.ErrVersionRangeRequiresGitSource)
+}
+
+// TestValidateSourceFields_SemverRangeConflictsWithConstraintsVersion proves a vendor.yaml source
+// combining a semver-range version: with a constraints.version ceiling is rejected at
+// validateSourceFields -- before URI templating, resolution, or any network access is attempted.
+func TestValidateSourceFields_SemverRangeConflictsWithConstraintsVersion(t *testing.T) {
+	s := &schema.AtmosVendorSource{
+		Component:   "vpc",
+		Source:      "github.com/cloudposse/terraform-aws-vpc.git?ref={{.Version}}",
+		Version:     "^1.0.0",
+		Targets:     schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+		Constraints: &schema.VendorConstraints{Version: "<2.0.0"},
+	}
+
+	err := validateSourceFields(s, "vendor.yaml")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrVersionRangeConflictsWithConstraints)
+}
+
+// TestValidateSourceFields_SemverRangeWithExcludedVersionsAndNoPrereleasesIsAccepted proves
+// constraints.excluded_versions/no_prereleases (unlike constraints.version) remain valid alongside
+// a range-declared version:.
+func TestValidateSourceFields_SemverRangeWithExcludedVersionsAndNoPrereleasesIsAccepted(t *testing.T) {
+	s := &schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/cloudposse/terraform-aws-vpc.git?ref={{.Version}}",
+		Version:   "^1.0.0",
+		Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+		Constraints: &schema.VendorConstraints{
+			ExcludedVersions: []string{"1.9.0"},
+			NoPrereleases:    true,
+		},
+	}
+
+	require.NoError(t, validateSourceFields(s, "vendor.yaml"))
 }
 
 func TestValidateTagsAndComponents(t *testing.T) {
@@ -983,30 +1193,27 @@ func TestValidateTagsAndComponents(t *testing.T) {
 // yet is kept pending.
 func TestFilterMaterializedVendorPackages_SkipsMaterializedPackage(t *testing.T) {
 	base := t.TempDir()
-	target := filepath.Join(base, "target")
-	require.NoError(t, os.MkdirAll(target, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("resource"), 0o644))
-
-	tempDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.tf"), []byte("resource"), 0o644))
+	sourceDir := filepath.Join(base, "source")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("resource"), 0o644))
 
 	config := &schema.AtmosConfiguration{BasePath: base}
-	materialized := pkgAtmosVendor{
-		uri: filepath.Join(base, "source"), name: "vpc-materialized",
-		targetPath: target, pkgType: pkgTypeLocal,
-	}
-	require.NoError(t, recordVendorLock(&materialized, tempDir, config))
+	materialized := install.NewAtmosVendorPackage(&install.AtmosPackageParams{
+		Name: "vpc-materialized", URI: sourceDir, TargetPath: filepath.Join(base, "target"), PkgType: install.PkgTypeLocal,
+	})
+	result, err := install.Install(config, materialized, install.InstallOptions{})
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
 
-	pending := pkgAtmosVendor{
-		uri: filepath.Join(base, "source"), name: "vpc-pending",
-		targetPath: filepath.Join(base, "pending-target"), pkgType: pkgTypeLocal,
-	}
+	pending := install.NewAtmosVendorPackage(&install.AtmosPackageParams{
+		Name: "vpc-pending", URI: sourceDir, TargetPath: filepath.Join(base, "pending-target"), PkgType: install.PkgTypeLocal,
+	})
 
-	result, err := filterMaterializedVendorPackages([]pkgAtmosVendor{materialized, pending}, config)
+	filtered, err := install.FilterPending(config, []install.VendorPackage{materialized, pending}, install.InstallOptions{})
 
 	require.NoError(t, err)
-	require.Len(t, result, 1, "only the not-yet-materialized package should remain")
-	assert.Equal(t, "vpc-pending", result[0].name)
+	require.Len(t, filtered, 1, "only the not-yet-materialized package should remain")
+	assert.Equal(t, "vpc-pending", filtered[0].Name)
 }
 
 // TestFilterMaterializedVendorPackages_PropagatesError proves a package whose targetPath can't be
@@ -1014,9 +1221,11 @@ func TestFilterMaterializedVendorPackages_SkipsMaterializedPackage(t *testing.T)
 // failing package, instead of silently treating it as pending.
 func TestFilterMaterializedVendorPackages_PropagatesError(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
-	pkgs := []pkgAtmosVendor{{uri: "source", name: "vpc", targetPath: t.TempDir(), pkgType: pkgTypeLocal}}
+	pkgs := []install.VendorPackage{
+		install.NewAtmosVendorPackage(&install.AtmosPackageParams{Name: "vpc", URI: "source", TargetPath: t.TempDir(), PkgType: install.PkgTypeLocal}),
+	}
 
-	result, err := filterMaterializedVendorPackages(pkgs, config)
+	result, err := install.FilterPending(config, pkgs, install.InstallOptions{})
 
 	require.Error(t, err)
 	assert.Nil(t, result)

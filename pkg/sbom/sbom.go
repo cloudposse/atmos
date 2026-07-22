@@ -159,7 +159,7 @@ func appendVendor(graph *Graph, config *schema.AtmosConfiguration, includeFiles 
 			return err
 		}
 		for id, artifact := range lock.Artifacts {
-			name := artifact.Component
+			name := artifact.Name
 			if name == "" {
 				name = id
 			}

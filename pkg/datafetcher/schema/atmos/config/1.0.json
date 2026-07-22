@@ -12152,6 +12152,20 @@
             }
           ],
           "description": "CI configures optional CI-only publishing and reporting for vendor updates."
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorLockConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift."
         }
       },
       "type": "object"
@@ -12187,6 +12201,23 @@
       },
       "type": "object",
       "description": "VendorCIConfig configures provider-backed publishing for vendor updates."
+    },
+    "VendorLockConfig": {
+      "properties": {
+        "enforcement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Enforcement is \"warn\" (the default when omitted), \"silent\", or \"strict\".\n  - \"silent\": re-fetch the drifted package with no reporting.\n  - \"warn\": re-fetch the drifted package and print one warning per package naming why it\n    drifted.\n  - \"strict\": refuse to run (before any fetch/copy/write) when a drifted package is found and\n    `--refresh-lock` was not explicitly passed, naming every drifted package and its reason."
+        }
+      },
+      "type": "object",
+      "description": "VendorLockConfig configures how `atmos vendor pull` reacts when a package's on-disk state no\nlonger matches its vendor.lock.yaml receipt."
     },
     "VendorPullRequestConfig": {
       "properties": {
@@ -12366,7 +12397,7 @@
               "type": "null"
             }
           ],
-          "description": "Mode is \"scope\" (the default) or \"component\". Component batching requires\nexecution.mode=worktree because every component receives an isolated branch."
+          "description": "Mode is \"scope\" (the only supported value today - one branch/PR for the whole update run).\nPer-component batching (one isolated branch/PR per updated component) is a deferred future\nfeature; see docs/prd/vendor-lock.md's Known Limitations."
         }
       },
       "type": "object",

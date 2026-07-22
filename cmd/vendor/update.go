@@ -1,7 +1,9 @@
 package vendor
 
 import (
+	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -11,12 +13,14 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
 	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 )
 
@@ -29,7 +33,8 @@ var vendorUpdateCmd = &cobra.Command{
 	Short: "Update vendored component versions to the latest allowed release",
 	Long: `Check each Git-backed source in the vendor manifest for a newer version (honoring
 any per-source constraints) and update the version field in place, preserving
-comments, anchors, and templates. Use --check for a dry run.`,
+comments, anchors, and templates. Use --check for a dry run. This never checks whether
+what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' for that.`,
 	Example: "atmos vendor update --check\natmos vendor update --component vpc\natmos vendor update --group platform --check\natmos vendor update --all --format json\natmos vendor update --pull\natmos vendor update --pull-request",
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,7 +68,7 @@ comments, anchors, and templates. Use --check for a dry run.`,
 		all := v.GetBool("all")
 		group := v.GetString("group")
 		format := v.GetString("format")
-		scope := updateScope(group, components)
+		scope := updater.UpdateScope(group, components)
 		result := updater.Result{Scope: scope, Check: check, Status: "no_updates"}
 		defer func() {
 			if !vendorSummaryEnabled(v) {
@@ -74,7 +79,7 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			_ = ci.WriteStepSummary(updater.MarkdownSummary(&result))
 		}()
 
-		invocation := updateInvocation{PullRequest: pullRequest, All: all, Group: group, Components: components}
+		invocation := updater.Invocation{PullRequest: pullRequest, All: all, Group: group, Components: components}
 		if err := validateUpdateInvocation(v, cmd, invocation); err != nil {
 			result.Status, result.Failure = "failed", err.Error()
 			return err
@@ -88,6 +93,7 @@ comments, anchors, and templates. Use --check for a dry run.`,
 		var (
 			report     *vendoring.UpdateReport
 			baseBranch string
+			workdir    = currentWorkdir
 		)
 		var err error
 
@@ -95,7 +101,15 @@ comments, anchors, and templates. Use --check for a dry run.`,
 		// not create a branch, commit, push, or pull request.
 		selected := components
 		if pullRequest && !check {
-			discovery, dErr := runVendorUpdate(v, componentType, tags, typeChanged, selected, group, true)
+			execWorkdir, ewErr := resolveExecutionWorkdir(cmd.Context(), v, currentWorkdir)
+			if ewErr != nil {
+				result.Status, result.Failure = "failed", ewErr.Error()
+				return ewErr
+			}
+			defer execWorkdir.Cleanup()
+			workdir = execWorkdir.Workdir
+
+			discovery, dErr := runVendorUpdate(&vendorUpdateParams{viper: v, componentType: componentType, tags: tags, typeChanged: typeChanged, components: selected, group: group, check: true})
 			if dErr != nil {
 				result.Status, result.Failure = "failed", dErr.Error()
 				return dErr
@@ -112,7 +126,14 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			if group != "" {
 				selected = updatedComponents(discovery)
 			}
-			branch, base, pErr := prepareComponentUpdateBranch(cmd.Context(), v, scope)
+			baseBranchOverride := v.GetString("vendor.ci.pull_request.base_branch")
+			if execWorkdir.ResolvedBase != "" {
+				// vendor.update.execution.mode: worktree already resolved the base branch once
+				// (to check out the worktree itself) -- reuse it instead of re-resolving via a
+				// second remote call.
+				baseBranchOverride = execWorkdir.ResolvedBase
+			}
+			branch, base, pErr := updater.PrepareBranch(cmd.Context(), workdir, "origin", baseBranchOverride, v.GetString("vendor.ci.pull_request.branch_prefix"), scope)
 			if pErr != nil {
 				result.Status, result.Failure = "failed", pErr.Error()
 				return pErr
@@ -121,7 +142,7 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			baseBranch = base
 		}
 
-		report, err = runVendorUpdate(v, componentType, tags, typeChanged, selected, group, check)
+		report, err = runVendorUpdate(&vendorUpdateParams{viper: v, componentType: componentType, tags: tags, typeChanged: typeChanged, components: selected, group: group, check: check})
 
 		if report != nil {
 			applyComponentUpdaterReport(&result, report)
@@ -137,9 +158,11 @@ comments, anchors, and templates. Use --check for a dry run.`,
 		// executor uses vendor.lock.yaml to skip fully verified targets.
 		if report != nil && v.GetBool("pull") && !check {
 			err = runVendorPull(cmd, args, report, vendorPullParams{
-				component:     component,
-				componentType: componentType,
-				dryRun:        v.GetBool("dry-run"),
+				component:       component,
+				componentType:   componentType,
+				dryRun:          v.GetBool("dry-run"),
+				refreshLock:     v.GetBool("refresh-lock"),
+				lockEnforcement: v.GetString("lock-enforcement"),
 			})
 			if err != nil {
 				result.Status, result.Failure = "failed", err.Error()
@@ -147,7 +170,9 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			}
 		}
 		if pullRequest && !check && report != nil && report.UpdatedCount() > 0 {
-			pr, commit, pErr := publishComponentUpdate(cmd.Context(), v, componentUpdatePublication{scope: scope, branch: result.Branch, base: baseBranch, report: report})
+			publication := updater.Publication{Scope: scope, Branch: result.Branch, Base: baseBranch, Report: report}
+			prConfig := vendorPullRequestConfig(v)
+			pr, commit, pErr := updater.PublishComponentUpdate(cmd.Context(), workdir, "origin", publication, &prConfig, gitHubRepository)
 			if pErr != nil {
 				result.Status, result.Failure = "failed", pErr.Error()
 				return pErr
@@ -161,6 +186,104 @@ comments, anchors, and templates. Use --check for a dry run.`,
 		}
 		return nil
 	},
+}
+
+// vendorPullRequestConfig extracts the vendor.ci.pull_request.* viper values into the typed
+// schema.VendorPullRequestConfig pkg/vendoring/updater's publish functions take, keeping that
+// package's own viper reads at zero.
+func vendorPullRequestConfig(v *viper.Viper) schema.VendorPullRequestConfig {
+	return schema.VendorPullRequestConfig{
+		Provider:     v.GetString("vendor.ci.pull_request.provider"),
+		BaseBranch:   v.GetString("vendor.ci.pull_request.base_branch"),
+		BranchPrefix: v.GetString("vendor.ci.pull_request.branch_prefix"),
+		Title:        v.GetString("vendor.ci.pull_request.title"),
+		Body:         v.GetString("vendor.ci.pull_request.body"),
+		Labels:       v.GetStringSlice("vendor.ci.pull_request.labels"),
+		Draft:        v.GetBool("vendor.ci.pull_request.draft"),
+		Reviewers:    v.GetStringSlice("vendor.ci.pull_request.reviewers"),
+		Assignees:    v.GetStringSlice("vendor.ci.pull_request.assignees"),
+	}
+}
+
+// executionWorkdir is the outcome of resolveExecutionWorkdir.
+type executionWorkdir struct {
+	// Workdir is the git workdir the --pull-request publish path's branch/commit/push operations
+	// use: currentWorkdir unchanged for the default execution mode, or the isolated worktree's path
+	// for vendor.update.execution.mode: worktree.
+	Workdir string
+	// ResolvedBase is the concrete base branch worktree mode already resolved (so the caller can
+	// reuse it instead of re-resolving via a second remote call); empty for the default execution
+	// mode, where the caller keeps using its own vendor.ci.pull_request.base_branch config,
+	// unresolved, exactly as before this feature existed.
+	ResolvedBase string
+	// Cleanup unwinds whatever resolveExecutionWorkdir set up. Always non-nil, including on error,
+	// so callers can unconditionally `defer execWorkdir.Cleanup()` right after the call; it is a
+	// no-op for the default execution mode.
+	Cleanup func()
+}
+
+// resolveExecutionWorkdir sets up the git workdir (and, for worktree mode, the BasePath redirect)
+// the --pull-request publish path uses for its whole discover -> bump -> branch -> commit -> push
+// cycle. When vendor.update.execution.mode is "worktree", that entire cycle runs inside an isolated
+// git worktree, leaving the invoking checkout's working tree byte-for-byte unchanged (no modified
+// files, no branch switch, no new local branch). When execution mode is not "worktree" (empty or
+// "current"), the returned executionWorkdir.Workdir is currentWorkdir unchanged, ResolvedBase is
+// empty, and Cleanup is a no-op -- this is a strict superset feature and never changes the default
+// path's behavior.
+//
+// The redirect combines two mechanisms, both necessary (confirmed empirically, not just by reading
+// cfg.InitCliConfig):
+//
+//  1. Temporarily pointing the ATMOS_BASE_PATH environment variable at the worktree. Every
+//     path-resolution call in pkg/vendoring's discovery/resolve/write chain
+//     (DiscoverAllComponentManifests, DefaultComponentDirResolver.ComponentDir,
+//     ResolveComponentSource's component.yaml fallback) calls cfg.InitCliConfig fresh with an empty
+//     schema.ConfigAndStacksInfo{}, so nothing in that chain supplies a stronger override -- only an
+//     explicit ConfigAndStacksInfo.AtmosBasePath (the CLI --base-path flag or Terraform provider
+//     param, never set by those call sites) would outrank the env var.
+//  2. Temporarily changing the process's actual working directory to the worktree, via pkg/env's
+//     existing Chdir primitive (the same one --chdir itself uses). This is required because
+//     VendorFilePresent's default lookup (no --file override, no vendor.base_path configured in
+//     atmos.yaml -- the common case) checks for "./vendor.yaml" relative to the process's real
+//     working directory *before* ever consulting atmosConfig.BasePath -- ATMOS_BASE_PATH alone does
+//     not redirect that check, so without also moving the process cwd, that lookup would keep
+//     resolving (and writing) vendor.yaml in the invoking checkout instead of the worktree.
+func resolveExecutionWorkdir(ctx context.Context, v *viper.Viper, currentWorkdir string) (*executionWorkdir, error) {
+	defer perf.Track(nil, "vendor.resolveExecutionWorkdir")()
+
+	if v.GetString("vendor.update.execution.mode") != "worktree" {
+		return &executionWorkdir{Workdir: currentWorkdir, Cleanup: func() {}}, nil
+	}
+
+	prepared, wErr := updater.PrepareUpdateWorktree(ctx, currentWorkdir, "origin", v.GetString("vendor.ci.pull_request.base_branch"))
+	if wErr != nil {
+		return &executionWorkdir{Cleanup: func() {}}, wErr
+	}
+
+	restoreBasePath, envErr := env.SetWithRestore(map[string]string{"ATMOS_BASE_PATH": prepared.Path})
+	if envErr != nil {
+		prepared.Cleanup()
+		return &executionWorkdir{Cleanup: func() {}}, envErr
+	}
+
+	originalWd, wdErr := os.Getwd()
+	if wdErr != nil {
+		restoreBasePath()
+		prepared.Cleanup()
+		return &executionWorkdir{Cleanup: func() {}}, wdErr
+	}
+	if chdirErr := env.Chdir(prepared.Path); chdirErr != nil {
+		restoreBasePath()
+		prepared.Cleanup()
+		return &executionWorkdir{Cleanup: func() {}}, chdirErr
+	}
+
+	cleanup := func() {
+		_ = env.Chdir(originalWd)
+		restoreBasePath()
+		prepared.Cleanup()
+	}
+	return &executionWorkdir{Workdir: prepared.Path, ResolvedBase: prepared.Base, Cleanup: cleanup}, nil
 }
 
 func applyComponentUpdaterReport(result *updater.Result, report *vendoring.UpdateReport) {
@@ -234,7 +357,7 @@ func runRepoWideUpdate(v *viper.Viper, p repoWideUpdateParams) (*vendoring.Updat
 func init() {
 	vendorUpdateParser = flags.NewStandardParser(
 		flags.WithStringSliceFlag("component", "c", []string{}, "Update only these components (repeatable)"),
-		flags.WithStringFlag("type", "t", "terraform", "Component type (terraform, helmfile, or packer)"),
+		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("tags", "", "", "Update only components with any of these comma-separated tags"),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
 		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
@@ -248,9 +371,10 @@ func init() {
 		flags.WithBoolFlag("archived", "", false, "Show only sources whose upstream repository is archived"),
 		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		// Flags consumed by 'vendor pull' when --pull is set.
-		flags.WithStringFlag("stack", "s", "", "Only pull the specified stack (used with --pull)"),
 		flags.WithBoolFlag("everything", "", false, "Pull all components (used with --pull)"),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate the pull (used with --pull)"),
+		flags.WithBoolFlag("refresh-lock", "", false, "Refresh immutable vendor lock entries from declared sources (used with --pull)"),
+		flags.WithStringFlag("lock-enforcement", "", "", "Override vendor.lock.enforcement (strict, warn, or silent; used with --pull)"),
 	)
 	vendorUpdateParser.RegisterFlags(vendorUpdateCmd)
 	if err := vendorUpdateParser.BindToViper(viper.GetViper()); err != nil {
@@ -267,6 +391,13 @@ type vendorPullParams struct {
 	component     string
 	componentType string
 	dryRun        bool
+	// refreshLock/lockEnforcement carry vendor update's own --refresh-lock/--lock-enforcement
+	// flags through to the repo-wide "--pull" sweep path (pullBatchedComponentManifests); the
+	// single-component "--component X --pull" path instead reads them directly off cmd's flags
+	// (registered on vendorUpdateCmd itself, see init()) via ExecuteVendorPullCmd's own
+	// parseVendorFlags, so they don't need to be threaded through this struct for that path too.
+	refreshLock     bool
+	lockEnforcement string
 }
 
 // runVendorPull invokes the existing vendor pull execution after an update.
@@ -295,12 +426,9 @@ type vendorPullParams struct {
 //     touching ExecuteAtmosVendorInternal's component-filtering, out of scope for this fix.
 func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateReport, p vendorPullParams) error {
 	if p.component != "" {
-		// Clear "stack"/"tags" the same way pullUpdatedComponent does: they're vendor update's
-		// own flags of the same name (used, e.g., with a repo-wide "--tags foo --pull" run) and
-		// validateVendorFlags (internal/exec/vendor.go) rejects "component" combined with either.
-		if err := resetUnchangedFlag(cmd, "stack"); err != nil {
-			return err
-		}
+		// Clear "tags" the same way pullUpdatedComponent does: it's vendor update's own flag of
+		// the same name (used, e.g., with a repo-wide "--tags foo --pull" run) and
+		// validateVendorFlags (internal/exec/vendor.go) rejects "component" combined with it.
 		if err := resetUnchangedFlag(cmd, "tags"); err != nil {
 			return err
 		}
@@ -316,7 +444,13 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 	// component's directory under that one type's base path) - forwarding a mixed batch under one
 	// type would resolve some components under the wrong components/<type>/<name> path.
 	for componentType, components := range batchComponentsByType {
-		if err := pullBatchedComponentManifests(components, componentType, p.dryRun); err != nil {
+		if err := pullBatchedComponentManifests(&batchedComponentManifestsParams{
+			components:      components,
+			componentType:   componentType,
+			dryRun:          p.dryRun,
+			refreshLock:     p.refreshLock,
+			lockEnforcement: p.lockEnforcement,
+		}); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -364,16 +498,34 @@ func partitionReportResults(report *vendoring.UpdateReport, updatedOnly bool) (b
 	return batchComponentsByType, fallback
 }
 
+// batchedComponentManifestsParams bundles pullBatchedComponentManifests' inputs (Options Pattern,
+// CLAUDE.md: two adjacent bools (dryRun/refreshLock) plus lockEnforcement crossed both the
+// same-type-adjacent and >4-total-parameters thresholds once vendor update grew its own
+// --refresh-lock/--lock-enforcement flags).
+type batchedComponentManifestsParams struct {
+	components      []string
+	componentType   string
+	dryRun          bool
+	refreshLock     bool
+	lockEnforcement string
+}
+
 // pullBatchedComponentManifests initializes the CLI config the same way other component-manifest
 // resolution call sites do (e.g. pkg/vendoring/resolve.go's DefaultComponentDirResolver) and pulls
-// every entry in components in a single ExecuteComponentVendorPullBatch call.
-func pullBatchedComponentManifests(components []string, componentType string, dryRun bool) error {
+// every entry in p.components in a single ExecuteComponentVendorPullBatch call.
+func pullBatchedComponentManifests(p *batchedComponentManifestsParams) error {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err
 	}
-	// vendor update has no --refresh-lock flag today; false preserves this call's existing behavior.
-	return e.ExecuteComponentVendorPullBatch(&atmosConfig, components, componentType, dryRun, false)
+	// lockEnforcement falls back to vendor.lock.enforcement (defaulting to "warn") the same way
+	// any other flagless call path does when vendor update --lock-enforcement wasn't passed.
+	lockEnforcement := p.lockEnforcement
+	if lockEnforcement == "" {
+		lockEnforcement = e.DefaultLockEnforcement(&atmosConfig)
+	}
+	opts := install.InstallOptions{DryRun: p.dryRun, RefreshLock: p.refreshLock, LockEnforcement: lockEnforcement}
+	return e.ExecuteComponentVendorPullBatch(&atmosConfig, p.components, p.componentType, opts)
 }
 
 // pullUpdatedComponent drives a single "vendor pull --component <component>" call by resetting, on
@@ -384,11 +536,10 @@ func pullBatchedComponentManifests(components []string, componentType string, dr
 //   - "everything" is force-reset to false so it never wins over "component" (parseVendorFlags'
 //     setDefaultEverythingFlag only defaults it to true when nothing else is set, but a prior
 //     iteration - or an earlier design of this function - could otherwise have left it true).
-//   - "stack" and "tags" are cleared via resetUnchangedFlag (not cmd.Flags().Set, see its doc)
-//     since validateVendorFlags rejects "component" combined with either ("--component" and
-//     "--stack" are mutually exclusive, likewise "--component" and "--tags"): a
-//     "vendor update --tags foo --pull" or "--stack bar --pull" run would otherwise fail here even
-//     though the top-level update already resolved exactly which components to pull.
+//   - "tags" is cleared via resetUnchangedFlag (not cmd.Flags().Set, see its doc) since
+//     validateVendorFlags rejects "component" combined with "tags": a
+//     "vendor update --tags foo --pull" run would otherwise fail here even though the top-level
+//     update already resolved exactly which components to pull.
 //
 // "type" and "dry-run" are intentionally left untouched: they're identical across every iteration
 // (the same --type/--dry-run the user passed to "vendor update"), so vendorUpdateCmd's own "type"
@@ -401,9 +552,6 @@ func pullUpdatedComponent(cmd *cobra.Command, args []string, component string) e
 	if err := cmd.Flags().Set("everything", "false"); err != nil {
 		return err
 	}
-	if err := resetUnchangedFlag(cmd, "stack"); err != nil {
-		return err
-	}
 	if err := resetUnchangedFlag(cmd, "tags"); err != nil {
 		return err
 	}
@@ -412,12 +560,11 @@ func pullUpdatedComponent(cmd *cobra.Command, args []string, component string) e
 
 // resetUnchangedFlag clears name's value back to "" and marks it Changed=false, rather than merely
 // calling cmd.Flags().Set (which unconditionally marks a flag Changed=true, even when set to "").
-// This distinction matters for "stack": ExecuteVendorPullCommand (internal/exec/vendor.go) reads
-// flags.Changed("stack") directly - not its value - to decide whether to process stacks at all.
-// Leaving "stack" spuriously marked Changed after this per-component pull loop would force stack
-// processing even though no --stack was ever provided, which can fail outright in a repo with no (or
-// minimal) stack configuration. "tags" has no such Changed() reader today but is reset the same way
-// defensively, in case one is added later.
+// This distinction matters if any Changed()-sensitive flag reader is ever added to
+// ExecuteVendorPullCommand (internal/exec/vendor.go) in the future - a plain cmd.Flags().Set("")
+// would leave that flag spuriously marked Changed after this per-component pull loop, even though
+// the user never actually passed it. "tags" has no such Changed() reader today but is reset this
+// way defensively, in case one is added later.
 func resetUnchangedFlag(cmd *cobra.Command, name string) error {
 	f := cmd.Flags().Lookup(name)
 	if f == nil {

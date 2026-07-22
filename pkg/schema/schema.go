@@ -1967,6 +1967,8 @@ type Vendor struct {
 	Update VendorUpdateConfig `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
 	// CI configures optional CI-only publishing and reporting for vendor updates.
 	CI VendorCIConfig `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+	// Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift.
+	Lock VendorLockConfig `yaml:"lock,omitempty" json:"lock,omitempty" mapstructure:"lock"`
 }
 
 type ChromaStyle struct {

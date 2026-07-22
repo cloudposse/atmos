@@ -17,9 +17,10 @@ type VendorUpdateExecutionConfig struct {
 
 // VendorUpdateBatchingConfig configures the batching strategy for vendor updates.
 type VendorUpdateBatchingConfig struct {
-	// Mode is "scope" (the default) or "component". Component batching requires
-	// execution.mode=worktree because every component receives an isolated branch.
-	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" validate:"omitempty,oneof=scope component"`
+	// Mode is "scope" (the only supported value today - one branch/PR for the whole update run).
+	// Per-component batching (one isolated branch/PR per updated component) is a deferred future
+	// feature; see docs/prd/vendor-lock.md's Known Limitations.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" validate:"omitempty,oneof=scope"`
 }
 
 // VendorUpdateGroupConfig selects components for a named vendor update group.

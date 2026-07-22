@@ -1,6 +1,7 @@
 package lockfile
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -88,7 +90,7 @@ func TestInventoryAndCleanProtectsModifiedFiles(t *testing.T) {
 
 	config := &schema.AtmosConfiguration{BasePath: base}
 	lock := New()
-	lock.Artifacts["component"] = Artifact{Component: "component", Kind: "source", Target: target, Files: files}
+	lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: files}
 	require.NoError(t, Save(config, lock))
 	require.NoError(t, os.WriteFile(filepath.Join(target, "owned.txt"), []byte("modified"), 0o644))
 
@@ -118,8 +120,8 @@ func TestCleanRetainsPathsOwnedByUnselectedArtifact(t *testing.T) {
 
 	config := &schema.AtmosConfiguration{BasePath: base}
 	lock := New()
-	lock.Artifacts["first"] = Artifact{Component: "first", Kind: "source", Target: target, Files: files, Order: 1}
-	lock.Artifacts["second"] = Artifact{Component: "second", Kind: "source", Target: target, Files: files, Order: 2}
+	lock.Artifacts["first"] = Artifact{Name: "first", Kind: "source", Target: target, Files: files, Order: 1}
+	lock.Artifacts["second"] = Artifact{Name: "second", Kind: "source", Target: target, Files: files, Order: 2}
 	require.NoError(t, Save(config, lock))
 
 	report, err := Clean(config, "first", false, false)
@@ -155,7 +157,7 @@ func TestCleanRejectsLockTargetOutsideProject(t *testing.T) {
 			maliciousLock := `version: 1
 artifacts:
   malicious:
-    component: malicious
+    name: malicious
     kind: local
     target: ` + test.target(base, outside) + `
     source: {}
@@ -189,18 +191,238 @@ func TestIsMaterializedRequiresMatchingSourceAndFiles(t *testing.T) {
 	id := ArtifactID(artifact.Kind, artifact.Target)
 	require.NoError(t, Replace(config, id, artifact))
 
-	materialized, err := IsMaterialized(config, id, "file:///source", target)
+	check, err := IsMaterialized(config, MaterializationParams{ID: id, Declared: "file:///source", Target: target})
 	require.NoError(t, err)
-	require.True(t, materialized)
+	require.True(t, check.Materialized)
+	require.Empty(t, check.Reason)
 
-	materialized, err = IsMaterialized(config, id, "file:///other", target)
+	check, err = IsMaterialized(config, MaterializationParams{ID: id, Declared: "file:///other", Target: target})
 	require.NoError(t, err)
-	require.False(t, materialized)
+	require.False(t, check.Materialized)
+	require.Equal(t, "declared source changed", check.Reason)
 
 	require.NoError(t, os.WriteFile(filepath.Join(target, "owned.txt"), []byte("changed"), 0o644))
-	materialized, err = IsMaterialized(config, id, "file:///source", target)
+	check, err = IsMaterialized(config, MaterializationParams{ID: id, Declared: "file:///source", Target: target})
 	require.NoError(t, err)
-	require.False(t, materialized)
+	require.False(t, check.Materialized)
+	require.Equal(t, `file "owned.txt" checksum mismatch`, check.Reason)
+}
+
+// TestIsMaterializedDetectsIncludedExcludedPathsDrift proves a source whose only change is its
+// declared included_paths/excluded_paths (with no change to the declared source URI itself) is
+// correctly detected as drifted, and that an artifact recorded with no patterns at all (the
+// pre-existing lock-file shape, before Artifact gained IncludedPaths/ExcludedPaths) never
+// spuriously reports drift when compared against an equally-empty declared call.
+func TestIsMaterializedDetectsIncludedExcludedPathsDrift(t *testing.T) {
+	t.Parallel()
+
+	// Each subtest gets its own isolated base/target/lock file (rather than sharing one across
+	// t.Run calls) so both this test and its subtests can safely call t.Parallel(): Replace
+	// read-modifies-writes the whole vendor.lock.yaml file, which is not safe for concurrent
+	// writers sharing the same config/base.
+	newFixture := func(t *testing.T) (config *schema.AtmosConfiguration, target, declared string) {
+		t.Helper()
+		base := t.TempDir()
+		target = filepath.Join(base, "vendor")
+		require.NoError(t, os.MkdirAll(target, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("main"), 0o644))
+		return &schema.AtmosConfiguration{BasePath: base}, target, "file:///source"
+	}
+
+	t.Run("patterns-only change is detected as drift", func(t *testing.T) {
+		t.Parallel()
+		config, target, declared := newFixture(t)
+		files, err := Inventory(target)
+		require.NoError(t, err)
+
+		artifact := Artifact{
+			Kind:          "local",
+			Target:        target,
+			Source:        Source{Declared: declared},
+			Files:         files,
+			IncludedPaths: []string{"*.tf"},
+		}
+		id := ArtifactID(artifact.Kind, artifact.Target, "patterned")
+		require.NoError(t, Replace(config, id, artifact))
+
+		// Same declared source and files, unchanged included patterns: still materialized.
+		check, err := IsMaterialized(config, MaterializationParams{
+			ID: id, Declared: declared, Target: target, IncludedPaths: []string{"*.tf"},
+		})
+		require.NoError(t, err)
+		require.True(t, check.Materialized)
+
+		// Same declared source, but included_paths in vendor.yaml/component.yaml changed: drift.
+		check, err = IsMaterialized(config, MaterializationParams{
+			ID: id, Declared: declared, Target: target, IncludedPaths: []string{"*.tf", "*.md"},
+		})
+		require.NoError(t, err)
+		require.False(t, check.Materialized)
+		require.Equal(t, "included/excluded paths changed", check.Reason)
+
+		// Excluded-paths changes are detected the same way.
+		check, err = IsMaterialized(config, MaterializationParams{
+			ID: id, Declared: declared, Target: target, IncludedPaths: []string{"*.tf"}, ExcludedPaths: []string{"README.md"},
+		})
+		require.NoError(t, err)
+		require.False(t, check.Materialized)
+		require.Equal(t, "included/excluded paths changed", check.Reason)
+	})
+
+	t.Run("artifact with no recorded patterns does not spuriously drift", func(t *testing.T) {
+		t.Parallel()
+		config, target, declared := newFixture(t)
+		files, err := Inventory(target)
+		require.NoError(t, err)
+
+		artifact := Artifact{Kind: "local", Target: target, Source: Source{Declared: declared}, Files: files}
+		id := ArtifactID(artifact.Kind, artifact.Target, "unfiltered")
+		require.NoError(t, Replace(config, id, artifact))
+
+		check, err := IsMaterialized(config, MaterializationParams{ID: id, Declared: declared, Target: target})
+		require.NoError(t, err)
+		require.True(t, check.Materialized, "an artifact recorded with nil patterns must compare equal to a call declaring none")
+	})
+}
+
+// TestRecordPopulatesHTTPMetadataOnlyWhenProvided proves Record copies RecordOptions.HTTPMetadata
+// into Source.ETag/Source.LastModified when the caller supplies it (an HTTP(S) fetch), and leaves
+// both fields empty when it doesn't (git, OCI, or local sources), matching their omitempty tags.
+func TestRecordPopulatesHTTPMetadataOnlyWhenProvided(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	tempDir := filepath.Join(base, "staged")
+	require.NoError(t, os.MkdirAll(tempDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.tf"), []byte("main"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+
+	httpTarget := filepath.Join(base, "vendor", "http-source")
+	require.NoError(t, Record(context.Background(), config, "remote", "http-source", tempDir, httpTarget, "https://example.com/archive.tar.gz", RecordOptions{
+		HTTPMetadata: downloader.FetchMetadata{ETag: `"abc123"`, LastModified: "Wed, 21 Oct 2015 07:28:00 GMT"},
+	}))
+
+	localTarget := filepath.Join(base, "vendor", "local-source")
+	require.NoError(t, Record(context.Background(), config, "local", "local-source", tempDir, localTarget, "file:///source", RecordOptions{}))
+
+	lock, err := Load(config)
+	require.NoError(t, err)
+
+	httpArtifact, ok := lock.Artifacts[ArtifactID("remote", httpTarget, "http-source")]
+	require.True(t, ok)
+	require.Equal(t, `"abc123"`, httpArtifact.Source.ETag)
+	require.Equal(t, "Wed, 21 Oct 2015 07:28:00 GMT", httpArtifact.Source.LastModified)
+
+	localArtifact, ok := lock.Artifacts[ArtifactID("local", localTarget, "local-source")]
+	require.True(t, ok)
+	require.Empty(t, localArtifact.Source.ETag)
+	require.Empty(t, localArtifact.Source.LastModified)
+}
+
+// TestRecordPopulatesVersionResolutionOnlyWhenProvided proves Record copies
+// RecordOptions.VersionConstraint/ResolvedVersion into Source.VersionConstraint/Source.ResolvedVersion
+// when the caller supplies them (a range-declared `version:`), and leaves both fields empty
+// otherwise (an exact-pinned `version:`), matching their omitempty tags -- mirroring
+// TestRecordPopulatesHTTPMetadataOnlyWhenProvided's shape for the sibling ETag/LastModified fields.
+func TestRecordPopulatesVersionResolutionOnlyWhenProvided(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	tempDir := filepath.Join(base, "staged")
+	require.NoError(t, os.MkdirAll(tempDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.tf"), []byte("main"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+
+	rangeTarget := filepath.Join(base, "vendor", "range-source")
+	require.NoError(t, Record(context.Background(), config, "remote", "range-source", tempDir, rangeTarget, "https://example.com/archive.tar.gz", RecordOptions{
+		VersionConstraint: "^1.0.0",
+		ResolvedVersion:   "1.2.3",
+	}))
+
+	pinnedTarget := filepath.Join(base, "vendor", "pinned-source")
+	require.NoError(t, Record(context.Background(), config, "remote", "pinned-source", tempDir, pinnedTarget, "https://example.com/archive.tar.gz", RecordOptions{}))
+
+	lock, err := Load(config)
+	require.NoError(t, err)
+
+	rangeArtifact, ok := lock.Artifacts[ArtifactID("remote", rangeTarget, "range-source")]
+	require.True(t, ok)
+	require.Equal(t, "^1.0.0", rangeArtifact.Source.VersionConstraint)
+	require.Equal(t, "1.2.3", rangeArtifact.Source.ResolvedVersion)
+
+	pinnedArtifact, ok := lock.Artifacts[ArtifactID("remote", pinnedTarget, "pinned-source")]
+	require.True(t, ok)
+	require.Empty(t, pinnedArtifact.Source.VersionConstraint)
+	require.Empty(t, pinnedArtifact.Source.ResolvedVersion)
+
+	// Round-trip through YAML: omitempty means a pinned source's marshaled artifact must not even
+	// contain the version_constraint/resolved_version keys.
+	require.NoError(t, Save(config, lock))
+	data, err := os.ReadFile(Path(config))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "version_constraint: ^1.0.0")
+	require.Contains(t, string(data), "resolved_version: 1.2.3")
+}
+
+// TestIsMaterializedAndVerifyIgnoreETagAndLastModified is the dedicated "cache metadata is never
+// authoritative" guarantee: two artifacts identical except for ETag/LastModified must compare as
+// materialized/drift-free identically, and mutating only those fields in an already-recorded
+// artifact must never flip IsMaterialized or Verify's result.
+func TestIsMaterializedAndVerifyIgnoreETagAndLastModified(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	target := filepath.Join(base, "vendor")
+	require.NoError(t, os.MkdirAll(target, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(target, "owned.txt"), []byte("content"), 0o644))
+	files, err := Inventory(target)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+	declared := "https://example.com/a.tar.gz"
+
+	withETag := Artifact{
+		Kind:   "remote",
+		Target: target,
+		Source: Source{Declared: declared, Digest: "sha256:deadbeef", ETag: `"etag-1"`, LastModified: "Mon, 01 Jan 2024 00:00:00 GMT"},
+		Files:  files,
+	}
+	idWith := ArtifactID(withETag.Kind, withETag.Target, "with-etag")
+	require.NoError(t, Replace(config, idWith, withETag))
+
+	withoutETag := withETag
+	withoutETag.Source.ETag = ""
+	withoutETag.Source.LastModified = ""
+	idWithout := ArtifactID(withoutETag.Kind, withoutETag.Target, "without-etag")
+	require.NoError(t, Replace(config, idWithout, withoutETag))
+
+	checkWith, err := IsMaterialized(config, MaterializationParams{ID: idWith, Declared: declared, Target: target})
+	require.NoError(t, err)
+	checkWithout, err := IsMaterialized(config, MaterializationParams{ID: idWithout, Declared: declared, Target: target})
+	require.NoError(t, err)
+	require.True(t, checkWith.Materialized)
+	require.Equal(t, checkWith.Materialized, checkWithout.Materialized, "ETag/LastModified presence must never affect materialization")
+
+	lock, err := Load(config)
+	require.NoError(t, err)
+	drifts, err := Verify(config, lock)
+	require.NoError(t, err)
+	require.Empty(t, drifts, "identical file contents must verify cleanly regardless of ETag/LastModified presence")
+
+	// Mutate only ETag/LastModified on the already-recorded artifact (simulating a re-fetch that
+	// returned a new cache-validator but identical bytes) and confirm neither function reacts.
+	mutated := lock.Artifacts[idWith]
+	mutated.Source.ETag = `"etag-2-different"`
+	mutated.Source.LastModified = "Tue, 02 Jan 2024 00:00:00 GMT"
+	lock.Artifacts[idWith] = mutated
+	require.NoError(t, Save(config, lock))
+
+	checkAfterMutation, err := IsMaterialized(config, MaterializationParams{ID: idWith, Declared: declared, Target: target})
+	require.NoError(t, err)
+	require.True(t, checkAfterMutation.Materialized, "changing only ETag/LastModified in the lock must not invalidate materialization")
+
+	drifts, err = Verify(config, lock)
+	require.NoError(t, err)
+	require.Empty(t, drifts, "changing only ETag/LastModified in the lock must not report drift")
 }
 
 func TestVendorInventoryWithPatternsRecordsOnlyCopiedFiles(t *testing.T) {
@@ -271,7 +493,7 @@ func TestLoadRejectsUnreadableCorruptAndVersionMismatch(t *testing.T) {
 		require.NoError(t, os.MkdirAll(Path(config), 0o755))
 		_, err := Load(config)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "read vendor lock")
+		require.ErrorIs(t, err, ErrReadVendorLock)
 	})
 
 	t.Run("invalid yaml surfaces a parse error", func(t *testing.T) {
@@ -280,7 +502,7 @@ func TestLoadRejectsUnreadableCorruptAndVersionMismatch(t *testing.T) {
 		require.NoError(t, os.WriteFile(Path(config), []byte("not: [valid: yaml"), 0o644))
 		_, err := Load(config)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "parse vendor lock")
+		require.ErrorIs(t, err, ErrParseVendorLock)
 	})
 
 	t.Run("unsupported version is rejected", func(t *testing.T) {
@@ -289,7 +511,7 @@ func TestLoadRejectsUnreadableCorruptAndVersionMismatch(t *testing.T) {
 		require.NoError(t, os.WriteFile(Path(config), []byte("version: 2\nartifacts: {}\n"), 0o644))
 		_, err := Load(config)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "unsupported vendor lock version")
+		require.ErrorIs(t, err, ErrUnsupportedVendorLockVersion)
 	})
 }
 
@@ -301,7 +523,7 @@ func TestSaveRejectsInvalidArtifactTargetAndDirectoryCreationFailure(t *testing.
 		lock.Artifacts["evil"] = Artifact{Kind: "source", Target: filepath.Join(base, "..", "outside")}
 		err := Save(config, lock)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "normalize lock target")
+		require.ErrorIs(t, err, ErrNormalizeLockTarget)
 	})
 
 	t.Run("directory creation failure is surfaced", func(t *testing.T) {
@@ -313,7 +535,7 @@ func TestSaveRejectsInvalidArtifactTargetAndDirectoryCreationFailure(t *testing.
 		config := &schema.AtmosConfiguration{BasePath: notADir}
 		err := Save(config, New())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "create vendor lock directory")
+		require.ErrorIs(t, err, ErrCreateVendorLockDir)
 	})
 }
 
@@ -390,14 +612,14 @@ func TestIsMaterializedRejectsCorruptLockEscapingTargetAndInvalidFilePath(t *tes
 		base := t.TempDir()
 		config := &schema.AtmosConfiguration{BasePath: base}
 		require.NoError(t, os.WriteFile(Path(config), []byte("not: [valid"), 0o644))
-		_, err := IsMaterialized(config, "id", "declared", filepath.Join(base, "vendor"))
+		_, err := IsMaterialized(config, MaterializationParams{ID: "id", Declared: "declared", Target: filepath.Join(base, "vendor")})
 		require.Error(t, err)
 	})
 
 	t.Run("target escaping project root is rejected", func(t *testing.T) {
 		base := t.TempDir()
 		config := &schema.AtmosConfiguration{BasePath: base}
-		_, err := IsMaterialized(config, "id", "declared", filepath.Join(base, "..", "outside"))
+		_, err := IsMaterialized(config, MaterializationParams{ID: "id", Declared: "declared", Target: filepath.Join(base, "..", "outside")})
 		require.Error(t, err)
 	})
 
@@ -421,9 +643,9 @@ artifacts:
     order: 1
 `
 		require.NoError(t, os.WriteFile(Path(config), []byte(maliciousLock), 0o644))
-		_, err := IsMaterialized(config, "malicious", "file:///source", target)
+		_, err := IsMaterialized(config, MaterializationParams{ID: "malicious", Declared: "file:///source", Target: target})
 		require.Error(t, err)
-		require.ErrorContains(t, err, "invalid lock-owned file path")
+		require.ErrorIs(t, err, ErrInvalidLockOwnedFilePath)
 	})
 }
 
@@ -511,7 +733,7 @@ func TestReplacePrunesStaleFilesAndHandlesEdgeCases(t *testing.T) {
 		}
 		err = Replace(config, id, Artifact{Kind: "source", Target: target, Files: keptOnly})
 		require.Error(t, err)
-		require.ErrorContains(t, err, "was modified")
+		require.ErrorIs(t, err, ErrStaleLockOwnedFileModified)
 
 		// The tampered file must survive: Replace must never silently discard
 		// evidence of an unexpected filesystem change.
@@ -673,7 +895,7 @@ func TestCleanHandlesMissingFilesDryRunAndCraftedPaths(t *testing.T) {
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		lock := New()
-		lock.Artifacts["component"] = Artifact{Component: "component", Kind: "source", Target: target, Files: files}
+		lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: files}
 		require.NoError(t, Save(config, lock))
 
 		report, err := Clean(config, "", false, true)
@@ -696,7 +918,7 @@ func TestCleanHandlesMissingFilesDryRunAndCraftedPaths(t *testing.T) {
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		lock := New()
-		lock.Artifacts["component"] = Artifact{Component: "component", Kind: "source", Target: target, Files: files}
+		lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: files}
 		require.NoError(t, Save(config, lock))
 		require.NoError(t, os.Remove(filepath.Join(target, "owned.txt")))
 
@@ -717,7 +939,7 @@ func TestCleanHandlesMissingFilesDryRunAndCraftedPaths(t *testing.T) {
 		maliciousLock := `version: 1
 artifacts:
   other:
-    component: other
+    name: other
     kind: source
     target: vendor
     source: {}
@@ -757,7 +979,7 @@ func TestLockedPathRejectsInvalidRelativePaths(t *testing.T) {
 			_, err := lockedPath(config, target, test.relative)
 			if test.wantErr {
 				require.Error(t, err)
-				require.ErrorContains(t, err, "invalid lock-owned file path")
+				require.ErrorIs(t, err, ErrInvalidLockOwnedFilePath)
 			} else {
 				require.NoError(t, err)
 			}
@@ -779,11 +1001,11 @@ func TestProjectRelativeTargetNormalizesAbsoluteAndRejectsEscapes(t *testing.T) 
 
 	_, err = projectRelativeTarget(config, filepath.Join(base, "..", "outside"))
 	require.Error(t, err)
-	require.ErrorContains(t, err, "invalid vendor lock target")
+	require.ErrorIs(t, err, ErrInvalidVendorLockTarget)
 
 	_, err = projectRelativeTarget(config, base)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "invalid vendor lock target")
+	require.ErrorIs(t, err, ErrInvalidVendorLockTarget)
 }
 
 func TestProjectBaseUsesCliConfigPathAndWorkingDirectoryFallback(t *testing.T) {
@@ -968,7 +1190,7 @@ func TestSaveSurfacesTemporaryFileCreationFailure(t *testing.T) {
 
 	err := Save(config, New())
 	require.Error(t, err)
-	require.ErrorContains(t, err, "create temporary vendor lock")
+	require.ErrorIs(t, err, ErrCreateTempVendorLock)
 }
 
 func TestVendorInventoryWithPatternsRejectsInvalidGlobAndTraversesKeptDirectories(t *testing.T) {
@@ -1000,11 +1222,11 @@ func TestInventoryFunctionsRejectMissingRoot(t *testing.T) {
 
 	_, err := Inventory(missing)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "inventory vendor target")
+	require.ErrorIs(t, err, ErrInventoryWalk)
 
 	_, err = VendorInventoryWithPatterns(missing, nil, nil)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "inventory patterned vendor source")
+	require.ErrorIs(t, err, ErrInventoryWalk)
 }
 
 func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T) {
@@ -1013,7 +1235,7 @@ func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T
 		config := &schema.AtmosConfiguration{BasePath: base}
 		err := Replace(config, "id", Artifact{Kind: "source", Target: filepath.Join(base, "..", "outside")})
 		require.Error(t, err)
-		require.ErrorContains(t, err, "normalize artifact target")
+		require.ErrorIs(t, err, ErrNormalizeArtifactTarget)
 	})
 
 	t.Run("corrupt lock on disk surfaces a load error", func(t *testing.T) {
@@ -1077,7 +1299,7 @@ func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T
 
 		err = Replace(config, id, Artifact{Kind: "source", Target: target, Files: keptOnly})
 		require.Error(t, err)
-		require.ErrorContains(t, err, "inspect stale lock-owned file")
+		require.ErrorIs(t, err, ErrInspectLockOwnedFile)
 	})
 
 	t.Run("stale file removal failure is surfaced instead of silently updating the receipt", func(t *testing.T) {
@@ -1106,7 +1328,7 @@ func TestReplaceRejectsInvalidTargetsCorruptLockAndInvalidFilePaths(t *testing.T
 		}
 		err = Replace(config, id, Artifact{Kind: "source", Target: target, Files: keptOnly})
 		require.Error(t, err)
-		require.ErrorContains(t, err, "remove stale lock-owned file")
+		require.ErrorIs(t, err, ErrRemoveLockOwnedFile)
 	})
 }
 
@@ -1147,12 +1369,12 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 		require.NoError(t, os.WriteFile(filepath.Join(target, "blocker"), []byte("x"), 0o644))
 		config := &schema.AtmosConfiguration{BasePath: base}
 		lock := New()
-		lock.Artifacts["component"] = Artifact{Component: "component", Kind: "source", Target: target, Files: []File{{Path: "blocker/nested.txt", Type: "file", SHA256: "ignored"}}}
+		lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: []File{{Path: "blocker/nested.txt", Type: "file", SHA256: "ignored"}}}
 		require.NoError(t, Save(config, lock))
 
 		_, err := Clean(config, "", false, false)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "inspect lock-owned file")
+		require.ErrorIs(t, err, ErrInspectLockOwnedFile)
 	})
 
 	t.Run("file removal failure and lock save failure are both surfaced, not silently swallowed", func(t *testing.T) {
@@ -1166,7 +1388,7 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		lock := New()
-		lock.Artifacts["component"] = Artifact{Component: "component", Kind: "source", Target: target, Files: files}
+		lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: files}
 		require.NoError(t, Save(config, lock))
 
 		require.NoError(t, os.Chmod(target, 0o555))
@@ -1174,7 +1396,7 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 
 		_, err = Clean(config, "", true, false)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "remove lock-owned file")
+		require.ErrorIs(t, err, ErrRemoveLockOwnedFile)
 	})
 
 	t.Run("lock save failure after successful removal is surfaced, not silently dropped", func(t *testing.T) {
@@ -1188,7 +1410,7 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		lock := New()
-		lock.Artifacts["component"] = Artifact{Component: "component", Kind: "source", Target: target, Files: files}
+		lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: files}
 		require.NoError(t, Save(config, lock))
 
 		// Only the base (lock) directory is read-only; the target directory

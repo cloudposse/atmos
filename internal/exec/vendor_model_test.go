@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	stdio "io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -19,9 +17,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
 // Note on testing bubbletea's TTY/cursor/line-clearing behavior:
@@ -49,12 +46,6 @@ import (
 // terminal width (and is correctly omitted when a line exactly fills the
 // terminal width) -- both zero before this fix, in an otherwise identical
 // capture.
-func TestPkgTypeString(t *testing.T) {
-	assert.Equal(t, "remote", pkgTypeRemote.String())
-	assert.Equal(t, "oci", pkgTypeOci.String())
-	assert.Equal(t, "local", pkgTypeLocal.String())
-	assert.Equal(t, "unknown", pkgType(999).String())
-}
 
 func TestVendorFailureError(t *testing.T) {
 	// Regression test: the vendor error must contain a descriptive explanation
@@ -90,12 +81,24 @@ func TestVendorFailureError(t *testing.T) {
 	})
 }
 
+// namedPackage builds an install.VendorPackage carrying only Name/Version for TUI-only tests that
+// never invoke the installer itself.
+func namedPackage(name, version string) install.VendorPackage {
+	return install.NewAtmosVendorPackage(&install.AtmosPackageParams{Name: name, Version: version})
+}
+
+// mixinPackage builds an install.VendorPackage whose IsMixin() reports true, matching a
+// component.yaml mixin.
+func mixinPackage(name string) install.VendorPackage {
+	return install.NewComponentVendorPackage(&install.ComponentPackageParams{Name: name, IsMixin: true})
+}
+
 func TestHandleInstalledPkgMsg_TracksFailedNames(t *testing.T) {
 	// Verify that handleInstalledPkgMsg appends failed package names.
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc"},
-			{name: "rds"},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", ""),
+			namedPackage("rds", ""),
 		},
 		index: 0,
 		isTTY: false,
@@ -128,9 +131,9 @@ func TestHandleInstalledPkgMsg_NonTTYStatusOutput(t *testing.T) {
 	t.Run("non-final success logs package status", func(t *testing.T) {
 		stderr.Reset()
 		m := &modelVendor{
-			packages: []pkgVendor{
-				{name: "vpc", version: "1.0.0"},
-				{name: "rds", version: "2.0.0"},
+			packages: []install.VendorPackage{
+				namedPackage("vpc", "1.0.0"),
+				namedPackage("rds", "2.0.0"),
 			},
 			isTTY: false,
 		}
@@ -145,8 +148,8 @@ func TestHandleInstalledPkgMsg_NonTTYStatusOutput(t *testing.T) {
 	t.Run("final failure logs failed package and summary", func(t *testing.T) {
 		stderr.Reset()
 		m := &modelVendor{
-			packages: []pkgVendor{
-				{name: "vpc", version: "1.0.0"},
+			packages: []install.VendorPackage{
+				namedPackage("vpc", "1.0.0"),
 			},
 			isTTY: false,
 		}
@@ -170,8 +173,8 @@ func TestLogNonTTYFinalStatus_DryRunSuccessSummary(t *testing.T) {
 	defer cleanup()
 
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", version: "1.0.0"},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", "1.0.0"),
 		},
 		dryRun: true,
 		isTTY:  false,
@@ -200,7 +203,7 @@ func (ts *vendorModelTestStreams) RawError() stdio.Writer  { return ts.stderr }
 // newVendorModelForView builds a modelVendor with an initialized spinner/progress bar so View()
 // can be exercised directly in tests without going through newModelVendor (which would query the
 // real terminal for its initial width).
-func newVendorModelForView(packages []pkgVendor, width int) *modelVendor {
+func newVendorModelForView(packages []install.VendorPackage, width int) *modelVendor {
 	return &modelVendor{
 		packages: packages,
 		spinner:  spinner.New(),
@@ -211,17 +214,17 @@ func newVendorModelForView(packages []pkgVendor, width int) *modelVendor {
 
 // TestModelVendor_ComponentCount_ExcludesMixins is a regression test: mixins are appended into
 // m.packages alongside their owning component (see buildComponentVendorPackages in
-// vendor_component_utils.go), so len(m.packages) over-counts "components" whenever any component
-// declares mixins. The componentCount and mixinCount helpers must separate the two so completion
-// messages ("Vendored N components") match what `vendor update` already reported (e.g. "Updated N
-// component(s)").
+// vendor_component_packages.go), so len(m.packages) over-counts "components" whenever any
+// component declares mixins. The componentCount and mixinCount helpers must separate the two so
+// completion messages ("Vendored N components") match what `vendor update` already reported (e.g.
+// "Updated N component(s)").
 func TestModelVendor_ComponentCount_ExcludesMixins(t *testing.T) {
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
-			{name: "mixin https://example.com/b.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/b.tf", IsMixins: true}},
-			{name: "rds", componentPackage: &pkgComponentVendor{name: "rds"}},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
+			mixinPackage("mixin https://example.com/b.tf"),
+			namedPackage("rds", ""),
 		},
 	}
 
@@ -235,9 +238,9 @@ func TestModelVendor_ComponentCount_ExcludesMixins(t *testing.T) {
 // "components" reported as vendored.
 func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		m := newVendorModelForView([]pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		m := newVendorModelForView([]install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
 		}, 80)
 		m.done = true
 
@@ -248,9 +251,9 @@ func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 	})
 
 	t.Run("mixin-only failure", func(t *testing.T) {
-		m := newVendorModelForView([]pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		m := newVendorModelForView([]install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
 		}, 80)
 		m.done = true
 		m.failedPkg = 1
@@ -267,9 +270,9 @@ func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 	})
 
 	t.Run("component and mixin both failed", func(t *testing.T) {
-		m := newVendorModelForView([]pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		m := newVendorModelForView([]install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
 		}, 80)
 		m.done = true
 		m.failedPkg = 2
@@ -288,9 +291,9 @@ func TestModelVendor_LogNonTTYFinalStatus_CountsExcludeMixins(t *testing.T) {
 	defer cleanup()
 
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", version: "1.0.0", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", "1.0.0"),
+			mixinPackage("mixin https://example.com/a.tf"),
 		},
 		isTTY: false,
 	}
@@ -311,9 +314,9 @@ func TestModelVendor_LogNonTTYFinalStatus_MixinOnlyFailureSurfaced(t *testing.T)
 	defer cleanup()
 
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", version: "1.0.0", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", "1.0.0"),
+			mixinPackage("mixin https://example.com/a.tf"),
 		},
 		isTTY:        false,
 		failedPkg:    1,
@@ -336,8 +339,8 @@ func TestModelVendor_LogNonTTYFinalStatus_MixinOnlyFailureSurfaced(t *testing.T)
 // terminal's true last column (never equal to width -- see liveLineMargin).
 func TestModelVendor_View_LiveLine_NeverWraps(t *testing.T) {
 	longURL := "https://raw.githubusercontent.com/cloudposse/terraform-components/mixins/v0.3.2/src/mixins/account-verification.mixin.tf"
-	packages := []pkgVendor{
-		{name: "mixin " + longURL, version: "v0.3.2", componentPackage: &pkgComponentVendor{name: "mixin " + longURL, IsMixins: true}},
+	packages := []install.VendorPackage{
+		install.NewComponentVendorPackage(&install.ComponentPackageParams{Name: "mixin " + longURL, Version: "v0.3.2", IsMixin: true}),
 	}
 
 	for _, width := range []int{0, 1, 10, 40, 80, 200} {
@@ -357,9 +360,9 @@ func TestModelVendor_View_LiveLine_NeverWraps(t *testing.T) {
 // the padded gap saturates the line), the rendered line must still stop at least liveLineMargin
 // columns short of the terminal's true last column, never landing exactly on it.
 func TestModelVendor_View_NeverTouchesLastColumn(t *testing.T) {
-	packages := []pkgVendor{
-		{name: "datadog-monitor", componentPackage: &pkgComponentVendor{name: "datadog-monitor"}},
-		{name: "other", componentPackage: &pkgComponentVendor{name: "other"}},
+	packages := []install.VendorPackage{
+		namedPackage("datadog-monitor", ""),
+		namedPackage("other", ""),
 	}
 
 	for _, width := range []int{60, 61, 79, 80, 81, 120, 200, 250} {
@@ -403,8 +406,8 @@ func TestProgressBarWidthFor(t *testing.T) {
 // the live line against the real reported width (up to the generous maxWidth sanity ceiling), not
 // an aggressively low fixed cap, and the bar itself must grow wider accordingly.
 func TestModelVendor_Update_WindowSizeMsg_RightAlignsAgainstRealWidth(t *testing.T) {
-	packages := []pkgVendor{
-		{name: "datadog-monitor", componentPackage: &pkgComponentVendor{name: "datadog-monitor"}},
+	packages := []install.VendorPackage{
+		namedPackage("datadog-monitor", ""),
 	}
 	m := newVendorModelForView(packages, 0)
 
@@ -429,8 +432,8 @@ func TestModelVendor_Update_WindowSizeMsg_RightAlignsAgainstRealWidth(t *testing
 // truncates down to a bare ellipsis (truncate.StringWithTail at width 0) for the run's whole
 // lifetime, since tea.WindowSizeMsg only fires once (bubbletea has no SIGWINCH-driven resends here).
 func TestModelVendor_Update_WindowSizeMsg_ZeroWidthDoesNotResetKnownWidth(t *testing.T) {
-	packages := []pkgVendor{
-		{name: "datadog-monitor", componentPackage: &pkgComponentVendor{name: "datadog-monitor"}},
+	packages := []install.VendorPackage{
+		namedPackage("datadog-monitor", ""),
 	}
 	m := newVendorModelForView(packages, fallbackModelWidth)
 
@@ -447,8 +450,8 @@ func TestModelVendor_Update_WindowSizeMsg_ZeroWidthDoesNotResetKnownWidth(t *tes
 // with an ellipsis when the package name doesn't fit.
 func TestModelVendor_View_LiveLine_TruncatesLongName(t *testing.T) {
 	longName := strings.Repeat("x", 200)
-	packages := []pkgVendor{
-		{name: longName, componentPackage: &pkgComponentVendor{name: longName}},
+	packages := []install.VendorPackage{
+		namedPackage(longName, ""),
 	}
 	m := newVendorModelForView(packages, 60)
 
@@ -456,131 +459,6 @@ func TestModelVendor_View_LiveLine_TruncatesLongName(t *testing.T) {
 
 	assert.NotContains(t, view, longName, "the full 200-char name must not appear verbatim in a 60-column line")
 	assert.Contains(t, view, ellipsis)
-}
-
-func TestRecordVendorLockRecordsOnlyCopiedTree(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	tempDir := filepath.Join(base, "download")
-	target := filepath.Join(base, "target")
-	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, ".git"), 0o755))
-	require.NoError(t, os.MkdirAll(target, 0o755))
-	sourceFile := filepath.Join(tempDir, "main.tf")
-	require.NoError(t, os.WriteFile(sourceFile, []byte("resource"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".git", "config"), []byte("metadata"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("resource"), 0o644))
-
-	// recordVendorLock captures File.Mode via a raw os.Stat (pkg/vendoring/lockfile's Inventory),
-	// so the expected mode must come from the same call rather than a hardcoded Unix literal:
-	// Windows collapses any os.WriteFile mode to 0666 (rw) or 0444 (read-only), never 0644.
-	sourceInfo, err := os.Stat(sourceFile)
-	require.NoError(t, err)
-	expectedMode := uint32(sourceInfo.Mode().Perm())
-
-	config := &schema.AtmosConfiguration{BasePath: base}
-	pkg := &pkgAtmosVendor{
-		uri:        filepath.Join(base, "source"),
-		name:       "vpc",
-		targetPath: target,
-		pkgType:    pkgTypeLocal,
-	}
-	require.NoError(t, recordVendorLock(pkg, tempDir, config))
-	secondPkg := *pkg
-	secondPkg.name = "vpc-secondary"
-	require.NoError(t, recordVendorLock(&secondPkg, tempDir, config))
-	needs, err := needsVendorMaterialization(pkg, config)
-	require.NoError(t, err)
-	require.False(t, needs)
-	needs, err = needsVendorMaterialization(&secondPkg, config)
-	require.NoError(t, err)
-	require.False(t, needs)
-	require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("modified"), 0o644))
-	needs, err = needsVendorMaterialization(pkg, config)
-	require.NoError(t, err)
-	require.True(t, needs)
-
-	lock, err := lockfile.Load(config)
-	require.NoError(t, err)
-	require.Len(t, lock.Artifacts, 2)
-	for _, artifact := range lock.Artifacts {
-		require.Equal(t, "sha256", artifact.Source.Digest[:6])
-		require.Equal(t, []lockfile.File{{
-			Path: "main.tf", Type: "file", Mode: expectedMode,
-			SHA256: "5de95319f17467ed6dc58e4e0b16c1193a13b35d60dc48bcf06bf6b7beebbe6c",
-		}}, artifact.Files)
-	}
-}
-
-// TestLockDeclaredSource proves lockDeclaredSource restores the "oci://" scheme the legacy
-// installer strips before provenance resolution (so the lock records the original declared
-// source), while leaving every other pkgType's uri untouched.
-func TestLockDeclaredSource(t *testing.T) {
-	tests := []struct {
-		name string
-		kind pkgType
-		uri  string
-		want string
-	}{
-		{
-			name: "oci kind without the scheme gets it restored",
-			kind: pkgTypeOci,
-			uri:  "ghcr.io/cloudposse/vpc:1.0.0",
-			want: "oci://ghcr.io/cloudposse/vpc:1.0.0",
-		},
-		{
-			name: "oci kind that already carries the scheme is left alone",
-			kind: pkgTypeOci,
-			uri:  "oci://ghcr.io/cloudposse/vpc:1.0.0",
-			want: "oci://ghcr.io/cloudposse/vpc:1.0.0",
-		},
-		{
-			name: "remote kind is never prefixed",
-			kind: pkgTypeRemote,
-			uri:  "github.com/cloudposse/terraform-null-label.git",
-			want: "github.com/cloudposse/terraform-null-label.git",
-		},
-		{
-			name: "local kind is never prefixed",
-			kind: pkgTypeLocal,
-			uri:  "/abs/path/to/component",
-			want: "/abs/path/to/component",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, lockDeclaredSource(tt.kind, tt.uri))
-		})
-	}
-}
-
-// TestDownloadAndInstall_RecordVendorLockErrorSurfaced proves a vendor-lock recording failure
-// after a successful copy is surfaced as an installedPkgMsg error (naming the package), instead of
-// being reported as an overall success despite the receipt never having been written.
-func TestDownloadAndInstall_RecordVendorLockErrorSurfaced(t *testing.T) {
-	sourceDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
-
-	// targetPath deliberately lives outside atmosConfig.BasePath's tree, so recordVendorLock's
-	// lockfile.Replace can't relate it back to the project root and returns an error, even though
-	// the preceding copy to targetPath itself succeeds.
-	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
-	targetPath := t.TempDir()
-
-	pkg := &pkgAtmosVendor{
-		uri:        sourceDir,
-		name:       "vpc",
-		targetPath: targetPath,
-		pkgType:    pkgTypeLocal,
-	}
-
-	msg := downloadAndInstall(pkg, false, atmosConfig)()
-
-	installed, ok := msg.(installedPkgMsg)
-	require.True(t, ok)
-	require.Error(t, installed.err)
-	assert.Contains(t, installed.err.Error(), "vpc")
-	assert.Contains(t, installed.err.Error(), "failed to record vendor lock")
 }
 
 func setupVendorModelTestUI(t *testing.T) (stderr *bytes.Buffer, cleanup func()) {

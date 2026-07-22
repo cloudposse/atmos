@@ -10,6 +10,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -39,7 +40,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, install.InstallOptions{})
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder.
@@ -61,7 +62,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, install.InstallOptions{})
 	assert.Nil(t, err)
 
 	// Additional files to check

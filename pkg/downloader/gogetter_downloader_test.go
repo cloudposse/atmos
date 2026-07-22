@@ -3,9 +3,11 @@ package downloader
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
@@ -153,16 +155,20 @@ func TestNewClient_AttachesGitHubTokenToHTTPGetter(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, httpGetter.Client, "an authenticated http.Client should be attached when a GitHub token is available")
 
-	transport, ok := httpGetter.Client.Transport.(*httpClient.GitHubAuthenticatedTransport)
-	require.True(t, ok, "Transport should be GitHubAuthenticatedTransport, got %T", httpGetter.Client.Transport)
+	capture, ok := httpGetter.Client.Transport.(*metadataCapturingTransport)
+	require.True(t, ok, "Transport should wrap a metadataCapturingTransport, got %T", httpGetter.Client.Transport)
+	transport, ok := capture.base.(*httpClient.GitHubAuthenticatedTransport)
+	require.True(t, ok, "capturing transport should wrap GitHubAuthenticatedTransport, got %T", capture.base)
 	assert.Equal(t, "ghp_test_token", transport.GitHubToken)
+	assert.NotNil(t, httpGetter.Client.CheckRedirect, "CheckRedirect from NewGitHubAuthenticatedHTTPClient must be preserved")
+	assert.Same(t, ggc.metadata, capture, "goGetterClient.Metadata() must read the same transport attached to the http getter")
 }
 
-// TestNewClient_NoTokenLeavesHTTPGetterOnGoGetterDefault ensures that when no GitHub token is
-// resolvable, the http/https getter is left with a nil Client so go-getter falls back to its
-// own default (unauthenticated) client rather than an Atmos-constructed one — preserving
-// go-getter's existing timeout/transport semantics for the common no-token case.
-func TestNewClient_NoTokenLeavesHTTPGetterOnGoGetterDefault(t *testing.T) {
+// TestNewClient_NoTokenAttachesMetadataCapturingTransport ensures that when no GitHub token is
+// resolvable and no test client was injected, the http/https getter still gets an explicit
+// *http.Client wrapping a metadataCapturingTransport (over Go's default transport) instead of a
+// nil Client, so ETag/Last-Modified capture works even in the plain, unauthenticated case.
+func TestNewClient_NoTokenAttachesMetadataCapturingTransport(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("ATMOS_GITHUB_TOKEN", "")
 	t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
@@ -178,15 +184,20 @@ func TestNewClient_NoTokenLeavesHTTPGetterOnGoGetterDefault(t *testing.T) {
 	require.True(t, ok)
 	httpGetter, ok := ggc.client.Getters["https"].(*getter.HttpGetter)
 	require.True(t, ok)
-	assert.Nil(t, httpGetter.Client, "go-getter's own default client should be used when no token is available")
+	require.NotNil(t, httpGetter.Client, "an http.Client wrapping the capturing transport should always be attached")
+	capture, ok := httpGetter.Client.Transport.(*metadataCapturingTransport)
+	require.True(t, ok, "Transport should be metadataCapturingTransport, got %T", httpGetter.Client.Transport)
+	assert.Same(t, http.DefaultTransport, capture.base, "no auth/test transport to wrap, so RoundTrip falls back to http.DefaultTransport")
 }
 
 // TestNewClient_CustomHTTPClientTakesPrecedenceOverToken ensures a caller-supplied test client
-// (WithHTTPClient) is never silently overridden by token-based auth injection.
+// (WithHTTPClient) is never silently overridden by token-based auth injection, and that the
+// caller-owned client is wrapped (for header capture) rather than mutated in place.
 func TestNewClient_CustomHTTPClientTakesPrecedenceOverToken(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_test_token")
 
-	custom := &http.Client{}
+	baseTransport := &http.Transport{}
+	custom := &http.Client{Transport: baseTransport}
 	factory := &goGetterClientFactory{httpClient: custom}
 	dc, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", t.TempDir(), ClientModeFile)
 	require.NoError(t, err)
@@ -195,7 +206,68 @@ func TestNewClient_CustomHTTPClientTakesPrecedenceOverToken(t *testing.T) {
 	require.True(t, ok)
 	httpGetter, ok := ggc.client.Getters["https"].(*getter.HttpGetter)
 	require.True(t, ok)
-	assert.Same(t, custom, httpGetter.Client, "an injected test client must take precedence over token-based auth")
+	require.NotNil(t, httpGetter.Client)
+
+	// The caller's client must never be mutated in place.
+	assert.Same(t, baseTransport, custom.Transport, "the caller-supplied client's Transport must not be mutated")
+	assert.NotSame(t, custom, httpGetter.Client, "an injected test client must be wrapped in a distinct client, not shared")
+
+	capture, ok := httpGetter.Client.Transport.(*metadataCapturingTransport)
+	require.True(t, ok, "Transport should wrap a metadataCapturingTransport, got %T", httpGetter.Client.Transport)
+	assert.Same(t, baseTransport, capture.base, "the capturing transport must wrap the caller's original transport")
+}
+
+// TestFetchWithMetadata_CapturesHTTPHeaders proves an HTTP(S) fetch through FetchWithMetadata
+// against a local httptest.Server captures ETag/Last-Modified from the response -- no real
+// network call involved, per CLAUDE.md's test conventions.
+func TestFetchWithMetadata_CapturesHTTPHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("ETag", `"abc123"`)
+		w.Header().Set("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer server.Close()
+
+	config := fakeAtmosConfig()
+	dest := filepath.Join(t.TempDir(), "downloaded.txt")
+	metadata, err := NewGoGetterDownloader(&config).FetchWithMetadata(server.URL+"/file.txt", dest, ClientModeFile, 10*time.Second)
+	require.NoError(t, err)
+	assert.Equal(t, `"abc123"`, metadata.ETag)
+	assert.Equal(t, "Wed, 21 Oct 2015 07:28:00 GMT", metadata.LastModified)
+	assert.FileExists(t, dest)
+}
+
+// TestFetchWithMetadata_NoHeadersReturnsEmptyMetadata proves a fetch whose response carries
+// neither header returns a zero-value FetchMetadata, not an error.
+func TestFetchWithMetadata_NoHeadersReturnsEmptyMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer server.Close()
+
+	config := fakeAtmosConfig()
+	dest := filepath.Join(t.TempDir(), "downloaded.txt")
+	metadata, err := NewGoGetterDownloader(&config).FetchWithMetadata(server.URL+"/file.txt", dest, ClientModeFile, 10*time.Second)
+	require.NoError(t, err)
+	assert.Empty(t, metadata.ETag)
+	assert.Empty(t, metadata.LastModified)
+}
+
+// TestFetchWithMetadata_LocalFileReturnsEmptyMetadata proves a non-HTTP (local file) fetch
+// yields zero-value FetchMetadata, since the "file" getter never attaches an HTTP transport.
+func TestFetchWithMetadata_LocalFileReturnsEmptyMetadata(t *testing.T) {
+	srcDir := t.TempDir()
+	testFile := filepath.Join(srcDir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("test content"), 0o644))
+
+	config := fakeAtmosConfig()
+	dest := filepath.Join(t.TempDir(), "downloaded.txt")
+	metadata, err := NewGoGetterDownloader(&config).FetchWithMetadata(testFile, dest, ClientModeFile, 10*time.Second)
+	require.NoError(t, err)
+	assert.Empty(t, metadata.ETag)
+	assert.Empty(t, metadata.LastModified)
 }
 
 // Unix-specific test moved to gogetter_downloader_unix_test.go:

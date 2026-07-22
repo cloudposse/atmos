@@ -11,62 +11,70 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
+	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
+
+// buildComponentPackagesOptions bundles buildComponentVendorPackages' inputs (Options Pattern,
+// CLAUDE.md: crossed the >4-total-parameters threshold once RefreshLock/Lister joined the original
+// AtmosConfig/VendorComponentSpec/Component/ComponentPath).
+type buildComponentPackagesOptions struct {
+	AtmosConfig         *schema.AtmosConfiguration
+	VendorComponentSpec *schema.VendorComponentSpec
+	Component           string
+	ComponentPath       string
+	// RefreshLock forces fresh semver-range version resolution -- see resolveEffectiveVersion.
+	RefreshLock bool
+	// Lister overrides the remote Git tag lister used to resolve a semver-range `version:`; nil in
+	// every production call path -- see vendorSourceParams.lister's doc comment.
+	Lister version.RemoteLister
+}
 
 // buildComponentVendorPackages resolves a single component's vendor spec (plus any mixins) into
 // the package list executeVendorModel consumes, without executing the pull. Extracted from
 // ExecuteComponentVendorInternal so ExecuteComponentVendorPullBatch can build package lists for
 // multiple components and combine them into one executeVendorModel call.
-func buildComponentVendorPackages(
-	atmosConfig *schema.AtmosConfiguration,
-	vendorComponentSpec *schema.VendorComponentSpec,
-	component string,
-	componentPath string,
-) ([]pkgComponentVendor, error) {
+func buildComponentVendorPackages(opts buildComponentPackagesOptions) ([]install.VendorPackage, error) {
+	atmosConfig := opts.AtmosConfig
+	vendorComponentSpec := opts.VendorComponentSpec
+	component := opts.Component
+	componentPath := opts.ComponentPath
+
 	if vendorComponentSpec.Source.Uri == "" {
 		return nil, fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
 	}
-	uri := vendorComponentSpec.Source.Uri
-	// Parse 'uri' template. Uses ProcessTmpl (the same helper vendor_utils.go uses for the
-	// top-level vendor.yaml source/target templating) so component.yaml source URIs get the
-	// same Sprig, gomplate, and Atmos template functions (the "atmos" namespace from
-	// internal/exec/template_funcs.go) rather than a narrower, hand-rolled function map.
-	if vendorComponentSpec.Source.Version != "" {
-		var err error
-		uri, err = ProcessTmpl(atmosConfig, fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version), vendorComponentSpec.Source.Uri, vendorComponentSpec.Source, false)
-		if err != nil {
-			return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
-				WithCause(err).
-				WithContext("component", component).
-				WithContext("uri", vendorComponentSpec.Source.Uri).
-				Err()
-		}
+	if err := version.ValidateVersionRangeConstraints(vendorComponentSpec.Source.Version, vendorComponentSpec.Source.Constraints); err != nil {
+		return nil, err
 	}
-	var useOciScheme, useLocalFileSystem, sourceIsLocalFile bool
 
+	resolved, err := resolveComponentSourceURI(atmosConfig, vendorComponentSpec, component, opts)
+	if err != nil {
+		return nil, err
+	}
+	uri := resolved.URI
+
+	var useOciScheme, useLocalFileSystem, sourceIsLocalFile bool
 	// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
 	if strings.HasPrefix(uri, ociScheme) {
 		useOciScheme = true
 		uri = strings.TrimPrefix(uri, ociScheme)
 	}
-
 	if !useOciScheme {
 		uri, useLocalFileSystem, sourceIsLocalFile = handleLocalFileScheme(componentPath, uri)
 	}
 	pType := determinePackageType(useOciScheme, useLocalFileSystem)
-	componentPkg := pkgComponentVendor{
-		uri:                 uri,
-		name:                component,
-		componentPath:       componentPath,
-		sourceIsLocalFile:   sourceIsLocalFile,
-		pkgType:             pType,
-		version:             vendorComponentSpec.Source.Version,
-		vendorComponentSpec: vendorComponentSpec,
-		IsComponent:         true,
-	}
+	componentPkg := install.NewComponentVendorPackage(&install.ComponentPackageParams{
+		Name:              component,
+		URI:               uri,
+		ComponentPath:     componentPath,
+		Version:           resolved.ResolvedVersion,
+		RawVersion:        resolved.RawVersion,
+		PkgType:           pType,
+		SourceIsLocalFile: sourceIsLocalFile,
+		Spec:              vendorComponentSpec,
+	})
 
-	var packages []pkgComponentVendor
-	packages = append(packages, componentPkg)
+	packages := []install.VendorPackage{componentPkg}
 	// Process mixins
 	if len(vendorComponentSpec.Mixins) > 0 {
 		mixinPkgs, err := processComponentMixins(atmosConfig, vendorComponentSpec, componentPath)
@@ -76,6 +84,60 @@ func buildComponentVendorPackages(
 		packages = append(packages, mixinPkgs...)
 	}
 	return packages, nil
+}
+
+// componentSourceResolution is resolveComponentSourceURI's result: the templated source URI (with
+// a range-declared version: already resolved to a concrete version -- see resolveEffectiveVersion)
+// plus its resolved/raw version, for building the eventual install.VendorPackage. RawVersion is
+// non-empty only when the declared version was a range -- see install.VendorPackage.RawVersion.
+type componentSourceResolution struct {
+	URI             string
+	ResolvedVersion string
+	RawVersion      string
+}
+
+// resolveComponentSourceURI resolves a component.yaml source's declared `version:` (exact pin or
+// semver range, via resolveEffectiveVersion) and templates the result into source.uri. Uses
+// ProcessTmpl (the same helper vendor_utils.go uses for the top-level vendor.yaml source/target
+// templating) so component.yaml source URIs get the same Sprig, gomplate, and Atmos template
+// functions (the "atmos" namespace from internal/exec/template_funcs.go) rather than a narrower,
+// hand-rolled function map.
+func resolveComponentSourceURI(
+	atmosConfig *schema.AtmosConfiguration,
+	vendorComponentSpec *schema.VendorComponentSpec,
+	component string,
+	opts buildComponentPackagesOptions,
+) (componentSourceResolution, error) {
+	uri := vendorComponentSpec.Source.Uri
+
+	resolvedVersion, rawVersion, err := resolveEffectiveVersion(&versionResolveInputs{
+		AtmosConfig: atmosConfig,
+		Name:        component,
+		Source:      vendorComponentSpec.Source.Uri,
+		RawVersion:  vendorComponentSpec.Source.Version,
+		Constraints: vendorComponentSpec.Source.Constraints,
+		RefreshLock: opts.RefreshLock,
+		Lister:      opts.Lister,
+	})
+	if err != nil {
+		return componentSourceResolution{}, fmt.Errorf("resolve version for component %q: %w", component, err)
+	}
+
+	if vendorComponentSpec.Source.Version == "" {
+		return componentSourceResolution{URI: uri, ResolvedVersion: resolvedVersion, RawVersion: rawVersion}, nil
+	}
+
+	templateData := vendorComponentSpec.Source
+	templateData.Version = resolvedVersion
+	uri, err = ProcessTmpl(atmosConfig, fmt.Sprintf("source-uri-%s", resolvedVersion), vendorComponentSpec.Source.Uri, templateData, false)
+	if err != nil {
+		return componentSourceResolution{}, errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("component", component).
+			WithContext("uri", vendorComponentSpec.Source.Uri).
+			Err()
+	}
+	return componentSourceResolution{URI: uri, ResolvedVersion: resolvedVersion, RawVersion: rawVersion}, nil
 }
 
 // handleLocalFileScheme processes the URI for local file system paths.
@@ -128,8 +190,8 @@ func resolveFileURIPath(uri string) (path string, ok bool) {
 	return filepath.Clean(p), true
 }
 
-func processComponentMixins(atmosConfig *schema.AtmosConfiguration, vendorComponentSpec *schema.VendorComponentSpec, componentPath string) ([]pkgComponentVendor, error) {
-	var packages []pkgComponentVendor
+func processComponentMixins(atmosConfig *schema.AtmosConfiguration, vendorComponentSpec *schema.VendorComponentSpec, componentPath string) ([]install.VendorPackage, error) {
+	var packages []install.VendorPackage
 	for _, mixin := range vendorComponentSpec.Mixins {
 		if mixin.Uri == "" {
 			return nil, ErrMissingMixinURI
@@ -155,16 +217,22 @@ func processComponentMixins(atmosConfig *schema.AtmosConfiguration, vendorCompon
 // resolveMixinPackage resolves a single mixin's URI template and local-file/OCI/remote
 // classification into a package. The alreadyMaterialized flag is true when the mixin's target
 // already exists locally, in which case pkg is the zero value and there is nothing to fetch.
+//
+// Scope note: unlike a component's own source.version, a mixin's version is templated verbatim
+// (mixin.Version below) and never passed through resolveEffectiveVersion -- a semver-range mixin
+// version: is not supported, and is templated as a literal, unresolved string like any other
+// non-range value (typically failing at fetch time with an invalid-ref error, not a silent
+// mis-resolution).
 func resolveMixinPackage(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorComponentSpec *schema.VendorComponentSpec,
 	mixin *schema.VendorComponentMixins,
 	componentPath string,
-) (pkg pkgComponentVendor, alreadyMaterialized bool, err error) {
+) (pkg install.VendorPackage, alreadyMaterialized bool, err error) {
 	// Parse 'uri' template.
 	uri, err := parseMixinURI(atmosConfig, mixin)
 	if err != nil {
-		return pkgComponentVendor{}, false, fmt.Errorf("mixin %q (uri %q): %w", mixin.Filename, mixin.Uri, err)
+		return install.VendorPackage{}, false, fmt.Errorf("mixin %q (uri %q): %w", mixin.Filename, mixin.Uri, err)
 	}
 
 	// Normalize `file://` URIs so they keep their absolute root (see resolveFileURIPath),
@@ -174,12 +242,12 @@ func resolveMixinPackage(
 		uri = resolved
 	}
 
-	pType := pkgTypeRemote
+	pType := install.PkgTypeRemote
 	// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
 	useOciScheme := false
 	if strings.HasPrefix(uri, ociScheme) {
 		useOciScheme = true
-		pType = pkgTypeOci
+		pType = install.PkgTypeOci
 		uri = strings.TrimPrefix(uri, ociScheme)
 	}
 
@@ -193,20 +261,20 @@ func resolveMixinPackage(
 	}
 	// Check if it's a local file already present at the destination; if so, there's nothing to fetch.
 	if absPath, joinErr := u.JoinPathAndValidate(componentPath, uri); joinErr == nil && u.FileExists(absPath) {
-		return pkgComponentVendor{}, true, nil
+		return install.VendorPackage{}, true, nil
 	}
 
-	return pkgComponentVendor{
-		uri:                 uri,
-		pkgType:             pType,
-		name:                "mixin " + uri,
-		sourceIsLocalFile:   false,
-		IsMixins:            true,
-		vendorComponentSpec: vendorComponentSpec,
-		version:             mixin.Version,
-		componentPath:       componentPath,
-		mixinFilename:       mixin.Filename,
-	}, false, nil
+	return install.NewComponentVendorPackage(&install.ComponentPackageParams{
+		Name:              "mixin " + uri,
+		URI:               uri,
+		ComponentPath:     componentPath,
+		Version:           mixin.Version,
+		PkgType:           pType,
+		SourceIsLocalFile: false,
+		Spec:              vendorComponentSpec,
+		IsMixin:           true,
+		MixinFilename:     mixin.Filename,
+	}), false, nil
 }
 
 func parseMixinURI(atmosConfig *schema.AtmosConfiguration, mixin *schema.VendorComponentMixins) (string, error) {

@@ -1,4 +1,4 @@
-package exec
+package install
 
 import (
 	"errors"
@@ -7,15 +7,25 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/filesystem"
-	"github.com/cloudposse/atmos/pkg/perf"
+	cp "github.com/otiai10/copy" // Using the optimized copy library when no filtering is required.
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	cp "github.com/otiai10/copy" // Using the optimized copy library when no filtering is required.
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
+
+// copyToTargetWithPatterns and its helpers below are moved verbatim (aside from the package
+// rename and perf.Track namespace) from internal/exec/copy_glob.go: the include/exclude glob-
+// pattern copy step used only by atmos-vendor (vendor.yaml) sources. component.yaml sources use
+// the different, simpler vendor.CopyToTarget (pkg/vendor/copy.go) -- these two copy
+// implementations are a pre-existing difference in how vendor.yaml and component.yaml sources
+// apply included_paths/excluded_paths, not something this refactor unifies (see the Part 1 plan:
+// only the pkgType fetch dispatch and lock-record steps were duplicated between the two
+// installers; the copy-to-target step was already legitimately different).
 
 // Named constants to avoid literal duplication.
 const (
@@ -24,11 +34,8 @@ const (
 	logKeyPattern     = "pattern"
 	shallowCopySuffix = "/*"
 
-	// finalTargetKey is used as a logging key for the final target.
+	// FinalTargetKey is used as a logging key for the final target.
 	finalTargetKey = "finalTarget"
-
-	// sourceKey is used as a logging key for the source.
-	sourceKey = "source"
 
 	// GitDirName is the name of git directory to skip during copy operations.
 	gitDirName = ".git"
@@ -98,17 +105,14 @@ func (fc *FileCopier) copyFile(src, dst string) error {
 	}
 	defer destinationFile.Close()
 
-	// COVERAGE NOTE: Now testable via IOCopier mock - see copy_glob_error_paths_test.go.
 	if _, err := fc.ioCopy.Copy(destinationFile, sourceFile); err != nil {
 		return fmt.Errorf("copying content from %q to %q: %w", src, dst, err)
 	}
 
-	// COVERAGE NOTE: Now testable via FileSystem mock - see copy_glob_error_paths_test.go.
 	info, err := fc.fs.Stat(src)
 	if err != nil {
 		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("getting file info for %q: %w", src, err))
 	}
-	// COVERAGE NOTE: Now testable via FileSystem mock - see copy_glob_error_paths_test.go.
 	if err := fc.fs.Chmod(dst, info.Mode()); err != nil {
 		return errors.Join(errUtils.ErrSetPermissions, fmt.Errorf("setting permissions on %q: %w", dst, err))
 	}
@@ -370,7 +374,7 @@ func isShallowPattern(pattern string) bool {
 
 // processMatch handles a single file/directory match for copyToTargetWithPatterns.
 func processMatch(sourceDir, targetPath, file string, shallow bool, excluded []string) error {
-	info, err := os.Stat(file)
+	info, err := os.Stat(file) //nolint:gosec // G703: file is a glob match already resolved on disk under sourceDir (getMatchesForPattern), not a raw user string.
 	if err != nil {
 		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("stating file %q: %w", file, err))
 	}
@@ -440,7 +444,7 @@ func getLocalFinalTarget(sourceDir, targetPath string) (string, error) {
 		if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
 			return "", errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating target directory %q: %w", targetPath, err))
 		}
-		return filepath.Join(targetPath, SanitizeFileName(filepath.Base(sourceDir))), nil
+		return filepath.Join(targetPath, vendor.SanitizeFileName(filepath.Base(sourceDir))), nil
 	}
 
 	parent := filepath.Dir(targetPath)
@@ -480,28 +484,42 @@ func copyToTargetWithPatterns(
 	}
 	// If no inclusion or exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
-		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy")
-		copyOptions := cp.Options{
-			// Skip .git directories from source to avoid copying git metadata.
-			Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-				if filepath.Base(src) == gitDirName {
-					return true, nil
-				}
-				return false, nil
-			},
-			// OnDirExists handles existing directories at the destination.
-			// If the destination already has a .git directory (from a previous vendor run),
-			// we need to leave it untouched to avoid permission errors on git packfiles
-			// which often have restrictive permissions.
-			OnDirExists: func(src, dest string) cp.DirExistsAction {
-				if filepath.Base(dest) == gitDirName {
-					return cp.Untouchable
-				}
-				return cp.Merge
-			},
-		}
-		return cp.Copy(sourceDir, finalTarget, copyOptions)
+		return copyWithoutPatterns(sourceDir, finalTarget)
 	}
+	return copyWithPatterns(sourceDir, finalTarget, s)
+}
+
+// copyWithoutPatterns performs a fast whole-directory copy via the cp library, used when no
+// inclusion/exclusion patterns are defined. It skips .git directories in the source, and leaves an
+// existing .git directory at the destination untouched (see OnDirExists below).
+func copyWithoutPatterns(sourceDir, finalTarget string) error {
+	log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy")
+	copyOptions := cp.Options{
+		// Skip .git directories from source to avoid copying git metadata.
+		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			if filepath.Base(src) == gitDirName {
+				return true, nil
+			}
+			return false, nil
+		},
+		// OnDirExists handles existing directories at the destination.
+		// If the destination already has a .git directory (from a previous vendor run),
+		// we need to leave it untouched to avoid permission errors on git packfiles
+		// which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == gitDirName {
+				return cp.Untouchable
+			}
+			return cp.Merge
+		},
+	}
+	return cp.Copy(sourceDir, finalTarget, copyOptions)
+}
+
+// copyWithPatterns applies s's inclusion/exclusion glob patterns while copying sourceDir to
+// finalTarget: every inclusion pattern is processed individually, and, only when none are defined,
+// the whole directory is copied recursively (with s.ExcludedPaths still applied).
+func copyWithPatterns(sourceDir, finalTarget string, s *schema.AtmosVendorSource) error {
 	// Process each inclusion pattern.
 	for _, pattern := range s.IncludedPaths {
 		log.Debug("Processing inclusion pattern", "pattern", pattern, "source", sourceDir, finalTargetKey, finalTarget)
@@ -527,7 +545,7 @@ func copyToTargetWithPatterns(
 
 // ComponentOrMixinsCopy covers 2 cases: file-to-folder and file-to-file copy.
 func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
-	defer perf.Track(nil, "exec.ComponentOrMixinsCopy")()
+	defer perf.Track(nil, "install.ComponentOrMixinsCopy")()
 
 	var dest string
 	if filepath.Ext(finalTarget) == "" {

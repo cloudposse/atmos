@@ -1526,6 +1526,11 @@ var (
 	ErrNoVersionsMatchConstraints = errors.New("no versions match the configured constraints")
 	// ErrInvalidSemverConstraint indicates a constraints.version value is not a valid semver constraint.
 	ErrInvalidSemverConstraint = errors.New("invalid semver constraint")
+	// ErrVersionRangeConflictsWithConstraints indicates a source declared both a semver-range
+	// version: and a constraints.version ceiling -- mutually exclusive, since constraints.version's
+	// entire purpose (bounding what `atmos vendor update` may bump an *exact* pin to) no longer
+	// applies once version: is itself already a range.
+	ErrVersionRangeConflictsWithConstraints = errors.New("version: is a semver range and constraints.version is also set -- these are mutually exclusive, remove one")
 	// ErrVendorSourceNotFound indicates a requested component/source was not found in the vendor manifest.
 	ErrVendorSourceNotFound = errors.New("vendor source not found")
 	// ErrVendorSourceNotGit indicates a vendor source is not a Git repository (unsupported for update/diff).
@@ -1544,6 +1549,8 @@ var (
 	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
 	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
 	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
+	// ErrComponentFolderNotFound indicates a component's resolved base directory does not exist.
+	ErrComponentFolderNotFound = errors.New("component folder does not exist")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

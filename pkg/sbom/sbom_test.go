@@ -28,9 +28,9 @@ func TestBuildAndRenderAllLockDomains(t *testing.T) {
 
 	vendor := vendorlock.New()
 	vendor.Artifacts["vpc"] = vendorlock.Artifact{
-		Component: "vpc",
-		Kind:      "source",
-		Target:    filepath.Join(base, "components", "terraform", "vpc"),
+		Name:   "vpc",
+		Kind:   "source",
+		Target: filepath.Join(base, "components", "terraform", "vpc"),
 		Source: vendorlock.Source{
 			Declared: "oci://ghcr.io/example/vpc:v1",
 			Digest:   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -93,7 +93,7 @@ func TestBuildTerraformScopeWithImmutableModuleEvidence(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: base}
 	config.Components.Terraform.BasePath = filepath.Join("components", "terraform")
 	vendor := vendorlock.New()
-	vendor.Artifacts["vpc"] = vendorlock.Artifact{Component: "vpc", Kind: "git", Target: componentDir, Source: vendorlock.Source{Declared: "https://token@example.com/org/vpc.git?signature=secret", Resolved: "https://example.com/org/vpc.git", Digest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}
+	vendor.Artifacts["vpc"] = vendorlock.Artifact{Name: "vpc", Kind: "git", Target: componentDir, Source: vendorlock.Source{Declared: "https://token@example.com/org/vpc.git?signature=secret", Resolved: "https://example.com/org/vpc.git", Digest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}
 	require.NoError(t, vendorlock.Save(config, vendor))
 	graph, err := BuildWithOptions(config, Options{Scope: ScopeTerraform, Mode: ModeNTIA, Subject: Subject{Name: "infra-live", Version: "2026.07.17", Supplier: "Example"}})
 	require.NoError(t, err)

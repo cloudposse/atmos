@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
 // fileURIFromPath converts an absolute filesystem path into a "file://" URI that
@@ -82,7 +84,7 @@ func TestProcessComponentMixins_FileURI_NormalizesToAbsolutePath(t *testing.T) {
 	packages, err := processComponentMixins(nil, spec, t.TempDir())
 	require.NoError(t, err)
 	require.Len(t, packages, 1)
-	assert.Equal(t, missingSource, packages[0].uri)
+	assert.Equal(t, missingSource, packages[0].URI())
 }
 
 // TestBuildComponentVendorPackages_OciScheme proves a component source.uri using the "oci://"
@@ -93,12 +95,81 @@ func TestBuildComponentVendorPackages_OciScheme(t *testing.T) {
 		Source: schema.VendorComponentSource{Uri: "oci://ghcr.io/cloudposse/vpc:1.0.0"},
 	}
 
-	packages, err := buildComponentVendorPackages(nil, spec, "vpc", t.TempDir())
+	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
 
 	require.NoError(t, err)
 	require.Len(t, packages, 1)
-	assert.Equal(t, pkgTypeOci, packages[0].pkgType)
-	assert.Equal(t, "ghcr.io/cloudposse/vpc:1.0.0", packages[0].uri)
+	assert.Equal(t, install.PkgTypeOci, packages[0].PkgType())
+	assert.Equal(t, "ghcr.io/cloudposse/vpc:1.0.0", packages[0].URI())
+}
+
+// TestBuildComponentVendorPackages_SemverRangeResolvesAndTemplatesConcreteVersion proves a
+// component.yaml `version:` that is a semver range resolves (via the injected fakeTagLister, no
+// real network access) to a concrete version, and that concrete version -- not the literal range
+// string -- is what's templated into source.uri.
+func TestBuildComponentVendorPackages_SemverRangeResolvesAndTemplatesConcreteVersion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{
+			Uri:     "github.com/cloudposse/terraform-aws-vpc.git?ref={{.Version}}",
+			Version: "^1.0.0",
+		},
+	}
+
+	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{
+		AtmosConfig:         atmosConfig,
+		VendorComponentSpec: spec,
+		Component:           "vpc",
+		ComponentPath:       t.TempDir(),
+		Lister:              &fakeTagLister{tags: []string{"v1.0.0", "v1.2.3", "v1.5.0", "v2.0.0"}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, packages, 1)
+	assert.Equal(t, "v1.5.0", packages[0].Version)
+	assert.Equal(t, "^1.0.0", packages[0].RawVersion)
+	assert.Contains(t, packages[0].URI(), "ref=v1.5.0")
+}
+
+// TestBuildComponentVendorPackages_SemverRangeOnNonGitSourceReturnsClearError proves a
+// component.yaml `version:` that is a semver range (e.g. "^1.0.0") on a source with no
+// tag-listing mechanism (OCI here) fails buildComponentVendorPackages with a clear, wrapped error
+// instead of silently templating the literal range string into the uri. Network-free: a non-Git
+// source is rejected by install.ResolveDeclaredVersion before it ever reaches the (real, unmocked)
+// default Lister.
+func TestBuildComponentVendorPackages_SemverRangeOnNonGitSourceReturnsClearError(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{Uri: "oci://ghcr.io/cloudposse/vpc:{{.Version}}", Version: "^1.0.0"},
+	}
+
+	_, err := buildComponentVendorPackages(buildComponentPackagesOptions{AtmosConfig: &schema.AtmosConfiguration{BasePath: t.TempDir()}, VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, install.ErrVersionRangeRequiresGitSource)
+}
+
+// TestBuildComponentVendorPackages_SemverRangeConflictsWithConstraintsVersion proves a
+// component.yaml source combining a semver-range version: with a constraints.version ceiling is
+// rejected before any resolution/network access is attempted -- the two are mutually exclusive.
+func TestBuildComponentVendorPackages_SemverRangeConflictsWithConstraintsVersion(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{
+			Uri:         "github.com/cloudposse/terraform-aws-vpc.git?ref={{.Version}}",
+			Version:     "^1.0.0",
+			Constraints: &schema.VendorConstraints{Version: "<2.0.0"},
+		},
+	}
+
+	_, err := buildComponentVendorPackages(buildComponentPackagesOptions{
+		AtmosConfig:         &schema.AtmosConfiguration{BasePath: t.TempDir()},
+		VendorComponentSpec: spec,
+		Component:           "vpc",
+		ComponentPath:       t.TempDir(),
+		Lister:              &fakeTagLister{tags: []string{"v1.0.0", "v1.5.0"}},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrVersionRangeConflictsWithConstraints)
 }
 
 // TestResolveMixinPackage_OciScheme proves a mixin uri using the "oci://" scheme is classified as
@@ -112,8 +183,8 @@ func TestResolveMixinPackage_OciScheme(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, alreadyMaterialized)
-	assert.Equal(t, pkgTypeOci, pkg.pkgType)
-	assert.Equal(t, "ghcr.io/cloudposse/mixins:context.tf", pkg.uri)
+	assert.Equal(t, install.PkgTypeOci, pkg.PkgType())
+	assert.Equal(t, "ghcr.io/cloudposse/mixins:context.tf", pkg.URI())
 }
 
 // TestResolveMixinPackage_AlreadyMaterialized proves a mixin whose target file already exists at
@@ -130,7 +201,7 @@ func TestResolveMixinPackage_AlreadyMaterialized(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, alreadyMaterialized)
-	assert.Equal(t, pkgComponentVendor{}, pkg, "an already-materialized mixin returns the zero-value package, since there is nothing to fetch")
+	assert.Equal(t, install.VendorPackage{}, pkg, "an already-materialized mixin returns the zero-value package, since there is nothing to fetch")
 }
 
 // TestResolveMixinPackage_TemplateError proves an invalid Go template in a versioned mixin's uri
@@ -200,7 +271,7 @@ func TestProcessComponentMixins_AlreadyMaterializedMixinIsSkipped(t *testing.T) 
 
 	require.NoError(t, err)
 	require.Len(t, packages, 1, "only the not-yet-materialized mixin should produce a package")
-	assert.Equal(t, "fixtures.tf", packages[0].mixinFilename)
+	assert.Equal(t, "fixtures.tf", packages[0].MixinFilename())
 }
 
 // TestProcessComponentMixins_PropagatesResolveError proves a mixin whose uri fails template

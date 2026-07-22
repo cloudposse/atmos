@@ -43,7 +43,6 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	// Add vendor-specific flags.
 	cmd.DisableFlagParsing = false
 	cmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
-	cmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
 	cmd.PersistentFlags().StringP("type", "t", "terraform", "The type of the vendor (terraform or helmfile).")
 	cmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
 	cmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
@@ -91,7 +90,6 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 
 	flags := cmd.Flags()
 	flags.String("component", "", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")
@@ -175,7 +173,6 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 
 	flags := cmd.Flags()
 	flags.String("component", "s3-bucket", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")

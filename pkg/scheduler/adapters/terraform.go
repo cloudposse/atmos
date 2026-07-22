@@ -722,7 +722,9 @@ func addTerraformDependencies(
 	componentSection map[string]any,
 ) error {
 	fromID := terraformNodeID(componentName, stackName)
-	for _, dep := range terraformDependencies(componentSection) {
+	deps := terraformDependencies(componentSection)
+	for i := range deps {
+		dep := &deps[i]
 		if !dep.IsComponentDependency() {
 			continue
 		}
@@ -750,22 +752,40 @@ func addTerraformDependencies(
 
 // terraformDependencies extracts modern or legacy dependency declarations from a component.
 func terraformDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	if depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any); ok {
-		if _, hasComponents := depsSection["components"]; hasComponents {
-			var deps schema.Dependencies
-			if err := mapstructure.Decode(depsSection, &deps); err == nil && len(deps.Components) > 0 {
-				return deps.Components
-			}
-		}
+	if deps, ok := modernTerraformDependencies(componentSection); ok {
+		return deps
 	}
 
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
 	if !ok {
 		return nil
 	}
+	return legacyTerraformDependencies(settingsSection)
+}
+
+// modernTerraformDependencies extracts dependencies.components declarations, when present and
+// non-empty.
+func modernTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, bool) {
+	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	if _, hasComponents := depsSection["components"]; !hasComponents {
+		return nil, false
+	}
+	var deps schema.Dependencies
+	if err := mapstructure.Decode(depsSection, &deps); err != nil || len(deps.Components) == 0 {
+		return nil, false
+	}
+	return deps.Components, true
+}
+
+// legacyTerraformDependencies extracts settings.depends_on declarations (deprecated in favor of
+// dependencies.components), trying the string-keyed legacy shorthand before falling back to the
+// full schema.Settings decode.
+func legacyTerraformDependencies(settingsSection map[string]any) []schema.ComponentDependency {
 	if dependsOn, ok := settingsSection["depends_on"]; ok {
-		deps := parseLegacyDependsOn(dependsOn)
-		if len(deps) > 0 {
+		if deps := parseLegacyDependsOn(dependsOn); len(deps) > 0 {
 			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
 			return deps
 		}

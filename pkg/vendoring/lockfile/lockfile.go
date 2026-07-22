@@ -1,10 +1,11 @@
 // Package lockfile stores the immutable identities and installed-file inventory
 // produced by Atmos vendoring.
 //
-//nolint:cyclop,err113,gocognit,gocritic,gosec,lintroller,nestif,nilerr,revive // Lock transactions keep ownership, verification, and atomicity in one auditable unit.
+//nolint:cyclop,gocognit,gocritic,gosec,lintroller,nestif,revive // Lock transactions keep ownership, verification, and atomicity in one auditable unit.
 package lockfile
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -12,11 +13,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
@@ -37,12 +41,19 @@ type LockFile struct {
 
 // Artifact is one independently materialized source, target, or mixin.
 type Artifact struct {
-	Component string `yaml:"component,omitempty" json:"component,omitempty"`
-	Kind      string `yaml:"kind" json:"kind"`
-	Target    string `yaml:"target" json:"target"`
-	Source    Source `yaml:"source" json:"source"`
-	Files     []File `yaml:"files" json:"files"`
-	Order     int    `yaml:"order" json:"order"`
+	Name   string `yaml:"name,omitempty" json:"name,omitempty"`
+	Kind   string `yaml:"kind" json:"kind"`
+	Target string `yaml:"target" json:"target"`
+	Source Source `yaml:"source" json:"source"`
+	Files  []File `yaml:"files" json:"files"`
+	Order  int    `yaml:"order" json:"order"`
+	// IncludedPaths/ExcludedPaths are the copy-filter patterns in effect when this artifact was
+	// recorded (see RecordOptions.IncludedPaths/ExcludedPaths). Omitted entirely for artifacts
+	// recorded with no filtering (mixins, and unfiltered sources), so a committed lock file written
+	// before these fields existed loads with both nil -- IsMaterialized treats that identically to
+	// an explicit empty list, never spuriously reporting drift on an old receipt.
+	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty"`
+	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty"`
 }
 
 // Source identifies the immutable artifact that was installed.
@@ -52,6 +63,16 @@ type Source struct {
 	Digest       string `yaml:"digest,omitempty" json:"digest,omitempty"`
 	ETag         string `yaml:"etag,omitempty" json:"etag,omitempty"`
 	LastModified string `yaml:"last_modified,omitempty" json:"last_modified,omitempty"`
+	// VersionConstraint is the raw semver-range expression declared in a source's `version:` field
+	// (e.g. "^1.0.0"), populated only when `version:` was a range rather than an exact pin. Empty
+	// for every exact-pinned source -- the overwhelming common case. Distinct from Resolved above:
+	// Resolved is the post-fetch resolved identity (e.g. a resolved commit/digest);
+	// VersionConstraint/ResolvedVersion are pre-fetch version-range resolution provenance -- see
+	// pkg/vendoring/install/version_resolve.go.
+	VersionConstraint string `yaml:"version_constraint,omitempty" json:"version_constraint,omitempty"`
+	// ResolvedVersion is the concrete version VersionConstraint last resolved to. Empty whenever
+	// VersionConstraint is empty.
+	ResolvedVersion string `yaml:"resolved_version,omitempty" json:"resolved_version,omitempty"`
 }
 
 // File records one lock-owned output path. SHA256 is the file bytes, or the
@@ -110,14 +131,14 @@ func Load(config *schema.AtmosConfiguration) (*LockFile, error) {
 		return New(), nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read vendor lock: %w", err)
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, ErrReadVendorLock, err)
 	}
 	lock := New()
 	if err := yaml.Unmarshal(data, lock); err != nil {
-		return nil, fmt.Errorf("parse vendor lock: %w", err)
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, ErrParseVendorLock, err)
 	}
 	if lock.Version != lockVersion {
-		return nil, fmt.Errorf("unsupported vendor lock version %d", lock.Version)
+		return nil, fmt.Errorf("%w: %d", ErrUnsupportedVendorLockVersion, lock.Version)
 	}
 	if lock.Artifacts == nil {
 		lock.Artifacts = map[string]Artifact{}
@@ -139,7 +160,7 @@ func Save(config *schema.AtmosConfiguration, lock *LockFile) error {
 	for id, artifact := range lock.Artifacts {
 		target, targetErr := projectRelativeTarget(config, artifact.Target)
 		if targetErr != nil {
-			return fmt.Errorf("normalize lock target for artifact %q: %w", id, targetErr)
+			return fmt.Errorf("%w: artifact %q: %w", ErrNormalizeLockTarget, id, targetErr)
 		}
 		artifact.Target = target
 		artifact.Source.Declared = RedactSource(artifact.Source.Declared)
@@ -149,46 +170,50 @@ func Save(config *schema.AtmosConfiguration, lock *LockFile) error {
 	}
 	data, err := yaml.Marshal(lock)
 	if err != nil {
-		return fmt.Errorf("marshal vendor lock: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrMarshalVendorLock, err)
 	}
 	lockPath := Path(config)
 	if err := os.MkdirAll(filepath.Dir(lockPath), directoryMode); err != nil {
-		return fmt.Errorf("create vendor lock directory: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrCreateVendorLockDir, err)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(lockPath), ".vendor.lock-*")
 	if err != nil {
-		return fmt.Errorf("create temporary vendor lock: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrCreateTempVendorLock, err)
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }()
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("write temporary vendor lock: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrWriteTempVendorLock, err)
 	}
 	if err := tmp.Chmod(fileMode); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("set vendor lock permissions: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrSetVendorLockPermissions, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close temporary vendor lock: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrCloseTempVendorLock, err)
 	}
 	if err := os.Rename(tmpName, lockPath); err != nil {
-		return fmt.Errorf("replace vendor lock: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrReplaceVendorLock, err)
 	}
 	return nil
 }
 
-// Inventory records every regular file and symlink below root. Paths are always
-// relative and slash-normalized so the lock is portable across operating systems.
+// Inventory records every regular file and symlink below root with no exclusions at all (not
+// even .git). Used by tests that need to assert exact directory contents after an operation;
+// production code uses VendorInventory/VendorInventoryWithPatterns instead, both of which apply
+// real skip rules.
 func Inventory(root string) ([]File, error) {
-	return inventory(root, false)
+	return walkInventory(root, nil)
 }
 
 // VendorInventory records the files that the standard directory vendoring
 // copy writes. Git metadata is deliberately excluded because the installer
 // never copies it to the materialized target.
 func VendorInventory(root string) ([]File, error) {
-	return inventory(root, true)
+	return walkInventory(root, func(info os.FileInfo, path, _ string) (bool, error) {
+		return info.IsDir() && filepath.Base(path) == ".git", nil
+	})
 }
 
 // VendorInventoryWithPatterns records the exact files selected by the shared
@@ -196,8 +221,15 @@ func VendorInventory(root string) ([]File, error) {
 // files, rather than taking a broad snapshot of a component directory that
 // may also contain local configuration or mixin output.
 func VendorInventoryWithPatterns(root string, includedPaths, excludedPaths []string) ([]File, error) {
+	return walkInventory(root, vendor.CreateSkipFunc(root, includedPaths, excludedPaths))
+}
+
+// walkInventory is the single WalkDir+SHA256 tree-inventory implementation, parameterized by a
+// skip predicate matching pkg/vendor.CreateSkipFunc's existing signature. A nil skip inventories
+// every regular file and symlink below root with no exclusions. Paths are always relative and
+// slash-normalized so the lock is portable across operating systems.
+func walkInventory(root string, skip func(os.FileInfo, string, string) (bool, error)) ([]File, error) {
 	files := []File{}
-	skip := vendor.CreateSkipFunc(root, includedPaths, excludedPaths)
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -209,15 +241,17 @@ func VendorInventoryWithPatterns(root string, includedPaths, excludedPaths []str
 		if err != nil {
 			return err
 		}
-		shouldSkip, err := skip(info, path, "")
-		if err != nil {
-			return err
-		}
-		if shouldSkip {
-			if entry.IsDir() {
-				return filepath.SkipDir
+		if skip != nil {
+			shouldSkip, err := skip(info, path, "")
+			if err != nil {
+				return err
 			}
-			return nil
+			if shouldSkip {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 		if entry.IsDir() {
 			return nil
@@ -226,72 +260,40 @@ func VendorInventoryWithPatterns(root string, includedPaths, excludedPaths []str
 		if err != nil {
 			return err
 		}
-		file := File{Path: filepath.ToSlash(rel), Mode: uint32(info.Mode().Perm())}
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			file.Type, file.SHA256 = "symlink", hashString(target)
-		} else {
-			digest, err := hashFile(path)
-			if err != nil {
-				return err
-			}
-			file.Type, file.SHA256 = "file", digest
+		entryFile, err := fileEntryFor(rel, path, info)
+		if err != nil {
+			return err
 		}
-		files = append(files, file)
+		files = append(files, entryFile)
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("inventory patterned vendor source %q: %w", root, err)
+		return nil, fmt.Errorf("%w %q: %w", ErrInventoryWalk, root, err)
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
 }
 
-func inventory(root string, skipGit bool) ([]File, error) {
-	files := []File{}
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+// fileEntryFor builds a File record for one walked entry: rel is the root-relative path (in
+// OS-native separator form, as returned by filepath.Rel), path is the entry's full filesystem
+// path, and info is its os.FileInfo. Symlinks record the hash of their target text; regular
+// files record the hash of their bytes.
+func fileEntryFor(rel, path string, info os.FileInfo) (File, error) {
+	file := File{Path: filepath.ToSlash(rel), Mode: uint32(info.Mode().Perm())}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(path)
 		if err != nil {
-			return err
+			return File{}, err
 		}
-		if path == root || entry.IsDir() {
-			if skipGit && entry.IsDir() && entry.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		file := File{Path: filepath.ToSlash(rel), Mode: uint32(info.Mode().Perm())}
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			file.Type, file.SHA256 = "symlink", hashString(target)
-		} else {
-			digest, err := hashFile(path)
-			if err != nil {
-				return err
-			}
-			file.Type, file.SHA256 = "file", digest
-		}
-		files = append(files, file)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("inventory vendor target %q: %w", root, err)
+		file.Type, file.SHA256 = "symlink", hashString(target)
+		return file, nil
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-	return files, nil
+	digest, err := hashFile(path)
+	if err != nil {
+		return File{}, err
+	}
+	file.Type, file.SHA256 = "file", digest
+	return file, nil
 }
 
 // FilesDigest returns the deterministic SHA-256 identity for an installation
@@ -315,33 +317,164 @@ func ArtifactID(kind, target string, writers ...string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// IsMaterialized reports whether a declared source has a complete, unchanged
-// installation receipt at target. It never treats cache metadata as evidence
-// of integrity.
-func IsMaterialized(config *schema.AtmosConfiguration, id, declared, target string) (bool, error) {
+// RecordOptions configures how Record inventories and identifies a materialized artifact.
+type RecordOptions struct {
+	// IncludedPaths/ExcludedPaths select VendorInventoryWithPatterns-style filtered inventory,
+	// matching a vendor.yaml or component.yaml source's own copy-filter configuration. Passed
+	// through even when both are empty (an unfiltered patterned source still uses this path,
+	// matching this package's existing behavior).
+	IncludedPaths []string
+	ExcludedPaths []string
+	// Mixin marks a mixin install: inventoried via plain VendorInventory (no pattern filtering,
+	// since mixins install a set of individually-declared files rather than a filtered directory
+	// copy), and its filename is appended to ArtifactID's writer list so a component and its
+	// mixins never collide on the same lock key.
+	Mixin         bool
+	MixinFilename string
+	// HTTPMetadata is best-effort HTTP cache metadata (ETag/Last-Modified) captured during the
+	// fetch that staged tempDir, when it was an HTTP(S) source -- see downloader.FetchMetadata's
+	// doc comment. Zero-value for git, OCI, and local sources, whose fetch has no HTTP response to
+	// observe. Cache metadata only: never read by IsMaterialized or Verify, both of which continue
+	// to rely solely on Digest and the per-file SHA256 values for integrity/drift decisions.
+	HTTPMetadata downloader.FetchMetadata
+	// VersionConstraint/ResolvedVersion record a range-declared `version:`'s resolution -- see
+	// pkg/vendoring/install/version_resolve.go. Both empty for an exact-pinned version: (the common
+	// case), matching Source.VersionConstraint/ResolvedVersion's own omitempty fields.
+	VersionConstraint string
+	ResolvedVersion   string
+}
+
+// Record inventories tempDir (honoring opts), resolves declaredSource's immutable identity via
+// downloader.ResolveArtifact (falling back to a files digest when the resolver has none), and
+// replaces the lock artifact identified by (kind, target, name[, opts.MixinFilename]). This is
+// the single writer of vendor.lock.yaml artifacts — every install path (vendor.yaml sources,
+// component.yaml sources, and mixins) calls this instead of hand rolling the
+// inventory->resolve->Replace sequence itself.
+func Record(ctx context.Context, atmosConfig *schema.AtmosConfiguration, kind, name, tempDir, target, declaredSource string, opts RecordOptions) error {
+	var (
+		files []File
+		err   error
+	)
+	if opts.Mixin {
+		files, err = VendorInventory(tempDir)
+	} else {
+		files, err = VendorInventoryWithPatterns(tempDir, opts.IncludedPaths, opts.ExcludedPaths)
+	}
+	if err != nil {
+		return err
+	}
+
+	resolved, err := downloader.ResolveArtifact(ctx, atmosConfig, declaredSource, tempDir)
+	if err != nil {
+		return err
+	}
+	identity := resolved.Identity
+	if identity == "" {
+		identity = FilesDigest(files)
+	}
+
+	source := Source{Declared: declaredSource, Resolved: resolved.Resolved, Digest: identity}
+	if opts.HTTPMetadata.ETag != "" {
+		source.ETag = opts.HTTPMetadata.ETag
+	}
+	if opts.HTTPMetadata.LastModified != "" {
+		source.LastModified = opts.HTTPMetadata.LastModified
+	}
+	if opts.VersionConstraint != "" {
+		source.VersionConstraint = opts.VersionConstraint
+	}
+	if opts.ResolvedVersion != "" {
+		source.ResolvedVersion = opts.ResolvedVersion
+	}
+
+	artifact := Artifact{
+		Name:          name,
+		Kind:          kind,
+		Target:        target,
+		Source:        source,
+		Files:         files,
+		IncludedPaths: opts.IncludedPaths,
+		ExcludedPaths: opts.ExcludedPaths,
+	}
+
+	writers := []string{name}
+	if opts.Mixin {
+		writers = append(writers, opts.MixinFilename)
+	}
+	return Replace(atmosConfig, ArtifactID(kind, target, writers...), artifact)
+}
+
+// MaterializationParams identifies the artifact IsMaterialized checks and the source's
+// currently-declared identity and copy-filter patterns to compare against the lock receipt. A
+// struct rather than positional parameters: with IncludedPaths/ExcludedPaths added to ID/Declared/
+// Target, this crosses the Options Pattern threshold (CLAUDE.md) of more than four parameters.
+type MaterializationParams struct {
+	// ID is the lock artifact key -- see ArtifactID.
+	ID string
+	// Declared is the source's currently-declared URI (pre-redaction; IsMaterialized redacts it
+	// itself before comparing against the receipt's already-redacted Source.Declared).
+	Declared string
+	// Target is the source's currently-declared destination path.
+	Target string
+	// IncludedPaths/ExcludedPaths are the source's currently-declared copy-filter patterns.
+	IncludedPaths []string
+	ExcludedPaths []string
+}
+
+// MaterializationCheck is IsMaterialized's structured result: whether a package's on-disk state
+// still matches its vendor.lock.yaml receipt, and -- when it doesn't -- why.
+type MaterializationCheck struct {
+	Materialized bool
+	// Reason is empty when Materialized is true. Otherwise one of: "no lock entry", "target path
+	// changed", "declared source changed", "included/excluded paths changed", or a per-file reason
+	// naming the file (e.g. `file "foo.tf" missing`, `file "foo.tf" checksum mismatch`).
+	Reason string
+}
+
+// notMaterialized is a small constructor keeping every early-return in IsMaterialized to one line.
+func notMaterialized(reason string) (MaterializationCheck, error) {
+	return MaterializationCheck{Reason: reason}, nil
+}
+
+// IsMaterialized reports whether a declared source (identity and copy-filter patterns alike) has a
+// complete, unchanged installation receipt at target. It never treats cache metadata as evidence of
+// integrity.
+func IsMaterialized(config *schema.AtmosConfiguration, params MaterializationParams) (MaterializationCheck, error) {
 	lock, err := Load(config)
 	if err != nil {
-		return false, err
+		return MaterializationCheck{}, err
 	}
-	lockTarget, err := projectRelativeTarget(config, target)
+	lockTarget, err := projectRelativeTarget(config, params.Target)
 	if err != nil {
-		return false, err
+		return MaterializationCheck{}, err
 	}
-	artifact, found := lock.Artifacts[id]
-	if !found || artifact.Target != lockTarget || artifact.Source.Declared != RedactSource(declared) {
-		return false, nil
+	artifact, found := lock.Artifacts[params.ID]
+	if !found {
+		return notMaterialized("no lock entry")
+	}
+	if artifact.Target != lockTarget {
+		return notMaterialized("target path changed")
+	}
+	if artifact.Source.Declared != RedactSource(params.Declared) {
+		return notMaterialized("declared source changed")
+	}
+	if !slices.Equal(artifact.IncludedPaths, params.IncludedPaths) || !slices.Equal(artifact.ExcludedPaths, params.ExcludedPaths) {
+		return notMaterialized("included/excluded paths changed")
 	}
 	for _, file := range artifact.Files {
 		path, pathErr := lockedPath(config, artifact.Target, file.Path)
 		if pathErr != nil {
-			return false, pathErr
+			return MaterializationCheck{}, pathErr
 		}
 		info, statErr := os.Lstat(path)
-		if statErr != nil || !matches(file, path, info) {
-			return false, nil
+		if statErr != nil {
+			return notMaterialized(fmt.Sprintf("file %q missing", file.Path))
+		}
+		if !matches(file, path, info) {
+			return notMaterialized(fmt.Sprintf("file %q checksum mismatch", file.Path))
 		}
 	}
-	return true, nil
+	return MaterializationCheck{Materialized: true}, nil
 }
 
 // Replace atomically updates one artifact receipt after its files have been
@@ -350,7 +483,7 @@ func IsMaterialized(config *schema.AtmosConfiguration, id, declared, target stri
 func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) error {
 	target, err := projectRelativeTarget(config, artifact.Target)
 	if err != nil {
-		return fmt.Errorf("normalize artifact target: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrNormalizeArtifactTarget, err)
 	}
 	artifact.Target = target
 	lock, err := Load(config)
@@ -385,13 +518,13 @@ func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) er
 				continue
 			}
 			if statErr != nil {
-				return fmt.Errorf("inspect stale lock-owned file %q: %w", path, statErr)
+				return fmt.Errorf("%w %q: %w", ErrInspectLockOwnedFile, path, statErr)
 			}
 			if !matches(file, path, info) {
-				return fmt.Errorf("stale lock-owned file %q was modified", path)
+				return fmt.Errorf("%w: %q", ErrStaleLockOwnedFileModified, path)
 			}
 			if err := os.Remove(path); err != nil {
-				return fmt.Errorf("remove stale lock-owned file %q: %w", path, err)
+				return fmt.Errorf("%w %q: %w", ErrRemoveLockOwnedFile, path, err)
 			}
 			previousRoot, rootErr := lockTargetRoot(config, previous.Target)
 			if rootErr != nil {
@@ -477,7 +610,7 @@ func selectCleanArtifacts(config *schema.AtmosConfiguration, lock *LockFile, com
 	selected := map[string]Artifact{}
 	remainingOwners := map[string]struct{}{}
 	for id, artifact := range lock.Artifacts {
-		if component == "" || artifact.Component == component {
+		if component == "" || artifact.Name == component {
 			selected[id] = artifact
 			continue
 		}
@@ -516,7 +649,7 @@ func validateCleanArtifacts(config *schema.AtmosConfiguration, selected map[stri
 				continue
 			}
 			if err != nil {
-				return fmt.Errorf("inspect lock-owned file %q: %w", path, err)
+				return fmt.Errorf("%w %q: %w", ErrInspectLockOwnedFile, path, err)
 			}
 			if !force && !matches(file, path, info) {
 				report.Conflicts = append(report.Conflicts, Drift{Artifact: id, Path: path, Reason: "checksum mismatch"})
@@ -549,13 +682,13 @@ func removeCleanFile(config *schema.AtmosConfiguration, target, path string, dry
 	if _, err := os.Lstat(path); os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
-		return fmt.Errorf("inspect lock-owned file %q: %w", path, err)
+		return fmt.Errorf("%w %q: %w", ErrInspectLockOwnedFile, path, err)
 	}
 	if dryRun {
 		return nil
 	}
 	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("remove lock-owned file %q: %w", path, err)
+		return fmt.Errorf("%w %q: %w", ErrRemoveLockOwnedFile, path, err)
 	}
 	root, err := lockTargetRoot(config, target)
 	if err != nil {
@@ -595,7 +728,7 @@ func lockedPath(config *schema.AtmosConfiguration, target, relative string) (str
 	}
 	cleaned := filepath.Clean(filepath.FromSlash(relative))
 	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
-		return "", fmt.Errorf("invalid lock-owned file path %q", relative)
+		return "", fmt.Errorf("%w: %q", ErrInvalidLockOwnedFilePath, relative)
 	}
 	return filepath.Join(root, cleaned), nil
 }
@@ -611,11 +744,11 @@ func projectRelativeTarget(config *schema.AtmosConfiguration, target string) (st
 	if filepath.IsAbs(cleaned) {
 		cleaned, err = filepath.Rel(base, cleaned)
 		if err != nil {
-			return "", fmt.Errorf("make target relative to project root: %w", err)
+			return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrMakeTargetRelative, err)
 		}
 	}
 	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
-		return "", fmt.Errorf("invalid vendor lock target %q", target)
+		return "", fmt.Errorf("%w: %q", ErrInvalidVendorLockTarget, target)
 	}
 	return filepath.ToSlash(cleaned), nil
 }
@@ -624,7 +757,7 @@ func projectRelativeTarget(config *schema.AtmosConfiguration, target string) (st
 // targets must be relative so a crafted lock cannot redirect filesystem actions.
 func lockTargetRoot(config *schema.AtmosConfiguration, target string) (string, error) {
 	if filepath.IsAbs(filepath.FromSlash(target)) {
-		return "", fmt.Errorf("invalid absolute vendor lock target %q", target)
+		return "", fmt.Errorf("%w: %q", ErrAbsoluteVendorLockTarget, target)
 	}
 	relative, err := projectRelativeTarget(config, target)
 	if err != nil {
@@ -636,7 +769,7 @@ func lockTargetRoot(config *schema.AtmosConfiguration, target string) (string, e
 	}
 	root := filepath.Join(base, filepath.FromSlash(relative))
 	if relative, err := filepath.Rel(base, root); err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("vendor lock target %q escapes project root", target)
+		return "", fmt.Errorf("%w: %q", ErrVendorLockTargetEscapesRoot, target)
 	}
 	return root, nil
 }
@@ -653,12 +786,12 @@ func projectBase(config *schema.AtmosConfiguration) (string, error) {
 		var err error
 		base, err = os.Getwd()
 		if err != nil {
-			return "", fmt.Errorf("get project root: %w", err)
+			return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrGetProjectRoot, err)
 		}
 	}
 	abs, err := filepath.Abs(base)
 	if err != nil {
-		return "", fmt.Errorf("resolve project root: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrResolveProjectRoot, err)
 	}
 	return filepath.Clean(abs), nil
 }
