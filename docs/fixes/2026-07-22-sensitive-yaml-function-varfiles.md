@@ -19,29 +19,31 @@ was declared sensitive.
 
 A local, real-state reproduction confirmed the sensitive JSON leak in both Atmos
 `1.221.0` and `1.223.0`. The original report that opened this fix also showed the
-separate raw-argument symptom. The controlled fixture did not recreate that exact path:
-both versions preserved the explicit tag and resolved the state value correctly.
+separate raw-argument symptom. The direct source path that produces that symptom is now
+identified and covered by regression tests.
 
-### Hypothesis: how raw function arguments could become a Terraform value
+### Root cause: template preprocessing discarded explicit tags
 
 An explicit YAML scalar has two distinct parts after YAML parsing: its tag
 (`!terraform.state`) and its scalar value (`producer ".fields.PRIVATE_KEY"`). The
 runtime resolver only runs when it receives the reconstructed complete expression:
 `!terraform.state producer ".fields.PRIVATE_KEY"`.
 
-The observed raw-argument value is therefore consistent with a tag-preservation failure
-at a decode or validation boundary: if that boundary clears or drops the explicit tag
-without rebuilding `tag + " " + value`, the runtime sees only
-`producer ".fields.PRIVATE_KEY"`. It is then an ordinary string, not a recognized YAML
-function, and can be serialized unchanged as a Terraform input. Graceful degradation
-does not explain that symptom; it substitutes `(computed)`, not the function arguments.
+The execution-critical structured template pre-processing path decoded raw YAML into an
+untyped Go map with plain `yaml.Unmarshal` and then re-rendered it. Plain decoding
+preserves the scalar value but drops its explicit tag, so it transformed `!terraform.state producer
+".fields.PRIVATE_KEY"` into `producer ".fields.PRIVATE_KEY"`. The final function
+processor consequently received an ordinary string and correctly did not invoke the
+state resolver; Terraform was handed the raw arguments. Graceful degradation was not
+involved: it emits `(computed)`, never function arguments.
 
-The exact decode or validation boundary that dropped the tag in the original incident
-was not isolated from the available configuration. Controlled `1.221.0` and `1.223.0`
-runs both preserved the explicit tag and resolved the real state value. The regression
-tests added by this fix assert preservation in mapping and list values and assert that
-`TF_VAR_*` receives only the resolved value, so the reported failure mode is now covered
-even though its original environmental trigger remains unconfirmed.
+The pre-pass now uses Atmos's tag-aware YAML decoder, which reconstructs custom tags as
+`tag + " " + value`. The regression test follows that route and verifies that the complete
+expression reaches final configuration. Other raw YAML parsing in stack processing is
+either node-only diagnostics or display-only inspection; normal stack configuration
+decoding already uses the tag-aware decoder. Controlled `1.221.0` and `1.223.0` runs took
+a simpler route and therefore resolved correctly; the faulty structured pre-pass was
+introduced after those releases.
 
 ## Changes
 
@@ -54,6 +56,8 @@ even though its original environmental trigger remains unconfirmed.
 - Add function-aware debug logging for lenient YAML-function degradation.
 - Add a neutral producer/consumer regression fixture and coverage for explicit-tag decoding,
   state resolution, JSON exclusion, and `TF_VAR_*` transport.
+- Preserve explicit YAML function tags through the context/import template pre-processing
+  path that previously stripped them.
 
 ## Validation
 
