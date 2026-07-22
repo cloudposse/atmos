@@ -191,8 +191,13 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 	// and pass the absolute path.
 	resolved, err := resolveBinaryOnPath(ctx.Hook.Command, ctx.ToolchainPATH)
 	if err != nil {
+		// resolveBinaryOnPath's own error already wraps ErrCommandNotFound (needed so its
+		// direct callers/tests can errors.Is() against it standalone). Build the user-facing
+		// message from scratch here rather than via WithCause(err): that would double the
+		// sentinel's own text into the final message ("command not found: command not found:
+		// <name>"), since err already wraps the same sentinel this Build() call starts from,
+		// and the explanation/hint below already say everything err's text would add.
 		return nil, errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
 			WithExplanationf("Hook command %q is not on PATH", ctx.Hook.Command).
 			WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before the hook fires", ctx.Hook.Command).
 			WithContext("hook_kind", ctx.Hook.Kind).

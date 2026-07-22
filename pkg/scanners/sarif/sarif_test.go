@@ -2,6 +2,7 @@ package sarif
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -66,6 +67,33 @@ func TestParse_LevelBasedSeverity(t *testing.T) {
 
 	// Highest severity (lowest enum value = most severe).
 	assert.Equal(t, SeverityHigh, f.HighestSeverity())
+}
+
+func TestParse_PreservesSourceRange(t *testing.T) {
+	data := []byte(`{
+		"runs": [{
+			"tool": {"driver": {"name": "tflint"}},
+			"results": [{
+				"ruleId": "invalid_type",
+				"level": "error",
+				"message": {"text": "invalid type"},
+				"locations": [{"physicalLocation": {
+					"artifactLocation": {"uri": "variables.tf"},
+					"region": {"startLine": 8, "startColumn": 14, "endLine": 8, "endColumn": 29}
+				}}]
+			}]
+		}]
+	}`)
+
+	findings, err := Parse(data)
+	require.NoError(t, err)
+	require.Len(t, findings.Findings, 1)
+	finding := findings.Findings[0]
+	assert.Equal(t, "variables.tf", finding.File)
+	assert.Equal(t, 8, finding.Line)
+	assert.Equal(t, 14, finding.Column)
+	assert.Equal(t, 8, finding.EndLine)
+	assert.Equal(t, 29, finding.EndColumn)
 }
 
 func TestParse_CheckovLikeSARIF(t *testing.T) {
@@ -370,6 +398,10 @@ func TestRenderMarkdown_Empty(t *testing.T) {
 	assert.Contains(t, out, "no findings")
 }
 
+// TestRenderMarkdown_WithFindings covers the default (no RepoBaseURL, not running in
+// GitHub Actions) rendering: severity badges are plain inline code, never shields.io
+// images — an image inside a table cell/heading makes glamour pull its raw URL out
+// into a numbered footnote, which is exactly the noise this mode exists to avoid.
 func TestRenderMarkdown_WithFindings(t *testing.T) {
 	f := &Findings{
 		Tool: "checkov",
@@ -380,12 +412,35 @@ func TestRenderMarkdown_WithFindings(t *testing.T) {
 	}
 	out := RenderMarkdown(f, RenderMarkdownOptions{})
 	assert.Contains(t, out, "checkov")
+	assert.Contains(t, out, "`HIGH`")
+	assert.Contains(t, out, "`LOW`")
+	assert.Contains(t, out, "`HIGH: 1`")
+	assert.Contains(t, out, "`LOW: 1`")
+	assert.NotContains(t, out, "shields.io")
+	assert.Contains(t, out, "CKV_AWS_19")
+	assert.Contains(t, out, "main.tf:5")
+	assert.NotContains(t, out, "[main.tf:5]")
+}
+
+// TestRenderMarkdown_WithFindings_GitHubActions covers rendering when RepoBaseURL is
+// set (running in GitHub Actions): severity badges become real shields.io images,
+// since GitHub renders the same markdown natively (PR comments, Pro run page) and
+// shows them inline with no footnote noise.
+func TestRenderMarkdown_WithFindings_GitHubActions(t *testing.T) {
+	f := &Findings{
+		Tool: "checkov",
+		Findings: []Finding{
+			{RuleID: "CKV_AWS_19", Severity: SeverityHigh, Message: "Encrypt at rest", File: "main.tf", Line: 5},
+			{RuleID: "CKV_AWS_18", Severity: SeverityLow, Message: "Access logging"},
+		},
+	}
+	out := RenderMarkdown(f, RenderMarkdownOptions{RepoBaseURL: "https://github.com/org/repo/blob/abc123"})
 	assert.Contains(t, out, "https://shields.io/badge/HIGH-1-critical?style=for-the-badge")
 	assert.Contains(t, out, "https://shields.io/badge/LOW-1-yellow?style=for-the-badge")
 	assert.Contains(t, out, "https://shields.io/badge/-HIGH-critical?style=for-the-badge")
 	assert.Contains(t, out, "https://shields.io/badge/-LOW-yellow?style=for-the-badge")
 	assert.Contains(t, out, "CKV_AWS_19")
-	assert.Contains(t, out, "[main.tf:5](main.tf#L5)")
+	assert.Contains(t, out, "[main.tf:5](https://github.com/org/repo/blob/abc123/main.tf#L5)")
 }
 
 func TestRenderMarkdown_RespectsMaxFindings(t *testing.T) {
@@ -399,6 +454,27 @@ func TestRenderMarkdown_RespectsMaxFindings(t *testing.T) {
 	}
 	out := RenderMarkdown(&Findings{Tool: "t", Findings: findings}, RenderMarkdownOptions{MaxFindings: 3})
 	assert.Contains(t, out, "and 22 more")
+}
+
+// TestRenderMarkdown_NegativeMaxFindingsShowsEverything verifies a negative
+// MaxFindings (the sentinel cmd/terraform/lint.go's --max-findings=0 translates to)
+// shows every finding with no "…and N more" truncation footer, while zero (unset)
+// still falls back to defaultMaxFindings — the existing behavior every other caller
+// (checkov/trivy/kics hooks) that never sets MaxFindings at all relies on.
+func TestRenderMarkdown_NegativeMaxFindingsShowsEverything(t *testing.T) {
+	findings := make([]Finding, 25)
+	for i := range findings {
+		findings[i] = Finding{RuleID: "R", Severity: SeverityMedium, Message: "x"}
+	}
+	f := &Findings{Tool: "t", Findings: findings}
+
+	unlimited := RenderMarkdown(f, RenderMarkdownOptions{MaxFindings: -1})
+	assert.NotContains(t, unlimited, "more_")
+	assert.Equal(t, 25, strings.Count(unlimited, "| R | x |"))
+
+	zero := RenderMarkdown(f, RenderMarkdownOptions{MaxFindings: 0})
+	assert.Contains(t, zero, "and 15 more")
+	assert.Equal(t, defaultMaxFindings, strings.Count(zero, "| R | x |"))
 }
 
 func TestRenderMarkdown_EscapesPipesInMessages(t *testing.T) {

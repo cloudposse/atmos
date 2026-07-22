@@ -7,7 +7,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/scanners"
+	"github.com/cloudposse/atmos/pkg/validation"
 )
+
+const terminalFormatRich = "rich"
 
 // HandlerOptions configures how NewResultHandler reads SARIF.
 type HandlerOptions struct {
@@ -21,6 +24,9 @@ type HandlerOptions struct {
 	// MaxFindings caps how many individual findings appear in the markdown
 	// table. Defaults to 10 when zero.
 	MaxFindings int
+	// TerminalFormat selects an optional terminal-only presentation. The
+	// Markdown Body remains unchanged for CI, Pro, PR comments, and artifacts.
+	TerminalFormat string
 }
 
 // NewResultHandler returns a scanners.ResultHandler that reads SARIF from
@@ -39,7 +45,11 @@ func NewResultHandler(opts HandlerOptions) scanners.ResultHandler {
 		}
 
 		data, err := os.ReadFile(path)
-		if os.IsNotExist(err) {
+		// runSubprocess always pre-creates the capture file when CaptureStdout is set, so
+		// "file exists but is empty" and "file doesn't exist" are the same signal: the
+		// scanner produced nothing. missingReportSummary already knows how to turn that
+		// into success vs. failure based on ctx.ExitCode.
+		if os.IsNotExist(err) || (err == nil && len(data) == 0) {
 			return missingReportSummary(ctx, opts)
 		}
 		if err != nil {
@@ -57,11 +67,13 @@ func NewResultHandler(opts HandlerOptions) scanners.ResultHandler {
 		// (e.g. "tfsec") so the report is labeled by the actual tool.
 		label := labelOrDefault(opts.Kind, findings.Tool)
 		body := RenderMarkdown(findings, RenderMarkdownOptions{
-			Tool:        label,
-			MaxFindings: opts.MaxFindings,
+			Tool:         label,
+			MaxFindings:  opts.MaxFindings,
+			ComponentDir: sourceComponentPath(ctx),
+			RepoBaseURL:  githubBlobBaseURL(),
 		})
 
-		return &scanners.Summary{
+		summary := &scanners.Summary{
 			Kind:     label,
 			Status:   statusForFindings(findings),
 			Title:    titleForFindings(findings),
@@ -71,8 +83,65 @@ func NewResultHandler(opts HandlerOptions) scanners.ResultHandler {
 			// Preserve the tool's SARIF fidelity while normalizing artifact
 			// paths so annotations and Code Scanning can anchor to PR files.
 			SARIF: data,
-		}, nil
+		}
+		if opts.TerminalFormat == terminalFormatRich {
+			summary.TerminalBody = renderRich(findings, label, opts.MaxFindings, richSourceRoot(ctx))
+		}
+		return summary, nil
 	}
+}
+
+// renderRich adapts normalized SARIF findings into Atmos's shared validation
+// report, preserving source ranges and applying the same cap as Markdown
+// output before the renderer orders diagnostics by source location.
+func renderRich(findings *Findings, source string, maxFindings int, root string) string {
+	report := validation.Report{Diagnostics: richDiagnostics(findings, source, maxFindings)}
+	return validation.Rich(report, validation.DefaultRichOptions(root))
+}
+
+func richDiagnostics(findings *Findings, source string, maxFindings int) []validation.Diagnostic {
+	if findings == nil {
+		return nil
+	}
+	sorted := findings.SortedBySeverity()
+	limit := richFindingsLimit(len(sorted), maxFindings)
+	diagnostics := make([]validation.Diagnostic, 0, limit)
+	for _, finding := range sorted[:limit] {
+		diagnostics = append(diagnostics, validation.Diagnostic{
+			Source: source, RuleID: finding.RuleID, Severity: validationSeverity(finding.Severity),
+			Message: finding.Message, File: finding.File, Line: finding.Line, Column: finding.Column,
+			EndLine: finding.EndLine, EndColumn: finding.EndColumn,
+		})
+	}
+	return diagnostics
+}
+
+func richFindingsLimit(total, maxFindings int) int {
+	if maxFindings == 0 {
+		maxFindings = defaultMaxFindings
+	}
+	if maxFindings < 0 || maxFindings > total {
+		return total
+	}
+	return maxFindings
+}
+
+func validationSeverity(severity Severity) validation.Severity {
+	switch severity {
+	case SeverityCritical, SeverityHigh:
+		return validation.SeverityError
+	case SeverityMedium:
+		return validation.SeverityWarning
+	default:
+		return validation.SeverityNotice
+	}
+}
+
+func richSourceRoot(ctx *scanners.Context) string {
+	if root := githubWorkspace(); root != "" {
+		return root
+	}
+	return sourceComponentPath(ctx)
 }
 
 // missingReportSummary reports a scanner failure when it exited unsuccessfully

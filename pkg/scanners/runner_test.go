@@ -384,6 +384,7 @@ func TestRenderTerminal(t *testing.T) {
 	// None of these must panic; they exercise the guard clauses.
 	renderTerminal(&Context{}, nil)
 	renderTerminal(&Context{}, &Output{})
+	renderTerminal(&Context{}, &Output{Summary: &Summary{TerminalBody: "plain source excerpt", Body: "**markdown fallback**"}})
 	renderTerminal(&Context{}, &Output{Summary: &Summary{Body: "**hi**"}})
 	renderTerminal(&Context{Format: FormatMarkdown}, &Output{Artifact: &Artifact{Body: []byte("**hi**")}})
 	// Non-markdown artifact format must not attempt to render.

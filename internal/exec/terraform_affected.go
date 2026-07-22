@@ -56,13 +56,27 @@ func FilterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
 func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 	defer perf.Track(nil, "exec.GetAffectedComponents")()
 
+	return GetAffectedComponentsWithOptions(args, DescribeStacksErrorOptions{})
+}
+
+// GetAffectedComponentsWithOptions is GetAffectedComponents plus opt-in graceful degradation
+// for recoverable per-value YAML function errors (see DescribeStacksErrorOptions), dispatching
+// to the *WithOptions variant of whichever git-target resolution mode applies.
+func GetAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponentsWithOptions")()
+
 	if args == nil {
 		return nil, errUtils.ErrNilParam
 	}
+	return dispatchAffectedComponentsWithOptions(args, errOptions)
+}
 
+// dispatchAffectedComponentsWithOptions is GetAffectedComponentsWithOptions's git-target
+// dispatch switch, split out so the exported entry point stays a short nil-check + delegate.
+func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
 	switch {
 	case args.RepoPath != "":
-		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 			args.CLIConfig,
 			args.RepoPath,
 			args.IncludeSpaceliftAdminStacks,
@@ -74,10 +88,11 @@ func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ExcludeLocked,
 			args.AuthManager,
 			args.AuthDisabled,
+			errOptions,
 		)
 		return affectedList, err
 	case args.CloneTargetRef:
-		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefClone(
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
@@ -92,10 +107,11 @@ func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ExcludeLocked,
 			args.AuthManager,
 			args.AuthDisabled,
+			errOptions,
 		)
 		return affectedList, err
 	default:
-		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckout(
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
@@ -109,6 +125,7 @@ func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ExcludeLocked,
 			args.AuthManager,
 			args.AuthDisabled,
+			errOptions,
 		)
 		return affectedList, err
 	}

@@ -660,6 +660,12 @@ type Terraform struct {
 // absolute path or a path relative to the Atmos base path.
 type TerraformLint struct {
 	Config string `yaml:"config,omitempty" json:"config,omitempty" mapstructure:"config"`
+	// ErrorMode is the project-wide default for `atmos terraform lint`'s `--error-mode` flag:
+	// how to handle a recoverable per-value YAML function error (e.g. a Terraform backend that
+	// has not been provisioned yet) or a component-specific auth failure encountered while
+	// discovering lint targets. Values: "strict", "warn" (default), "silent". An explicit
+	// --error-mode flag or ATMOS_TERRAFORM_LINT_ERROR_MODE env var overrides this.
+	ErrorMode string `yaml:"error_mode,omitempty" json:"error_mode,omitempty" mapstructure:"error_mode"`
 }
 
 // TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native

@@ -17,14 +17,21 @@ import (
 const (
 	Name    = "tflint"
 	Command = "tflint"
+
+	OutputFormatMarkdown = "markdown"
+	OutputFormatRich     = "rich"
 )
 
+// DefaultArgs returns tflint's default CLI arguments. TFLint has no `--chdir` flag
+// (unlike terraform/tofu) — it takes the target directory as a positional
+// [FILE or DIR...] argument, so $ATMOS_COMPONENT_PATH is passed positionally rather
+// than as a flag value.
 func DefaultArgs() []string {
 	defer perf.Track(nil, "tflint.DefaultArgs")()
 
 	return []string{
-		"--chdir=$ATMOS_COMPONENT_PATH",
 		"--format=sarif",
+		"$ATMOS_COMPONENT_PATH",
 	}
 }
 
@@ -36,6 +43,13 @@ type Options struct {
 	AtmosConfig   *schema.AtmosConfiguration
 	Info          *schema.ConfigAndStacksInfo
 	ToolchainPATH string
+	// MaxFindings caps how many individual findings appear in the table per
+	// component (0 uses sarif's own default of 10). See cmd/terraform/lint.go's
+	// --max-findings flag.
+	MaxFindings int
+	// OutputFormat controls Atmos's presentation of findings. TFLint still
+	// always receives --format=sarif so artifacts and CI reports stay stable.
+	OutputFormat string
 }
 
 func Run(ctx context.Context, opts *Options) (*scanners.Output, *scanners.Context, error) {
@@ -62,8 +76,10 @@ func Run(ctx context.Context, opts *Options) (*scanners.Output, *scanners.Contex
 		Info:          opts.Info,
 		ToolchainPATH: opts.ToolchainPATH,
 		ResultHandler: sarif.NewResultHandler(sarif.HandlerOptions{
-			Kind:       Name,
-			OutputPath: sarif.DefaultOutputFile,
+			Kind:           Name,
+			OutputPath:     sarif.DefaultOutputFile,
+			MaxFindings:    opts.MaxFindings,
+			TerminalFormat: opts.OutputFormat,
 		}),
 	}
 

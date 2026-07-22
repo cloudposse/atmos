@@ -12,13 +12,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/scanners"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// findingSARIF is a minimal SARIF document with one result, standing in for what a real
+// tflint invocation emits when it finds an issue and exits 1.
+const findingSARIF = `{"runs":[{"tool":{"driver":{"name":"tflint","rules":[{"id":"test_rule"}]}},"results":[{"ruleId":"test_rule","level":"error","message":{"text":"test finding"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"main.tf"},"region":{"startLine":1,"startColumn":1}}}]}]}]}`
 
 func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TFLINT_TEST_SARIF") == "1" {
 		fmt.Fprint(os.Stdout, `{"runs":[{"tool":{"driver":{"name":"tflint","rules":[]}},"results":[]}]}`)
 		os.Exit(0)
+	}
+	if os.Getenv("_ATMOS_TFLINT_TEST_SARIF_FINDING") == "1" {
+		fmt.Fprint(os.Stdout, findingSARIF)
+		os.Exit(1)
 	}
 	os.Exit(m.Run())
 }
@@ -49,6 +58,61 @@ func TestRunUsesToolchainBinaryAndParsesSARIF(t *testing.T) {
 	assert.Contains(t, string(out.Artifact.Body), `"tflint"`)
 }
 
+// TestRunOnFailureFailSurfacesFindingsAsError verifies that OnFailure: scanners.OnFailureFail
+// (what executeTarget now passes for the standalone `atmos terraform lint` command) turns a
+// non-zero tflint exit — including one caused by genuine findings, not just a crash — into a
+// returned error, so the overall command's exit code reflects real findings.
+func TestRunOnFailureFailSurfacesFindingsAsError(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	toolchain := t.TempDir()
+	toolName := Command
+	if runtime.GOOS == "windows" {
+		toolName += ".exe"
+	}
+	tool := filepath.Join(toolchain, toolName)
+	require.NoError(t, os.Symlink(exe, tool))
+	base := t.TempDir()
+	componentPath := filepath.Join(base, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("resource \"null_resource\" \"example\" {}\n"), 0o600))
+
+	out, _, err := Run(context.Background(), &Options{
+		ToolchainPATH: toolchain,
+		Env:           map[string]string{"_ATMOS_TFLINT_TEST_SARIF_FINDING": "1"},
+		AtmosConfig:   &schema.AtmosConfiguration{TerraformDirAbsolutePath: filepath.Join(base, "components", "terraform")},
+		Info:          &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", FinalComponent: "vpc", Stack: "prod"},
+		OnFailure:     scanners.OnFailureFail,
+		OutputFormat:  OutputFormatRich,
+	})
+	require.Error(t, err)
+	require.NotNil(t, out.Summary)
+	assert.Contains(t, out.Summary.TerminalBody, "main.tf:1:1")
+	assert.Contains(t, out.Summary.Body, "| Severity | Rule | Message | Location |")
+}
+
+// TestRunOnFailureWarnSuppressesFindingsError verifies the shared scanner default
+// (OnFailureWarn, used by `hooks:`-embedded tflint runs during plan/apply) still swallows a
+// findings-driven non-zero exit, so a lint hook never blocks infrastructure changes.
+func TestRunOnFailureWarnSuppressesFindingsError(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	toolchain := t.TempDir()
+	toolName := Command
+	if runtime.GOOS == "windows" {
+		toolName += ".exe"
+	}
+	tool := filepath.Join(toolchain, toolName)
+	require.NoError(t, os.Symlink(exe, tool))
+
+	_, _, err = Run(context.Background(), &Options{
+		ToolchainPATH: toolchain,
+		Env:           map[string]string{"_ATMOS_TFLINT_TEST_SARIF_FINDING": "1"},
+		Info:          &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "prod"},
+	})
+	require.NoError(t, err)
+}
+
 func TestConfigPathPrefersComponentConfig(t *testing.T) {
 	base := t.TempDir()
 	componentPath := filepath.Join(base, "components", "terraform", "vpc")
@@ -73,7 +137,7 @@ func TestConfigPathUsesConfiguredGlobalFallback(t *testing.T) {
 	require.Equal(t, filepath.Join(base, ".tflint.hcl"), ConfigPath(config, info))
 	require.Equal(
 		t,
-		[]string{"--chdir=$ATMOS_COMPONENT_PATH", "--format=sarif", "--config=" + filepath.Join(base, ".tflint.hcl")},
+		[]string{"--format=sarif", "$ATMOS_COMPONENT_PATH", "--config=" + filepath.Join(base, ".tflint.hcl")},
 		ResolveArgs(DefaultArgs(), config, info),
 	)
 }

@@ -58,6 +58,61 @@ func TestHandler_ParsesFindings(t *testing.T) {
 	assert.Contains(t, s.Body, "main.tf:12")
 }
 
+func TestHandler_RichTerminalBodyIncludesSourceExcerpt(t *testing.T) {
+	t.Setenv("GITHUB_WORKSPACE", "")
+	base := t.TempDir()
+	componentPath := filepath.Join(base, "components", "terraform", "waf")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "variables.tf"), []byte("variable \"example\" {\n  type = optional(string, \"default\")\n}\n"), 0o600))
+
+	path := filepath.Join(t.TempDir(), "results.sarif")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+		"runs": [{"tool": {"driver": {"name": "tflint"}}, "results": [{
+			"ruleId": "invalid_type",
+			"level": "error",
+			"message": {"text": "optional attribute syntax is unsupported"},
+			"locations": [{"physicalLocation": {
+				"artifactLocation": {"uri": "variables.tf"},
+				"region": {"startLine": 2, "startColumn": 10, "endLine": 2, "endColumn": 18}
+			}}]
+		}]}]
+	}`), 0o600))
+
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:           "tflint",
+		OutputPath:     func(_ *scanners.Context) string { return path },
+		TerminalFormat: "rich",
+	})
+	summary, err := handler(&scanners.Context{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: filepath.Join(base, "components", "terraform")},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "waf", FinalComponent: "waf"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, summary)
+	assert.Contains(t, summary.Body, "| Severity | Rule | Message | Location |", "shared Markdown output remains available")
+	assert.Contains(t, summary.TerminalBody, "[tflint] variables.tf:2:10")
+	assert.Contains(t, summary.TerminalBody, "2 |   type = optional(string, \"default\")")
+	assert.Contains(t, summary.TerminalBody, "^")
+}
+
+func TestHandler_RichTerminalBodyKeepsUnreadableLocation(t *testing.T) {
+	t.Setenv("GITHUB_WORKSPACE", "")
+	path := filepath.Join(t.TempDir(), "results.sarif")
+	require.NoError(t, os.WriteFile(path, []byte(sampleSARIF), 0o600))
+
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:           "tflint",
+		OutputPath:     func(_ *scanners.Context) string { return path },
+		TerminalFormat: "rich",
+	})
+	summary, err := handler(&scanners.Context{})
+	require.NoError(t, err)
+	require.NotNil(t, summary)
+	assert.Contains(t, summary.TerminalBody, "main.tf:12")
+	assert.Contains(t, summary.TerminalBody, "quoted references are deprecated")
+	assert.NotContains(t, summary.TerminalBody, "12 |")
+}
+
 func TestHandler_NoFindingsFile(t *testing.T) {
 	missingPath := filepath.Join(t.TempDir(), "missing.sarif")
 	handler := sarif.NewResultHandler(sarif.HandlerOptions{
@@ -86,6 +141,44 @@ func TestHandler_MissingReportAfterScannerFailure(t *testing.T) {
 	assert.Equal(t, scanners.StatusFailure, s.Status)
 	assert.Equal(t, "scan failed", s.Title)
 	assert.Contains(t, s.Body, "exit code 1")
+}
+
+// TestHandler_EmptyOutputFileAfterScannerFailure verifies a 0-byte capture file (the
+// state runSubprocess leaves behind when a scanner exits non-zero before writing
+// anything) is treated the same as a missing file: routed through missingReportSummary
+// rather than silently parsed as zero findings.
+func TestHandler_EmptyOutputFileAfterScannerFailure(t *testing.T) {
+	emptyPath := filepath.Join(t.TempDir(), "empty.sarif")
+	require.NoError(t, os.WriteFile(emptyPath, []byte{}, 0o600))
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:       "tflint",
+		OutputPath: func(_ *scanners.Context) string { return emptyPath },
+	})
+
+	s, err := handler(&scanners.Context{CommandError: errors.New("exit status 1"), ExitCode: 1})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+	assert.Equal(t, scanners.StatusFailure, s.Status)
+	assert.Equal(t, "scan failed", s.Title)
+	assert.Contains(t, s.Body, "exit code 1")
+}
+
+// TestHandler_EmptyOutputFileCleanRun locks in that a 0-byte capture file after a
+// successful (exit 0) run still reports success/no-findings — the fix only changes
+// routing for the non-zero-exit case.
+func TestHandler_EmptyOutputFileCleanRun(t *testing.T) {
+	emptyPath := filepath.Join(t.TempDir(), "empty.sarif")
+	require.NoError(t, os.WriteFile(emptyPath, []byte{}, 0o600))
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:       "tflint",
+		OutputPath: func(_ *scanners.Context) string { return emptyPath },
+	})
+
+	s, err := handler(&scanners.Context{})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+	assert.Equal(t, scanners.StatusSuccess, s.Status)
+	assert.Equal(t, "no findings", s.Title)
 }
 
 func TestHandler_NilOutputPath(t *testing.T) {

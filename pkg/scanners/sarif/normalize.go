@@ -263,6 +263,37 @@ func githubWorkspace() string {
 	return viper.GetString(githubWorkspaceViperKey)
 }
 
+const (
+	githubServerURLViperKey  = "github-server-url"
+	githubRepositoryViperKey = "github-repository"
+	githubSHAViperKey        = "github-sha"
+	defaultGitHubServerURL   = "https://github.com"
+)
+
+var bindGitHubBlobEnvOnce sync.Once //nolint:gochecknoglobals // one-time viper env binding.
+
+// githubBlobBaseURL returns "<server>/<owner>/<repo>/blob/<sha>" when running in GitHub
+// Actions (GITHUB_REPOSITORY and GITHUB_SHA both set), or "" otherwise. A finding's file
+// is meaningless as a link outside the machine that produced it (a local filesystem
+// path), but inside GitHub Actions it can point at the exact file on GitHub instead.
+func githubBlobBaseURL() string {
+	bindGitHubBlobEnvOnce.Do(func() {
+		_ = viper.BindEnv(githubServerURLViperKey, "GITHUB_SERVER_URL")
+		_ = viper.BindEnv(githubRepositoryViperKey, "GITHUB_REPOSITORY")
+		_ = viper.BindEnv(githubSHAViperKey, "GITHUB_SHA")
+	})
+	repo := viper.GetString(githubRepositoryViperKey)
+	sha := viper.GetString(githubSHAViperKey)
+	if repo == "" || sha == "" {
+		return ""
+	}
+	serverURL := viper.GetString(githubServerURLViperKey)
+	if serverURL == "" {
+		serverURL = defaultGitHubServerURL
+	}
+	return serverURL + "/" + repo + "/blob/" + sha
+}
+
 // atmosBasePath returns the absolute Atmos base path (the working directory),
 // which is the root that kics and Checkov anchor their relative SARIF paths to.
 func atmosBasePath(ctx *scanners.Context) string {

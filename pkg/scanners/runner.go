@@ -103,8 +103,13 @@ func prepareSubprocess(scan *Context, tmpDir, outputFile string) (*subprocessPre
 	}
 	resolved, err := resolveBinaryOnPath(scan.Command, scan.ToolchainPATH, pathFromEnv(baseEnv), pathExtFromEnv(baseEnv), runtime.GOOS)
 	if err != nil {
+		// resolveBinaryOnPath's own error already wraps ErrCommandNotFound (needed so its
+		// direct callers/tests can errors.Is() against it standalone). Build the user-facing
+		// message from scratch here rather than via WithCause(err): that would double the
+		// sentinel's own text into the final message ("command not found: command not found:
+		// <name>"), since err already wraps the same sentinel this Build() call starts from,
+		// and the explanation/hint below already say everything err's text would add.
 		return nil, errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
 			WithExplanationf("Scanner command %q is not on PATH", scan.Command).
 			WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before the scanner runs", scan.Command).
 			WithContext("scanner", scan.Name).
@@ -181,6 +186,11 @@ func captureOutput(scan *Context, outputFile string) *Output {
 
 func renderTerminal(scan *Context, out *Output) {
 	if out == nil {
+		return
+	}
+	if out.Summary != nil && out.Summary.TerminalBody != "" {
+		ui.Writeln("")
+		ui.Writeln(out.Summary.TerminalBody)
 		return
 	}
 	if out.Summary != nil && out.Summary.Body != "" {

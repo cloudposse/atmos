@@ -248,3 +248,41 @@ func TestSourceComponentPath(t *testing.T) {
 	}
 	assert.Equal(t, "", sourceComponentPath(noComp))
 }
+
+// TestGithubBlobBaseURL verifies githubBlobBaseURL only returns a URL when both
+// GITHUB_REPOSITORY and GITHUB_SHA are set (the two pieces it can't construct a
+// meaningful blob URL without), defaults to github.com when GITHUB_SERVER_URL is
+// unset (GitHub Enterprise sets it explicitly), and returns "" outside CI.
+func TestGithubBlobBaseURL(t *testing.T) {
+	t.Run("outside CI returns empty", func(t *testing.T) {
+		t.Setenv("GITHUB_REPOSITORY", "")
+		t.Setenv("GITHUB_SHA", "")
+		assert.Empty(t, githubBlobBaseURL())
+	})
+
+	t.Run("missing SHA returns empty", func(t *testing.T) {
+		t.Setenv("GITHUB_REPOSITORY", "org/repo")
+		t.Setenv("GITHUB_SHA", "")
+		assert.Empty(t, githubBlobBaseURL())
+	})
+
+	t.Run("missing repository returns empty", func(t *testing.T) {
+		t.Setenv("GITHUB_REPOSITORY", "")
+		t.Setenv("GITHUB_SHA", "abc123")
+		assert.Empty(t, githubBlobBaseURL())
+	})
+
+	t.Run("repository and SHA set defaults to github.com", func(t *testing.T) {
+		t.Setenv("GITHUB_REPOSITORY", "org/repo")
+		t.Setenv("GITHUB_SHA", "abc123")
+		t.Setenv("GITHUB_SERVER_URL", "")
+		assert.Equal(t, "https://github.com/org/repo/blob/abc123", githubBlobBaseURL())
+	})
+
+	t.Run("honors GITHUB_SERVER_URL for GitHub Enterprise", func(t *testing.T) {
+		t.Setenv("GITHUB_REPOSITORY", "org/repo")
+		t.Setenv("GITHUB_SHA", "abc123")
+		t.Setenv("GITHUB_SERVER_URL", "https://github.example.com")
+		assert.Equal(t, "https://github.example.com/org/repo/blob/abc123", githubBlobBaseURL())
+	})
+}

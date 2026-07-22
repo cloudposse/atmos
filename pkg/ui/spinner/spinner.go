@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/muesli/reflow/truncate"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -16,7 +17,58 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-const newline = "\n"
+const (
+	newline = "\n"
+
+	// FallbackWidth is used when the real terminal width can't be detected (terminal.Width
+	// reports 0, e.g. a PTY that hasn't been given a window size yet). Matches
+	// internal/exec/vendor_model.go's fallbackModelWidth.
+	fallbackWidth = 120
+
+	// LiveLineMargin reserves this many trailing columns so the live progress line's
+	// rendered content never reaches the terminal's true last column, matching
+	// internal/exec/vendor_model.go's identically named const.
+	liveLineMargin = 1
+
+	// Ellipsis marks a progress message truncated to fit the live progress line.
+	ellipsis = "…"
+)
+
+// initialWidth returns the real terminal width to use for the live progress line,
+// so the first frame can truncate against it before bubbletea's own asynchronous
+// tea.WindowSizeMsg (sent by a background goroutine) has had a chance to arrive.
+// See internal/exec/vendor_model.go's initialModelWidth for the full rationale:
+// a PTY that hasn't been given a window size yet reports 0 to both this direct
+// query and bubbletea's own, which would otherwise disable truncation entirely
+// and let long lines overflow the real terminal, wrap, and corrupt the
+// single-line spinner redraw (each frame appending a new scrollback line
+// instead of updating in place).
+func initialWidth() int {
+	width := terminal.New().Width(terminal.Stderr)
+	if width <= 0 {
+		return fallbackWidth
+	}
+	return width
+}
+
+// clipToWidth truncates a rendered (possibly ANSI-styled) line to fit within width,
+// appending an ellipsis when content is cut, so it never auto-wraps onto a second
+// physical row. Bubbletea's inline renderer moves the cursor up by counting '\n' in
+// the previous frame; a line that auto-wraps (no embedded '\n') desyncs that count,
+// leaving stale wrapped remainders behind as scrollback instead of being overwritten.
+// Lipgloss's Style.MaxWidth is deliberately avoided: it can word-wrap by inserting a
+// literal newline instead of truncating, which would defeat the single-line guarantee
+// this exists to provide (see internal/exec/vendor_model.go's View).
+func clipToWidth(line string, width int) string {
+	if width <= 0 {
+		return line
+	}
+	effectiveWidth := width - liveLineMargin
+	if effectiveWidth <= 0 {
+		return line
+	}
+	return truncate.StringWithTail(line, uint(effectiveWidth), ellipsis)
+}
 
 // newDotSpinner builds the shared Dot spinner used by every spinner variant here.
 // Apply honors the ATMOS_SPINNER_FPS override (for VHS demo recordings).
@@ -112,6 +164,7 @@ type spinnerModel struct {
 	completedMsg string // Message shown when done (e.g., "Started container").
 	done         bool
 	err          error
+	width        int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
 type opCompleteMsg struct {
@@ -130,6 +183,15 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	case tea.WindowSizeMsg:
+		// A zero/negative width means the terminal genuinely doesn't have a size yet (e.g. a
+		// freshly opened PTY that hasn't been resized): keep the initialWidth() fallback
+		// already picked rather than stomping it down to 0, which would disable truncation
+		// for the run's whole lifetime. See initialWidth's doc comment.
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case opCompleteMsg:
 		m.done = true
 		m.err = msg.err
@@ -156,7 +218,8 @@ func (m spinnerModel) View() string {
 	}
 	// Show progress message with spinner.
 	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
+	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
@@ -165,6 +228,7 @@ func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
 		spinner:      s,
 		progressMsg:  progressMsg,
 		completedMsg: completedMsg,
+		width:        initialWidth(),
 	}
 }
 
@@ -262,6 +326,7 @@ type dynamicSpinnerModel struct {
 	completedMsg string // Message shown when done (set dynamically).
 	done         bool
 	err          error
+	width        int // Terminal width, from tea.WindowSizeMsg; 0 until the first resize event arrives.
 }
 
 type opCompleteDynamicMsg struct {
@@ -281,6 +346,15 @@ func (m dynamicSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	case tea.WindowSizeMsg:
+		// A zero/negative width means the terminal genuinely doesn't have a size yet (e.g. a
+		// freshly opened PTY that hasn't been resized): keep the initialWidth() fallback
+		// already picked rather than stomping it down to 0, which would disable truncation
+		// for the run's whole lifetime. See initialWidth's doc comment.
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case opCompleteDynamicMsg:
 		m.done = true
 		m.completedMsg = msg.completedMsg
@@ -312,7 +386,8 @@ func (m dynamicSpinnerModel) View() string {
 	}
 	// Show progress message with spinner.
 	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
+	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
@@ -320,6 +395,7 @@ func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
 	return dynamicSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
+		width:       initialWidth(),
 	}
 }
 
@@ -450,6 +526,7 @@ type manualSpinnerModel struct {
 	finalMsg    string
 	success     bool
 	done        bool
+	width       int // Terminal width, from tea.WindowSizeMsg; 0 until the first resize event arrives.
 }
 
 type manualStopMsg struct {
@@ -466,6 +543,7 @@ func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
 	return manualSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
+		width:       initialWidth(),
 	}
 }
 
@@ -481,6 +559,15 @@ func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	case tea.WindowSizeMsg:
+		// A zero/negative width means the terminal genuinely doesn't have a size yet (e.g. a
+		// freshly opened PTY that hasn't been resized): keep the initialWidth() fallback
+		// already picked rather than stomping it down to 0, which would disable truncation
+		// for the run's whole lifetime. See initialWidth's doc comment.
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case manualStopMsg:
 		m.done = true
 		m.finalMsg = msg.message
@@ -511,5 +598,6 @@ func (m manualSpinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatError(m.finalMsg) + newline
 	}
 	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
+	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	return terminal.EscResetLine + clipToWidth(line, m.width)
 }

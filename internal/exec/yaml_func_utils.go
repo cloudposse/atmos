@@ -53,14 +53,15 @@ func ProcessCustomYamlTags(
 }
 
 // ProcessCustomYamlTagsLenient behaves like ProcessCustomYamlTags, except that when a
-// per-value YAML function error is classified recoverable (see isRecoverableTerraformError;
-// currently a Terraform backend/state that has not been provisioned yet), it substitutes
+// per-value YAML function error is classified recoverable (see isRecoverableInWarnMode: a
+// Terraform backend/state that has not been provisioned yet, or a backend read that failed
+// for any other reason — credential refresh, network, permissions), it substitutes
 // degradation.AtmosComputedValue{} for that value, invokes onWarning with details, and
 // continues processing sibling keys and the rest of the tree instead of failing the whole call.
 //
-// Non-recoverable errors (auth failures, malformed YAML, misconfiguration, etc.) still fail
-// the whole call, exactly like ProcessCustomYamlTags — this deliberately does not blanket-catch
-// every error. A nil onWarning is allowed; degraded values are then substituted silently.
+// Non-recoverable errors (malformed YAML, misconfiguration, etc.) still fail the whole call,
+// exactly like ProcessCustomYamlTags — this deliberately does not blanket-catch every error.
+// A nil onWarning is allowed; degraded values are then substituted silently.
 //
 //nolint:revive // argument-limit: mirrors ProcessCustomYamlTags's 5 args plus the degradation callback.
 func ProcessCustomYamlTagsLenient(
@@ -104,7 +105,7 @@ func processNodes(
 }
 
 // processNodesWithContext walks data and resolves every YAML function it finds. When
-// onWarning is non-nil, per-value errors classified recoverable by isRecoverableTerraformError
+// onWarning is non-nil, per-value errors classified recoverable by isRecoverableInWarnMode
 // are tolerated: the value becomes degradation.AtmosComputedValue{}, onWarning is invoked
 // with details, and the walk continues. All other errors — and every error when onWarning
 // is nil — still abort the whole call, matching the original strict behavior.
@@ -131,7 +132,7 @@ func processNodesWithContext(
 		case string:
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
-				if onWarning != nil && isRecoverableTerraformError(err) {
+				if onWarning != nil && isRecoverableInWarnMode(err) {
 					component := ""
 					if stackInfo != nil {
 						component = stackInfo.Component

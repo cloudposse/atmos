@@ -64,6 +64,11 @@ type Finding struct {
 	File string
 	// Line is the 1-based line number; 0 if unknown.
 	Line int
+	// Column is the 1-based column number; 0 if unknown.
+	Column int
+	// EndLine and EndColumn optionally identify the end of the finding range.
+	EndLine   int
+	EndColumn int
 	// Tool is the producer's driver name (e.g., "checkov", "trivy", "kics").
 	Tool string
 	// HelpURI is the per-rule remediation link from SARIF's
@@ -209,7 +214,18 @@ type rawArtifactLocation struct {
 }
 
 type rawRegion struct {
-	StartLine int `json:"startLine"`
+	StartLine   int `json:"startLine"`
+	StartColumn int `json:"startColumn"`
+	EndLine     int `json:"endLine"`
+	EndColumn   int `json:"endColumn"`
+}
+
+type sourceLocation struct {
+	file      string
+	line      int
+	column    int
+	endLine   int
+	endColumn int
 }
 
 // Parse decodes a SARIF document and returns normalized Findings.
@@ -250,16 +266,19 @@ func Parse(data []byte) (*Findings, error) {
 			}
 
 			severity := classifySeverity(level, res.Properties, rule.Properties)
-			file, line := primaryLocation(res.Locations)
+			location := primaryLocation(res.Locations)
 
 			out.Findings = append(out.Findings, Finding{
-				RuleID:   res.RuleID,
-				Severity: severity,
-				Message:  bestMessage(res, &rule),
-				File:     file,
-				Line:     line,
-				Tool:     driverName,
-				HelpURI:  rule.HelpURI,
+				RuleID:    res.RuleID,
+				Severity:  severity,
+				Message:   bestMessage(res, &rule),
+				File:      location.file,
+				Line:      location.line,
+				Column:    location.column,
+				EndLine:   location.endLine,
+				EndColumn: location.endColumn,
+				Tool:      driverName,
+				HelpURI:   rule.HelpURI,
 			})
 		}
 	}
@@ -426,10 +445,16 @@ func levelToSeverity(level string) Severity {
 	}
 }
 
-func primaryLocation(locs []rawLocation) (string, int) {
+func primaryLocation(locs []rawLocation) sourceLocation {
 	if len(locs) == 0 {
-		return "", 0
+		return sourceLocation{}
 	}
 	loc := locs[0].PhysicalLocation
-	return loc.ArtifactLocation.URI, loc.Region.StartLine
+	return sourceLocation{
+		file:      loc.ArtifactLocation.URI,
+		line:      loc.Region.StartLine,
+		column:    loc.Region.StartColumn,
+		endLine:   loc.Region.EndLine,
+		endColumn: loc.Region.EndColumn,
+	}
 }

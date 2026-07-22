@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -21,13 +22,21 @@ func TestTerraformLintCommandSetup(t *testing.T) {
 	require.NotNil(t, lintParser)
 	assert.True(t, lintParser.Registry().Has("affected"))
 	assert.True(t, lintParser.Registry().Has("all"))
+	assert.True(t, lintParser.Registry().Has(outputFormatFlagName))
 	assert.NotNil(t, lintCmd.Flags().Lookup("affected"))
 	assert.NotNil(t, lintCmd.Flags().Lookup("all"))
+	assert.NotNil(t, lintCmd.Flags().Lookup(outputFormatFlagName))
 
 	v := viper.New()
 	require.NoError(t, lintParser.BindToViper(v))
 	v.Set("affected", true)
 	assert.True(t, v.GetBool("affected"))
+	assert.Equal(t, outputFormatMarkdown, v.GetString(outputFormatFlagName))
+}
+
+func TestTerraformLintRuntimeCarriesOutputFormat(t *testing.T) {
+	runtime := terraformLintRuntime("warn", outputFormatRich)
+	assert.Equal(t, tflint.OutputFormatRich, runtime.OutputFormat)
 }
 
 func TestCheckTerraformLintFlags(t *testing.T) {
@@ -71,7 +80,7 @@ func TestTerraformLintAffectedArgsCopiesFlagsAndExecutionInfo(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("include-dependents", "true"))
 
 	info := &schema.ConfigAndStacksInfo{Stack: "plat-dev", ProcessTemplates: true, ProcessFunctions: true, Skip: []string{"terraform"}, AuthDisabled: true}
-	args := terraformLintAffectedArgs(cmd, info)
+	args := terraformLintAffectedArgs(cmd, info, "warn")
 	assert.Equal(t, "/repo", args.RepoPath)
 	assert.Equal(t, "main", args.Ref)
 	assert.Equal(t, "abc123", args.SHA)
@@ -79,6 +88,7 @@ func TestTerraformLintAffectedArgsCopiesFlagsAndExecutionInfo(t *testing.T) {
 	assert.Equal(t, info.Stack, args.Stack)
 	assert.Equal(t, info.Skip, args.Skip)
 	assert.True(t, args.AuthDisabled)
+	assert.Equal(t, "warn", args.ErrorMode)
 }
 
 func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
@@ -108,7 +118,7 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 		called := false
 		original := executeTerraformLint
 		t.Cleanup(func() { executeTerraformLint = original })
-		executeTerraformLint = func(_ context.Context, _ *tflint.Runtime, got *schema.ConfigAndStacksInfo, affected *tflint.AffectedOptions) error {
+		executeTerraformLint = func(_ context.Context, _ *tflint.Runtime, got *schema.ConfigAndStacksInfo, affected *tflint.AffectedOptions, _ int) error {
 			called = true
 			assert.Same(t, info, got)
 			assert.Nil(t, affected)
@@ -129,7 +139,7 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 		called := false
 		original := executeTerraformLint
 		t.Cleanup(func() { executeTerraformLint = original })
-		executeTerraformLint = func(_ context.Context, _ *tflint.Runtime, got *schema.ConfigAndStacksInfo, args *tflint.AffectedOptions) error {
+		executeTerraformLint = func(_ context.Context, _ *tflint.Runtime, got *schema.ConfigAndStacksInfo, args *tflint.AffectedOptions, _ int) error {
 			called = true
 			assert.Same(t, info, got)
 			require.NotNil(t, args)
@@ -165,4 +175,76 @@ func TestRunTerraformLintReturnsPreparationErrors(t *testing.T) {
 		patches.ApplyFunc(resolveTerraformLintInfo, func(*viper.Viper, []string) (*schema.ConfigAndStacksInfo, error) { return nil, want })
 		require.ErrorIs(t, runTerraformLint(&cobra.Command{}, nil), want)
 	})
+}
+
+// TestResolveMaxFindings verifies --max-findings precedence (explicit flag/env value,
+// including 0, wins over defaultMaxFindings) and the translation of the CLI's "0 =
+// unlimited" convention into sarifUnlimitedFindings, the sentinel
+// pkg/scanners/sarif's RenderMarkdownOptions recognizes.
+func TestResolveMaxFindings(t *testing.T) {
+	tests := []struct {
+		name      string
+		flagSet   bool // simulate cmd.Flags().Changed("max-findings")
+		flagValue int  // value Viper reports for the flag
+		want      int
+	}{
+		{
+			name:      "user passes --max-findings 0 (unlimited, translated to sarif's sentinel)",
+			flagSet:   true,
+			flagValue: 0,
+			want:      sarifUnlimitedFindings,
+		},
+		{
+			name:      "user passes --max-findings 25 (explicit positive)",
+			flagSet:   true,
+			flagValue: 25,
+			want:      25,
+		},
+		{
+			name:      "env var sets 0 (no flag, viper picked up 0 via env binding)",
+			flagSet:   false,
+			flagValue: 0,
+			want:      sarifUnlimitedFindings,
+		},
+		{
+			name:      "env var sets 1000 (no flag, viper returns non-sentinel)",
+			flagSet:   false,
+			flagValue: 1000,
+			want:      1000,
+		},
+		{
+			name:      "no flag, no env — defaultMaxFindings",
+			flagSet:   false,
+			flagValue: maxFindingsUnset,
+			want:      defaultMaxFindings,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newMaxFindingsTestCmd(t, tt.flagSet, tt.flagValue)
+			assert.Equal(t, tt.want, resolveMaxFindings(cmd, tt.flagValue))
+		})
+	}
+
+	t.Run("nil cmd does not panic and falls back to flag value when not sentinel", func(t *testing.T) {
+		assert.Equal(t, 42, resolveMaxFindings(nil, 42))
+	})
+
+	t.Run("nil cmd with sentinel falls back to default", func(t *testing.T) {
+		assert.Equal(t, defaultMaxFindings, resolveMaxFindings(nil, maxFindingsUnset))
+	})
+}
+
+// newMaxFindingsTestCmd builds a tiny cobra command that registers a single
+// --max-findings int flag with the same default sentinel as production, and
+// optionally marks it as user-set by parsing an args slice.
+func newMaxFindingsTestCmd(t *testing.T, flagSet bool, flagValue int) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test", Run: func(*cobra.Command, []string) {}}
+	cmd.Flags().Int(maxFindingsFlagName, maxFindingsUnset, "")
+	if flagSet {
+		require.NoError(t, cmd.Flags().Set(maxFindingsFlagName, strconv.Itoa(flagValue)))
+	}
+	return cmd
 }

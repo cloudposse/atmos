@@ -3,6 +3,10 @@ package tflint
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +47,102 @@ func stubInitCLIConfig(t *testing.T) {
 		return schema.AtmosConfiguration{}, nil
 	}
 	t.Cleanup(func() { initCLIConfig = original })
+
+	// checkTFLintAvailable hits the real toolchain/PATH; stub it so tests exercising
+	// other behavior aren't at the mercy of whether tflint happens to be installed on
+	// the machine running the test suite. TestCheckTFLintAvailable covers its real logic.
+	originalCheck := checkTFLintAvailable
+	checkTFLintAvailable = func(*schema.AtmosConfiguration) (string, error) { return "", nil }
+	t.Cleanup(func() { checkTFLintAvailable = originalCheck })
+}
+
+// TestCheckTFLintAvailableImpl_NotOnPATH verifies the fast-fail check reports a
+// well-formatted, hinted ErrCommandNotFound when tflint resolves nowhere (no
+// .tool-versions pin, nothing on PATH) — the exact scenario that previously ran a full
+// describe-stacks pass (and generated files for every component) before failing.
+func TestCheckTFLintAvailableImpl_NotOnPATH(t *testing.T) {
+	emptyPathDir := t.TempDir()
+	t.Setenv("PATH", emptyPathDir)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	path, err := checkTFLintAvailableImpl(atmosConfig)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	assert.ErrorContains(t, err, "tflint")
+	assert.Empty(t, path)
+}
+
+// TestCheckTFLintAvailableImpl_OnPATH verifies the check passes (returns nil) when
+// tflint resolves via the ambient PATH, so a genuinely-available tflint never blocks
+// discovery. No .tool-versions pin is declared, so the resolved toolchain PATH is empty.
+func TestCheckTFLintAvailableImpl_OnPATH(t *testing.T) {
+	binDir := t.TempDir()
+	toolName := Command
+	if runtime.GOOS == "windows" {
+		toolName += ".exe"
+	}
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(exe, filepath.Join(binDir, toolName)))
+	t.Setenv("PATH", binDir)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	path, err := checkTFLintAvailableImpl(atmosConfig)
+	require.NoError(t, err)
+	assert.Empty(t, path)
+}
+
+// TestCombineToolchainPATH verifies the project-wide (.tool-versions-resolved) toolchain
+// PATH is combined with a target's own component-resolved PATH, taking priority over it,
+// so a tool pinned solely via .tool-versions (with no matching stack/component
+// `dependencies:` block) is still found by dependencies.ForComponent's PATH-unaware
+// resolution. See checkTFLintAvailableImpl's doc comment for the full rationale.
+func TestCombineToolchainPATH(t *testing.T) {
+	sep := string(os.PathListSeparator)
+
+	tests := []struct {
+		name          string
+		projectPATH   string
+		componentPATH string
+		want          string
+	}{
+		{name: "both empty", projectPATH: "", componentPATH: "", want: ""},
+		{name: "project only", projectPATH: "/project/bin", componentPATH: "", want: "/project/bin"},
+		{name: "component only", projectPATH: "", componentPATH: "/component/bin", want: "/component/bin"},
+		{name: "both set, project takes priority", projectPATH: "/project/bin", componentPATH: "/component/bin", want: "/project/bin" + sep + "/component/bin"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, combineToolchainPATH(tt.projectPATH, tt.componentPATH))
+		})
+	}
+}
+
+// TestScopeToTFLint verifies the check only ever hands tflint's own .tool-versions
+// entry to dependencies.NewEnvironmentFromDeps, never the other pinned tools — those
+// would each trigger a real install attempt (see NewEnvironmentFromDeps/EnsureTools),
+// turning a fast-fail check into a multi-minute one across an unrelated toolchain.
+func TestScopeToTFLint(t *testing.T) {
+	deps := map[string]string{
+		"terraform": "1.9.0",
+		"kubectl":   "1.31.0",
+		Command:     "0.38.1",
+	}
+
+	scoped := scopeToTFLint(deps)
+
+	assert.Equal(t, map[string]string{Command: "0.38.1"}, scoped)
+}
+
+// TestScopeToTFLint_NotDeclared verifies scoping returns an empty map (not the whole
+// input) when tflint isn't declared in .tool-versions at all.
+func TestScopeToTFLint_NotDeclared(t *testing.T) {
+	deps := map[string]string{"terraform": "1.9.0"}
+
+	scoped := scopeToTFLint(deps)
+
+	assert.Empty(t, scoped)
 }
 
 func TestTargetsForDeduplicatesComponentsDeterministically(t *testing.T) {
@@ -64,10 +164,10 @@ func TestTargetsForDeduplicatesComponentsDeterministically(t *testing.T) {
 
 func TestExecuteRejectsMissingInputs(t *testing.T) {
 	runtime := testRuntime()
-	require.ErrorIs(t, Execute(context.Background(), runtime, nil, nil), errUtils.ErrNilParam)
-	require.ErrorIs(t, Execute(context.Background(), nil, &schema.ConfigAndStacksInfo{}, nil), errUtils.ErrNilParam)
+	require.ErrorIs(t, Execute(context.Background(), runtime, nil, nil, 0), errUtils.ErrNilParam)
+	require.ErrorIs(t, Execute(context.Background(), nil, &schema.ConfigAndStacksInfo{}, nil, 0), errUtils.ErrNilParam)
 	runtime.AffectedComponents = nil
-	require.ErrorIs(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{}, &AffectedOptions{}), errUtils.ErrNilParam)
+	require.ErrorIs(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{}, &AffectedOptions{}, 0), errUtils.ErrNilParam)
 }
 
 func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
@@ -92,7 +192,7 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	}
 	t.Cleanup(func() { runTarget = originalRun })
 
-	require.NoError(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil))
+	require.NoError(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
 	assert.Equal(t, []string{"app:dev", "vpc:dev"}, linted)
 }
 
@@ -125,7 +225,7 @@ func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
 	}
 
 	info := &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue, ProcessFunctions: true}
-	require.NoError(t, Execute(context.Background(), runtime, info, nil))
+	require.NoError(t, Execute(context.Background(), runtime, info, nil, 0))
 	assert.True(t, called)
 }
 
@@ -137,7 +237,7 @@ func TestExecuteReturnsSetupErrors(t *testing.T) {
 			return schema.AtmosConfiguration{}, want
 		}
 		t.Cleanup(func() { initCLIConfig = original })
-		require.ErrorIs(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{}, nil), want)
+		require.ErrorIs(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{}, nil, 0), want)
 	})
 
 	t.Run("authentication", func(t *testing.T) {
@@ -147,7 +247,7 @@ func TestExecuteReturnsSetupErrors(t *testing.T) {
 		runtime.SetupAuth = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 			return nil, want
 		}
-		require.ErrorIs(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{}, nil), want)
+		require.ErrorIs(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{}, nil, 0), want)
 	})
 
 	t.Run("describe stacks", func(t *testing.T) {
@@ -159,7 +259,7 @@ func TestExecuteReturnsSetupErrors(t *testing.T) {
 		) (map[string]any, error) {
 			return nil, want
 		}
-		require.ErrorIs(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{}, nil), want)
+		require.ErrorIs(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{}, nil, 0), want)
 	})
 }
 
@@ -186,7 +286,7 @@ func TestExecuteAffectedFiltersAndDeduplicatesTargets(t *testing.T) {
 	t.Cleanup(func() { runTarget = originalRun })
 
 	info := &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}
-	require.NoError(t, Execute(context.Background(), runtime, info, &AffectedOptions{ProcessYamlFunctions: true}))
+	require.NoError(t, Execute(context.Background(), runtime, info, &AffectedOptions{ProcessYamlFunctions: true}, 0))
 	assert.Equal(t, []string{"vpc:dev"}, linted)
 	assert.True(t, info.AuthDisabled)
 }
@@ -241,4 +341,27 @@ func TestExecuteTargetsContinuesAfterFailures(t *testing.T) {
 	assert.Equal(t, []string{"first", "second", "third"}, linted)
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, secondErr)
+
+	// The returned error's own Error() must stay a short, count-based summary — not
+	// every joined per-target message concatenated — since the top-level CLI error
+	// formatter can't traverse a joined multi-error and would otherwise print the
+	// whole concatenation verbatim. See lintAggregateError's doc comment.
+	assert.Equal(t, "2 of 3 component(s) failed to lint", err.Error())
+	assert.NotContains(t, err.Error(), firstErr.Error())
+	assert.NotContains(t, err.Error(), secondErr.Error())
+}
+
+// TestLintAggregateError_UnwrapsForErrorsIsWithoutLongText verifies
+// lintAggregateError directly: Unwrap() []error makes errors.Is/errors.As traverse
+// into every wrapped cause, while Error() itself never grows with the number or
+// length of those causes.
+func TestLintAggregateError_UnwrapsForErrorsIsWithoutLongText(t *testing.T) {
+	causeA := errors.New("cause A: " + strings.Repeat("x", 200))
+	causeB := errors.New("cause B: " + strings.Repeat("y", 200))
+	err := &lintAggregateError{errs: []error{causeA, causeB}, failed: 2, total: 5}
+
+	require.ErrorIs(t, err, causeA)
+	require.ErrorIs(t, err, causeB)
+	assert.Equal(t, "2 of 5 component(s) failed to lint", err.Error())
+	assert.Less(t, len(err.Error()), 60)
 }

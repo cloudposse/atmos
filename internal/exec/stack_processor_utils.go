@@ -1000,7 +1000,13 @@ func manifestSchemaItemHasSpecificFinding(items []manifestSchemaErrorItem, curre
 // specific sibling finding.
 func renderManifestSchemaErrorItems(relativeFilePath string, items []manifestSchemaErrorItem) []string {
 	rendered := make([]string, 0, len(items))
+	// Distinct failing branches of an outer oneOf/anyOf (e.g. the manifest's
+	// top-level "workflows vs. everything else" split) can each independently
+	// surface the very same leaf violation; dedupe by the exact rendered line
+	// so a single mistake still reads as a single finding.
+	seen := make(map[string]struct{}, len(items))
 	for index, item := range items {
+		var line string
 		if item.types != nil {
 			// A type mismatch from a sibling oneOf branch is only a cascade when
 			// another branch explains the same value (for example, a string that
@@ -1011,10 +1017,15 @@ func renderManifestSchemaErrorItems(relativeFilePath string, items []manifestSch
 				continue
 			}
 			message := fmt.Sprintf("expected %s, but got %s", strings.Join(item.types.expected, " or "), item.types.got)
-			rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.types.position.Line, item.types.position.Column, item.types.path, message))
+			line = fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.types.position.Line, item.types.position.Column, item.types.path, message)
+		} else {
+			line = fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.position.Line, item.position.Column, item.path, item.message)
+		}
+		if _, ok := seen[line]; ok {
 			continue
 		}
-		rendered = append(rendered, fmt.Sprintf("- %s:%d:%d: error: %s: %s", relativeFilePath, item.position.Line, item.position.Column, item.path, item.message))
+		seen[line] = struct{}{}
+		rendered = append(rendered, line)
 	}
 	return rendered
 }
@@ -1609,7 +1620,14 @@ func processYAMLConfigFileWithContextInternal(
 					parentTerraformOverridesImports,
 					parentHelmfileOverridesInline,
 					parentHelmfileOverridesImports,
-					"",
+					// Forward the schema path (empty unless the caller, e.g. `atmos validate
+					// stacks`, explicitly requested schema validation) so imported files are
+					// schema-checked too, not just the top-level entry file. Without this, a
+					// schema violation living entirely inside an imported mixin was invisible:
+					// `ValidateStacks`' own best-effort first pass discards its errors, and its
+					// second pass skips imported files, trusting recursive import processing
+					// (here) to catch them — which it couldn't while this was hardcoded to "".
+					atmosManifestJsonSchemaFilePath,
 					mergeContext,
 				)
 				if processErr != nil {

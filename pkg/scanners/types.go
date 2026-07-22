@@ -54,13 +54,19 @@ const (
 )
 
 type Summary struct {
-	Kind     string
-	Status   SummaryStatus
-	Title    string
-	Counts   map[string]int
-	Body     string
-	Findings []Finding
-	SARIF    []byte
+	Kind   string
+	Status SummaryStatus
+	Title  string
+	Counts map[string]int
+	// Body is the Markdown summary shared by terminal Markdown output, CI, Pro,
+	// PR comments, and code-scanning consumers.
+	Body string
+	// TerminalBody, when set, replaces Body only in local terminal output. It is
+	// plain terminal text (not Markdown), so callers can use presentation such
+	// as source excerpts without changing shared scanner reports.
+	TerminalBody string
+	Findings     []Finding
+	SARIF        []byte
 }
 
 type Finding struct {
