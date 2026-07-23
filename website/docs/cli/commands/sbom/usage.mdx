@@ -17,7 +17,7 @@ Generate a provenance/build-input SBOM from Atmos source receipts and Terraform 
 
 # SBOM Generation
 
-`atmos sbom generate` builds one provenance graph and renders it as CycloneDX JSON or SPDX JSON. The initial supported scope is Terraform: Atmos-managed sources, OCI source artifacts, Terraform providers, and Terraform modules.
+`atmos sbom generate` builds one provenance graph and renders it as CycloneDX JSON or SPDX JSON. The default scope is `terraform`: Atmos-managed sources, OCI source artifacts, Terraform providers, and Terraform modules. Pass `--scope dependencies` instead to inventory Atmos's own toolchain and version-track lock evidence (`.tools/toolchain.lock.yaml` and `versions.lock.yaml`) rather than Terraform.
 
 This is not a claim that every deployed workload has been inventoried. Helm, Helmfile, discovered container images, image package contents, and OpenTofu module graphs are reported as outside the initial scope rather than silently omitted.
 
@@ -95,6 +95,10 @@ Atmos runs that command in each Terraform component directory. It uses `componen
 
 `vendor.lock.yaml` supplies immutable source identities and exact installed-file manifests for `vendor.yaml`, `component.yaml`, and mixin installs. JIT workdirs contribute their local provenance receipts. Atmos uses a Git commit, OCI manifest digest, or content-tree SHA-256 fallback as integrity evidence; cache metadata is never used as an integrity guarantee. Credentials and query strings are removed before source references enter locks or SBOM output.
 
+## Dependencies Evidence
+
+`--scope dependencies` inventories `.tools/toolchain.lock.yaml` (installed toolchain binaries, one component per platform) and `versions.lock.yaml` (version-tracked ecosystem dependencies) instead of Terraform evidence. Vendor-lock source evidence is still included, unaffected by `--scope`.
+
 ## Output and Scope
 
 | Flag | Default | Description |
@@ -102,7 +106,7 @@ Atmos runs that command in each Terraform component directory. It uses `componen
 | `--format` | `cyclonedx-json` | `cyclonedx-json` or `spdx-json`. |
 | `--output` | stdout | File to receive the rendered document. |
 | `--upload` | `false` | Publish the rendered document through the detected native CI provider. GitHub Actions publishes a workflow artifact. |
-| `--scope` | `terraform` | Initial supported inventory scope. |
+| `--scope` | `terraform` | `terraform` (provider and module evidence) or `dependencies` (toolchain and version-track evidence). |
 | `--mode` | `provenance` | `provenance` includes coverage diagnostics; `ntia` validates complete selected-scope evidence. |
 | `--include-files` | `false` | Include lock-owned vendor files and containment relationships. |
 | `--subject-name`, `--subject-version`, `--subject-supplier` | empty | Required together by `--mode ntia`. |

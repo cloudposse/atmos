@@ -361,6 +361,19 @@ linters:
           - revive
         path: pkg/schema/schema\.go$
         text: "file-length-limit"
+      # task.go is a core configuration struct file that's expected to be large.
+      # TODO: Refactor by splitting task/workflow-step schema fields into a separate file.
+      - linters:
+          - revive
+        path: pkg/schema/task\.go$
+        text: "file-length-limit"
+      # lockfile.go is the single writer/reader/verifier for vendor.lock.yaml, kept as one file so
+      # its Load/Save/Record/Replace/Verify/Clean invariants stay auditable together.
+      # TODO: Refactor by splitting Clean's helpers into a sibling clean.go file.
+      - linters:
+          - revive
+        path: pkg/vendoring/lockfile/lockfile\.go$
+        text: "file-length-limit"
       # handlers.go is temporarily over the 500-line limit; pre-existed at 915 lines.
       # TODO: Refactor by splitting command-specific handlers into separate files
       # (plan_handlers.go, apply_handlers.go, deploy_handlers.go).

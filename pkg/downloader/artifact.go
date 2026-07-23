@@ -152,6 +152,9 @@ func TreeSHA256(root string) (string, error) {
 // RedactSource removes credentials and query strings before a source reaches a
 // lock, workdir receipt, log, or SBOM.
 func RedactSource(source string) string {
+	if source == "" {
+		return ""
+	}
 	if parsed, err := url.Parse(source); err == nil && parsed.Scheme != "" {
 		parsed.User = nil
 		parsed.RawQuery = ""

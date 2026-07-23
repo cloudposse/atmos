@@ -10,15 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
 	"github.com/cloudposse/atmos/pkg/vendoring"
+	vendorcomponent "github.com/cloudposse/atmos/pkg/vendoring/component"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
-)
-
-const ociScheme = "oci://"
-
-var (
-	ErrMissingMixinURI      = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMissingMixinFilename = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrUriMustSpecified     = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
 )
 
 // ComponentSkipFunc matches otiai10/copy's Skip function signature.
@@ -86,12 +79,13 @@ func ExecuteComponentVendorInternal(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
-	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{
+	packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
 		AtmosConfig:         atmosConfig,
 		VendorComponentSpec: vendorComponentSpec,
 		Component:           component,
 		ComponentPath:       componentPath,
 		RefreshLock:         opts.RefreshLock,
+		TemplateFunc:        ProcessTmpl,
 	})
 	if err != nil {
 		return err
@@ -132,12 +126,13 @@ func ExecuteComponentVendorPullBatch(
 		if err != nil {
 			return fmt.Errorf("component %q: %w", component, err)
 		}
-		packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{
+		packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
 			AtmosConfig:         atmosConfig,
 			VendorComponentSpec: &config.Spec,
 			Component:           component,
 			ComponentPath:       componentPath,
 			RefreshLock:         opts.RefreshLock,
+			TemplateFunc:        ProcessTmpl,
 		})
 		if err != nil {
 			return fmt.Errorf("component %q: %w", component, err)

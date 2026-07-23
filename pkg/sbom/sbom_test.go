@@ -19,7 +19,48 @@ import (
 	versionmanager "github.com/cloudposse/atmos/pkg/version/manager"
 )
 
-func TestBuildAndRenderAllLockDomains(t *testing.T) {
+func TestBuildAndRenderVendorLockDomain(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+
+	vendor := vendorlock.New()
+	vendor.Artifacts["vpc"] = vendorlock.Artifact{
+		Name:   "vpc",
+		Kind:   "source",
+		Target: filepath.Join(base, "components", "terraform", "vpc"),
+		Source: vendorlock.Source{
+			Declared: "oci://ghcr.io/example/vpc:v1",
+			Digest:   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+		Files: []vendorlock.File{{Path: "main.tf", Type: "file", Mode: 0o644, SHA256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+	}
+	require.NoError(t, vendorlock.Save(config, vendor))
+
+	// An empty Scope normalizes to ScopeTerraform (see TestNormalizeOptionsDefaultsScopeWhenEmpty),
+	// so this also exercises BuildWithOptions' default entry point.
+	graph, err := BuildWithOptions(config, Options{IncludeFiles: true})
+	require.NoError(t, err)
+	require.Len(t, graph.Components, 2)
+	require.Len(t, graph.Relationships, 1)
+
+	for _, format := range []string{FormatCycloneDXJSON, FormatSPDXJSON} {
+		content, renderErr := Render(graph, format)
+		require.NoError(t, renderErr)
+		require.NotContains(t, string(content), base)
+		var document map[string]any
+		require.NoError(t, json.Unmarshal(content, &document))
+		if format == FormatCycloneDXJSON {
+			require.Equal(t, "CycloneDX", document["bomFormat"])
+			require.Len(t, document["dependencies"], 1)
+		} else {
+			require.Equal(t, "SPDX-2.3", document["spdxVersion"])
+			require.Len(t, document["relationships"], 1)
+		}
+	}
+}
+
+func TestBuildDependenciesScopeIncludesToolchainAndVersionTrackEvidence(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
 	config := &schema.AtmosConfiguration{BasePath: base}
@@ -35,7 +76,6 @@ func TestBuildAndRenderAllLockDomains(t *testing.T) {
 			Declared: "oci://ghcr.io/example/vpc:v1",
 			Digest:   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
-		Files: []vendorlock.File{{Path: "main.tf", Type: "file", Mode: 0o644, SHA256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
 	}
 	require.NoError(t, vendorlock.Save(config, vendor))
 
@@ -53,25 +93,12 @@ func TestBuildAndRenderAllLockDomains(t *testing.T) {
 	}}
 	require.NoError(t, versionmanager.SaveLock(config, versions))
 
-	graph, err := Build(config, true)
+	graph, err := BuildWithOptions(config, Options{Scope: ScopeDependencies})
 	require.NoError(t, err)
-	require.Len(t, graph.Components, 4)
-	require.Len(t, graph.Relationships, 1)
-
-	for _, format := range []string{FormatCycloneDXJSON, FormatSPDXJSON} {
-		content, renderErr := Render(graph, format)
-		require.NoError(t, renderErr)
-		require.NotContains(t, string(content), base)
-		var document map[string]any
-		require.NoError(t, json.Unmarshal(content, &document))
-		if format == FormatCycloneDXJSON {
-			require.Equal(t, "CycloneDX", document["bomFormat"])
-			require.Len(t, document["dependencies"], 1)
-		} else {
-			require.Equal(t, "SPDX-2.3", document["spdxVersion"])
-			require.Len(t, document["relationships"], 1)
-		}
-	}
+	ids := componentIDs(graph)
+	require.Contains(t, ids, "vendor:vpc")
+	require.Contains(t, ids, "toolchain:terraform:darwin_arm64")
+	require.Contains(t, ids, "version:stable:aws")
 }
 
 func TestBuildTerraformScopeWithImmutableModuleEvidence(t *testing.T) {
@@ -203,6 +230,20 @@ func TestNormalizeOptionsRejectsUnsupportedScope(t *testing.T) {
 	require.ErrorIs(t, err, errUnsupportedScope)
 }
 
+func TestNormalizeOptionsDefaultsScopeWhenEmpty(t *testing.T) {
+	t.Parallel()
+	options := Options{}
+	require.NoError(t, normalizeOptions(&options))
+	require.Equal(t, ScopeTerraform, options.Scope)
+}
+
+func TestNormalizeOptionsAcceptsDependenciesScope(t *testing.T) {
+	t.Parallel()
+	options := Options{Scope: ScopeDependencies}
+	require.NoError(t, normalizeOptions(&options))
+	require.Equal(t, ScopeDependencies, options.Scope)
+}
+
 func TestBuildWithOptionsPropagatesNormalizeOptionsError(t *testing.T) {
 	t.Parallel()
 	_, err := BuildWithOptions(&schema.AtmosConfiguration{BasePath: t.TempDir()}, Options{Mode: "bogus"})
@@ -227,7 +268,7 @@ func TestBuildWithOptionsPropagatesScopeArtifactsError(t *testing.T) {
 	config.Toolchain.LockFile = "toolchain.lock.yaml"
 	require.NoError(t, os.WriteFile(filepath.Join(base, config.Toolchain.LockFile), []byte("not: [valid yaml"), 0o644))
 
-	_, err := BuildWithOptions(config, Options{})
+	_, err := BuildWithOptions(config, Options{Scope: ScopeDependencies})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "failed to parse lock file")
 }
@@ -239,7 +280,7 @@ func TestAppendVersionsErrorPropagatesThroughScopeArtifacts(t *testing.T) {
 	config.Version.LockFile = "versions.lock.yaml"
 	require.NoError(t, os.WriteFile(filepath.Join(base, config.Version.LockFile), []byte("not: [valid yaml"), 0o644))
 
-	_, err := BuildWithOptions(config, Options{})
+	_, err := BuildWithOptions(config, Options{Scope: ScopeDependencies})
 	require.Error(t, err)
 }
 

@@ -1,9 +1,12 @@
-package exec
+package component
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,7 +14,37 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
+	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
+
+// testTemplateFunc is a minimal TemplateFunc stand-in for internal/exec.ProcessTmpl, sufficient for
+// this package's tests: plain {{.Field}} substitution and template-parse-error propagation. Real
+// production callers pass internal/exec.ProcessTmpl (Sprig/gomplate/Atmos functions), which this
+// package cannot import without creating an import cycle (internal/exec already imports
+// pkg/vendoring).
+func testTemplateFunc(_ *schema.AtmosConfiguration, name, tmplValue string, tmplData any, _ bool) (string, error) {
+	tmpl, err := template.New(name).Parse(tmplValue)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, tmplData); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// fakeTagLister is a version.RemoteLister test double that returns a fixed tag set with no
+// network access, so semver-range resolution tests are deterministic and network-free.
+type fakeTagLister struct {
+	tags []string
+}
+
+func (f *fakeTagLister) ListTags(context.Context, string) ([]string, error) {
+	return f.tags, nil
+}
+
+var _ version.RemoteLister = (*fakeTagLister)(nil)
 
 // fileURIFromPath converts an absolute filesystem path into a "file://" URI that
 // resolveFileURIPath can parse back to the original path on every platform: on POSIX the path
@@ -81,21 +114,21 @@ func TestProcessComponentMixins_FileURI_NormalizesToAbsolutePath(t *testing.T) {
 		},
 	}
 
-	packages, err := processComponentMixins(nil, spec, t.TempDir())
+	packages, err := processComponentMixins(nil, spec, t.TempDir(), testTemplateFunc)
 	require.NoError(t, err)
 	require.Len(t, packages, 1)
 	assert.Equal(t, missingSource, packages[0].URI())
 }
 
-// TestBuildComponentVendorPackages_OciScheme proves a component source.uri using the "oci://"
-// scheme is classified as pkgTypeOci with the scheme stripped from the stored uri, matching the
-// mixin-side handling in resolveMixinPackage.
-func TestBuildComponentVendorPackages_OciScheme(t *testing.T) {
+// TestBuildVendorPackages_OciScheme proves a component source.uri using the "oci://" scheme is
+// classified as pkgTypeOci with the scheme stripped from the stored uri, matching the mixin-side
+// handling in resolveMixinPackage.
+func TestBuildVendorPackages_OciScheme(t *testing.T) {
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{Uri: "oci://ghcr.io/cloudposse/vpc:1.0.0"},
 	}
 
-	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
+	packages, err := BuildVendorPackages(BuildPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir(), TemplateFunc: testTemplateFunc})
 
 	require.NoError(t, err)
 	require.Len(t, packages, 1)
@@ -103,11 +136,11 @@ func TestBuildComponentVendorPackages_OciScheme(t *testing.T) {
 	assert.Equal(t, "ghcr.io/cloudposse/vpc:1.0.0", packages[0].URI())
 }
 
-// TestBuildComponentVendorPackages_SemverRangeResolvesAndTemplatesConcreteVersion proves a
-// component.yaml `version:` that is a semver range resolves (via the injected fakeTagLister, no
-// real network access) to a concrete version, and that concrete version -- not the literal range
-// string -- is what's templated into source.uri.
-func TestBuildComponentVendorPackages_SemverRangeResolvesAndTemplatesConcreteVersion(t *testing.T) {
+// TestBuildVendorPackages_SemverRangeResolvesAndTemplatesConcreteVersion proves a component.yaml
+// `version:` that is a semver range resolves (via the injected fakeTagLister, no real network
+// access) to a concrete version, and that concrete version -- not the literal range string -- is
+// what's templated into source.uri.
+func TestBuildVendorPackages_SemverRangeResolvesAndTemplatesConcreteVersion(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{
@@ -116,12 +149,13 @@ func TestBuildComponentVendorPackages_SemverRangeResolvesAndTemplatesConcreteVer
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{
+	packages, err := BuildVendorPackages(BuildPackagesOptions{
 		AtmosConfig:         atmosConfig,
 		VendorComponentSpec: spec,
 		Component:           "vpc",
 		ComponentPath:       t.TempDir(),
 		Lister:              &fakeTagLister{tags: []string{"v1.0.0", "v1.2.3", "v1.5.0", "v2.0.0"}},
+		TemplateFunc:        testTemplateFunc,
 	})
 
 	require.NoError(t, err)
@@ -131,27 +165,26 @@ func TestBuildComponentVendorPackages_SemverRangeResolvesAndTemplatesConcreteVer
 	assert.Contains(t, packages[0].URI(), "ref=v1.5.0")
 }
 
-// TestBuildComponentVendorPackages_SemverRangeOnNonGitSourceReturnsClearError proves a
-// component.yaml `version:` that is a semver range (e.g. "^1.0.0") on a source with no
-// tag-listing mechanism (OCI here) fails buildComponentVendorPackages with a clear, wrapped error
-// instead of silently templating the literal range string into the uri. Network-free: a non-Git
-// source is rejected by install.ResolveDeclaredVersion before it ever reaches the (real, unmocked)
-// default Lister.
-func TestBuildComponentVendorPackages_SemverRangeOnNonGitSourceReturnsClearError(t *testing.T) {
+// TestBuildVendorPackages_SemverRangeOnNonGitSourceReturnsClearError proves a component.yaml
+// `version:` that is a semver range (e.g. "^1.0.0") on a source with no tag-listing mechanism (OCI
+// here) fails BuildVendorPackages with a clear, wrapped error instead of silently templating the
+// literal range string into the uri. Network-free: a non-Git source is rejected by
+// install.ResolveDeclaredVersion before it ever reaches the (real, unmocked) default Lister.
+func TestBuildVendorPackages_SemverRangeOnNonGitSourceReturnsClearError(t *testing.T) {
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{Uri: "oci://ghcr.io/cloudposse/vpc:{{.Version}}", Version: "^1.0.0"},
 	}
 
-	_, err := buildComponentVendorPackages(buildComponentPackagesOptions{AtmosConfig: &schema.AtmosConfiguration{BasePath: t.TempDir()}, VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
+	_, err := BuildVendorPackages(BuildPackagesOptions{AtmosConfig: &schema.AtmosConfiguration{BasePath: t.TempDir()}, VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir(), TemplateFunc: testTemplateFunc})
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, install.ErrVersionRangeRequiresGitSource)
 }
 
-// TestBuildComponentVendorPackages_SemverRangeConflictsWithConstraintsVersion proves a
-// component.yaml source combining a semver-range version: with a constraints.version ceiling is
-// rejected before any resolution/network access is attempted -- the two are mutually exclusive.
-func TestBuildComponentVendorPackages_SemverRangeConflictsWithConstraintsVersion(t *testing.T) {
+// TestBuildVendorPackages_SemverRangeConflictsWithConstraintsVersion proves a component.yaml
+// source combining a semver-range version: with a constraints.version ceiling is rejected before
+// any resolution/network access is attempted -- the two are mutually exclusive.
+func TestBuildVendorPackages_SemverRangeConflictsWithConstraintsVersion(t *testing.T) {
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{
 			Uri:         "github.com/cloudposse/terraform-aws-vpc.git?ref={{.Version}}",
@@ -160,26 +193,72 @@ func TestBuildComponentVendorPackages_SemverRangeConflictsWithConstraintsVersion
 		},
 	}
 
-	_, err := buildComponentVendorPackages(buildComponentPackagesOptions{
+	_, err := BuildVendorPackages(BuildPackagesOptions{
 		AtmosConfig:         &schema.AtmosConfiguration{BasePath: t.TempDir()},
 		VendorComponentSpec: spec,
 		Component:           "vpc",
 		ComponentPath:       t.TempDir(),
 		Lister:              &fakeTagLister{tags: []string{"v1.0.0", "v1.5.0"}},
+		TemplateFunc:        testTemplateFunc,
 	})
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, errUtils.ErrVersionRangeConflictsWithConstraints)
 }
 
+// TestBuildVendorPackages_MissingUri proves an empty source URI is rejected before any package is
+// built.
+func TestBuildVendorPackages_MissingUri(t *testing.T) {
+	spec := &schema.VendorComponentSpec{}
+	packages, err := BuildVendorPackages(BuildPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir(), TemplateFunc: testTemplateFunc})
+	assert.Error(t, err)
+	assert.Nil(t, packages)
+}
+
+// TestBuildVendorPackages_InvalidUriTemplate proves a source.uri that fails to parse as a Go
+// template (only attempted when source.version is set) is surfaced rather than silently falling
+// back to the literal, unparsed uri.
+func TestBuildVendorPackages_InvalidUriTemplate(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{
+			Uri:     "github.com/cloudposse/terraform-null-label.git//?ref={{.Version",
+			Version: "0.1.0",
+		},
+	}
+
+	packages, err := BuildVendorPackages(BuildPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir(), TemplateFunc: testTemplateFunc})
+
+	assert.Error(t, err)
+	assert.Nil(t, packages)
+}
+
+// TestBuildVendorPackages_PropagatesMixinError proves a mixin missing its required uri fails the
+// whole component, matching processComponentMixins' own fail-fast validation.
+func TestBuildVendorPackages_PropagatesMixinError(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{
+			Uri: "github.com/cloudposse/terraform-null-label.git//?ref=0.1.0",
+		},
+		Mixins: []schema.VendorComponentMixins{
+			{Filename: "context.tf"}, // Missing Uri.
+		},
+	}
+
+	packages, err := BuildVendorPackages(BuildPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir(), TemplateFunc: testTemplateFunc})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrMissingMixinURI)
+	assert.Nil(t, packages)
+}
+
 // TestResolveMixinPackage_OciScheme proves a mixin uri using the "oci://" scheme is classified as
-// pkgTypeOci with the scheme stripped, mirroring buildComponentVendorPackages' component-level
-// handling of the same scheme.
+// pkgTypeOci with the scheme stripped, mirroring BuildVendorPackages' component-level handling of
+// the same scheme.
 func TestResolveMixinPackage_OciScheme(t *testing.T) {
 	spec := &schema.VendorComponentSpec{}
 	mixin := &schema.VendorComponentMixins{Uri: "oci://ghcr.io/cloudposse/mixins:context.tf", Filename: "context.tf"}
 
-	pkg, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, t.TempDir())
+	pkg, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, t.TempDir(), testTemplateFunc)
 
 	require.NoError(t, err)
 	assert.False(t, alreadyMaterialized)
@@ -197,7 +276,7 @@ func TestResolveMixinPackage_AlreadyMaterialized(t *testing.T) {
 	spec := &schema.VendorComponentSpec{}
 	mixin := &schema.VendorComponentMixins{Uri: "context.tf", Filename: "context.tf"}
 
-	pkg, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, componentPath)
+	pkg, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, componentPath, testTemplateFunc)
 
 	require.NoError(t, err)
 	assert.True(t, alreadyMaterialized)
@@ -215,7 +294,7 @@ func TestResolveMixinPackage_TemplateError(t *testing.T) {
 		Filename: "context.tf",
 	}
 
-	_, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, t.TempDir())
+	_, alreadyMaterialized, err := resolveMixinPackage(nil, spec, mixin, t.TempDir(), testTemplateFunc)
 
 	require.Error(t, err)
 	assert.False(t, alreadyMaterialized)
@@ -231,7 +310,7 @@ func TestParseMixinURI_RendersVersionTemplate(t *testing.T) {
 		Filename: "context.tf",
 	}
 
-	uri, err := parseMixinURI(nil, mixin)
+	uri, err := parseMixinURI(nil, mixin, testTemplateFunc)
 
 	require.NoError(t, err)
 	assert.Equal(t, "https://example.com/archive/1.2.3/context.tf", uri)
@@ -246,7 +325,7 @@ func TestProcessComponentMixins_MissingFilename(t *testing.T) {
 		},
 	}
 
-	packages, err := processComponentMixins(nil, spec, t.TempDir())
+	packages, err := processComponentMixins(nil, spec, t.TempDir(), testTemplateFunc)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrMissingMixinFilename)
@@ -267,7 +346,7 @@ func TestProcessComponentMixins_AlreadyMaterializedMixinIsSkipped(t *testing.T) 
 		},
 	}
 
-	packages, err := processComponentMixins(nil, spec, componentPath)
+	packages, err := processComponentMixins(nil, spec, componentPath, testTemplateFunc)
 
 	require.NoError(t, err)
 	require.Len(t, packages, 1, "only the not-yet-materialized mixin should produce a package")
@@ -283,7 +362,7 @@ func TestProcessComponentMixins_PropagatesResolveError(t *testing.T) {
 		},
 	}
 
-	packages, err := processComponentMixins(nil, spec, t.TempDir())
+	packages, err := processComponentMixins(nil, spec, t.TempDir(), testTemplateFunc)
 
 	require.Error(t, err)
 	assert.Nil(t, packages)

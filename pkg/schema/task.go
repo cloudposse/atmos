@@ -1,4 +1,3 @@
-//nolint:revive // The Task schema stays consolidated to preserve its user-facing configuration shape.
 package schema
 
 import (

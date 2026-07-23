@@ -350,12 +350,12 @@ func TestRecordPopulatesHTTPMetadataOnlyWhenProvided(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: base}
 
 	httpTarget := filepath.Join(base, "vendor", "http-source")
-	require.NoError(t, Record(context.Background(), config, "remote", "http-source", tempDir, httpTarget, "https://example.com/archive.tar.gz", RecordOptions{
+	require.NoError(t, Record(context.Background(), config, RecordTarget{Kind: "remote", Name: "http-source", TempDir: tempDir, Path: httpTarget, DeclaredSource: "https://example.com/archive.tar.gz"}, RecordOptions{
 		HTTPMetadata: downloader.FetchMetadata{ETag: `"abc123"`, LastModified: "Wed, 21 Oct 2015 07:28:00 GMT"},
 	}))
 
 	localTarget := filepath.Join(base, "vendor", "local-source")
-	require.NoError(t, Record(context.Background(), config, "local", "local-source", tempDir, localTarget, "file:///source", RecordOptions{}))
+	require.NoError(t, Record(context.Background(), config, RecordTarget{Kind: "local", Name: "local-source", TempDir: tempDir, Path: localTarget, DeclaredSource: "file:///source"}, RecordOptions{}))
 
 	lock, err := Load(config)
 	require.NoError(t, err)
@@ -386,13 +386,13 @@ func TestRecordPopulatesVersionResolutionOnlyWhenProvided(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: base}
 
 	rangeTarget := filepath.Join(base, "vendor", "range-source")
-	require.NoError(t, Record(context.Background(), config, "remote", "range-source", tempDir, rangeTarget, "https://example.com/archive.tar.gz", RecordOptions{
+	require.NoError(t, Record(context.Background(), config, RecordTarget{Kind: "remote", Name: "range-source", TempDir: tempDir, Path: rangeTarget, DeclaredSource: "https://example.com/archive.tar.gz"}, RecordOptions{
 		VersionConstraint: "^1.0.0",
 		ResolvedVersion:   "1.2.3",
 	}))
 
 	pinnedTarget := filepath.Join(base, "vendor", "pinned-source")
-	require.NoError(t, Record(context.Background(), config, "remote", "pinned-source", tempDir, pinnedTarget, "https://example.com/archive.tar.gz", RecordOptions{}))
+	require.NoError(t, Record(context.Background(), config, RecordTarget{Kind: "remote", Name: "pinned-source", TempDir: tempDir, Path: pinnedTarget, DeclaredSource: "https://example.com/archive.tar.gz"}, RecordOptions{}))
 
 	lock, err := Load(config)
 	require.NoError(t, err)
@@ -1180,24 +1180,6 @@ func TestHashFileAndHashStringErrorsAndDeterminism(t *testing.T) {
 		require.Equal(t, hashString("target-text"), hashString("target-text"))
 		require.NotEqual(t, hashString("target-text"), hashString("other-text"))
 	})
-}
-
-func TestRedactSourceHandlesNonURLAndUnparsableInput(t *testing.T) {
-	tests := []struct {
-		name   string
-		source string
-		want   string
-	}{
-		{name: "empty string stays empty", source: "", want: ""},
-		{name: "userinfo and query are stripped from a real URL", source: "https://token@example.com/repo?signature=secret", want: "https://example.com/repo"},
-		{name: "non-URL text with a query-like suffix falls back to prefix split", source: "not a url?query=1", want: "not a url"},
-		{name: "malformed percent-encoding falls back to prefix split", source: "%zz?foo=bar", want: "%zz"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.want, RedactSource(test.source))
-		})
-	}
 }
 
 func TestLoadDefaultsNilArtifactsMap(t *testing.T) {

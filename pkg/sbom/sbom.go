@@ -26,7 +26,10 @@ const (
 	FormatSPDXJSON      = "spdx-json"
 	ModeProvenance      = "provenance"
 	ModeNTIA            = "ntia"
-	ScopeTerraform      = "terraform"
+	// ScopeTerraform selects Terraform provider and module evidence (the CLI's default scope).
+	ScopeTerraform = "terraform"
+	// ScopeDependencies selects toolchain and version-track lock evidence instead of Terraform.
+	ScopeDependencies = "dependencies"
 )
 
 var (
@@ -88,13 +91,6 @@ type Graph struct {
 	Coverage      []Coverage
 }
 
-// Build preserves the original package API for callers that want a
-// lock-derived provenance graph. The CLI uses BuildWithOptions for scope and
-// mode validation.
-func Build(config *schema.AtmosConfiguration, includeFiles bool) (*Graph, error) {
-	return BuildWithOptions(config, Options{IncludeFiles: includeFiles, Mode: ModeProvenance})
-}
-
 func BuildWithOptions(config *schema.AtmosConfiguration, options Options) (*Graph, error) {
 	if err := normalizeOptions(&options); err != nil {
 		return nil, err
@@ -126,20 +122,23 @@ func normalizeOptions(options *Options) error {
 	if options.Mode != ModeProvenance && options.Mode != ModeNTIA {
 		return fmt.Errorf("%w: %s", errUnsupportedMode, options.Mode)
 	}
-	if options.Scope != "" && options.Scope != ScopeTerraform {
+	if options.Scope == "" {
+		options.Scope = ScopeTerraform
+	}
+	if options.Scope != ScopeTerraform && options.Scope != ScopeDependencies {
 		return fmt.Errorf("%w: %s", errUnsupportedScope, options.Scope)
 	}
 	return nil
 }
 
 func appendScopeArtifacts(graph *Graph, config *schema.AtmosConfiguration, scope string) error {
-	if scope == ScopeTerraform {
-		return appendTerraform(graph, config)
+	if scope == ScopeDependencies {
+		if err := appendToolchain(graph, config); err != nil {
+			return err
+		}
+		return appendVersions(graph, config)
 	}
-	if err := appendToolchain(graph, config); err != nil {
-		return err
-	}
-	return appendVersions(graph, config)
+	return appendTerraform(graph, config)
 }
 
 func subjectComponent(subject Subject) Component {

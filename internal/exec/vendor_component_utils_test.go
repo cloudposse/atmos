@@ -10,6 +10,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	vendorcomponent "github.com/cloudposse/atmos/pkg/vendoring/component"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
@@ -248,12 +249,14 @@ func TestExecuteComponentVendorPullBatch_PropagatesMaterializationCheckError(t *
 	assert.Contains(t, err.Error(), "verify vendor lock")
 }
 
-// TestBuildComponentVendorPackages_ComponentAndMixins proves buildComponentVendorPackages (the
-// helper extracted from ExecuteComponentVendorInternal so ExecuteComponentVendorPullBatch can
-// build package lists for multiple components without executing each one) returns the same shape
+// TestBuildComponentVendorPackages_WiresProcessTmpl proves internal/exec wires its own ProcessTmpl
+// (Sprig/gomplate/Atmos template functions) into pkg/vendoring/component.BuildVendorPackages as
+// its TemplateFunc, and that the resulting package list has the same shape
 // ExecuteComponentVendorInternal used to build inline: the component package first (IsMixin
-// false), followed by one entry per mixin (IsMixin true).
-func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
+// false), followed by one entry per mixin (IsMixin true). The pure package-building logic itself
+// (URI templating, mixin resolution, error propagation) is covered directly in
+// pkg/vendoring/component's own tests.
+func TestBuildComponentVendorPackages_WiresProcessTmpl(t *testing.T) {
 	componentPath := t.TempDir()
 
 	// A local mixin file that already exists at the resolved path is skipped by
@@ -261,67 +264,29 @@ func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
 	// at a non-existent local file to ensure it produces a package entry.
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{
-			Uri: "github.com/cloudposse/terraform-null-label.git//?ref=0.1.0",
+			Uri:     "github.com/cloudposse/terraform-null-label.git//?ref={{.Version}}",
+			Version: "0.1.0",
 		},
 		Mixins: []schema.VendorComponentMixins{
 			{Uri: "github.com/cloudposse/terraform-null-label.git//exports/context.tf?ref=0.1.0", Filename: "context.tf"},
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: componentPath})
+	packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
+		VendorComponentSpec: spec,
+		Component:           "vpc",
+		ComponentPath:       componentPath,
+		TemplateFunc:        ProcessTmpl,
+	})
 	require.NoError(t, err)
 	require.Len(t, packages, 2)
 
 	assert.Equal(t, "vpc", packages[0].Name)
 	assert.False(t, packages[0].IsMixin())
+	assert.Contains(t, packages[0].URI(), "ref=0.1.0", "ProcessTmpl must have templated {{.Version}} into the source uri")
 
 	assert.True(t, packages[1].IsMixin())
 	assert.Equal(t, "context.tf", packages[1].MixinFilename())
-}
-
-// TestBuildComponentVendorPackages_MissingUri proves an empty source URI is rejected before any
-// package is built, matching ExecuteComponentVendorInternal's pre-refactor behavior.
-func TestBuildComponentVendorPackages_MissingUri(t *testing.T) {
-	spec := &schema.VendorComponentSpec{}
-	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
-	assert.Error(t, err)
-	assert.Nil(t, packages)
-}
-
-// TestBuildComponentVendorPackages_InvalidUriTemplate proves a source.uri that fails to parse as
-// a Go template (only attempted when source.version is set) is surfaced rather than silently
-// falling back to the literal, unparsed uri.
-func TestBuildComponentVendorPackages_InvalidUriTemplate(t *testing.T) {
-	spec := &schema.VendorComponentSpec{
-		Source: schema.VendorComponentSource{
-			Uri:     "github.com/cloudposse/terraform-null-label.git//?ref={{.Version",
-			Version: "0.1.0",
-		},
-	}
-
-	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
-
-	assert.Error(t, err)
-	assert.Nil(t, packages)
-}
-
-// TestBuildComponentVendorPackages_PropagatesMixinError proves a mixin missing its required uri
-// fails the whole component, matching processComponentMixins' own fail-fast validation.
-func TestBuildComponentVendorPackages_PropagatesMixinError(t *testing.T) {
-	spec := &schema.VendorComponentSpec{
-		Source: schema.VendorComponentSource{
-			Uri: "github.com/cloudposse/terraform-null-label.git//?ref=0.1.0",
-		},
-		Mixins: []schema.VendorComponentMixins{
-			{Filename: "context.tf"}, // Missing Uri.
-		},
-	}
-
-	packages, err := buildComponentVendorPackages(buildComponentPackagesOptions{VendorComponentSpec: spec, Component: "vpc", ComponentPath: t.TempDir()})
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrMissingMixinURI)
-	assert.Nil(t, packages)
 }
 
 // TestFilterMaterializedComponentVendorPackages_PropagatesError proves a package whose

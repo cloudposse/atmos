@@ -24,13 +24,41 @@ type vendorUpdateParams struct {
 	check         bool
 }
 
+// runWithProgressAdapter bridges cmd/vendor's own bubbletea-spinner runUpdateWithSpinner (named
+// vendorUpdateWork/vendorProgressFunc types) to pkg/vendoring/updater.RunWithProgress's unnamed
+// callback shape, since Go does not treat a named function type and a structurally-equivalent
+// unnamed one as interchangeable once nested inside another function type.
+func runWithProgressAdapter(doWork func(onProgress func(component string, index, total int)) (*vendoring.UpdateReport, error)) (*vendoring.UpdateReport, error) {
+	return runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
+		return doWork(onProgress)
+	})
+}
+
+// selectionParams builds updater.SelectionParams from p, binding RepoWideUpdate to this package's
+// own runRepoWideUpdate (which pkg/vendoring/updater cannot call directly -- it depends on
+// cmd/vendor's viper-bound flag reads) and RunWithProgress to the bubbletea spinner adapter above.
+func (p *vendorUpdateParams) selectionParams() *updater.SelectionParams {
+	return &updater.SelectionParams{
+		Viper:           p.viper,
+		ComponentType:   p.componentType,
+		Tags:            p.tags,
+		Group:           p.group,
+		Check:           p.check,
+		VendorFile:      p.viper.GetString("file"),
+		RunWithProgress: runWithProgressAdapter,
+		RepoWideUpdate: func(check bool) (*vendoring.UpdateReport, error) {
+			return runRepoWideUpdate(p.viper, repoWideUpdateParams{typeChanged: p.typeChanged, componentType: p.componentType, tags: p.tags, check: check})
+		},
+	}
+}
+
 func runVendorUpdate(p *vendorUpdateParams) (*vendoring.UpdateReport, error) {
 	v := p.viper
 	// A nil selection means a direct --group invocation needs discovery. A
 	// non-nil selection was already narrowed by the --pull-request discovery
 	// pass and must not be rediscovered or widened.
 	if p.group != "" && p.components == nil {
-		finalReport, components, err := resolveGroupSelection(v, p)
+		finalReport, components, err := updater.ResolveGroupSelection(p.selectionParams())
 		if err != nil {
 			return nil, err
 		}
@@ -48,47 +76,7 @@ func runVendorUpdate(p *vendorUpdateParams) (*vendoring.UpdateReport, error) {
 			return runRepoWideUpdate(v, repoWideUpdateParams{typeChanged: p.typeChanged, componentType: p.componentType, tags: p.tags, check: p.check, onProgress: onProgress})
 		})
 	}
-	return updateSelectedComponents(v, p)
-}
-
-// resolveGroupSelection discovers a --group invocation's outdated components via a check-mode
-// repo-wide update, narrowed by the group's include/exclude patterns. When p.check is set, or the
-// resulting selection is empty, it returns a non-nil finalReport for runVendorUpdate to return
-// immediately; otherwise it returns the resolved component names for runVendorUpdate to continue
-// with.
-func resolveGroupSelection(v *viper.Viper, p *vendorUpdateParams) (finalReport *vendoring.UpdateReport, components []string, err error) {
-	discovery, err := runRepoWideUpdate(v, repoWideUpdateParams{typeChanged: p.typeChanged, componentType: p.componentType, tags: p.tags, check: true})
-	if err != nil {
-		return nil, nil, err
-	}
-	components = updater.FilterGroupComponents(discovery, v.GetStringSlice("vendor.update.groups."+p.group+".include"), v.GetStringSlice("vendor.update.groups."+p.group+".exclude"))
-	if p.check {
-		return updater.FilterReport(discovery, components), nil, nil
-	}
-	if len(components) == 0 {
-		return &vendoring.UpdateReport{}, nil, nil
-	}
-	return nil, components, nil
-}
-
-// updateSelectedComponents runs the update for each of p.components individually, resolving each
-// component's declared source before updating it.
-func updateSelectedComponents(v *viper.Viper, p *vendorUpdateParams) (*vendoring.UpdateReport, error) {
-	results := make([]vendoring.SourceUpdateResult, 0, len(p.components))
-	for _, component := range p.components {
-		resolved, err := vendoring.ResolveComponentSource(&vendoring.ResolveSourceParams{VendorFile: v.GetString("file"), Component: component, ComponentType: p.componentType})
-		if err != nil {
-			return nil, err
-		}
-		report, err := runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
-			return vendoring.UpdateResolved(resolved, &vendoring.UpdateParams{Tags: p.tags, DryRun: p.check, OnProgress: onProgress})
-		})
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, report.Results...)
-	}
-	return &vendoring.UpdateReport{Results: results}, nil
+	return updater.UpdateSelectedComponents(p.selectionParams(), p.components)
 }
 
 func normalizeComponentSelectors(components []string) []string {

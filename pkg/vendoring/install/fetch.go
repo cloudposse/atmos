@@ -93,7 +93,7 @@ func fetchRemote(atmosConfig *schema.AtmosConfiguration, uri, tempDir string, op
 	}
 	metadata, err := downloader.NewGoGetterDownloader(atmosConfig, ggOpts...).FetchWithMetadata(uri, target, opts.ClientMode, fetchTimeout)
 	if err != nil {
-		return "", downloader.FetchMetadata{}, fmt.Errorf("failed to download package: %w", err)
+		return "", downloader.FetchMetadata{}, fmt.Errorf("%w: %w", ErrDownloadPackage, err)
 	}
 	return target, metadata, nil
 }
@@ -102,7 +102,7 @@ func fetchOCI(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, 
 	ociCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 	if err := oci.ProcessImage(ociCtx, atmosConfig, uri, tempDir); err != nil {
-		return "", fmt.Errorf("failed to process OCI image: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrProcessOCIImage, err)
 	}
 	return tempDir, nil
 }
@@ -121,7 +121,7 @@ func fetchLocal(uri, tempDir string, opts fetchOptions) (string, error) {
 		OnSymlink:     func(string) cp.SymlinkAction { return cp.Deep },
 	}
 	if err := cp.Copy(uri, target, copyOptions); err != nil {
-		return "", fmt.Errorf("failed to copy package: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrCopyPackage, err)
 	}
 	return target, nil
 }

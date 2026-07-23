@@ -17,11 +17,14 @@ Use this skill to generate, review, or publish an Atmos software bill of materia
 Atmos produces a **provenance/build-input SBOM**: it records evidence used to build or run the
 selected infrastructure scope. It is not a claim that every deployed workload has been inventoried.
 
-The initial supported scope is Terraform. It includes Atmos-managed source receipts, OCI source
+The default scope is `terraform`. It includes Atmos-managed source receipts, OCI source
 artifacts, Terraform provider locks, and Terraform modules when the configured command exposes a
-stable module graph. Helm, Helmfile, discovered deployed images, image package contents, and
-OpenTofu module graphs are outside this initial scope and must be reported as incomplete or
-unavailable rather than silently treated as absent.
+stable module graph. Pass `--scope dependencies` instead to inventory Atmos's own toolchain
+(`.tools/toolchain.lock.yaml`) and version-track (`versions.lock.yaml`) evidence rather than
+Terraform; Atmos-managed source receipts are always included regardless of `--scope`. Helm,
+Helmfile, discovered deployed images, image package contents, and OpenTofu module graphs are
+outside this initial scope and must be reported as incomplete or unavailable rather than silently
+treated as absent.
 
 ## Related Skills
 

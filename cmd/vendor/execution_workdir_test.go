@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
@@ -55,14 +56,17 @@ spec:
 }
 
 // TestResolveExecutionWorkdir_WorktreeModeIsolatesInvokingCheckout is the correctness-critical
-// proof behind vendor.update.execution.mode: worktree: the discover -> bump cycle (resolveExecutionWorkdir
-// followed by the same runVendorUpdate call vendorUpdateCmd.RunE makes) writes its version bump
-// inside the isolated worktree, and the invoking checkout's own working tree -- including its
-// branch -- is left completely untouched. Deliberately drives resolveExecutionWorkdir and
-// runVendorUpdate directly rather than the full vendorUpdateCmd.RunE (which, under --pull-request,
-// forces an actual "vendor pull" materialization requiring a real network-hosted component source
-// -- see the NOTE above TestVendorUpdatePullRequestDiscoveryError in component_updater_test.go for
-// the established precedent of testing these pieces directly instead).
+// proof behind vendor.update.execution.mode: worktree: the discover -> bump cycle
+// (updater.ResolveExecutionWorkdir followed by the same runVendorUpdate call vendorUpdateCmd.RunE
+// makes) writes its version bump inside the isolated worktree, and the invoking checkout's own
+// working tree -- including its branch -- is left completely untouched. Deliberately drives
+// updater.ResolveExecutionWorkdir and runVendorUpdate directly rather than the full
+// vendorUpdateCmd.RunE (which, under --pull-request, forces an actual "vendor pull"
+// materialization requiring a real network-hosted component source -- see the NOTE above
+// TestVendorUpdatePullRequestDiscoveryError in component_updater_test.go for the established
+// precedent of testing these pieces directly instead). ResolveExecutionWorkdir's own mode-selection
+// logic is unit-tested directly in pkg/vendoring/updater; this test is the integration proof that
+// cmd/vendor wires it correctly into the rest of the --pull-request publish cycle.
 func TestResolveExecutionWorkdir_WorktreeModeIsolatesInvokingCheckout(t *testing.T) {
 	_, workdir := newExecutionWorktreeFixture(t)
 
@@ -79,7 +83,7 @@ func TestResolveExecutionWorkdir_WorktreeModeIsolatesInvokingCheckout(t *testing
 	v := viper.New()
 	v.Set("vendor.update.execution.mode", "worktree")
 
-	execWorkdir, err := resolveExecutionWorkdir(context.Background(), v, workdir)
+	execWorkdir, err := updater.ResolveExecutionWorkdir(context.Background(), v, workdir)
 	require.NoError(t, err)
 	worktreePath, cleanup := execWorkdir.Workdir, execWorkdir.Cleanup
 	require.NotEmpty(t, worktreePath)
@@ -127,27 +131,6 @@ func TestResolveExecutionWorkdir_WorktreeModeIsolatesInvokingCheckout(t *testing
 	resolvedRestored, err := filepath.EvalSymlinks(restoredWd)
 	require.NoError(t, err)
 	assert.Equal(t, resolvedWorkdir, resolvedRestored, "cleanup must restore the process working directory")
-}
-
-// TestResolveExecutionWorkdir_CurrentModeIsNoOp proves execution.mode values other than "worktree"
-// (unset, or explicitly "current") leave workdir/resolvedBase/cleanup exactly as before this
-// feature existed: no worktree is created, no env var or cwd is touched.
-func TestResolveExecutionWorkdir_CurrentModeIsNoOp(t *testing.T) {
-	for _, mode := range []string{"", "current"} {
-		t.Run("mode="+mode, func(t *testing.T) {
-			v := viper.New()
-			if mode != "" {
-				v.Set("vendor.update.execution.mode", mode)
-			}
-
-			execWorkdir, err := resolveExecutionWorkdir(context.Background(), v, "workdir-placeholder")
-			require.NoError(t, err)
-			assert.Equal(t, "workdir-placeholder", execWorkdir.Workdir)
-			assert.Empty(t, execWorkdir.ResolvedBase)
-			require.NotNil(t, execWorkdir.Cleanup)
-			execWorkdir.Cleanup() // Must be a safe no-op.
-		})
-	}
 }
 
 // runGitCapture runs a git command in dir and returns its combined output, failing the test on error.

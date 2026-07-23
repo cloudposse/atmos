@@ -114,6 +114,74 @@ func ResolveDeclaredVersion(ctx context.Context, atmosConfig *schema.AtmosConfig
 	return resolved, nil
 }
 
+// ResolveEffectiveVersionInputs bundles ResolveEffectiveVersion's inputs. A struct rather than
+// positional parameters: this repo's Options Pattern threshold (CLAUDE.md, >4 total parameters)
+// was crossed once Discriminator/RefreshLock/Lister joined the original Name/Source/RawVersion/
+// Constraints.
+type ResolveEffectiveVersionInputs struct {
+	AtmosConfig *schema.AtmosConfiguration
+	// Name identifies the declaring source/target -- typically the component name.
+	Name string
+	// Source is the source's raw, un-templated URI/source string (before {{.Version}} is
+	// substituted) -- see VersionResolveParams.SourceForGitURI.
+	Source      string
+	RawVersion  string
+	Constraints *schema.VendorConstraints
+	// Discriminator disambiguates multiple version declarations that would otherwise share the
+	// same Name (e.g. a vendor.yaml source's per-target version overrides).
+	Discriminator string
+	RefreshLock   bool
+	// Lister overrides the remote Git tag lister; nil defaults to version.DefaultLister.
+	Lister version.RemoteLister
+}
+
+// ResolveEffectiveVersion resolves in.RawVersion -- which may be an exact pin (returned unchanged,
+// with no lock or network access) or a semver range (resolved via ResolveDeclaredVersion, reusing
+// the first resolution recorded in vendor.lock.yaml on every later pull that declares the same
+// range) -- to the concrete version used for source-URI/target-path templating. Raw is non-empty
+// only when in.RawVersion was actually a range, so callers can carry it through to
+// VendorPackage.RawVersion for lockfile provenance on the eventual install receipt.
+func ResolveEffectiveVersion(in *ResolveEffectiveVersionInputs) (resolved, raw string, err error) { //nolint:lintroller // Delegates entirely to the tracked ResolveDeclaredVersion.
+	resolved, err = ResolveDeclaredVersion(context.Background(), in.AtmosConfig, &VersionResolveParams{
+		RawVersion:      in.RawVersion,
+		Name:            effectiveVersionName(in.Name, in.Source),
+		Discriminator:   in.Discriminator,
+		SourceForGitURI: in.Source,
+		Constraints:     in.Constraints,
+		RefreshLock:     in.RefreshLock,
+		Lister:          in.Lister,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if version.IsSemverConstraint(in.RawVersion) {
+		raw = in.RawVersion
+	}
+	return resolved, raw, nil
+}
+
+// effectiveVersionName falls back to the raw source URI as the lock cache key's identity when a
+// source declares no component name.
+func effectiveVersionName(name, source string) string {
+	if name != "" {
+		return name
+	}
+	return source
+}
+
+// DeterminePackageType classifies a resolved source URI into the PkgType fetch dispatch uses,
+// from the two scheme/filesystem probes every vendor.yaml and component.yaml source resolution
+// already performs (OCI scheme stripped, then a local-filesystem check).
+func DeterminePackageType(useOciScheme, useLocalFileSystem bool) PkgType { //nolint:lintroller // Trivial pure classification; perf.Track overhead is unwarranted.
+	if useOciScheme {
+		return PkgTypeOci
+	}
+	if useLocalFileSystem {
+		return PkgTypeLocal
+	}
+	return PkgTypeRemote
+}
+
 // resolveVersionRangeFresh lists remote Git tags and applies RawVersion's constraint-filtering
 // pipeline, with no lock involvement -- the "cache miss or RefreshLock" branch of
 // ResolveDeclaredVersion, split out to keep that function's cyclomatic complexity within this

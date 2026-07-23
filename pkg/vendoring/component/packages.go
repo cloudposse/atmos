@@ -1,6 +1,10 @@
-package exec
+// Package component resolves a component.yaml vendoring spec (plus any mixins) into the package
+// list pkg/vendoring/install materializes -- the component.yaml counterpart to pkg/vendoring's own
+// vendor.yaml source resolution.
+package component
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -8,40 +12,64 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
-// buildComponentPackagesOptions bundles buildComponentVendorPackages' inputs (Options Pattern,
-// CLAUDE.md: crossed the >4-total-parameters threshold once RefreshLock/Lister joined the original
+// ociScheme is the URI prefix marking an OCI-registry source. Stripped before classification.
+const ociScheme = "oci://"
+
+// Sentinel errors for pkg/vendoring/component, matching the precedent pkg/vendoring/install and
+// pkg/vendoring/lockfile set for this refactor: package-local rather than centralized in
+// errors/errors.go, since they are internal invariants of this package's own contract.
+var (
+	// ErrURIMustBeSpecified indicates a component.yaml declared no source.uri.
+	ErrURIMustBeSpecified = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
+	// ErrMissingMixinURI indicates a component.yaml mixin declared no uri.
+	ErrMissingMixinURI = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
+	// ErrMissingMixinFilename indicates a component.yaml mixin declared no filename.
+	ErrMissingMixinFilename = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
+)
+
+// TemplateFunc evaluates a Go template against tmplData, matching internal/exec.ProcessTmpl's
+// signature exactly -- callers pass ProcessTmpl itself, so this package needs no dependency on
+// internal/exec's template machinery (which would create an import cycle: internal/exec already
+// imports pkg/vendoring).
+type TemplateFunc func(atmosConfig *schema.AtmosConfiguration, tmplName, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error)
+
+// BuildPackagesOptions bundles BuildVendorPackages' inputs (Options Pattern, CLAUDE.md: crossed the
+// >4-total-parameters threshold once RefreshLock/Lister/TemplateFunc joined the original
 // AtmosConfig/VendorComponentSpec/Component/ComponentPath).
-type buildComponentPackagesOptions struct {
+type BuildPackagesOptions struct {
 	AtmosConfig         *schema.AtmosConfiguration
 	VendorComponentSpec *schema.VendorComponentSpec
 	Component           string
 	ComponentPath       string
-	// RefreshLock forces fresh semver-range version resolution -- see resolveEffectiveVersion.
+	// RefreshLock forces fresh semver-range version resolution -- see install.ResolveEffectiveVersion.
 	RefreshLock bool
 	// Lister overrides the remote Git tag lister used to resolve a semver-range `version:`; nil in
-	// every production call path -- see vendorSourceParams.lister's doc comment.
+	// every production call path.
 	Lister version.RemoteLister
+	// TemplateFunc evaluates source-uri and mixin-uri templates -- callers pass internal/exec.ProcessTmpl.
+	TemplateFunc TemplateFunc
 }
 
-// buildComponentVendorPackages resolves a single component's vendor spec (plus any mixins) into
-// the package list executeVendorModel consumes, without executing the pull. Extracted from
-// ExecuteComponentVendorInternal so ExecuteComponentVendorPullBatch can build package lists for
-// multiple components and combine them into one executeVendorModel call.
-func buildComponentVendorPackages(opts buildComponentPackagesOptions) ([]install.VendorPackage, error) {
+// BuildVendorPackages resolves a single component's vendor spec (plus any mixins) into the package
+// list pkg/vendoring/install consumes, without executing the pull.
+func BuildVendorPackages(opts BuildPackagesOptions) ([]install.VendorPackage, error) { //nolint:gocritic // hugeParam: opts is a read-only options struct.
+	defer perf.Track(opts.AtmosConfig, "component.BuildVendorPackages")()
+
 	atmosConfig := opts.AtmosConfig
 	vendorComponentSpec := opts.VendorComponentSpec
 	component := opts.Component
 	componentPath := opts.ComponentPath
 
 	if vendorComponentSpec.Source.Uri == "" {
-		return nil, fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
+		return nil, fmt.Errorf("%w:'%s'", ErrURIMustBeSpecified, config.ComponentVendorConfigFileName)
 	}
 	if err := version.ValidateVersionRangeConstraints(vendorComponentSpec.Source.Version, vendorComponentSpec.Source.Constraints); err != nil {
 		return nil, err
@@ -62,7 +90,7 @@ func buildComponentVendorPackages(opts buildComponentPackagesOptions) ([]install
 	if !useOciScheme {
 		uri, useLocalFileSystem, sourceIsLocalFile = handleLocalFileScheme(componentPath, uri)
 	}
-	pType := determinePackageType(useOciScheme, useLocalFileSystem)
+	pType := install.DeterminePackageType(useOciScheme, useLocalFileSystem)
 	componentPkg := install.NewComponentVendorPackage(&install.ComponentPackageParams{
 		Name:              component,
 		URI:               uri,
@@ -77,7 +105,7 @@ func buildComponentVendorPackages(opts buildComponentPackagesOptions) ([]install
 	packages := []install.VendorPackage{componentPkg}
 	// Process mixins
 	if len(vendorComponentSpec.Mixins) > 0 {
-		mixinPkgs, err := processComponentMixins(atmosConfig, vendorComponentSpec, componentPath)
+		mixinPkgs, err := processComponentMixins(atmosConfig, vendorComponentSpec, componentPath, opts.TemplateFunc)
 		if err != nil {
 			return nil, err
 		}
@@ -86,31 +114,30 @@ func buildComponentVendorPackages(opts buildComponentPackagesOptions) ([]install
 	return packages, nil
 }
 
-// componentSourceResolution is resolveComponentSourceURI's result: the templated source URI (with
-// a range-declared version: already resolved to a concrete version -- see resolveEffectiveVersion)
-// plus its resolved/raw version, for building the eventual install.VendorPackage. RawVersion is
-// non-empty only when the declared version was a range -- see install.VendorPackage.RawVersion.
-type componentSourceResolution struct {
+// sourceResolution is resolveComponentSourceURI's result: the templated source URI (with a
+// range-declared version: already resolved to a concrete version -- see
+// install.ResolveEffectiveVersion) plus its resolved/raw version, for building the eventual
+// install.VendorPackage. RawVersion is non-empty only when the declared version was a range -- see
+// install.VendorPackage.RawVersion.
+type sourceResolution struct {
 	URI             string
 	ResolvedVersion string
 	RawVersion      string
 }
 
 // resolveComponentSourceURI resolves a component.yaml source's declared `version:` (exact pin or
-// semver range, via resolveEffectiveVersion) and templates the result into source.uri. Uses
-// ProcessTmpl (the same helper vendor_utils.go uses for the top-level vendor.yaml source/target
-// templating) so component.yaml source URIs get the same Sprig, gomplate, and Atmos template
-// functions (the "atmos" namespace from internal/exec/template_funcs.go) rather than a narrower,
-// hand-rolled function map.
+// semver range, via install.ResolveEffectiveVersion) and templates the result into source.uri via
+// opts.TemplateFunc, so component.yaml source URIs get the same Sprig, gomplate, and Atmos template
+// functions vendor.yaml source/target templating uses.
 func resolveComponentSourceURI(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorComponentSpec *schema.VendorComponentSpec,
 	component string,
-	opts buildComponentPackagesOptions,
-) (componentSourceResolution, error) {
+	opts BuildPackagesOptions, //nolint:gocritic // hugeParam: opts is a read-only options struct.
+) (sourceResolution, error) {
 	uri := vendorComponentSpec.Source.Uri
 
-	resolvedVersion, rawVersion, err := resolveEffectiveVersion(&versionResolveInputs{
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
 		AtmosConfig: atmosConfig,
 		Name:        component,
 		Source:      vendorComponentSpec.Source.Uri,
@@ -120,24 +147,24 @@ func resolveComponentSourceURI(
 		Lister:      opts.Lister,
 	})
 	if err != nil {
-		return componentSourceResolution{}, fmt.Errorf("resolve version for component %q: %w", component, err)
+		return sourceResolution{}, fmt.Errorf("resolve version for component %q: %w", component, err)
 	}
 
 	if vendorComponentSpec.Source.Version == "" {
-		return componentSourceResolution{URI: uri, ResolvedVersion: resolvedVersion, RawVersion: rawVersion}, nil
+		return sourceResolution{URI: uri, ResolvedVersion: resolvedVersion, RawVersion: rawVersion}, nil
 	}
 
 	templateData := vendorComponentSpec.Source
 	templateData.Version = resolvedVersion
-	uri, err = ProcessTmpl(atmosConfig, fmt.Sprintf("source-uri-%s", resolvedVersion), vendorComponentSpec.Source.Uri, templateData, false)
+	uri, err = opts.TemplateFunc(atmosConfig, fmt.Sprintf("source-uri-%s", resolvedVersion), vendorComponentSpec.Source.Uri, templateData, false)
 	if err != nil {
-		return componentSourceResolution{}, errUtils.Build(errUtils.ErrTemplateEvaluation).
+		return sourceResolution{}, errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
 			WithContext("component", component).
 			WithContext("uri", vendorComponentSpec.Source.Uri).
 			Err()
 	}
-	return componentSourceResolution{URI: uri, ResolvedVersion: resolvedVersion, RawVersion: rawVersion}, nil
+	return sourceResolution{URI: uri, ResolvedVersion: resolvedVersion, RawVersion: rawVersion}, nil
 }
 
 // handleLocalFileScheme processes the URI for local file system paths.
@@ -190,7 +217,7 @@ func resolveFileURIPath(uri string) (path string, ok bool) {
 	return filepath.Clean(p), true
 }
 
-func processComponentMixins(atmosConfig *schema.AtmosConfiguration, vendorComponentSpec *schema.VendorComponentSpec, componentPath string) ([]install.VendorPackage, error) {
+func processComponentMixins(atmosConfig *schema.AtmosConfiguration, vendorComponentSpec *schema.VendorComponentSpec, componentPath string, templateFunc TemplateFunc) ([]install.VendorPackage, error) {
 	var packages []install.VendorPackage
 	for _, mixin := range vendorComponentSpec.Mixins {
 		if mixin.Uri == "" {
@@ -201,7 +228,7 @@ func processComponentMixins(atmosConfig *schema.AtmosConfiguration, vendorCompon
 			return nil, ErrMissingMixinFilename
 		}
 
-		pkg, alreadyMaterialized, err := resolveMixinPackage(atmosConfig, vendorComponentSpec, &mixin, componentPath)
+		pkg, alreadyMaterialized, err := resolveMixinPackage(atmosConfig, vendorComponentSpec, &mixin, componentPath, templateFunc)
 		if err != nil {
 			return nil, err
 		}
@@ -219,8 +246,8 @@ func processComponentMixins(atmosConfig *schema.AtmosConfiguration, vendorCompon
 // already exists locally, in which case pkg is the zero value and there is nothing to fetch.
 //
 // Scope note: unlike a component's own source.version, a mixin's version is templated verbatim
-// (mixin.Version below) and never passed through resolveEffectiveVersion -- a semver-range mixin
-// version: is not supported, and is templated as a literal, unresolved string like any other
+// (mixin.Version below) and never passed through install.ResolveEffectiveVersion -- a semver-range
+// mixin version: is not supported, and is templated as a literal, unresolved string like any other
 // non-range value (typically failing at fetch time with an invalid-ref error, not a silent
 // mis-resolution).
 func resolveMixinPackage(
@@ -228,9 +255,10 @@ func resolveMixinPackage(
 	vendorComponentSpec *schema.VendorComponentSpec,
 	mixin *schema.VendorComponentMixins,
 	componentPath string,
+	templateFunc TemplateFunc,
 ) (pkg install.VendorPackage, alreadyMaterialized bool, err error) {
 	// Parse 'uri' template.
-	uri, err := parseMixinURI(atmosConfig, mixin)
+	uri, err := parseMixinURI(atmosConfig, mixin, templateFunc)
 	if err != nil {
 		return install.VendorPackage{}, false, fmt.Errorf("mixin %q (uri %q): %w", mixin.Filename, mixin.Uri, err)
 	}
@@ -277,12 +305,12 @@ func resolveMixinPackage(
 	}), false, nil
 }
 
-func parseMixinURI(atmosConfig *schema.AtmosConfiguration, mixin *schema.VendorComponentMixins) (string, error) {
+func parseMixinURI(atmosConfig *schema.AtmosConfiguration, mixin *schema.VendorComponentMixins, templateFunc TemplateFunc) (string, error) {
 	if mixin.Version == "" {
 		return mixin.Uri, nil
 	}
 
-	uri, err := ProcessTmpl(atmosConfig, "mixin-uri", mixin.Uri, mixin, false)
+	uri, err := templateFunc(atmosConfig, "mixin-uri", mixin.Uri, mixin, false)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).

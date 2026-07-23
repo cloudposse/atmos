@@ -97,7 +97,7 @@ func (p *componentVendorInstaller) installComponent(ctx context.Context, tempDir
 		IncludedPaths: p.includedPaths(),
 		ExcludedPaths: p.excludedPaths(),
 	}); err != nil {
-		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
+		return fmt.Errorf("%w %s: %w", ErrCopyPackage, p.name, err)
 	}
 
 	recordOpts := lockfile.RecordOptions{
@@ -109,8 +109,15 @@ func (p *componentVendorInstaller) installComponent(ctx context.Context, tempDir
 		recordOpts.VersionConstraint = p.rawVersion
 		recordOpts.ResolvedVersion = p.version
 	}
-	if err := lockfile.Record(ctx, atmosConfig, p.pType.String(), p.name, fetchedDir, p.componentPath, lockDeclaredSource(p.pType, p.srcURI), recordOpts); err != nil {
-		return fmt.Errorf("record component vendor lock: %w", err)
+	recordTarget := lockfile.RecordTarget{
+		Kind:           p.pType.String(),
+		Name:           p.name,
+		TempDir:        fetchedDir,
+		Path:           p.componentPath,
+		DeclaredSource: lockDeclaredSource(p.pType, p.srcURI),
+	}
+	if err := lockfile.Record(ctx, atmosConfig, recordTarget, recordOpts); err != nil {
+		return fmt.Errorf("%w: %w", ErrRecordComponentVendorLock, err)
 	}
 	return nil
 }
@@ -148,15 +155,22 @@ func (p *componentVendorInstaller) installMixin(ctx context.Context, tempDir str
 		},
 	}
 	if err := cp.Copy(tempDir, p.componentPath, copyOptions); err != nil {
-		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
+		return fmt.Errorf("%w %s: %w", ErrCopyPackage, p.name, err)
 	}
 
-	if err := lockfile.Record(ctx, atmosConfig, p.pType.String(), p.name, tempDir, p.componentPath, lockDeclaredSource(p.pType, p.srcURI), lockfile.RecordOptions{
+	mixinRecordTarget := lockfile.RecordTarget{
+		Kind:           p.pType.String(),
+		Name:           p.name,
+		TempDir:        tempDir,
+		Path:           p.componentPath,
+		DeclaredSource: lockDeclaredSource(p.pType, p.srcURI),
+	}
+	if err := lockfile.Record(ctx, atmosConfig, mixinRecordTarget, lockfile.RecordOptions{
 		Mixin:         true,
 		MixinFilename: p.mixinFile,
 		HTTPMetadata:  metadata,
 	}); err != nil {
-		return fmt.Errorf("record mixin vendor lock: %w", err)
+		return fmt.Errorf("%w: %w", ErrRecordMixinVendorLock, err)
 	}
 	return nil
 }
@@ -164,7 +178,7 @@ func (p *componentVendorInstaller) installMixin(ctx context.Context, tempDir str
 func (p *componentVendorInstaller) dryRunCheck(_ context.Context, atmosConfig *schema.AtmosConfiguration) error {
 	log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.srcURI)
 	if err := detectIfNeeded(atmosConfig, p.srcURI); err != nil {
-		return fmt.Errorf("dry-run: detection failed for component %s: %w", p.name, err)
+		return fmt.Errorf("%w for component %s: %w", ErrDryRunDetectionFailed, p.name, err)
 	}
 	time.Sleep(100 * time.Millisecond)
 	return nil

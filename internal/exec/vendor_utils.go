@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -96,61 +95,6 @@ type vendorSourceParams struct {
 	// every production call path (install.ResolveDeclaredVersion defaults to version.DefaultLister);
 	// only ever set by tests, so a range's resolution can be verified without real network access.
 	lister version.RemoteLister
-}
-
-// versionResolveInputs bundles resolveEffectiveVersion's inputs. A struct rather than positional
-// parameters: this repo's Options Pattern threshold (CLAUDE.md, >4 total parameters) was crossed
-// once Discriminator/RefreshLock/Lister joined the original Name/Source/RawVersion/Constraints.
-type versionResolveInputs struct {
-	AtmosConfig *schema.AtmosConfiguration
-	// Name identifies the declaring source/target -- typically the component name.
-	Name string
-	// Source is the source's raw, un-templated URI/source string (before {{.Version}} is
-	// substituted) -- see install.VersionResolveParams.SourceForGitURI.
-	Source      string
-	RawVersion  string
-	Constraints *schema.VendorConstraints
-	// Discriminator disambiguates multiple version declarations that would otherwise share the
-	// same Name (e.g. a vendor.yaml source's per-target version overrides).
-	Discriminator string
-	RefreshLock   bool
-	// Lister overrides the remote Git tag lister; nil defaults to version.DefaultLister -- see
-	// vendorSourceParams.lister's doc comment.
-	Lister version.RemoteLister
-}
-
-// resolveEffectiveVersion resolves in.RawVersion -- which may be an exact pin (returned unchanged,
-// with no lock or network access) or a semver range (resolved via install.ResolveDeclaredVersion,
-// reusing the first resolution recorded in vendor.lock.yaml on every later pull that declares the
-// same range) -- to the concrete version used for source-URI/target-path templating. Raw is
-// non-empty only when in.RawVersion was actually a range, so callers can carry it through to
-// install.VendorPackage.RawVersion for lockfile provenance on the eventual install receipt.
-func resolveEffectiveVersion(in *versionResolveInputs) (resolved, raw string, err error) {
-	resolved, err = install.ResolveDeclaredVersion(context.Background(), in.AtmosConfig, &install.VersionResolveParams{
-		RawVersion:      in.RawVersion,
-		Name:            versionResolveName(in.Name, in.Source),
-		Discriminator:   in.Discriminator,
-		SourceForGitURI: in.Source,
-		Constraints:     in.Constraints,
-		RefreshLock:     in.RefreshLock,
-		Lister:          in.Lister,
-	})
-	if err != nil {
-		return "", "", err
-	}
-	if version.IsSemverConstraint(in.RawVersion) {
-		raw = in.RawVersion
-	}
-	return resolved, raw, nil
-}
-
-// versionResolveName falls back to the raw source URI as the lock cache key's identity when a
-// source declares no component name.
-func versionResolveName(name, source string) string {
-	if name != "" {
-		return name
-	}
-	return source
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
@@ -439,7 +383,7 @@ type atmosVendorSourceResolution struct {
 // processAtmosVendorSourceEntry needs before it can process each of the source's targets.
 func resolveAtmosVendorSource(params *vendorSourceParams, indexSource int) (*atmosVendorSourceResolution, error) {
 	src := &params.sources[indexSource]
-	resolvedVersion, rawVersion, err := resolveEffectiveVersion(&versionResolveInputs{
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
 		AtmosConfig: params.atmosConfig,
 		Name:        src.Component,
 		Source:      src.Source,
@@ -484,19 +428,10 @@ func resolveAtmosVendorSource(params *vendorSourceParams, indexSource int) (*atm
 	return &atmosVendorSourceResolution{
 		URI:               uri,
 		TemplateData:      tmplData,
-		PkgType:           determinePackageType(useOciScheme, useLocalFileSystem),
+		PkgType:           install.DeterminePackageType(useOciScheme, useLocalFileSystem),
 		SourceIsLocalFile: sourceIsLocalFile,
 		RawVersion:        rawVersion,
 	}, nil
-}
-
-func determinePackageType(useOciScheme, useLocalFileSystem bool) install.PkgType {
-	if useOciScheme {
-		return install.PkgTypeOci
-	} else if useLocalFileSystem {
-		return install.PkgTypeLocal
-	}
-	return install.PkgTypeRemote
 }
 
 // resolvedTarget holds the resolved URI, version, template data, and source classification for a single target.
@@ -511,7 +446,7 @@ type resolvedTarget struct {
 
 // resolveTargetOverride re-resolves the source URI and classification when a target has a version override.
 func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt schema.AtmosVendorTarget) (*resolvedTarget, error) {
-	resolvedVersion, rawVersion, err := resolveEffectiveVersion(&versionResolveInputs{
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
 		AtmosConfig:   params.AtmosConfig,
 		Name:          params.Source.Component,
 		Source:        params.SourceTemplate,
@@ -560,7 +495,7 @@ func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt sc
 		version:           resolvedVersion,
 		rawVersion:        rawVersion,
 		tmplData:          tmplData,
-		pkgType:           determinePackageType(useOciScheme, useLocalFileSystem),
+		pkgType:           install.DeterminePackageType(useOciScheme, useLocalFileSystem),
 		sourceIsLocalFile: sourceIsLocalFile,
 	}, nil
 }

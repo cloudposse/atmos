@@ -27,7 +27,21 @@ func TestResolveArtifactUsesContentHashForLocalDirectory(t *testing.T) {
 }
 
 func TestRedactSourceRemovesCredentialsAndQuery(t *testing.T) {
-	require.Equal(t, "https://github.example.com/org/module.git", RedactSource("https://token@example@github.example.com/org/module.git?signature=secret"))
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{name: "empty string stays empty", source: "", want: ""},
+		{name: "userinfo and query are stripped from a real URL", source: "https://token@example@github.example.com/org/module.git?signature=secret", want: "https://github.example.com/org/module.git"},
+		{name: "non-URL text with a query-like suffix falls back to prefix split", source: "not a url?query=1", want: "not a url"},
+		{name: "malformed percent-encoding falls back to prefix split", source: "%zz?foo=bar", want: "%zz"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, RedactSource(test.source))
+		})
+	}
 }
 
 // TestResolveArtifactOCISuccess resolves an "oci://" declared source against a

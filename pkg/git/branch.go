@@ -46,20 +46,20 @@ func PrepareBranch(ctx context.Context, opts PrepareBranchOptions) error {
 		return errUtils.ErrComponentUpdaterDirtyWorktree
 	}
 	if err := gitRun(ctx, opts.Workdir, "fetch", opts.Remote, opts.Base); err != nil {
-		return fmt.Errorf("fetching %s/%s: %w", opts.Remote, opts.Base, err)
+		return fmt.Errorf("%w: fetching %s/%s: %w", errUtils.ErrGitFetchFailed, opts.Remote, opts.Base, err)
 	}
 	remoteBranch := opts.Remote + "/" + opts.Branch
 	if gitRun(ctx, opts.Workdir, "ls-remote", "--exit-code", "--heads", opts.Remote, opts.Branch) == nil {
 		if err := gitRun(ctx, opts.Workdir, "fetch", opts.Remote, opts.Branch); err != nil {
-			return fmt.Errorf("fetching existing feature branch: %w", err)
+			return fmt.Errorf("%w: fetching existing feature branch: %w", errUtils.ErrGitFetchFailed, err)
 		}
 		if err := gitRun(ctx, opts.Workdir, "checkout", "-B", opts.Branch, remoteBranch); err != nil {
-			return fmt.Errorf("checking out existing feature branch: %w", err)
+			return fmt.Errorf("%w: checking out existing feature branch: %w", errUtils.ErrGitCheckoutFailed, err)
 		}
 		return nil
 	}
 	if err := gitRun(ctx, opts.Workdir, "checkout", "-B", opts.Branch, opts.Remote+"/"+opts.Base); err != nil {
-		return fmt.Errorf("creating feature branch from %s: %w", opts.Base, err)
+		return fmt.Errorf("%w: creating feature branch from %s: %w", errUtils.ErrGitCheckoutFailed, opts.Base, err)
 	}
 	return nil
 }
@@ -74,7 +74,7 @@ func DefaultBranch(ctx context.Context, workdir, remote string) (string, error) 
 	}
 	out, err := gitOutput(ctx, workdir, "ls-remote", "--symref", remote, "HEAD")
 	if err != nil {
-		return "", fmt.Errorf("resolving remote default branch: %w", err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrGitDefaultBranchResolution, err)
 	}
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)

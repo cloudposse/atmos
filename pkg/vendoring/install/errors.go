@@ -17,4 +17,20 @@ var (
 	// source with no tag-listing mechanism in this codebase (OCI, local-file, or plain HTTP/S3).
 	// Ranges are Git-only for now; see ResolveDeclaredVersion's doc comment.
 	ErrVersionRangeRequiresGitSource = errors.New("a semver-range version: requires a Git source")
+	// ErrCopyPackage indicates a fetched package's content failed to copy to its target path.
+	ErrCopyPackage = errors.New("failed to copy package")
+	// ErrRecordVendorLock indicates a vendor.yaml target's vendor.lock.yaml receipt failed to write.
+	ErrRecordVendorLock = errors.New("failed to record vendor lock")
+	// ErrRecordComponentVendorLock indicates a component.yaml component's vendor.lock.yaml receipt
+	// failed to write.
+	ErrRecordComponentVendorLock = errors.New("failed to record component vendor lock")
+	// ErrRecordMixinVendorLock indicates a component.yaml mixin's vendor.lock.yaml receipt failed
+	// to write.
+	ErrRecordMixinVendorLock = errors.New("failed to record mixin vendor lock")
+	// ErrDryRunDetectionFailed indicates a dry run's custom Git detection probe failed.
+	ErrDryRunDetectionFailed = errors.New("dry-run: detection failed")
+	// ErrDownloadPackage indicates a go-getter fetch of a remote source failed.
+	ErrDownloadPackage = errors.New("failed to download package")
+	// ErrProcessOCIImage indicates an OCI-registry source failed to pull or unpack.
+	ErrProcessOCIImage = errors.New("failed to process OCI image")
 )

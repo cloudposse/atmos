@@ -1525,6 +1525,12 @@ var (
 	ErrGitHubAuthorization = errors.New("GitHub authorization failed")
 	// ErrPullRequestReconciliation indicates an existing or new PR could not be reconciled.
 	ErrPullRequestReconciliation = errors.New("pull request reconciliation failed")
+	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
+	ErrGitFetchFailed = errors.New("git fetch failed")
+	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.
+	ErrGitCheckoutFailed = errors.New("git checkout failed")
+	// ErrGitDefaultBranchResolution indicates the remote's default branch could not be resolved.
+	ErrGitDefaultBranchResolution = errors.New("resolving remote default branch failed")
 
 	// ErrGitLsRemoteFailed indicates listing refs from a remote Git repository failed.
 	ErrGitLsRemoteFailed = errors.New("failed to list refs from remote Git repository")

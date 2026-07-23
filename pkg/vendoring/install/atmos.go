@@ -72,7 +72,7 @@ func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmo
 	}
 
 	if err := copyToTargetWithPatterns(fetchedDir, p.targetPath, &p.source, p.localFile); err != nil {
-		return fmt.Errorf("failed to copy package: %w", err)
+		return fmt.Errorf("%w: %w", ErrCopyPackage, err)
 	}
 
 	recordOpts := lockfile.RecordOptions{
@@ -84,8 +84,15 @@ func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmo
 		recordOpts.VersionConstraint = p.rawVersion
 		recordOpts.ResolvedVersion = p.version
 	}
-	if err := lockfile.Record(ctx, atmosConfig, p.pType.String(), p.name, fetchedDir, p.targetPath, lockDeclaredSource(p.pType, p.srcURI), recordOpts); err != nil {
-		return fmt.Errorf("failed to record vendor lock: %w", err)
+	recordTarget := lockfile.RecordTarget{
+		Kind:           p.pType.String(),
+		Name:           p.name,
+		TempDir:        fetchedDir,
+		Path:           p.targetPath,
+		DeclaredSource: lockDeclaredSource(p.pType, p.srcURI),
+	}
+	if err := lockfile.Record(ctx, atmosConfig, recordTarget, recordOpts); err != nil {
+		return fmt.Errorf("%w: %w", ErrRecordVendorLock, err)
 	}
 	return nil
 }
@@ -93,7 +100,7 @@ func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmo
 func (p *atmosVendorInstaller) dryRunCheck(_ context.Context, atmosConfig *schema.AtmosConfiguration) error {
 	log.Debug("Entering dry-run flow for generic (non component/mixin) vendoring", "package", p.name)
 	if err := detectIfNeeded(atmosConfig, p.srcURI); err != nil {
-		return fmt.Errorf("dry-run: detection failed: %w", err)
+		return fmt.Errorf("%w: %w", ErrDryRunDetectionFailed, err)
 	}
 	time.Sleep(500 * time.Millisecond)
 	return nil

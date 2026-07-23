@@ -115,7 +115,7 @@ func init() {
 	generateCmd.Flags().String("output", "", "Write the SBOM to this file instead of stdout")
 	generateCmd.Flags().Bool("upload", false, "Upload the generated SBOM through the detected native CI provider")
 	generateCmd.Flags().Bool("include-files", false, "Include vendor lock file entries as file components")
-	generateCmd.Flags().String("scope", sbom.ScopeTerraform, "Inventory scope (currently terraform)")
+	generateCmd.Flags().String("scope", sbom.ScopeTerraform, "Inventory scope: terraform (provider and module evidence) or dependencies (toolchain and version-track evidence)")
 	generateCmd.Flags().String("mode", sbom.ModeProvenance, "SBOM mode: provenance or ntia")
 	generateCmd.Flags().String("subject-name", "", "Subject name (required for --mode ntia)")
 	generateCmd.Flags().String("subject-version", "", "Subject version (required for --mode ntia)")
