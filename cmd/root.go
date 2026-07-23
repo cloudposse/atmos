@@ -80,6 +80,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	_ "github.com/cloudposse/atmos/cmd/azure"
 	castcmd "github.com/cloudposse/atmos/cmd/cast"
 	_ "github.com/cloudposse/atmos/cmd/ci"
 	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
