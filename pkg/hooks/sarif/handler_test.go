@@ -97,6 +97,44 @@ func TestHandler_MissingReportAfterScannerFailure(t *testing.T) {
 	assert.Contains(t, s.Body, "exit code 1")
 }
 
+// TestHandler_EmptyOutputFileAfterScannerFailure verifies a 0-byte capture file (the
+// state runSubprocess leaves behind when a scanner exits non-zero before writing
+// anything) is treated the same as a missing file: routed through missingReportSummary
+// rather than silently parsed as zero findings.
+func TestHandler_EmptyOutputFileAfterScannerFailure(t *testing.T) {
+	emptyPath := filepath.Join(t.TempDir(), "empty.sarif")
+	require.NoError(t, os.WriteFile(emptyPath, []byte{}, 0o600))
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:       "checkov",
+		OutputPath: func(_ *hooks.ExecContext) string { return emptyPath },
+	})
+
+	s, err := handler(&hooks.ExecContext{CommandError: errors.New("exit status 1"), ExitCode: 1})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+	assert.Equal(t, hooks.StatusFailure, s.Status)
+	assert.Equal(t, "scan failed", s.Title)
+	assert.Contains(t, s.Body, "exit code 1")
+}
+
+// TestHandler_EmptyOutputFileCleanRun locks in that a 0-byte capture file after a
+// successful (exit 0) run still reports success/no-findings — the fix only changes
+// routing for the non-zero-exit case.
+func TestHandler_EmptyOutputFileCleanRun(t *testing.T) {
+	emptyPath := filepath.Join(t.TempDir(), "empty.sarif")
+	require.NoError(t, os.WriteFile(emptyPath, []byte{}, 0o600))
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:       "checkov",
+		OutputPath: func(_ *hooks.ExecContext) string { return emptyPath },
+	})
+
+	s, err := handler(&hooks.ExecContext{})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+	assert.Equal(t, hooks.StatusSuccess, s.Status)
+	assert.Equal(t, "no findings", s.Title)
+}
+
 func TestHandler_NilOutputPath(t *testing.T) {
 	handler := sarif.NewResultHandler(sarif.HandlerOptions{Kind: "trivy"})
 	s, err := handler(&hooks.ExecContext{})
