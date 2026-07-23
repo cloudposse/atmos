@@ -23,6 +23,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -2759,4 +2760,24 @@ func TestAppendComponentEnvVars_CommandEnvOverrides(t *testing.T) {
 
 	assert.Contains(t, env, "SHARED=from-command")
 	assert.NotContains(t, env, "SHARED=from-component")
+}
+
+// TestConfigureCustomCommandScannerContext_SetsToolchainPATH guards against a
+// regression where a `type: tflint` (or other toolchain-aware) step run from
+// a custom command silently lost the toolchain-resolved PATH that the
+// equivalent workflow step path (configureStepScannerContext) sets, falling
+// back to whatever tflint happens to be on the ambient PATH.
+func TestConfigureCustomCommandScannerContext_SetsToolchainPATH(t *testing.T) {
+	vars := stepPkg.NewStepExecutor().Variables()
+	toolchainPath := filepath.Join("opt", "toolchain", "bin")
+
+	configureCustomCommandScannerContext(vars, &schema.AtmosConfiguration{}, toolchainPath, nil)
+
+	assert.Equal(t, toolchainPath, vars.ToolchainPATH)
+}
+
+func TestConfigureCustomCommandScannerContext_NilVarsNoPanic(t *testing.T) {
+	assert.NotPanics(t, func() {
+		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, filepath.Join("opt", "toolchain", "bin"), nil)
+	})
 }
