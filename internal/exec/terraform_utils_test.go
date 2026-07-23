@@ -304,7 +304,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 		require.True(t, processStacks)
 		return schema.AtmosConfiguration{}, nil
 	})
-	patches.ApplyFunc(getAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+	patches.ApplyFunc(GetAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 		describedAffected = true
 		require.NotNil(t, args.CLIConfig)
 		require.Equal(t, repoPath, args.RepoPath)
