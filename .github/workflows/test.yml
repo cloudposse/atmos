@@ -525,7 +525,11 @@ jobs:
 
       - name: Install Linux build dependencies
         run: |
-          sudo apt-get update
+          # The Azure mirror used by GitHub's Ubuntu runners can stall long
+          # enough to exhaust this job's timeout. Use Ubuntu's primary archive
+          # for this small, deterministic dependency install instead.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
           sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Run Floci Go E2E tests
