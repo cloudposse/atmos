@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -31,6 +31,32 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
+
+type experimentalNoticeRecorder struct {
+	mu sync.Mutex
+	ui strings.Builder
+}
+
+func (r *experimentalNoticeRecorder) Record(stream, content string) {
+	if stream != "e" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ui.WriteString(content)
+}
+
+func (r *experimentalNoticeRecorder) Reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ui.Reset()
+}
+
+func (r *experimentalNoticeRecorder) UI() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ui.String()
+}
 
 // TestCleanupLogFile tests log file cleanup functionality.
 func TestCleanupLogFile(t *testing.T) {
@@ -1217,6 +1243,8 @@ func TestFindExperimentalParent_RegistryBased(t *testing.T) {
 func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 	_ = NewTestKit(t)
 	t.Setenv("ATMOS_EXPERIMENTAL", "warn")
+	recorder := &experimentalNoticeRecorder{}
+	t.Cleanup(iolib.SetRecorder(recorder))
 
 	command := &cobra.Command{
 		Use:         "experimental-notice-test",
@@ -1231,23 +1259,11 @@ func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 	t.Cleanup(func() { RootCmd.RemoveCommand(command) })
 
 	runCommand := func() string {
-		reader, writer, err := os.Pipe()
-		require.NoError(t, err)
-		defer func() { _ = reader.Close() }()
-		defer func() { _ = writer.Close() }()
-
-		oldStderr := os.Stderr
-		os.Stderr = writer
-		defer func() { os.Stderr = oldStderr }()
-
+		recorder.Reset()
 		iolib.Reset()
 		RootCmd.SetArgs([]string{"experimental-notice-test"})
 		require.NoError(t, Execute())
-		require.NoError(t, writer.Close())
-
-		output, err := io.ReadAll(reader)
-		require.NoError(t, err)
-		return string(output)
+		return recorder.UI()
 	}
 	t.Cleanup(iolib.Reset)
 
