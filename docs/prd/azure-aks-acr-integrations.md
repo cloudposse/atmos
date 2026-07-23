@@ -22,10 +22,10 @@ existing Azure identity, not identities themselves.
 Before this work, Azure users authenticating with `atmos auth login` had no automated path to:
 
 1. **AKS kubeconfig**: Users had to run `az aks get-credentials`, which requires the Azure CLI
-   and (for AAD-integrated clusters, the modern default) the `kubelogin` binary.
+    and (for AAD-integrated clusters, the modern default) the `kubelogin` binary.
 2. **ACR Docker login**: Users had to run `az acr login`, again requiring the Azure CLI.
 3. **Credential mismatch**: `az` CLI commands use whatever `az` is currently logged into, which
-   may not match the Atmos-managed identity the user authenticated with.
+    may not match the Atmos-managed identity the user authenticated with.
 
 ### Desired Workflow
 
@@ -42,19 +42,19 @@ $ docker pull myregistry.azurecr.io/myimage:latest
 ## Design Goals
 
 1. **No external binaries**: Eliminate any dependency on the `az` CLI or `kubelogin` — use the
-   Azure Go SDK (`armcontainerservice`) directly, matching the EKS precedent of using
-   `aws-sdk-go-v2` instead of shelling out.
+    Azure Go SDK (`armcontainerservice`) directly, matching the EKS precedent of using
+    `aws-sdk-go-v2` instead of shelling out.
 2. **Shared spec shape**: `IntegrationSpec.Cluster`/`.Registry` are reused, unmodified, across
-   both clouds — `kind` (`aws/eks` vs `azure/aks`, `aws/ecr` vs `azure/acr`) determines which
-   fields apply, not a forked per-cloud struct. This was an explicit user requirement: "the whole
-   purpose of having different kinds is so the specs can be similar."
+    both clouds — `kind` (`aws/eks` vs `azure/aks`, `aws/ecr` vs `azure/acr`) determines which
+    fields apply, not a forked per-cloud struct. This was an explicit user requirement: "the whole
+    purpose of having different kinds is so the specs can be similar."
 3. **Cloud-agnostic kubeconfig writer**: Generalize `pkg/auth/cloud/kube.KubeconfigManager`
-   (previously typed to AWS's `EKSClusterInfo`) to a cloud-agnostic `ClusterInfo` struct, so both
-   EKS and AKS share one merge/diff/write implementation instead of forking a parallel writer.
+    (previously typed to AWS's `EKSClusterInfo`) to a cloud-agnostic `ClusterInfo` struct, so both
+    EKS and AKS share one merge/diff/write implementation instead of forking a parallel writer.
 4. **Non-blocking failures**: Integration failures during `atmos auth login` warn, not fail
-   authentication (same as EKS/ECR).
+    authentication (same as EKS/ECR).
 5. **Testability**: Mockable SDK client interfaces (`AKSClient`), HTTP client injection for the
-   ACR OAuth2 exchange, and function-var test seams throughout, matching the EKS/ECR pattern.
+    ACR OAuth2 exchange, and function-var test seams throughout, matching the EKS/ECR pattern.
 
 ## Technical Specification
 
@@ -85,12 +85,12 @@ $ docker pull myregistry.azurecr.io/myimage:latest
           │ Write Docker    │         │  .Get + .ListCluster│
           │ config.json     │         │  UserCredentials │
           └─────────────────┘         │ Write Kubeconfig │
-                                       │ (exec: atmos)    │
-                                       └──────────────────┘
-                                               │
+                                      │ (exec: atmos)    │
+                                      └──────────────────┘
+                                              │
                                       (later, at kubectl time)
-                                               │
-                                               ▼
+                                              │
+                                              ▼
                                       ┌──────────────────┐
                                       │ kubectl exec     │
                                       │ → atmos azure    │
@@ -188,18 +188,18 @@ AWS-shaped output is byte-identical to pre-refactor behavior.
 
 1. Calls `ManagedClustersClient.Get` for the cluster's ARM resource ID.
 2. Calls `ManagedClustersClient.ListClusterUserCredentials` with `Format: exec` — the response
-   embeds a ready-made kubeconfig (server endpoint, CA data, and a `kubelogin` exec block) that
-   Atmos **parses but does not use verbatim**.
+    embeds a ready-made kubeconfig (server endpoint, CA data, and a `kubelogin` exec block) that
+    Atmos **parses but does not use verbatim**.
 3. Extracts `Server`/`CertificateAuthorityData` from the embedded kubeconfig's single cluster
-   entry, and scans the embedded `kubelogin` exec args for `--server-id`/`--tenant-id` — the AAD
-   server application ID and tenant *that specific cluster* expects. This is preferred over
-   hardcoding the well-known AKS server app ID (`6dae42f8-4368-4678-94ff-3960e28e3630`), since it
-   is robust to both AKS-managed AAD (the modern default) and legacy BYO-server-app clusters.
+    entry, and scans the embedded `kubelogin` exec args for `--server-id`/`--tenant-id` — the AAD
+    server application ID and tenant *that specific cluster* expects. This is preferred over
+    hardcoding the well-known AKS server app ID (`6dae42f8-4368-4678-94ff-3960e28e3630`), since it
+    is robust to both AKS-managed AAD (the modern default) and legacy BYO-server-app clusters.
 4. If the embedded kubeconfig has no exec block (the cluster isn't AAD-enabled — `Format: exec`
-   silently falls back to a local-account kubeconfig), `DescribeCluster` fails with
-   `ErrAKSClusterNotAADEnabled`. Only AAD-integrated clusters are supported.
+    silently falls back to a local-account kubeconfig), `DescribeCluster` fails with
+    `ErrAKSClusterNotAADEnabled`. Only AAD-integrated clusters are supported.
 5. Atmos then builds its **own** kubeconfig exec entry pointing at `atmos azure aks token`
-   instead of `kubelogin`.
+    instead of `kubelogin`.
 
 ### AKS: Token Generation and Scope-Bound AAD Tokens
 
@@ -331,34 +331,34 @@ Same posture as EKS/ECR:
 
 1. **Credential isolation**: kubeconfig uses an exec plugin — no long-lived tokens stored on disk.
 2. **File permissions**: kubeconfig written with `0600`; ACR/ECR credentials go through the
-   existing `pkg/auth/cloud/docker` writer, unchanged.
+    existing `pkg/auth/cloud/docker` writer, unchanged.
 3. **Token scope**: the AKS-scoped token is acquired specifically for the AKS-managed server
-   application — it is not the identity's primary ARM-scoped token, limiting blast radius if
-   leaked.
+    application — it is not the identity's primary ARM-scoped token, limiting blast radius if
+    leaked.
 4. **No secrets in kubeconfig**: only cluster endpoint and CA cert are stored; auth is via exec.
 
 ## Success Metrics
 
 1. AKS kubeconfig and ACR Docker login generated correctly with valid output.
 2. `kubectl`/`docker` can authenticate using the generated credentials against a real AAD-enabled
-   AKS cluster / ACR registry (not exercised in this sandbox — no live Azure subscription
-   available; verified via unit tests exercising the real `clientcmd`/JWT/kubeconfig-merge code
-   paths against synthetic fixtures).
+    AKS cluster / ACR registry (not exercised in this sandbox — no live Azure subscription
+    available; verified via unit tests exercising the real `clientcmd`/JWT/kubeconfig-merge code
+    paths against synthetic fixtures).
 3. Auto-provisioning triggers both integrations on `atmos auth login`, non-blocking on failure.
 4. Full repository test suite (`go test ./...`) passes with the AWS EKS/ECR regression suite
-   unchanged in behavior.
+    unchanged in behavior.
 
 ## Future Enhancements
 
 1. **Non-default AAD server application support**: re-acquire an AKS token scoped to a
-   cluster-specific `--server-id` discovered during `DescribeCluster`, rather than only warning
-   when it differs from the well-known default. Requires threading a scope parameter back into
-   the provider's token-acquisition call, which today only runs once at `Authenticate()` time.
+    cluster-specific `--server-id` discovered during `DescribeCluster`, rather than only warning
+    when it differs from the well-known default. Requires threading a scope parameter back into
+    the provider's token-acquisition call, which today only runs once at `Authenticate()` time.
 2. **ACR admin/service-principal auth modes**: today only AAD-token-based login is supported,
-   matching `az acr login`'s primary mode; ACR admin-user credentials are out of scope.
+    matching `az acr login`'s primary mode; ACR admin-user credentials are out of scope.
 3. **CI/CD workflow for `atmos azure aks token`**: define behavior when Azure credentials come
-   from federated/managed identity in CI rather than `atmos auth login` (mirrors the same open
-   question already tracked for `atmos aws eks token`).
+    from federated/managed identity in CI rather than `atmos auth login` (mirrors the same open
+    question already tracked for `atmos aws eks token`).
 
 ## References
 
