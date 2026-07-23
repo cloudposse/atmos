@@ -43,7 +43,7 @@ func TestTFLintHandlerExecuteResolvesInputsAndBuildsResult(t *testing.T) {
 	})
 
 	runTFLint = func(_ context.Context, options *tflintscanner.Options) (*scanners.Output, *scanners.Context, error) {
-		assert.Equal(t, []string{"--chdir=$ATMOS_COMPONENT_PATH", "--format=sarif", "--minimum-failure-severity=warning"}, options.Args)
+		assert.Equal(t, []string{"--format=sarif", "--chdir=$ATMOS_COMPONENT_PATH", "--minimum-failure-severity=warning"}, options.Args)
 		assert.Equal(t, map[string]string{"TFLINT_LOG": "info"}, options.Env)
 		assert.Equal(t, scanners.OnFailureFail, options.OnFailure)
 		return &scanners.Output{Summary: &scanners.Summary{Status: scanners.StatusWarning, Title: "1 finding", Findings: []scanners.Finding{{RuleID: "terraform_unused"}}}}, nil, nil
@@ -111,8 +111,8 @@ func TestResolveTFLintArgsAppendsUserArgsToDefaults(t *testing.T) {
 	}, tflintStepConfig{Args: []string{"--minimum-failure-severity={{ .flags.severity }}"}}, vars)
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"--chdir=$ATMOS_COMPONENT_PATH",
 		"--format=sarif",
+		"--chdir=$ATMOS_COMPONENT_PATH",
 		"--minimum-failure-severity=<no value>",
 	}, args)
 }

@@ -60,6 +60,12 @@ func TestHandler_ParsesFindings(t *testing.T) {
 
 func TestHandler_RichTerminalBodyIncludesSourceExcerpt(t *testing.T) {
 	t.Setenv("GITHUB_WORKSPACE", "")
+	// Force color off so the asserted literal substrings aren't split by ANSI escape
+	// codes. Terminal color-profile detection is environment-dependent (e.g. some CI
+	// runners' output is detected as color-capable even without a TTY), and richStyle
+	// wraps each styled segment individually, so "[tflint] variables.tf:2:10" only
+	// appears contiguously when color is disabled.
+	t.Setenv("NO_COLOR", "1")
 	base := t.TempDir()
 	componentPath := filepath.Join(base, "components", "terraform", "waf")
 	require.NoError(t, os.MkdirAll(componentPath, 0o755))
