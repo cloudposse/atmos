@@ -410,73 +410,28 @@ ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 Keep this skill focused on the auth sections inside a profile, such as providers, identities, and
 keyring settings.
 
-## ECR / ACR Integrations
+## ECR/ACR and EKS/AKS Integrations
 
-ECR and ACR integrations auto-trigger on identity login when `auto_provision: true` (default):
-
-```yaml
-auth:
-  integrations:
-    dev/ecr:
-      kind: aws/ecr
-      via:
-        identity: dev-admin
-      spec:
-        auto_provision: true
-        registry:
-          account_id: "123456789012"
-          region: us-east-2
-
-    dev/acr:
-      kind: azure/acr
-      via:
-        identity: azure-dev
-      spec:
-        auto_provision: true
-        registry:
-          name: myregistry
-```
-
-`spec.registry` is a single shared struct across both kinds — `account_id`/`region` apply to
-`aws/ecr`, `name`/`tenant_id` apply to `azure/acr`; each integration reads only the fields its
-`kind` needs. Integration failures are non-blocking during `atmos auth login`. Use
-`atmos aws ecr login` / `atmos azure acr login` to retry. See
-[atmos-aws-ecr](../atmos-aws-ecr/SKILL.md) and [atmos-azure-acr](../atmos-azure-acr/SKILL.md) for
-command details.
-
-## EKS / AKS Integrations
-
-EKS and AKS integrations write kubeconfig entries on identity login when `auto_provision: true`
-(default):
+Registry login (`aws/ecr`, `azure/acr`) and kubeconfig provisioning (`aws/eks`, `azure/aks`)
+auto-trigger on identity login when `auto_provision: true` (default). `spec.registry` and
+`spec.cluster` are single structs shared across both clouds — each integration's `kind` picks
+which fields matter (`account_id`/`region` vs `name`/`tenant_id`; `name`/`region` vs
+`name`/`resource_group`/`subscription_id`):
 
 ```yaml
 auth:
   integrations:
-    dev/eks:
-      kind: aws/eks
-      via:
-        identity: dev-admin
-      spec:
-        cluster:
-          name: dev-cluster
-          region: us-east-2
-
-    dev/aks:
-      kind: azure/aks
-      via:
-        identity: azure-dev
-      spec:
-        cluster:
-          name: dev-cluster
-          resource_group: dev-rg
+    dev/ecr: { kind: aws/ecr, via: { identity: dev-admin }, spec: { registry: { account_id: "123456789012", region: us-east-2 } } }
+    dev/acr: { kind: azure/acr, via: { identity: azure-dev }, spec: { registry: { name: myregistry } } }
+    dev/eks: { kind: aws/eks, via: { identity: dev-admin }, spec: { cluster: { name: dev-cluster, region: us-east-2 } } }
+    dev/aks: { kind: azure/aks, via: { identity: azure-dev }, spec: { cluster: { name: dev-cluster, resource_group: dev-rg } } }
 ```
 
-`spec.cluster` is the same shared struct for both kinds — `name`/`region` apply to `aws/eks`,
-`name`/`resource_group`/`subscription_id` apply to `azure/aks`. See
-[atmos-aws-eks](../atmos-aws-eks/SKILL.md) and [atmos-azure-aks](../atmos-azure-aks/SKILL.md) for
-command details, including the kubectl exec-credential-plugin token commands
-(`atmos aws eks token` / `atmos azure aks token`) each integration wires into the generated
-kubeconfig.
+Integration failures are non-blocking during `atmos auth login`; retry with
+`atmos aws ecr login` / `atmos azure acr login` / `atmos aws eks update-kubeconfig` /
+`atmos azure aks update-kubeconfig`. See [atmos-aws-ecr](../atmos-aws-ecr/SKILL.md),
+[atmos-azure-acr](../atmos-azure-acr/SKILL.md), [atmos-aws-eks](../atmos-aws-eks/SKILL.md), and
+[atmos-azure-aks](../atmos-azure-aks/SKILL.md) for command details.
 
 ## GitHub STS Integration
 
