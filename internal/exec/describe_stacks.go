@@ -153,6 +153,14 @@ const (
 type DescribeStacksErrorOptions struct {
 	OnError   OnErrorMode
 	OnWarning func(DegradationWarning)
+	// OnProgress, when non-nil, is called once per stack file immediately before it's
+	// processed — stackFile is the file name, index is 0-based, total is the number of
+	// stack files describe-stacks will visit this call (both counted before filtering by
+	// includeEmptyStacks, so total is a stable upper bound even though some files are
+	// skipped). Bundled onto this struct (rather than a new parameter) purely for plumbing
+	// convenience — it shares the same threading path as OnError/OnWarning. Optional; a nil
+	// OnProgress is a no-op, matching every existing caller's behavior exactly.
+	OnProgress func(stackFile string, index, total int)
 }
 
 // ResolveErrorMode determines the effective --error-mode value using the documented
@@ -368,7 +376,14 @@ func executeDescribeStacks(
 		processor.withDegradation(errOptions.OnWarning)
 	}
 
+	totalStackFiles := len(stacksMap)
+	stackFileIndex := 0
 	for stackFileName, stackSection := range stacksMap {
+		if errOptions.OnProgress != nil {
+			errOptions.OnProgress(stackFileName, stackFileIndex, totalStackFiles)
+		}
+		stackFileIndex++
+
 		stackMap, ok := stackSection.(map[string]any)
 		if !ok {
 			continue
