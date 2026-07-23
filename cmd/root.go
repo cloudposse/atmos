@@ -1061,6 +1061,8 @@ const (
 	experimentalNoticeEmitted    = "true"
 )
 
+var writeExperimentalNotice = ui.Experimental
+
 // showExperimentalCommandNotice emits an experimental warning at most once for a command execution.
 // Cobra integrations can invoke a persistent pre-run more than once while setting up a command.
 func showExperimentalCommandNotice(cmd *cobra.Command, feature string) {
@@ -1075,7 +1077,7 @@ func showExperimentalCommandNotice(cmd *cobra.Command, feature string) {
 	}
 
 	cmd.Annotations[experimentalNoticeAnnotation] = experimentalNoticeEmitted
-	ui.Experimental(feature)
+	writeExperimentalNotice(feature)
 }
 
 func resetExperimentalCommandNotices(cmd *cobra.Command) {

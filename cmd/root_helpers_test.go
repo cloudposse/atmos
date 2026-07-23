@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -31,32 +30,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
-
-type experimentalNoticeRecorder struct {
-	mu sync.Mutex
-	ui strings.Builder
-}
-
-func (r *experimentalNoticeRecorder) Record(stream, content string) {
-	if stream != "e" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.ui.WriteString(content)
-}
-
-func (r *experimentalNoticeRecorder) Reset() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.ui.Reset()
-}
-
-func (r *experimentalNoticeRecorder) UI() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.ui.String()
-}
 
 // TestCleanupLogFile tests log file cleanup functionality.
 func TestCleanupLogFile(t *testing.T) {
@@ -1243,8 +1216,15 @@ func TestFindExperimentalParent_RegistryBased(t *testing.T) {
 func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 	_ = NewTestKit(t)
 	t.Setenv("ATMOS_EXPERIMENTAL", "warn")
-	recorder := &experimentalNoticeRecorder{}
-	t.Cleanup(iolib.SetRecorder(recorder))
+	var output strings.Builder
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	writeExperimentalNotice = func(feature string) {
+		output.WriteString(feature)
+		output.WriteByte('\n')
+	}
+	t.Cleanup(func() {
+		writeExperimentalNotice = originalWriteExperimentalNotice
+	})
 
 	command := &cobra.Command{
 		Use:         "experimental-notice-test",
@@ -1259,17 +1239,17 @@ func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 	t.Cleanup(func() { RootCmd.RemoveCommand(command) })
 
 	runCommand := func() string {
-		recorder.Reset()
+		output.Reset()
 		iolib.Reset()
 		RootCmd.SetArgs([]string{"experimental-notice-test"})
 		require.NoError(t, Execute())
-		return recorder.UI()
+		return output.String()
 	}
 	t.Cleanup(iolib.Reset)
 
 	for range 2 {
 		output := runCommand()
-		assert.Equal(t, 1, strings.Count(output, "experimental-notice-test is an experimental feature"))
+		assert.Equal(t, 1, strings.Count(output, "experimental-notice-test"))
 	}
 }
 
