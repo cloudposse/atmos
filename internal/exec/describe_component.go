@@ -489,6 +489,9 @@ func detectComponentType(
 		if err == nil {
 			return result, nil
 		}
+		if errors.Is(err, errUtils.ErrDuplicateComponentConfig) {
+			return result, err
+		}
 		if !errors.Is(err, errUtils.ErrInvalidComponent) {
 			return result, err
 		}

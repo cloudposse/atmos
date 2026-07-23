@@ -1,0 +1,11 @@
+vars:
+  environment: dev
+  stage: conflict
+
+components:
+  terraform:
+    shared:
+      metadata:
+        component: mock
+      vars:
+        name: shared

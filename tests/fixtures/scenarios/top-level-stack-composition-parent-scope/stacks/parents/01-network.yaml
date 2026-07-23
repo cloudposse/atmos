@@ -1,0 +1,13 @@
+vars:
+  environment: dev
+  stage: scoped
+  owner: network
+
+components:
+  terraform:
+    dns-primary:
+      metadata:
+        component: mock
+      vars:
+        name: dns-primary
+        hostname: primary.example.com

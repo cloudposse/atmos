@@ -546,15 +546,131 @@ func extractAndAddLocalsToContext(
 
 // stackProcessResult holds the result of processing a single stack in parallel.
 type stackProcessResult struct {
-	index         int
-	stackFileName string
-	yamlConfig    string
-	finalConfig   map[string]any
-	stackConfig   map[string]any
-	importsConfig map[string]map[string]any
-	uniqueImports []string
-	mergeContext  *m.MergeContext
-	err           error
+	index            int
+	stackFileName    string
+	yamlConfig       string
+	finalConfig      map[string]any
+	deepMergedConfig map[string]any
+	stackConfig      map[string]any
+	importsConfig    map[string]map[string]any
+	uniqueImports    []string
+	mergeContext     *m.MergeContext
+	err              error
+}
+
+// logicalStackIdentity returns the canonical identity used to group top-level
+// manifests. Component configuration is deliberately not merged between group
+// members; the group exists only to make distinct inherited base components
+// visible while each component retains its owning manifest's scope.
+func logicalStackIdentity(atmosConfig *schema.AtmosConfiguration, stackFileName string, stackConfig map[string]any) (string, error) {
+	if stackManifestName := getStackManifestName(stackConfig); stackManifestName != "" {
+		return stackManifestName, nil
+	}
+
+	if atmosConfig.Stacks.NameTemplate != "" {
+		return ProcessTmpl(atmosConfig, "top-level-stack-identity", atmosConfig.Stacks.NameTemplate, stackConfig, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+	}
+
+	if atmosConfig.Stacks.NamePattern != "" {
+		vars, _ := stackConfig[cfg.VarsSectionName].(map[string]any)
+		return cfg.GetContextPrefix(stackFileName, cfg.GetContextFromVars(vars), GetStackNamePattern(atmosConfig), stackFileName)
+	}
+
+	return stackFileName, nil
+}
+
+// addPeerComponentsForInheritance makes a logical stack's distinct component
+// definitions available to peers for metadata.inherits resolution. It never
+// overwrites a component owned by the receiving manifest, and callers filter
+// the processed result back to its original component set afterwards.
+func addPeerComponentsForInheritance(atmosConfig *schema.AtmosConfiguration, results []stackProcessResult) error {
+	groups := make(map[string][]int)
+	for i := range results {
+		identity, err := logicalStackIdentity(atmosConfig, results[i].stackFileName, results[i].deepMergedConfig)
+		if err != nil {
+			return err
+		}
+		groups[identity] = append(groups[identity], i)
+	}
+
+	for _, indexes := range groups {
+		if len(indexes) < 2 {
+			continue
+		}
+
+		sort.Slice(indexes, func(i, j int) bool {
+			return results[indexes[i]].stackFileName < results[indexes[j]].stackFileName
+		})
+
+		registry := map[string]map[string]any{}
+		for _, index := range indexes {
+			components, _ := results[index].deepMergedConfig[cfg.ComponentsSectionName].(map[string]any)
+			for componentType, componentsValue := range components {
+				componentsMap, ok := componentsValue.(map[string]any)
+				if !ok {
+					continue
+				}
+				if registry[componentType] == nil {
+					registry[componentType] = map[string]any{}
+				}
+				for componentName, componentConfig := range componentsMap {
+					if _, exists := registry[componentType][componentName]; !exists {
+						registry[componentType][componentName] = componentConfig
+					}
+				}
+			}
+		}
+
+		for _, index := range indexes {
+			deepMergedConfig, err := m.DeepCopyMap(results[index].deepMergedConfig)
+			if err != nil {
+				return err
+			}
+			components, _ := deepMergedConfig[cfg.ComponentsSectionName].(map[string]any)
+			if components == nil {
+				components = map[string]any{}
+				deepMergedConfig[cfg.ComponentsSectionName] = components
+			}
+			for componentType, registryComponents := range registry {
+				componentsMap, _ := components[componentType].(map[string]any)
+				if componentsMap == nil {
+					componentsMap = map[string]any{}
+					components[componentType] = componentsMap
+				}
+				for componentName, componentConfig := range registryComponents {
+					if _, exists := componentsMap[componentName]; !exists {
+						componentsMap[componentName] = componentConfig
+					}
+				}
+			}
+			results[index].deepMergedConfig = deepMergedConfig
+		}
+	}
+
+	return nil
+}
+
+// retainOwnedComponents removes peer components injected solely to resolve
+// metadata.inherits, preserving parent-scoped component output.
+func retainOwnedComponents(finalConfig, originalConfig map[string]any) {
+	finalComponents, _ := finalConfig[cfg.ComponentsSectionName].(map[string]any)
+	originalComponents, _ := originalConfig[cfg.ComponentsSectionName].(map[string]any)
+	if finalComponents == nil || originalComponents == nil {
+		return
+	}
+
+	for componentType, finalComponentsValue := range finalComponents {
+		finalComponentsMap, ok := finalComponentsValue.(map[string]any)
+		if !ok {
+			continue
+		}
+		originalComponentsMap, _ := originalComponents[componentType].(map[string]any)
+		for componentName := range finalComponentsMap {
+			if _, owned := originalComponentsMap[componentName]; !owned {
+				delete(finalComponentsMap, componentName)
+			}
+		}
+	}
 }
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
@@ -650,48 +766,18 @@ func ProcessYAMLConfigFiles(
 			uniqueImports := u.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
-			componentStackMap := map[string]map[string][]string{}
-
-			finalConfig, err := ProcessStackConfig(
-				atmosConfig,
-				stackBasePath,
-				terraformComponentsBasePath,
-				helmfileComponentsBasePath,
-				packerComponentsBasePath,
-				ansibleComponentsBasePath,
-				p,
-				processingResult.DeepMergedConfig,
-				processStackDeps,
-				processComponentDeps,
-				"",
-				componentStackMap,
-				processingResult.ImportsConfig,
-				true,
-			)
-			if err != nil {
-				results <- stackProcessResult{index: i, err: err}
-				return
-			}
-
-			finalConfig["imports"] = uniqueImports
-
-			yamlConfig, err := u.ConvertToYAML(finalConfig)
-			if err != nil {
-				results <- stackProcessResult{index: i, err: err}
-				return
-			}
-
-			// Send result via channel (lock-free).
+			// Send imported, unprocessed configuration. The caller first groups
+			// logically identical parent manifests so metadata.inherits can see
+			// distinct peer-owned components without merging parent scopes.
 			results <- stackProcessResult{
-				index:         i,
-				stackFileName: stackFileName,
-				yamlConfig:    yamlConfig,
-				finalConfig:   finalConfig,
-				stackConfig:   processingResult.StackConfig,
-				importsConfig: processingResult.ImportsConfig,
-				uniqueImports: uniqueImports,
-				mergeContext:  mergeContext,
-				err:           nil,
+				index:            i,
+				stackFileName:    stackFileName,
+				deepMergedConfig: processingResult.DeepMergedConfig,
+				stackConfig:      processingResult.StackConfig,
+				importsConfig:    processingResult.ImportsConfig,
+				uniqueImports:    uniqueImports,
+				mergeContext:     mergeContext,
+				err:              nil,
 			}
 		}(i, filePath)
 	}
@@ -702,11 +788,65 @@ func ProcessYAMLConfigFiles(
 		close(results)
 	}()
 
-	// Collect all results from channel (no lock contention).
+	// Collect all import-processing results from the channel (no lock contention).
+	processedResults := make([]stackProcessResult, count)
 	for result := range results {
 		if result.err != nil {
 			return nil, nil, nil, result.err
 		}
+		processedResults[result.index] = result
+	}
+
+	originalConfigs := make([]map[string]any, count)
+	for i := range processedResults {
+		originalConfig, err := m.DeepCopyMap(processedResults[i].deepMergedConfig)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		originalConfigs[i] = originalConfig
+	}
+
+	if err := addPeerComponentsForInheritance(atmosConfig, processedResults); err != nil {
+		return nil, nil, nil, err
+	}
+
+	for i := range processedResults {
+		result := &processedResults[i]
+		filePath := filePaths[result.index]
+		stackBasePath := stacksBasePath
+		if len(stackBasePath) < 1 {
+			stackBasePath = filepath.Dir(filePath)
+		}
+
+		componentStackMap := map[string]map[string][]string{}
+		finalConfig, err := ProcessStackConfig(
+			atmosConfig,
+			stackBasePath,
+			terraformComponentsBasePath,
+			helmfileComponentsBasePath,
+			packerComponentsBasePath,
+			ansibleComponentsBasePath,
+			filePath,
+			result.deepMergedConfig,
+			processStackDeps,
+			processComponentDeps,
+			"",
+			componentStackMap,
+			result.importsConfig,
+			true,
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		retainOwnedComponents(finalConfig, originalConfigs[i])
+		finalConfig["imports"] = result.uniqueImports
+		yamlConfig, err := u.ConvertToYAML(finalConfig)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		result.finalConfig = finalConfig
+		result.yamlConfig = yamlConfig
 
 		// Store merge context for this stack file if provenance tracking is enabled.
 		if atmosConfig != nil && atmosConfig.TrackProvenance && result.mergeContext != nil && result.mergeContext.IsProvenanceEnabled() {

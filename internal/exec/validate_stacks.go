@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
@@ -97,7 +96,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	errorList, err := checkComponentStackMap(terraformComponentStackMap)
+	errorList, err := checkComponentStackMap(stacksMap, cfg.TerraformSectionName, terraformComponentStackMap)
 	if err != nil {
 		return err
 	}
@@ -108,7 +107,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	errorList, err = checkComponentStackMap(helmfileComponentStackMap)
+	errorList, err = checkComponentStackMap(stacksMap, cfg.HelmfileSectionName, helmfileComponentStackMap)
 	if err != nil {
 		return err
 	}
@@ -213,7 +212,8 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
-	// Second pass: only process top-level files (not imported by others)
+	// Second pass: process every top-level file for schema validation. The
+	// earlier FindStacksMap call resolves component inheritance as logical groups.
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		relativeFilePath := u.TrimBasePathFromPath(atmosConfig.StacksBaseAbsolutePath+"/", filePath)
 
@@ -229,11 +229,10 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			log.Debug("Skipping imported file (will be processed via parent)", "file", relativeFilePath)
 			continue
 		}
-
 		// Create a new merge context to track import chain for better error messages
 		mergeContext := m.NewMergeContext()
 
-		processingResult, _, err := ProcessYAMLConfigFileWithContext(
+		_, _, err := ProcessYAMLConfigFileWithContext(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -253,28 +252,6 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		if err != nil {
 			// Collect the error from ProcessYAMLConfigFile
 			validationErrorMessages = append(validationErrorMessages, err.Error())
-		} else {
-			// Only process stack config if YAML processing succeeded
-			// This avoids duplicate error reporting for the same issue
-			_, err = ProcessStackConfig(
-				atmosConfig,
-				atmosConfig.StacksBaseAbsolutePath,
-				atmosConfig.TerraformDirAbsolutePath,
-				atmosConfig.HelmfileDirAbsolutePath,
-				atmosConfig.PackerDirAbsolutePath,
-				atmosConfig.AnsibleDirAbsolutePath,
-				filePath,
-				processingResult.DeepMergedConfig,
-				false,
-				true,
-				"",
-				map[string]map[string][]string{},
-				processingResult.ImportsConfig,
-				false,
-			)
-			if err != nil {
-				validationErrorMessages = append(validationErrorMessages, err.Error())
-			}
 		}
 	}
 
@@ -405,7 +382,7 @@ func createComponentStackMap(
 	return terraformComponentStackMap, nil
 }
 
-func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([]string, error) {
+func checkComponentStackMap(stacksMap map[string]any, componentType string, componentStackMap map[string]map[string][]string) ([]string, error) {
 	defer perf.Track(nil, "exec.checkComponentStackMap")()
 
 	var res []string
@@ -418,42 +395,29 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-						Component:            componentName,
-						Stack:                stackManifestName,
-						ProcessTemplates:     false,
-						ProcessYamlFunctions: false,
-						Skip:                 nil,
-						AuthManager:          nil,
-					})
-					if err != nil {
-						return nil, err
+					stackConfig, ok := stacksMap[stackManifestName].(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("could not find stack manifest '%s'", stackManifestName)
 					}
-
-					// Hide the sections that should not be compared
-					componentConfig["atmos_cli_config"] = nil
-					componentConfig["atmos_stack"] = nil
-					componentConfig["stack"] = nil
-					componentConfig["atmos_stack_file"] = nil
-					componentConfig["atmos_manifest"] = nil
-					componentConfig["sources"] = nil
-					componentConfig["imports"] = nil
-					componentConfig["deps_all"] = nil
-					componentConfig["deps"] = nil
+					components, ok := stackConfig[cfg.ComponentsSectionName].(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("components section is missing in stack manifest '%s'", stackManifestName)
+					}
+					componentTypeConfig, ok := components[componentType].(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("components.%s section is missing in stack manifest '%s'", componentType, stackManifestName)
+					}
+					componentConfig, ok := componentTypeConfig[componentName].(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("component '%s' is missing in stack manifest '%s'", componentName, stackManifestName)
+					}
 
 					componentConfigs = append(componentConfigs, componentConfig)
 				}
 
-				componentConfigsEqual := true
+				configsAreEqual := componentConfigsEqual(componentConfigs)
 
-				for i := 0; i < len(componentConfigs)-1; i++ {
-					if !reflect.DeepEqual(componentConfigs[i], componentConfigs[i+1]) {
-						componentConfigsEqual = false
-						break
-					}
-				}
-
-				if !componentConfigsEqual {
+				if !configsAreEqual {
 					var m1 string
 					for _, stackManifestName := range stackManifests {
 						m1 = m1 + "\n" + fmt.Sprintf("- atmos describe component %s -s %s", componentName, stackManifestName)
