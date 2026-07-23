@@ -3,8 +3,9 @@ package azure
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,20 +17,37 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const azureCLIHelperEnv = "GO_WANT_AZURE_CLI_HELPER"
+
+func TestCLIProviderHelperProcess(t *testing.T) {
+	if os.Getenv(azureCLIHelperEnv) != "1" {
+		return
+	}
+
+	for i, arg := range os.Args {
+		if arg == "--resource" && i+1 < len(os.Args) && os.Args[i+1] == "custom-server-id" {
+			if _, err := fmt.Fprint(os.Stdout, `{"accessToken":"aks-token","expiresOn":"2026-03-17T12:00:00Z"}`); err != nil {
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+	}
+
+	if _, err := fmt.Fprint(os.Stdout, `{"accessToken":"management-token","expiresOn":"2026-03-17T12:00:00Z","subscription":"sub-456"}`); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 func TestCLIProvider_Authenticate_UsesClusterServerID(t *testing.T) {
-	azPath := filepath.Join(t.TempDir(), "az")
-	azScript := `#!/bin/sh
-case "$*" in
-  *"--resource custom-server-id"*)
-    echo '{"accessToken":"aks-token","expiresOn":"2026-03-17T12:00:00Z"}'
-    ;;
-  *)
-    echo '{"accessToken":"management-token","expiresOn":"2026-03-17T12:00:00Z","subscription":"sub-456"}'
-    ;;
-esac
-`
-	require.NoError(t, os.WriteFile(azPath, []byte(azScript), 0o700))
-	t.Setenv("PATH", filepath.Dir(azPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	originalNewCommandContext := newCommandContext
+	t.Cleanup(func() { newCommandContext = originalNewCommandContext })
+	newCommandContext = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		cmdArgs := append([]string{"-test.run=^TestCLIProviderHelperProcess$", "--"}, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cmdArgs...)
+		cmd.Env = append(os.Environ(), azureCLIHelperEnv+"=1")
+		return cmd
+	}
 
 	provider := &cliProvider{
 		name:           "test",
