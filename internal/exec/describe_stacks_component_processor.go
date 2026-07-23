@@ -176,8 +176,14 @@ func shouldResolvePerComponentAuth(processTemplates, processYamlFunctions bool) 
 // It returns the parent AuthManager unchanged when per-component resolution is
 // disabled (see shouldResolvePerComponentAuth) or when the component does not
 // declare its own default identity in its auth section. When the component
-// declares a default identity, resolver errors are fatal: falling back to the
-// parent manager could read the wrong backend/account.
+// declares a default identity, resolver errors are fatal by default: falling
+// back to the parent manager could silently read the wrong backend/account
+// for a manager that *did* resolve, just not to what was declared. In warn/silent
+// mode (p.onWarning set), a construction FAILURE — no manager was built at all,
+// as opposed to one resolving to an unexpected identity — is instead reported as
+// a degradation warning and this component falls back to the parent manager,
+// matching the same "recoverable, substitute, continue" pattern YAML-function
+// processing already uses for e.g. a not-yet-provisioned backend.
 func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentSection map[string]any,
 	componentName, stackName string,
@@ -207,6 +213,15 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
 	if createErr != nil {
+		if p.onWarning != nil {
+			p.onWarning(DegradationWarning{
+				Stack:     stackName,
+				Component: componentName,
+				Function:  "auth",
+				Reason:    createErr.Error(),
+			})
+			return componentAuthManager, nil
+		}
 		return componentAuthManager, fmt.Errorf("%w: failed to resolve auth for component %q in stack %q: %w", errUtils.ErrAuthManager, componentName, stackName, createErr)
 	}
 	result := componentAuthManager

@@ -903,9 +903,11 @@ func ExecuteWorkflow(
 					break
 				}
 				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-					DryRun:      dryRun,
-					FinalStack:  finalStack,
-					AtmosConfig: &atmosConfig,
+					DryRun:        dryRun,
+					FinalStack:    finalStack,
+					AtmosConfig:   &atmosConfig,
+					ToolchainPATH: tenv.PATH(),
+					AuthManager:   authManager,
 				})
 			}
 			if err != nil {
@@ -960,9 +962,11 @@ func ExecuteWorkflow(
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
-	DryRun      bool
-	FinalStack  string
-	AtmosConfig *schema.AtmosConfiguration
+	DryRun        bool
+	FinalStack    string
+	AtmosConfig   *schema.AtmosConfiguration
+	ToolchainPATH string
+	AuthManager   auth.AuthManager
 }
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
@@ -974,7 +978,7 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Set workflow context for output mode inheritance.
 	stepExecutorState.SetWorkflow(workflow)
-	stepExecutorState.SetAtmosConfig(opts.AtmosConfig)
+	configureStepScannerContext(stepExecutorState.Variables(), opts.AtmosConfig, opts.ToolchainPATH, opts.AuthManager)
 
 	// Add environment variables to the executor.
 	for _, env := range envVars {
@@ -993,6 +997,35 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	stepCopy.Stack = opts.FinalStack
 	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
+}
+
+func configureStepScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {
+	if vars == nil {
+		return
+	}
+	vars.SetAtmosConfig(atmosConfig)
+	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			ComponentType:    componentType,
+			StackFromArg:     stack,
+			Stack:            stack,
+		}
+		stackConfig, err := config.InitCliConfig(info, true)
+		if err != nil {
+			return nil, err
+		}
+		var authForStack auth.AuthManager
+		if stackConfig.CliConfigPath == atmosConfig.CliConfigPath {
+			authForStack = authManager
+		}
+		resolved, err := ProcessStacks(&stackConfig, info, true, true, false, nil, authForStack)
+		if err != nil {
+			return nil, err
+		}
+		return &resolved, nil
+	})
 }
 
 // ResetStepExecutorState resets the step executor state.
