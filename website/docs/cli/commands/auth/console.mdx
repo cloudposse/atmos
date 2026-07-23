@@ -298,7 +298,7 @@ atmos auth console --issuer platform-team --duration 4h
 
 **Problem**: You're using permanent IAM user credentials instead of temporary credentials.
 
-**Solution**: AWS console access requires temporary credentials with a session token. Atmos obtains these automatically for `aws/user` identities; other identities should use AWS IAM Identity Center, SAML, or assumed roles.
+**Solution**: AWS console access requires temporary credentials with a session token. Atmos obtains these automatically for `aws/user` identities; other identities should use AWS IAM Identity Center or SAML.
 
 ### "Failed to open browser automatically"
 
