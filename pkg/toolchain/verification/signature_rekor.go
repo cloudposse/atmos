@@ -91,8 +91,8 @@ const cosignHTTPFetchMarker = "server returned HTTP "
 
 var cosignHTTPFetchRetryableStatuses = []string{"429", "500", "502", "503", "504"}
 
-// classifyCosignError joins ErrSignatureRetryable into err when the cosign
-// output contains a known transient failure marker. Three classes qualify:
+// classifySignatureVerificationError joins ErrSignatureRetryable into err when
+// signature-verifier output contains a known transient failure marker. Three classes qualify:
 // Sigstore Rekor API flakes (rekorFlakeMarkers, tlog 5xx), transport-level
 // network errors (transportFlakeMarkers), and generic upstream HTTP 5xx/429
 // responses cosign surfaces when it directly fetches a URL
@@ -102,41 +102,70 @@ var cosignHTTPFetchRetryableStatuses = []string{"429", "500", "502", "503", "504
 // flakes and transport failures — real signature failures (tampering,
 // expired cert, identity mismatch, missing signature) must surface
 // immediately on the first attempt.
-func classifyCosignError(err error) error {
-	defer perf.Track(nil, "verification.classifyCosignError")()
+func classifySignatureVerificationError(err error) error {
+	defer perf.Track(nil, "verification.classifySignatureVerificationError")()
 
 	if err == nil {
 		return nil
 	}
 	msg := err.Error()
-	for _, marker := range rekorFlakeMarkers {
-		if strings.Contains(msg, marker) {
-			return errors.Join(errUtils.ErrSignatureRetryable, err)
-		}
-	}
-	for _, marker := range transportFlakeMarkers {
-		if strings.Contains(msg, marker) {
-			return errors.Join(errUtils.ErrSignatureRetryable, err)
-		}
-	}
-	if strings.Contains(msg, rekorTlogEndpointMarker) {
-		for _, status := range rekorTlog5xxStatuses {
-			if strings.Contains(msg, rekorTlogEndpointMarker+status+"]") {
-				return errors.Join(errUtils.ErrSignatureRetryable, err)
-			}
-		}
-	}
-	if isRekorStreamInternalError(msg) {
+	if isRetryableSignatureError(msg) {
 		return errors.Join(errUtils.ErrSignatureRetryable, err)
 	}
-	if strings.Contains(msg, cosignHTTPFetchMarker) {
-		for _, status := range cosignHTTPFetchRetryableStatuses {
-			if strings.Contains(msg, cosignHTTPFetchMarker+status) {
-				return errors.Join(errUtils.ErrSignatureRetryable, err)
-			}
+	return err
+}
+
+// isRetryableSignatureError reports whether msg matches one of the known
+// transient-failure marker categories: Sigstore Rekor API flakes
+// (rekorFlakeMarkers), transport-level network errors (transportFlakeMarkers),
+// Rekor tlog 5xx responses, Rekor stream internal errors, or generic upstream
+// HTTP 5xx/429 responses cosign surfaces when it directly fetches a URL. Kept
+// as a single predicate so classifySignatureVerificationError stays a flat
+// check-then-wrap pipeline.
+func isRetryableSignatureError(msg string) bool {
+	return matchesAnyMarker(msg, rekorFlakeMarkers) ||
+		matchesAnyMarker(msg, transportFlakeMarkers) ||
+		hasRekorTlog5xxStatus(msg) ||
+		isRekorStreamInternalError(msg) ||
+		hasCosignHTTPFetchRetryableStatus(msg)
+}
+
+// matchesAnyMarker reports whether msg contains any of the given substrings.
+func matchesAnyMarker(msg string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(msg, marker) {
+			return true
 		}
 	}
-	return err
+	return false
+}
+
+// hasRekorTlog5xxStatus reports whether msg is a Rekor tlog retrieve-endpoint
+// error carrying one of rekorTlog5xxStatuses.
+func hasRekorTlog5xxStatus(msg string) bool {
+	if !strings.Contains(msg, rekorTlogEndpointMarker) {
+		return false
+	}
+	for _, status := range rekorTlog5xxStatuses {
+		if strings.Contains(msg, rekorTlogEndpointMarker+status+"]") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCosignHTTPFetchRetryableStatus reports whether msg is a direct cosign
+// HTTP fetch failure carrying one of cosignHTTPFetchRetryableStatuses.
+func hasCosignHTTPFetchRetryableStatus(msg string) bool {
+	if !strings.Contains(msg, cosignHTTPFetchMarker) {
+		return false
+	}
+	for _, status := range cosignHTTPFetchRetryableStatuses {
+		if strings.Contains(msg, cosignHTTPFetchMarker+status) {
+			return true
+		}
+	}
+	return false
 }
 
 func isRekorStreamInternalError(msg string) bool {
