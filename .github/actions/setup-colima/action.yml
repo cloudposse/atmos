@@ -54,8 +54,15 @@ runs:
 
         run_with_timeout 420 brew install colima docker
 
+        # Colima/Lima occasionally leaves the VM half-started on macOS runners
+        # (SSH/DHCP timeout while QEMU is still exiting). Start from a clean
+        # instance and retry before failing the job. Also preflight Docker
+        # and pull the k3s image here so emulator startup does not discover a
+        # broken runtime halfway through `atmos test`.
         start_colima() {
           local status=1
+
+          run_with_timeout 180 colima delete --data --force || true
 
           for vm_type in vz qemu; do
             if [ "$vm_type" = "qemu" ]; then
@@ -64,7 +71,9 @@ runs:
 
             for attempt in 1 2; do
               echo "::group::Start Colima (${vm_type}) attempt ${attempt}"
-              if run_with_timeout 480 colima start --runtime docker --vm-type "$vm_type" --cpu 2 --memory 4 --disk 20; then
+              if run_with_timeout 480 colima start --runtime docker --vm-type "$vm_type" --cpu 2 --memory 4 --disk 20 \
+                && run_with_timeout 120 docker info \
+                && run_with_timeout 600 docker pull rancher/k3s:latest; then
                 echo "::endgroup::"
                 return 0
               fi
@@ -73,7 +82,7 @@ runs:
               echo "::endgroup::"
               diagnose_colima
 
-              run_with_timeout 180 colima delete -f || true
+              run_with_timeout 180 colima delete --data --force || true
               sleep $((attempt * 20))
             done
           done
