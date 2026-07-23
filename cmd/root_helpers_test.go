@@ -1215,6 +1215,7 @@ func TestFindExperimentalParent_RegistryBased(t *testing.T) {
 
 func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EXPERIMENTAL", "warn")
 
 	command := &cobra.Command{
 		Use:         "experimental-notice-test",
