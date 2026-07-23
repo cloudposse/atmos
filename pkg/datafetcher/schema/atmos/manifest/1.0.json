@@ -440,6 +440,15 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -586,6 +595,12 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -1119,6 +1134,12 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -2586,6 +2607,13 @@
         "command": {
           "type": "string"
         },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Command/scanner step arguments (supports templates)."
+        },
         "prompt": {
           "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
           "oneOf": [
@@ -3339,6 +3367,7 @@
                       "checkov",
                       "kics",
                       "trivy",
+                      "tflint",
                       "git",
                       "step",
                       "steps",
@@ -3848,9 +3877,7 @@
               "description": "User-defined tags for categorizing and filtering identities (atmos auth list/login --tags)."
             }
           },
-          "required": [
-            "kind"
-          ]
+          "required": []
         }
       ]
     },
