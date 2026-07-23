@@ -106,6 +106,13 @@ func TestLocationCell_WithRepoBaseURL_NoLine(t *testing.T) {
 // the "Location" column showing a full absolute path per finding/footnote
 // (screenshots) was fixed to stop doing.
 func TestLocationCell_ComponentRelative(t *testing.T) {
+	// componentDir must be a real, platform-correct absolute path (drive letter included
+	// on Windows) — a hardcoded Unix-style "/repo/..." string isn't absolute per
+	// filepath.IsAbs on Windows (no volume name), so the component-relative shortening
+	// this test exercises would never engage there.
+	componentDir := filepath.Join(t.TempDir(), "components", "terraform", "aws-account")
+	outsideDir := filepath.Join(t.TempDir(), "components", "terraform", "shared-module")
+
 	tests := []struct {
 		name         string
 		file         string
@@ -115,38 +122,38 @@ func TestLocationCell_ComponentRelative(t *testing.T) {
 	}{
 		{
 			name:         "file under component dir is shortened",
-			file:         "/repo/components/terraform/aws-account/account-map.deprecated.tf",
-			componentDir: "/repo/components/terraform/aws-account",
+			file:         filepath.Join(componentDir, "account-map.deprecated.tf"),
+			componentDir: componentDir,
 			line:         11,
 			wantDisplay:  "account-map.deprecated.tf:11",
 		},
 		{
 			name:         "nested file under component dir is shortened",
-			file:         "/repo/components/terraform/aws-account/modules/nested/main.tf",
-			componentDir: "/repo/components/terraform/aws-account",
+			file:         filepath.Join(componentDir, "modules", "nested", "main.tf"),
+			componentDir: componentDir,
 			line:         4,
 			wantDisplay:  "modules/nested/main.tf:4",
 		},
 		{
 			name:         "componentDir unset leaves file unchanged",
-			file:         "/repo/components/terraform/aws-account/account-map.deprecated.tf",
+			file:         filepath.Join(componentDir, "account-map.deprecated.tf"),
 			componentDir: "",
 			line:         9,
-			wantDisplay:  "/repo/components/terraform/aws-account/account-map.deprecated.tf:9",
+			wantDisplay:  filepath.Join(componentDir, "account-map.deprecated.tf") + ":9",
 		},
 		{
 			name:         "file outside componentDir falls back to full path",
-			file:         "/repo/components/terraform/shared-module/main.tf",
-			componentDir: "/repo/components/terraform/aws-account",
+			file:         filepath.Join(outsideDir, "main.tf"),
+			componentDir: componentDir,
 			line:         2,
-			wantDisplay:  "/repo/components/terraform/shared-module/main.tf:2",
+			wantDisplay:  filepath.Join(outsideDir, "main.tf") + ":2",
 		},
 		{
 			name:         "relative file with absolute componentDir falls back to full path",
-			file:         "components/terraform/aws-account/account-map.deprecated.tf",
-			componentDir: "/repo/components/terraform/aws-account",
+			file:         filepath.Join("components", "terraform", "aws-account", "account-map.deprecated.tf"),
+			componentDir: componentDir,
 			line:         9,
-			wantDisplay:  "components/terraform/aws-account/account-map.deprecated.tf:9",
+			wantDisplay:  filepath.Join("components", "terraform", "aws-account", "account-map.deprecated.tf") + ":9",
 		},
 	}
 	for _, tt := range tests {
