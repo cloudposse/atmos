@@ -1210,6 +1210,20 @@ func TestFindExperimentalParent_RegistryBased(t *testing.T) {
 	})
 }
 
+func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
+	cmd := &cobra.Command{Use: "experimental"}
+
+	assert.Nil(t, cmd.Annotations)
+	showExperimentalCommandNotice(cmd, "experimental")
+	assert.Equal(t, experimentalNoticeEmitted, cmd.Annotations[experimentalNoticeAnnotation])
+
+	showExperimentalCommandNotice(cmd, "experimental")
+	assert.Len(t, cmd.Annotations, 1)
+
+	resetExperimentalCommandNotices(cmd)
+	assert.NotContains(t, cmd.Annotations, experimentalNoticeAnnotation)
+}
+
 // TestIsTopLevelCommand tests the isTopLevelCommand helper.
 func TestIsTopLevelCommand(t *testing.T) {
 	root := &cobra.Command{Use: "atmos"}
