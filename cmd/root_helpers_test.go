@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -20,6 +22,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1211,17 +1214,43 @@ func TestFindExperimentalParent_RegistryBased(t *testing.T) {
 }
 
 func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
-	cmd := &cobra.Command{Use: "experimental"}
+	_ = NewTestKit(t)
 
-	assert.Nil(t, cmd.Annotations)
-	showExperimentalCommandNotice(cmd, "experimental")
-	assert.Equal(t, experimentalNoticeEmitted, cmd.Annotations[experimentalNoticeAnnotation])
+	command := &cobra.Command{
+		Use:         "experimental-notice-test",
+		Annotations: map[string]string{"experimental": "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Simulate an integration that invokes the root pre-run a second time.
+			RootCmd.PersistentPreRun(cmd, args)
+			return nil
+		},
+	}
+	RootCmd.AddCommand(command)
+	t.Cleanup(func() { RootCmd.RemoveCommand(command) })
 
-	showExperimentalCommandNotice(cmd, "experimental")
-	assert.Len(t, cmd.Annotations, 1)
+	runCommand := func() string {
+		reader, writer, err := os.Pipe()
+		assert.NoError(t, err)
 
-	resetExperimentalCommandNotices(cmd)
-	assert.NotContains(t, cmd.Annotations, experimentalNoticeAnnotation)
+		oldStderr := os.Stderr
+		os.Stderr = writer
+		t.Cleanup(func() { os.Stderr = oldStderr })
+
+		iolib.Reset()
+		RootCmd.SetArgs([]string{"experimental-notice-test"})
+		assert.NoError(t, Execute())
+		assert.NoError(t, writer.Close())
+
+		output, err := io.ReadAll(reader)
+		assert.NoError(t, err)
+		return string(output)
+	}
+	t.Cleanup(iolib.Reset)
+
+	for range 2 {
+		output := runCommand()
+		assert.Equal(t, 1, strings.Count(output, "experimental-notice-test is an experimental feature"))
+	}
 }
 
 // TestIsTopLevelCommand tests the isTopLevelCommand helper.
