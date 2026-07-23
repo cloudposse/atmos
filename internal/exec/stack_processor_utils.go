@@ -568,15 +568,39 @@ func logicalStackIdentity(atmosConfig *schema.AtmosConfiguration, stackFileName 
 	}
 
 	if atmosConfig.Stacks.NameTemplate != "" {
-		return ProcessTmpl(atmosConfig, "top-level-stack-identity", atmosConfig.Stacks.NameTemplate, stackConfig, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+		identity, err := ProcessTmpl(atmosConfig, "top-level-stack-identity", atmosConfig.Stacks.NameTemplate, stackConfig, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+		if err == nil {
+			return identity, nil
+		}
+		if isMissingStackIdentityContext(err) {
+			return stackFileName, nil
+		}
+		return "", err
 	}
 
 	if atmosConfig.Stacks.NamePattern != "" {
 		vars, _ := stackConfig[cfg.VarsSectionName].(map[string]any)
-		return cfg.GetContextPrefix(stackFileName, cfg.GetContextFromVars(vars), GetStackNamePattern(atmosConfig), stackFileName)
+		identity, err := cfg.GetContextPrefix(stackFileName, cfg.GetContextFromVars(vars), GetStackNamePattern(atmosConfig), stackFileName)
+		if err == nil {
+			return identity, nil
+		}
+		if isMissingStackIdentityContext(err) {
+			return stackFileName, nil
+		}
+		return "", err
 	}
 
 	return stackFileName, nil
+}
+
+// isMissingStackIdentityContext identifies a name template or pattern that
+// needs component-level context unavailable in a raw parent manifest. The
+// parent remains isolated until normal component resolution determines its
+// canonical stack identity.
+func isMissingStackIdentityContext(err error) bool {
+	message := err.Error()
+	return strings.Contains(message, "map has no entry for key") ||
+		strings.Contains(message, "context part that is not defined")
 }
 
 // addPeerComponentsForInheritance makes a logical stack's distinct component

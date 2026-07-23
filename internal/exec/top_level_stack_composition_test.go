@@ -154,3 +154,28 @@ func TestTopLevelStackCompositionRejectsCrossLogicalStackInheritance(t *testing.
 	assert.Contains(t, err.Error(), "component 'chatops'")
 	assert.Contains(t, err.Error(), "inherits from 'dns-primary'")
 }
+
+func TestLogicalStackIdentityDefersMissingComponentContext(t *testing.T) {
+	tests := []struct {
+		name         string
+		stacksConfig schema.Stacks
+	}{
+		{
+			name:         "name template",
+			stacksConfig: schema.Stacks{NameTemplate: "{{ .vars.stage }}"},
+		},
+		{
+			name:         "name pattern",
+			stacksConfig: schema.Stacks{NamePattern: "{stage}"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{Stacks: tt.stacksConfig}
+			identity, err := logicalStackIdentity(atmosConfig, "parents/component-scoped", map[string]any{})
+			require.NoError(t, err)
+			assert.Equal(t, "parents/component-scoped", identity)
+		})
+	}
+}
