@@ -343,7 +343,7 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 	// Try to get an AKS-scoped token silently, for `atmos azure aks token`.
 	aksResult, err := client.AcquireTokenSilent(
 		ctx,
-		[]string{azureCloud.AKSServerScope},
+		[]string{azureCloud.AKSServerScopeFromContext(ctx)},
 		public.WithSilentAccount(account),
 	)
 	if err == nil {
@@ -446,7 +446,7 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 	log.Debug("Requesting AKS token")
 	aksResult, err := client.AcquireTokenSilent(
 		ctx,
-		[]string{azureCloud.AKSServerScope},
+		[]string{azureCloud.AKSServerScopeFromContext(ctx)},
 		public.WithSilentAccount(account),
 	)
 	if err != nil {

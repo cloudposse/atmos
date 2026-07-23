@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -54,6 +55,7 @@ Examples:
 var (
 	loadDefaultAzureCredentials = azureCloud.LoadDefaultAzureCredentials
 	getAuthorizationToken       = azureCloud.GetAuthorizationToken
+	loginParser                 *flags.StandardParser
 )
 
 func executeLoginCommand(cmd *cobra.Command, args []string) error {
@@ -66,7 +68,7 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 
 	// Get flag values (errors are ignored as flags are guaranteed to exist by Cobra).
 	identityName, _ := cmd.Flags().GetString("identity")
-	registries, _ := cmd.Flags().GetStringArray("registry")
+	registries, _ := cmd.Flags().GetStringSlice("registry")
 
 	// Get integration name from positional argument.
 	var integrationName string
@@ -76,6 +78,9 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 
 	// Case 1: Explicit registries — no Atmos config needed, uses ambient Azure credentials.
 	if len(registries) > 0 {
+		if identityName != "" || integrationName != "" {
+			return fmt.Errorf("%w: --registry cannot be combined with --identity or an integration argument", errUtils.ErrMutuallyExclusiveFlags)
+		}
 		return executeExplicitRegistries(ctx, registries)
 	}
 
@@ -206,18 +211,13 @@ var createAuthManager = func(authConfig *schema.AuthConfig, cliConfigPath string
 }
 
 func init() {
-	// Add --identity flag locally since this command is outside the auth command tree.
-	loginCmd.Flags().StringP("identity", "i", "", "Specify the target identity to use for linked integrations.")
-
-	// Set NoOptDefVal to enable optional flag value.
-	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
-	identityFlag := loginCmd.Flags().Lookup("identity")
-	if identityFlag != nil {
-		identityFlag.NoOptDefVal = cfg.IdentityFlagSelectValue
-	}
-
-	// Add --registry as a local flag specific to login.
-	loginCmd.Flags().StringArrayP("registry", "r", nil, "ACR registry login server URL(s) - explicit mode")
+	// Register command-local flags through the standard parser so identity keeps
+	// its optional-value behavior and flag definitions remain consistent.
+	loginParser = flags.NewStandardParser(
+		flags.WithIdentityFlag(),
+		flags.WithStringSliceFlag("registry", "r", nil, "ACR registry login server URL(s) - explicit mode"),
+	)
+	loginParser.RegisterFlags(loginCmd)
 
 	AcrCmd.AddCommand(loginCmd)
 }

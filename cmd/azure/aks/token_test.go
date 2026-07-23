@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -40,6 +41,7 @@ func newTestTokenCmd() *cobra.Command {
 	cmd.Flags().String("cluster-name", "", "AKS cluster name")
 	cmd.Flags().String("resource-group", "", "Azure resource group")
 	cmd.Flags().String("subscription-id", "", "Azure subscription ID")
+	cmd.Flags().String("server-id", "", "AKS AAD server application ID")
 	cmd.Flags().StringP("identity", "i", "", "Atmos identity")
 	return cmd
 }
@@ -86,6 +88,8 @@ func TestTokenCmd_HasFlags(t *testing.T) {
 	require.NotNil(t, identityFlag)
 	assert.Equal(t, "", identityFlag.DefValue)
 	assert.Equal(t, "i", identityFlag.Shorthand)
+
+	assert.NotNil(t, tokenCmd.Flags().Lookup("server-id"))
 }
 
 func TestTokenCmd_NoArgs(t *testing.T) {
@@ -292,7 +296,8 @@ func TestExecuteTokenCommand_TokenGenerationFailure(t *testing.T) {
 	initCliConfigFn = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
 		return mockAuthConfig(), nil
 	}
-	authenticateForTokenFn = func(_ context.Context, _ *schema.AuthConfig, _, _ string) (types.ICredentials, error) {
+	authenticateForTokenFn = func(ctx context.Context, _ *schema.AuthConfig, _, _ string) (types.ICredentials, error) {
+		assert.Equal(t, "custom-server-id/.default", azureCloud.AKSServerScopeFromContext(ctx))
 		return mockAzureCreds(), nil
 	}
 	getAKSTokenFn = func(_ types.ICredentials) (string, time.Time, error) {
@@ -303,6 +308,7 @@ func TestExecuteTokenCommand_TokenGenerationFailure(t *testing.T) {
 	_ = cmd.Flags().Set("cluster-name", "my-cluster")
 	_ = cmd.Flags().Set("resource-group", "my-rg")
 	_ = cmd.Flags().Set("identity", "azure-dev")
+	_ = cmd.Flags().Set("server-id", "custom-server-id")
 
 	err := executeTokenCommand(cmd, []string{})
 	require.Error(t, err)

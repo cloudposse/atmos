@@ -503,6 +503,32 @@ func TestAKSIntegration_FindClusterID_NoMatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "no cluster resource ID found matching missing-cluster")
 }
 
+func TestAKSIntegration_FindClusterID_DisambiguatesResourceGroup(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+
+	const clusterName = "shared-cluster"
+	wrongID := "/subscriptions/sub-123/resourceGroups/other-rg/providers/Microsoft.ContainerService/managedClusters/" + clusterName
+	wantID := "/subscriptions/sub-123/resourceGroups/target-rg/providers/Microsoft.ContainerService/managedClusters/" + clusterName
+	for alias, id := range map[string]string{"other": wrongID, "target": wantID} {
+		_, err = mgr.WriteClusterConfig(&kube.ClusterInfo{
+			Name:       clusterName,
+			Endpoint:   "https://example.hcp.eastus.azmk8s.io:443",
+			ID:         id,
+			Region:     "target-rg",
+			UserPrefix: "aks",
+			ExecArgs:   []string{"azure", "aks", "token"},
+		}, alias, "merge")
+		require.NoError(t, err)
+	}
+
+	integration := &AKSIntegration{cluster: &schema.Cluster{Name: clusterName, ResourceGroup: "TARGET-RG"}}
+	got, err := integration.findClusterID(mgr)
+	require.NoError(t, err)
+	assert.Equal(t, wantID, got)
+}
+
 func TestAKSIntegrationRegistration(t *testing.T) {
 	assert.True(t, integrations.IsRegistered(integrations.KindAzureAKS))
 }

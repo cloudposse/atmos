@@ -284,10 +284,10 @@ func (a *AKSIntegration) findClusterID(mgr *kube.KubeconfigManager) (string, err
 		return "", err
 	}
 
-	// Look for a resource ID ending with "/managedClusters/<name>".
-	suffix := "/managedClusters/" + a.cluster.Name
+	// Include the resource group so same-named clusters cannot collide.
+	suffix := "/resourceGroups/" + a.cluster.ResourceGroup + "/providers/Microsoft.ContainerService/managedClusters/" + a.cluster.Name
 	for _, id := range clusters {
-		if strings.HasSuffix(id, suffix) {
+		if strings.HasSuffix(strings.ToLower(id), strings.ToLower(suffix)) {
 			return id, nil
 		}
 	}
