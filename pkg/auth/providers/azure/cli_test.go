@@ -3,6 +3,8 @@ package azure
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,8 +12,39 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestCLIProvider_Authenticate_UsesClusterServerID(t *testing.T) {
+	azPath := filepath.Join(t.TempDir(), "az")
+	azScript := `#!/bin/sh
+case "$*" in
+  *"--resource custom-server-id"*)
+    echo '{"accessToken":"aks-token","expiresOn":"2026-03-17T12:00:00Z"}'
+    ;;
+  *)
+    echo '{"accessToken":"management-token","expiresOn":"2026-03-17T12:00:00Z","subscription":"sub-456"}'
+    ;;
+esac
+`
+	require.NoError(t, os.WriteFile(azPath, []byte(azScript), 0o700))
+	t.Setenv("PATH", filepath.Dir(azPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	provider := &cliProvider{
+		name:           "test",
+		tenantID:       "tenant-123",
+		subscriptionID: "sub-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+	ctx := azureCloud.ContextWithAKSServerID(context.Background(), "custom-server-id")
+	creds, err := provider.Authenticate(ctx)
+	require.NoError(t, err)
+
+	azureCreds, ok := creds.(*authTypes.AzureCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "aks-token", azureCreds.AKSToken)
+}
 
 func TestNewCLIProvider(t *testing.T) {
 	tests := []struct {

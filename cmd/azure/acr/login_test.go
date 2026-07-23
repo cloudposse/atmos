@@ -55,6 +55,7 @@ func TestLoginCmd_HasIdentityFlag(t *testing.T) {
 	identityFlag := loginCmd.Flags().Lookup("identity")
 	require.NotNil(t, identityFlag)
 	assert.Equal(t, "i", identityFlag.Shorthand)
+	assert.Equal(t, cfg.IdentityFlagSelectValue, identityFlag.NoOptDefVal)
 }
 
 func TestLoginCmd_NoPublicFlag(t *testing.T) {
@@ -83,7 +84,7 @@ func TestLoginCmd_FlagDefaults(t *testing.T) {
 	registryFlag := loginCmd.Flags().Lookup("registry")
 	require.NotNil(t, registryFlag)
 	assert.Equal(t, "[]", registryFlag.DefValue)
-	assert.Equal(t, "stringArray", registryFlag.Value.Type())
+	assert.Equal(t, "stringSlice", registryFlag.Value.Type())
 }
 
 func TestLoginCmd_CommandStructure(t *testing.T) {
@@ -370,7 +371,7 @@ func TestExecuteWithAuthManager_IdentityIntegrations(t *testing.T) {
 func newTestLoginCmd() *cobra.Command {
 	c := &cobra.Command{Use: "login", RunE: executeLoginCommand}
 	c.Flags().StringP("identity", "i", "", "")
-	c.Flags().StringArrayP("registry", "r", nil, "")
+	c.Flags().StringSliceP("registry", "r", nil, "")
 	return c
 }
 
@@ -395,4 +396,32 @@ func TestExecuteLoginCommand_Dispatch(t *testing.T) {
 		err := executeLoginCommand(c, nil)
 		require.NoError(t, err)
 	})
+
+	for _, tt := range []struct {
+		name     string
+		identity string
+		args     []string
+	}{
+		{name: "identity", identity: "azure-dev"},
+		{name: "integration argument", args: []string{"dev/acr"}},
+	} {
+		t.Run("explicit registry rejects "+tt.name, func(t *testing.T) {
+			origLoadCreds := loadDefaultAzureCredentials
+			t.Cleanup(func() { loadDefaultAzureCredentials = origLoadCreds })
+			loadDefaultAzureCredentials = func(context.Context) (*authTypes.AzureCredentials, error) {
+				t.Fatal("explicit registry authentication must not start for conflicting input")
+				return nil, nil
+			}
+
+			c := newTestLoginCmd()
+			require.NoError(t, c.Flags().Set("registry", reg))
+			if tt.identity != "" {
+				require.NoError(t, c.Flags().Set("identity", tt.identity))
+			}
+
+			err := executeLoginCommand(c, tt.args)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+		})
+	}
 }

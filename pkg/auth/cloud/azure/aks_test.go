@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -276,6 +277,7 @@ func TestBuildKubeClusterInfo_WithIdentity(t *testing.T) {
 		ID:                       "/subscriptions/sub-123/resourceGroups/myRG/providers/Microsoft.ContainerService/managedClusters/mycluster",
 		Endpoint:                 "https://mycluster.hcp.eastus.azmk8s.io:443",
 		CertificateAuthorityData: "dGVzdA==",
+		ServerID:                 "custom-server-id",
 	}
 
 	clusterInfo := BuildKubeClusterInfo(info, "azure-dev")
@@ -286,10 +288,17 @@ func TestBuildKubeClusterInfo_WithIdentity(t *testing.T) {
 	assert.Equal(t, info.ID, clusterInfo.ID)
 	assert.Equal(t, "myRG", clusterInfo.Region)
 	assert.Equal(t, "aks", clusterInfo.UserPrefix)
-	assert.Equal(t, []string{"azure", "aks", "token", "--cluster-name", "mycluster", "--resource-group", "myRG", "--subscription-id", "sub-123", "--identity=azure-dev"}, clusterInfo.ExecArgs)
+	assert.Equal(t, []string{"azure", "aks", "token", "--cluster-name", "mycluster", "--resource-group", "myRG", "--server-id", "custom-server-id", "--subscription-id", "sub-123", "--identity=azure-dev"}, clusterInfo.ExecArgs)
 	require.Len(t, clusterInfo.ExecEnv, 1)
 	assert.Equal(t, "ATMOS_IDENTITY", clusterInfo.ExecEnv[0].Name)
 	assert.Equal(t, "azure-dev", clusterInfo.ExecEnv[0].Value)
+}
+
+func TestAKSServerScopeFromContext(t *testing.T) {
+	assert.Equal(t, AKSServerScope, AKSServerScopeFromContext(context.Background()))
+
+	ctx := ContextWithAKSServerID(context.Background(), "custom-server-id")
+	assert.Equal(t, "custom-server-id/.default", AKSServerScopeFromContext(ctx))
 }
 
 func TestBuildKubeClusterInfo_WithoutIdentity(t *testing.T) {

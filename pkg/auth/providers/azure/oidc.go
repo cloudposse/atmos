@@ -299,7 +299,7 @@ func (p *oidcProvider) acquireAdditionalTokens(ctx context.Context, federatedTok
 	// Acquire an AKS-scoped token, for `atmos azure aks token` (optional).
 	go func() {
 		defer wg.Done()
-		aksResp, err := p.exchangeToken(ctx, federatedToken, azureCloud.AKSServerScope)
+		aksResp, err := p.exchangeToken(ctx, federatedToken, azureCloud.AKSServerScopeFromContext(ctx))
 		if err != nil {
 			log.Debug("Failed to acquire AKS token (atmos azure aks token may not work)", "error", err)
 			return

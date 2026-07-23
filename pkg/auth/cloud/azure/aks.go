@@ -41,6 +41,26 @@ type AKSClusterInfo struct {
 	TenantID string
 }
 
+type aksServerIDContextKey struct{}
+
+// ContextWithAKSServerID records the cluster's AAD server application ID for
+// the Azure provider that authenticates the kubeconfig exec-plugin request.
+func ContextWithAKSServerID(ctx context.Context, serverID string) context.Context {
+	if serverID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, aksServerIDContextKey{}, serverID)
+}
+
+// AKSServerScopeFromContext returns the requested AKS AAD scope, falling back
+// to the well-known AKS server application when no cluster-specific ID exists.
+func AKSServerScopeFromContext(ctx context.Context) string {
+	if serverID, ok := ctx.Value(aksServerIDContextKey{}).(string); ok && serverID != "" {
+		return serverID + "/.default"
+	}
+	return AKSServerScope
+}
+
 // AKSClient defines the interface for AKS API calls (for testability).
 //
 //go:generate mockgen -destination=mock_aks_client_test.go -package=azure -source=aks.go AKSClient
@@ -214,6 +234,9 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 		info.Name,
 		"--resource-group",
 		info.ResourceGroup,
+	}
+	if info.ServerID != "" {
+		execArgs = append(execArgs, "--server-id", info.ServerID)
 	}
 	if info.SubscriptionID != "" {
 		execArgs = append(execArgs, "--subscription-id", info.SubscriptionID)

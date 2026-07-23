@@ -92,6 +92,7 @@ func executeTokenCommand(cmd *cobra.Command, _ []string) error {
 	// Authenticate to get credentials.
 	// Skip integrations to avoid rewriting the kubeconfig during token generation.
 	ctx := auth.ContextWithSkipIntegrations(context.Background())
+	ctx = azureCloud.ContextWithAKSServerID(ctx, req.serverID)
 	creds, err := authenticateForTokenFn(ctx, &atmosConfig.Auth, atmosConfig.CliConfigPath, req.identityName)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrAKSTokenGeneration, err)
@@ -107,25 +108,25 @@ func executeTokenCommand(cmd *cobra.Command, _ []string) error {
 }
 
 // tokenRequest bundles the parsed cluster-name/resource-group/subscription-id/
-// identity flags for the token command, returned by parseTokenRequest.
+// identity/server-id flags for the token command, returned by parseTokenRequest.
 type tokenRequest struct {
 	clusterName    string
 	resourceGroup  string
 	subscriptionID string
 	identityName   string
+	serverID       string
 }
 
 // parseTokenRequest extracts and validates the cluster-name/resource-group/
 // subscription-id/identity flags for the token command.
-// --cluster-name/--resource-group/--subscription-id are accepted (and
-// required to parse successfully) because the kubeconfig exec plugin always
-// passes them, but the current token generation path (GetToken) only needs
-// the already-authenticated identity's cached AKS-scoped token — they're
-// surfaced here for debug logging only.
+// --cluster-name/--resource-group/--subscription-id are accepted because the
+// kubeconfig exec plugin passes them. When present, --server-id selects the
+// cluster's AAD server audience for the authentication flow.
 func parseTokenRequest(cmd *cobra.Command) (tokenRequest, error) {
 	clusterName, _ := cmd.Flags().GetString("cluster-name")
 	resourceGroup, _ := cmd.Flags().GetString("resource-group")
 	subscriptionID, _ := cmd.Flags().GetString("subscription-id")
+	serverID, _ := cmd.Flags().GetString("server-id")
 
 	if clusterName == "" {
 		return tokenRequest{}, fmt.Errorf("%w: --cluster-name is required", errUtils.ErrAKSTokenGeneration)
@@ -143,6 +144,7 @@ func parseTokenRequest(cmd *cobra.Command) (tokenRequest, error) {
 		resourceGroup:  resourceGroup,
 		subscriptionID: subscriptionID,
 		identityName:   identityName,
+		serverID:       serverID,
 	}, nil
 }
 
@@ -240,6 +242,7 @@ func init() {
 	tokenCmd.Flags().String("cluster-name", "", "AKS cluster name (required)")
 	tokenCmd.Flags().String("resource-group", "", "Azure resource group (required)")
 	tokenCmd.Flags().String("subscription-id", "", "Azure subscription ID (optional, falls back to identity's subscription)")
+	tokenCmd.Flags().String("server-id", "", "AKS AAD server application ID (internal kubeconfig exec setting)")
 	tokenCmd.Flags().StringP("identity", "i", "", "Atmos identity to authenticate with")
 	AksCmd.AddCommand(tokenCmd)
 }

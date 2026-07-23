@@ -154,7 +154,9 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// Acquire an AKS-scoped token, for `atmos azure aks token` (best-effort,
 	// non-fatal — az CLI-backed identities without AKS access simply won't
 	// have an AKSToken populated).
-	if aksResp, err := p.executeAzCommand(ctx, azureCloud.AKSServerAppID); err != nil {
+	aksScope := azureCloud.AKSServerScopeFromContext(ctx)
+	aksResource := strings.TrimSuffix(aksScope, "/.default")
+	if aksResp, err := p.executeAzCommand(ctx, aksResource); err != nil {
 		log.Debug("Failed to acquire AKS token via az CLI, atmos azure aks token may not work", "error", err)
 	} else if aksExpiresOn, err := parseAzureCLITime(aksResp.ExpiresOn); err != nil {
 		log.Debug("Failed to parse AKS token expiration via az CLI, atmos azure aks token may not work", "error", err)
