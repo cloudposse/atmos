@@ -3041,6 +3041,81 @@
       },
       "type": "object"
     },
+    "Cluster": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the cluster name (required by both aws/eks and azure/aks)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the AWS region where the cluster is located (required for aws/eks)."
+        },
+        "resource_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ResourceGroup is the Azure resource group containing the cluster (required for azure/aks)."
+        },
+        "subscription_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SubscriptionID optionally overrides the Azure subscription used to address\nthe cluster (azure/aks); defaults to the identity's subscription."
+        },
+        "alias": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Alias is the context name in kubeconfig (optional, defaults to the cluster ARN/resource ID)."
+        },
+        "kubeconfig": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KubeconfigSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Kubeconfig contains kubeconfig file settings (optional)."
+        }
+      },
+      "type": "object",
+      "description": "Cluster represents a Kubernetes cluster configuration shared by aws/eks\nand azure/aks integrations. Each integration kind reads only the fields it\nneeds: aws/eks requires Name+Region; azure/aks requires Name+ResourceGroup."
+    },
     "Command": {
       "properties": {
         "name": {
@@ -4401,85 +4476,6 @@
         }
       },
       "type": "object"
-    },
-    "ECRRegistry": {
-      "properties": {
-        "account_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "region": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "type": "object",
-      "description": "ECRRegistry represents an ECR registry configuration for aws/ecr integrations."
-    },
-    "EKSCluster": {
-      "properties": {
-        "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Name is the EKS cluster name (required)."
-        },
-        "region": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Region is the AWS region where the cluster is located (required)."
-        },
-        "alias": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Alias is the context name in kubeconfig (optional, defaults to cluster ARN)."
-        },
-        "kubeconfig": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/KubeconfigSettings"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ],
-          "description": "Kubeconfig contains kubeconfig file settings (optional)."
-        }
-      },
-      "type": "object",
-      "description": "EKSCluster represents an EKS cluster configuration for aws/eks integrations."
     },
     "EditorConfig": {
       "properties": {
@@ -5953,7 +5949,7 @@
         "registry": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ECRRegistry"
+              "$ref": "#/$defs/Registry"
             },
             {
               "type": "null"
@@ -5962,12 +5958,12 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Single ECR registry for aws/ecr integrations."
+          "description": "Registry for aws/ecr and azure/acr integrations."
         },
         "cluster": {
           "anyOf": [
             {
-              "$ref": "#/$defs/EKSCluster"
+              "$ref": "#/$defs/Cluster"
             },
             {
               "type": "null"
@@ -5976,7 +5972,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "EKS cluster for aws/eks integrations."
+          "description": "Cluster for aws/eks and azure/aks integrations."
         },
         "repos": {
           "anyOf": [
@@ -8190,6 +8186,56 @@
       },
       "type": "object",
       "description": "ProvisionWorkdirSettings contains default settings for workdir provisioning."
+    },
+    "Registry": {
+      "properties": {
+        "account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "AccountID is the AWS account ID (required for aws/ecr)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the AWS region (required for aws/ecr)."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the Azure Container Registry name (required for azure/acr).\nThe login server is Name + \".azurecr.io\"."
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "TenantID optionally overrides the Azure AD tenant used for the ACR\nOAuth2 token exchange (azure/acr); defaults to the identity's tenant."
+        }
+      },
+      "type": "object",
+      "description": "Registry represents a container registry configuration shared by aws/ecr\nand azure/acr integrations. Each integration kind reads only the fields it\nneeds: aws/ecr requires AccountID+Region; azure/acr requires Name and\noptionally TenantID."
     },
     "ResourcePath": {
       "properties": {

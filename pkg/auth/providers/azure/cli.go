@@ -112,13 +112,14 @@ func (p *cliProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.cliProvider.Authenticate")()
 
-	log.Debug("Authenticating with Azure CLI",
+	log.Debug(
+		"Authenticating with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 	)
 
 	// Execute az command and parse response.
-	tokenResp, err := p.executeAzCommand(ctx)
+	tokenResp, err := p.executeAzCommand(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +151,21 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		CloudEnvironment: p.cloudEnv.Name,
 	}
 
-	log.Debug("Successfully authenticated with Azure CLI",
+	// Acquire an AKS-scoped token, for `atmos azure aks token` (best-effort,
+	// non-fatal — az CLI-backed identities without AKS access simply won't
+	// have an AKSToken populated).
+	if aksResp, err := p.executeAzCommand(ctx, azureCloud.AKSServerAppID); err != nil {
+		log.Debug("Failed to acquire AKS token via az CLI, atmos azure aks token may not work", "error", err)
+	} else if aksExpiresOn, err := parseAzureCLITime(aksResp.ExpiresOn); err != nil {
+		log.Debug("Failed to parse AKS token expiration via az CLI, atmos azure aks token may not work", "error", err)
+	} else {
+		creds.AKSToken = aksResp.AccessToken
+		creds.AKSTokenExpiration = aksExpiresOn.Format(time.RFC3339)
+		log.Debug("Acquired AKS token via az CLI", "expiresOn", creds.AKSTokenExpiration)
+	}
+
+	log.Debug(
+		"Successfully authenticated with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"subscription", subscriptionID,
@@ -160,11 +175,17 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 }
 
 // executeAzCommand executes the az CLI command and returns the token response.
-func (p *cliProvider) executeAzCommand(ctx context.Context) (*azureCliTokenResponse, error) {
+// An empty resource requests a token for the default Azure Resource Manager
+// audience; a non-empty resource (an app ID or App ID URI) requests a token
+// scoped to that resource instead (e.g., the AKS-managed server app).
+func (p *cliProvider) executeAzCommand(ctx context.Context, resource string) (*azureCliTokenResponse, error) {
 	// Build az command args.
 	args := []string{"account", "get-access-token", "--tenant", p.tenantID}
 	if p.subscriptionID != "" {
 		args = append(args, "--subscription", p.subscriptionID)
+	}
+	if resource != "" {
+		args = append(args, "--resource", resource)
 	}
 	args = append(args, "--output", "json")
 

@@ -890,6 +890,12 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				assert.Equal(t, "tenant-123", creds.TenantID)
 				assert.Equal(t, "sub-789", creds.SubscriptionID)
 				assert.NotEmpty(t, creds.Expiration)
+				// acquireAdditionalTokens exchanges the same federated token
+				// against the same test server for Graph/KeyVault/AKS scopes
+				// (the handler doesn't distinguish by scope), confirming the
+				// AKS-scope goroutine runs and populates AzureCredentials.
+				assert.NotEmpty(t, creds.AKSToken)
+				assert.NotEmpty(t, creds.AKSTokenExpiration)
 			},
 		},
 		{

@@ -166,9 +166,9 @@ type IntegrationVia struct {
 
 // IntegrationSpec defines the spec configuration for integrations.
 type IntegrationSpec struct {
-	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
-	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
-	Cluster       *EKSCluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // EKS cluster for aws/eks integrations.
+	AutoProvision *bool     `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
+	Registry      *Registry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Registry for aws/ecr and azure/acr integrations.
+	Cluster       *Cluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // Cluster for aws/eks and azure/aks integrations.
 
 	// GitHub STS integration (github/sts) fields.
 	Repos         []string `yaml:"repos,omitempty" json:"repos,omitempty" mapstructure:"repos"`                               // Optional source repos (sent as sts sources[]).
@@ -178,21 +178,44 @@ type IntegrationSpec struct {
 	TokenEnv      string   `yaml:"token_env,omitempty" json:"token_env,omitempty" mapstructure:"token_env"`                   // Env var name to export the raw minted token under: a literal (e.g. "GH_TOKEN") or a Go template over .owner/.host (e.g. "GH_TOKEN_{{ .owner }}"). Empty defaults to "ATMOS_PRO_GITHUB_TOKEN" so the token bridges to gh/REST and Atmos's in-process git detector.
 }
 
-// ECRRegistry represents an ECR registry configuration for aws/ecr integrations.
-type ECRRegistry struct {
-	AccountID string `yaml:"account_id" json:"account_id" mapstructure:"account_id"`
-	Region    string `yaml:"region" json:"region" mapstructure:"region"`
+// Registry represents a container registry configuration shared by aws/ecr
+// and azure/acr integrations. Each integration kind reads only the fields it
+// needs: aws/ecr requires AccountID+Region; azure/acr requires Name and
+// optionally TenantID.
+type Registry struct {
+	// AccountID is the AWS account ID (required for aws/ecr).
+	AccountID string `yaml:"account_id,omitempty" json:"account_id,omitempty" mapstructure:"account_id"`
+
+	// Region is the AWS region (required for aws/ecr).
+	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+
+	// Name is the Azure Container Registry name (required for azure/acr).
+	// The login server is Name + ".azurecr.io".
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+
+	// TenantID optionally overrides the Azure AD tenant used for the ACR
+	// OAuth2 token exchange (azure/acr); defaults to the identity's tenant.
+	TenantID string `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty" mapstructure:"tenant_id"`
 }
 
-// EKSCluster represents an EKS cluster configuration for aws/eks integrations.
-type EKSCluster struct {
-	// Name is the EKS cluster name (required).
+// Cluster represents a Kubernetes cluster configuration shared by aws/eks
+// and azure/aks integrations. Each integration kind reads only the fields it
+// needs: aws/eks requires Name+Region; azure/aks requires Name+ResourceGroup.
+type Cluster struct {
+	// Name is the cluster name (required by both aws/eks and azure/aks).
 	Name string `yaml:"name" json:"name" mapstructure:"name"`
 
-	// Region is the AWS region where the cluster is located (required).
-	Region string `yaml:"region" json:"region" mapstructure:"region"`
+	// Region is the AWS region where the cluster is located (required for aws/eks).
+	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
 
-	// Alias is the context name in kubeconfig (optional, defaults to cluster ARN).
+	// ResourceGroup is the Azure resource group containing the cluster (required for azure/aks).
+	ResourceGroup string `yaml:"resource_group,omitempty" json:"resource_group,omitempty" mapstructure:"resource_group"`
+
+	// SubscriptionID optionally overrides the Azure subscription used to address
+	// the cluster (azure/aks); defaults to the identity's subscription.
+	SubscriptionID string `yaml:"subscription_id,omitempty" json:"subscription_id,omitempty" mapstructure:"subscription_id"`
+
+	// Alias is the context name in kubeconfig (optional, defaults to the cluster ARN/resource ID).
 	Alias string `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 
 	// Kubeconfig contains kubeconfig file settings (optional).

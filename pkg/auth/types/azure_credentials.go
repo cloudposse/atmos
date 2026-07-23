@@ -40,6 +40,11 @@ type AzureCredentials struct {
 	// CloudEnvironment is the Azure cloud environment name ("public", "usgovernment", "china").
 	// Used to select correct endpoints when writing MSAL cache entries.
 	CloudEnvironment string `json:"cloud_environment,omitempty"`
+	// AKSToken is an AAD access token scoped to the AKS-managed server
+	// application, used by `atmos azure aks token` to authenticate kubectl.
+	AKSToken string `json:"aks_token,omitempty"`
+	// AKSTokenExpiration is the RFC3339 expiration timestamp for AKSToken.
+	AKSTokenExpiration string `json:"aks_token_expiration,omitempty"`
 }
 
 // IsExpired returns true if the credentials are expired.
@@ -89,8 +94,8 @@ func (c *AzureCredentials) Validate(ctx context.Context) (*ValidationInfo, error
 	}
 
 	// Create a token credential from the access token.
-	tokenCred := &staticTokenCredential{
-		token: azcore.AccessToken{
+	tokenCred := &StaticTokenCredential{
+		Token: azcore.AccessToken{
 			Token:     c.AccessToken,
 			ExpiresOn: time.Time{}, // Will be validated via API call
 		},
@@ -126,12 +131,15 @@ func (c *AzureCredentials) Validate(ctx context.Context) (*ValidationInfo, error
 	return info, nil
 }
 
-// staticTokenCredential implements azcore.TokenCredential for static access tokens.
-type staticTokenCredential struct {
-	token azcore.AccessToken
+// StaticTokenCredential implements azcore.TokenCredential for static access
+// tokens. Exported so other packages (e.g. pkg/auth/cloud/azure) can build
+// ARM SDK clients from an already-acquired Atmos credential without
+// duplicating this wrapper.
+type StaticTokenCredential struct {
+	Token azcore.AccessToken
 }
 
 // GetToken returns the static access token.
-func (c *staticTokenCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return c.token, nil
+func (c *StaticTokenCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return c.Token, nil
 }

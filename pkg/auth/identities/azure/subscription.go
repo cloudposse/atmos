@@ -86,7 +86,8 @@ func (i *subscriptionIdentity) GetProviderName() (string, error) {
 func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authTypes.ICredentials) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.subscriptionIdentity.Authenticate")()
 
-	log.Debug("Authenticating Azure subscription identity",
+	log.Debug(
+		"Authenticating Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
@@ -110,6 +111,8 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		GraphAPIExpiration: azureCreds.GraphAPIExpiration, // Preserve Graph API token expiration.
 		KeyVaultToken:      azureCreds.KeyVaultToken,      // Preserve KeyVault API token from provider.
 		KeyVaultExpiration: azureCreds.KeyVaultExpiration, // Preserve KeyVault token expiration.
+		AKSToken:           azureCreds.AKSToken,           // Preserve AKS-scoped token from provider.
+		AKSTokenExpiration: azureCreds.AKSTokenExpiration, // Preserve AKS token expiration.
 		ClientID:           azureCreds.ClientID,           // Preserve client ID for MSAL cache format.
 		IsServicePrincipal: azureCreds.IsServicePrincipal, // Preserve auth type for MSAL cache format.
 		TokenFilePath:      azureCreds.TokenFilePath,      // Preserve token file path for OIDC.
@@ -122,7 +125,8 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		creds.Location = azureCreds.Location
 	}
 
-	log.Debug("Successfully authenticated Azure subscription identity",
+	log.Debug(
+		"Successfully authenticated Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
@@ -185,7 +189,8 @@ func (i *subscriptionIdentity) PrepareEnvironment(ctx context.Context, environ m
 func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *authTypes.PostAuthenticateParams) error {
 	defer perf.Track(nil, "azure.subscriptionIdentity.PostAuthenticate")()
 
-	log.Debug("Post-authenticate for Azure subscription identity",
+	log.Debug(
+		"Post-authenticate for Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
@@ -224,7 +229,8 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 		return fmt.Errorf("failed to set Azure environment variables: %w", err)
 	}
 
-	log.Debug("Post-authenticate complete for Azure subscription identity",
+	log.Debug(
+		"Post-authenticate complete for Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
