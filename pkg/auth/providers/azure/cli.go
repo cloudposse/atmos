@@ -38,6 +38,8 @@ type azureCliTokenResponse struct {
 	TokenType    string `json:"tokenType"`    // Usually "Bearer"
 }
 
+var newCommandContext = exec.CommandContext
+
 // NewCLIProvider creates a new Azure CLI provider.
 func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) {
 	if config == nil {
@@ -192,7 +194,7 @@ func (p *cliProvider) executeAzCommand(ctx context.Context, resource string) (*a
 	args = append(args, "--output", "json")
 
 	// Execute az command.
-	cmd := exec.CommandContext(ctx, "az", args...)
+	cmd := newCommandContext(ctx, "az", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		outputStr := strings.TrimSpace(string(output))

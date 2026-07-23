@@ -511,15 +511,22 @@ func TestAKSIntegration_FindClusterID_DisambiguatesResourceGroup(t *testing.T) {
 	const clusterName = "shared-cluster"
 	wrongID := "/subscriptions/sub-123/resourceGroups/other-rg/providers/Microsoft.ContainerService/managedClusters/" + clusterName
 	wantID := "/subscriptions/sub-123/resourceGroups/target-rg/providers/Microsoft.ContainerService/managedClusters/" + clusterName
-	for alias, id := range map[string]string{"other": wrongID, "target": wantID} {
+	for _, tt := range []struct {
+		alias  string
+		id     string
+		region string
+	}{
+		{alias: "other", id: wrongID, region: "other-rg"},
+		{alias: "target", id: wantID, region: "target-rg"},
+	} {
 		_, err = mgr.WriteClusterConfig(&kube.ClusterInfo{
 			Name:       clusterName,
 			Endpoint:   "https://example.hcp.eastus.azmk8s.io:443",
-			ID:         id,
-			Region:     "target-rg",
+			ID:         tt.id,
+			Region:     tt.region,
 			UserPrefix: "aks",
 			ExecArgs:   []string{"azure", "aks", "token"},
-		}, alias, "merge")
+		}, tt.alias, "merge")
 		require.NoError(t, err)
 	}
 
