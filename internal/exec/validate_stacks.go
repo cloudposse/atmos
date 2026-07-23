@@ -279,10 +279,27 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	if len(validationErrorMessages) > 0 {
-		return errors.New(strings.Join(validationErrorMessages, "\n\n"))
+		return errors.New(strings.Join(dedupeStrings(validationErrorMessages), "\n\n"))
 	}
 
 	return nil
+}
+
+// dedupeStrings drops exact-duplicate entries while preserving first-seen order.
+// An imported manifest can be reached and schema-validated more than once while
+// resolving a stack's import graph, so the same violation can otherwise be
+// reported more than once for a single underlying mistake.
+func dedupeStrings(messages []string) []string {
+	seen := make(map[string]struct{}, len(messages))
+	deduped := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if _, ok := seen[msg]; ok {
+			continue
+		}
+		seen[msg] = struct{}{}
+		deduped = append(deduped, msg)
+	}
+	return deduped
 }
 
 func createComponentStackMap(
