@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -1231,19 +1232,21 @@ func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 
 	runCommand := func() string {
 		reader, writer, err := os.Pipe()
-		assert.NoError(t, err)
+		require.NoError(t, err)
+		defer func() { _ = reader.Close() }()
+		defer func() { _ = writer.Close() }()
 
 		oldStderr := os.Stderr
 		os.Stderr = writer
-		t.Cleanup(func() { os.Stderr = oldStderr })
+		defer func() { os.Stderr = oldStderr }()
 
 		iolib.Reset()
 		RootCmd.SetArgs([]string{"experimental-notice-test"})
-		assert.NoError(t, Execute())
-		assert.NoError(t, writer.Close())
+		require.NoError(t, Execute())
+		require.NoError(t, writer.Close())
 
 		output, err := io.ReadAll(reader)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return string(output)
 	}
 	t.Cleanup(iolib.Reset)
