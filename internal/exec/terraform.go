@@ -13,15 +13,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
-	"github.com/cloudposse/atmos/pkg/xdg"
+	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 )
 
 const (
-	terraformPluginCacheDirEnv              = "TF_PLUGIN_CACHE_DIR"
-	terraformPluginCacheMayBreakLockFileEnv = "TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"
+	terraformPluginCacheDirEnv              = tfplugin.CacheDirEnv
+	terraformPluginCacheMayBreakLockFileEnv = tfplugin.CacheMayBreakLockFileEnv
 
 	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
 	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
@@ -194,38 +194,31 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // It checks if the user has already set TF_PLUGIN_CACHE_DIR (via OS env or global env),
 // and if not, configures automatic caching based on atmosConfig.Components.Terraform.PluginCache.
 func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
-	// Check both OS env and global env (atmos.yaml env: section) for user override.
-	// If user has TF_PLUGIN_CACHE_DIR set to a valid path, do nothing - they manage their own cache.
-	// Invalid values (empty string or "/") are ignored with a warning, and we use our default.
-	if userCacheDir := getValidUserPluginCacheDir(atmosConfig); userCacheDir != "" {
-		log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
-		return nil
-	}
-
-	if !atmosConfig.Components.Terraform.PluginCache {
-		return nil
-	}
-
-	pluginCacheDir := atmosConfig.Components.Terraform.PluginCacheDir
-
-	// Use XDG cache directory if no custom path configured.
-	if pluginCacheDir == "" {
-		cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
-		if err != nil {
-			log.Warn("Failed to create plugin cache directory", "error", err)
-			return nil
+	override, overrideSet := pluginCacheOverride(atmosConfig)
+	cache := tfplugin.Resolve(atmosConfig, override, overrideSet)
+	if !cache.Automatic {
+		if cache.Directory != "" {
+			log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
 		}
-		pluginCacheDir = cacheDir
-	}
-
-	if pluginCacheDir == "" {
 		return nil
 	}
-
 	return []string{
-		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, pluginCacheDir),
+		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, cache.Directory),
 		fmt.Sprintf("%s=true", terraformPluginCacheMayBreakLockFileEnv),
 	}
+}
+
+// pluginCacheOverride resolves explicit user configuration with the historical
+// command-path precedence: process environment first, then atmos.yaml global env.
+func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration) (string, bool) {
+	if value, ok := os.LookupEnv(terraformPluginCacheDirEnv); ok {
+		return value, true
+	}
+	if atmosConfig != nil {
+		value, ok := atmosConfig.Env[terraformPluginCacheDirEnv]
+		return value, ok
+	}
+	return "", false
 }
 
 // getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
@@ -254,15 +247,7 @@ func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
 // isValidPluginCacheDir checks if a plugin cache directory path is valid.
 // Invalid paths (empty string or "/") are logged as warnings and return false.
 func isValidPluginCacheDir(path, source string) bool {
-	if path == "" {
-		log.Warn("TF_PLUGIN_CACHE_DIR is empty, ignoring and using Atmos default", "source", source)
-		return false
-	}
-	if path == "/" {
-		log.Warn("TF_PLUGIN_CACHE_DIR is set to root '/', ignoring and using Atmos default", "source", source)
-		return false
-	}
-	return true
+	return tfplugin.IsValidDirectory(path, source)
 }
 
 // disableTerraformPluginCacheForExecution removes Terraform/OpenTofu plugin-cache
