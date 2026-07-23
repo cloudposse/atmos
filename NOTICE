@@ -1368,6 +1368,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.12.0/sdk/internal/LICENSE.txt
 
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v6
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/containerservice/armcontainerservice/v6.6.0/sdk/resourcemanager/containerservice/armcontainerservice/LICENSE.txt
+
   - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armsubscriptions/v1.3.0/sdk/resourcemanager/resources/armsubscriptions/LICENSE.txt
