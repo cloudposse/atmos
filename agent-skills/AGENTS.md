@@ -104,6 +104,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Emulator components: AWS/GCP/Azure/Kubernetes/Vault/OpenBao/registry local emulators                                  | `atmos-emulator`        | `agent-skills/skills/atmos-emulator/SKILL.md`        |
 | Compositions: named service groupings and `atmos composition validate`                                                | `atmos-compositions`    | `agent-skills/skills/atmos-compositions/SKILL.md`    |
 | terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `agent-skills/skills/atmos-terraform/SKILL.md`       |
+| Terraform/OpenTofu linting: `atmos terraform lint`, TFLint configuration and rules, component toolchain pins, lifecycle hooks, SARIF CI findings | `atmos-lint` | `agent-skills/skills/atmos-lint/SKILL.md` |
 | helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/skills/atmos-helmfile/SKILL.md`        |
 | Native Helm (experimental): Helm Go SDK template/diff/apply/delete, chart sources, values, repositories, provision targets | `atmos-helm`            | `agent-skills/skills/atmos-helm/SKILL.md`            |
 | Native Kubernetes (experimental): Go SDK render/plan/diff/apply/deploy/delete/validate, kubectl/kustomize providers, provision targets | `atmos-kubernetes`      | `agent-skills/skills/atmos-kubernetes/SKILL.md`      |

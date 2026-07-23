@@ -241,10 +241,8 @@ func TestProcessCustomYamlTags(t *testing.T) {
 		tfoutput.ResetOutputsCache()
 	})
 
-	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
-		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
-			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state integration test)")
-		}
+	if _, lookErr := exec.LookPath("terraform"); lookErr != nil {
+		t.Skip("skipping: 'terraform' binary not found in PATH (required for !terraform.state integration test)")
 	}
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")

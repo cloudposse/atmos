@@ -33,6 +33,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -853,6 +854,19 @@ func executeCustomCommand(
 		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps#interactive-and-tty-steps")
 	}
 
+	// Resolve the toolchain-augmented PATH from the command's already-resolved
+	// dependencies so a `type: tflint` (or other toolchain-aware) step run from
+	// a custom command sees the same pinned binaries a workflow step would,
+	// instead of silently falling back to whatever is on the ambient PATH.
+	toolchainEnv, err := dependencies.NewEnvironmentFromDeps(&atmosConfig, deps)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to resolve toolchain PATH for command '%s'", commandConfig.Name).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 	stepVars := executor.Variables()
@@ -861,6 +875,7 @@ func executeCustomCommand(
 	})
 	stepVars.SetTemplatePasses(3)
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
+	configureCustomCommandScannerContext(stepVars, &atmosConfig, toolchainEnv.PATH(), authManager)
 
 	// Execute custom command's steps
 	var commandErr error
@@ -1098,6 +1113,12 @@ func executeCustomCommand(
 		// The dispatch is wrapped in a collapsible CI log group (no-op outside
 		// CI / when disabled), labeled with the step name or command. Exec steps
 		// run bare because a successful Unix exec never returns to close a group.
+		var commandResult *stepPkg.StepResult
+		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
+			var runErr error
+			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
+			return runErr
+		}
 		runStep := func() error {
 			switch stepType {
 			case "shell":
@@ -1105,25 +1126,30 @@ func executeCustomCommand(
 				// Steps with tty/interactive attach the user's terminal so commands
 				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-					Command:     commandToRun,
-					Name:        commandName,
-					Dir:         stepWorkDir,
-					Env:         env,
-					TTY:         step.Tty,
-					Interactive: step.Interactive,
-				}, func() error {
-					if step.Output == string(stepPkg.OutputModeNone) {
+				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+						Command:     commandToRun,
+						Name:        commandName,
+						Dir:         stepWorkDir,
+						Env:         env,
+						TTY:         step.Tty,
+						Interactive: step.Interactive,
+					}, func() error {
+						stdout := ioLayer.MaskWriter(os.Stdout)
+						stderr := ioLayer.MaskWriter(os.Stderr)
+						if step.Output == string(stepPkg.OutputModeNone) {
+							stdout = io.Discard
+							stderr = io.Discard
+						}
 						return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
 							Command: commandToRun,
 							Name:    commandName,
 							Dir:     stepWorkDir,
 							EnvVars: env,
-							Stdout:  io.Discard,
-							Stderr:  io.Discard,
+							Stdout:  io.MultiWriter(stdout, stdoutCapture),
+							Stderr:  io.MultiWriter(stderr, stderrCapture),
 						})
-					}
-					return e.ExecuteShell(commandToRun, commandName, stepWorkDir, env, false)
+					})
 				})
 			case schema.TaskTypeExec:
 				// Replace the Atmos process with the command (shell exec semantics).
@@ -1140,7 +1166,29 @@ func executeCustomCommand(
 				if execErr != nil {
 					return execErr
 				}
-				return e.ExecuteShellCommand(atmosConfig, execPath, args, stepWorkDir, env, false, "")
+				return runCommandStep(func(stdout, stderr io.Writer) error {
+					execOpts := []e.ShellCommandOption{
+						e.WithStdoutCapture(stdout),
+						e.WithStderrCapture(stderr),
+					}
+					if step.Output == string(stepPkg.OutputModeNone) {
+						execOpts = append(execOpts, e.WithProcessStreams(process.Streams{
+							Stdin:  os.Stdin,
+							Stdout: io.Discard,
+							Stderr: io.Discard,
+						}))
+					}
+					return e.ExecuteShellCommand(
+						atmosConfig,
+						execPath,
+						args,
+						stepWorkDir,
+						env,
+						false,
+						"",
+						execOpts...,
+					)
+				})
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
 				if stepPkg.IsExtendedStepType(stepType) {
@@ -1175,9 +1223,13 @@ func executeCustomCommand(
 		}
 		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
 			if step.Retry != nil {
-				return retry.Do(context.Background(), step.Retry, runStep)
+				if retryErr := retry.Do(context.Background(), step.Retry, runStep); retryErr != nil {
+					return retryErr
+				}
+			} else if runErr := runStep(); runErr != nil {
+				return runErr
 			}
-			return runStep()
+			return stepPkg.StoreCommandResult(stepVars, step.Name, step.Outputs, commandResult)
 		})
 		if err != nil {
 			var silentExit errUtils.ExitCodeError
@@ -1193,6 +1245,35 @@ func executeCustomCommand(
 		}
 	}
 	errUtils.CheckErrorPrintAndExit(commandErr, "", "")
+}
+
+func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {
+	if vars == nil {
+		return
+	}
+	vars.SetAtmosConfig(atmosConfig)
+	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			ComponentType:    componentType,
+			StackFromArg:     stack,
+			Stack:            stack,
+		}
+		stackConfig, err := cfg.InitCliConfig(info, true)
+		if err != nil {
+			return nil, err
+		}
+		var authForStack auth.AuthManager
+		if stackConfig.CliConfigPath == atmosConfig.CliConfigPath {
+			authForStack = authManager
+		}
+		resolved, err := e.ProcessStacks(&stackConfig, info, true, true, false, nil, authForStack)
+		if err != nil {
+			return nil, err
+		}
+		return &resolved, nil
+	})
 }
 
 func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string, status string) schema.ConditionContext {

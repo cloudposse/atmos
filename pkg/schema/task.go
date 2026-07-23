@@ -150,6 +150,12 @@ type Task struct {
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
+	// Command/scanner step arguments (supports templates).
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+
+	// With holds type-specific step parameters for non-container step types.
+	With map[string]any `yaml:"-" json:"with,omitempty" mapstructure:"with"`
+
 	// Env step type fields.
 	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
 
@@ -272,6 +278,7 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 		color:     &task.Background,
 		forList:   &task.For,
 		steps:     &task.Steps,
+		generic:   &task.With,
 		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
 	})
 }
@@ -420,6 +427,12 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 
 		// Environment variables.
 		Env: task.Env,
+
+		// Command/scanner step arguments.
+		Args: task.Args,
+
+		// Type-specific step parameters.
+		With: task.With,
 
 		// Env step type fields.
 		Vars: task.Vars,

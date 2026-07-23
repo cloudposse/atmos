@@ -60,6 +60,22 @@ run:
 		assert.Nil(t, step.Run, "legacy run: block must be ignored after the with: hard-cut")
 	})
 
+	t.Run("non-container with is preserved as generic payload", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte(`
+type: tflint
+with:
+  component: vpc
+  stack: plat-ue2-dev
+  args: [--minimum-failure-severity=error]
+`), &step))
+		assert.Equal(t, "tflint", step.Type)
+		require.NotNil(t, step.With)
+		assert.Equal(t, "vpc", step.With["component"])
+		assert.Equal(t, "plat-ue2-dev", step.With["stack"])
+		assert.Nil(t, step.Run)
+	})
+
 	t.Run("explicit push action", func(t *testing.T) {
 		var step WorkflowStep
 		require.NoError(t, yaml.Unmarshal([]byte(`
@@ -109,6 +125,34 @@ with:
 `), &step)
 		require.Error(t, err)
 	})
+
+	t.Run("non-container with decode error propagates", func(t *testing.T) {
+		// `with:` for a non-container step must be a mapping; a scalar cannot
+		// decode into map[string]any and the error must surface, not be
+		// swallowed.
+		var step WorkflowStep
+		err := yaml.Unmarshal([]byte(`
+type: tflint
+with: not-a-map
+`), &step)
+		require.Error(t, err)
+	})
+}
+
+// TestDecodeStepWith_GenericNilGuard exercises decodeStepWith's defensive
+// guard directly: every real caller wires stepPolyTargets.generic (see
+// UnmarshalYAML for WorkflowStep and Task), so this branch is unreachable
+// through the public YAML API. It still must not panic if a future caller
+// forgets to wire it.
+func TestDecodeStepWith_GenericNilGuard(t *testing.T) {
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("component: vpc\n"), &node))
+	// yaml.Unmarshal into a Node wraps content in a DocumentNode; unwrap to
+	// the mapping node decodeStepWith expects.
+	mapping := node.Content[0]
+
+	err := decodeStepWith(mapping, "tflint", "", &stepPolyTargets{})
+	require.NoError(t, err)
 }
 
 // TestWorkflowStep_DecodeBackground verifies the polymorphic `background:` key:
@@ -146,8 +190,9 @@ func TestWorkflowStep_DecodeFor(t *testing.T) {
 
 // TestTask_DecodeWith confirms the custom-command Task flavor shares the same vocabulary.
 func TestTask_DecodeWith(t *testing.T) {
-	var tasks Tasks
-	require.NoError(t, yaml.Unmarshal([]byte(`
+	t.Run("container with decodes into selected action", func(t *testing.T) {
+		var tasks Tasks
+		require.NoError(t, yaml.Unmarshal([]byte(`
 - type: container
   action: run
   background: true
@@ -155,9 +200,25 @@ func TestTask_DecodeWith(t *testing.T) {
     image: postgres:16
     command: ./migrate.sh
 `), &tasks))
-	require.Len(t, tasks, 1)
-	assert.True(t, tasks[0].BackgroundAsync)
-	require.NotNil(t, tasks[0].Run)
-	assert.Equal(t, "postgres:16", tasks[0].Run.Image)
-	assert.Equal(t, "./migrate.sh", tasks[0].Run.Command)
+		require.Len(t, tasks, 1)
+		assert.True(t, tasks[0].BackgroundAsync)
+		require.NotNil(t, tasks[0].Run)
+		assert.Equal(t, "postgres:16", tasks[0].Run.Image)
+		assert.Equal(t, "./migrate.sh", tasks[0].Run.Command)
+	})
+
+	t.Run("non-container with is preserved", func(t *testing.T) {
+		var tasks Tasks
+		require.NoError(t, yaml.Unmarshal([]byte(`
+- type: tflint
+  with:
+    component: vpc
+    stack: plat-ue2-dev
+`), &tasks))
+		require.Len(t, tasks, 1)
+		assert.Equal(t, "vpc", tasks[0].With["component"])
+		assert.Nil(t, tasks[0].Run)
+		step := tasks[0].ToWorkflowStep()
+		assert.Equal(t, "vpc", step.With["component"])
+	})
 }
