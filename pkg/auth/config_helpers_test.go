@@ -341,6 +341,60 @@ func TestMergeComponentAuthFromConfig_DefaultOnlyFalseMarkerOverridesExistingIde
 	assert.False(t, mergedAuth.Identities["selected"].Default)
 }
 
+// TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch covers a component
+// marker spelled with different casing than the global identity it targets (Viper lower-cases
+// config keys during load, so a component section's own casing isn't guaranteed to match).
+// The marker must resolve via IdentityCaseMap and write back under the identity's own
+// (globally-configured) key, not create a separate, differently-cased entry.
+func TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch(t *testing.T) {
+	t.Run("true marker", func(t *testing.T) {
+		globalAuth := &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"identity": {Kind: "mock", Default: false},
+				"fallback": {Kind: "mock", Default: true},
+			},
+			IdentityCaseMap: map[string]string{"identity": "identity", "fallback": "fallback"},
+		}
+		componentConfig := map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identities": map[string]any{
+					"IDENTITY": map[string]any{"default": true},
+				},
+			},
+		}
+
+		mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+		require.NoError(t, err)
+		assert.True(t, mergedAuth.Identities["identity"].Default)
+		assert.False(t, mergedAuth.Identities["fallback"].Default)
+		_, hasSeparateEntry := mergedAuth.Identities["IDENTITY"]
+		assert.False(t, hasSeparateEntry, "marker must target the existing 'identity' entry, not create a separate 'IDENTITY' one")
+	})
+
+	t.Run("false marker", func(t *testing.T) {
+		globalAuth := &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"identity": {Kind: "mock", Default: true},
+			},
+			IdentityCaseMap: map[string]string{"identity": "identity"},
+		}
+		componentConfig := map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identities": map[string]any{
+					"IDENTITY": map[string]any{"default": false},
+				},
+			},
+		}
+
+		mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+		require.NoError(t, err)
+		assert.Equal(t, "mock", mergedAuth.Identities["identity"].Kind)
+		assert.False(t, mergedAuth.Identities["identity"].Default)
+		_, hasSeparateEntry := mergedAuth.Identities["IDENTITY"]
+		assert.False(t, hasSeparateEntry, "marker must target the existing 'identity' entry, not create a separate 'IDENTITY' one")
+	})
+}
+
 func TestMergeComponentAuthFromConfig_DefaultOnlyTrueMarkerSelectsExistingIdentity(t *testing.T) {
 	globalAuth := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
