@@ -371,7 +371,7 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	}
 	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, logFieldVersion, version, "url", assetURL)
 
-	assetPath, effectiveAssetURL, effectiveVersion, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
+	downloadResult, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrHTTPRequest, err)
 	}
@@ -381,14 +381,14 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	// extracted archive's top-level directory carries the same prefix. The version
 	// DIRECTORY on disk still uses the originally requested `version` for
 	// .tool-versions / lookup consistency.
-	tool.Version = effectiveVersion
+	tool.Version = downloadResult.effectiveVersion
 
-	verificationResult, err := i.verifyDownloadedAsset(tool, version, effectiveAssetURL, assetPath)
+	verificationResult, err := i.verifyDownloadedAsset(tool, version, downloadResult.effectiveURL, downloadResult.assetPath)
 	if err != nil {
-		_ = os.Remove(assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
+		_ = os.Remove(downloadResult.assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
 		return "", err
 	}
-	binaryPath, err := i.extractAndInstall(tool, assetPath, version)
+	binaryPath, err := i.extractAndInstall(tool, downloadResult.assetPath, version)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
 	}
@@ -398,7 +398,7 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	// Set mod time to now so install date reflects installation, not archive timestamp
 	now := time.Now()
 	_ = os.Chtimes(binaryPath, now, now)
-	if err := i.updateLockFile(tool, version, effectiveAssetURL, verificationResult); err != nil {
+	if err := i.updateLockFile(tool, version, downloadResult.effectiveURL, verificationResult); err != nil {
 		return "", err
 	}
 	return binaryPath, nil
