@@ -343,56 +343,44 @@ func TestMergeComponentAuthFromConfig_DefaultOnlyFalseMarkerOverridesExistingIde
 
 // TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch covers a component
 // marker spelled with different casing than the global identity it targets (Viper lower-cases
-// config keys during load, so a component section's own casing isn't guaranteed to match).
-// The marker must resolve via IdentityCaseMap and write back under the identity's own
-// (globally-configured) key, not create a separate, differently-cased entry.
+// config keys during load, so a component section's own casing isn't guaranteed to match). The
+// global identity key is genuinely mixed-case ("Identity") and distinct from both the
+// lowercase IdentityCaseMap key and the lowercase component marker, so this can only pass by
+// actually resolving through IdentityCaseMap — not by an exact or already-lowercase match. The
+// marker must write back under the identity's own canonical key ("Identity"), not create a
+// separate, lowercase "identity" entry.
 func TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch(t *testing.T) {
-	t.Run("true marker", func(t *testing.T) {
-		globalAuth := &schema.AuthConfig{
-			Identities: map[string]schema.Identity{
-				"identity": {Kind: "mock", Default: false},
-				"fallback": {Kind: "mock", Default: true},
-			},
-			IdentityCaseMap: map[string]string{"identity": "identity", "fallback": "fallback"},
-		}
-		componentConfig := map[string]any{
-			cfg.AuthSectionName: map[string]any{
-				"identities": map[string]any{
-					"IDENTITY": map[string]any{"default": true},
+	tests := []struct {
+		name        string
+		markerValue bool
+	}{
+		{name: "true marker", markerValue: true},
+		{name: "false marker", markerValue: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			globalAuth := &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"Identity": {Kind: "mock", Default: !tt.markerValue},
 				},
-			},
-		}
-
-		mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
-		require.NoError(t, err)
-		assert.True(t, mergedAuth.Identities["identity"].Default)
-		assert.False(t, mergedAuth.Identities["fallback"].Default)
-		_, hasSeparateEntry := mergedAuth.Identities["IDENTITY"]
-		assert.False(t, hasSeparateEntry, "marker must target the existing 'identity' entry, not create a separate 'IDENTITY' one")
-	})
-
-	t.Run("false marker", func(t *testing.T) {
-		globalAuth := &schema.AuthConfig{
-			Identities: map[string]schema.Identity{
-				"identity": {Kind: "mock", Default: true},
-			},
-			IdentityCaseMap: map[string]string{"identity": "identity"},
-		}
-		componentConfig := map[string]any{
-			cfg.AuthSectionName: map[string]any{
-				"identities": map[string]any{
-					"IDENTITY": map[string]any{"default": false},
+				IdentityCaseMap: map[string]string{"identity": "Identity"},
+			}
+			componentConfig := map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"identity": map[string]any{"default": tt.markerValue},
+					},
 				},
-			},
-		}
+			}
 
-		mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
-		require.NoError(t, err)
-		assert.Equal(t, "mock", mergedAuth.Identities["identity"].Kind)
-		assert.False(t, mergedAuth.Identities["identity"].Default)
-		_, hasSeparateEntry := mergedAuth.Identities["IDENTITY"]
-		assert.False(t, hasSeparateEntry, "marker must target the existing 'identity' entry, not create a separate 'IDENTITY' one")
-	})
+			mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+			require.NoError(t, err)
+			assert.Equal(t, "mock", mergedAuth.Identities["Identity"].Kind)
+			assert.Equal(t, tt.markerValue, mergedAuth.Identities["Identity"].Default)
+			_, hasSeparateEntry := mergedAuth.Identities["identity"]
+			assert.False(t, hasSeparateEntry, "marker must target the existing 'Identity' entry, not create a separate lowercase 'identity' one")
+		})
+	}
 }
 
 func TestMergeComponentAuthFromConfig_DefaultOnlyTrueMarkerSelectsExistingIdentity(t *testing.T) {
