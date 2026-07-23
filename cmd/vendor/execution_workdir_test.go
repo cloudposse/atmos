@@ -5,8 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -24,6 +26,19 @@ import (
 func newExecutionWorktreeFixture(t *testing.T) (remote, workdir string) {
 	t.Helper()
 	root := t.TempDir()
+	if runtime.GOOS == "windows" {
+		// Git for Windows can return successfully while a scanner still holds a short-lived
+		// handle in the linked worktree's administrative directory. Remove the fixture before
+		// t.TempDir's own cleanup and retry until that handle is released.
+		t.Cleanup(func() {
+			var cleanupErr error
+			require.Eventually(t, func() bool {
+				cleanupErr = os.RemoveAll(root)
+				return cleanupErr == nil
+			}, time.Minute, 250*time.Millisecond, "remove the worktree fixture after Windows releases its file handle")
+			require.NoError(t, cleanupErr)
+		})
+	}
 	remote = filepath.Join(root, "remote.git")
 	workdir = filepath.Join(root, "workdir")
 	run := func(dir string, args ...string) {
