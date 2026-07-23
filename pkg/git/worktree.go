@@ -186,20 +186,49 @@ func isTransientWorktreeRemoveError(output string) bool {
 	return false
 }
 
+type worktreeCommandRunner func(repoDir string, args ...string) (string, error)
+
+func runWorktreeCommand(repoDir string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoDir
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+// removeWorktree retries removal failures caused by transient filesystem locks. If Git has already
+// removed the worktree directory but cannot remove its administrative metadata, it falls back to
+// `git worktree prune --expire now` to clear that stale registration. This occurs on Windows CI
+// when a scanner briefly holds a handle in .git/worktrees/<name> after the worktree command exits.
+func removeWorktree(repoDir, worktreePath string, run worktreeCommandRunner, config *schema.RetryConfig) (string, error) {
+	var removeOutput string
+	removeErr := retry.WithPredicate(context.Background(), config, func() error {
+		output, err := run(repoDir, "worktree", "remove", "--force", worktreePath)
+		removeOutput = output
+		return err
+	}, func(error) bool { return isTransientWorktreeRemoveError(removeOutput) })
+	if removeErr == nil || !isTransientWorktreeRemoveError(removeOutput) {
+		return removeOutput, removeErr
+	}
+
+	var pruneOutput string
+	pruneErr := retry.WithPredicate(context.Background(), config, func() error {
+		output, err := run(repoDir, "worktree", "prune", "--expire", "now")
+		pruneOutput = output
+		return err
+	}, func(error) bool { return isTransientWorktreeRemoveError(pruneOutput) })
+	if pruneErr == nil {
+		return pruneOutput, nil
+	}
+	return "worktree remove:\n" + removeOutput + "\nworktree prune:\n" + pruneOutput, errors.Join(removeErr, pruneErr)
+}
+
 // RemoveWorktree removes a git worktree using `git worktree remove`.
 // This properly unregisters the worktree from git's tracking in addition to removing the directory.
 // The repoDir parameter should be the path to any directory in the repository (main worktree or any linked worktree).
 func RemoveWorktree(repoDir, worktreePath string) {
 	defer perf.Track(nil, "git.RemoveWorktree")()
 
-	var lastOutput string
-	err := retry.WithPredicate(context.Background(), removeWorktreeRetryConfig(), func() error {
-		cmd := exec.Command("git", "worktree", "remove", "--force", worktreePath)
-		cmd.Dir = repoDir
-		output, runErr := cmd.CombinedOutput()
-		lastOutput = string(output)
-		return runErr
-	}, func(err error) bool { return isTransientWorktreeRemoveError(lastOutput) })
+	lastOutput, err := removeWorktree(repoDir, worktreePath, runWorktreeCommand, removeWorktreeRetryConfig())
 	if err != nil {
 		log.Warn("Failed to remove git worktree", "path", worktreePath, "error", err.Error(), "output", lastOutput)
 	}

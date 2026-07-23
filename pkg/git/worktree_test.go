@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -297,6 +299,27 @@ func TestRemoveWorktree(t *testing.T) {
 		RemoveWorktree("", "")
 		// If we get here without panicking, the test passes.
 	})
+}
+
+func TestRemoveWorktreePrunesStaleRegistrationAfterTransientRemoveFailure(t *testing.T) {
+	maxAttempts := 1
+	config := &schema.RetryConfig{MaxAttempts: &maxAttempts}
+	var commands [][]string
+	run := func(_ string, args ...string) (string, error) {
+		commands = append(commands, args)
+		if args[1] == "remove" {
+			return "error: failed to delete '.git/worktrees/worktree': Invalid argument", errors.New("git worktree remove failed")
+		}
+		return "", nil
+	}
+
+	output, err := removeWorktree("repo", "worktree", run, config)
+	require.NoError(t, err)
+	assert.Empty(t, output)
+	assert.Equal(t, [][]string{
+		{"worktree", "remove", "--force", "worktree"},
+		{"worktree", "prune", "--expire", "now"},
+	}, commands)
 }
 
 func TestWorktreeSubdirConstant(t *testing.T) {
