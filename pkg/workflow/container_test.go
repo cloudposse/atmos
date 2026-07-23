@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -33,11 +34,80 @@ func (f *fakeContainer) Exec(_ context.Context, command []string, opts *containe
 	if opts.Stdout != nil {
 		_, _ = io.WriteString(opts.Stdout, "ok\n")
 	}
+	if opts.Stderr != nil {
+		_, _ = io.WriteString(opts.Stderr, "warning\n")
+	}
 	return nil
 }
 
 func (f *fakeContainer) Cleanup(bool) error {
 	return nil
+}
+
+func TestContainerSessionExecShellCapturesOutput(t *testing.T) {
+	fake := &fakeContainer{id: "container-id", name: "sandbox"}
+	session := &ContainerSession{
+		backend:       fake,
+		config:        &schema.WorkflowContainer{Workspace: "/workspace"},
+		hostWorkspace: "/repo",
+	}
+	var stdout, stderr bytes.Buffer
+
+	err := session.ExecShell(context.Background(), &ContainerStepParams{
+		Step:          &schema.WorkflowStep{Name: "capture", Type: "shell", Command: "echo ok"},
+		WorkflowDef:   &schema.WorkflowDefinition{Output: "none"},
+		HostWorkDir:   "/repo",
+		Command:       "echo ok",
+		StdoutCapture: &stdout,
+		StderrCapture: &stderr,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "ok\n", stdout.String())
+	assert.Equal(t, "warning\n", stderr.String())
+}
+
+func TestContainerSessionExecShellTerminalSessionDoesNotCaptureOutput(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		tty         bool
+		interactive bool
+	}{
+		{name: "tty", tty: true},
+		{name: "interactive", interactive: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeContainer{id: "container-id", name: "sandbox"}
+			session := &ContainerSession{
+				backend:       fake,
+				config:        &schema.WorkflowContainer{Workspace: "/workspace"},
+				hostWorkspace: "/repo",
+			}
+			var stdout, stderr bytes.Buffer
+
+			err := session.ExecShell(context.Background(), &ContainerStepParams{
+				Step: &schema.WorkflowStep{
+					Name:        "session",
+					Type:        "shell",
+					Command:     "interactive",
+					Tty:         tc.tty,
+					Interactive: tc.interactive,
+				},
+				WorkflowDef:   &schema.WorkflowDefinition{Output: "none"},
+				HostWorkDir:   "/repo",
+				Command:       "interactive",
+				StdoutCapture: &stdout,
+				StderrCapture: &stderr,
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, fake.opts)
+			assert.Equal(t, tc.tty, fake.opts.Tty)
+			assert.Equal(t, tc.interactive, fake.opts.AttachStdin)
+			assert.Empty(t, stdout.String())
+			assert.Empty(t, stderr.String())
+		})
+	}
 }
 
 func TestContainerSessionExecShellPassesStepEnvAndMappedWorkingDirectory(t *testing.T) {
