@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -373,14 +374,35 @@ func TestWriteEphemeralResult(t *testing.T) {
 	assert.NotPanics(t, func() {
 		writeEphemeralResult(params, &container.EphemeralResult{Stdout: "out", Stderr: "err"}, nil)
 	})
-	// TTY steps skip rendering.
-	ttyParams := &ContainerStepParams{
-		Step:        &schema.WorkflowStep{Name: "s", Tty: true},
-		WorkflowDef: &schema.WorkflowDefinition{Output: "none"},
+	var stdout, stderr bytes.Buffer
+	capturingParams := &ContainerStepParams{
+		Step:          &schema.WorkflowStep{Name: "s"},
+		WorkflowDef:   &schema.WorkflowDefinition{Output: "none"},
+		StdoutCapture: &stdout,
+		StderrCapture: &stderr,
 	}
-	assert.NotPanics(t, func() {
-		writeEphemeralResult(ttyParams, &container.EphemeralResult{Stdout: "x"}, nil)
-	})
+	writeEphemeralResult(capturingParams, &container.EphemeralResult{Stdout: "out", Stderr: "err"}, nil)
+	assert.Equal(t, "out", stdout.String())
+	assert.Equal(t, "err", stderr.String())
+	// Terminal-attached steps skip rendering and capture.
+	for _, step := range []*schema.WorkflowStep{
+		{Name: "tty", Tty: true},
+		{Name: "interactive", Interactive: true},
+	} {
+		terminalParams := &ContainerStepParams{
+			Step:          step,
+			WorkflowDef:   &schema.WorkflowDefinition{Output: "none"},
+			StdoutCapture: &stdout,
+			StderrCapture: &stderr,
+		}
+		stdout.Reset()
+		stderr.Reset()
+		assert.NotPanics(t, func() {
+			writeEphemeralResult(terminalParams, &container.EphemeralResult{Stdout: "x"}, nil)
+		})
+		assert.Empty(t, stdout.String())
+		assert.Empty(t, stderr.String())
+	}
 }
 
 func TestContainerSessionCleanup(t *testing.T) {
@@ -470,6 +492,7 @@ func TestRunStepContainerOverride_UsesRuntimeEnvWithFakeDocker(t *testing.T) {
 		Mode: testhelpers.FakeContainerRuntimeWorkflowEnv,
 	})
 
+	var stdout, stderr bytes.Buffer
 	err := RunStepContainerOverride(context.Background(), &ContainerStepParams{
 		WorkflowDef: &schema.WorkflowDefinition{Output: "none"},
 		Step: &schema.WorkflowStep{
@@ -479,10 +502,14 @@ func TestRunStepContainerOverride_UsesRuntimeEnvWithFakeDocker(t *testing.T) {
 				Provider: string(container.TypeDocker),
 			},
 		},
-		Command:    "echo hi",
-		RuntimeEnv: []string{"ATMOS_FAKE_AUTH=present"},
+		Command:       "echo hi",
+		RuntimeEnv:    []string{"ATMOS_FAKE_AUTH=present"},
+		StdoutCapture: &stdout,
+		StderrCapture: &stderr,
 	})
 	require.NoError(t, err)
+	assert.Contains(t, stdout.String(), "container stdout")
+	assert.Empty(t, stderr.String())
 }
 
 func TestExecShell_NilGuards(t *testing.T) {
