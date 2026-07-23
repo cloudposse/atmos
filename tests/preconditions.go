@@ -697,6 +697,8 @@ var terraformRegistryErrorSignatures = []string{
 	"Failed to install provider",
 	"Failed to query available provider packages",
 	"could not query provider registry",
+	"could not connect to registry.terraform.io",
+	"lookup registry.terraform.io",
 	"Too Many Requests",
 }
 
