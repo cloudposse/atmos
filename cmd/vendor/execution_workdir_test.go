@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -25,20 +24,7 @@ import (
 // fixtures (no network).
 func newExecutionWorktreeFixture(t *testing.T) (remote, workdir string) {
 	t.Helper()
-	root := t.TempDir()
-	if runtime.GOOS == "windows" {
-		// Git for Windows can return successfully while a scanner still holds a short-lived
-		// handle in the linked worktree's administrative directory. Remove the fixture before
-		// t.TempDir's own cleanup and retry until that handle is released.
-		t.Cleanup(func() {
-			var cleanupErr error
-			require.Eventually(t, func() bool {
-				cleanupErr = os.RemoveAll(root)
-				return cleanupErr == nil
-			}, time.Minute, 250*time.Millisecond, "remove the worktree fixture after Windows releases its file handle")
-			require.NoError(t, cleanupErr)
-		})
-	}
+	root := newExecutionWorktreeFixtureRoot(t)
 	remote = filepath.Join(root, "remote.git")
 	workdir = filepath.Join(root, "workdir")
 	run := func(dir string, args ...string) {
@@ -68,6 +54,24 @@ spec:
 	run(workdir, "branch", "-M", "main")
 	run(workdir, "push", "-u", "origin", "main")
 	return remote, workdir
+}
+
+// newExecutionWorktreeFixtureRoot creates an isolated fixture directory. Git for Windows can
+// leave a scanner-owned handle in a removed linked worktree's administrative directory long after
+// the worktree is successfully pruned. Avoid t.TempDir on Windows because its mandatory cleanup
+// turns that runner-only handle into a test failure; the best-effort cleanup is sufficient for an
+// ephemeral CI temp directory and still removes the fixture when the handle has been released.
+func newExecutionWorktreeFixtureRoot(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return t.TempDir()
+	}
+
+	//nolint:lintroller // t.TempDir's mandatory cleanup fails while Git for Windows' scanner-owned handle persists.
+	root, err := os.MkdirTemp("", "atmos-vendor-worktree-test-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
 }
 
 // TestResolveExecutionWorkdir_WorktreeModeIsolatesInvokingCheckout is the correctness-critical
