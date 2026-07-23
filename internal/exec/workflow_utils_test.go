@@ -1347,6 +1347,9 @@ func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T
 	err = ExecuteWorkflow(atmosConfig, "test-failure-continuation", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
+	assert.Equal(t, 7, errUtils.GetExitCode(err))
+	_, stored := stepExecutorState.GetResult("fail-step")
+	assert.False(t, stored)
 	formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 	assert.Contains(t, strings.ReplaceAll(formattedErr, "\n", ""), "fail-step")
 
@@ -1468,7 +1471,13 @@ func TestExecuteWorkflow_DryRunShell(t *testing.T) {
 
 	// Dry run should not execute the command.
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	result, stored := stepExecutorState.GetResult("step1")
+	require.True(t, stored)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, "", result.Metadata["stdout"])
+	assert.Equal(t, "", result.Metadata["stderr"])
+	assert.Equal(t, 0, result.Metadata["exit_code"])
 }
 
 func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {
