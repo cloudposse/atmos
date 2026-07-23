@@ -429,6 +429,9 @@ func TestCustomCommandShellOutputNoneSuppressesOutput(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	outputFile := filepath.Join(tmpDir, "ran.txt")
+	resultFile := filepath.Join(tmpDir, "result.env")
+	exePath, err := os.Executable()
+	require.NoError(t, err)
 
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: tmpDir,
@@ -441,14 +444,23 @@ func TestCustomCommandShellOutputNoneSuppressesOutput(t *testing.T) {
 						Type:    "shell",
 						Name:    "quiet",
 						Output:  "none",
-						Command: fmt.Sprintf("echo stdout-visible; echo stderr-visible >&2; printf ran > %q", outputFile),
+						Command: fmt.Sprintf("printf stdout-visible; printf stderr-visible >&2; printf ran > %q", outputFile),
+					},
+					{
+						Type:    "shell",
+						Output:  "none",
+						Command: fmt.Sprintf("%q", exePath),
+						Env: map[string]string{
+							"_ATMOS_TEST_DUMP_ENV": resultFile,
+							"CAPTURED_RESULT":      "{{ .steps.quiet.value }}|{{ .steps.quiet.metadata.stdout }}|{{ .steps.quiet.metadata.stderr }}|{{ .steps.quiet.metadata.exit_code }}",
+						},
 					},
 				},
 			},
 		},
 	}
 
-	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	customCmd, _, err := RootCmd.Find([]string{"test-output-none"})
@@ -465,6 +477,9 @@ func TestCustomCommandShellOutputNoneSuppressesOutput(t *testing.T) {
 	actual, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
 	assert.Equal(t, "ran", string(actual))
+	resultEnv, err := os.ReadFile(resultFile)
+	require.NoError(t, err)
+	assert.Equal(t, "stdout-visible|stdout-visible|stderr-visible|0", extractEnvVar(string(resultEnv), "CAPTURED_RESULT"))
 }
 
 // TestCustomCommandIntegration_MockProviderEnvironment tests that custom commands with mock provider
@@ -761,6 +776,9 @@ func TestCustomCommandIntegration_RetriesShellStep(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	attemptsFile := filepath.Join(tmpDir, "attempts.txt")
+	resultFile := filepath.Join(tmpDir, "result.env")
+	exePath, err := os.Executable()
+	require.NoError(t, err)
 	maxAttempts := 2
 	initialDelay := time.Millisecond
 
@@ -769,12 +787,22 @@ func TestCustomCommandIntegration_RetriesShellStep(t *testing.T) {
 		Description: "Test retry shell step",
 		Steps: schema.Tasks{
 			{
+				Name:    "retry",
 				Command: customCommandRetryHelperCommand(t, attemptsFile),
 				Type:    "shell",
 				Retry: &schema.RetryConfig{
 					MaxAttempts:     &maxAttempts,
 					InitialDelay:    &initialDelay,
 					BackoffStrategy: "constant",
+				},
+			},
+			{
+				Command: fmt.Sprintf("%q", exePath),
+				Type:    "shell",
+				Output:  "none",
+				Env: map[string]string{
+					"_ATMOS_TEST_DUMP_ENV": resultFile,
+					"CAPTURED_RESULT":      "{{ .steps.retry.value }}|{{ .steps.retry.metadata.stdout }}|{{ .steps.retry.metadata.stderr }}",
 				},
 			},
 		},
@@ -798,6 +826,9 @@ func TestCustomCommandIntegration_RetriesShellStep(t *testing.T) {
 	attempts, err := os.ReadFile(attemptsFile)
 	require.NoError(t, err)
 	assert.Equal(t, "2", strings.TrimSpace(string(attempts)))
+	resultEnv, err := os.ReadFile(resultFile)
+	require.NoError(t, err)
+	assert.Equal(t, "attempt-2|attempt-2|warning-2", extractEnvVar(string(resultEnv), "CAPTURED_RESULT"))
 }
 
 func TestCustomCommandIntegration_ShellStepWithoutRetryRunsOnce(t *testing.T) {
@@ -1051,6 +1082,11 @@ func customCommandAttemptHelperCommand(t *testing.T, path string) string {
 	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", exe, encodedPath)
 }
 
+func customCommandAtmosAttemptHelperArgs(path string) string {
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("-test.run=TestCustomCommandIntegrationAttemptHelper -- %s", encodedPath)
+}
+
 func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
 	separator := -1
 	for i, arg := range os.Args {
@@ -1098,6 +1134,8 @@ func TestCustomCommandIntegrationRetryHelper(t *testing.T) {
 		attempt = parsed + 1
 	}
 	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
+	_, _ = fmt.Fprintf(os.Stdout, "attempt-%d", attempt)
+	_, _ = fmt.Fprintf(os.Stderr, "warning-%d", attempt)
 	if attempt < 2 {
 		os.Exit(1)
 	}
