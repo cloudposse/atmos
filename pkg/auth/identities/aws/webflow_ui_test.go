@@ -5,6 +5,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -122,6 +123,40 @@ func TestWebflowSpinnerModel_Update_TokenResult(t *testing.T) {
 func TestDisplayWebflowDialog(t *testing.T) {
 	// Just verify it doesn't panic.
 	displayWebflowDialog("https://example.com/auth")
+}
+
+func TestRenderWebflowDialog_URLPlacement(t *testing.T) {
+	longURL := "https://example.com/" + strings.Repeat("x", maxWebflowDialogURLWidth)
+
+	tests := []struct {
+		name          string
+		authURL       string
+		containsURL   bool
+		wantDialogURL bool
+	}{
+		{
+			name:          "short URL stays in dialog",
+			authURL:       "https://example.com/device?user_code=ABCD-1234",
+			containsURL:   true,
+			wantDialogURL: true,
+		},
+		{
+			name:          "long URL stays outside dialog",
+			authURL:       longURL,
+			containsURL:   false,
+			wantDialogURL: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dialog, containsURL := renderWebflowDialog(tt.authURL)
+
+			assert.Equal(t, tt.containsURL, containsURL)
+			assert.Contains(t, dialog, "AWS Browser Authentication")
+			assert.Equal(t, tt.wantDialogURL, strings.Contains(dialog, tt.authURL))
+		})
+	}
 }
 
 func TestDisplayWebflowDialogPlainText(t *testing.T) {
