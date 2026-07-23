@@ -143,7 +143,7 @@ func validateCtx(ctx *ExecContext) error {
 func makeOutputDir() (tmpDir, outputFile string, err error) {
 	tmpDir, err = os.MkdirTemp("", "atmos-hook-*")
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create temp dir for hook output: %w", err)
+		return "", "", fmt.Errorf("%w: hook output directory: %w", errUtils.ErrCreateDirectory, err)
 	}
 	return tmpDir, filepath.Join(tmpDir, "output"), nil
 }
@@ -155,6 +155,11 @@ type subprocessPrep struct {
 	binary string
 	args   []string
 	env    []string
+	// captureStdoutPath, when non-empty, is the file the subprocess's stdout
+	// is redirected into (instead of the terminal). Set for kinds with
+	// CaptureStdout — tools that emit structured output to stdout and have no
+	// file-output flag (tflint). Points at the same file ATMOS_OUTPUT_FILE does.
+	captureStdoutPath string
 }
 
 // prepareSubprocess renders args / env (with $ATMOS_* expansion) and
@@ -186,13 +191,26 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 	// and pass the absolute path.
 	resolved, err := resolveBinaryOnPath(ctx.Hook.Command, ctx.ToolchainPATH)
 	if err != nil {
+		// resolveBinaryOnPath's own error already wraps ErrCommandNotFound (needed so its
+		// direct callers/tests can errors.Is() against it standalone). Build the user-facing
+		// message from scratch here rather than via WithCause(err): that would double the
+		// sentinel's own text into the final message ("command not found: command not found:
+		// <name>"), since err already wraps the same sentinel this Build() call starts from,
+		// and the explanation/hint below already say everything err's text would add.
 		return nil, errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
 			WithExplanationf("Hook command %q is not on PATH", ctx.Hook.Command).
 			WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before the hook fires", ctx.Hook.Command).
 			WithContext("hook_kind", ctx.Hook.Kind).
 			WithContext("command", ctx.Hook.Command).
 			Err()
+	}
+
+	captureStdoutPath := ""
+	if ctx.Kind != nil && ctx.Kind.CaptureStdout {
+		// Redirect stdout into the same file ATMOS_OUTPUT_FILE points at, so
+		// the kind's ResultHandler reads it via sarif.DefaultOutputFile — no
+		// difference from a tool that writes the file itself (trivy/checkov).
+		captureStdoutPath = outputFile
 	}
 
 	env := mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv)
@@ -201,20 +219,36 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 	}
 
 	return &subprocessPrep{
-		binary: resolved,
-		args:   args,
-		env:    env,
+		binary:            resolved,
+		args:              args,
+		env:               env,
+		captureStdoutPath: captureStdoutPath,
 	}, nil
 }
 
 // runSubprocess executes the prepared command, wiring stdin/stdout/stderr
-// to the host process so the user sees tool output in real time.
+// to the host process so the user sees tool output in real time. When the kind
+// opts into stdout capture (p.captureStdoutPath set), stdout is redirected into
+// that file instead of the terminal — for tools that emit structured output
+// (SARIF) to stdout with no file-output flag. Stderr still streams so the
+// tool's diagnostics/errors remain visible.
 func runSubprocess(p *subprocessPrep) error {
 	cmd := exec.Command(p.binary, p.args...) // #nosec G204 -- intentional: this is the whole point of a hook
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = p.env
+
+	if p.captureStdoutPath != "" {
+		f, err := os.Create(p.captureStdoutPath) // #nosec G304 -- engine-controlled temp path (makeOutputDir)
+		if err != nil {
+			return fmt.Errorf("%w: hook stdout capture file: %w", errUtils.ErrCreateFile, err)
+		}
+		defer f.Close()
+		cmd.Stdout = f
+	} else {
+		cmd.Stdout = os.Stdout
+	}
+
 	return cmd.Run()
 }
 
