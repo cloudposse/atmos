@@ -257,3 +257,75 @@ func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
 	require.Contains(t, err.Error(), "!envv")
 }
+
+func TestCheckComponentStackMapClassifiesInvalidConfig(t *testing.T) {
+	componentStackMap := map[string]map[string][]string{
+		"component": {
+			"stack": {"manifest-a", "manifest-b"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		stacksMap     map[string]any
+		componentType string
+		expectedErr   error
+		contains      string
+	}{
+		{
+			name:          "missing manifest",
+			stacksMap:     map[string]any{},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrInvalidStackManifest,
+			contains:      "manifest-a",
+		},
+		{
+			name: "missing components",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrComponentsSectionNotFound,
+			contains:      "manifest-a",
+		},
+		{
+			name: "missing terraform components type",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsTerraform,
+			contains:      "components.terraform",
+		},
+		{
+			name: "missing helmfile components type",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.HelmfileSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsHelmfile,
+			contains:      "components.helmfile",
+		},
+		{
+			name: "missing component",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{
+					cfg.ComponentsSectionName: map[string]any{
+						cfg.TerraformSectionName: map[string]any{},
+					},
+				},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrComponentNotDefined,
+			contains:      "component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := checkComponentStackMap(tt.stacksMap, tt.componentType, componentStackMap)
+			require.ErrorIs(t, err, tt.expectedErr)
+			assert.Contains(t, err.Error(), tt.contains)
+		})
+	}
+}

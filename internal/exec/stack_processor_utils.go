@@ -563,6 +563,10 @@ type stackProcessResult struct {
 // members; the group exists only to make distinct inherited base components
 // visible while each component retains its owning manifest's scope.
 func logicalStackIdentity(atmosConfig *schema.AtmosConfiguration, stackFileName string, stackConfig map[string]any) (string, error) {
+	if atmosConfig == nil {
+		return stackFileName, nil
+	}
+
 	if stackManifestName := getStackManifestName(stackConfig); stackManifestName != "" {
 		return stackManifestName, nil
 	}
@@ -678,10 +682,10 @@ func addPeerComponentsForInheritance(atmosConfig *schema.AtmosConfiguration, res
 // metadata.inherits, preserving parent-scoped component output.
 func retainOwnedComponents(finalConfig, originalConfig map[string]any) {
 	finalComponents, _ := finalConfig[cfg.ComponentsSectionName].(map[string]any)
-	originalComponents, _ := originalConfig[cfg.ComponentsSectionName].(map[string]any)
-	if finalComponents == nil || originalComponents == nil {
+	if finalComponents == nil {
 		return
 	}
+	originalComponents, _ := originalConfig[cfg.ComponentsSectionName].(map[string]any)
 
 	for componentType, finalComponentsValue := range finalComponents {
 		finalComponentsMap, ok := finalComponentsValue.(map[string]any)

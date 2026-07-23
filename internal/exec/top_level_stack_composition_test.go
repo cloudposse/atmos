@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +13,7 @@ import (
 
 func initTopLevelStackCompositionConfig(t *testing.T, fixture string) schema.AtmosConfiguration {
 	t.Helper()
-	t.Chdir("../../tests/fixtures/scenarios/" + fixture)
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", fixture))
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
@@ -178,4 +179,26 @@ func TestLogicalStackIdentityDefersMissingComponentContext(t *testing.T) {
 			assert.Equal(t, "parents/component-scoped", identity)
 		})
 	}
+}
+
+func TestLogicalStackIdentityWithNilConfig(t *testing.T) {
+	identity, err := logicalStackIdentity(nil, "parents/component-scoped", map[string]any{"name": "ignored"})
+	require.NoError(t, err)
+	assert.Equal(t, "parents/component-scoped", identity)
+}
+
+func TestRetainOwnedComponentsRemovesAllPeerComponentsWhenOriginalHasNone(t *testing.T) {
+	finalConfig := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"peer-component": map[string]any{"vars": map[string]any{"source": "peer"}},
+			},
+		},
+	}
+
+	retainOwnedComponents(finalConfig, map[string]any{})
+
+	components := finalConfig[cfg.ComponentsSectionName].(map[string]any)
+	terraform := components[cfg.TerraformSectionName].(map[string]any)
+	assert.Empty(t, terraform)
 }

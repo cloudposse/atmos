@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -397,19 +398,26 @@ func checkComponentStackMap(stacksMap map[string]any, componentType string, comp
 				for _, stackManifestName := range stackManifests {
 					stackConfig, ok := stacksMap[stackManifestName].(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("could not find stack manifest '%s'", stackManifestName)
+						return nil, fmt.Errorf("%w: could not find stack manifest %q", errUtils.ErrInvalidStackManifest, stackManifestName)
 					}
 					components, ok := stackConfig[cfg.ComponentsSectionName].(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("components section is missing in stack manifest '%s'", stackManifestName)
+						return nil, fmt.Errorf("%w: components section is missing in stack manifest %q", errUtils.ErrComponentsSectionNotFound, stackManifestName)
 					}
 					componentTypeConfig, ok := components[componentType].(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("components.%s section is missing in stack manifest '%s'", componentType, stackManifestName)
+						componentTypeErr := errUtils.ErrInvalidComponentsSection
+						switch componentType {
+						case cfg.TerraformSectionName:
+							componentTypeErr = errUtils.ErrInvalidComponentsTerraform
+						case cfg.HelmfileSectionName:
+							componentTypeErr = errUtils.ErrInvalidComponentsHelmfile
+						}
+						return nil, fmt.Errorf("%w: components.%s section is missing in stack manifest %q", componentTypeErr, componentType, stackManifestName)
 					}
 					componentConfig, ok := componentTypeConfig[componentName].(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("component '%s' is missing in stack manifest '%s'", componentName, stackManifestName)
+						return nil, fmt.Errorf("%w: component %q is missing in stack manifest %q", errUtils.ErrComponentNotDefined, componentName, stackManifestName)
 					}
 
 					componentConfigs = append(componentConfigs, componentConfig)
