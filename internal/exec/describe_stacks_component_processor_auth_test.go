@@ -326,6 +326,46 @@ func TestResolveComponentAuthManager_ResolverErrorIsFatal(t *testing.T) {
 	_ = parentMgr // documented intent: parentMgr is the untyped-nil fallback value.
 }
 
+// TestResolveComponentAuthManager_ResolverErrorDegradesInWarnMode verifies that a
+// component-specific AuthManager construction failure (e.g. an unrelated component's
+// broken identity config) does NOT abort describe-stacks when onWarning is set — it falls
+// back to the parent AuthManager and reports a DegradationWarning instead, matching the
+// same "recoverable, substitute, continue" pattern YAML-function processing already uses.
+func TestResolveComponentAuthManager_ResolverErrorDegradesInWarnMode(t *testing.T) {
+	t.Parallel()
+
+	parentMgr := auth.AuthManager(nil)
+	spy := &componentAuthResolverSpy{
+		returnMgr: nil,
+		returnErr: assert.AnError,
+	}
+
+	var warnings []DegradationWarning
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		authManager:           parentMgr,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+	p.withDegradation(func(w DegradationWarning) { warnings = append(warnings, w) })
+
+	got, err := p.resolveComponentAuthManager(
+		componentSectionWithAuth(authSectionWithDefault()),
+		"test-component",
+		"test-stack",
+	)
+
+	require.NoError(t, err, "warn mode must not fail the whole describe-stacks call")
+	assert.Equal(t, parentMgr, got, "warn mode falls back to the parent AuthManager")
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "test-stack", warnings[0].Stack)
+	assert.Equal(t, "test-component", warnings[0].Component)
+	assert.Equal(t, "auth", warnings[0].Function)
+	assert.Contains(t, warnings[0].Reason, assert.AnError.Error())
+}
+
 func TestProcessComponentEntry_ComponentAuthResolverErrorIsFatal(t *testing.T) {
 	t.Parallel()
 

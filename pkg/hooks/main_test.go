@@ -18,6 +18,10 @@ import (
 //   - _ATMOS_TEST_WRITE_OUTPUT: write the value of _ATMOS_TEST_OUTPUT_BODY to
 //     the path in $ATMOS_OUTPUT_FILE, then exit 0. Lets tests simulate a tool
 //     that produces structured side-channel output.
+//   - _ATMOS_TEST_ECHO_STDOUT: write the value of _ATMOS_TEST_STDOUT_BODY to
+//     os.Stdout, then exit 0. Lets tests simulate a tool that emits structured
+//     output to stdout (e.g. tflint --format=sarif) so the engine's
+//     CaptureStdout redirect can be verified cross-platform via os.Executable().
 func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
@@ -31,6 +35,10 @@ func TestMain(m *testing.M) {
 				os.Exit(1)
 			}
 		}
+		os.Exit(0)
+	}
+	if os.Getenv("_ATMOS_TEST_ECHO_STDOUT") == "1" {
+		fmt.Fprint(os.Stdout, os.Getenv("_ATMOS_TEST_STDOUT_BODY"))
 		os.Exit(0)
 	}
 
