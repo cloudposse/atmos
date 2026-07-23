@@ -176,6 +176,13 @@ type Kind struct {
 	DefaultArgs []string
 	DefaultEnv  map[string]string
 
+	// CaptureStdout, when true, redirects the subprocess's stdout into
+	// ATMOS_OUTPUT_FILE instead of streaming it to the terminal. Use for tools
+	// that emit structured output (e.g. SARIF) to stdout and have no
+	// file-output flag (tflint). The kind's ResultHandler then reads it via
+	// sarif.DefaultOutputFile, same as file-output tools (trivy/checkov).
+	CaptureStdout bool
+
 	// OnFailure is the default failure mode if the hook doesn't override.
 	OnFailure string
 
