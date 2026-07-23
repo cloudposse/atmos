@@ -22,8 +22,7 @@ on:
 # the auto-generated GITHUB_TOKEN. The default PR-event scope is
 # `contents: read` only, which causes ghcr.io to reject the token with
 # `DENIED: denied` whenever credentials are sent (as happens on Windows
-# runners that have no usable Docker keychain entry for ghcr.io). Reviewdog
-# gets job-level checks write access for tflint annotations.
+# runners that have no usable Docker keychain entry for ghcr.io).
 permissions:
   checks: read
   contents: read
@@ -217,15 +216,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default hashicorp/terraform
           atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Verify OpenTofu, Helm, and Helmfile
+      - name: Verify Terraform, OpenTofu, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
+          terraform version
           tofu version
           helm version --short
           helmfile version
@@ -841,33 +841,28 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
-        demo-folder:
-          # - demo-component-manifest
-          - demo-context
-          # - demo-custom-command
-          # - demo-json-validation
-          # - demo-library
-          # - demo-floci
-          # - demo-opa-validation
-          # - demo-opentofu
-          # - demo-project
-          # - demo-stacks
-          # - demo-terraform
-          # - demo-terraform-overrides
-          # - demo-workflows
-          # - demo-yaml-anchors
-          # - demo-mock-architecture
-          # - demo-stack-templating
-          # - demo-multi-cloud
-          - quick-start-advanced
-          #- quick-start-simple
+        include:
+          - demo-folder: quick-start-advanced
+            component: kms-key
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: s3-bucket
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: dynamodb-table
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: sns-topic
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: sqs-queue
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: app-config
+            stack: plat-ue2-dev
 
     timeout-minutes: 20
     steps:
@@ -881,29 +876,52 @@ jobs:
         with:
           target: linux
 
-      - name: Install OpenTofu with Atmos toolchain
+      - name: Install OpenTofu and TFLint with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install --default terraform-linters/tflint@0.59.1
           atmos toolchain env --format=github
 
-      - name: Verify OpenTofu
-        run: tofu version
+      - name: Verify OpenTofu and TFLint
+        run: |
+          tofu version
+          tflint --version
 
-      - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
-        uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
+      - name: Lint ${{ matrix.demo-folder }}/${{ matrix.component }}
+        working-directory: examples/${{ matrix.demo-folder }}
+        # Lint reads static HCL only. Disable the quick-start stack's emulator
+        # identity because this CI job intentionally does not start the emulator.
+        run: atmos terraform lint ${{ matrix.component }} -s ${{ matrix.stack }} --identity=false
+
+  hooks-tflint:
+    name: "[hooks-tflint] example"
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          github_token: ${{ github.token }}
-          tflint_version: v0.58.1
-          working_directory: examples/${{ matrix.demo-folder }}/components/terraform
-          flags: >-
-            --enable-rule=terraform_unused_declarations
-            --disable-rule=terraform_typed_variables
-            --minimum-failure-severity=warning
-            --recursive
-            --config=${{ github.workspace }}/examples/.tflint.hcl
-          fail_level: error
+          persist-credentials: false
+
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+
+      - name: Install OpenTofu and TFLint with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install --default terraform-linters/tflint@0.59.1
+          atmos toolchain env --format=github
+
+      - name: Run the TFLint hook example
+        working-directory: examples/hooks-tflint
+        run: atmos terraform plan example -s test
 
   # run other demo tests
   validate:

@@ -270,7 +270,7 @@ func TestGetAffectedComponents(t *testing.T) {
 			patch := tt.mockFunc()
 			defer patch.Reset()
 
-			result, err := getAffectedComponents(tt.args)
+			result, err := GetAffectedComponents(tt.args)
 
 			// Check if gomonkey mocking is working.
 			if tt.expectedError && err == nil {
@@ -341,8 +341,8 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				// Mock getAffectedComponents to return empty list.
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				// Mock GetAffectedComponents to return empty list.
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{}, nil
 					})
@@ -366,8 +366,8 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				// Mock getAffectedComponents.
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				// Mock GetAffectedComponents.
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "prod", IncludedInDependents: false},
@@ -396,7 +396,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			skipIfMocked:  true,
 		},
 		{
-			name: "error from getAffectedComponents",
+			name: "error from GetAffectedComponents",
 			args: &DescribeAffectedCmdArgs{
 				CLIConfig: &schema.AtmosConfiguration{},
 				RepoPath:  "/invalid/path",
@@ -408,7 +408,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return nil, errors.New("failed to get affected components")
 					})
@@ -432,7 +432,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "prod"},
@@ -525,6 +525,6 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = getAffectedComponents(args)
+		_, _ = GetAffectedComponents(args)
 	}
 }
