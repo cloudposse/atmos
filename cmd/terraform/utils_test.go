@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -113,6 +115,105 @@ func TestCheckTerraformFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTerraformRunWithOptionsMockGuards(t *testing.T) {
+	parent := &cobra.Command{Use: "terraform"}
+
+	err := terraformRunWithOptions(parent, &cobra.Command{Use: "apply"}, nil, &TerraformRunOptions{
+		ProcessFunctions: true,
+		UseMocks:         true,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
+
+	err = terraformRunWithOptions(parent, &cobra.Command{Use: "plan"}, nil, &TerraformRunOptions{
+		ProcessFunctions: false,
+		UseMocks:         true,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "requires --process-functions=true")
+}
+
+func TestValidateTerraformMockFlagsBeforeHooks(t *testing.T) {
+	cmd := &cobra.Command{Use: "apply"}
+	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+
+	err := validateTerraformMockFlags(cmd)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
+}
+
+func TestValidateTerraformMockFlags(t *testing.T) {
+	tests := []struct {
+		name             string
+		command          *cobra.Command
+		useMocks         bool
+		processFunctions bool
+		wantErr          string
+	}{
+		{name: "nil command"},
+		{name: "command without mock flag", command: &cobra.Command{Use: "plan"}},
+		{name: "mocks disabled", command: &cobra.Command{Use: "apply"}, processFunctions: true},
+		{name: "mocks require function processing", command: &cobra.Command{Use: "plan"}, useMocks: true, wantErr: "requires --process-functions=true"},
+		{name: "mocks require plan", command: &cobra.Command{Use: "apply"}, useMocks: true, processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "valid mock plan", command: &cobra.Command{Use: "plan"}, useMocks: true, processFunctions: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.command != nil && tt.name != "command without mock flag" {
+				tt.command.Flags().Bool("use-mocks", tt.useMocks, "")
+				tt.command.Flags().Bool("process-functions", tt.processFunctions, "")
+			}
+
+			err := validateTerraformMockFlags(tt.command)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestValidateTerraformMockOptions(t *testing.T) {
+	assert.NoError(t, validateTerraformMockOptions("apply", false, false))
+	assert.ErrorContains(t, validateTerraformMockOptions("plan", true, false), "requires --process-functions=true")
+	assert.ErrorContains(t, validateTerraformMockOptions("apply", true, true), "supported only by `atmos terraform plan`")
+	assert.NoError(t, validateTerraformMockOptions("plan", true, true))
+}
+
+func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {
+	for _, args := range [][]string{
+		{"providers", "lock"},
+		{"state", "list"},
+		{"workspace", "show"},
+	} {
+		assert.True(t, isCompoundTerraformCommandWithoutComponent(args))
+	}
+
+	assert.False(t, isCompoundTerraformCommandWithoutComponent(nil))
+	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"providers"}))
+	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"version", "show"}))
+}
+
+func TestRunBeforeHooksRejectsInvalidMocksBeforeResolution(t *testing.T) {
+	cmd := &cobra.Command{Use: "apply"}
+	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+
+	err := runBeforeHooks(h.HookEvent("before.terraform.apply"), cmd, nil)
+	assert.ErrorContains(t, err, "supported only by `atmos terraform plan`")
+}
+
+func TestTerraformRunWithOptionsRejectsInvalidMocksBeforeConfig(t *testing.T) {
+	parent := &cobra.Command{Use: "terraform"}
+	actual := &cobra.Command{Use: "plan"}
+
+	err := terraformRunWithOptions(parent, actual, nil, &TerraformRunOptions{UseMocks: true})
+	assert.ErrorContains(t, err, "requires --process-functions=true")
 }
 
 // TestTerraformIdentityFlagHandling tests the identity flag handling in terraformRun.
@@ -371,6 +472,16 @@ func TestHasMultiComponentFlags(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			name:     "tags flag set",
+			info:     &schema.ConfigAndStacksInfo{Tags: []string{"production"}},
+			expected: true,
+		},
+		{
+			name:     "labels flag set",
+			info:     &schema.ConfigAndStacksInfo{Labels: map[string]string{"cost-center": "platform"}},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -522,6 +633,16 @@ func TestIsMultiComponentExecution(t *testing.T) {
 			info:     &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
 			expected: false,
 		},
+		{
+			name:     "tags set",
+			info:     &schema.ConfigAndStacksInfo{Tags: []string{"production"}},
+			expected: true,
+		},
+		{
+			name:     "labels set",
+			info:     &schema.ConfigAndStacksInfo{Labels: map[string]string{"cost-center": "platform"}},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -530,6 +651,21 @@ func TestIsMultiComponentExecution(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestHasNonAffectedMultiFlags_TagsAndLabelsComposeWithAffected asserts that
+// --tags/--labels are deliberately excluded from hasNonAffectedMultiFlags, so
+// `--affected --tags production` passes checkTerraformFlags instead of being
+// rejected as a conflicting multi-component selector.
+func TestHasNonAffectedMultiFlags_TagsAndLabelsComposeWithAffected(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		Affected: true,
+		Tags:     []string{"production"},
+		Labels:   map[string]string{"cost-center": "platform"},
+	}
+
+	assert.False(t, hasNonAffectedMultiFlags(info), "tags/labels alone must not trip the non-affected multi-flag check")
+	assert.NoError(t, checkTerraformFlags(info), "--affected --tags/--labels must compose without error")
 }
 
 // TestHasNonAffectedMultiFlags tests the hasNonAffectedMultiFlags function.
@@ -572,6 +708,28 @@ func TestHasNonAffectedMultiFlags(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestIsMultiComponentInvocationUsesViperValues(t *testing.T) {
+	v := viper.GetViper()
+	t.Cleanup(func() {
+		v.Set("all", false)
+		v.Set("affected", false)
+		v.Set("components", []string{})
+		v.Set("query", "")
+	})
+	v.Set("all", false)
+	v.Set("affected", false)
+	v.Set("components", []string{"vpc", "eks"})
+	v.Set("query", "")
+
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().Bool("all", false, "")
+	cmd.Flags().Bool("affected", false, "")
+	cmd.Flags().StringSlice("components", nil, "")
+	cmd.Flags().String("query", "", "")
+
+	assert.True(t, isMultiComponentInvocation(cmd))
 }
 
 // TestHasSingleComponentFlags tests the hasSingleComponentFlags function.

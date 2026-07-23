@@ -59,7 +59,7 @@ func DeleteS3Backend(
 		return err
 	}
 
-	ui.Success(fmt.Sprintf("✓ Backend deleted: bucket '%s' and all contents removed", config.bucket))
+	ui.Successf("Backend deleted: bucket '%s' and all contents removed", config.bucket)
 	return nil
 }
 
@@ -82,7 +82,7 @@ func createS3ClientForDeletion(ctx context.Context, config *s3Config, authContex
 			WithHint("Check AWS credentials and region configuration").
 			Err()
 	}
-	return getS3ClientFactory()(awsConfig), nil
+	return newS3Client(&awsConfig, config, authContext), nil
 }
 
 // validateBucketExistsForDeletion checks if the bucket exists before deletion.

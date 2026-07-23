@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // TestMain is the package's test entry point. It checks for two env-gate
@@ -14,6 +18,10 @@ import (
 //   - _ATMOS_TEST_WRITE_OUTPUT: write the value of _ATMOS_TEST_OUTPUT_BODY to
 //     the path in $ATMOS_OUTPUT_FILE, then exit 0. Lets tests simulate a tool
 //     that produces structured side-channel output.
+//   - _ATMOS_TEST_ECHO_STDOUT: write the value of _ATMOS_TEST_STDOUT_BODY to
+//     os.Stdout, then exit 0. Lets tests simulate a tool that emits structured
+//     output to stdout (e.g. tflint --format=sarif) so the engine's
+//     CaptureStdout redirect can be verified cross-platform via os.Executable().
 func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
@@ -29,5 +37,18 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	if os.Getenv("_ATMOS_TEST_ECHO_STDOUT") == "1" {
+		fmt.Fprint(os.Stdout, os.Getenv("_ATMOS_TEST_STDOUT_BODY"))
+		os.Exit(0)
+	}
+
+	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
+	// (used by pkg/ci CI annotations/log groups, exercised via command_engine.go)
+	// don't panic or silently no-op during tests.
+	if ioCtx, err := iolib.NewContext(); err == nil {
+		data.InitWriter(ioCtx)
+		ui.InitFormatter(ioCtx)
+	}
+
 	os.Exit(m.Run())
 }

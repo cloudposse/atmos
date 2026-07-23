@@ -77,8 +77,8 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          " ",
-				Suffix:          " ",
+				Prefix:          "\u00A0", // Non-breaking space for padding.
+				Suffix:          "\u00A0", // Non-breaking space for padding.
 				Color:           &h1Color,
 				BackgroundColor: &h1BgColor,
 				Bold:            boolPtr(true),

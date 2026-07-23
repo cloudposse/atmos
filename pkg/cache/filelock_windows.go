@@ -3,31 +3,37 @@
 package cache
 
 import (
+	"context"
 	"time"
 )
 
-// noopFileLock implements FileLock without actual locking for Windows.
-// Windows file locking has timeout issues, so we gracefully degrade
-// to no locking since the cache is non-critical functionality.
+// noopFileLock keeps cache operations best-effort on Windows. Native Windows
+// file locks have historically caused cache-operation timeouts; the cache is
+// non-critical and must not block the primary command path.
 type noopFileLock struct{}
 
-// NewFileLock creates a new FileLock for the given path.
-// On Windows, this returns a no-op implementation.
+// NewFileLock returns the Windows best-effort cache lock implementation.
 func NewFileLock(_ string) FileLock {
 	return &noopFileLock{}
 }
 
-// WithLock executes fn without locking on Windows.
+// WithLock executes fn without a native lock and gives Windows time to release
+// file handles before another cache operation starts.
 func (n *noopFileLock) WithLock(fn func() error) error {
-	// Add a small delay after operations to let Windows release file handles.
-	defer func() {
-		time.Sleep(50 * time.Millisecond)
-	}()
+	defer time.Sleep(50 * time.Millisecond)
 
 	return fn()
 }
 
-// WithRLock executes fn without locking on Windows.
+// WithLockContext executes fn without a native lock. Cache writes are
+// intentionally best-effort on Windows, including when ctx is canceled.
+func (n *noopFileLock) WithLockContext(_ context.Context, fn func() error) error {
+	defer time.Sleep(50 * time.Millisecond)
+
+	return fn()
+}
+
+// WithRLock executes cache reads without a native lock on Windows.
 func (n *noopFileLock) WithRLock(fn func() error) error {
 	return fn()
 }

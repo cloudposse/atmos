@@ -25,7 +25,7 @@ Install skills using various GitHub URL formats:
 
 <Terminal title="terminal">
 ```bash
-# Install all 21+ official Atmos skills (recommended)
+# Install all 25 official Atmos skills (recommended)
 atmos ai skill install cloudposse/atmos
 
 # With specific version tag
@@ -53,7 +53,9 @@ When you install a skill, Atmos downloads the repository, validates the SKILL.md
 
 ## Managing Installed Skills
 
-### List Installed Skills
+### List Available and Installed Skills
+
+`atmos ai skill list` shows the full catalog of official skills (embedded in the binary, so it works offline) alongside anything you've installed. A filled dot (`●`) marks an installed skill; a hollow dot (`○`) marks one that's available to install. Add `--installed` to show only what's installed.
 
 <Terminal title="terminal">
 ```bash

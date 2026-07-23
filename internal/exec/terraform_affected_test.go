@@ -13,6 +13,34 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestExtractAffectedNodeIDs(t *testing.T) {
+	t.Run("empty list", func(t *testing.T) {
+		ids := extractAffectedNodeIDs(nil)
+		assert.Empty(t, ids)
+	})
+
+	t.Run("single affected", func(t *testing.T) {
+		affected := []schema.Affected{
+			{Component: "vpc", Stack: "dev"},
+		}
+		ids := extractAffectedNodeIDs(affected)
+		assert.Equal(t, []string{"vpc-dev"}, ids)
+	})
+
+	t.Run("multiple affected", func(t *testing.T) {
+		affected := []schema.Affected{
+			{Component: "vpc", Stack: "dev"},
+			{Component: "rds", Stack: "prod"},
+			{Component: "app", Stack: "staging"},
+		}
+		ids := extractAffectedNodeIDs(affected)
+		assert.Equal(t, 3, len(ids))
+		assert.Equal(t, "vpc-dev", ids[0])
+		assert.Equal(t, "rds-prod", ids[1])
+		assert.Equal(t, "app-staging", ids[2])
+	})
+}
+
 func TestGetAffectedComponents(t *testing.T) {
 	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
 	// GoMonkey requires runtime code patching which macOS memory protection prevents.
@@ -242,7 +270,7 @@ func TestGetAffectedComponents(t *testing.T) {
 			patch := tt.mockFunc()
 			defer patch.Reset()
 
-			result, err := getAffectedComponents(tt.args)
+			result, err := GetAffectedComponents(tt.args)
 
 			// Check if gomonkey mocking is working.
 			if tt.expectedError && err == nil {
@@ -284,259 +312,6 @@ func TestGetAffectedComponents(t *testing.T) {
 	}
 }
 
-// setupExecuteAffectedComponentsMock sets up mocks for executeAffectedComponents tests.
-func setupExecuteAffectedComponentsMock(
-	mockFunc func() *gomonkey.Patches,
-	skipIfMockFailed bool,
-	expectedError bool,
-	executionCount *int,
-) (cleanupFunc func()) {
-	cleanups := []func(){}
-
-	// Setup basic mocks if needed.
-	if mockFunc != nil {
-		patch := mockFunc()
-		if patch != nil {
-			cleanups = append(cleanups, patch.Reset)
-		}
-	}
-
-	// Track execution count if we're mocking.
-	if skipIfMockFailed {
-		patch := gomonkey.ApplyFunc(executeTerraformAffectedComponentInDepOrder,
-			func(
-				info *schema.ConfigAndStacksInfo,
-				affectedList []schema.Affected,
-				params *affectedDepOrderParams,
-				args *DescribeAffectedCmdArgs,
-			) error {
-				*executionCount++
-				if expectedError {
-					return errors.New("terraform execution failed")
-				}
-				return nil
-			})
-		cleanups = append(cleanups, patch.Reset)
-	}
-
-	return func() {
-		for _, cleanup := range cleanups {
-			cleanup()
-		}
-	}
-}
-
-func TestExecuteAffectedComponents(t *testing.T) {
-	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
-	// GoMonkey requires runtime code patching which macOS memory protection prevents.
-	// See: https://github.com/agiledragon/gomonkey/issues/169
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
-
-	tests := []struct {
-		name                      string
-		affectedList              []schema.Affected
-		info                      *schema.ConfigAndStacksInfo
-		args                      *DescribeAffectedCmdArgs
-		mockFunc                  func() *gomonkey.Patches
-		expectedExecutionCount    int
-		expectedError             bool
-		skipIfMockFailed          bool
-		expectedSkippedComponents int
-	}{
-		{
-			name:         "empty affected list",
-			affectedList: []schema.Affected{},
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockFunc:               func() *gomonkey.Patches { return nil },
-			expectedExecutionCount: 0,
-			expectedError:          false,
-		},
-		{
-			name: "single affected component without dependents",
-			affectedList: []schema.Affected{
-				{
-					Component:            "vpc",
-					Stack:                "prod",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockFunc: func() *gomonkey.Patches {
-				return gomonkey.ApplyFunc(executeTerraformAffectedComponentInDepOrder,
-					func(
-						info *schema.ConfigAndStacksInfo,
-						affectedList []schema.Affected,
-						params *affectedDepOrderParams,
-						args *DescribeAffectedCmdArgs,
-					) error {
-						return nil
-					})
-			},
-			expectedExecutionCount: 1,
-			expectedError:          false,
-			skipIfMockFailed:       true,
-		},
-		{
-			name: "multiple affected components",
-			affectedList: []schema.Affected{
-				{
-					Component:            "vpc",
-					Stack:                "prod",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-				{
-					Component:            "eks",
-					Stack:                "prod",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-				{
-					Component:            "rds",
-					Stack:                "prod",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockFunc: func() *gomonkey.Patches {
-				return gomonkey.ApplyFunc(executeTerraformAffectedComponentInDepOrder,
-					func(
-						info *schema.ConfigAndStacksInfo,
-						affectedList []schema.Affected,
-						params *affectedDepOrderParams,
-						args *DescribeAffectedCmdArgs,
-					) error {
-						return nil
-					})
-			},
-			expectedExecutionCount: 3,
-			expectedError:          false,
-			skipIfMockFailed:       true,
-		},
-		{
-			name: "skip components included in dependents",
-			affectedList: []schema.Affected{
-				{
-					Component:            "vpc",
-					Stack:                "prod",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-				{
-					Component:            "security-group",
-					Stack:                "prod",
-					IncludedInDependents: true, // This should be skipped.
-					Dependents:           []schema.Dependent{},
-				},
-				{
-					Component:            "eks",
-					Stack:                "prod",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockFunc: func() *gomonkey.Patches {
-				return gomonkey.ApplyFunc(executeTerraformAffectedComponentInDepOrder,
-					func(
-						info *schema.ConfigAndStacksInfo,
-						affectedList []schema.Affected,
-						params *affectedDepOrderParams,
-						args *DescribeAffectedCmdArgs,
-					) error {
-						return nil
-					})
-			},
-			expectedExecutionCount:    2, // Only vpc and eks, security-group is skipped.
-			expectedError:             false,
-			skipIfMockFailed:          true,
-			expectedSkippedComponents: 1,
-		},
-		{
-			name: "error during component execution",
-			affectedList: []schema.Affected{
-				{
-					Component:            "vpc",
-					Stack:                "prod",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockFunc: func() *gomonkey.Patches {
-				return gomonkey.ApplyFunc(executeTerraformAffectedComponentInDepOrder,
-					func(
-						info *schema.ConfigAndStacksInfo,
-						affectedList []schema.Affected,
-						params *affectedDepOrderParams,
-						args *DescribeAffectedCmdArgs,
-					) error {
-						return errors.New("terraform execution failed")
-					})
-			},
-			expectedExecutionCount: 1,
-			expectedError:          true,
-			skipIfMockFailed:       true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var executionCount int
-
-			// Setup mocks and defer cleanup.
-			cleanup := setupExecuteAffectedComponentsMock(tt.mockFunc, tt.skipIfMockFailed, tt.expectedError, &executionCount)
-			defer cleanup()
-
-			err := executeAffectedComponents(tt.affectedList, tt.info, tt.args)
-
-			// Check if gomonkey mocking is working.
-			if tt.skipIfMockFailed && tt.expectedExecutionCount > 0 && executionCount == 0 {
-				t.Skip("gomonkey function mocking failed (likely due to compiler optimizations or platform issues)")
-			}
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			if tt.skipIfMockFailed {
-				assert.Equal(t, tt.expectedExecutionCount, executionCount, "Expected %d executions, got %d", tt.expectedExecutionCount, executionCount)
-			}
-		})
-	}
-}
-
 func TestExecuteTerraformAffected(t *testing.T) {
 	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
 	// GoMonkey requires runtime code patching which macOS memory protection prevents.
@@ -566,8 +341,8 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				// Mock getAffectedComponents to return empty list.
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				// Mock GetAffectedComponents to return empty list.
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{}, nil
 					})
@@ -591,8 +366,8 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				// Mock getAffectedComponents.
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				// Mock GetAffectedComponents.
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "prod", IncludedInDependents: false},
@@ -615,20 +390,13 @@ func TestExecuteTerraformAffected(t *testing.T) {
 					})
 				patches = append(patches, p2)
 
-				// Mock executeAffectedComponents.
-				p3 := gomonkey.ApplyFunc(executeAffectedComponents,
-					func(affectedList []schema.Affected, info *schema.ConfigAndStacksInfo, args *DescribeAffectedCmdArgs) error {
-						return nil
-					})
-				patches = append(patches, p3)
-
 				return patches
 			},
 			expectedError: false,
 			skipIfMocked:  true,
 		},
 		{
-			name: "error from getAffectedComponents",
+			name: "error from GetAffectedComponents",
 			args: &DescribeAffectedCmdArgs{
 				CLIConfig: &schema.AtmosConfiguration{},
 				RepoPath:  "/invalid/path",
@@ -640,7 +408,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return nil, errors.New("failed to get affected components")
 					})
@@ -664,7 +432,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "prod"},
@@ -685,52 +453,6 @@ func TestExecuteTerraformAffected(t *testing.T) {
 						return errors.New("failed to add dependents")
 					})
 				patches = append(patches, p2)
-
-				return patches
-			},
-			expectedError: true,
-			skipIfMocked:  true,
-		},
-		{
-			name: "error from executeAffectedComponents",
-			args: &DescribeAffectedCmdArgs{
-				CLIConfig: &schema.AtmosConfiguration{},
-				RepoPath:  "/path/to/repo",
-				Stack:     "test-stack",
-			},
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-			},
-			mockFunc: func() []*gomonkey.Patches {
-				patches := []*gomonkey.Patches{}
-
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
-					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
-						return []schema.Affected{
-							{Component: "vpc", Stack: "prod"},
-						}, nil
-					})
-				patches = append(patches, p1)
-
-				p2 := gomonkey.ApplyFunc(addDependentsToAffected,
-					func(
-						cliConfig *schema.AtmosConfiguration,
-						affectedList *[]schema.Affected,
-						includeSettings bool,
-						processTemplates bool,
-						processYamlFunctions bool,
-						skip []string,
-						parentStack string,
-					) error {
-						return nil
-					})
-				patches = append(patches, p2)
-
-				p3 := gomonkey.ApplyFunc(executeAffectedComponents,
-					func(affectedList []schema.Affected, info *schema.ConfigAndStacksInfo, args *DescribeAffectedCmdArgs) error {
-						return errors.New("failed to execute components")
-					})
-				patches = append(patches, p3)
 
 				return patches
 			},
@@ -803,46 +525,6 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = getAffectedComponents(args)
-	}
-}
-
-func BenchmarkExecuteAffectedComponents(b *testing.B) {
-	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
-	// GoMonkey requires runtime code patching which macOS memory protection prevents.
-	// See: https://github.com/agiledragon/gomonkey/issues/169
-	if runtime.GOARCH == "arm64" {
-		b.Skip("Skipping gomonkey benchmark on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
-
-	affectedList := []schema.Affected{
-		{Component: "vpc", Stack: "prod", IncludedInDependents: false},
-		{Component: "eks", Stack: "prod", IncludedInDependents: false},
-	}
-	info := &schema.ConfigAndStacksInfo{
-		SubCommand: "plan",
-	}
-	args := &DescribeAffectedCmdArgs{
-		IncludeDependents: false,
-	}
-
-	patch := gomonkey.ApplyFunc(executeTerraformAffectedComponentInDepOrder,
-		func(
-			info *schema.ConfigAndStacksInfo,
-			affectedList []schema.Affected,
-			affectedComponent string,
-			affectedStack string,
-			parentComponent string,
-			parentStack string,
-			dependents []schema.Dependent,
-			args *DescribeAffectedCmdArgs,
-		) error {
-			return nil
-		})
-	defer patch.Reset()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = executeAffectedComponents(affectedList, info, args)
+		_, _ = GetAffectedComponents(args)
 	}
 }

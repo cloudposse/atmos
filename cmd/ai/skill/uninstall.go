@@ -3,6 +3,7 @@ package skill
 import (
 	_ "embed"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -26,15 +27,13 @@ var uninstallUsageMarkdown string
 
 // uninstallCmd represents the 'atmos ai skill uninstall' command.
 var uninstallCmd = &cobra.Command{
-	Use:     "uninstall <name>",
+	Use:     "uninstall [name]",
 	Short:   "Remove an installed skill",
 	Long:    uninstallLongMarkdown,
 	Example: uninstallUsageMarkdown,
-	Args:    cobra.ExactArgs(1),
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.aiSkillUninstallCmd")()
-
-		name := args[0]
 
 		// Bind parsed flags to Viper for precedence handling.
 		v := viper.GetViper()
@@ -51,8 +50,29 @@ var uninstallCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize installer: %w", err)
 		}
 
-		// Uninstall skill.
-		if err := installer.Uninstall(name, force); err != nil {
+		basePath, err := os.Getwd()
+		if err != nil {
+			basePath = "."
+		}
+
+		scopes, err := resolveUninstallScopes(cmd, v, force)
+		if err != nil {
+			return err
+		}
+
+		clients, err := resolveUninstallClients(basePath, v, force, scopes)
+		if err != nil {
+			return err
+		}
+
+		// With no <name> given, uninstall every installed skill instead of
+		// just one, mirroring `atmos mcp uninstall` acting on every
+		// configured server when no server names are given.
+		if len(args) == 0 {
+			return installer.UninstallAll(force, basePath, clients, scopes)
+		}
+
+		if err := installer.Uninstall(args[0], force, basePath, clients, scopes); err != nil {
 			return err
 		}
 
@@ -65,6 +85,15 @@ func init() {
 	uninstallParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
+		flags.WithStringSliceFlag("client", "c", nil, "AI client to remove the skill from (repeatable): claude-code, vscode, gemini"),
+		flags.WithEnvVars("client", "ATMOS_AI_SKILL_CLIENT"),
+		flags.WithBoolFlag("all-clients", "", false, "Remove the skill from all supported AI clients"),
+		flags.WithEnvVars("all-clients", "ATMOS_AI_SKILL_ALL_CLIENTS"),
+		flags.WithStringFlag(scopeFlag, "", marketplace.ScopeProject, "Distribution scope: project or user"),
+		flags.WithEnvVars(scopeFlag, "ATMOS_AI_SKILL_SCOPE"),
+		flags.WithValidValues(scopeFlag, marketplace.ScopeProject, marketplace.ScopeUser),
+		flags.WithBoolFlag("global", "g", false, "Alias for --scope user"),
+		flags.WithEnvVars("global", "ATMOS_AI_SKILL_GLOBAL"),
 	)
 
 	// Register flags on the command.

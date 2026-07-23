@@ -33,6 +33,7 @@ type parserConfig struct {
 type flagPromptConfig struct {
 	PromptTitle    string         // Title for the interactive selector
 	CompletionFunc CompletionFunc // Function to get available options
+	ShouldPrompt   func(*ParsedConfig) bool
 }
 
 // WithStringFlag adds a string flag to the parser configuration.
@@ -103,6 +104,37 @@ func WithStringSliceFlag(name, shorthand string, defaultValue []string, descript
 
 	return func(cfg *parserConfig) {
 		cfg.registry.Register(&StringSliceFlag{
+			Name:        name,
+			Shorthand:   shorthand,
+			Default:     defaultValue,
+			Description: description,
+		})
+	}
+}
+
+// WithStringMapFlag adds a string map flag for key=value pairs.
+//
+// Parameters:
+//   - name: Long flag name (without --)
+//   - shorthand: Short flag name (single character, without -)
+//   - defaultValue: Default map if flag not provided
+//   - description: Help text
+//
+// Usage:
+//
+//	WithStringMapFlag("set", "", map[string]string{}, "Set template values (key=value)")
+//
+// This flag accepts repeated key=value pairs:
+//   - CLI: --set foo=bar --set baz=qux
+//   - ENV: ATMOS_SET=foo=bar,baz=qux (comma-separated)
+//   - Config: set: {foo: bar, baz: qux}
+//
+// Use ParseStringMap() in viper_helpers.go to retrieve the parsed map.
+func WithStringMapFlag(name, shorthand string, defaultValue map[string]string, description string) Option {
+	defer perf.Track(nil, "flags.WithStringMapFlag")()
+
+	return func(cfg *parserConfig) {
+		cfg.registry.Register(&StringMapFlag{
 			Name:        name,
 			Shorthand:   shorthand,
 			Default:     defaultValue,
@@ -239,6 +271,8 @@ func WithEnvVars(flagName string, envVars ...string) Option {
 			f.EnvVars = envVars
 		case *StringSliceFlag:
 			f.EnvVars = envVars
+		case *StringMapFlag:
+			f.EnvVars = envVars
 		}
 	}
 }
@@ -258,6 +292,21 @@ func WithNoOptDefVal(flagName, value string) Option {
 		if strFlag, ok := flag.(*StringFlag); ok {
 			strFlag.NoOptDefVal = value
 			// Note: No need to re-register - we're just updating the field in place.
+		}
+	}
+}
+
+// WithNoOptDefValNoSpaceValue sets NoOptDefVal for a string flag without
+// allowing "--flag value" preprocessing. This is for flags where the bare
+// flag has meaning and the following positional argument must remain positional.
+func WithNoOptDefValNoSpaceValue(flagName, value string) Option {
+	defer perf.Track(nil, "flags.WithNoOptDefValNoSpaceValue")()
+
+	return func(cfg *parserConfig) {
+		flag := cfg.registry.Get(flagName)
+		if strFlag, ok := flag.(*StringFlag); ok {
+			strFlag.NoOptDefVal = value
+			strFlag.NoOptDefValNoSpaceValue = true
 		}
 	}
 }
@@ -411,6 +460,24 @@ func WithOptionalValuePrompt(flagName, promptTitle string, completionFunc Comple
 func WithPositionalArgPrompt(argName, promptTitle string, completionFunc CompletionFunc) Option {
 	defer perf.Track(nil, "flags.WithPositionalArgPrompt")()
 
+	return WithConditionalPositionalArgPrompt(argName, promptTitle, completionFunc, nil)
+}
+
+// WithConditionalPositionalArgPrompt enables interactive prompting for a missing
+// positional argument only when shouldPrompt returns true. Cobra still defers a
+// missing prompted argument to Parse; the command's normal positional validator
+// runs after this optional prompt has completed.
+//
+// This is useful for commands where a positional component is required for a
+// single-target operation but intentionally omitted for a bulk mode such as
+// --all or --affected.
+func WithConditionalPositionalArgPrompt(
+	argName, promptTitle string,
+	completionFunc CompletionFunc,
+	shouldPrompt func(*ParsedConfig) bool,
+) Option {
+	defer perf.Track(nil, "flags.WithConditionalPositionalArgPrompt")()
+
 	return func(cfg *parserConfig) {
 		if cfg.positionalPrompts == nil {
 			cfg.positionalPrompts = make(map[string]*flagPromptConfig)
@@ -418,6 +485,7 @@ func WithPositionalArgPrompt(argName, promptTitle string, completionFunc Complet
 		cfg.positionalPrompts[argName] = &flagPromptConfig{
 			PromptTitle:    promptTitle,
 			CompletionFunc: completionFunc,
+			ShouldPrompt:   shouldPrompt,
 		}
 	}
 }

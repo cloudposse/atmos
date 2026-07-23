@@ -6,15 +6,17 @@ id: component
 description: Use this command to describe the complete configuration for an Atmos component in an Atmos stack.
 ---
 import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to describe the complete configuration for an [Atmos component](/components) in
 an [Atmos stack](/learn/stacks).
 </Intro>
 
-<Screengrab title="atmos describe component --help" slug="atmos-describe-component--help" />
+<CastPlayer src="/casts/demo/fixtures/basic/describe-component.cast" title="atmos describe component" chrome controls scrubber />
+
+<CastPlayer title="atmos describe component --help" src="/casts/screengrabs/atmos-describe-component--help.cast" static chrome />
 
 ## Usage
 
@@ -275,7 +277,7 @@ The output contains the following sections:
 
 - `sources` - sources of the values from the component's sections (`vars`, `env`, `settings`)
 
-- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/cli/configuration/integrations/spacelift) is configured for the component in the stack
+- `spacelift_stack` - legacy Spacelift stack name (if the [legacy Spacelift integration](/deprecated/spacelift) is configured for the component in the stack
   and `settings.spacelift.workspace_enabled` is set to `true`)
 
 - `vars` - the final deep-merged component variables that are provided to Terraform/OpenTofu and Helmfile when executing

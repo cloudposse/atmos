@@ -1,3 +1,11 @@
+---
+title: Remote Stack Imports
+tags: [Stacks]
+cast:
+  file: /casts/examples/remote-stack-imports/remote-vars.cast
+  title: atmos remote stack imports
+---
+
 # Remote Stack Imports Example
 
 This example demonstrates how to import stack configurations from remote sources using [go-getter](https://github.com/hashicorp/go-getter) URL schemes.
@@ -53,6 +61,18 @@ import:
   - github.com/acme/infrastructure//stacks/catalog/rds?ref=main
 ```
 
+### Nested Imports from the Remote Source
+
+Remote files can contain their own `import:` section. By default, those nested imports resolve from your local `stacks.base_path`. Use `nested_imports: remote` when the remote file and its imports should be resolved together from the same remote source:
+
+```yaml
+import:
+  - path: git::https://github.com/acme/infrastructure.git//stacks/orgs/acme/_defaults.yaml?ref=v1.2.0
+    nested_imports: remote
+```
+
+With this setting, a nested import like `catalog/_defaults` resolves to `stacks/catalog/_defaults.yaml` in the remote repository.
+
 ### S3 Bucket
 
 ```yaml
@@ -66,6 +86,7 @@ import:
 2. **Cache Considerations** - Remote imports are cached locally
 3. **Authentication** - Configure credentials for private repositories via environment variables
 4. **Fallback to Local** - Consider vendoring critical imports for offline access
+5. **Choose Nested Import Resolution** - Use the default `nested_imports: local` for remote files that expect local extension points, and `nested_imports: remote` for self-contained remote stack libraries
 
 ## Learn More
 

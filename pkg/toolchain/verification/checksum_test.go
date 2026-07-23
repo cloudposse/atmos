@@ -376,7 +376,9 @@ func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {
 		AssetURL:  "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz",
 		AssetPath: assetPath,
 		Downloader: fakeDownloader{
-			"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt": checksumData,
+			"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt":     checksumData,
+			"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.pem": []byte("pem"),
+			"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.sig": []byte("sig"),
 		},
 		Policy: Policy{
 			Checksums:  PolicyWhenAvailable,
@@ -388,14 +390,9 @@ func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, runner.calls, 1)
 	assert.Equal(t, "cosign", runner.calls[0].name)
-	assert.Equal(t, []string{
-		"verify-blob",
-		"--certificate",
-		"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.pem",
-		"--signature",
-		"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.sig",
-		writeAssetPathPlaceholder(runner.calls[0].args),
-	}, normalizeLastArg(runner.calls[0].args))
+	assert.Equal(t, []string{"verify-blob", "--certificate", "--signature"}, []string{runner.calls[0].args[0], runner.calls[0].args[1], runner.calls[0].args[3]})
+	assert.NotEqual(t, "https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.pem", runner.calls[0].args[2])
+	assert.NotEqual(t, "https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.sig", runner.calls[0].args[4])
 	assert.NotEqual(t, assetPath, runner.calls[0].args[len(runner.calls[0].args)-1])
 	assert.Contains(t, result.SignatureMethods, "cosign")
 	assert.Equal(t, "sha256", result.ChecksumAlgorithm)

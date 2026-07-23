@@ -1,0 +1,42 @@
+---
+title: atmos helm deploy
+sidebar_label: deploy
+sidebar_class_name: command
+id: deploy
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Deploy a Helm release for a component in a stack. `deploy` is an alias for
+  [`apply`](/cli/commands/helm/apply): it installs or upgrades the release
+  (`helm upgrade --install`), or delivers rendered manifests to a provision
+  target when `--target` is set.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm deploy <component> --stack <stack> [options]
+atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
+
+# Deploy components filtered by tags or labels (composes with --all/--affected)
+atmos helm deploy --all --tags production,tier-1
+atmos helm deploy --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>Provision target to deliver to. Defaults to `provision.default`, otherwise the cluster.</dd>
+
+  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
+  <dd>Process multiple Helm components in dependency order. See [`apply`](/cli/commands/helm/apply).</dd>
+
+  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+</dl>

@@ -25,20 +25,26 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 - **NEVER delete, reset, or discard files you didn't create** - Other sessions may have created them
 - **NEVER run `git reset`, `git checkout --`, or `git clean`** without explicit user approval
+- **NEVER run `go clean`**. In particular, `go clean -cache` deletes the shared Go build cache and breaks concurrent builds; it is not an approved troubleshooting step.
 - **ALWAYS ask the user before removing untracked files** - They may be work-in-progress from another session
 - **When you see unfamiliar files**, assume another session created them - ask the user what to do
 - **If pre-commit hooks fail due to files you didn't touch**, ask the user how to proceed rather than trying to fix or remove them
 
 **Why this matters:** The user may have multiple Claude sessions working in parallel on different aspects of a feature. Deleting “unknown” files destroys that work.
 
+## Hourly PR Maintenance Loop (RECOMMENDED)
+
+On a branch with an open PR, use the **`pr-maintenance-loop`** skill (`.claude/skills/pr-maintenance-loop/SKILL.md`) to start an hourly `/loop` that works the PR toward merge-ready: rebases against `main` when behind, checks CI, addresses and resolves unresolved CodeRabbit threads, and runs the patch-scoped `lint` and `test-coverage` skills. This loop is session-only — it dies with the process and expires after 7 days — so re-invoke the skill each new session; it is not a one-time setup. For a single on-demand pass without starting a recurring loop, invoke the **`fix-all`** skill directly (also mirrored at the CLI as `atmos fix --all`).
+
 ## Essential Commands
 
 ```bash
 # Build & Test
-make build                   # Build to ./build/atmos
-make testacc                 # Run tests
-make testacc-cover           # Tests with coverage
-make lint                    # golangci-lint on changed files
+atmos build                  # Build to ./build/atmos
+atmos test                   # Run short tests
+atmos test --full            # Run full acceptance tests
+atmos test --coverage        # Tests with coverage
+atmos lint --changed         # golangci-lint on changed files
 ```
 
 ## Architecture
@@ -158,6 +164,9 @@ Three groups separated by blank lines, sorted alphabetically:
 
 Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 
+### Go Formatting (MANDATORY)
+Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `goimports` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
+
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.
 
@@ -194,7 +203,7 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - Use interfaces + dependency injection for testability
 - Generate mocks with `go.uber.org/mock/mockgen`
 - Table-driven tests for comprehensive coverage
-- Target >80% coverage
+- Target >85% coverage
 
 ### Test Isolation (MANDATORY)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args).
@@ -233,7 +242,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
 
-**Commands**: `make test-short` (quick), `make testacc` (all), `make testacc-cover` (coverage)
+**Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
 
 **Fixtures**: `tests/test-cases/` for integration tests
 
@@ -290,12 +299,11 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 ### Regenerating Screengrabs (IMPORTANT)
 **When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
 
-**How (Linux/CI only):**
-1. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR)
-2. Local Linux: `cd demo/screengrabs && make all`
-3. Docker (macOS): `make -C demo/screengrabs docker-all`
+**How (any OS — native, no containers; screengrabs are casts custom commands, never a side-car tool):**
+1. Local: `atmos --chdir=demo/casts casts generate screengrabs cli` (the `casts setup` step builds atmos from the working tree; the command list lives inline in `demo/casts/atmos.d/screengrabs/cli.yaml` and each command is recorded via the global `--cast` flag into `website/static/casts/screengrabs/<slug>.cast`)
+2. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR; builds atmos from the checkout the same way)
 
-**Notes:** Captures exact output, ANSI→HTML, `script` syntax differs BSD/GNU, regenerate all together, no pipe indirection.
+**Notes:** Recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS`/`ATMOS_CAST_RECORDING_WIDTH` (recorded at 90 cols to fit the docs column). Machine-specific repo paths are rewritten to `/absolute/path/to/repo` (the test-harness convention) and validation (`atmos --chdir=demo/casts casts validate screengrabs cli`) fails on error output, path leaks, or docs referencing a missing cast. Regenerate all together; never pipe the output.
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
@@ -307,35 +315,15 @@ All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use keba
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
-- PRs labeled `minor`/`major` MUST include blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
-- Use `.mdx` with YAML front matter, `<!--truncate-->` after intro
-- **MUST read `website/blog/tags.yml`** - Only use tags defined there, never invent new tags
-- **MUST read `website/blog/authors.yml`** - Use existing author or add new entry for committer
-
-**Blog Template:**
-```markdown
----
-slug: descriptive-slug
-title: "Clear Title"
-authors: [username]
-tags: [feature]
----
-Brief intro.
-<!--truncate-->
-## What Changed / Why This Matters / How to Use It / Get Involved
-```
-
-**Valid Tags (from `website/blog/tags.yml`):**
-- User-facing: `feature`, `enhancement`, `bugfix`, `dx`, `breaking-change`, `security`, `documentation`, `deprecation`
-- Internal: `core` (for contributor-only changes with zero user impact)
+- Non-draft PRs targeting `main`, labeled `minor`/`major`, MUST include a blog post:
+  `website/blog/YYYY-MM-DD-feature-name.mdx` (CI accepts `.md` too, but `.mdx` is this repo's convention)
+- See the `changelog` skill (`.claude/skills/changelog/SKILL.md`) for the MDX template, frontmatter,
+  `tags.yml`/`authors.yml` rules, and style requirements (problem-first framing, no backtick-opening prose,
+  optional cast embeds, no Go-internals leakage)
 
 **Roadmap Updates (CI Enforced):**
 - PRs labeled `minor`/`major` MUST also update `website/src/data/roadmap.js`
-- For new features: Add milestone to relevant initiative with `status: 'shipped'`
-- Link to changelog: Add `changelog: 'your-blog-slug'` to the milestone
-- Link to PR: Add `pr: <pr-number>` to the milestone
-- Update initiative `progress` percentage: `(shipped milestones / total milestones) * 100`
-- See `.claude/agents/roadmap.md` for detailed update instructions
+- See the `roadmap` skill (`.claude/skills/roadmap/SKILL.md`) for detailed update instructions
 
 Use `no-release` label for docs-only changes.
 
@@ -375,7 +363,7 @@ Don't commit: todos, research, scratch files. Do commit: code, tests, requested 
 Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
-80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
+85% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
 
 ### Cyclomatic Complexity (MANDATORY)
 golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
@@ -452,7 +440,13 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 **Build**: CGO disabled, cross-platform, version via ldflags, output to `./build/`
 
 ### Compilation (MANDATORY)
-ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediately.
+ALWAYS compile after changes: `go build ./... && atmos test`. Fix errors immediately. `atmos test` runs short-mode tests only; use `atmos test --full` before opening a PR or when a change touches slow/integration-style tests.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+at `specs/001-pact-consumer-contracts/plan.md`
+<!-- SPECKIT END -->

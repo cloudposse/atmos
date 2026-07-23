@@ -9,11 +9,11 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 ```bash
 # Run quick tests only (skip long-running tests >2s)
 go test -short ./...
-make test-short
+atmos test short
 
 # Run all tests including long-running ones (will skip if preconditions not met)
 go test ./...
-make testacc
+atmos test acc
 
 # Run with verbose output to see skips
 go test -v ./...
@@ -29,7 +29,7 @@ Run quick tests only, skipping tests that take more than 2 seconds:
 
 ```bash
 go test -short ./...
-make test-short
+atmos test short
 ```
 
 Long tests include:
@@ -40,7 +40,7 @@ Long tests include:
 To run all tests including long ones:
 ```bash
 go test ./...
-make testacc
+atmos test acc
 ```
 
 ## Heavy Integration Tests
@@ -61,6 +61,60 @@ go test ./pkg/auth/providers/aws
 ```
 
 These tests validate that SAML browser automation actually downloads and installs the Chromium browser correctly.
+
+### Floci Cloud Emulator Tests
+
+Floci-backed E2E tests are opt-in and should use fixtures under
+`tests/fixtures/scenarios`, not `gists/`. The gists are manual examples; the
+test fixtures are allowed to be parameterized for isolation and CI.
+
+Use `newFlociHarness` from `tests/floci_harness_test.go` for new Floci tests.
+It centralizes endpoint discovery, the `ATMOS_TEST_FLOCI=true` opt-in gate,
+temporary fixture copies, command env, local Atmos binary execution, and common
+AWS verification clients.
+
+#### Running locally (auto-start)
+
+When you opt in with `ATMOS_TEST_FLOCI=true` and leave the `FLOCI_*` endpoint
+variables unset, the suite **starts the Floci emulators for you**
+(using [testcontainers](https://golang.testcontainers.org/)) and tears them down
+when the run finishes. The container runtime is auto-detected via `pkg/container`,
+so either **Docker or Podman** works — for Podman the machine's API socket is wired
+into testcontainers automatically (and the Ryuk reaper is disabled, since rootless
+Podman cannot run it):
+
+```bash
+ATMOS_TEST_FLOCI=true go test ./tests -run Floci
+```
+
+If no container runtime is available, the Floci tests **skip** with an explanatory
+message rather than failing. The emulator images are pinned in
+`tests/floci_containers_test.go` and kept in sync with the CI service containers.
+
+#### Bringing your own Floci
+
+To target a Floci instance you manage (or the CI service containers), pre-set the
+endpoint variables. Auto-start sees they are already set and does nothing:
+
+```bash
+ATMOS_TEST_FLOCI=true \
+FLOCI_ENDPOINT_URL=http://localhost:4566 \
+FLOCI_GCP_ENDPOINT=http://localhost:4588 \
+FLOCI_AZURE_ENDPOINT=http://localhost:4577 \
+go test ./tests -run Floci
+```
+
+GitHub Actions runs the AWS, GCP, and Azure store/secrets Floci coverage in the dedicated
+`[floci] go e2e` job from `.github/workflows/test.yml`. The general acceptance
+test matrix does not set `ATMOS_TEST_FLOCI`, so these tests continue to skip
+outside the Floci job.
+
+The shared harness supports separate Floci endpoints for AWS-compatible
+services, GCP Secret Manager, and Azure Key Vault. AWS uses
+`FLOCI_ENDPOINT_URL`, GCP uses `FLOCI_GCP_ENDPOINT`, and Azure uses
+`FLOCI_AZURE_ENDPOINT`.
+
+Do not use LocalStack for these tests.
 
 ## Understanding Test Skips
 
@@ -291,9 +345,9 @@ The tests will automatically set some environment variables:
 - `HOME` is set to an empty temporary directory
 - `XDG_*` is set to an empty temporary directory
 
-### Flags
+### Snapshot Regeneration
 
-To regenerate ALL snapshots pass the `-regenerate-snapshots` flag.
+To regenerate ALL snapshots, use the Atmos development command:
 
 > ![WARNING]
 >
@@ -305,13 +359,19 @@ To regenerate ALL snapshots pass the `-regenerate-snapshots` flag.
 > git diff tests/snapshots
 > ```
 
+```shell
+atmos dev generate snapshots --all
+```
+
 To regenerate the snapshots for a specific test, just run:
 
 (replace `TestCLICommands/check_atmos_--help_in_empty-dir` with your test name)
 
 ```shell
-go test ./tests -v -run 'TestCLICommands/check_atmos_--help_in_empty-dir' -timeout 2m -regenerate-snapshots
+atmos dev generate snapshots --filter 'TestCLICommands/check_atmos_--help_in_empty-dir'
 ```
+
+The `--filter` value is passed to Go's `-run` flag as a regular expression.
 
 After generating new golden snapshots, don't forget to add them.
 

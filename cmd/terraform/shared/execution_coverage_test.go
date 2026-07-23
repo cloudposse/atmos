@@ -108,7 +108,8 @@ func TestParseAndApplyRunOptions(t *testing.T) {
 	v.Set("affected", true)
 	v.Set("upload-status", true)
 
-	opts := ParseRunOptions(v)
+	opts, err := ParseRunOptions(v)
+	require.NoError(t, err)
 	assert.True(t, opts.ProcessTemplates)
 	assert.True(t, opts.ProcessFunctions)
 	assert.Equal(t, []string{"store.get"}, opts.Skip)
@@ -147,7 +148,6 @@ func TestParseAndApplyRunOptions(t *testing.T) {
 	assert.True(t, info.UseTerraformPlan)
 	assert.Equal(t, "true", info.PlanSkipPlanfile)
 	assert.Equal(t, "true", info.DeployRunInit)
-	assert.True(t, info.VerifyPlan)
 }
 
 func TestBackendAndIdentityFlagRegistration(t *testing.T) {
@@ -205,11 +205,12 @@ func TestResolveAndPromptForArgsResolvesComponentPath(t *testing.T) {
 
 	previousInitCliConfig := initCliConfig
 	previousResolver := resolveComponentFromPath
+	expectedComponentPath := filepath.Join("components", "terraform", "vpc")
 	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
 		return schema.AtmosConfiguration{}, nil
 	}
 	resolveComponentFromPath = func(_ *schema.AtmosConfiguration, path string, stack string, expectedComponentType string) (string, error) {
-		assert.Equal(t, "components/terraform/vpc", path)
+		assert.Equal(t, expectedComponentPath, path)
 		assert.Equal(t, "dev", stack)
 		assert.Equal(t, cfg.TerraformComponentType, expectedComponentType)
 		return "vpc", nil
@@ -221,7 +222,7 @@ func TestResolveAndPromptForArgsResolvesComponentPath(t *testing.T) {
 
 	info := &schema.ConfigAndStacksInfo{
 		AtmosConfigDirsFromArg: []string{fixtureDir},
-		ComponentFromArg:       "components/terraform/vpc",
+		ComponentFromArg:       expectedComponentPath,
 		Stack:                  "dev",
 		NeedsPathResolution:    true,
 	}

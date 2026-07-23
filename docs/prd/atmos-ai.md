@@ -478,16 +478,16 @@ ai:
     # require_confirmation: true    # Default: true (secure by default)
                                      # Set to false to opt-out of prompts
 
-    allowed_tools:
+    allowed:
       - atmos_describe_*
       - atmos_list_*
       - file_read
 
-    restricted_tools:
+    restricted:
       - file_write
       - atmos_terraform_plan
 
-    blocked_tools:
+    blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
 
@@ -1363,10 +1363,10 @@ ai:
 ai:
   # Restrict tool access
   tools:
-    allowed_tools:
+    allowed:
       - atmos_describe_*
       - atmos_list_*
-    blocked_tools:
+    blocked:
       - atmos_terraform_destroy
       - atmos_terraform_apply
 
@@ -1582,16 +1582,16 @@ ai:
     # require_confirmation: true    # Default: true (secure by default)
                                      # Set to false to opt-out of prompts
 
-    allowed_tools:
+    allowed:
       - atmos_describe_*
       - atmos_list_*
       - file_read
 
-    restricted_tools:
+    restricted:
       - file_write
       - atmos_terraform_plan
 
-    blocked_tools:
+    blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
 
@@ -2031,6 +2031,6 @@ Atmos AI builds upon patterns and ideas from industry-leading AI systems while m
 - [Model Context Protocol](https://modelcontextprotocol.io)
 - [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 - [Anthropic Documentation](https://docs.anthropic.com)
-- [OpenAI Documentation](https://platform.openai.com/docs)
+- [OpenAI Documentation](https://developers.openai.com/api/docs)
 - [Google Gemini API](https://ai.google.dev/gemini-api/docs)
 - [Ollama](https://ollama.com)

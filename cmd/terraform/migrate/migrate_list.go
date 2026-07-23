@@ -67,7 +67,11 @@ func runTerraformMigrateList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	shared.ApplyRunOptions(&info, shared.ParseRunOptions(v))
+	opts, err := shared.ParseRunOptions(v)
+	if err != nil {
+		return err
+	}
+	shared.ApplyRunOptions(&info, opts)
 
 	rows, err := collectTfmigrateListRows(&info)
 	if err != nil {

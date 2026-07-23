@@ -7,6 +7,7 @@ import (
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -552,11 +553,27 @@ func getPathFromEnv() string {
 // BuildToolchainPATH constructs a PATH string with toolchain binaries prepended.
 // This function does NOT modify the global environment - it returns the PATH string
 // which should be added to ComponentEnvList for subprocess execution.
+//
+// Onedir (multi-file) tools such as nodejs/node or aws-cli keep their executables
+// nested inside a preserved .pkg tree (described by .atmos-onedir.json), not at the
+// bare version-dir root. PATH entries are therefore resolved through the same
+// onedir-aware helper as `atmos toolchain env` (toolchain.EntrypointDirsForVersion),
+// so every installed entrypoint is reachable; flat installs still contribute their
+// single version directory. A tool that is not installed falls back to its bare
+// version directory to preserve backward compatibility.
 func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map[string]string) (string, error) {
 	defer perf.Track(atmosConfig, "dependencies.BuildToolchainPATH")()
 
+	proxyEnv, err := toolchain.PrepareProxyEnvironment(atmosConfig)
+	if err != nil {
+		return "", fmt.Errorf("prepare toolchain proxies: %w", err)
+	}
+	currentPath := getPathFromEnv()
 	if len(dependencies) == 0 {
-		return getPathFromEnv(), nil
+		if proxyEnv.Path == "" || strings.HasPrefix(currentPath, proxyEnv.Path+string(os.PathListSeparator)) || currentPath == proxyEnv.Path {
+			return currentPath, nil
+		}
+		return strings.Join([]string{proxyEnv.Path, currentPath}, string(os.PathListSeparator)), nil
 	}
 
 	// Use the same path logic as toolchain installation to ensure PATH points
@@ -566,12 +583,44 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
 		toolsDir = atmosConfig.Toolchain.InstallPath
 	}
+	binDir := filepath.Join(toolsDir, "bin")
 
-	// Get the resolver from toolchain package for alias and registry resolution.
-	tcInstaller := toolchain.NewInstaller()
-	resolver := tcInstaller.GetResolver()
+	// Bind a locator to the resolved bin dir so onedir manifest lookups
+	// (FindBinaryPath/GetBinaryPaths) target where the tools were installed.
+	locator := toolchain.NewInstallerWithBinDir(binDir)
+	resolver := locator.GetResolver()
+
+	paths := collectToolchainDirs(locator, resolver, binDir, dependencies)
+
+	// Prepend toolchain paths to existing PATH.
+	if len(paths) == 0 {
+		if proxyEnv.Path == "" {
+			return currentPath, nil
+		}
+		paths = append(paths, proxyEnv.Path)
+	}
+	if proxyEnv.Path != "" && !slices.Contains(paths, proxyEnv.Path) {
+		paths = append([]string{proxyEnv.Path}, paths...)
+	}
+
+	// Append currentPath only when non-empty: a trailing list separator is
+	// interpreted as "." by exec lookups, which would run binaries from the
+	// working directory.
+	if currentPath != "" {
+		paths = append(paths, currentPath)
+	}
+	return strings.Join(paths, string(os.PathListSeparator)), nil
+}
+
+// collectToolchainDirs resolves the deduplicated, absolute PATH directories for a
+// set of resolved dependencies. Onedir tools contribute each nested entrypoint
+// directory; flat tools contribute their version directory. A tool that cannot be
+// located on disk falls back to its bare version directory.
+func collectToolchainDirs(locator *toolchain.Installer, resolver toolchain.ToolResolver, binDir string, dependencies map[string]string) []string {
+	defer perf.Track(nil, "dependencies.collectToolchainDirs")()
 
 	var paths []string
+	seen := make(map[string]struct{})
 	for tool, version := range dependencies {
 		// Resolve tool to owner/repo using the shared resolver.
 		owner, repo, err := resolver.Resolve(tool)
@@ -579,25 +628,27 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 			continue // Skip invalid tools.
 		}
 
-		// Add versioned bin directory to PATH.
-		binPath := filepath.Join(toolsDir, "bin", owner, repo, version)
+		dirs := toolchain.EntrypointDirsForVersion(locator, owner, repo, version, false)
+		if len(dirs) == 0 {
+			// Not installed (or unusual layout): prepend the bare version directory
+			// so callers still get a usable entry. Convert to absolute to avoid
+			// Go 1.19+ exec.LookPath rejection of relative PATH entries.
+			absBinPath, absErr := filepath.Abs(filepath.Join(binDir, owner, repo, version))
+			if absErr != nil {
+				absBinPath = filepath.Join(binDir, owner, repo, version)
+			}
+			dirs = []string{absBinPath}
+		}
 
-		// Convert to absolute path to avoid Go 1.19+ exec.LookPath security issues.
-		// Go 1.19+ rejects executables found via relative PATH entries.
-		// Note: filepath.Abs rarely fails in practice; we trust it to succeed here.
-		absBinPath, _ := filepath.Abs(binPath)
-
-		paths = append(paths, absBinPath)
+		for _, dir := range dirs {
+			if _, ok := seen[dir]; ok {
+				continue
+			}
+			seen[dir] = struct{}{}
+			paths = append(paths, dir)
+		}
 	}
-
-	// Prepend toolchain paths to existing PATH.
-	currentPath := getPathFromEnv()
-	if len(paths) == 0 {
-		return currentPath, nil
-	}
-
-	newPath := strings.Join(append(paths, currentPath), string(os.PathListSeparator))
-	return newPath, nil
+	return paths
 }
 
 // UpdatePathForTools updates PATH environment variable to include tool binaries.

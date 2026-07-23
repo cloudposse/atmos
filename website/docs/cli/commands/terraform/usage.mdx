@@ -3,7 +3,7 @@ title: atmos terraform
 sidebar_label: terraform
 sidebar_class_name: command
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -14,7 +14,7 @@ import File from '@site/src/components/File'
 Use these subcommands to interact with Terraform and OpenTofu.
 </Intro>
 
-<Screengrab title="atmos terraform --help" slug="atmos-terraform--help" />
+<CastPlayer title="atmos terraform --help" src="/casts/screengrabs/atmos-terraform--help.cast" static chrome />
 
 Atmos supports all Terraform and OpenTofu commands and options described in
 [Terraform CLI Overview](https://developer.hashicorp.com/terraform/cli/commands)
@@ -112,6 +112,12 @@ atmos terraform <command> --affected
 
 # Execute on components matching a query
 atmos terraform <command> --query '.vars.tags.team == "eks"'
+
+# Execute on affected components that are also tagged "production"
+atmos terraform <command> --affected --tags production
+
+# Execute on components labeled cost-center=platform
+atmos terraform <command> --all --labels cost-center=platform
 ```
 </Terminal>
 
@@ -293,6 +299,31 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         ```
     </dd>
 
+    <dt>`--skip-hooks` <em>(optional)</em></dt>
+    <dd>
+        Bypass [lifecycle hooks](/stacks/hooks) for the current invocation
+        without editing stack configuration. Hooks only run on `terraform`
+        `plan`, `apply`, and `deploy`, so this flag lives on the `terraform`
+        command and its subcommands.
+
+        - **No value** (`--skip-hooks`): skip every hook.
+        - **Comma-separated list** (`--skip-hooks=cost,security`): skip only the named hooks; others still run.
+        - **Boolean** (`--skip-hooks=true|false`): explicit on/off.
+        - Also available as the `ATMOS_SKIP_HOOKS` environment variable (same value syntax).
+        - **Per-invocation only** — does not propagate to nested commands or workflows.
+
+        ```shell
+        # Skip all hooks for one run (emergency rollback, debugging, etc.)
+        atmos terraform apply <component> -s <stack> --skip-hooks
+
+        # Skip just the cost-estimator and security scanner
+        atmos terraform plan <component> -s <stack> --skip-hooks=cost,security
+
+        # Via environment variable
+        ATMOS_SKIP_HOOKS=true atmos terraform apply <component> -s <stack>
+        ```
+    </dd>
+
     <dt>`--skip-planfile` <em>(optional)</em></dt>
     <dd>
         Skip writing the plan to a file.
@@ -380,7 +411,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dt>`--affected` <em>(optional)</em></dt>
     <dd>
         Execute the command on all the directly affected components, in all stacks or in a specific stack,
-        in dependency order (if [component dependencies](/stacks/settings/depends_on) are configured).
+        in dependency order (if [component dependencies](/stacks/dependencies/components) are configured).
 
         __NOTE__: When using the `--affected` flag, Atmos supports all the flags from the [`atmos describe affected`](/cli/commands/describe/affected) CLI command.
 
@@ -394,11 +425,31 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         ```
     </dd>
 
+    <dt>`--tags` <em>(optional)</em></dt>
+    <dd>
+        Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further, rather than being mutually exclusive with them. Cannot be combined with a single `component` argument.
+
+        ```shell
+        atmos terraform apply --tags production,tier-1
+        atmos terraform apply --affected --tags production
+        ```
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`. Cannot be combined with a single `component` argument.
+
+        ```shell
+        atmos terraform apply --labels cost-center=platform
+        atmos terraform apply --all --labels cost-center=platform,compliance=sox
+        ```
+    </dd>
+
     <dt>`--include-dependents` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
     <dd>
         For each directly affected component, detect the dependent components and process them in dependency order, recursively.
         Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
-        or configs, but they are configured as [dependencies](/stacks/settings/depends_on) of the components that are modified.
+        or configs, but they are configured as [dependencies](/stacks/dependencies/components) of the components that are modified.
 
         ```shell
         atmos terraform plan --affected --include-dependents --logs-level=Debug
@@ -507,7 +558,7 @@ All native Terraform/OpenTofu flags are supported.
 ## Multi-Component Commands (Bulk Operations) Examples
 
 Let's assume that we have the following Atmos stack manifests in the `prod` and `nonprod` stacks,
-with [dependencies between the components](/stacks/settings/depends_on):
+with [dependencies between the components](/stacks/dependencies/components):
 
 <File title="`prod` and `nonprod` stacks">
 ```yaml
@@ -523,79 +574,68 @@ components:
         tags:
           # Team `eks` manages the `eks/cluster` component
           team: eks
-      settings:
-        depends_on:
+      dependencies:
+        components:
           # `eks/cluster` depends on the `vpc` component
-          1:
-            component: vpc
+          - name: vpc
     eks/external-dns:
       vars:
         tags:
           # Team `eks` manages the `eks/external-dns` component
           team: eks
-      settings:
-        depends_on:
+      dependencies:
+        components:
           # `eks/external-dns` depends on the `eks/cluster` component
-          1:
-            component: eks/cluster
+          - name: eks/cluster
     eks/karpenter:
       vars:
         tags:
           # Team `eks` manages the `eks/karpenter` component
           team: eks
-      settings:
-        depends_on:
+      dependencies:
+        components:
           # `eks/karpenter` depends on the `eks/cluster` component
-          1:
-            component: eks/cluster
+          - name: eks/cluster
     eks/karpenter-node-pool:
       vars:
         tags:
           # Team `eks` manages the `eks/karpenter-node-pool` component
           team: eks
-      settings:
+      dependencies:
         # `eks/karpenter-node-pool` depends on the `eks/cluster` and `eks/karpenter` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/karpenter
+        components:
+          - name: eks/cluster
+          - name: eks/karpenter
     eks/istio/base:
       vars:
         tags:
           # Team `istio` manages the `eks/istio/base` component
           team: istio
-      settings:
+      dependencies:
         # `eks/istio/base` depends on the `eks/cluster` component
-        depends_on:
-          1:
-            component: eks/cluster
+        components:
+          - name: eks/cluster
     eks/istio/istiod:
       vars:
         tags:
           # Team `istio` manages the `eks/istio/istiod` component
           team: istio
-      settings:
+      dependencies:
         # `eks/istio/istiod` depends on the `eks/cluster` and `eks/istio/base` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/istio/base
+        components:
+          - name: eks/cluster
+          - name: eks/istio/base
     eks/istio/test-app:
       vars:
         tags:
           # Team `istio` manages the `eks/istio/test-app` component
           team: istio
-      settings:
+      dependencies:
         # `eks/istio/test-app` depends on the `eks/cluster`, `eks/istio/istiod` and `eks/istio/base` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/istio/istiod
-          3:
-            component: eks/istio/base
+        components:
+          - name: eks/cluster
+          - name: eks/istio/istiod
+          - name: eks/istio/base
 ```
 </File>
 

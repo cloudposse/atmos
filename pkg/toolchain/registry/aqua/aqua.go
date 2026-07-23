@@ -18,6 +18,7 @@ import (
 	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry/cache"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -62,6 +63,7 @@ type AquaRegistry struct {
 	client          httpClient.Client
 	cache           *RegistryCache
 	cacheStore      cache.Store
+	githubToken     string
 	githubBaseURL   string
 	registryBaseURL string // Base URL of the aqua-registry repo (raw content). See defaultAquaRegistryBaseURL.
 	lastSearchTotal int    // Total number of search results before pagination.
@@ -127,14 +129,16 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 		cacheBaseDir = filepath.Join(os.TempDir(), "atmos-toolchain-cache")
 	}
 
+	githubToken := github.GetGitHubToken()
 	ar := &AquaRegistry{
 		client: httpClient.NewDefaultClient(
-			httpClient.WithGitHubToken(github.GetGitHubToken()),
+			httpClient.WithGitHubToken(githubToken),
 		),
 		cache: &RegistryCache{
 			baseDir: filepath.Join(cacheBaseDir, "registry"),
 		},
 		cacheStore:      cache.NewFileStore(cacheBaseDir),
+		githubToken:     githubToken,
 		githubBaseURL:   "https://api.github.com", // default
 		registryBaseURL: defaultAquaRegistryBaseURL,
 	}
@@ -150,7 +154,11 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 // get performs an HTTP GET request and returns the response.
 // This is a helper method to adapt the pkg/http Client interface.
 func (ar *AquaRegistry) get(url string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	return ar.getWithContext(context.Background(), url)
+}
+
+func (ar *AquaRegistry) getWithContext(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create request: %w", registry.ErrHTTPRequest, err)
 	}
@@ -160,7 +168,56 @@ func (ar *AquaRegistry) get(url string) (*http.Response, error) {
 		return nil, err
 	}
 
+	if ar.shouldRetryUnauthenticated(url, resp) {
+		resp.Body.Close()
+		return httpClient.NewDefaultClient().Do(req)
+	}
+
 	return resp, nil
+}
+
+// getBytes performs a GET, validates the status is 200, and reads the full
+// response body — retrying the whole request on transient network failures
+// (e.g. "connection reset by peer", a truncated read) so flaky reads of
+// registry metadata recover. Non-transient failures, including non-200 status
+// codes (such as a 404 that drives path fallback), are returned without
+// retrying.
+func (ar *AquaRegistry) getBytes(url string) ([]byte, error) {
+	var data []byte
+	err := retry.WithPredicate(
+		context.Background(),
+		registry.TransientRetryConfig(),
+		func() error {
+			resp, derr := ar.get(url)
+			if derr != nil {
+				return fmt.Errorf("%w: failed to fetch %s: %w", registry.ErrHTTPRequest, url, derr)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, url)
+			}
+
+			body, rerr := io.ReadAll(resp.Body)
+			if rerr != nil {
+				return fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, rerr)
+			}
+			data = body
+			return nil
+		},
+		registry.IsTransientNetworkError,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (ar *AquaRegistry) shouldRetryUnauthenticated(url string, resp *http.Response) bool {
+	if resp == nil || resp.StatusCode != http.StatusForbidden || ar.githubToken == "" {
+		return false
+	}
+	return strings.HasPrefix(url, strings.TrimRight(ar.githubBaseURL, "/")+"/")
 }
 
 // LoadLocalConfig is deprecated and no-op for compatibility.
@@ -551,19 +608,9 @@ func computeSemVer(version, prefix string) string {
 
 // fetchRegistryPackage fetches and parses a registry file, returning the first package.
 func (ar *AquaRegistry) fetchRegistryPackage(registryURL string) (*registryPackage, error) {
-	resp, err := ar.get(registryURL)
+	data, err := ar.getBytes(registryURL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch registry file: %w", registry.ErrHTTPRequest, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, registryURL)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read registry file: %w", registry.ErrHTTPRequest, err)
+		return nil, err
 	}
 
 	var registryFile struct {
@@ -623,21 +670,10 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*registry.Tool, error) {
 		return tool, nil
 	}
 
-	// Fetch from remote
-	resp, err := ar.get(url)
+	// Fetch from remote (retries transient network failures).
+	data, err := ar.getBytes(url)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch %s: %w", registry.ErrHTTPRequest, url, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, url)
-	}
-
-	// Read response
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read response: %w", registry.ErrHTTPRequest, err)
+		return nil, err
 	}
 
 	// Cache the response

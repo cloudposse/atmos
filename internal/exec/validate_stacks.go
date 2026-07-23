@@ -54,9 +54,9 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if schemasAtmosManifestFlag != "" {
-		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
+		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{
 			Manifest: schemasAtmosManifestFlag,
-		}
+		})
 	}
 
 	err = ValidateStacks(&atmosConfig)
@@ -72,6 +72,17 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 // ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ValidateStacks")()
+	// A project can use Atmos strictly for CLI configuration, components, or
+	// workflows and legitimately have no stacks directory. Validation is a
+	// no-op in that case; a missing imported manifest is still reported later
+	// once a stack base directory exists and manifests are discovered.
+	if atmosConfig.StacksBaseAbsolutePath != "" {
+		if _, err := os.Stat(atmosConfig.StacksBaseAbsolutePath); os.IsNotExist(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+	}
 
 	var validationErrorMessages []string
 
@@ -119,7 +130,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		if err != nil {
 			return err
 		}
-		manifestSchema.Manifest = f
+		atmosManifestJsonSchemaFilePath = f
 		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema")
 	case u.FileExists(manifestSchema.Manifest):
 		atmosManifestJsonSchemaFilePath = manifestSchema.Manifest
@@ -173,7 +184,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 
 	// First pass: identify all imported files
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		_, importsConfig, _, _, _, _, _, _ := ProcessYAMLConfigFile(
+		firstPassResult, err := ProcessYAMLConfigFile(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -189,11 +200,16 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			map[string]any{},
 			atmosManifestJsonSchemaFilePath,
 		)
+		// The first pass is best-effort import discovery; processing errors are
+		// reported by the second pass.
+		if err != nil {
+			continue
+		}
 
 		// Track all imported files
-		for importPath := range importsConfig {
+		for importPath := range firstPassResult.ImportsConfig {
 			importedFiles[importPath] = true
-			allImportsConfig[importPath] = importsConfig[importPath]
+			allImportsConfig[importPath] = firstPassResult.ImportsConfig[importPath]
 		}
 	}
 
@@ -217,7 +233,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		// Create a new merge context to track import chain for better error messages
 		mergeContext := m.NewMergeContext()
 
-		stackConfig, importsConfig, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+		processingResult, _, err := ProcessYAMLConfigFileWithContext(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -248,12 +264,12 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 				atmosConfig.PackerDirAbsolutePath,
 				atmosConfig.AnsibleDirAbsolutePath,
 				filePath,
-				stackConfig,
+				processingResult.DeepMergedConfig,
 				false,
 				true,
 				"",
 				map[string]map[string][]string{},
-				importsConfig,
+				processingResult.ImportsConfig,
 				false,
 			)
 			if err != nil {
@@ -263,10 +279,27 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	if len(validationErrorMessages) > 0 {
-		return errors.New(strings.Join(validationErrorMessages, "\n\n"))
+		return errors.New(strings.Join(dedupeStrings(validationErrorMessages), "\n\n"))
 	}
 
 	return nil
+}
+
+// dedupeStrings drops exact-duplicate entries while preserving first-seen order.
+// An imported manifest can be reached and schema-validated more than once while
+// resolving a stack's import graph, so the same violation can otherwise be
+// reported more than once for a single underlying mistake.
+func dedupeStrings(messages []string) []string {
+	seen := make(map[string]struct{}, len(messages))
+	deduped := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if _, ok := seen[msg]; ok {
+			continue
+		}
+		seen[msg] = struct{}{}
+		deduped = append(deduped, msg)
+	}
+	return deduped
 }
 
 func createComponentStackMap(
@@ -363,7 +396,7 @@ func createComponentStackMap(
 
 					// Find Atmos stack name
 					if atmosConfig.Stacks.NameTemplate != "" {
-						stackName, err = ProcessTmpl(atmosConfig, "validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						stackName, err = ProcessTmpl(atmosConfig, "validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 						if err != nil {
 							return nil, err
 						}

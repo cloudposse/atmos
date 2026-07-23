@@ -1,0 +1,70 @@
+name: Download Artifact With Retry
+description: >
+  Downloads a GitHub Actions artifact, retrying on transient network errors.
+  actions/download-artifact only retries HTTP 5xx/429; it does not retry
+  connection-level failures like ENOTFOUND/ETIMEDOUT talking to the Actions
+  artifact API, which have caused sustained (multi-minute) outages on hosted
+  runners. Makes up to three attempts with a cooldown between each.
+
+inputs:
+  name:
+    description: 'Name of the artifact to download'
+    required: true
+  path:
+    description: 'Destination path to extract the artifact into'
+    required: true
+  run-id:
+    description: 'Workflow run ID to download the artifact from (defaults to the current run; only needed for cross-run downloads)'
+    required: false
+    default: ''
+  github-token:
+    description: 'Token used to authenticate cross-repository/cross-run downloads (defaults to the current job token)'
+    required: false
+    default: ''
+  backoff-seconds:
+    description: 'Seconds to wait before each retry'
+    required: false
+    default: '15'
+
+runs:
+  using: composite
+  steps:
+    - name: Download artifact (attempt 1/3)
+      id: attempt_1
+      continue-on-error: true
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        run-id: ${{ inputs.run-id }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Wait before retry
+      if: steps.attempt_1.outcome == 'failure'
+      shell: bash
+      run: sleep "${{ inputs.backoff-seconds }}"
+
+    - name: Download artifact (attempt 2/3)
+      id: attempt_2
+      if: steps.attempt_1.outcome == 'failure'
+      continue-on-error: true
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        run-id: ${{ inputs.run-id }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Wait before final retry
+      if: steps.attempt_1.outcome == 'failure' && steps.attempt_2.outcome == 'failure'
+      shell: bash
+      run: sleep "${{ inputs.backoff-seconds }}"
+
+    - name: Download artifact (attempt 3/3)
+      if: steps.attempt_1.outcome == 'failure' && steps.attempt_2.outcome == 'failure'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        run-id: ${{ inputs.run-id }}
+        github-token: ${{ inputs.github-token }}

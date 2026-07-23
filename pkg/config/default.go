@@ -21,6 +21,12 @@ var (
 	defaultCliConfig = schema.AtmosConfiguration{
 		Default:  true,
 		BasePath: ".",
+		Cast: &schema.CastConfig{
+			Recording: &schema.CastRecordingConfig{
+				Width:  120,
+				Height: 36,
+			},
+		},
 		Stacks: schema.Stacks{
 			BasePath:    "stacks",
 			NamePattern: "{tenant}-{environment}-{stage}",
@@ -63,6 +69,11 @@ var (
 			Packer: schema.Packer{
 				BasePath: "components/packer",
 				Command:  "packer",
+			},
+			Kubernetes: schema.Kubernetes{
+				BasePath:          "components/kubernetes",
+				Provider:          "kubectl",
+				AutoGenerateFiles: false,
 			},
 		},
 		Settings: schema.AtmosSettings{

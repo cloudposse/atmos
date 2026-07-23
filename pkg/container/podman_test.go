@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -375,6 +376,146 @@ func TestParsePodmanContainer(t *testing.T) {
 	}
 }
 
+func TestParsePodmanPortsFromContainerJSON(t *testing.T) {
+	tests := []struct {
+		name          string
+		containerJSON map[string]interface{}
+		expected      []PortBinding
+	}{
+		{
+			// Shape emitted by `podman ps --format json`: numbers decode to float64.
+			name: "single published port",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"host_ip":        "0.0.0.0",
+						"container_port": float64(4566),
+						"host_port":      float64(35853),
+						"range":          float64(1),
+						"protocol":       "tcp",
+					},
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
+			},
+		},
+		{
+			name: "missing protocol defaults to tcp",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"container_port": float64(8080),
+						"host_port":      float64(18080),
+					},
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 8080, HostPort: 18080, Protocol: "tcp"},
+			},
+		},
+		{
+			name: "range expands to consecutive bindings",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"container_port": float64(4566),
+						"host_port":      float64(35853),
+						"range":          float64(2),
+						"protocol":       "tcp",
+					},
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
+				{ContainerPort: 4567, HostPort: 35854, Protocol: "tcp"},
+			},
+		},
+		{
+			name: "unpublished port (host_port 0) is skipped",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"container_port": float64(4566),
+						"host_port":      float64(0),
+						"protocol":       "tcp",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name:          "no Ports key",
+			containerJSON: map[string]interface{}{"Id": "abc"},
+			expected:      nil,
+		},
+		{
+			name:          "Ports wrong type ignored",
+			containerJSON: map[string]interface{}{"Ports": "not-an-array"},
+			expected:      nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, parsePodmanPorts(tt.containerJSON))
+		})
+	}
+}
+
+// TestParsePodmanContainer_PopulatesPorts guards the regression where
+// parsePodmanContainer dropped the Ports array, leaving Info.Ports empty and
+// breaking auto-assigned host-port read-back (e.g. emulator endpoint resolution).
+func TestParsePodmanContainer_PopulatesPorts(t *testing.T) {
+	info := parsePodmanContainer(map[string]interface{}{
+		"Id":    "abc123",
+		"Names": []interface{}{"atmos-local-emulator-aws"},
+		"Image": "floci/floci:latest",
+		"State": "running",
+		"Ports": []interface{}{
+			map[string]interface{}{
+				"container_port": float64(4566),
+				"host_port":      float64(35853),
+				"protocol":       "tcp",
+			},
+		},
+	})
+
+	assert.Equal(t, []PortBinding{{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"}}, info.Ports)
+}
+
+func TestParsePodmanPortsFromContainerRecord(t *testing.T) {
+	t.Run("published port parsed, exposed-only port skipped", func(t *testing.T) {
+		// `podman ps --format json` decodes numbers as float64 through the generic map.
+		// The Gitea image both publishes 3000 and merely exposes 22 (no host_port).
+		rawPorts := []interface{}{
+			map[string]interface{}{
+				"host_ip": "0.0.0.0", "container_port": float64(3000), "host_port": float64(3000), "protocol": "tcp",
+			},
+			map[string]interface{}{
+				"container_port": float64(22), "protocol": "tcp",
+			},
+		}
+		ports := parsePodmanPorts(rawPorts)
+		require.Len(t, ports, 1)
+		assert.Equal(t, PortBinding{ContainerPort: 3000, HostPort: 3000, Protocol: "tcp"}, ports[0])
+	})
+
+	t.Run("auto-assigned host port is surfaced", func(t *testing.T) {
+		rawPorts := []interface{}{
+			map[string]interface{}{"container_port": float64(4566), "host_port": float64(49153), "protocol": "tcp"},
+		}
+		ports := parsePodmanPorts(rawPorts)
+		require.Len(t, ports, 1)
+		assert.Equal(t, PortBinding{ContainerPort: 4566, HostPort: 49153, Protocol: "tcp"}, ports[0])
+	})
+
+	t.Run("missing or empty Ports yields nil", func(t *testing.T) {
+		assert.Nil(t, parsePodmanPorts(map[string]interface{}{}))
+		assert.Nil(t, parsePodmanPorts([]interface{}{}))
+	})
+}
+
 func TestParsePodmanContainers(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -468,18 +609,18 @@ func TestPodmanRuntime_Inspect(t *testing.T) {
 	}
 }
 
-// TestPodmanRuntime_Attach validates Podman's Attach() method logic for shell selection
+// TestPodmanRuntime_Shell validates Podman's Shell() method logic for shell selection
 // and argument handling. Tests verify that options are correctly interpreted and passed
-// to the underlying Exec() call by testing the buildAttachCommand builder function.
+// to the underlying Exec() call by testing the buildShellCommand builder function.
 //
 // Tests are intentionally duplicated to verify both implementations independently, ensuring
 // consistency across runtimes and allowing runtime-specific test evolution if needed.
 //
-//nolint:dupl // Docker and Podman implement identical Runtime interface with same Attach() behavior.
-func TestPodmanRuntime_Attach(t *testing.T) {
+//nolint:dupl // Docker and Podman implement identical Runtime interface with same Shell() behavior.
+func TestPodmanRuntime_Shell(t *testing.T) {
 	tests := []struct {
 		name         string
-		opts         *AttachOptions
+		opts         *ShellOptions
 		expectShell  string
 		expectArgs   []string
 		expectUser   string
@@ -496,8 +637,8 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 			expectAttach: true,
 		},
 		{
-			name:         "empty AttachOptions uses defaults",
-			opts:         &AttachOptions{},
+			name:         "empty ShellOptions uses defaults",
+			opts:         &ShellOptions{},
 			expectShell:  "/bin/bash",
 			expectArgs:   nil,
 			expectUser:   "",
@@ -506,7 +647,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "custom shell",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell: "/bin/sh",
 			},
 			expectShell:  "/bin/sh",
@@ -517,7 +658,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "shell with args",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell:     "/bin/bash",
 				ShellArgs: []string{"-l", "-i"},
 			},
@@ -529,7 +670,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "custom user preserved in exec options",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				User: "node",
 			},
 			expectShell:  "/bin/bash",
@@ -543,7 +684,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the builder function that constructs the command and exec options.
-			cmd, execOpts := buildAttachCommand(tt.opts)
+			cmd, execOpts := buildShellCommand(tt.opts)
 
 			// Verify command structure: first element is shell, rest are args.
 			require.NotEmpty(t, cmd, "command should not be empty")
@@ -788,4 +929,269 @@ RUN echo "test build"
 	}
 
 	require.NoError(t, err, "Build should succeed")
+}
+
+func TestPodmanRuntime_BuildBakeUnsupported(t *testing.T) {
+	runtime := NewPodmanRuntime()
+	err := runtime.Build(context.Background(), &BuildConfig{
+		Bake: &BakeConfig{File: "docker-bake.hcl"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Docker Buildx requires Docker")
+}
+
+func TestPodmanRuntime_BuildDriverUnsupported(t *testing.T) {
+	runtime := NewPodmanRuntime()
+	err := runtime.Build(context.Background(), &BuildConfig{
+		Driver: &DriverConfig{Provider: "docker-container"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Docker Buildx requires Docker")
+}
+
+func TestParsePodmanPorts(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      interface{}
+		expected []PortBinding
+	}{
+		{
+			name: "single published port",
+			raw: []interface{}{
+				map[string]interface{}{
+					"host_port":      float64(54321),
+					"container_port": float64(4566),
+					"protocol":       "tcp",
+				},
+			},
+			expected: []PortBinding{{ContainerPort: 4566, HostPort: 54321, Protocol: "tcp"}},
+		},
+		{
+			name: "multiple bindings preserved in order",
+			raw: []interface{}{
+				map[string]interface{}{
+					"host_port":      float64(8080),
+					"container_port": float64(80),
+					"protocol":       "tcp",
+				},
+				map[string]interface{}{
+					"host_port":      float64(15353),
+					"container_port": float64(53),
+					"protocol":       "udp",
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"},
+				{ContainerPort: 53, HostPort: 15353, Protocol: "udp"},
+			},
+		},
+		{
+			name: "missing protocol defaults to tcp",
+			raw: []interface{}{
+				map[string]interface{}{
+					"host_port":      float64(9000),
+					"container_port": float64(9000),
+				},
+			},
+			expected: []PortBinding{{ContainerPort: 9000, HostPort: 9000, Protocol: "tcp"}},
+		},
+		{
+			name: "port range expanded into consecutive bindings",
+			raw: []interface{}{
+				map[string]interface{}{
+					"host_port":      float64(8000),
+					"container_port": float64(8000),
+					"protocol":       "tcp",
+					"range":          float64(3),
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 8000, HostPort: 8000, Protocol: "tcp"},
+				{ContainerPort: 8001, HostPort: 8001, Protocol: "tcp"},
+				{ContainerPort: 8002, HostPort: 8002, Protocol: "tcp"},
+			},
+		},
+		{
+			name: "duplicate bindings are deduplicated",
+			raw: []interface{}{
+				map[string]interface{}{
+					"host_port":      float64(8080),
+					"container_port": float64(80),
+					"protocol":       "tcp",
+				},
+				map[string]interface{}{
+					"host_port":      float64(8080),
+					"container_port": float64(80),
+					"protocol":       "tcp",
+				},
+			},
+			expected: []PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
+		},
+		{
+			name: "unpublished port (host_port 0) skipped",
+			raw: []interface{}{
+				map[string]interface{}{
+					"host_port":      float64(0),
+					"container_port": float64(80),
+					"protocol":       "tcp",
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "entry missing container_port skipped",
+			raw: []interface{}{
+				map[string]interface{}{
+					"host_port": float64(8080),
+					"protocol":  "tcp",
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "non-map entries skipped, valid ones kept",
+			raw: []interface{}{
+				"not-a-map",
+				map[string]interface{}{
+					"host_port":      float64(8080),
+					"container_port": float64(80),
+					"protocol":       "tcp",
+				},
+			},
+			expected: []PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
+		},
+		{
+			name:     "non-array input returns nil",
+			raw:      "not-an-array",
+			expected: nil,
+		},
+		{
+			name:     "empty array returns nil",
+			raw:      []interface{}{},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parsePodmanPorts(tt.raw)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParsePodmanNetworks(t *testing.T) {
+	assert.Equal(t, []string{"bridge", "github_network_123"}, parsePodmanNetworks([]interface{}{"github_network_123", "bridge"}))
+	assert.Equal(t, []string{"bridge", "github_network_123"}, parsePodmanNetworks(map[string]interface{}{
+		"github_network_123": map[string]interface{}{},
+		"bridge":             map[string]interface{}{},
+	}))
+	assert.Empty(t, parsePodmanNetworks("not-networks"))
+}
+
+func TestParsePodmanPort(t *testing.T) {
+	tests := []struct {
+		name        string
+		entry       interface{}
+		wantBinding PortBinding
+		wantSpan    int
+		wantOK      bool
+	}{
+		{
+			name: "valid entry with explicit range",
+			entry: map[string]interface{}{
+				"host_port":      float64(8080),
+				"container_port": float64(80),
+				"protocol":       "tcp",
+				"range":          float64(2),
+			},
+			wantBinding: PortBinding{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"},
+			wantSpan:    2,
+			wantOK:      true,
+		},
+		{
+			name: "missing range defaults span to 1",
+			entry: map[string]interface{}{
+				"host_port":      float64(8080),
+				"container_port": float64(80),
+				"protocol":       "udp",
+			},
+			wantBinding: PortBinding{ContainerPort: 80, HostPort: 8080, Protocol: "udp"},
+			wantSpan:    1,
+			wantOK:      true,
+		},
+		{
+			name:        "non-map entry not ok",
+			entry:       42,
+			wantBinding: PortBinding{},
+			wantSpan:    0,
+			wantOK:      false,
+		},
+		{
+			name: "zero host_port not ok",
+			entry: map[string]interface{}{
+				"host_port":      float64(0),
+				"container_port": float64(80),
+			},
+			wantBinding: PortBinding{},
+			wantSpan:    0,
+			wantOK:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binding, span, ok := parsePodmanPort(tt.entry)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantBinding, binding)
+			assert.Equal(t, tt.wantSpan, span)
+		})
+	}
+}
+
+func TestJSONFieldInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    interface{}
+		expected int
+	}{
+		{name: "float64 (json.Unmarshal default)", value: float64(4566), expected: 4566},
+		{name: "native int", value: 8080, expected: 8080},
+		{name: "json.Number", value: json.Number("15353"), expected: 15353},
+		{name: "invalid json.Number yields zero", value: json.Number("not-a-number"), expected: 0},
+		{name: "string is not numeric", value: "80", expected: 0},
+		{name: "nil yields zero", value: nil, expected: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, jsonFieldInt(tt.value))
+		})
+	}
+}
+
+func TestParsePodmanContainerWithPorts(t *testing.T) {
+	containerJSON := map[string]interface{}{
+		"Id":    "abc123",
+		"Names": []interface{}{"emulator"},
+		"Image": "floci:latest",
+		"State": "running",
+		"Ports": []interface{}{
+			map[string]interface{}{
+				"host_port":      float64(54321),
+				"container_port": float64(4566),
+				"protocol":       "tcp",
+			},
+		},
+	}
+
+	result := parsePodmanContainer(containerJSON)
+
+	assert.Equal(t, "abc123", result.ID)
+	assert.Equal(t, "emulator", result.Name)
+	assert.Equal(t, "running", result.Status)
+	require.Len(t, result.Ports, 1)
+	assert.Equal(t, PortBinding{ContainerPort: 4566, HostPort: 54321, Protocol: "tcp"}, result.Ports[0])
 }

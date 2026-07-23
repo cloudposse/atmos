@@ -1,0 +1,76 @@
+---
+title: atmos config set
+sidebar_label: set
+sidebar_class_name: command
+id: config-set
+description: Set a value in atmos.yaml by dot-notation path while preserving comments, anchors, and templates.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Set a value in your `atmos.yaml` configuration using a dot-notation path. The edit
+preserves comments, anchors/aliases, Atmos YAML functions, and Go templates.
+</Intro>
+
+<CastPlayer title="atmos config set --help" src="/casts/screengrabs/atmos-config-set--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos config set <path> <value> [--type <type>]
+```
+
+The value's type is inferred from the Atmos config schema when `<path>` matches a
+known field — `mcp.enabled` writes a boolean, `components.terraform.parallelism`
+writes an int, and so on — with no `--type` needed. Paths outside the schema (e.g.
+free-form `vars` sections) fall back to writing a string. Pass `--type` explicitly
+to override the inferred type, or when the type can't be inferred.
+
+## Examples
+
+```shell
+# Type inferred from the schema -- writes a boolean, not the string "true".
+atmos config set mcp.enabled true
+atmos config set components.terraform.apply_auto_approve true
+
+# String value (default when the path isn't in the schema).
+atmos config set vars.environment production
+
+# Explicit --type overrides inference.
+atmos config set --type=string logs.level Debug
+atmos config set --type=int components.terraform.parallelism 10
+
+# Raw YAML literal (lists, maps).
+atmos config set --type=yaml 'logs.exclude' '["a", "b"]'
+
+# Target a specific file.
+atmos config set logs.level Trace --config ./atmos.yaml
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Dot-notation path to the value (e.g. `logs.level`).</dd>
+  <dt>`<value>` (required)</dt>
+  <dd>The value to set. Interpreted according to `--type`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--type` (string, default: inferred from the schema, falling back to `string`)</dt>
+  <dd>How to interpret `<value>`: `string`, `int`, `bool`, `float`, `null`, or `yaml` (a raw YAML/yq literal inserted verbatim). Overrides the type Atmos would otherwise infer from `<path>`.</dd>
+  <dt>`--config` (string, inherited)</dt>
+  <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root.</dd>
+</dl>
+
+:::note
+Edits that would alter or expand a YAML anchor or alias (including changing a value
+shared by an anchor) are rejected to avoid silently mutating shared data, as are
+multi-document YAML files and files that define the same anchor name more than once.
+Comments, anchors, indentation width, and line endings (CRLF/LF) are preserved, but
+blank lines between entries are dropped and non-indented sequence styles are
+normalized when a file is edited.
+:::

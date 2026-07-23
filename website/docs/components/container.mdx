@@ -1,0 +1,131 @@
+---
+title: Using Containers
+sidebar_position: 7
+sidebar_label: Container
+id: container
+description: Run persistent, stack-scoped container services with the same stack-based configuration used for Terraform and Helmfile. One component is one container, operated by labels.
+---
+import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
+
+<Intro>
+Atmos natively supports **container components** — stack-scoped, persistent containers. One component
+is one service. Atmos owns the image artifact (build/push/pull) and an optional long-running named
+container lifecycle (`up`/`ps`/`logs`/`exec`/`restart`/`stop`/`rm`/`down`), discovered by labels
+derived from the canonical component instance address — not from local state files.
+</Intro>
+
+For the complete command reference, see the [`atmos container`](/cli/commands/container/usage)
+documentation. To operate a group of fulfilled services together, see
+[`atmos composition`](/cli/commands/composition/usage).
+
+This is different from the ephemeral [`type: container` workflow step](/workflows), which is
+`docker run --rm` and workflow-scoped. The component is declarative, addressable infrastructure; the
+step is procedural sequencing.
+
+## Stack Configuration
+
+Container component config uses **first-class sections** (`image`, `build`, `run`) — consistent with
+the container workflow step, NOT nested under `vars`:
+
+```yaml
+components:
+  container:
+    api:
+      composition: storefront            # composition membership (optional)
+      image: localhost:5001/api:latest
+      build:                             # build the image
+        context: app
+        dockerfile: Dockerfile
+        tags:
+          - localhost:5001/api:latest
+      run:                               # run configuration
+        command: ./api
+        ports:
+          - host: 8080
+            container: 80
+        mounts:
+          - source: .
+            target: /workspace
+      env:                               # component env (resolved with secrets)
+        PORT: "8080"
+```
+
+Inheritance (`metadata.inherits`), catalogs, mixins, and deep-merge work exactly like other component
+kinds — define abstract base components with shared `run`/`build` defaults and inherit them.
+
+## Host runtime access (Docker-out-of-Docker)
+
+A container that must launch and manage **sibling** containers (Testcontainers-style suites, tools that
+shell out to `docker`) can drive the host container runtime with `run.runtime.host`:
+
+```yaml
+components:
+  container:
+    integration-tests:
+      run:
+        runtime:
+          host: true        # mount the host runtime socket, run as root, set DOCKER_HOST
+```
+
+This is the same `runtime.host` flag available on [emulator components](/stacks/components/emulator) and
+`type: container` workflow steps. It is opt-in and effectively host-root; it works on Docker and
+**rootful** podman (on rootless podman the socket is unreachable in-container — use
+`podman machine set --rootful` or Docker). It is independent of kernel-capability `privileged`.
+
+## Lifecycle
+
+```bash
+atmos container build api -s dev      # build the image from `build`
+atmos container up api -s dev         # create/start the long-running container (build-on-missing)
+atmos container list                  # all container components + running state
+atmos container ps api -s dev         # show running state
+atmos container logs api -s dev       # stream logs
+atmos container exec api -s dev -- sh # run a command inside the container
+atmos container down api -s dev       # stop + rm
+```
+
+Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g.,
+`atmos-dev-container-api`), so lifecycle commands discover it by label — there are no local state files.
+
+`atmos container list` shows a running/stopped/unknown indicator for each container component.
+
+## Compositions
+
+A composition groups components into a system. Declare membership with the `composition` field; the
+top-level `compositions` section declares the closed set of services:
+
+```yaml
+compositions:
+  storefront:
+    description: Storefront system
+    services: [api, worker, database]
+```
+
+Run `atmos composition validate storefront -s dev` to see which services are fulfilled vs. not provided
+in a stack. Use the first-class composition lifecycle when you want Atmos to operate the fulfilled
+members together:
+
+```bash
+atmos composition list -s dev
+atmos composition up storefront -s dev
+atmos composition ps storefront -s dev
+atmos composition logs storefront -s dev --tail=100
+atmos composition down storefront -s dev
+```
+
+If you omit the composition name from a stack-scoped lifecycle or read command, Atmos targets all
+compositions with fulfilled members in that stack. Startup and read commands process composition names
+alphabetically and services in declared order; teardown commands use the reverse order.
+
+## Try It
+
+Explore a complete, working example of the container component kind's full lifecycle.
+
+<EmbedExample example="container-component" />
+
+## Related
+
+- [Container Components](/stacks/components/container) — Full stack-manifest configuration reference
+- [atmos container](/cli/commands/container/usage) — Command reference
+- [atmos composition](/cli/commands/composition/usage) — Composition lifecycle command reference

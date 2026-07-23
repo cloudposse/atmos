@@ -6,8 +6,10 @@ package terraform
 // that would result from registering kinds inside pkg/hooks itself.
 import (
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/checkov"   // kind: checkov.
+	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/git"       // kind: git.
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/infracost" // kind: infracost.
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/kics"      // kind: kics.
+	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/tflint"    // kind: tflint.
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/tfmigrate" // kind: tfmigrate.
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/trivy"     // kind: trivy.
 )

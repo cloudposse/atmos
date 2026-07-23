@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: list
 description: List all configured authentication providers and identities with their relationships and chains.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -15,12 +15,12 @@ Display all authentication providers and identities configured in your Atmos pro
 
 <DemoVideo id="auth-list" title="atmos auth list" showCaption={false} />
 
-<Screengrab title="atmos auth list --help" slug="atmos-auth-list--help" />
+<CastPlayer title="atmos auth list --help" src="/casts/screengrabs/atmos-auth-list--help.cast" static chrome />
 
 ## Usage
 
 ```shell
-atmos auth list [--format <format>] [--providers [names]] [--identities [names]]
+atmos auth list [--format <format>] [--providers [names]] [--identities [names]] [--tags <tags>]
 ```
 
 ## Examples
@@ -40,6 +40,12 @@ atmos auth list --identities
 
 # Show specific identities
 atmos auth list --identities=admin,developer
+
+# Filter by tags (matches providers/identities tagged with any of the given tags)
+atmos auth list --tags production
+
+# Filter by multiple tags
+atmos auth list --tags production,tier-1
 
 # Display as hierarchical tree
 atmos auth list --format tree
@@ -117,6 +123,11 @@ atmos auth list --format markdown > auth.md
   <dt>`--identities [names]`</dt>
   <dd>
     Show only identities. Optionally filter by comma-separated identity names (e.g., `--identities=admin,dev`). Cannot be used with `--providers`.
+  </dd>
+
+  <dt>`--tags <tags>`</dt>
+  <dd>
+    Filter providers and identities by tags (comma-separated, matches any): `--tags=production,tier-1`. Providers and identities are tagged via an optional `tags: [...]` list on their `atmos.yaml` definitions.
   </dd>
 </dl>
 

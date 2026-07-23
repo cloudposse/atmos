@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -88,7 +91,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	importsConfig := make(map[string]map[string]any)
 
 	// Process the YAML config file that imports conflicting configurations
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	_, err := ProcessYAMLConfigFile(
 		atmosConfig,
 		basePath,
 		filePath,
@@ -177,4 +180,80 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 			assert.NoError(t, err, "Expected no error when expectedParts is nil")
 		})
 	}
+}
+
+// TestValidateStacksSchemaValidationHasTeeth guards against the JSON Schema validation
+// in `atmos validate stacks` silently becoming a no-op (which would let CI stay green
+// while validating nothing). It is the negative-path counterpart to the CI `[validate]`
+// matrix, which only exercises the positive path (all example stacks must be valid).
+//
+// The invalid manifest is *structurally* valid (the `settings` section is free-form, so
+// the stack processor accepts a string for `settings.templates`) but violates the schema:
+// that field must be either an object or an `!include` file reference. The failure must
+// therefore come specifically from JSON Schema validation — not from the structural parser.
+func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
+	const validManifest = "vars:\n  stage: dev\n" +
+		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
+	const invalidManifest = "vars:\n  stage: dev\n" +
+		"settings:\n  templates: \"this must be an object per the schema\"\n" +
+		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
+
+	// validate builds a fresh, isolated temp project for the given manifest and runs
+	// `atmos validate stacks` against it with the default embedded schema (no
+	// `schemas.atmos.manifest` override — the same schema `atmos validate stacks` uses
+	// for any user who hasn't configured one). A fresh directory per call sidesteps
+	// Atmos's per-path manifest memoization, so reusing this helper for both the valid
+	// and invalid manifest is sound.
+	validate := func(manifest string) error {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+		atmosYAML := "base_path: \".\"\n" +
+			"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+			"logs:\n  level: \"Warning\"\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+		t.Chdir(dir)
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		require.NoError(t, err)
+		return ValidateStacks(&atmosConfig)
+	}
+
+	// Negative: a schema-invalid manifest must be rejected by JSON Schema validation.
+	// Assert on its user-facing `!include` diagnostic (not just any failure) —
+	// the ad-hoc structural parser (e.g. "invalid vars section", "invalid
+	// components section") never produces this message, so its presence proves
+	// the failure came from schema validation.
+	err := validate(invalidManifest)
+	require.Error(t, err, "schema-invalid manifest must fail validation")
+	require.Contains(t, err.Error(), "settings.templates",
+		"failure must come from JSON Schema validation, not the structural parser")
+	require.Contains(t, err.Error(), "file references must use the !include YAML tag",
+		"failure must come from JSON Schema validation, not the structural parser")
+
+	// Positive control: a valid manifest must pass — proving the failure above is the
+	// manifest, not a broken harness.
+	require.NoError(t, validate(validManifest), "valid manifest must pass validation")
+}
+
+func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+
+	atmosYAML := "base_path: \".\"\n" +
+		"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+		"logs:\n  level: \"Warning\"\n"
+	manifest := "vars:\n  stage: !envv ATMOS_TEST_STAGE\n" +
+		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+	t.Chdir(dir)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	err = ValidateStacks(&atmosConfig)
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+	require.Contains(t, err.Error(), "!envv")
 }

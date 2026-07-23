@@ -21,15 +21,17 @@ const errWrapFormat = "%w: %w"
 
 // IsMultiComponentExecution checks if the command should be routed to multi-component execution.
 func IsMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "")
+	return info.All || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0 ||
+		(info.Stack != "" && info.ComponentFromArg == "")
 }
 
 // HasMultiComponentFlags checks if any multi-component flags are set.
 func HasMultiComponentFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || info.Affected || len(info.Components) > 0 || info.Query != ""
+	return info.All || info.Affected || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0
 }
 
 // HasNonAffectedMultiFlags checks if multi-component flags, excluding --affected, are set.
+// Tags and labels compose with --affected to narrow the affected set.
 func HasNonAffectedMultiFlags(info *schema.ConfigAndStacksInfo) bool {
 	return info.All || len(info.Components) > 0 || info.Query != ""
 }

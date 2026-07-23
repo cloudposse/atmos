@@ -1,8 +1,8 @@
 package exec
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,8 +11,12 @@ import (
 	"github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -20,6 +24,13 @@ import (
 // Helper function to create a bool pointer for testing.
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func skipGomonkeyOnDarwinARM64(t testing.TB) {
+	t.Helper()
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
+	}
 }
 
 func TestIsWorkspacesEnabled(t *testing.T) {
@@ -90,65 +101,6 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 			// Assert results.
 			assert.Equal(t, tc.expectedEnabled, result, "Expected workspace enabled status to match")
 		})
-	}
-}
-
-func TestExecuteTerraformAffectedWithGraphAndDependents(t *testing.T) {
-	// Skip long tests in short mode (this test takes ~26 seconds due to Git operations and Terraform execution).
-	tests.SkipIfShort(t)
-	// Check for valid Git remote URL before running test
-	tests.RequireGitRemoteWithValidURL(t)
-
-	// Check if terraform is installed
-	tests.RequireExecutable(t, "terraform", "running Terraform affected tests")
-	os.Unsetenv("ATMOS_BASE_PATH")
-	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-
-	// Define the work directory and change to it
-	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
-	t.Chdir(workDir)
-
-	oldStd := os.Stderr
-	_, w, _ := os.Pipe()
-	os.Stderr = w
-
-	// Ensure stderr is restored even if test fails.
-	defer func() {
-		os.Stderr = oldStd
-	}()
-
-	stack := "prod"
-
-	info := schema.ConfigAndStacksInfo{
-		Stack:         stack,
-		ComponentType: "terraform",
-		SubCommand:    "plan",
-		Affected:      true,
-		DryRun:        true,
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		t.Fatalf("Failed to execute 'InitCliConfig': %v", err)
-	}
-
-	a := DescribeAffectedCmdArgs{
-		CLIConfig:         &atmosConfig,
-		Stack:             stack,
-		IncludeDependents: true,
-		CloneTargetRef:    true,
-	}
-
-	err = ExecuteTerraformAffectedWithGraph(&a, &info)
-
-	// Restore stderr before checking error.
-	w.Close()
-	os.Stderr = oldStd
-
-	if err != nil {
-		// This test may fail in environments where Git operations or terraform execution
-		// encounter issues. Skip instead of failing to avoid blocking CI.
-		t.Skipf("Test failed (environment issue or missing preconditions): %v", err)
 	}
 }
 
@@ -233,6 +185,334 @@ func TestExecuteTerraformQueryNoMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteTerraformQuery should succeed when no components match: %v", err)
 	}
+}
+
+func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		require.Equal(t, "terraform", identity)
+		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
+		return authManager, nil
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{"dev": map[string]any{}}
+	var described bool
+	var scheduled bool
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "dev", info.Stack)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+		useMocks bool,
+	) (map[string]any, error) {
+		described = true
+		require.NotNil(t, atmosConfig)
+		require.Equal(t, "dev", filterByStack)
+		require.Equal(t, []string{"app"}, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, useMocks)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "dev", opts.Info.Stack)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Components:       []string{"app"},
+		SubCommand:       "plan",
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	require.NoError(t, ExecuteTerraformQuery(info))
+	require.True(t, described)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		require.Equal(t, "terraform", identity)
+		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
+		return authManager, nil
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{},
+				},
+			},
+		},
+	}
+	var describedAffected bool
+	var describedStacks bool
+	var scheduled bool
+	repoPath := t.TempDir()
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "plan", info.SubCommand)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(GetAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+		describedAffected = true
+		require.NotNil(t, args.CLIConfig)
+		require.Equal(t, repoPath, args.RepoPath)
+		require.Equal(t, "dev", args.Stack)
+		require.True(t, args.ProcessTemplates)
+		require.True(t, args.ProcessYamlFunctions)
+		require.Equal(t, []string{"skip-me"}, args.Skip)
+		require.Equal(t, authManager, args.AuthManager)
+		require.False(t, args.AuthDisabled)
+		return []schema.Affected{
+			{Component: "app", Stack: "dev", ComponentType: cfg.TerraformComponentType},
+			{Component: "helm", Stack: "dev", ComponentType: "helmfile"},
+			{Component: "deleted", Stack: "dev", ComponentType: cfg.TerraformComponentType, Deleted: true},
+		}, nil
+	})
+	patches.ApplyFunc(ExecuteDescribeStacksWithAuthDisabledAndMocks, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+		authDisabled bool,
+		useMocks bool,
+	) (map[string]any, error) {
+		describedStacks = true
+		require.NotNil(t, atmosConfig)
+		require.Empty(t, filterByStack)
+		require.Nil(t, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, authDisabled)
+		require.False(t, useMocks)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		require.NotNil(t, opts.Selection)
+		require.Equal(t, []string{"app-dev"}, opts.Selection.NodeIDs)
+		require.True(t, opts.Selection.IncludeDependents)
+		require.False(t, opts.Selection.IncludeDependencies)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Affected:         true,
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	args := &DescribeAffectedCmdArgs{
+		RepoPath:             repoPath,
+		Stack:                "dev",
+		IncludeDependents:    true,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{"skip-me"},
+	}
+	require.NoError(t, ExecuteTerraformAffectedWithContext(context.Background(), args, info))
+	require.True(t, describedAffected)
+	require.True(t, describedStacks)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	t.Run("config init", func(t *testing.T) {
+		expectedErr := errors.New("config failed")
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("auth manager", func(t *testing.T) {
+		expectedErr := errors.New("auth failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, expectedErr
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("describe stacks", func(t *testing.T) {
+		expectedErr := errors.New("describe failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, nil
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
+			*schema.AtmosConfiguration,
+			string,
+			[]string,
+			[]string,
+			[]string,
+			bool,
+			bool,
+			bool,
+			bool,
+			[]string,
+			auth.AuthManager,
+			bool,
+		) (map[string]any, error) {
+			return nil, expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("scheduler", func(t *testing.T) {
+		expectedErr := errors.New("scheduler failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, nil
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
+			*schema.AtmosConfiguration,
+			string,
+			[]string,
+			[]string,
+			[]string,
+			bool,
+			bool,
+			bool,
+			bool,
+			[]string,
+			auth.AuthManager,
+			bool,
+		) (map[string]any, error) {
+			return map[string]any{}, nil
+		})
+		patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
+			return expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+}
+
+func TestCreateQueryAuthManagerPropagatesFactoryError(t *testing.T) {
+	expectedErr := errors.New("auth failed")
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return nil, expectedErr
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	manager, err := createQueryAuthManager(&schema.ConfigAndStacksInfo{}, &schema.AtmosConfiguration{})
+	require.Nil(t, manager)
+	require.ErrorIs(t, err, expectedErr)
+	require.Contains(t, err.Error(), "create query auth manager")
 }
 
 // TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
@@ -359,203 +639,6 @@ func TestWalkTerraformComponents(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Empty(t, visited)
-	})
-}
-
-// TestProcessTerraformComponent exercises the filtering logic of processTerraformComponent.
-func TestProcessTerraformComponent(t *testing.T) {
-	atmosConfig := schema.AtmosConfiguration{}
-	logFunc := func(msg interface{}, keyvals ...interface{}) {}
-	stack := "s1"
-	component := "comp1"
-
-	newSection := func(meta map[string]any) map[string]any {
-		return map[string]any{
-			cfg.MetadataSectionName: meta,
-			"vars": map[string]any{
-				"tags": map[string]any{"team": "eks"},
-			},
-		}
-	}
-
-	// mockExecutor returns a mock executor that records whether it was called.
-	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error {
-		return func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
-			*called = true
-			return returnErr
-		}
-	}
-
-	t.Run("no metadata section", func(t *testing.T) {
-		// Section without metadata should return false, nil.
-		section := map[string]any{
-			"vars": map[string]any{"key": "value"},
-		}
-		called := false
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
-		assert.NoError(t, err)
-		assert.False(t, processed)
-		assert.False(t, called)
-	})
-
-	t.Run("metadata wrong type", func(t *testing.T) {
-		// Section with metadata of wrong type should return false, nil.
-		section := map[string]any{
-			cfg.MetadataSectionName: "string-not-map",
-			"vars":                  map[string]any{"key": "value"},
-		}
-		called := false
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
-		assert.NoError(t, err)
-		assert.False(t, processed)
-		assert.False(t, called)
-	})
-
-	t.Run("abstract", func(t *testing.T) {
-		section := newSection(map[string]any{"type": "abstract"})
-		called := false
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
-		assert.NoError(t, err)
-		assert.False(t, processed)
-		assert.False(t, called)
-	})
-
-	t.Run("disabled", func(t *testing.T) {
-		section := newSection(map[string]any{"enabled": false})
-		called := false
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
-		assert.NoError(t, err)
-		assert.False(t, processed)
-		assert.False(t, called)
-	})
-
-	t.Run("query not satisfied", func(t *testing.T) {
-		section := newSection(map[string]any{"enabled": true})
-		called := false
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan", Query: ".vars.tags.team == \"foo\""}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
-		assert.NoError(t, err)
-		assert.False(t, processed)
-		assert.False(t, called)
-	})
-
-	t.Run("execute", func(t *testing.T) {
-		section := newSection(map[string]any{"enabled": true})
-		called := false
-		executor := func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
-			called = true
-			// check fields set
-			assert.Equal(t, component, i.Component)
-			assert.Equal(t, stack, i.Stack)
-			return nil
-		}
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, executor)
-		assert.NoError(t, err)
-		assert.True(t, processed)
-		assert.True(t, called)
-	})
-
-	t.Run("dry run", func(t *testing.T) {
-		section := newSection(map[string]any{"enabled": true})
-		called := false
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan", DryRun: true}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
-		assert.NoError(t, err)
-		assert.True(t, processed) // Returns true in dry-run mode.
-		assert.False(t, called)   // But doesn't call executeFn.
-	})
-
-	t.Run("execute returns error", func(t *testing.T) {
-		section := newSection(map[string]any{"enabled": true})
-		expectedErr := errors.New("terraform error")
-		called := false
-
-		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, expectedErr))
-
-		assert.Error(t, err)
-		assert.True(t, processed)
-		assert.True(t, called)
-	})
-
-	t.Run("per-component hook fires on success with captured output", func(t *testing.T) {
-		section := newSection(map[string]any{"enabled": true})
-		hookCalled := false
-		var hookComponent, hookStack, hookOutput string
-		var hookErr error
-
-		info := schema.ConfigAndStacksInfo{
-			SubCommand: "plan",
-			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
-				hookCalled = true
-				hookComponent = ci.Component
-				hookStack = ci.Stack
-				hookOutput = output
-				hookErr = execErr
-			},
-		}
-
-		// Executor writes to the capture buffers provided via ShellCommandOption.
-		executor := func(_ schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
-			c := &shellCommandConfig{}
-			for _, opt := range opts {
-				opt(c)
-			}
-			if c.stdoutCapture != nil {
-				fmt.Fprint(c.stdoutCapture, "plan-stdout")
-			}
-			if c.stderrCapture != nil {
-				fmt.Fprint(c.stderrCapture, "plan-stderr")
-			}
-			return nil
-		}
-
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, executor)
-
-		assert.NoError(t, err)
-		assert.True(t, processed)
-		assert.True(t, hookCalled)
-		assert.Equal(t, component, hookComponent)
-		assert.Equal(t, stack, hookStack)
-		assert.Contains(t, hookOutput, "plan-stdout")
-		assert.Contains(t, hookOutput, "plan-stderr")
-		assert.NoError(t, hookErr)
-	})
-
-	t.Run("per-component hook fires before error is returned", func(t *testing.T) {
-		section := newSection(map[string]any{"enabled": true})
-		expectedErr := errors.New("terraform failed")
-		hookCalled := false
-		var hookErr error
-
-		info := schema.ConfigAndStacksInfo{
-			SubCommand: "plan",
-			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
-				hookCalled = true
-				hookErr = execErr
-			},
-		}
-
-		_, err := processTerraformComponent(
-			&atmosConfig, &info, stack, component, section, logFunc,
-			func(_ schema.ConfigAndStacksInfo, _ ...ShellCommandOption) error { return expectedErr },
-		)
-
-		assert.ErrorIs(t, err, expectedErr)
-		assert.True(t, hookCalled, "hook must fire even when executor fails")
-		assert.ErrorIs(t, hookErr, expectedErr)
 	})
 }
 
@@ -1143,493 +1226,6 @@ func BenchmarkNeedProcessTemplatesAndYamlFunctions(b *testing.B) {
 	}
 }
 
-func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
-	// gomonkey uses unsafe binary patching that causes a fatal SIGBUS on macOS ARM64
-	// (Apple Silicon) because code pages are read-only. Skip on that platform.
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
-
-	tests := []struct {
-		name               string
-		info               *schema.ConfigAndStacksInfo
-		affectedList       []schema.Affected
-		affectedComponent  string
-		affectedStack      string
-		parentComponent    string
-		parentStack        string
-		dependents         []schema.Dependent
-		args               *DescribeAffectedCmdArgs
-		mockTerraformError bool
-		expectedError      bool
-		expectedCalls      int
-	}{
-		{
-			name: "simple component execution without dependents",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList:      []schema.Affected{},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents:        []schema.Dependent{},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      1,
-		},
-		{
-			name: "dry run execution",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     true,
-			},
-			affectedList:      []schema.Affected{},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents:        []schema.Dependent{},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      0, // No actual terraform execution in dry run.
-		},
-		{
-			name: "dry run with parent component info",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     true,
-			},
-			affectedList:      []schema.Affected{},
-			affectedComponent: "security-group",
-			affectedStack:     "prod",
-			parentComponent:   "vpc",
-			parentStack:       "prod",
-			dependents:        []schema.Dependent{},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      0, // No actual terraform execution in dry run.
-		},
-		{
-			name: "component with parent component",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList:      []schema.Affected{},
-			affectedComponent: "security-group",
-			affectedStack:     "prod",
-			parentComponent:   "vpc",
-			parentStack:       "prod",
-			dependents:        []schema.Dependent{},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      1,
-		},
-		{
-			name: "terraform execution fails",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList:      []schema.Affected{},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents:        []schema.Dependent{},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockTerraformError: true,
-			expectedError:      true,
-			expectedCalls:      1,
-		},
-		{
-			name: "component with one dependent",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList: []schema.Affected{
-				{
-					StackSlug: "prod-security-group",
-				},
-			},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents: []schema.Dependent{
-				{
-					Component:            "security-group",
-					Stack:                "prod",
-					StackSlug:            "prod-security-group",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      2, // vpc + security-group.
-		},
-		{
-			name: "component with nested dependents",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList: []schema.Affected{
-				{
-					StackSlug: "prod-security-group",
-				},
-				{
-					StackSlug: "prod-application",
-				},
-			},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents: []schema.Dependent{
-				{
-					Component:            "security-group",
-					Stack:                "prod",
-					StackSlug:            "prod-security-group",
-					IncludedInDependents: false,
-					Dependents: []schema.Dependent{
-						{
-							Component:            "application",
-							Stack:                "prod",
-							StackSlug:            "prod-application",
-							IncludedInDependents: false,
-							Dependents:           []schema.Dependent{},
-						},
-					},
-				},
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      3, // vpc + security-group + application.
-		},
-		{
-			name: "component with dependent already included",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList: []schema.Affected{
-				{
-					StackSlug: "prod-security-group",
-				},
-			},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents: []schema.Dependent{
-				{
-					Component:            "security-group",
-					Stack:                "prod",
-					StackSlug:            "prod-security-group",
-					IncludedInDependents: true, // Already included.
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      1, // Only vpc, security-group skipped.
-		},
-		{
-			name: "include dependents disabled",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList:      []schema.Affected{},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents: []schema.Dependent{
-				{
-					Component:            "security-group",
-					Stack:                "prod",
-					StackSlug:            "prod-security-group",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: false,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      1, // Only vpc, dependents not included.
-		},
-		{
-			// Defense-in-depth coverage for issue #2361: a terraform component
-			// must never trigger terraform plan/apply on a helmfile dependent.
-			name: "helmfile dependent skipped (issue #2361)",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList: []schema.Affected{
-				{StackSlug: "prod-helm-app"},
-			},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents: []schema.Dependent{
-				{
-					Component:            "helm-app",
-					ComponentType:        "helmfile",
-					Stack:                "prod",
-					StackSlug:            "prod-helm-app",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      1, // Only vpc; helmfile dependent filtered.
-		},
-		{
-			// Defense-in-depth coverage for issue #2361: a terraform component
-			// must never trigger terraform plan/apply on a packer dependent.
-			name: "packer dependent skipped (issue #2361)",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList: []schema.Affected{
-				{StackSlug: "prod-image"},
-			},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents: []schema.Dependent{
-				{
-					Component:            "image",
-					ComponentType:        "packer",
-					Stack:                "prod",
-					StackSlug:            "prod-image",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      1, // Only vpc; packer dependent filtered.
-		},
-		{
-			// Mixed-type dependents: only the terraform one runs.
-			name: "mixed-type dependents — only terraform runs (issue #2361)",
-			info: &schema.ConfigAndStacksInfo{
-				SubCommand: "plan",
-				DryRun:     false,
-			},
-			affectedList: []schema.Affected{
-				{StackSlug: "prod-helm-app"},
-				{StackSlug: "prod-image"},
-				{StackSlug: "prod-security-group"},
-			},
-			affectedComponent: "vpc",
-			affectedStack:     "prod",
-			parentComponent:   "",
-			parentStack:       "",
-			dependents: []schema.Dependent{
-				{
-					Component:            "helm-app",
-					ComponentType:        "helmfile",
-					Stack:                "prod",
-					StackSlug:            "prod-helm-app",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-				{
-					Component:            "image",
-					ComponentType:        "packer",
-					Stack:                "prod",
-					StackSlug:            "prod-image",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-				{
-					Component:            "security-group",
-					ComponentType:        "terraform",
-					Stack:                "prod",
-					StackSlug:            "prod-security-group",
-					IncludedInDependents: false,
-					Dependents:           []schema.Dependent{},
-				},
-			},
-			args: &DescribeAffectedCmdArgs{
-				IncludeDependents: true,
-			},
-			mockTerraformError: false,
-			expectedError:      false,
-			expectedCalls:      2, // vpc + security-group; helmfile + packer filtered.
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Track the number of ExecuteTerraform calls.
-			callCount := 0
-
-			// Mock ExecuteTerraform function.
-			patch := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo) error {
-				callCount++
-				if tt.mockTerraformError {
-					return assert.AnError
-				}
-				return nil
-			})
-			defer patch.Reset()
-
-			// Mock isComponentInStackAffected to return true for components in affected list.
-			patchAffected := gomonkey.ApplyFunc(isComponentInStackAffected, func(affectedList []schema.Affected, stackSlug string) bool {
-				for _, affected := range affectedList {
-					if affected.StackSlug == stackSlug {
-						return true
-					}
-				}
-				return false
-			})
-			defer patchAffected.Reset()
-
-			// Execute the function.
-			err := executeTerraformAffectedComponentInDepOrder(
-				tt.info,
-				tt.affectedList,
-				&affectedDepOrderParams{
-					AffectedComponent: tt.affectedComponent,
-					AffectedStack:     tt.affectedStack,
-					ParentComponent:   tt.parentComponent,
-					ParentStack:       tt.parentStack,
-					Dependents:        tt.dependents,
-				},
-				tt.args,
-			)
-
-			// Check if gomonkey mocking is working.
-			// For dry_run case (expectedCalls == 0), if we get an error, the mock likely failed.
-			if tt.expectedCalls == 0 && err != nil {
-				t.Skipf("gomonkey function mocking failed - real function was called (likely due to compiler optimizations or platform issues)")
-			}
-
-			// If expected calls > 0 but callCount is 0, it means gomonkey failed to mock the function.
-			if tt.expectedCalls > 0 && callCount == 0 {
-				t.Skipf("gomonkey function mocking failed (likely due to compiler optimizations or platform issues)")
-			}
-
-			// If expected calls > actual calls AND we got an unexpected error, the mock likely failed.
-			// This can happen on macOS where gomonkey partially works but the real function gets called.
-			if tt.expectedCalls > callCount && !tt.expectedError && err != nil {
-				t.Skipf("gomonkey function mocking failed - partial mock execution detected (likely due to platform issues)")
-			}
-
-			// Assert results.
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			// Verify the number of terraform calls.
-			assert.Equal(t, tt.expectedCalls, callCount, "Expected %d terraform calls, got %d", tt.expectedCalls, callCount)
-
-			// Verify that the function completed successfully.
-			// Note: The info object is modified during recursive execution,
-			// so we only verify the call count and error state.
-		})
-	}
-}
-
-// TestIsNonTerraformDependent is the portable companion to the gomonkey-based
-// table above. It directly exercises the defense-in-depth predicate that
-// `executeTerraformAffectedComponentInDepOrder` uses to drop helmfile/packer
-// dependents during the recursion. Testing the predicate (rather than the
-// orchestrator) avoids racing with parallel tests that monkey-patch the
-// orchestrator, and gives the guard real coverage on every CI runner —
-// including macOS ARM64 where gomonkey is unsupported.
-func TestIsNonTerraformDependent(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		dep  schema.Dependent
-		want bool
-	}{
-		{
-			name: "helmfile dependent is non-terraform (issue #2361)",
-			dep:  schema.Dependent{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
-			want: true,
-		},
-		{
-			name: "packer dependent is non-terraform (issue #2361)",
-			dep:  schema.Dependent{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
-			want: true,
-		},
-		{
-			// Positive path: a terraform dependent must NOT be flagged,
-			// otherwise the guard would be over-broad and silently drop
-			// legitimate work.
-			name: "terraform dependent is not flagged",
-			dep:  schema.Dependent{Component: "security-group", ComponentType: cfg.TerraformComponentType, Stack: "prod"},
-			want: false,
-		},
-		{
-			// Empty ComponentType is treated as terraform for backward
-			// compatibility — older affected payloads omitted this field.
-			name: "empty ComponentType is treated as terraform",
-			dep:  schema.Dependent{Component: "legacy", ComponentType: "", Stack: "prod"},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			dep := tt.dep
-			assert.Equal(t, tt.want, isNonTerraformDependent(&dep))
-		})
-	}
-}
-
 func BenchmarkParseUploadStatusFlag(b *testing.B) {
 	args := []string{"--verbose", "--upload-status=true", "--output=json"}
 	flagName := "upload-status"
@@ -1638,125 +1234,6 @@ func BenchmarkParseUploadStatusFlag(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		parseUploadStatusFlag(args, flagName)
 	}
-}
-
-func BenchmarkExecuteTerraformAffectedComponentInDepOrder(b *testing.B) {
-	// gomonkey uses unsafe binary patching that causes a fatal SIGBUS on macOS ARM64.
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		b.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		SubCommand: "plan",
-		DryRun:     true, // Use dry run to avoid actual terraform execution.
-	}
-	affectedList := []schema.Affected{}
-	dependents := []schema.Dependent{}
-	args := &DescribeAffectedCmdArgs{
-		IncludeDependents: false,
-	}
-
-	// Mock isComponentInStackAffected.
-	patch := gomonkey.ApplyFunc(isComponentInStackAffected, func(affectedList []schema.Affected, stackSlug string) bool {
-		return false
-	})
-	defer patch.Reset()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := executeTerraformAffectedComponentInDepOrder(
-			info,
-			affectedList,
-			&affectedDepOrderParams{
-				AffectedComponent: "test-component",
-				AffectedStack:     "test-stack",
-				Dependents:        dependents,
-			},
-			args,
-		)
-		if err != nil {
-			b.Fatalf("Unexpected error in benchmark: %v", err)
-		}
-	}
-}
-
-func TestLogFuncForDryRun(t *testing.T) {
-	t.Run("dry run returns non-nil function", func(t *testing.T) {
-		fn := logFuncForDryRun(true)
-		assert.NotNil(t, fn)
-	})
-
-	t.Run("non-dry-run returns non-nil function", func(t *testing.T) {
-		fn := logFuncForDryRun(false)
-		assert.NotNil(t, fn)
-	})
-}
-
-func TestShouldProcessDependent(t *testing.T) {
-	affectedList := []schema.Affected{
-		{Component: "vpc", Stack: "dev", StackSlug: "vpc-dev"},
-		{Component: "rds", Stack: "prod", StackSlug: "rds-prod"},
-	}
-
-	t.Run("already included in dependents", func(t *testing.T) {
-		dep := &schema.Dependent{
-			Component:            "vpc",
-			Stack:                "dev",
-			StackSlug:            "vpc-dev",
-			IncludedInDependents: true,
-		}
-		assert.False(t, shouldProcessDependent(dep, affectedList, true))
-	})
-
-	t.Run("include dependents flag true", func(t *testing.T) {
-		dep := &schema.Dependent{
-			Component:            "app",
-			Stack:                "dev",
-			StackSlug:            "app-dev",
-			IncludedInDependents: false,
-		}
-		assert.True(t, shouldProcessDependent(dep, affectedList, true))
-	})
-
-	t.Run("not included but affected in stack", func(t *testing.T) {
-		dep := &schema.Dependent{
-			Component:            "vpc",
-			Stack:                "dev",
-			StackSlug:            "vpc-dev",
-			IncludedInDependents: false,
-		}
-		assert.True(t, shouldProcessDependent(dep, affectedList, false))
-	})
-
-	t.Run("not included and not affected", func(t *testing.T) {
-		dep := &schema.Dependent{
-			Component:            "app",
-			Stack:                "staging",
-			StackSlug:            "app-staging",
-			IncludedInDependents: false,
-		}
-		assert.False(t, shouldProcessDependent(dep, affectedList, false))
-	})
-
-	t.Run("empty affected list with include dependents", func(t *testing.T) {
-		dep := &schema.Dependent{
-			Component:            "app",
-			Stack:                "dev",
-			StackSlug:            "app-dev",
-			IncludedInDependents: false,
-		}
-		assert.True(t, shouldProcessDependent(dep, nil, true))
-	})
-
-	t.Run("empty affected list without include dependents", func(t *testing.T) {
-		dep := &schema.Dependent{
-			Component:            "app",
-			Stack:                "dev",
-			StackSlug:            "app-dev",
-			IncludedInDependents: false,
-		}
-		assert.False(t, shouldProcessDependent(dep, nil, false))
-	})
 }
 
 func TestParseUploadStatusFlag(t *testing.T) {

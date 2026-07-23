@@ -107,7 +107,10 @@ func parseTerraformMigrate(cmd *cobra.Command, args []string, action string) (sc
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 	}
 
-	opts := shared.ParseRunOptions(v)
+	opts, err := shared.ParseRunOptions(v)
+	if err != nil {
+		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
+	}
 	migrateOpts := tfmigrate.Options{
 		Action:        action,
 		Migration:     v.GetString("migration"),

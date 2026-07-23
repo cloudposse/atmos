@@ -2,13 +2,22 @@ package exec
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // ---------------------------------------------------------------------------
@@ -23,6 +32,7 @@ func TestExtractDescribeComponentSections_AllPresent(t *testing.T) {
 	authMap := map[string]any{"role": "arn:aws"}
 	providers := map[string]any{"aws": map[string]any{}}
 	hooks := map[string]any{"pre_plan": "script.sh"}
+	secrets := map[string]any{"vars": map[string]any{"API_KEY": map[string]any{"store": "app-secrets"}}}
 	overrides := map[string]any{"env": map[string]any{}}
 	backend := map[string]any{"bucket": "my-bucket"}
 
@@ -34,6 +44,7 @@ func TestExtractDescribeComponentSections_AllPresent(t *testing.T) {
 		cfg.AuthSectionName:        authMap,
 		cfg.ProvidersSectionName:   providers,
 		cfg.HooksSectionName:       hooks,
+		cfg.SecretsSectionName:     secrets,
 		cfg.OverridesSectionName:   overrides,
 		cfg.BackendSectionName:     backend,
 		cfg.BackendTypeSectionName: "s3",
@@ -48,6 +59,7 @@ func TestExtractDescribeComponentSections_AllPresent(t *testing.T) {
 	assert.Equal(t, authMap, secs.auth)
 	assert.Equal(t, providers, secs.providers)
 	assert.Equal(t, hooks, secs.hooks)
+	assert.Equal(t, secrets, secs.secrets)
 	assert.Equal(t, overrides, secs.overrides)
 	assert.Equal(t, backend, secs.backend)
 	assert.Equal(t, "s3", secs.backendType)
@@ -96,6 +108,7 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 		auth:        map[string]any{},
 		providers:   map[string]any{},
 		hooks:       map[string]any{},
+		secrets:     map[string]any{"vars": map[string]any{}},
 		overrides:   map[string]any{},
 		backend:     map[string]any{"bucket": "tfstate"},
 		backendType: "s3",
@@ -120,6 +133,7 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 	// ComponentSection mirror.
 	assert.Equal(t, secs.vars, info.ComponentSection[cfg.VarsSectionName])
 	assert.Equal(t, secs.metadata, info.ComponentSection[cfg.MetadataSectionName])
+	assert.Equal(t, secs.secrets, info.ComponentSection[cfg.SecretsSectionName])
 	assert.Equal(t, "s3", info.ComponentSection[cfg.BackendTypeSectionName])
 }
 
@@ -1213,6 +1227,28 @@ func TestProcessComponentSectionTemplates_UnmarshalYAMLError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestProcessComponentSectionTemplates_AddTemplateContextError(t *testing.T) {
+	// When the component section references `.version` and the managed
+	// versions lock file is malformed, manager.AddTemplateContext (via
+	// manager.VersionMap/LoadLock) returns an error that propagates out of
+	// processComponentSectionTemplates.
+	basePath := t.TempDir()
+	lockPath := filepath.Join(basePath, "versions.lock.yaml")
+	require.NoError(t, os.WriteFile(lockPath, []byte("tracks: not-a-map\n"), 0o644))
+
+	ac := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"ref": "{{ .version.opentofu }}",
+		},
+	}
+
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	require.Error(t, err)
+}
+
 func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 	// When processTemplates=true and the component section has an invalid Go template,
 	// processComponentSectionTemplates returns an error which processComponentEntry propagates (lines 264-266).
@@ -1265,8 +1301,90 @@ func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
 		},
 	}
 
-	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil)
+	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil, false)
 	require.Error(t, err)
+}
+
+func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
+	require.NoError(t, iolib.Initialize())
+
+	tests := []struct {
+		name           string
+		resolveSecrets bool
+		storeValue     any
+		storeErr       error
+		expectError    error
+		expectValue    string
+	}{
+		{
+			name:           "inspection masks without retrieving",
+			resolveSecrets: false,
+			expectValue:    iolib.GetContext().Masker().Replacement(),
+		},
+		{
+			name:           "execution fails for a missing required secret",
+			resolveSecrets: true,
+			storeErr:       errors.New("secret not found"),
+			expectError:    secrets.ErrSecretMissing,
+		},
+		{
+			name:           "execution resolves and registers the secret for masking",
+			resolveSecrets: true,
+			storeValue:     "api-secret-value",
+			expectValue:    "api-secret-value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			secretStore := store.NewMockStore(ctrl)
+			if tt.resolveSecrets {
+				secretStore.EXPECT().Get("dev", "app", "API_KEY").Return(tt.storeValue, tt.storeErr)
+			} else {
+				secretStore.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				StoresConfig: store.StoresConfig{
+					"app-secrets": {Type: "test", Secret: true},
+				},
+				Stores: store.StoreRegistry{"app-secrets": secretStore},
+			}
+			componentSection := map[string]any{
+				cfg.ComponentSectionName: "app",
+				"secrets": map[string]any{
+					"vars": map[string]any{
+						"API_KEY": map[string]any{"store": "app-secrets", "required": true},
+					},
+				},
+				"vars": map[string]any{"api_key": "!secret API_KEY"},
+			}
+			processor := newDescribeStacksProcessor(
+				atmosConfig,
+				"", nil, nil, nil,
+				false, true, false, nil, nil,
+			)
+			processor.resolveSecrets = tt.resolveSecrets
+
+			err := processor.processComponentEntry(
+				"dev", "", cfg.TerraformSectionName,
+				"app", componentSection, map[string]any{"app": componentSection},
+				processComponentTypeOpts{},
+			)
+			if tt.expectError != nil {
+				require.ErrorIs(t, err, tt.expectError)
+				return
+			}
+			require.NoError(t, err)
+
+			resolved := processor.finalStacksMap["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)["vars"].(map[string]any)["api_key"]
+			assert.Equal(t, tt.expectValue, resolved)
+			if tt.resolveSecrets {
+				assert.Equal(t, iolib.GetContext().Masker().Replacement(), iolib.GetContext().Masker().Mask(tt.expectValue))
+			}
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1513,4 +1631,150 @@ func TestProcessStackFile_NoGhostEntryUnderFilename(t *testing.T) {
 		"ghost entry under raw filename must not exist when stack name resolves differently")
 	assert.True(t, hasResolvedEntry,
 		"real entry under resolved stack name must exist")
+}
+
+// ---------------------------------------------------------------------------
+// withDegradation
+// ---------------------------------------------------------------------------
+
+// TestWithDegradation_SetsOnWarningAndReturnsSelf verifies that withDegradation sets
+// onWarning to the given callback and returns the same processor pointer, enabling
+// method chaining (e.g. newDescribeStacksProcessor(...).withDegradation(onWarning)).
+func TestWithDegradation_SetsOnWarningAndReturnsSelf(t *testing.T) {
+	p := newMinimalProcessor()
+	assert.Nil(t, p.onWarning, "onWarning must start nil (strict by default)")
+
+	var called bool
+	onWarning := func(DegradationWarning) { called = true }
+
+	returned := p.withDegradation(onWarning)
+
+	assert.Same(t, p, returned, "withDegradation must return the same processor for method chaining")
+	require.NotNil(t, p.onWarning)
+	p.onWarning(DegradationWarning{})
+	assert.True(t, called, "the callback stored on the processor must be the one passed in")
+}
+
+// TestWithDegradation_NilRestoresStrict verifies that calling withDegradation(nil) after a
+// prior non-nil call resets onWarning back to nil, restoring strict processing.
+func TestWithDegradation_NilRestoresStrict(t *testing.T) {
+	p := newMinimalProcessor()
+	p.withDegradation(func(DegradationWarning) {})
+	require.NotNil(t, p.onWarning, "precondition: onWarning must be set before testing the nil-reset path")
+
+	returned := p.withDegradation(nil)
+
+	assert.Same(t, p, returned)
+	assert.Nil(t, p.onWarning, "passing nil must restore strict (nil) behavior")
+}
+
+// ---------------------------------------------------------------------------
+// processComponentSectionYAMLFunctions – lenient (onWarning != nil) branch
+// ---------------------------------------------------------------------------
+
+// TestProcessComponentSectionYAMLFunctions_Lenient_Warn verifies the previously-uncovered
+// onWarning != nil branch inside processComponentSectionYAMLFunctions: a recoverable
+// per-value error is substituted with degradation.AtmosComputedValue{} and reported via
+// onWarning, instead of aborting the whole call the way
+// TestProcessComponentSectionYAMLFunctions_Error (onWarning == nil) does.
+func TestProcessComponentSectionYAMLFunctions_Lenient_Warn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	ac := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}
+
+	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)
+	mockStateGetter.EXPECT().
+		GetState(ac, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, recoverableErr).
+		Times(1)
+
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"bucket": "!terraform.state vpc test-stack bucket_name",
+		},
+	}
+
+	var warnings []DegradationWarning
+	result, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, func(w DegradationWarning) {
+		warnings = append(warnings, w)
+	}, false)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, degradation.AtmosComputedValue{}, vars["bucket"])
+
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "test-stack", warnings[0].Stack)
+	assert.Equal(t, "vpc", warnings[0].Component)
+	assert.Contains(t, warnings[0].Function, "!terraform.state")
+	assert.Contains(t, warnings[0].Reason, "terraform state not provisioned")
+}
+
+// ---------------------------------------------------------------------------
+// processComponentEntry – withDegradation wired end-to-end
+// ---------------------------------------------------------------------------
+
+// TestProcessComponentEntry_WithDegradation_RecoverableError_Warns wires withDegradation
+// through the full processComponentEntry path (not just processComponentSectionYAMLFunctions
+// directly) using a real degradation.Collector, proving the onWarning field set by
+// withDegradation actually reaches the YAML-function call site inside processComponentEntry.
+func TestProcessComponentEntry_WithDegradation_RecoverableError_Warns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	ac := &schema.AtmosConfiguration{}
+	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)
+	mockStateGetter.EXPECT().
+		GetState(ac, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, recoverableErr).
+		Times(1)
+
+	p := newDescribeStacksProcessor(
+		ac,
+		"", nil, nil, nil,
+		false, // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil, nil,
+	)
+
+	var collector degradation.Collector
+	require.Same(t, p, p.withDegradation(collector.Add), "withDegradation must chain onto the same processor")
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		"vars": map[string]any{
+			"bucket": "!terraform.state vpc test-stack bucket_name",
+		},
+	}
+	allTypeComponents := map[string]any{"vpc": componentSection}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, collector.Count())
+
+	destMap, ok := getComponentDestMap(p.finalStacksMap, "test.yaml", cfg.TerraformSectionName, "vpc")
+	require.True(t, ok)
+	vars, ok := destMap["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, degradation.AtmosComputedValue{}, vars["bucket"])
 }

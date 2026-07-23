@@ -33,7 +33,7 @@ func TestManager_isCredentialValid_NilCreds(t *testing.T) {
 // affected --upload` processed multiple components sharing the same
 // standalone `ambient` identity in v1.219.0.
 //
-// On the first call, ambient.AuthenticateStandaloneAmbient returns
+// On the first call, the ambient identity's AuthenticateStandalone returns
 // (nil, nil), and authenticateChain stored that nil in
 // processCredentialCache. The second call hit the cache and invoked
 // isCredentialValid("process-cache", nil), which dereferenced the nil
@@ -79,7 +79,7 @@ func TestManager_Authenticate_AmbientStandalone_RepeatedCallsNoPanic(t *testing.
 
 // TestAuthenticateChain_AmbientStandalone_DoesNotCacheNil locks in the
 // authenticateChain-side fix: a successful (nil, nil) result from
-// AuthenticateStandaloneAmbient must NOT be written to
+// the ambient identity's AuthenticateStandalone must NOT be written to
 // processCredentialCache. Storing nil there is what set up the
 // subsequent isCredentialValid panic.
 //

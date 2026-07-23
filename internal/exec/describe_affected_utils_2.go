@@ -136,6 +136,51 @@ func isEqual(
 	return false
 }
 
+// remoteComponentLocator identifies a single component within the remote (target ref)
+// stacks map, so section lookups don't need to thread the navigation keys as separate
+// function arguments.
+type remoteComponentLocator struct {
+	remoteStacks  *map[string]any
+	stackName     string
+	componentType string
+	componentName string
+}
+
+// section returns the raw value of the named section for the located remote component,
+// and whether it was found.
+func (l remoteComponentLocator) section(sectionName string) (any, bool) {
+	remoteStackSection, ok := (*l.remoteStacks)[l.stackName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentTypeSection, ok := remoteComponentsSection[l.componentType].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentSection, ok := remoteComponentTypeSection[l.componentName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return remoteComponentSection[sectionName], true
+}
+
+// isSectionValueEqual compares a local component section value with the corresponding value
+// on the located remote component. Unlike isEqual, it accepts a value of any type, so it also
+// handles scalar sections such as `backend_type`, `required_version`, and `command` (not just
+// map sections). When the remote component path is absent it returns false (treated as
+// changed/affected), matching isEqual semantics.
+func isSectionValueEqual(locator remoteComponentLocator, localValue any, sectionName string) bool {
+	remoteValue, ok := locator.section(sectionName)
+	if !ok {
+		return false
+	}
+	return deepEqualValues(localValue, remoteValue)
+}
+
 // deepEqualMaps performs optimized deep comparison of two maps.
 // This avoids the overhead of reflect.DeepEqual by using type assertions.
 // Correctly distinguishes between nil and empty maps to match reflect.DeepEqual behavior.
@@ -274,6 +319,8 @@ func isComponentFolderChanged(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
+	case cfg.KubernetesComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath, component)
 	default:
 		return false, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
 	}
@@ -425,7 +472,7 @@ func addAffectedSpaceliftAdminStack(
 	var adminStackContextPrefix string
 
 	if atmosConfig.Stacks.NameTemplate != "" {
-		adminStackContextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		adminStackContextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return nil, err
 		}
@@ -464,7 +511,7 @@ func addAffectedSpaceliftAdminStack(
 							var contextPrefix string
 
 							if atmosConfig.Stacks.NameTemplate != "" {
-								contextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+								contextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 								if err != nil {
 									return nil, err
 								}
@@ -543,13 +590,14 @@ func addDependentsToAffected(
 	onlyInStack string,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) error {
 	// Resolve all stacks once and build a reverse dependency index — these are the expensive
 	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
 	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
 	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
 	// O(stacks × components) scan per affected item.
-	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+	stacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,
 		onlyInStack,
 		nil,
@@ -562,6 +610,7 @@ func addDependentsToAffected(
 		skip,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return err
@@ -757,16 +806,6 @@ func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Depen
 			if includedInDeps {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// isComponentInStackAffected checks if a component in a stack is in the affected list, recursively.
-func isComponentInStackAffected(affectedList []schema.Affected, stackSlug string) bool {
-	for i := range affectedList {
-		if affectedList[i].StackSlug == stackSlug {
-			return true
 		}
 	}
 	return false

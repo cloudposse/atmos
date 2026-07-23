@@ -15,19 +15,21 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
-	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
-	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws" // Register aws/ecr integration.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
 	logKeyIdentity           = "identity"
 	logKeyProvider           = "provider"
+	logKeyIntegration        = "integration"
 	logKeyChainIndex         = "chainIndex"
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
@@ -192,7 +194,32 @@ func NewAuthManager(
 		identity.SetRealm(m.realm.Value)
 	}
 
+	// Share the manager's config-aware credential store with identities that
+	// perform their own keyring I/O (e.g. AWS user identities cache/read STS
+	// credentials directly). Without this, those identities would construct a
+	// default "system" keyring and ignore auth.keyring.type — which hangs on a
+	// broken-but-present system keyring (issue #2544). Identities that do not
+	// implement credentialStoreReceiver simply keep their existing behavior.
+	for _, identity := range m.identities {
+		if receiver, ok := identity.(credentialStoreReceiver); ok {
+			receiver.SetCredentialStore(m.credentialStore)
+		}
+		// Inject the emulator resolver into identities that target an emulator
+		// (kind: <target>/emulator), so they can resolve the running emulator's
+		// project-scoped connection profile at auth time.
+		if receiver, ok := identity.(emulatorResolverReceiver); ok {
+			receiver.SetEmulatorResolver(defaultEmulatorResolver)
+		}
+	}
+
 	return m, nil
+}
+
+// credentialStoreReceiver is an optional interface implemented by identities
+// that perform their own credential-store I/O and want to reuse the auth
+// manager's config-aware store instead of constructing a default one.
+type credentialStoreReceiver interface {
+	SetCredentialStore(store types.CredentialStore)
 }
 
 // GetStackInfo returns the associated stack info pointer (may be nil).
@@ -207,6 +234,13 @@ func (m *manager) GetRealm() realm.RealmInfo {
 	defer perf.Track(nil, "auth.GetRealm")()
 
 	return m.realm
+}
+
+// CredentialStoreType returns the type of the backing credential store.
+func (m *manager) CredentialStoreType() string {
+	defer perf.Track(nil, "auth.CredentialStoreType")()
+
+	return m.credentialStore.Type()
 }
 
 // Authenticate performs hierarchical authentication for the specified identity.
@@ -294,8 +328,13 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			Manager:      m,
 			Realm:        m.realm.Value,
 		}); err != nil {
-			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
+			// Keep structured details and hints from the identity error. Emulator
+			// identities use those hints to tell the user how to start the selected
+			// emulator when it is not running.
+			wrappedErr := errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithCause(err).
+				WithExplanation("Post-authentication failed.").
+				Err()
 			return nil, wrappedErr
 		}
 
@@ -551,6 +590,11 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrUnsupportedInputType, err)
 	}
 
+	// Echo the choice: the huh form clears itself on submit, so without this the
+	// user never sees which identity they picked. Goes to stderr (UI channel) so
+	// it never corrupts machine-readable stdout (e.g. `atmos auth env`).
+	ui.Success(fmt.Sprintf("Selected identity: %s", selectedIdentity))
+
 	return selectedIdentity, nil
 }
 
@@ -674,8 +718,14 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 	if err != nil || len(chain) == 0 {
 		return ""
 	}
-	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
-		return "aws-user"
+	// A standalone identity forms a single-element chain whose root is the identity
+	// itself; some standalone kinds (aws/user) report a synthetic provider name instead.
+	if len(chain) == 1 {
+		if identity, exists := m.config.Identities[chain[0]]; exists {
+			if name, ok := types.StandaloneProviderName(identity.Kind); ok {
+				return name
+			}
+		}
 	}
 	return chain[0]
 }

@@ -1,0 +1,37 @@
+---
+title: input
+sidebar_label: input
+slug: /workflows/steps/type/input
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `input` step type prompts for a single line of text using the same interactive prompt Atmos uses in its own CLI, so your custom commands and workflows can collect values from the user at runtime.
+</Intro>
+
+```yaml
+steps:
+  - name: release
+    type: input
+    prompt: Release version
+    placeholder: v1.2.3
+```
+
+## Fields
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>Required. Prompt text shown to the user.</dd>
+
+  <dt>`placeholder`</dt>
+  <dd>Optional placeholder text.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional value used when the user submits an empty answer.</dd>
+
+  <dt>`password`</dt>
+  <dd>Set to `true` to mask the user's input.</dd>
+</dl>
+
+Interactive steps require a TTY; in a non-TTY environment such as CI, the step uses its [`default`](/workflows/steps#interactive-steps-in-ci-non-tty) if set and otherwise errors. Reference the value later with `{{ .steps.release.value }}`.

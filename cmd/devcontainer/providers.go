@@ -12,6 +12,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -153,7 +154,7 @@ func (d *DefaultUIProvider) Confirm(message string) (bool, error) {
 	var confirmed bool
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
+			uiutils.NewAtmosConfirm().
 				Title(message).
 				Value(&confirmed),
 		),
@@ -164,14 +165,4 @@ func (d *DefaultUIProvider) Confirm(message string) (bool, error) {
 	}
 
 	return confirmed, nil
-}
-
-// Output returns the writer for normal output (typically stderr for UI).
-func (d *DefaultUIProvider) Output() io.Writer {
-	return os.Stderr
-}
-
-// Error returns the writer for error output.
-func (d *DefaultUIProvider) Error() io.Writer {
-	return os.Stderr
 }

@@ -2,14 +2,17 @@
 
 This directory contains custom Atmos commands that are automatically loaded when you run `atmos` from the repository root.
 
-## Development Commands
+## Command Groups
 
-The `dev.yaml` file defines development workflow commands that help maintain code quality:
-
-- `atmos dev setup` - Set up local development environment
-- `atmos dev check` - Run pre-commit hooks on staged files
-- `atmos dev check-all` - Run pre-commit hooks on all files
-- `atmos dev lint` - Run golangci-lint
+- `dev.yaml` - local setup, `atmos dev shell`, quick validation, and generated artifact commands including snapshots
+- `build.yaml` - `atmos build deps`, `atmos build`, `atmos build version`, and README generation
+- `check.yaml` - `atmos check staged`, `atmos check pr`, `atmos check all`, and Codecov validation
+- `format.yaml` - `atmos format staged`, `atmos format pr`, and `atmos format all`
+- `cache.yaml` - `atmos cache list` and `atmos cache clear`
+- `lint.yaml` - `atmos lint --changed`, lintroller, gomodcheck, custom golangci-lint, and link checks
+- `test.yaml` - `atmos test`, mode flags, legacy test subcommands, race, and mock generation commands
+- `screengrabs.yaml` - `atmos screengrabs ...` commands for generating website screengrabs
+- `toolchain.yaml` - toolchain aliases and registries
 
 ## Why Custom Commands?
 

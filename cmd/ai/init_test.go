@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -38,9 +39,9 @@ func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
 		AI: schema.AISettings{
 			Tools: schema.AIToolSettings{
 				Enabled:             true,
-				AllowedTools:        []string{"read_file"},
-				RestrictedTools:     []string{"execute_bash_command"},
-				BlockedTools:        []string{"dangerous_tool"},
+				Allowed:             []string{"read_file"},
+				Restricted:          []string{"execute_bash_command"},
+				Blocked:             []string{"dangerous_tool"},
 				YOLOMode:            false,
 				RequireConfirmation: boolPtr(true),
 			},
@@ -86,34 +87,34 @@ func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
 		{
 			name: "with allowed tools only",
 			toolConfig: schema.AIToolSettings{
-				Enabled:      true,
-				AllowedTools: []string{"read_file", "list_files"},
+				Enabled: true,
+				Allowed: []string{"read_file", "list_files"},
 			},
 			shouldError: false,
 		},
 		{
 			name: "with restricted tools only",
 			toolConfig: schema.AIToolSettings{
-				Enabled:         true,
-				RestrictedTools: []string{"execute_bash_command"},
+				Enabled:    true,
+				Restricted: []string{"execute_bash_command"},
 			},
 			shouldError: false,
 		},
 		{
 			name: "with blocked tools only",
 			toolConfig: schema.AIToolSettings{
-				Enabled:      true,
-				BlockedTools: []string{"dangerous_tool"},
+				Enabled: true,
+				Blocked: []string{"dangerous_tool"},
 			},
 			shouldError: false,
 		},
 		{
 			name: "with all tool lists",
 			toolConfig: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{"read_file"},
-				RestrictedTools: []string{"write_file"},
-				BlockedTools:    []string{"delete_file"},
+				Enabled:    true,
+				Allowed:    []string{"read_file"},
+				Restricted: []string{"write_file"},
+				Blocked:    []string{"delete_file"},
 			},
 			shouldError: false,
 		},
@@ -535,6 +536,7 @@ func TestIsCLIProvider(t *testing.T) {
 	}{
 		{"claude-code is CLI", "claude-code", true},
 		{"codex-cli is CLI", "codex-cli", true},
+		{"copilot-cli is CLI", "copilot-cli", true},
 		{"gemini-cli is CLI", "gemini-cli", true},
 		{"anthropic is not CLI", "anthropic", false},
 		{"openai is not CLI", "openai", false},
@@ -543,7 +545,7 @@ func TestIsCLIProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, isCLIProvider(tt.provider))
+			assert.Equal(t, tt.expected, ai.IsCLIProvider(tt.provider))
 		})
 	}
 }

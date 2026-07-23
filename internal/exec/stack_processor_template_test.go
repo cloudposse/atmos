@@ -151,7 +151,7 @@ metadata:
 			require.NoError(t, err)
 
 			// Process the file
-			result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+			result, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				tempDir,
 				filePath,
@@ -173,9 +173,61 @@ metadata:
 			require.NotNil(t, result)
 
 			// Validate the content
-			tc.validateContent(t, result)
+			tc.validateContent(t, result.DeepMergedConfig)
 		})
 	}
+}
+
+// TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag verifies that
+// the structured template pre-processing path does not discard a YAML function tag.
+func TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag(t *testing.T) {
+	tempDir := t.TempDir()
+	stackPath := filepath.Join(tempDir, "stack.yaml.tmpl")
+	require.NoError(t, os.WriteFile(stackPath, []byte(`
+components:
+  terraform:
+    consumer:
+      vars:
+        state_lookup: !terraform.state producer ".fields.PRIVATE_KEY"
+        output_lookup: !terraform.output producer private_key
+        store_lookup: !store secure-store consumer private_key
+        environment_lookup: !env PRIVATE_KEY
+        template_value: "{{ .value }}"
+`), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+	}
+
+	result, _, err := ProcessYAMLConfigFileWithContext(
+		atmosConfig,
+		tempDir,
+		stackPath,
+		map[string]map[string]any{},
+		map[string]any{"value": "resolved-template-value"},
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+
+	require.NoError(t, err)
+	vars := result.DeepMergedConfig["components"].(map[string]any)["terraform"].(map[string]any)["consumer"].(map[string]any)["vars"].(map[string]any)
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, vars["state_lookup"])
+	assert.Equal(t, "!terraform.output producer private_key", vars["output_lookup"])
+	assert.Equal(t, "!store secure-store consumer private_key", vars["store_lookup"])
+	assert.Equal(t, "!env PRIVATE_KEY", vars["environment_lookup"])
+	assert.Equal(t, "resolved-template-value", vars["template_value"])
 }
 
 // TestProcessImportSectionWithTemplates tests that imports correctly identify template files.
@@ -317,7 +369,7 @@ components:
 
 	// Process the main stack file
 	stackPath := filepath.Join(tempDir, "stack.yaml")
-	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		tempDir,
 		stackPath,
@@ -339,11 +391,11 @@ components:
 	require.NotNil(t, result)
 
 	// Check that the import was processed
-	imports := result["import"]
+	imports := result.DeepMergedConfig["import"]
 	assert.NotNil(t, imports)
 
 	// Verify components section exists
-	components, ok := result["components"].(map[string]any)
+	components, ok := result.DeepMergedConfig["components"].(map[string]any)
 	require.True(t, ok)
 	terraform, ok := components["terraform"].(map[string]any)
 	require.True(t, ok)
@@ -387,7 +439,7 @@ components:
 	}
 
 	// Test with skipTemplatesProcessingInImports = true
-	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		tempDir,
 		templateFile,
@@ -409,7 +461,7 @@ components:
 	require.NotNil(t, result)
 
 	// Template should NOT be processed
-	components := result["components"].(map[string]any)
+	components := result.DeepMergedConfig["components"].(map[string]any)
 	terraform := components["terraform"].(map[string]any)
 	test := terraform["test"].(map[string]any)
 	vars := test["vars"].(map[string]any)
@@ -419,7 +471,7 @@ components:
 	assert.Equal(t, 10, vars["value"])
 
 	// Test with skipTemplatesProcessingInImports = false
-	result2, _, _, _, _, _, _, _, err2 := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result2, _, err2 := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		tempDir,
 		templateFile,
@@ -441,7 +493,7 @@ components:
 	require.NotNil(t, result2)
 
 	// Template SHOULD be processed
-	components2 := result2["components"].(map[string]any)
+	components2 := result2.DeepMergedConfig["components"].(map[string]any)
 	terraform2 := components2["terraform"].(map[string]any)
 	test2 := terraform2["test"].(map[string]any)
 	vars2 := test2["vars"].(map[string]any)
@@ -496,7 +548,7 @@ components:
 	}
 
 	stackPath := filepath.Join(tempDir, "stack.yaml")
-	_, _, _, _, _, _, _, _, err = ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	_, _, err = ProcessYAMLConfigFileWithContext(
 		atmosConfigNoIgnore,
 		tempDir,
 		stackPath,
@@ -528,7 +580,7 @@ components:
 		Logs: schema.Logs{Level: "Info"},
 	}
 
-	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, err := ProcessYAMLConfigFileWithContext(
 		atmosConfigWithIgnore,
 		tempDir,
 		stackPath,
@@ -549,7 +601,7 @@ components:
 	require.NotNil(t, result)
 
 	// Verify the component was created with the available template values.
-	components, ok := result["components"].(map[string]any)
+	components, ok := result.DeepMergedConfig["components"].(map[string]any)
 	require.True(t, ok)
 	terraform, ok := components["terraform"].(map[string]any)
 	require.True(t, ok)

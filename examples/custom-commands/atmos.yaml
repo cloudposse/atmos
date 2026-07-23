@@ -1,0 +1,106 @@
+base_path: "./"
+
+# Custom CLI commands
+#
+# This file contains basic custom command examples.
+# See .atmos.d/ for more advanced examples:
+#   - interactive.yaml: Interactive step types (choose, confirm, input, etc.)
+#   - advanced.yaml: Boolean flags, component config, working directory
+
+# No arguments or flags are required.
+commands:
+- name: hello
+  description: This command says Hello world
+  steps:
+    - "echo Hello world!"
+
+# No arguments or flags are required.
+- name: ip
+  description: Return my current IP
+  steps:
+    - curl -s https://ifconfig.me
+    - echo
+
+# Use Nested Custom Commands.
+- name: "github"
+  commands:
+  - name: "status"
+    description: This command returns the current GitHub status
+    steps:
+      - curl -s https://www.githubstatus.com/api/v2/status.json | jq -r .status.description
+
+  # Use positional arguments.
+  - name: "stargazers"
+    description: This command returns the number of stargazers for a GitHub repository
+    arguments:
+      - name: repo
+        description: >-
+          The GitHub repository to fetch the stargazers count for.
+          e.g. cloudposse/atmos
+        required: true
+        default: cloudposse/atmos
+    steps:
+      - curl -s https://api.github.com/repos/{{ .Arguments.repo }} | jq -r .stargazers_count
+
+# Use positional arguments with default values.
+- name: greet
+  description: "Displays a personalized greeting. Defaults to 'John Doe' if no name is provided."
+  arguments:
+    - name: name
+      description: >-
+          Enter your name as an argument
+      required: true
+      default: John Doe
+  steps:
+    - "echo Hello, {{ .Arguments.name }}"
+
+# Use native UI step types instead of shell.
+# Steps can render markdown, spinners, tables, and status toasts directly —
+# no echo or external tools required. See also .atmos.d/interactive.yaml for
+# interactive step types (choose, confirm, input, ...).
+- name: deploy-status
+  description: Show a styled deployment status using native step types
+  steps:
+    - name: banner
+      type: markdown
+      content: |
+        ## Deployment Status
+    - name: check
+      type: spin
+      title: "Checking service health..."
+      command: "sleep 1"
+    - name: services
+      type: table
+      title: "Services"
+      columns:
+        - service
+        - version
+        - status
+      data:
+        - service: api
+          version: v1.4.2
+          status: healthy
+        - service: worker
+          version: v1.4.2
+          status: healthy
+        - service: cache
+          version: v7.2.0
+          status: healthy
+    - name: done
+      type: toast
+      level: success
+      content: "All services healthy"
+
+# Use flags.
+- name: weather
+  description: This command fetches the weather
+  flags:
+    - name: location
+      shorthand: l
+      description: >-
+        Fetch the weather for a specific location. Works with airport codes.
+        Make sure to properly URL encode the location, if not using an airport code.
+        --location "LAX"
+      required: true
+  steps:
+    - curl -s https://wttr.in/{{ .Flags.location }}

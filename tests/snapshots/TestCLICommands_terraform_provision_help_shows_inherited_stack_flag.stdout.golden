@@ -5,9 +5,9 @@ This command provisions terraform components
 
 USAGE
 
-                                         
-    $ atmos terraform provision [flags]  
-                                         
+
+    $ atmos terraform provision [flags]
+
 
 FLAGS
 
@@ -21,112 +21,130 @@ FLAGS
 
 GLOBAL FLAGS
 
-      --ai                        Enable AI-powered analysis of command output
+      --ai                                   Enable AI-powered analysis of command output
 
-      --append-user-agent string  Customize User-Agent string in Terraform provider requests (sets
-                                  TF_APPEND_USER_AGENT)
+      --append-user-agent string             Customize User-Agent string in Terraform provider requests (sets
+                                             TF_APPEND_USER_AGENT)
 
-      --base-path string          Base path for Atmos project
+      --base-path string                     Base path for Atmos project
 
-  -C, --chdir string              Change working directory before executing the command (run as if Atmos started in
-                                  this directory)
+      --cast string                          Record command output as an asciinema cast (--cast for generated path, --
+                                             cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg
+                                             extension for explicit output)
 
-      --clone-target-ref          Clone the target reference with which to compare the current branch
+  -C, --chdir string                         Change working directory before executing the command (run as if Atmos
+                                             started in this directory)
 
-      --components strings        Filter by specific components
+      --clone-target-ref                     Clone the target reference with which to compare the current branch
 
-      --config strings            Paths to configuration files (comma-separated or repeated flag)
+      --components strings                   Filter by specific components
 
-      --config-path strings       Paths to search for Atmos configuration (comma-separated or repeated flag)
+      --config strings                       Paths to configuration files (comma-separated or repeated flag)
 
-      --dry-run                   Perform dry run without making actual changes
+      --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
-      --force-color               Force color output even when not a TTY (useful for screenshots)
+      --dry-run                              Perform dry run without making actual changes
 
-      --force-tty                 Force TTY mode with sane defaults when terminal detection fails (useful for
-                                  screenshots)
+      --force-color                          Force color output even when not a TTY (useful for screenshots)
 
-      --heatmap                   Show performance heatmap visualization after command execution (includes P95
-                                  latency)
+      --force-tty                            Force TTY mode with sane defaults when terminal detection fails (useful
+                                             for screenshots)
 
-      --heatmap-mode string       Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)
-                                  (default bar)
+      --heatmap                              Show performance heatmap visualization after command execution (includes
+                                             P95 latency)
 
-      --include-dependents        For each affected component, detect the dependent components and process them in the
-                                  dependency order
+      --heatmap-mode string                  Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in
+                                             TUI) (default bar)
 
-      --init-pass-vars            Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)
+      --include-dependents                   For each affected component, detect the dependent components and process
+                                             them in the dependency order
 
-      --interactive               Enable interactive prompts for missing required flags, optional value flags using
-                                  the sentinel pattern, and missing positional arguments (requires TTY, disabled in
-                                  CI) (default true)
+      --init-pass-vars                       Pass the generated varfile to terraform init using --var-file flag (OpenTofu
+                                             feature)
 
-      --logs-file string          The file to write Atmos logs to. Logs can be written to any file or any standard
-                                  file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
-                                  /dev/stderr)
+      --interactive                          Enable interactive prompts for missing required flags, optional value
+                                             flags using the sentinel pattern, and missing positional arguments
+                                             (requires TTY, disabled in CI) (default true)
 
-      --logs-level string         Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
-                                  level is set to Off, Atmos will not log any messages (default Warning)
+      --labels string                        Filter by labels (comma-separated key=value pairs, matches all): --
+                                             labels=cost-center=platform,compliance=sox
 
-      --mask                      Enable automatic masking of sensitive data in output (use --mask=false to disable)
-                                  (default true)
+      --logs-file string                     The file to write Atmos logs to. Logs can be written to any file or any
+                                             standard file descriptor, including '/dev/stdout', '/dev/stderr' and
+                                             '/dev/null' (default /dev/stderr)
 
-      --no-color                  Disable color output
+      --logs-level string                    Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If
+                                             the log level is set to Off, Atmos will not log any messages (default
+                                             Warning)
 
-      --pager string              Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
-                                  pager=less to use specific pager)
+      --mask                                 Enable automatic masking of sensitive data in output (use --mask=false to
+                                             disable) (default true)
 
-      --process-functions         Enable/disable YAML functions processing in Atmos stack manifests (default true)
+      --no-color                             Disable color output
 
-      --process-templates         Enable/disable Go template processing in Atmos stack manifests (default true)
+      --pager string                         Enable pager for output (--pager or --pager=true to enable, --pager=false to
+                                             disable, --pager=less to use specific pager)
 
-      --profile strings           Activate configuration profiles (comma-separated or repeated flag)
+      --process-functions                    Enable/disable YAML functions processing in Atmos stack manifests
+                                             (default true)
 
-      --profile-file string       Write profiling data to file instead of starting server
+      --process-templates                    Enable/disable Go template processing in Atmos stack manifests (default
+                                             true)
 
-      --profile-type string       Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
-                                  goroutine, block, mutex, threadcreate, trace (default cpu)
+      --profile strings                      Activate configuration profiles (comma-separated or repeated flag)
 
-      --profiler-enabled          Enable pprof profiling server
+      --profile-file string                  Write profiling data to file instead of starting server
 
-      --profiler-host string      Host for pprof profiling server (default localhost)
+      --profile-type string                  Type of profile to collect when using --profile-file. Options: cpu, heap,
+                                             allocs, goroutine, block, mutex, threadcreate, trace (default cpu)
 
-      --profiler-port int         Port for pprof profiling server (default 6060)
+      --profiler-enabled                     Enable pprof profiling server
 
-  -q, --query string              Execute atmos terraform command on components filtered by a YQ expression
+      --profiler-host string                 Host for pprof profiling server (default localhost)
 
-      --redirect-stderr string    File descriptor to redirect stderr to. Errors can be redirected to any file or any
-                                  standard file descriptor (including '/dev/null')
+      --profiler-port int                    Port for pprof profiling server (default 6060)
 
-      --ref string                Git reference with which to compare the current branch
+  -q, --query string                         Execute atmos terraform command on components filtered by a YQ expression
 
-      --repo-path string          Filesystem path to the already cloned target repository with which to compare the
-                                  current branch
+      --redirect-stderr string               File descriptor to redirect stderr to. Errors can be redirected to any
+                                             file or any standard file descriptor (including '/dev/null')
 
-      --sha string                Git commit SHA with which to compare the current branch
+      --ref string                           Git reference with which to compare the current branch
 
-      --skill strings             Specify skills for AI analysis context (comma-separated or repeated flag, requires --
-                                  ai)
+      --repo-path string                     Filesystem path to the already cloned target repository with which to
+                                             compare the current branch
 
-      --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
+      --settings-list-merge-strategy string  Override settings.list_merge_strategy for this invocation. Controls how
+                                             lists are merged in Atmos stack manifests (replace, append, merge)
 
-      --skip-hooks string         Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
-                                  skip-hooks=name1,name2 to skip specific hooks by name
+      --sha string                           Git commit SHA with which to compare the current branch
 
-      --skip-init                 Skip terraform init before running command
+      --skill strings                        Specify skills for AI analysis context (comma-separated or repeated flag,
+                                             requires --ai)
 
-      --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH
+      --skip strings                         Skip executing specific YAML functions in the Atmos stack manifests
 
-      --ssh-key-password string   Encryption password for the PEM-encoded private key if the key contains a password-
-                                  encrypted PEM block
+      --skip-hooks string                    Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to
+                                             skip all, or --skip-hooks=name1,name2 to skip specific hooks by name
 
-  -s, --stack string              Stack name
+      --skip-init                            Skip terraform init before running command
 
-      --upload-status             Upload plan status to Atmos Pro
+      --ssh-key string                       Path to PEM-encoded private key to clone private repos using SSH
 
-      --use-version string        Use a specific version of Atmos (e.g., --use-version=1.160.0)
+      --ssh-key-password string              Encryption password for the PEM-encoded private key if the key contains a
+                                             password-encrypted PEM block
 
-  -v, --verbose                   Enable verbose error output with full context, stack traces, and detailed
-                                  information
+  -s, --stack string                         Stack name
 
+      --tags strings                         Filter by tags (comma-separated, matches any): --tags=production,tier-1
+
+      --upload-status                        Upload plan status to Atmos Pro
+
+      --use-mocks                            Resolve Terraform state/output YAML functions from component mocks
+                                             instead of remote state. Supported only by plan and describe commands
+
+      --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
+
+  -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
+                                             information
 

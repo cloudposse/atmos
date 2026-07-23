@@ -1,0 +1,751 @@
+commands:
+  - name: casts generate screengrabs cli
+    description: Regenerate the CLI docs screengrab casts from the manifest
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: script
+        name: record
+        interpreter: python3
+        env: !include cast-defaults.yaml .env.recording
+        script: |
+          import os
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import command_slug, sanitize_paths
+
+          REPO = Path("..", "..").resolve()
+          # Commands recorded for the CLI docs screengrabs, one cast per line
+          # (slug = command with spaces/flags folded, see cast_checks.command_slug).
+          COMMANDS = """
+          atmos about
+          atmos about --help
+          atmos ai --help
+          atmos ai ask --help
+          atmos ai chat --help
+          atmos ai exec --help
+          atmos ai sessions --help
+          atmos ai skill --help
+          atmos lsp --help
+          atmos lsp start --help
+          atmos mcp --help
+          atmos mcp add --help
+          atmos mcp export --help
+          atmos mcp install --help
+          atmos mcp list --help
+          atmos mcp remove --help
+          atmos mcp restart --help
+          atmos mcp start --help
+          atmos mcp status --help
+          atmos mcp test --help
+          atmos mcp tools --help
+          atmos mcp uninstall --help
+          atmos packer --help
+          atmos packer build --help
+          atmos packer init --help
+          atmos packer inspect --help
+          atmos packer output --help
+          atmos packer validate --help
+          atmos packer version --help
+          atmos helmfile --help
+          atmos helmfile generate --help
+          atmos helmfile generate varfile --help
+          atmos container --help
+          atmos emulator --help
+          atmos emulator up --help
+          atmos emulator ps --help
+          atmos emulator logs --help
+          atmos emulator exec --help
+          atmos emulator down --help
+          atmos emulator reset --help
+          atmos --help
+          atmos atlantis --help
+          atmos atlantis generate --help
+          atmos atlantis generate repo-config --help
+          atmos auth --help
+          atmos auth console --help
+          atmos auth env --help
+          atmos auth exec --help
+          atmos auth list --help
+          atmos auth login --help
+          atmos auth logout --help
+          atmos auth shell --help
+          atmos auth user --help
+          atmos auth user configure --help
+          atmos auth validate --help
+          atmos auth whoami --help
+          atmos cast --help
+          atmos cast play --help
+          atmos cast render --help
+          atmos aws --help
+          atmos aws compliance --help
+          atmos aws compliance report --help
+          atmos aws eks --help
+          atmos aws eks update-kubeconfig --help
+          atmos aws security --help
+          atmos aws security analyze --help
+          atmos completion --help
+          atmos describe --help
+          atmos describe affected --help
+          atmos describe component --help
+          atmos describe config --help
+          atmos describe dependents --help
+          atmos describe stacks --help
+          atmos describe workflows --help
+          atmos docs --help
+          atmos docs generate --help
+          atmos git --help
+          atmos git init --help
+          atmos git clone --help
+          atmos git pull --help
+          atmos git status --help
+          atmos git diff --help
+          atmos git commit --help
+          atmos git push --help
+          atmos git clean --help
+          atmos git list --help
+          atmos git hooks --help
+          atmos git hooks install --help
+          atmos git hooks run --help
+          atmos git hooks uninstall --help
+          atmos env --help
+          atmos list --help
+          atmos list components --help
+          atmos list dependencies --help
+          atmos list metadata --help
+          atmos list settings --help
+          atmos list stacks --help
+          atmos list values --help
+          atmos list vars --help
+          atmos list workflows --help
+          atmos pro lock --help
+          atmos pro unlock --help
+          atmos profile --help
+          atmos profile list
+          atmos profile list --help
+          atmos profile show --help
+          atmos terraform --help
+          atmos terraform apply --help
+          atmos terraform backend --help
+          atmos terraform backend create --help
+          atmos terraform backend delete --help
+          atmos terraform backend describe --help
+          atmos terraform backend list --help
+          atmos terraform backend update --help
+          atmos terraform clean --help
+          atmos terraform console --help
+          atmos terraform deploy --help
+          atmos terraform destroy --help
+          atmos terraform fmt --help
+          atmos terraform force-unlock --help
+          atmos terraform generate --help
+          atmos terraform generate backend --help
+          atmos terraform generate backends --help
+          atmos terraform generate planfile --help
+          atmos terraform generate varfile --help
+          atmos terraform generate varfiles --help
+          atmos terraform get --help
+          atmos terraform graph --help
+          atmos terraform import --help
+          atmos terraform init --help
+          atmos terraform lint --help
+          atmos terraform login --help
+          atmos terraform logout --help
+          atmos terraform metadata --help
+          atmos terraform modules --help
+          atmos terraform output --help
+          atmos terraform plan --help
+          atmos terraform plan-diff --help
+          atmos terraform providers --help
+          atmos terraform providers lock --help
+          atmos terraform providers mirror --help
+          atmos terraform providers schema --help
+          atmos terraform refresh --help
+          atmos terraform shell --help
+          atmos terraform show --help
+          atmos terraform state --help
+          atmos terraform state list --help
+          atmos terraform state mv --help
+          atmos terraform state pull --help
+          atmos terraform state push --help
+          atmos terraform state replace-provider --help
+          atmos terraform state rm --help
+          atmos terraform state show --help
+          atmos terraform taint --help
+          atmos terraform test --help
+          atmos terraform untaint --help
+          atmos terraform validate --help
+          atmos terraform version --help
+          atmos terraform workspace --help
+          atmos terraform workspace delete --help
+          atmos terraform workspace list --help
+          atmos terraform workspace new --help
+          atmos terraform workspace select --help
+          atmos terraform workspace show --help
+          atmos support
+          atmos support --help
+          atmos theme --help
+          atmos theme list --help
+          atmos theme show --help
+          atmos validate --help
+          atmos validate component --help
+          atmos validate editorconfig --help
+          atmos validate schema --help
+          atmos validate stacks --help
+          atmos vendor --help
+          atmos vendor pull --help
+          atmos config get --help
+          atmos config set --help
+          atmos config delete --help
+          atmos config format --help
+          atmos config list --help
+          atmos config schema --help
+          atmos config validate --help
+          atmos stack get --help
+          atmos stack set --help
+          atmos stack delete --help
+          atmos stack format --help
+          atmos stack schema --help
+          atmos stack validate --help
+          atmos stack config --help
+          atmos stack config get --help
+          atmos stack config set --help
+          atmos stack config delete --help
+          atmos stack config format --help
+          atmos stack config list --help
+          atmos vendor get --help
+          atmos vendor set --help
+          atmos vendor update --help
+          atmos vendor diff --help
+          atmos vendor config --help
+          atmos vendor config get --help
+          atmos vendor config set --help
+          atmos vendor config delete --help
+          atmos vendor config format --help
+          atmos vendor config list --help
+          atmos version
+          atmos version --help
+          atmos version list --help
+          atmos version show --help
+          atmos workflow --help
+          atmos ansible --help
+          atmos ansible playbook --help
+          atmos ansible version --help
+          atmos aws ecr login --help
+          atmos describe config
+          atmos describe locals --help
+          atmos devcontainer --help
+          atmos devcontainer attach --help
+          atmos devcontainer config --help
+          atmos devcontainer exec --help
+          atmos devcontainer list --help
+          atmos devcontainer logs --help
+          atmos devcontainer rebuild --help
+          atmos devcontainer remove --help
+          atmos devcontainer shell --help
+          atmos devcontainer start --help
+          atmos devcontainer stop --help
+          atmos emulator list --help
+          atmos helmfile source --help
+          atmos helmfile source delete --help
+          atmos helmfile source describe --help
+          atmos helmfile source list --help
+          atmos helmfile source pull --help
+          atmos kubernetes apply --help
+          atmos kubernetes delete --help
+          atmos kubernetes deploy --help
+          atmos kubernetes diff --help
+          atmos kubernetes render --help
+          atmos kubernetes validate --help
+          atmos list affected --help
+          atmos list instances --help
+          atmos list sources --help
+          atmos list themes --help
+          atmos list vendor --help
+          atmos packer source --help
+          atmos packer source delete --help
+          atmos packer source describe --help
+          atmos packer source list --help
+          atmos packer source pull --help
+          atmos secret --help
+          atmos secret delete --help
+          atmos secret exec --help
+          atmos secret get --help
+          atmos secret import --help
+          atmos secret init --help
+          atmos secret keygen --help
+          atmos secret list --help
+          atmos secret pull --help
+          atmos secret push --help
+          atmos secret set --help
+          atmos secret shell --help
+          atmos secret validate --help
+          atmos terraform cache --help
+          atmos terraform cache delete --help
+          atmos terraform cache list --help
+          atmos terraform cache mirror --help
+          atmos terraform cache prune --help
+          atmos terraform cache stats --help
+          atmos terraform cache trust --help
+          atmos terraform cache untrust --help
+          atmos terraform generate files --help
+          atmos terraform source --help
+          atmos terraform source delete --help
+          atmos terraform source describe --help
+          atmos terraform source list --help
+          atmos terraform source pull --help
+          atmos terraform workdir --help
+          atmos terraform workdir clean --help
+          atmos terraform workdir describe --help
+          atmos terraform workdir list --help
+          atmos terraform workdir show --help
+          atmos toolchain --help
+          atmos toolchain add --help
+          atmos toolchain aliases --help
+          atmos toolchain clean --help
+          atmos toolchain du --help
+          atmos toolchain env --help
+          atmos toolchain exec --help
+          atmos toolchain get --help
+          atmos toolchain info --help
+          atmos toolchain install --help
+          atmos toolchain list --help
+          atmos toolchain path --help
+          atmos toolchain registry --help
+          atmos toolchain registry list --help
+          atmos toolchain registry search --help
+          atmos toolchain remove --help
+          atmos toolchain search --help
+          atmos toolchain set --help
+          atmos toolchain uninstall --help
+          atmos toolchain versions --help
+          atmos toolchain which --help
+          atmos ci status --help
+          atmos ci cache delete --help
+          atmos ci cache list --help
+          atmos ci cache paths --help
+          atmos ci cache restore --help
+          atmos ci cache save --help
+          atmos init --help
+          atmos scaffold --help
+          atmos scaffold list --help
+          atmos scaffold validate --help
+          atmos scaffold generate --help
+          """
+          FIXTURE = REPO / ".context" / "cast-fixtures" / "demo-stacks"
+          OUT = REPO / "website" / "static" / "casts" / "screengrabs"
+
+          # Screengrabs are recorded at the docs column width; COLUMNS drives
+          # the help layout and ATMOS_CAST_RECORDING_* the cast header. The
+          # pager stays off so output is captured, not paged.
+          env = os.environ.copy()
+          env.update({
+              "COLUMNS": "90",
+              "ATMOS_CAST_RECORDING_WIDTH": "90",
+              "ATMOS_CAST_RECORDING_HEIGHT": "36",
+              "ATMOS_PAGER": "false",
+              "LESS": "-X",
+          })
+
+          commands = [line.strip() for line in COMMANDS.splitlines() if line.strip()]
+          OUT.mkdir(parents=True, exist_ok=True)
+          with tempfile.TemporaryDirectory() as tmpdir:
+              for index, command in enumerate(commands, 1):
+                  slug = command_slug(command)
+                  tmp_cast = Path(tmpdir) / f"{slug}.cast"
+                  argv = command.split() + [f"--cast={tmp_cast}"]
+                  proc = subprocess.run(
+                      argv, cwd=FIXTURE, env=env, capture_output=True, text=True
+                  )
+                  if proc.returncode != 0:
+                      sys.stderr.write(proc.stdout + proc.stderr)
+                      raise SystemExit(
+                          f"screengrab command failed ({proc.returncode}): {command}"
+                      )
+                  # Sanitize machine-specific paths, then move into place so a
+                  # failed run never leaves a partial cast behind.
+                  raw = sanitize_paths(tmp_cast.read_text(), REPO)
+                  tmp_cast.write_text(raw)
+                  os.replace(tmp_cast, OUT / f"{slug}.cast")
+                  print(f"[{index}/{len(commands)}] {slug}.cast")
+      - type: shell
+        name: validate
+        command: atmos casts validate screengrabs cli
+  - name: casts validate screengrabs cli
+    description: Validate the CLI docs screengrab casts
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import (
+              command_slug,
+              load_text,
+              assert_no_error_output,
+              assert_no_local_paths,
+              assert_body_color,
+              strip_ansi,
+          )
+
+          REPO = Path("..", "..").resolve()
+          OUT = REPO / "website" / "static" / "casts" / "screengrabs"
+          # Commands recorded for the CLI docs screengrabs, one cast per line
+          # (slug = command with spaces/flags folded, see cast_checks.command_slug).
+          COMMANDS = """
+          atmos about
+          atmos about --help
+          atmos ai --help
+          atmos ai ask --help
+          atmos ai chat --help
+          atmos ai exec --help
+          atmos ai sessions --help
+          atmos ai skill --help
+          atmos lsp --help
+          atmos lsp start --help
+          atmos mcp --help
+          atmos mcp add --help
+          atmos mcp export --help
+          atmos mcp install --help
+          atmos mcp list --help
+          atmos mcp remove --help
+          atmos mcp restart --help
+          atmos mcp start --help
+          atmos mcp status --help
+          atmos mcp test --help
+          atmos mcp tools --help
+          atmos mcp uninstall --help
+          atmos packer --help
+          atmos packer build --help
+          atmos packer init --help
+          atmos packer inspect --help
+          atmos packer output --help
+          atmos packer validate --help
+          atmos packer version --help
+          atmos helmfile --help
+          atmos helmfile generate --help
+          atmos helmfile generate varfile --help
+          atmos container --help
+          atmos emulator --help
+          atmos emulator up --help
+          atmos emulator ps --help
+          atmos emulator logs --help
+          atmos emulator exec --help
+          atmos emulator down --help
+          atmos emulator reset --help
+          atmos --help
+          atmos atlantis --help
+          atmos atlantis generate --help
+          atmos atlantis generate repo-config --help
+          atmos auth --help
+          atmos auth console --help
+          atmos auth env --help
+          atmos auth exec --help
+          atmos auth list --help
+          atmos auth login --help
+          atmos auth logout --help
+          atmos auth shell --help
+          atmos auth user --help
+          atmos auth user configure --help
+          atmos auth validate --help
+          atmos auth whoami --help
+          atmos cast --help
+          atmos cast play --help
+          atmos cast render --help
+          atmos aws --help
+          atmos aws compliance --help
+          atmos aws compliance report --help
+          atmos aws eks --help
+          atmos aws eks update-kubeconfig --help
+          atmos aws security --help
+          atmos aws security analyze --help
+          atmos completion --help
+          atmos describe --help
+          atmos describe affected --help
+          atmos describe component --help
+          atmos describe config --help
+          atmos describe dependents --help
+          atmos describe stacks --help
+          atmos describe workflows --help
+          atmos docs --help
+          atmos docs generate --help
+          atmos git --help
+          atmos git init --help
+          atmos git clone --help
+          atmos git pull --help
+          atmos git status --help
+          atmos git diff --help
+          atmos git commit --help
+          atmos git push --help
+          atmos git clean --help
+          atmos git list --help
+          atmos git hooks --help
+          atmos git hooks install --help
+          atmos git hooks run --help
+          atmos git hooks uninstall --help
+          atmos env --help
+          atmos list --help
+          atmos list components --help
+          atmos list dependencies --help
+          atmos list metadata --help
+          atmos list settings --help
+          atmos list stacks --help
+          atmos list values --help
+          atmos list vars --help
+          atmos list workflows --help
+          atmos pro lock --help
+          atmos pro unlock --help
+          atmos profile --help
+          atmos profile list
+          atmos profile list --help
+          atmos profile show --help
+          atmos terraform --help
+          atmos terraform apply --help
+          atmos terraform backend --help
+          atmos terraform backend create --help
+          atmos terraform backend delete --help
+          atmos terraform backend describe --help
+          atmos terraform backend list --help
+          atmos terraform backend update --help
+          atmos terraform clean --help
+          atmos terraform console --help
+          atmos terraform deploy --help
+          atmos terraform destroy --help
+          atmos terraform fmt --help
+          atmos terraform force-unlock --help
+          atmos terraform generate --help
+          atmos terraform generate backend --help
+          atmos terraform generate backends --help
+          atmos terraform generate planfile --help
+          atmos terraform generate varfile --help
+          atmos terraform generate varfiles --help
+          atmos terraform get --help
+          atmos terraform graph --help
+          atmos terraform import --help
+          atmos terraform init --help
+          atmos terraform lint --help
+          atmos terraform login --help
+          atmos terraform logout --help
+          atmos terraform metadata --help
+          atmos terraform modules --help
+          atmos terraform output --help
+          atmos terraform plan --help
+          atmos terraform plan-diff --help
+          atmos terraform providers --help
+          atmos terraform providers lock --help
+          atmos terraform providers mirror --help
+          atmos terraform providers schema --help
+          atmos terraform refresh --help
+          atmos terraform shell --help
+          atmos terraform show --help
+          atmos terraform state --help
+          atmos terraform state list --help
+          atmos terraform state mv --help
+          atmos terraform state pull --help
+          atmos terraform state push --help
+          atmos terraform state replace-provider --help
+          atmos terraform state rm --help
+          atmos terraform state show --help
+          atmos terraform taint --help
+          atmos terraform test --help
+          atmos terraform untaint --help
+          atmos terraform validate --help
+          atmos terraform version --help
+          atmos terraform workspace --help
+          atmos terraform workspace delete --help
+          atmos terraform workspace list --help
+          atmos terraform workspace new --help
+          atmos terraform workspace select --help
+          atmos terraform workspace show --help
+          atmos support
+          atmos support --help
+          atmos theme --help
+          atmos theme list --help
+          atmos theme show --help
+          atmos validate --help
+          atmos validate component --help
+          atmos validate editorconfig --help
+          atmos validate schema --help
+          atmos validate stacks --help
+          atmos vendor --help
+          atmos vendor pull --help
+          atmos config get --help
+          atmos config set --help
+          atmos config delete --help
+          atmos config format --help
+          atmos config list --help
+          atmos config schema --help
+          atmos config validate --help
+          atmos stack get --help
+          atmos stack set --help
+          atmos stack delete --help
+          atmos stack format --help
+          atmos stack schema --help
+          atmos stack validate --help
+          atmos stack config --help
+          atmos stack config get --help
+          atmos stack config set --help
+          atmos stack config delete --help
+          atmos stack config format --help
+          atmos stack config list --help
+          atmos vendor get --help
+          atmos vendor set --help
+          atmos vendor update --help
+          atmos vendor diff --help
+          atmos vendor config --help
+          atmos vendor config get --help
+          atmos vendor config set --help
+          atmos vendor config delete --help
+          atmos vendor config format --help
+          atmos vendor config list --help
+          atmos version
+          atmos version --help
+          atmos version list --help
+          atmos version show --help
+          atmos workflow --help
+          atmos ansible --help
+          atmos ansible playbook --help
+          atmos ansible version --help
+          atmos aws ecr login --help
+          atmos describe config
+          atmos describe locals --help
+          atmos devcontainer --help
+          atmos devcontainer attach --help
+          atmos devcontainer config --help
+          atmos devcontainer exec --help
+          atmos devcontainer list --help
+          atmos devcontainer logs --help
+          atmos devcontainer rebuild --help
+          atmos devcontainer remove --help
+          atmos devcontainer shell --help
+          atmos devcontainer start --help
+          atmos devcontainer stop --help
+          atmos emulator list --help
+          atmos helmfile source --help
+          atmos helmfile source delete --help
+          atmos helmfile source describe --help
+          atmos helmfile source list --help
+          atmos helmfile source pull --help
+          atmos kubernetes apply --help
+          atmos kubernetes delete --help
+          atmos kubernetes deploy --help
+          atmos kubernetes diff --help
+          atmos kubernetes render --help
+          atmos kubernetes validate --help
+          atmos list affected --help
+          atmos list instances --help
+          atmos list sources --help
+          atmos list themes --help
+          atmos list vendor --help
+          atmos packer source --help
+          atmos packer source delete --help
+          atmos packer source describe --help
+          atmos packer source list --help
+          atmos packer source pull --help
+          atmos secret --help
+          atmos secret delete --help
+          atmos secret exec --help
+          atmos secret get --help
+          atmos secret import --help
+          atmos secret init --help
+          atmos secret keygen --help
+          atmos secret list --help
+          atmos secret pull --help
+          atmos secret push --help
+          atmos secret set --help
+          atmos secret shell --help
+          atmos secret validate --help
+          atmos terraform cache --help
+          atmos terraform cache delete --help
+          atmos terraform cache list --help
+          atmos terraform cache mirror --help
+          atmos terraform cache prune --help
+          atmos terraform cache stats --help
+          atmos terraform cache trust --help
+          atmos terraform cache untrust --help
+          atmos terraform generate files --help
+          atmos terraform source --help
+          atmos terraform source delete --help
+          atmos terraform source describe --help
+          atmos terraform source list --help
+          atmos terraform source pull --help
+          atmos terraform workdir --help
+          atmos terraform workdir clean --help
+          atmos terraform workdir describe --help
+          atmos terraform workdir list --help
+          atmos terraform workdir show --help
+          atmos toolchain --help
+          atmos toolchain add --help
+          atmos toolchain aliases --help
+          atmos toolchain clean --help
+          atmos toolchain du --help
+          atmos toolchain env --help
+          atmos toolchain exec --help
+          atmos toolchain get --help
+          atmos toolchain info --help
+          atmos toolchain install --help
+          atmos toolchain list --help
+          atmos toolchain path --help
+          atmos toolchain registry --help
+          atmos toolchain registry list --help
+          atmos toolchain registry search --help
+          atmos toolchain remove --help
+          atmos toolchain search --help
+          atmos toolchain set --help
+          atmos toolchain uninstall --help
+          atmos toolchain versions --help
+          atmos toolchain which --help
+          atmos ci status --help
+          atmos ci cache delete --help
+          atmos ci cache list --help
+          atmos ci cache paths --help
+          atmos ci cache restore --help
+          atmos ci cache save --help
+          atmos init --help
+          atmos scaffold --help
+          atmos scaffold list --help
+          atmos scaffold validate --help
+          atmos scaffold generate --help
+          """
+
+          commands = [line.strip() for line in COMMANDS.splitlines() if line.strip()]
+
+          # Every manifest command must have a committed cast, and every cast
+          # must be clean: no error output, no machine-specific paths, and
+          # colored body output. (Help text may legitimately mention
+          # "experimental", so the experimental assert does not apply here.)
+          for command in commands:
+              slug = command_slug(command)
+              path = OUT / f"{slug}.cast"
+              if not path.is_file():
+                  raise SystemExit(f"screengrab cast missing for {command!r}: {path.name}")
+              text = load_text(path)
+              assert_no_error_output(text)
+              assert_no_local_paths(text)
+              assert_body_color(text)
+              if command.endswith(" --help") and len(re.findall(r"(?m)^USAGE$", strip_ansi(text))) != 1:
+                  raise SystemExit(
+                      f"help cast must contain exactly one USAGE heading: {path.name}"
+                  )
+
+          # Every cast referenced by the docs must exist so pages never embed
+          # a broken player.
+          referenced = set()
+          for doc in (REPO / "website" / "docs").rglob("*.mdx"):
+              referenced.update(
+                  re.findall(r"casts/screengrabs/[A-Za-z0-9._-]+\.cast", doc.read_text())
+              )
+          for ref in sorted(referenced):
+              if not (REPO / "website" / "static" / ref).is_file():
+                  raise SystemExit(f"docs reference a missing cast: {ref}")

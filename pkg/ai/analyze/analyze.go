@@ -57,6 +57,7 @@ var providerHintDefaults = map[string]struct{ model, envVar string }{
 	"azureopenai": {model: "gpt-4o", envVar: "AZURE_OPENAI_API_KEY"},
 	"ollama":      {model: "llama3", envVar: "OLLAMA_API_KEY"},
 	"grok":        {model: "grok-3", envVar: "GROK_API_KEY"},
+	"github":      {model: "openai/gpt-4o-mini", envVar: "GITHUB_TOKEN"},
 }
 
 // hintModel returns an example model name for the given provider.
@@ -88,10 +89,14 @@ func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
 			Err()
 	}
 
-	// Check that a provider is configured.
-	provider := atmosConfig.AI.DefaultProvider
-	if provider == "" {
-		provider = "anthropic"
+	// Resolve provider: explicit config, auto-detected CLI tool, or anthropic.
+	provider := ai.GetProvider(atmosConfig)
+
+	// CLI providers (claude-code, codex-cli, copilot-cli, gemini-cli) invoke an
+	// already-authenticated local binary and need neither a `providers:` entry nor an
+	// api_key — they're validated by their own client's binary lookup instead.
+	if ai.IsCLIProvider(provider) {
+		return nil
 	}
 
 	providerConfig, err := ai.GetProviderConfig(atmosConfig, provider)

@@ -1,8 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -10,8 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const mergeConfigFileExecHelperEnv = "ATMOS_TEST_MERGE_CONFIG_FILE_EXEC_HELPER"
+
 func TestMergeConfig_ImportOverrideBehavior(t *testing.T) {
 	// Test that the main config file's settings override imported settings.
+	setupTestAdapters()
 	tempDir := t.TempDir()
 
 	// Isolate from real git root's .atmos.d to prevent interference.
@@ -55,28 +61,111 @@ settings:
 	commands := v.Get("commands")
 	assert.NotNil(t, commands)
 
-	// Verify that commands were replaced, not appended.
 	commandsList, ok := commands.([]interface{})
-	assert.True(t, ok, "commands should be a slice")
-	assert.Equal(t, 1, len(commandsList), "should have exactly one command (imported commands replaced)")
-
-	// Verify the single command is from the main config.
-	if len(commandsList) > 0 {
-		cmd, ok := commandsList[0].(map[string]interface{})
-		assert.True(t, ok, "command should be a map")
-		assert.Equal(t, "main-command", cmd["name"], "command should be from main config")
-		assert.Equal(t, "This is from main", cmd["description"])
+	require.True(t, ok, "commands should be a slice")
+	require.Len(t, commandsList, 2)
+	commandNames := make(map[string]bool, len(commandsList))
+	for _, command := range commandsList {
+		cmd, ok := command.(map[string]interface{})
+		require.True(t, ok, "command should be a map")
+		name, ok := cmd["name"].(string)
+		require.True(t, ok, "command should have a name")
+		commandNames[name] = true
 	}
+	assert.True(t, commandNames["main-command"])
+	assert.True(t, commandNames["imported-command"])
 
 	// The main config's settings should override imported settings.
 	assert.Equal(t, "from-main", v.GetString("settings.shared"))
 	assert.True(t, v.GetBool("settings.main"))
-	// Note: settings.imported is NOT present because the entire settings section
-	// from the main config replaces the imported settings section.
+	assert.True(t, v.GetBool("settings.imported"))
+}
+
+func TestMergeConfigFileProcessesCommandYamlFunctionsOnce(t *testing.T) {
+	tempDir := t.TempDir()
+	countPath := filepath.Join(tempDir, "exec-count")
+
+	configPath := filepath.Join(tempDir, "commands.yaml")
+	configContent := fmt.Sprintf(`
+commands:
+  - name: existing
+    description: overridden
+  - name: generated
+    description: !exec >-
+      %s -test.run=^TestMergeConfigFileExecHelper$ -- %s
+`, shellQuote(os.Args[0]), shellQuote(countPath))
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	t.Setenv(mergeConfigFileExecHelperEnv, "1")
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set(commandsKey, []interface{}{
+		map[string]interface{}{
+			"name":        "existing",
+			"description": "original",
+		},
+	})
+
+	require.NoError(t, mergeConfigFile(configPath, v))
+
+	count, err := os.ReadFile(countPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1", string(count))
+
+	commands := normalizeCommandArray(v.Get(commandsKey))
+	require.Len(t, commands, 2)
+
+	byName := map[string]map[string]interface{}{}
+	for _, command := range commands {
+		cmd, ok := command.(map[string]interface{})
+		require.True(t, ok)
+		name, ok := cmd["name"].(string)
+		require.True(t, ok)
+		byName[name] = cmd
+	}
+
+	assert.Equal(t, "overridden", byName["existing"]["description"])
+	assert.Equal(t, "resolved-description", byName["generated"]["description"])
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func TestMergeConfigFileExecHelper(t *testing.T) {
+	if os.Getenv(mergeConfigFileExecHelperEnv) != "1" {
+		return
+	}
+
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) != 2 {
+		fmt.Fprintf(os.Stderr, "expected count path after --, got %q", os.Args)
+		os.Exit(2)
+	}
+
+	countPath := args[1]
+	count := 0
+	if raw, err := os.ReadFile(countPath); err == nil && len(raw) > 0 {
+		count, err = strconv.Atoi(string(raw))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid count file %q: %v", countPath, err)
+			os.Exit(2)
+		}
+	}
+	if err := os.WriteFile(countPath, []byte(strconv.Itoa(count+1)), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "write count file %q: %v", countPath, err)
+		os.Exit(2)
+	}
+	fmt.Fprint(os.Stdout, "resolved-description")
+	os.Exit(0)
 }
 
 func TestMergeConfig_ImportDeepMerge(t *testing.T) {
-	// Test that imports are deep merged at the top level, but sections are replaced.
+	setupTestAdapters()
 	tempDir := t.TempDir()
 
 	// Create an import file with various settings.
@@ -116,26 +205,25 @@ logs:
 	// base_path from main config should override import.
 	assert.Equal(t, "./", v.GetString("base_path"))
 
-	// vendor section is completely replaced by main config.
 	assert.Equal(t, "/main/vendor", v.GetString("vendor.base_path"))
 	assert.Equal(t, "main", v.GetString("vendor.setting2"))
-	assert.False(t, v.IsSet("vendor.setting1"), "vendor.setting1 should not exist (section replaced)")
+	assert.Equal(t, "imported", v.GetString("vendor.setting1"))
 
-	// logs section is completely replaced by main config.
 	assert.Equal(t, "Info", v.GetString("logs.level"))
-	assert.False(t, v.IsSet("logs.file"), "logs.file should not exist (section replaced)")
+	assert.Equal(t, "/imported.log", v.GetString("logs.file"))
 }
 
 func TestMergeConfig_AtmosDCommandsMerging(t *testing.T) {
 	// Test that commands from .atmos.d are merged with main config commands.
 	tempDir := t.TempDir()
+	t.Chdir(tempDir)
 
-	// Create .atmos.d directory with a command file.
+	// Create .atmos.d directory with command files split by command group.
 	atmosDDir := filepath.Join(tempDir, ".atmos.d")
 	err := os.Mkdir(atmosDDir, 0o755)
 	require.NoError(t, err)
 
-	atmosDContent := `
+	devContent := `
 commands:
   - name: "dev"
     description: "Development workflow commands"
@@ -144,8 +232,26 @@ commands:
         description: "Set up development environment"
         steps:
           - echo "Setting up..."
+      - name: "shell"
+        description: "Start a development shell"
+        working_directory: !repo-root .
+        steps:
+          - echo "Entering shell..."
 `
-	createConfigFile(t, atmosDDir, "dev.yaml", atmosDContent)
+	createConfigFile(t, atmosDDir, "dev.yaml", devContent)
+
+	buildContent := `
+commands:
+  - name: "build"
+    description: "Build workflow commands"
+    default: "binary"
+    commands:
+      - name: "binary"
+        description: "Build binary"
+        steps:
+          - echo "Building..."
+`
+	createConfigFile(t, atmosDDir, "build.yaml", buildContent)
 
 	// Create main config with its own commands.
 	mainContent := `
@@ -169,7 +275,7 @@ commands:
 
 	commandsList, ok := commands.([]interface{})
 	assert.True(t, ok, "commands should be a slice")
-	assert.Equal(t, 3, len(commandsList), "should have all 3 commands (1 from .atmos.d + 2 from main)")
+	assert.Equal(t, 4, len(commandsList), "should have all 4 commands (2 from .atmos.d + 2 from main)")
 
 	// Verify all commands are present.
 	commandNames := make(map[string]bool)
@@ -183,12 +289,14 @@ commands:
 	}
 
 	assert.True(t, commandNames["dev"], "dev command from .atmos.d should be present")
+	assert.True(t, commandNames["build"], "build command from .atmos.d should be present")
 	assert.True(t, commandNames["terraform"], "terraform command from main config should be present")
 	assert.True(t, commandNames["helmfile"], "helmfile command from main config should be present")
 }
 
 func TestMergeConfig_ProcessImportsWithInvalidYAML(t *testing.T) {
 	// Test error handling when import file contains invalid YAML.
+	setupTestAdapters()
 	tempDir := t.TempDir()
 
 	// Create an import file with invalid YAML.
@@ -218,6 +326,7 @@ import:
 
 func TestMergeConfig_ComplexImportHierarchy(t *testing.T) {
 	// Test complex import hierarchy to improve coverage of import processing.
+	setupTestAdapters()
 	tempDir := t.TempDir()
 
 	// Create a chain of imports: A imports B, B imports C.
@@ -264,15 +373,14 @@ settings:
 	assert.Equal(t, "./", v.GetString("base_path"))
 	assert.Equal(t, 1, v.GetInt("settings.level"))
 	assert.True(t, v.GetBool("settings.from_a"))
-	// B and C's unique settings should not exist (sections are replaced).
-	assert.False(t, v.IsSet("settings.from_b"))
+	assert.True(t, v.GetBool("settings.from_b"))
 	assert.False(t, v.IsSet("settings.from_c"))
 }
 
 func TestMergeConfig_ProvisionedIdentitiesDeepMerge(t *testing.T) {
+	setupTestAdapters()
 	// Test that auto-provisioned identities are deep-merged with manually configured identities.
-	// This verifies the behavior described in pkg/config/load.go:841-844 where provisioned
-	// imports are prepended to allow manual config to take precedence.
+	// Provisioned imports are prepended by injectProvisionedIdentityImports so manual config takes precedence.
 	tempDir := t.TempDir()
 
 	// Isolate XDG cache to prevent loading real user data.
@@ -367,6 +475,7 @@ auth:
 }
 
 func TestMergeConfig_ProvisionedIdentitiesNestedFieldOverride(t *testing.T) {
+	setupTestAdapters()
 	// Test that manual config can override specific nested fields in provisioned identities.
 	tempDir := t.TempDir()
 
@@ -439,6 +548,7 @@ auth:
 }
 
 func TestMergeConfig_ProvisionedIdentitiesWithMultipleProviders(t *testing.T) {
+	setupTestAdapters()
 	// Test that identities from multiple providers can coexist and be independently configured.
 	tempDir := t.TempDir()
 

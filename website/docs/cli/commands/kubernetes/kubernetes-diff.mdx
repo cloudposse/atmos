@@ -1,0 +1,117 @@
+---
+title: atmos kubernetes diff
+sidebar_label: diff
+sidebar_class_name: command
+id: diff
+description: Show what would change in the cluster for a stack-configured Kubernetes component using a server-side dry run.
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+  Check what would change in the cluster before you deploy. `diff` renders the
+  component, asks Kubernetes to validate the update with server-side dry run,
+  and reports which objects would be created, changed, or left alone.
+</Intro>
+
+<CastPlayer title="atmos kubernetes diff --help" src="/casts/screengrabs/atmos-kubernetes-diff--help.cast" static chrome />
+
+<ActionCard title="Configure Kubernetes Components">
+  `diff` uses the same stack inputs as deployment: `provider`, `paths`,
+  `manifests`, `vars`, `env`, Auth, hooks, and dependencies.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes diff <component> --stack <stack>
+atmos kubernetes diff --affected --base origin/main
+```
+
+`diff` renders the final manifests, sends each object through Kubernetes
+server-side dry-run apply, reads the live object through the dynamic client,
+normalizes volatile metadata, and reports whether each object would be created,
+changed, or left unchanged.
+
+The command does not require the `kubectl` binary and does not run `kubectl diff`.
+
+## Example
+
+```shell
+atmos kubernetes diff argocd -s plat-ue2-dev
+```
+
+Diff components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos kubernetes diff --all --tags production,tier-1
+atmos kubernetes diff --affected --labels cost-center=platform
+```
+
+Example output (each created or changed object is followed by its unified diff;
+`no-change` objects and `Secret` objects show only the action line):
+
+```diff
+create v1/Namespace argocd
+--- a/v1/Namespace_argocd.yaml
++++ b/v1/Namespace_argocd.yaml
+@@ -0,0 +1,4 @@
++apiVersion: v1
++kind: Namespace
++metadata:
++  name: argocd
+changed apps/v1/Deployment argocd/argocd-server
+@@ -8,7 +8,7 @@
+   replicas: 2
+-  image: argocd-server:2.10.0
++  image: argocd-server:2.11.0
+no-change v1/Service argocd/argocd-server
+```
+
+When run in CI (`ci.enabled: true`), the same diff is also written to the job summary as a
+collapsible **Kubernetes Diff** block. See [Job Summaries](/ci/job-summaries). `Secret` objects
+are omitted from the diff so their data is never printed or written to the summary.
+
+## Flags
+
+<dl>
+  <dt>
+    `--stack`, `-s` <em>(required)</em>
+  </dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Diff all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Diff affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+
+<dt>
+  `--tags` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>
+  `--labels` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
+</dl>

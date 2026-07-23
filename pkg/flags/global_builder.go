@@ -1,6 +1,7 @@
 package flags
 
 import (
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -41,6 +42,7 @@ func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 	builder.registerProfilingFlags(&defaults)
 	builder.registerPerformanceFlags(&defaults)
 	builder.registerAIFlags(&defaults)
+	builder.registerSettingsFlags(&defaults)
 	builder.registerSystemFlags(&defaults)
 
 	return builder
@@ -109,6 +111,10 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("pager", "", defaults.Pager.Value(), "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)"))
 	b.options = append(b.options, WithEnvVars("pager", "ATMOS_PAGER", "PAGER"))
 	b.options = append(b.options, WithNoOptDefVal("pager", "true"))
+
+	b.options = append(b.options, WithStringFlag(cfg.CastFlagName, "", defaults.Cast, "Record command output as an asciinema cast (--cast for generated path, --cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg extension for explicit output)"))
+	b.options = append(b.options, WithEnvVars(cfg.CastFlagName, cfg.CastEnvVarName))
+	b.options = append(b.options, WithNoOptDefValNoSpaceValue(cfg.CastFlagName, cfg.CastFlagAutoValue))
 }
 
 // registerAuthenticationFlags registers authentication flags.
@@ -184,6 +190,19 @@ func (b *GlobalOptionsBuilder) registerAIFlags(defaults *global.Flags) {
 	})
 }
 
+// registerSettingsFlags registers stack/settings configuration flags.
+func (b *GlobalOptionsBuilder) registerSettingsFlags(defaults *global.Flags) {
+	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerSettingsFlags")()
+
+	b.options = append(b.options, WithStringFlag(
+		"settings-list-merge-strategy",
+		"",
+		defaults.SettingsListMergeStrategy,
+		"Override settings.list_merge_strategy for this invocation. Controls how lists are merged in Atmos stack manifests (replace, append, merge)",
+	))
+	b.options = append(b.options, WithEnvVars("settings-list-merge-strategy", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY"))
+}
+
 // registerSystemFlags registers system configuration flags.
 func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerSystemFlags")()
@@ -205,12 +224,9 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("use-version", "", defaults.UseVersion, "Use a specific version of Atmos (e.g., --use-version=1.160.0)"))
 	b.options = append(b.options, WithEnvVars("use-version", "ATMOS_USE_VERSION"))
 
-	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
-	// current invocation; --skip-hooks=name1,name2 skips only the named
-	// hooks. Per-invocation only — does not propagate to nested commands.
-	b.options = append(b.options, WithStringFlag("skip-hooks", "", defaults.SkipHooks, "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name"))
-	b.options = append(b.options, WithEnvVars("skip-hooks", "ATMOS_SKIP_HOOKS"))
-	b.options = append(b.options, WithNoOptDefVal("skip-hooks", "*"))
+	// Note: --skip-hooks is NOT a global flag. Lifecycle hooks only run on
+	// terraform plan/apply/deploy, so the flag is registered as a persistent
+	// flag on the terraform command in cmd/terraform/flags.go.
 }
 
 // Build creates a StandardParser with all global flags configured.

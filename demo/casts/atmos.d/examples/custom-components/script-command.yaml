@@ -1,0 +1,77 @@
+commands:
+  - name: casts generate examples custom-components script-command
+    description: Regenerate the Custom Components example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: script-command
+        working_directory: "../../.context/cast-fixtures/custom-components"
+        title: "Custom component command"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/custom-components/script-command.cast"
+        steps:
+          - type: simulate
+            text: "# inspect the custom component type"
+          - type: simulate
+            text: &describe_config_cmd atmos describe config --format=yaml --query .components.script
+          - type: shell
+            name: describe-config
+            duration: 450ms
+            interval: 750ms
+            command: *describe_config_cmd
+          - type: simulate
+            text: "# run the custom script component"
+          - type: simulate
+            text: &script_cmd atmos script deploy-app -s dev
+          - type: shell
+            name: script-command
+            duration: 450ms
+            interval: 750ms
+            command: *script_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples custom-components script-command
+  - name: casts validate examples custom-components script-command
+    description: Validate the Custom Components example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/custom-components/script-command.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "# inspect the custom component type",
+              "atmos describe config --format=yaml --query .components.script",
+              "base_path: components/script",
+              "# run the custom script component",
+              "atmos script deploy-app -s dev",
+              "Component: deploy-app",
+              "Stack: dev",
+              "App: myapp",
+              "Version: 1.0.0",
+              "Replicas: 1",
+              "Env: deploying v1.0.0 to us-east-1",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"custom-components script-command cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "[describe-config]", "[script-command]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"custom-components script-command cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

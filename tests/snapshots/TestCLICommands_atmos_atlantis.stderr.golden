@@ -1,11 +1,14 @@
+
 # Incorrect Usage
 
-**Error:** The command atmos atlantis requires a subcommand
+**Error:** atmos atlantis requires a subcommand.
 
 Valid subcommands are:
 
   • generate
 
-## Hints
+## Usage
+
+ atmos atlantis [sub-command] [flags]
 
 💡 Run atmos atlantis --help for usage

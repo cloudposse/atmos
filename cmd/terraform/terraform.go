@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
+	"github.com/cloudposse/atmos/cmd/terraform/cache"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
 	"github.com/cloudposse/atmos/cmd/terraform/migrate"
 	"github.com/cloudposse/atmos/cmd/terraform/planfile"
@@ -72,6 +73,9 @@ func init() {
 
 	// Add workdir subcommand from the workdir subpackage.
 	terraformCmd.AddCommand(workdir.GetWorkdirCommand())
+
+	// Add cache subcommand from the cache subpackage.
+	terraformCmd.AddCommand(cache.GetCacheCommand())
 
 	// Add planfile subcommand from the planfile subpackage.
 	terraformCmd.AddCommand(planfile.PlanfileCmd)

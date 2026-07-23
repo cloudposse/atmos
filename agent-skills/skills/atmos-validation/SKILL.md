@@ -1,103 +1,112 @@
 ---
 name: atmos-validation
-description: "Policy validation: OPA/Rego policies, JSON Schema, schema manifests"
+description: "Validate Atmos projects, components, arbitrary JSON Schema inputs, EditorConfig, and GitHub Actions; use affected-file selection and native CI annotations"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "1.1.0"
+references:
+  - references/json-schema.md
+  - references/opa-policies.md
+  - references/project-validation.md
 ---
 
 # Atmos Validation Framework
 
-## Overview
+Use this skill for every Atmos validation command and validation policy configuration: aggregate
+project validation, configuration and stack schemas, JSON Schema, OPA/Rego, EditorConfig,
+GitHub Actions workflows, affected-file selection, and native CI reporting.
 
-Atmos provides a built-in validation framework that enforces policies and schema constraints on stack
-configurations before infrastructure is provisioned. Validation ensures clean, correct, and compliant
-configurations across teams and environments. Atmos supports three types of native validation:
+For detailed JSON Schema examples, read [references/json-schema.md](references/json-schema.md).
+For OPA/Rego policy patterns, read [references/opa-policies.md](references/opa-policies.md).
+For project-wide, affected, and CI validation behavior, read
+[references/project-validation.md](references/project-validation.md).
 
-1. **JSON Schema** -- Validates the structure and types of component configurations
-2. **Open Policy Agent (OPA)** -- Enforces custom business rules using Rego policies
-3. **EditorConfig Checker** -- Ensures consistent coding styles across files
+## Start with the Validation Target
 
-Validation runs automatically before `atmos terraform plan` and `atmos terraform apply`, preventing
-misconfigured infrastructure from being provisioned. It can also run on-demand using the
-`atmos validate component` and `atmos validate stacks` commands.
+| Need | Command |
+|---|---|
+| Run every project validator | `atmos validate` |
+| Validate only changed project inputs | `atmos validate --affected` |
+| Validate `atmos.yaml` | `atmos validate config` or `atmos config validate` |
+| Validate stack manifests | `atmos validate stacks` or `atmos stack validate` |
+| Validate `.editorconfig` rules | `atmos validate editorconfig` |
+| Lint GitHub Actions workflows with actionlint | `atmos ci validate` or `atmos validate ci` |
+| Validate arbitrary files against JSON Schema | `atmos validate schema <key>` |
+| Validate resolved component input | `atmos validate component <component> -s <stack>` |
+
+Start with the narrowest command that matches the change. Use the aggregate command for a
+repository gate because it reports every applicable validator instead of stopping at the first one.
 
 ## Validation Commands
 
-### `atmos validate component`
-
-Validates a specific component in a stack against configured validation rules:
-
 ```shell
-# Validate using rules defined in settings.validation
 atmos validate component vpc -s plat-ue2-prod
-
-# Validate with explicit schema path and type
-atmos validate component vpc -s plat-ue2-prod \
-  --schema-path vpc/validate-vpc-component.rego \
-  --schema-type opa
-
-# Validate with OPA and additional module paths
-atmos validate component vpc -s plat-ue2-dev \
-  --schema-path vpc/validate-vpc-component.rego \
-  --schema-type opa \
-  --module-paths catalog/constants
-
-# Validate with a timeout
-atmos validate component vpc -s plat-ue2-dev --timeout 15
+atmos validate stacks
+atmos validate schema github-actions
+atmos validate --affected --format rich
 ```
 
-If `--schema-path` and `--schema-type` are not provided on the command line, Atmos uses the
-`settings.validation` section from the component's stack configuration.
+`atmos validate component` validates a component in a stack using `settings.validation` or explicit
+`--schema-path` / `--schema-type` flags.
 
-### `atmos validate stacks`
+`atmos validate stacks` validates stack YAML syntax, imports, duplicate component definitions, and
+manifest schema compliance.
 
-Validates all stack configurations and YAML syntax:
+`atmos validate schema <key>` validates arbitrary files matched by a `schemas.<key>.matches` glob
+against a JSON Schema.
+
+`atmos validate` aggregates configuration, stack, EditorConfig, and GitHub Actions validation when
+those project inputs exist. It is the preferred CI entry point for repository-wide validation.
+
+## Affected Validation and Exclusions
+
+Use `--affected` to select repository inputs changed from the merge base. In GitHub pull requests,
+Atmos reads the PR base; locally, pass `--base <ref>` when the default base is not appropriate.
 
 ```shell
-atmos validate stacks
+atmos validate --affected --base origin/main --format rich
+atmos config validate --affected
+atmos stack validate --affected
+atmos validate ci --affected
 ```
 
-This command checks:
-- All YAML manifest files for syntax errors and inconsistencies
-- All imports for correct configuration, valid data types, and valid file references
-- Schema validation of all manifest sections using the Atmos Manifest JSON Schema
-- Detection of misconfigured or duplicated components in stacks
+Use repeatable repository-relative glob exclusions to keep deliberately-invalid test fixtures out
+of production validation. `--exclude` works with the aggregate command and the config, stacks,
+schema, and GitHub Actions validators whether they run all inputs or only affected inputs.
 
-If the same component is defined in multiple stack manifest files for the same stack with
-different configurations, Atmos reports it as an error.
+```shell
+atmos validate --affected --exclude 'tests/fixtures/**' --format rich
+atmos validate schema github-actions --exclude 'tests/fixtures/**'
+atmos validate ci --exclude 'tests/fixtures/**'
+```
 
-## Configuring Validation
+Use slash-separated repository globs. Do not use an exclusion to hide a deployable project path;
+run intentional negative fixtures in a dedicated test or annotation E2E check instead.
 
-### Schema Base Paths in `atmos.yaml`
+`atmos validate editorconfig --exclude` is its established EditorConfig regular-expression flag,
+not the generic repository-glob exclusion. The aggregate command still applies its repository-glob
+`--exclude` before invoking the EditorConfig validator.
 
-Configure the base paths for validation schemas in `atmos.yaml`:
+## Base Paths
+
+Configure validation schema base paths in `atmos.yaml`:
 
 ```yaml
-# atmos.yaml
 schemas:
-  # JSON Schema validation
   jsonschema:
-    # Supports absolute and relative paths
-    # Can be set via ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH env var
-    base_path: "stacks/schemas/jsonschema"
-
-  # OPA/Rego validation
+    base_path: stacks/schemas/jsonschema
   opa:
-    # Supports absolute and relative paths
-    # Can be set via ATMOS_SCHEMAS_OPA_BASE_PATH env var
-    base_path: "stacks/schemas/opa"
-
-  # Atmos manifest validation
+    base_path: stacks/schemas/opa
   atmos:
-    # JSON Schema for validating Atmos manifests themselves
-    # Can be set via ATMOS_SCHEMAS_ATMOS_MANIFEST env var
-    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+    manifest: stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 ```
 
-### Component Validation Settings
+The `cue`, `opa`, and `jsonschema` keys under `schemas` are reserved for Atmos schema-path
+configuration. Do not use those names as generic `atmos validate schema <key>` entries.
 
-Define validation rules in the `settings.validation` section of component configurations:
+## Component Validation
+
+Define component validation under `settings.validation`:
 
 ```yaml
 components:
@@ -105,351 +114,138 @@ components:
     vpc:
       settings:
         validation:
-          # JSON Schema validation step
-          validate-vpc-component-with-jsonschema:
+          validate-vpc-jsonschema:
             schema_type: jsonschema
-            schema_path: "vpc/validate-vpc-component.json"
-            description: Validate 'vpc' component variables using JSON Schema
-
-          # OPA policy validation step
-          check-vpc-component-config-with-opa-policy:
+            schema_path: vpc/validate-vpc-component.json
+          check-vpc-opa:
             schema_type: opa
-            schema_path: "vpc/validate-vpc-component.rego"
+            schema_path: vpc/validate-vpc-component.rego
             module_paths:
-              - "catalog/constants"
-            description: Check 'vpc' component configuration using OPA policy
-            disabled: false
+              - catalog/constants
             timeout: 10
 ```
 
-### Validation Step Properties
+Each validation step can define:
 
-Each validation step supports these properties:
+| Property | Use |
+|---|---|
+| `schema_type` | `jsonschema` or `opa` |
+| `schema_path` | Path relative to the matching schema base path |
+| `module_paths` | OPA module paths |
+| `description` | Human-readable description |
+| `disabled` | Skip the step when `true` |
+| `timeout` | Timeout in seconds |
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `schema_type` | string | `jsonschema` or `opa` |
-| `schema_path` | string | Path to the schema file (absolute or relative to base_path) |
-| `module_paths` | list | (OPA only) Additional Rego module paths for imports |
-| `description` | string | Human-readable description of the validation step |
-| `disabled` | boolean | Set to `true` to skip this step (default: `false`) |
-| `timeout` | integer | Timeout in seconds for the validation step |
+## Generic File Validation
 
-All validation steps must pass for the component to be provisioned. If any step fails, Atmos
-blocks the operation with the validation error messages.
+Use `atmos validate schema` for non-Atmos files, such as GitHub Actions workflows or Kubernetes
+manifests:
 
-## JSON Schema Validation
+```yaml
+schemas:
+  github-actions:
+    schema: https://json.schemastore.org/github-workflow.json
+    matches:
+      - .github/workflows/*.yml
+      - .github/workflows/*.yaml
+```
 
-JSON Schema validates the structure, types, and required fields of component configurations.
-Atmos supports the JSON Schema 2020-12 specification.
+```shell
+atmos validate schema github-actions
+```
 
-### Writing JSON Schema for Components
+## JSON Schema
 
-Place schema files in the `schemas.jsonschema.base_path` directory:
+JSON Schema validates structure, required fields, types, patterns, enums, and ranges. Atmos passes
+the full resolved component configuration to component schemas, so schemas usually validate under
+`vars`, `settings`, `env`, `backend`, or `metadata`.
+
+Minimal component schema:
 
 ```json
 {
-  "$id": "vpc-component",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "vpc component validation",
-  "description": "JSON Schema for the 'vpc' Atmos component.",
   "type": "object",
   "properties": {
     "vars": {
       "type": "object",
+      "required": ["region"],
       "properties": {
-        "region": {
-          "type": "string"
-        },
-        "ipv4_primary_cidr_block": {
-          "type": "string",
-          "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$"
-        },
-        "map_public_ip_on_launch": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": true,
-      "required": [
-        "region",
-        "ipv4_primary_cidr_block",
-        "map_public_ip_on_launch"
-      ]
+        "region": { "type": "string" }
+      }
     }
   }
 }
 ```
 
-### Input Structure for JSON Schema
+## OPA/Rego
 
-The entire component configuration is passed as the JSON document. The schema validates against
-the full configuration including `vars`, `settings`, `env`, `backend`, and other sections.
-
-## OPA/Rego Policy Validation
-
-The Open Policy Agent (OPA) provides policy-as-code validation using the Rego language. OPA
-policies enable complex business rule validation that goes beyond structural schema checks.
-
-### Writing OPA Policies for Atmos
-
-All Atmos OPA policies must:
-1. Use `package atmos`
-2. Define `errors` rules that return a set of error message strings (sets are serialized as arrays in OPA query results)
+Atmos OPA policies use `package atmos` and collect validation errors in `errors`.
 
 ```rego
 package atmos
 
-import future.keywords.in
-
-# Block public IPs in production
 errors[message] {
-    input.vars.stage == "prod"
-    input.vars.map_public_ip_on_launch == true
-    message = "Mapping public IPs on launch is not allowed in 'prod'"
-}
-
-# Enforce naming conventions
-errors[message] {
-    not re_match("^[a-zA-Z0-9]{2,20}$", input.vars.name)
-    message = "Component name must be 2-20 alphanumeric characters"
+  input.vars.stage == "prod"
+  input.vars.map_public_ip_on_launch == true
+  message = "Public IP mapping is not allowed in prod"
 }
 ```
 
-### OPA Input Structure
+OPA input is the resolved component configuration. Common fields include `input.vars`,
+`input.settings`, `input.env`, `input.backend`, `input.metadata`, and Terraform CLI context fields
+available during plan/apply.
 
-The `input` object contains the full component configuration as returned by
-`atmos describe component`. Key fields include:
+## CI Guidance
 
-- `input.vars` -- Component variables
-- `input.settings` -- Component settings
-- `input.env` -- Environment variables
-- `input.backend` -- Backend configuration
-- `input.metadata` -- Component metadata
-- `input.workspace` -- Terraform workspace name
-
-### Policy Execution Context
-
-When Atmos executes commands like `terraform plan` or `terraform apply`, additional context
-is provided to OPA policies:
-
-- `input.process_env` -- Map of environment variables in the current process
-- `input.cli_args` -- List of CLI arguments (e.g., `["terraform", "apply"]`)
-- `input.tf_cli_vars` -- Map of variables from command-line `-var` arguments
-- `input.env_tf_cli_args` -- List of arguments from `TF_CLI_ARGS` env var
-- `input.env_tf_cli_vars` -- Map of variables from `TF_CLI_ARGS` env var
-
-This enables context-aware policies such as:
-
-```rego
-package atmos
-
-# Don't allow terraform apply if foo is set to "foo"
-errors[message] {
-    count(input.cli_args) >= 2
-    input.cli_args[0] == "terraform"
-    input.cli_args[1] == "apply"
-    input.vars.foo == "foo"
-    message = "Cannot apply when 'foo' variable is set to 'foo'"
-}
-```
-
-### Modular OPA Policies
-
-Atmos supports splitting OPA policies across multiple Rego files. Define reusable constants
-and helper functions in separate files:
-
-```rego
-# stacks/schemas/opa/catalog/constants/constants.rego
-package atmos.constants
-
-vpc_dev_max_azs_error := "In 'dev', only 2 Availability Zones are allowed"
-vpc_name_regex := "^[a-zA-Z0-9]{2,20}$"
-```
-
-Import them in your main policy:
-
-```rego
-package atmos
-
-import data.atmos.constants.vpc_dev_max_azs_error
-import data.atmos.constants.vpc_name_regex
-
-errors[vpc_dev_max_azs_error] {
-    input.vars.stage == "dev"
-    count(input.vars.availability_zones) != 2
-}
-```
-
-Specify the module paths in the component's validation configuration:
-
-```yaml
-settings:
-  validation:
-    check-vpc:
-      schema_type: opa
-      schema_path: "vpc/validate-vpc-component.rego"
-      module_paths:
-        - "catalog/constants"
-```
-
-If `module_paths` specifies a folder, Atmos recursively loads all `.rego` files from that
-folder and its subfolders.
-
-## Atmos Manifest JSON Schema Validation
-
-Atmos includes an embedded JSON Schema for validating the structure of Atmos manifests themselves
-(not component vars, but the manifest file format). To override the embedded schema:
-
-```yaml
-# atmos.yaml
-schemas:
-  atmos:
-    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
-    # Also supports URLs:
-    # manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
-```
-
-The manifest schema can also be provided via:
-- Environment variable: `ATMOS_SCHEMAS_ATMOS_MANIFEST`
-- CLI flag: `--schemas-atmos-manifest`
-
-## EditorConfig Validation
-
-Atmos supports the EditorConfig Checker for ensuring consistent coding styles. This validates
-adherence to rules defined in `.editorconfig` files across the project.
-
-## Validation in CI/CD Pipelines
-
-### Running Validation in GitHub Actions
-
-Add a validation step early in your CI/CD pipeline:
+Run validation early in CI with the Atmos container and direct Atmos commands:
 
 ```yaml
 jobs:
   validate:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: Setup Atmos
-        uses: cloudposse/github-action-setup-atmos@v2
-        with:
-          atmos-version: 1.88.0
-
-      - name: Validate All Stacks
-        run: atmos validate stacks
-
-      - name: Validate Specific Components
-        run: |
-          atmos validate component vpc -s plat-ue2-dev
-          atmos validate component vpc -s plat-ue2-prod
+      - run: atmos validate --affected --format rich --exclude 'tests/fixtures/**'
 ```
 
-### Pre-Provisioning Validation
+Enable native CI output in `atmos.yaml` when validation runs in CI:
 
-Atmos automatically runs validation before `terraform plan` and `terraform apply`. If any
-validation policy fails, the operation is blocked:
-
-```text
-$ atmos terraform apply vpc -s plat-ue2-prod
-Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
-
-exit status 1
+```yaml
+ci:
+  enabled: true
+  annotations:
+    enabled: true
 ```
 
-## Best Practices for Validation Policies
+With native CI enabled, aggregate validation writes an Atmos job summary, including passed,
+skipped, and failed validators. Findings from validators that support source annotations (including
+GitHub Actions/actionlint) emit GitHub Actions workflow commands; a successful validation stays
+visible through the green check and job summary rather than creating success annotations. Use
+`--format rich` for readable CI diagnostics. The actionlint SARIF format is intentionally
+side-effect free, so use it when a separate SARIF uploader owns annotations.
 
-1. **Use JSON Schema for structural validation** -- Required fields, type checking, pattern matching
-2. **Use OPA for business logic** -- Cross-field validation, environment-specific rules, naming conventions
-3. **Organize OPA modules in a catalog** -- Reusable constants, helper functions, shared rules
-4. **Apply different policies per environment** -- Stricter rules for production, relaxed for dev
-5. **Set appropriate timeouts** -- Prevent slow policies from blocking operations
-6. **Use descriptive error messages** -- Include the rule being violated and how to fix it
-7. **Validate early in CI/CD** -- Run `atmos validate stacks` before plan/apply
-8. **Version your schemas** -- Keep schema files in the same repository as stack configurations
-9. **Test policies against known-good and known-bad configurations** -- Ensure policies catch what they should
-10. **Use `disabled: true`** to temporarily skip a validation step during migration
+Do not reintroduce deprecated setup actions in new examples. Route broader Native CI workflow
+structure, event triggers, permissions, and actionlint annotation E2E tests to `atmos-ci`.
 
-## Common Validation Patterns
+## Routing
 
-### Required Tags
+| Need | Skill |
+|---|---|
+| Detailed JSON Schema patterns | [references/json-schema.md](references/json-schema.md) |
+| Detailed OPA/Rego policy patterns | [references/opa-policies.md](references/opa-policies.md) |
+| Aggregate, affected, exclusions, and native CI behavior | [references/project-validation.md](references/project-validation.md) |
+| Atmos manifest JSON Schema and IDE completion | `atmos-schemas` |
+| Stack manifest structure and imports | `atmos-stacks` |
+| Component configuration and inheritance | `atmos-components` |
+| Native CI validation workflows | `atmos-ci` |
 
-```rego
-package atmos
+## Guardrails
 
-errors[message] {
-    required_tags := ["Environment", "Team", "CostCenter"]
-    tag := required_tags[_]
-    not input.vars.tags[tag]
-    message = sprintf("Required tag '%s' is missing", [tag])
-}
-```
-
-### Resource Limits by Environment
-
-```rego
-package atmos
-
-errors[message] {
-    input.vars.stage == "dev"
-    input.vars.instance_count > 3
-    message = sprintf("Dev environment limited to 3 instances, got %d", [input.vars.instance_count])
-}
-
-errors[message] {
-    input.vars.stage == "prod"
-    input.vars.instance_count < 2
-    message = sprintf("Prod environment requires at least 2 instances, got %d", [input.vars.instance_count])
-}
-```
-
-### Naming Convention Enforcement
-
-```rego
-package atmos
-
-errors[message] {
-    not re_match("^[a-z][a-z0-9-]*[a-z0-9]$", input.vars.name)
-    message = sprintf("Name '%s' must be lowercase alphanumeric with hyphens, starting with a letter", [input.vars.name])
-}
-```
-
-### Blocking Dangerous Operations
-
-```rego
-package atmos
-
-errors[message] {
-    count(input.cli_args) >= 2
-    input.cli_args[0] == "terraform"
-    input.cli_args[1] == "apply"
-    input.process_env.ENVIRONMENT == "production"
-    not input.process_env.DEPLOYMENT_APPROVED
-    message = "Production deployments require DEPLOYMENT_APPROVED environment variable"
-}
-```
-
-### Network Security Rules
-
-```rego
-package atmos
-
-errors[message] {
-    input.vars.stage == "prod"
-    cidr := input.vars.allowed_cidr_blocks[_]
-    cidr == "0.0.0.0/0"
-    message = "Open CIDR blocks (0.0.0.0/0) are not allowed in production"
-}
-```
-
-## Rego Syntax Notes
-
-- Backslashes in regex patterns must be double-escaped in Rego strings: `\\.` not `\.`
-- Use `import future.keywords.in` for the `in` keyword
-- The `package atmos` declaration is required in all Atmos OPA policies
-- Atmos reads the `errors` output -- if it contains any strings, the policy fails
-
-## Additional Resources
-
-- For OPA/Rego policy examples and input structure, see [references/opa-policies.md](references/opa-policies.md)
-- For JSON Schema validation patterns, see [references/json-schema.md](references/json-schema.md)
+- Prefer stack `vars` validation over ad hoc shell checks.
+- Keep reusable business rules in OPA modules or JSON Schema files, not inline in CI.
+- Do not validate against guessed stack names or component names; use `atmos list` or
+  `atmos describe` first.
+- Keep policy messages actionable and name the field that should change.

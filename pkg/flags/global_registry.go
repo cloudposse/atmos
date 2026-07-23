@@ -51,6 +51,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ForceColor: v.GetBool("force-color"),
 		ForceTTY:   v.GetBool("force-tty"),
 		Mask:       v.GetBool("mask"),
+		Cast:       parseCastFlag(cmd, v),
 
 		// Output configuration.
 		Pager: parsePagerFlag(cmd, v),
@@ -79,6 +80,9 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+
+		// Settings overrides.
+		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
 	}
 }
 
@@ -174,6 +178,23 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
+// parseCastFlag handles the cast flag's NoOptDefVal pattern, mirroring parsePagerFlag/parseIdentityFlag.
+func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
+	defer perf.Track(nil, "flags.parseCastFlag")()
+
+	flag, changed := lookupCommandFlag(cmd, cfg.CastFlagName)
+	if flag == nil {
+		return ""
+	}
+	if changed {
+		return flag.Value.String()
+	}
+	if v.IsSet(cfg.CastFlagName) {
+		return v.GetString(cfg.CastFlagName)
+	}
+	return ""
+}
+
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
 // The pager flag has three states:
 //  1. Not provided → PagerSelector{provided: false}
@@ -222,6 +243,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 	registerProfilingFlags(registry)
 	registerPerformanceFlags(registry)
 	registerAIFlags(registry)
+	registerSettingsFlags(registry)
 
 	return registry
 }
@@ -315,6 +337,16 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Description: "Enable pager for output",
 		NoOptDefVal: "true",
 		EnvVars:     []string{"ATMOS_PAGER"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:                    cfg.CastFlagName,
+		Shorthand:               "",
+		Default:                 "",
+		Description:             "Record command output as an asciinema cast",
+		NoOptDefVal:             cfg.CastFlagAutoValue,
+		NoOptDefValNoSpaceValue: true,
+		EnvVars:                 []string{cfg.CastEnvVarName},
 	})
 }
 
@@ -416,6 +448,19 @@ func registerAIFlags(registry *FlagRegistry) {
 		Default:     []string{},
 		Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
 		EnvVars:     []string{"ATMOS_SKILL"},
+	})
+}
+
+// registerSettingsFlags registers stack/settings configuration flags.
+func registerSettingsFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerSettingsFlags")()
+
+	registry.Register(&StringFlag{
+		Name:        "settings-list-merge-strategy",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
+		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
 	})
 }
 

@@ -147,12 +147,16 @@ func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
 func (m *masker) Mask(input string) string {
 	defer perf.Track(nil, "io.masker.Mask")()
 
-	if !m.enabled || input == "" {
+	if input == "" {
 		return input
 	}
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	if !m.enabled {
+		return input
+	}
 
 	masked := input
 
@@ -191,6 +195,30 @@ func (m *masker) Mask(input string) string {
 	return masked
 }
 
+// ContainsSecret reports whether value contains any registered secret literal as a
+// substring. This deliberately ignores the enabled flag (unlike Mask): callers use it
+// to prevent secrets from being written to disk (e.g. Terraform varfiles) even when
+// display masking is disabled via --mask=false. Regex patterns are not consulted here —
+// only literal secret values, which are exactly what must be kept off disk.
+func (m *masker) ContainsSecret(value string) bool {
+	defer perf.Track(nil, "io.masker.ContainsSecret")()
+
+	if value == "" {
+		return false
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for literal := range m.literals {
+		if literal != "" && strings.Contains(value, literal) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (m *masker) Clear() {
 	defer perf.Track(nil, "io.masker.Clear")()
 
@@ -213,5 +241,35 @@ func (m *masker) Count() int {
 func (m *masker) Enabled() bool {
 	defer perf.Track(nil, "io.masker.Enabled")()
 
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.enabled
+}
+
+func (m *masker) SetEnabled(enabled bool) {
+	defer perf.Track(nil, "io.masker.SetEnabled")()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.enabled = enabled
+}
+
+func (m *masker) SetReplacement(replacement string) {
+	defer perf.Track(nil, "io.masker.SetReplacement")()
+
+	if replacement == "" {
+		replacement = MaskReplacement
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.replacement = replacement
+}
+
+func (m *masker) Replacement() string {
+	defer perf.Track(nil, "io.masker.Replacement")()
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.replacement
 }

@@ -6,7 +6,7 @@ id: logout
 description: Remove locally cached credentials and session data
 ---
 
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
@@ -44,7 +44,7 @@ This leads to **credential sprawl**: old, forgotten credentials littering your s
 
 The `atmos auth logout` command makes credential cleanup explicit, comprehensive, and easy.
 
-<Screengrab title="atmos auth logout --help" slug="atmos-auth-logout--help" />
+<CastPlayer title="atmos auth logout --help" src="/casts/screengrabs/atmos-auth-logout--help.cast" static chrome />
 
 ## Usage
 
@@ -116,6 +116,14 @@ Successfully logged out from 4 identities
    may still be active. Visit your identity provider to end your
    browser session.
 ```
+
+### Logout by Tags
+
+```shell
+atmos auth logout --tags production
+```
+
+This removes credentials for every identity and provider tagged with any of the given tags, using the same confirmation flow as `--all`. This is useful when you want to log out of an entire environment (e.g. everything tagged `production`) without listing each identity individually.
 
 ### Logout from Specific Provider
 
@@ -294,6 +302,11 @@ All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth lo
 
   <dt>`--provider`</dt>
   <dd>Logout from a specific provider instead of an identity. Clears session data for all identities using this provider. Combine with `--keychain` to also remove stored credentials.</dd>
+
+  <dt>`--tags`</dt>
+  <dd>
+    Logout from every provider and identity matching any of the given tags (comma-separated): `--tags=production`. Providers and identities are tagged via an optional `tags: [...]` list in `atmos.yaml`. Uses the same confirmation flow as `--all`. Combine with `--keychain` to also remove stored credentials.
+  </dd>
 
   <dt>`--keychain`</dt>
   <dd>

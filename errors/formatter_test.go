@@ -5,15 +5,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/cockroachdb/errors"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 func TestDefaultFormatterConfig(t *testing.T) {
 	config := DefaultFormatterConfig()
 
 	assert.False(t, config.Verbose)
-	assert.Equal(t, 80, config.MaxLineLength)
+	assert.Zero(t, config.MaxLineLength)
 }
 
 func TestFormat_NilError(t *testing.T) {
@@ -33,6 +38,22 @@ func TestFormat_SimpleError(t *testing.T) {
 	assert.NotContains(t, result, "💡") // No hints.
 }
 
+func TestFormat_RendererFailureFallsBackToStructuredPlainError(t *testing.T) {
+	original := newMarkdownRendererWithWidth
+	newMarkdownRendererWithWidth = func(schema.AtmosConfiguration, int) (*markdown.Renderer, error) {
+		return nil, errors.New("renderer init failed")
+	}
+	defer func() {
+		newMarkdownRendererWithWidth = original
+	}()
+
+	result := Format(errors.New("user aborted"), DefaultFormatterConfig())
+
+	assert.Contains(t, result, "Error: user aborted")
+	assert.NotContains(t, result, "# Error")
+	assert.NotContains(t, result, "**Error**")
+}
+
 func TestFormat_ErrorWithHint(t *testing.T) {
 	err := errors.WithHint(
 		errors.New("test error"),
@@ -46,6 +67,20 @@ func TestFormat_ErrorWithHint(t *testing.T) {
 	assert.Contains(t, result, "test error")
 	assert.Contains(t, result, "💡")
 	assert.Contains(t, result, "Try running --help")
+}
+
+func TestFormat_ErrorWithMultilineHintList(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := Build(errors.New("test error")).
+		WithHint("Available workflows in test.yaml:\n\n- `workflow-a`\n- `workflow-b`\n").
+		Err()
+
+	result := Format(err, DefaultFormatterConfig())
+
+	assert.Contains(t, result, "💡 Available workflows in test.yaml:")
+	assert.Contains(t, result, "• workflow-a")
+	assert.Contains(t, result, "• workflow-b")
+	assert.NotContains(t, result, "Available workflows in test.yaml: -")
 }
 
 func TestFormat_ErrorWithMultipleHints(t *testing.T) {
@@ -321,9 +356,62 @@ func TestFormat_WithExplanation(t *testing.T) {
 	assert.Contains(t, result, "# Error")
 	// Should contain the error message.
 	assert.Contains(t, result, "test error")
-	// Should contain the Explanation section.
-	assert.Contains(t, result, "## Explanation")
+	// Should contain the explanation content without the old heading.
+	assert.NotContains(t, result, "## Explanation")
 	assert.Contains(t, result, "This is a detailed explanation")
+}
+
+func TestFormat_WithExplanationNoColorIsPlaintext(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := Build(errors.New("test error")).
+		WithExplanation("The selected stack prod was not found.").
+		Err()
+
+	result := Format(err, DefaultFormatterConfig())
+
+	assert.NotContains(t, result, "\x1b[")
+	assert.NotContains(t, result, "## Explanation")
+	assert.Contains(t, result, "The selected stack prod was not found.")
+}
+
+func TestRenderExplanationCallout_ColorAddsGradientBackground(t *testing.T) {
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	callout := renderExplanationCallout("first line\nsecond line", 80, true)
+
+	assert.Contains(t, callout, "\x1b[")
+	assert.Contains(t, callout, "first line")
+	assert.Contains(t, callout, "second line")
+	assert.Contains(t, callout, "48;2;51;32;79")
+	assert.Contains(t, callout, "48;2;18;60;92")
+	assert.Contains(t, callout, "38;2;247;250;252")
+}
+
+func TestRenderExplanationCallout_RestoresColorsAfterNestedReset(t *testing.T) {
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	const background = explanationGradientStart
+	reset := "\x1b[0m"
+	callout := renderExplanationCallout("before"+reset+"after", 80, true)
+
+	assert.Contains(t, callout, reset+calloutColorPrefix(background))
+	assert.Contains(t, callout, "48;2;51;32;79")
+	assert.Contains(t, callout, "38;2;247;250;252")
+}
+
+func TestExplanationMarkdownLineLength_ReservesPaddingForColor(t *testing.T) {
+	assert.Equal(t, 78, explanationMarkdownLineLength(80, true))
+	assert.Equal(t, 80, explanationMarkdownLineLength(80, false))
+	assert.Equal(t, 2, explanationMarkdownLineLength(2, true))
+	assert.Equal(t, 0, explanationMarkdownLineLength(0, true))
 }
 
 func TestFormat_WithExample(t *testing.T) {
@@ -368,7 +456,7 @@ func TestFormat_WithAllSections(t *testing.T) {
 	assert.Contains(t, result, "test error")
 
 	// Section 2: Explanation.
-	assert.Contains(t, result, "## Explanation")
+	assert.NotContains(t, result, "## Explanation")
 	assert.Contains(t, result, "Detailed explanation")
 
 	// Section 3: Example.
@@ -376,7 +464,7 @@ func TestFormat_WithAllSections(t *testing.T) {
 	assert.Contains(t, result, "test: example")
 
 	// Section 4: Hints.
-	assert.Contains(t, result, "## Hints")
+	assert.NotContains(t, result, "## Hints")
 	assert.Contains(t, result, "💡 First hint")
 	assert.Contains(t, result, "💡 Second hint")
 
@@ -405,11 +493,11 @@ func TestFormat_SectionOrder(t *testing.T) {
 
 	result := Format(err, config)
 
-	// Find positions of each section header.
+	// Find positions of each section.
 	errorPos := strings.Index(result, "# Error")
-	explanationPos := strings.Index(result, "## Explanation")
+	explanationPos := strings.Index(result, "explanation")
 	examplePos := strings.Index(result, "## Example")
-	hintsPos := strings.Index(result, "## Hints")
+	hintsPos := strings.Index(result, "💡 hint")
 	contextPos := strings.Index(result, "## Context")
 	stackPos := strings.Index(result, "## Stack Trace")
 
@@ -433,13 +521,13 @@ func TestFormat_ExampleAndHintsSeparation(t *testing.T) {
 
 	result := Format(err, config)
 
-	// Should have separate Example and Hints sections.
+	// Should keep example content separate from standalone hints.
 	assert.Contains(t, result, "## Example")
-	assert.Contains(t, result, "## Hints")
+	assert.NotContains(t, result, "## Hints")
 
 	// Example section should not have hint emoji.
 	exampleStart := strings.Index(result, "## Example")
-	hintsStart := strings.Index(result, "## Hints")
+	hintsStart := strings.Index(result, "💡 Regular hint")
 	exampleSection := result[exampleStart:hintsStart]
 	assert.NotContains(t, exampleSection, "💡", "Example section should not contain hint emoji")
 
@@ -462,9 +550,10 @@ func TestFormat_NoExplanation_NoSection(t *testing.T) {
 
 	// Should NOT have Explanation section if no explanation provided.
 	assert.NotContains(t, result, "## Explanation")
-	// But should have Error header and Hints.
+	// But should have Error header and standalone hints.
 	assert.Contains(t, result, "# Error")
-	assert.Contains(t, result, "## Hints")
+	assert.NotContains(t, result, "## Hints")
+	assert.Contains(t, result, "💡 Just a hint")
 }
 
 func TestFormat_NoExample_NoSection(t *testing.T) {
@@ -492,9 +581,9 @@ func TestFormat_NoHints_NoSection(t *testing.T) {
 
 	// Should NOT have Hints section if no hints provided.
 	assert.NotContains(t, result, "## Hints")
-	// But should have Error and Explanation.
+	// But should have Error and explanation content.
 	assert.Contains(t, result, "# Error")
-	assert.Contains(t, result, "## Explanation")
+	assert.Contains(t, result, "Just an explanation")
 }
 
 func TestFormat_ContextMarkdownTable(t *testing.T) {
@@ -639,23 +728,20 @@ func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
 	// Should have single H1.
 	assert.Contains(t, result, "# Component Error")
 
-	// Should have Hints section.
-	assert.Contains(t, result, "## Hints")
-
-	// Hints should be in Hints section, not in error message.
+	// Hints should be standalone action lines, not in the error message.
 	errorHeaderIdx := strings.Index(result, "# Component Error")
-	hintsHeaderIdx := strings.Index(result, "## Hints")
-	assert.Greater(t, hintsHeaderIdx, errorHeaderIdx, "Hints section should come after error header")
+	firstHintIdx := strings.Index(result, "💡")
+	assert.Greater(t, firstHintIdx, errorHeaderIdx, "Hints should come after error header")
 
-	// Extract the section between error header and hints header.
-	errorSection := result[errorHeaderIdx:hintsHeaderIdx]
+	// Extract the section between error header and first hint.
+	errorSection := result[errorHeaderIdx:firstHintIdx]
 
-	// Error section should NOT contain hint text (hints should only be in Hints section).
+	// Error section should NOT contain hint text.
 	assert.NotContains(t, errorSection, "Check that all the context variables")
 	assert.NotContains(t, errorSection, "Are the component and stack names correct")
 
-	// But hints section should contain them.
-	hintsSection := result[hintsHeaderIdx:]
+	// But standalone hints should contain them.
+	hintsSection := result[firstHintIdx:]
 	assert.Contains(t, hintsSection, "💡")
 	assert.Contains(t, hintsSection, "Check that all the context variables")
 	assert.Contains(t, hintsSection, "Are the component and stack names correct")
@@ -718,8 +804,8 @@ func TestFormat_WithTitle_OverridesDefault(t *testing.T) {
 	// Should NOT use default title.
 	assert.NotContains(t, result, "# Error\n")
 
-	// Should still have explanation section.
-	assert.Contains(t, result, "## Explanation")
+	// Should still have explanation content without the old heading.
+	assert.NotContains(t, result, "## Explanation")
 	assert.Contains(t, result, "database server is unreachable")
 }
 
@@ -753,6 +839,169 @@ func TestFormat_MaxLineLength_ControlsWrapping(t *testing.T) {
 
 	// Narrow config should produce more line breaks than wide config.
 	assert.Greater(t, narrowLines, wideLines, "Narrow MaxLineLength should produce more line breaks")
+}
+
+func TestResolveFormatterWidth(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+	detectFormatterTerminalWidth = func() int {
+		return 0
+	}
+
+	tests := []struct {
+		name          string
+		config        FormatterConfig
+		atmosConfig   *schema.AtmosConfiguration
+		expectedWidth int
+	}{
+		{
+			name: "explicit max line length wins",
+			config: FormatterConfig{
+				MaxLineLength: 72,
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{MaxWidth: 160},
+				},
+			},
+			expectedWidth: 72,
+		},
+		{
+			name:   "terminal max width config sets auto width",
+			config: FormatterConfig{},
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{MaxWidth: 160},
+				},
+			},
+			expectedWidth: 160,
+		},
+		{
+			name:   "deprecated docs max width config is fallback",
+			config: FormatterConfig{},
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Docs: schema.Docs{MaxWidth: 140},
+				},
+			},
+			expectedWidth: 140,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig = tt.atmosConfig
+
+			assert.Equal(t, tt.expectedWidth, resolveFormatterWidth(tt.config))
+		})
+	}
+}
+
+func TestResolveFormatterWidth_CapsAtDetectedWidthWhenNarrower(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{MaxWidth: 160},
+		},
+	}
+	detectFormatterTerminalWidth = func() int {
+		return 100
+	}
+
+	// max_width is a ceiling, not a fixed width -- when the real terminal is
+	// narrower than the configured max, the narrower width must win so
+	// padded content (like the title pill) doesn't wrap onto extra lines.
+	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_UsesConfiguredWidthWhenNarrowerThanDetected(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{MaxWidth: 100},
+		},
+	}
+	detectFormatterTerminalWidth = func() int {
+		return 160
+	}
+
+	// When the terminal is wider than the configured max, the max caps it.
+	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_ConfiguredWidthWinsEvenWhenItMatchesDetected(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{MaxWidth: 80},
+		},
+	}
+	detectFormatterTerminalWidth = func() int {
+		return 80
+	}
+
+	// Configured width should still be honored even when it happens to equal
+	// the detected width -- there's no reason to distrust it in that case.
+	assert.Equal(t, 80, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_UsesDetectedWidthWhenNoConfigOverride(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = nil
+	detectFormatterTerminalWidth = func() int {
+		return 90
+	}
+
+	// With no explicit config override, the actual detected terminal width
+	// must be used -- not the hardcoded DefaultMarkdownWidth. Regression test
+	// for a bug where the detected width was computed but never returned,
+	// causing content to be padded to 120 columns in narrower terminals and
+	// wrap onto extra visual lines.
+	assert.Equal(t, 90, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_FallsBackToDefaultMarkdownWidth(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = nil
+	detectFormatterTerminalWidth = func() int {
+		return 0
+	}
+
+	assert.Equal(t, DefaultMarkdownWidth, resolveFormatterWidth(DefaultFormatterConfig()))
 }
 
 func TestFormat_UseColor_ThreadedThrough(t *testing.T) {
@@ -801,7 +1050,7 @@ func TestFormat_ExplanationWithErrorBuilder(t *testing.T) {
 		config := DefaultFormatterConfig()
 		result := Format(err, config)
 
-		assert.Contains(t, result, "## Explanation")
+		assert.NotContains(t, result, "## Explanation")
 		assert.Contains(t, result, "Failed to vendor 1 of 3 components: my-vpc")
 		assert.ErrorIs(t, err, sentinel)
 	})

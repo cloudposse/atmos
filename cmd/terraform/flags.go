@@ -56,6 +56,17 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
 		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
 	})
+	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
+	// current invocation; --skip-hooks=name1,name2 skips only the named hooks.
+	// Per-invocation only — does not propagate to nested commands.
+	registry.Register(&flags.StringFlag{
+		Name:        "skip-hooks",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name",
+		EnvVars:     []string{"ATMOS_SKIP_HOOKS"},
+		NoOptDefVal: "*", // bare --skip-hooks means "skip all".
+	})
 }
 
 // BackendExecutionFlags returns flags for commands that generate backend files or run init.
@@ -85,6 +96,13 @@ func registerProcessingFlags(registry *flags.FlagRegistry) {
 		Description: "Enable/disable YAML functions processing in Atmos stack manifests",
 		EnvVars:     []string{"ATMOS_PROCESS_FUNCTIONS"},
 	})
+	registry.Register(&flags.BoolFlag{
+		Name:        "use-mocks",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands",
+		EnvVars:     []string{"ATMOS_USE_MOCKS"},
+	})
 	registry.Register(&flags.StringSliceFlag{
 		Name:        "skip",
 		Shorthand:   "",
@@ -109,6 +127,20 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Default:     nil,
 		Description: "Filter by specific components",
 		EnvVars:     []string{"ATMOS_COMPONENTS"},
+	})
+	registry.Register(&flags.StringSliceFlag{
+		Name:        "tags",
+		Shorthand:   "",
+		Default:     nil,
+		Description: "Filter by tags (comma-separated, matches any): --tags=production,tier-1",
+		EnvVars:     []string{"ATMOS_TAGS"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "labels",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		EnvVars:     []string{"ATMOS_LABELS"},
 	})
 }
 

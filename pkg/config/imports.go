@@ -58,7 +58,7 @@ const (
 	ADAPTER importTypes = 2
 )
 
-var defaultFileSystem = filesystem.NewOSFileSystem()
+var defaultFileSystem filesystem.FileSystem = filesystem.NewOSFileSystem()
 
 // ResolvedPaths represents a resolved import path with its file location and type.
 type ResolvedPaths struct {
@@ -70,38 +70,55 @@ type ResolvedPaths struct {
 // processConfigImports It reads the import paths from the source configuration.
 // It processes imports from the source configuration and merges them into the destination configuration.
 func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) error {
-	return processConfigImportsWithFS(source, dst, defaultFileSystem)
+	_, err := processConfigImportsWithBasePathSource(source, dst)
+	return err
 }
 
 // processConfigImportsWithFS processes imports using a FileSystem implementation.
 func processConfigImportsWithFS(source *schema.AtmosConfiguration, dst *viper.Viper, fs filesystem.FileSystem) error {
+	_, err := processConfigImportsWithFSAndBasePathSource(source, dst, fs)
+	return err
+}
+
+func processConfigImportsWithBasePathSource(source *schema.AtmosConfiguration, dst *viper.Viper) (string, error) {
+	return processConfigImportsWithFSAndBasePathSource(source, dst, defaultFileSystem)
+}
+
+func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfiguration, dst *viper.Viper, fs filesystem.FileSystem) (string, error) {
 	if source == nil || dst == nil {
-		return errUtils.ErrSourceDestination
+		return "", errUtils.ErrSourceDestination
 	}
 	if len(source.Import) == 0 {
-		return nil
+		return "", nil
 	}
 	importPaths := source.Import
-	basePath, err := filepath.Abs(source.BasePath)
-	if err != nil {
-		return err
-	}
 	tempDir, err := fs.MkdirTemp("", "atmos-import-*")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() {
 		if err := fs.RemoveAll(tempDir); err != nil {
 			log.Debug("Failed to remove temp directory", "path", tempDir, "error", err)
 		}
 	}()
-	resolvedPaths, err := processImports(basePath, importPaths, tempDir, 1, MaximumImportLvL)
+	// processImports resolves source.BasePath to an absolute path itself and rejects
+	// an empty base path, so no redundant filepath.Abs is needed here.
+	resolvedPaths, err := processImports(source, source.BasePath, importPaths, tempDir, 1, MaximumImportLvL)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
+	return mergeResolvedImports(resolvedPaths, dst, fs), nil
+}
+
+// mergeResolvedImports merges each resolved import file into dst and returns the
+// directory of the last imported file that declares a base_path (empty if none).
+// Files that fail to merge or re-read are skipped so a single bad import does not
+// abort the whole configuration load.
+func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem) string {
+	basePathSourceDir := ""
 	for _, resolvedPath := range resolvedPaths {
 		// Trace: log what we're about to merge (sanitized).
 		log.Trace("attempting to merge import", "import", sanitizeImport(resolvedPath.ImportPaths), "file_path", resolvedPath.FilePath)
@@ -111,18 +128,30 @@ func processConfigImportsWithFS(source *schema.AtmosConfiguration, dst *viper.Vi
 			continue
 		}
 		log.Trace("successfully merged config from import", "import", sanitizeImport(resolvedPath.ImportPaths), "file_path", resolvedPath.FilePath)
+		content, readErr := fs.ReadFile(resolvedPath.FilePath)
+		if readErr != nil {
+			continue
+		}
+		declaresBasePath, _, parseErr := importBasePathDeclaration(content)
+		if parseErr == nil && declaresBasePath {
+			basePathSourceDir = filepath.Dir(resolvedPath.FilePath)
+		}
 	}
-
-	return nil
+	return basePathSourceDir
 }
 
 // ProcessImportsFromAdapter is the public entry point for adapters to process nested imports.
 // Adapters should call this when they discover nested import statements in resolved configs.
-func ProcessImportsFromAdapter(basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
-	return processImports(basePath, importPaths, tempDir, currentDepth, maxDepth)
+// The atmosConfig parameter is threaded through so nested remote imports honor auth settings
+// (GitHub token injection and the Atmos Pro credential broker); it may be nil.
+//
+//nolint:revive // argument-limit: atmosConfig threaded through for remote-import auth.
+func ProcessImportsFromAdapter(atmosConfig *schema.AtmosConfiguration, basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
+	return processImports(atmosConfig, basePath, importPaths, tempDir, currentDepth, maxDepth)
 }
 
-func processImports(basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
+//nolint:revive // argument-limit: atmosConfig threaded through for remote-import auth.
+func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
 	if basePath == "" {
 		return nil, errUtils.ErrBasePath
 	}
@@ -150,7 +179,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 
 		// Use the adapter registry to find the appropriate adapter.
 		adapter := FindImportAdapter(importPath)
-		paths, resolveErr = adapter.Resolve(ctx, importPath, basePath, tempDir, currentDepth, maxDepth)
+		paths, resolveErr = adapter.Resolve(ctx, importPath, basePath, tempDir, currentDepth, maxDepth, atmosConfig)
 
 		if resolveErr != nil {
 			log.Debug("failed to resolve import", "path", importPath, "error", resolveErr)

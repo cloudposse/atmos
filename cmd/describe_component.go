@@ -49,6 +49,7 @@ type describeComponentFlags struct {
 	file                 string
 	processTemplates     bool
 	processYamlFunctions bool
+	useMocks             bool
 	query                string
 	skip                 []string
 	provenance           bool
@@ -73,6 +74,9 @@ func parseDescribeComponentFlags(cmd *cobra.Command) (describeComponentFlags, er
 		return f, err
 	}
 	if f.processYamlFunctions, err = flags.GetBool("process-functions"); err != nil {
+		return f, err
+	}
+	if f.useMocks, err = flags.GetBool("use-mocks"); err != nil {
 		return f, err
 	}
 	if f.query, err = flags.GetString("query"); err != nil {
@@ -151,7 +155,7 @@ func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 		}
 	}
 
-	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig)
+	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig, p.stack)
 }
 
 func getRunnableDescribeComponentCmd(
@@ -169,6 +173,9 @@ func getRunnableDescribeComponentCmd(
 		f, err := parseDescribeComponentFlags(cmd)
 		if err != nil {
 			return err
+		}
+		if f.useMocks && !f.processYamlFunctions {
+			return fmt.Errorf("%w: --use-mocks requires --process-functions=true", errUtils.ErrInvalidFlagValue)
 		}
 
 		component := args[0]
@@ -206,6 +213,7 @@ func getRunnableDescribeComponentCmd(
 			Stack:                f.stack,
 			ProcessTemplates:     f.processTemplates,
 			ProcessYamlFunctions: f.processYamlFunctions,
+			UseMocks:             f.useMocks,
 			Skip:                 f.skip,
 			Query:                f.query,
 			Format:               f.format,
@@ -246,6 +254,7 @@ func init() {
 	describeComponentCmd.PersistentFlags().String("file", "", "Write the result to the file")
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	describeComponentCmd.PersistentFlags().Bool("use-mocks", false, "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
 

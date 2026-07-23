@@ -1,11 +1,23 @@
-import:
-  # Import the `ue2` manifest with `vpc` configuration for `us-east-2` region
-  - catalog/vpc/ue2
-  # All accounts (stages) in `us-east-2` region will have the `vpc-flow-logs-bucket` component
-  - catalog/vpc-flow-logs-bucket/defaults
-
 vars:
   region: us-east-2
   environment: ue2
 
-# Other defaults for the `us-east-2` region
+# Literal producer outputs used by `terraform plan --use-mocks`. Keep them in
+# the regional mixin so a cold plan has provider-shaped values for this region.
+components:
+  terraform:
+    kms-key:
+      mocks:
+        key_arn: arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000
+    s3-bucket:
+      mocks:
+        bucket_id: mock-assets
+    dynamodb-table:
+      mocks:
+        table_name: mock-state
+    sns-topic:
+      mocks:
+        topic_arn: arn:aws:sns:us-east-2:000000000000:mock-events
+    sqs-queue:
+      mocks:
+        queue_url: http://localhost:4566/000000000000/mock-events

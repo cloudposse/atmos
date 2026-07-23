@@ -1,0 +1,50 @@
+---
+date: 2026-07-06T12:00:00.000Z
+slug: topic-specific-cli-help
+title: "Topic-Specific CLI Help"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Atmos help showed too much at once. A simple command like `atmos terraform plan --help` explained the command, its examples, its own flags, compatibility flags, and every inherited global flag, which made the options you actually needed harder to find.
+
+Topic-specific help fixes that by making default help focused, while keeping usage examples, command flags, and the full reference one flag away.
+
+<!--truncate-->
+
+## What Changed
+
+Default `--help` now shows the command description, usage, examples, subcommands, and flags for that command. Atmos no longer dumps every inherited global flag by default, so command-specific options stay visible.
+
+When you need a narrower or broader view, use a help topic:
+
+```shell
+atmos terraform plan --help=usage
+atmos terraform plan --help=flags
+atmos terraform plan --help=all
+```
+
+`--help=usage` shows just usage and examples. `--help=flags` shows command-specific flags, plus compatibility flags when Atmos forwards options to a native tool. `--help=all` restores the full reference view, including global flags.
+
+Every default help page includes a short reminder:
+
+```text
+Use --help=usage for examples or --help=all for all flags and full help.
+```
+
+## Why It Matters
+
+- **Less noise by default.** Atmos still exposes global flags, but they no longer bury the flags that actually change the command you are reading about.
+- **Examples are one command away.** Atmos already maintains usage snippets in markdown help files, and those snippets now have their own focused view.
+- **Full reference stays available.** `--help=all` keeps the exhaustive output available for scripting, documentation, and deep inspection.
+
+## Try It
+
+Compare the focused and full views:
+
+```shell
+atmos terraform plan --help
+atmos terraform plan --help=all
+```
+
+Use `--help=usage` when you only need examples, and `--help=flags` when you are checking command-specific options.

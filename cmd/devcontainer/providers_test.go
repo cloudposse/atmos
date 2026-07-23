@@ -1,8 +1,6 @@
 package devcontainer
 
 import (
-	"bytes"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -308,72 +306,4 @@ func TestDefaultUIProvider_Prompt(t *testing.T) {
 // TestDefaultUIProvider_Confirm is skipped because it requires interactive input.
 func TestDefaultUIProvider_Confirm(t *testing.T) {
 	t.Skip("Confirm requires interactive terminal and user input")
-}
-
-// TestDefaultUIProvider_Output tests output writer.
-func TestDefaultUIProvider_Output(t *testing.T) {
-	provider := &DefaultUIProvider{}
-
-	writer := provider.Output()
-
-	require.NotNil(t, writer)
-	assert.Equal(t, os.Stderr, writer)
-}
-
-// TestDefaultUIProvider_Error tests error writer.
-func TestDefaultUIProvider_Error(t *testing.T) {
-	provider := &DefaultUIProvider{}
-
-	writer := provider.Error()
-
-	require.NotNil(t, writer)
-	assert.Equal(t, os.Stderr, writer)
-}
-
-// TestDefaultUIProvider_OutputWritable tests writing to output.
-func TestDefaultUIProvider_OutputWritable(t *testing.T) {
-	provider := &DefaultUIProvider{}
-
-	// Capture stderr to verify writing works.
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
-	_, err = provider.Output().Write([]byte("test output\n"))
-	require.NoError(t, err)
-
-	// Restore stderr.
-	w.Close()
-	os.Stderr = oldStderr
-
-	// Read what was written.
-	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
-
-	assert.Contains(t, buf.String(), "test output")
-}
-
-// TestDefaultUIProvider_ErrorWritable tests writing to error output.
-func TestDefaultUIProvider_ErrorWritable(t *testing.T) {
-	provider := &DefaultUIProvider{}
-
-	// Capture stderr to verify writing works.
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
-	_, err = provider.Error().Write([]byte("test error\n"))
-	require.NoError(t, err)
-
-	// Restore stderr.
-	w.Close()
-	os.Stderr = oldStderr
-
-	// Read what was written.
-	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
-
-	assert.Contains(t, buf.String(), "test error")
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -108,6 +109,92 @@ func TestCommandEngine_CapturesOutputFile(t *testing.T) {
 	assert.Equal(t, "command", out.Artifact.Metadata["kind"])
 	assert.Equal(t, "test-stack", out.Artifact.Metadata["stack"])
 	assert.Equal(t, "test-component", out.Artifact.Metadata["component"])
+}
+
+// runEngineWithKind runs the CommandEngine for a hook under a caller-supplied
+// kind, so tests can exercise kind-level behavior such as CaptureStdout.
+func runEngineWithKind(t *testing.T, kind *Kind, hook *Hook) (*Output, error) {
+	t.Helper()
+	resolved := kind.ResolveDefaults(hook)
+	ctx := &ExecContext{
+		Hook: resolved,
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: t.TempDir(),
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "test-stack",
+			ComponentFromArg: "test-component",
+		},
+	}
+	return kind.Engine.Run(ctx)
+}
+
+func TestCommandEngine_CaptureStdoutWritesToOutputFile(t *testing.T) {
+	// A tool (tflint) that emits structured output to STDOUT with no
+	// file-output flag: with CaptureStdout the engine redirects stdout into
+	// ATMOS_OUTPUT_FILE, so captureOutput reads it back as the artifact body.
+	const body = `{"runs":[{"tool":{"driver":{"name":"tflint"}}}]}`
+	exe := testExePath(t)
+	kind := &Kind{
+		Name:          "command",
+		OnFailure:     OnFailureWarn,
+		Engine:        &CommandEngine{},
+		CaptureStdout: true,
+	}
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_ECHO_STDOUT": "1",
+			"_ATMOS_TEST_STDOUT_BODY": body,
+		},
+	}
+	out, err := runEngineWithKind(t, kind, hook)
+	require.NoError(t, err)
+	require.NotNil(t, out.Artifact, "stdout should have been captured into the output file")
+	assert.Equal(t, body, string(out.Artifact.Body))
+}
+
+func TestCommandEngine_NoCaptureStdoutLeavesOutputFileEmpty(t *testing.T) {
+	// Negative path: without CaptureStdout the same stdout streams to the
+	// terminal and never reaches the output file, so no artifact is produced.
+	const body = `should not be captured`
+	exe := testExePath(t)
+	kind := &Kind{
+		Name:      "command",
+		OnFailure: OnFailureWarn,
+		Engine:    &CommandEngine{},
+		// CaptureStdout intentionally left false.
+	}
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_ECHO_STDOUT": "1",
+			"_ATMOS_TEST_STDOUT_BODY": body,
+		},
+	}
+	out, err := runEngineWithKind(t, kind, hook)
+	require.NoError(t, err)
+	assert.Nil(t, out.Artifact, "without CaptureStdout, stdout must not be written to the output file")
+}
+
+func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {
+	exe := testExePath(t)
+	prep := &subprocessPrep{
+		binary: exe,
+		args:   []string{"-test.run", "^$"},
+		env:    os.Environ(),
+		// The parent directory does not exist, so os.Create must fail.
+		captureStdoutPath: filepath.Join(t.TempDir(), "missing-dir", "output"),
+	}
+
+	err := runSubprocess(prep)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCreateFile)
 }
 
 func TestCaptureOutput_AllowsNilInfo(t *testing.T) {
@@ -247,6 +334,47 @@ func TestPrepareSubprocess_MissingCommandReturnsCommandNotFound(t *testing.T) {
 	_, err := prepareSubprocess(ctx, t.TempDir(), filepath.Join(t.TempDir(), "output"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestPrepareSubprocess_PropagatesCILogGroupSentinel(t *testing.T) {
+	t.Setenv("ATMOS_CI_LOG_GROUP_ACTIVE", "")
+	prev := shouldPropagateHookLogGroupSentinel
+	t.Cleanup(func() { shouldPropagateHookLogGroupSentinel = prev })
+
+	tests := []struct {
+		name      string
+		propagate bool
+		want      bool
+	}{
+		{name: "propagates when hook group is active", propagate: true, want: true},
+		{name: "does not propagate when hook group is inactive", propagate: false, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shouldPropagateHookLogGroupSentinel = func(*schema.AtmosConfiguration, ci.Dimension) bool {
+				return tt.propagate
+			}
+
+			ctx := &ExecContext{
+				Hook: &Hook{
+					Kind:    "command",
+					Command: testExePath(t),
+				},
+				Kind:        &Kind{Name: "command"},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+
+			prep, err := prepareSubprocess(ctx, t.TempDir(), filepath.Join(t.TempDir(), "output"))
+			require.NoError(t, err)
+
+			if tt.want {
+				assert.Contains(t, prep.env, ci.LogGroupSentinelEnv())
+			} else {
+				assert.NotContains(t, prep.env, ci.LogGroupSentinelEnv())
+			}
+		})
+	}
 }
 
 func TestResolveBinaryOnPath_RejectsNonExecutableUnixFile(t *testing.T) {

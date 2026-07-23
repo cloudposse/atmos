@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: components
 description: Use this command to list Atmos components
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -15,7 +15,7 @@ Use this command to list all components in your Atmos configuration, optionally 
 
 <DemoVideo id="list-components" title="atmos list components" showCaption={false} />
 
-<Screengrab title="atmos list components --help" slug="atmos-list-components--help" />
+<CastPlayer title="atmos list components --help" src="/casts/screengrabs/atmos-list-components--help.cast" static chrome />
 
 ## Usage
 
@@ -61,6 +61,18 @@ atmos list components --enabled=true
 
 # List only locked components
 atmos list components --locked=true
+```
+
+Filter by tags and labels:
+```shell
+# List components tagged production or tier-1 (matches any)
+atmos list components --tags production,tier-1
+
+# List components labeled cost-center=platform (matches all given labels)
+atmos list components --labels cost-center=platform
+
+# Combine tags and labels
+atmos list components --tags production,tier-1 --labels cost-center=platform
 ```
 
 Include abstract components:
@@ -170,6 +182,12 @@ This means you can write simple `select()` expressions without worrying about th
   <dt>`--query` / `-q`</dt>
   <dd>Filter results using YQ expressions. Supports simplified syntax like `select(.locked == true)` which is automatically normalized. See the [YQ documentation](https://mikefarah.gitbook.io/yq) for expression syntax.<br/>Environment variable: `ATMOS_LIST_QUERY`</dd>
 
+  <dt>`--tags`</dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
   <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
 
@@ -181,6 +199,9 @@ This means you can write simple `select()` expressions without worrying about th
 
   <dt>`--skip`</dt>
   <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
+
+  <dt>`--on-error`</dt>
+  <dd>How to handle a recoverable YAML-function error, such as a Terraform backend that has not been provisioned yet (default `strict`). `strict` fails the command on the first such error. `warn` substitutes `null` for the unresolved value, prints a warning naming the stack/component/function, and continues processing the rest of the components. Errors unrelated to backend provisioning (auth failures, malformed YAML, etc.) still fail the command in either mode.<br/>Environment variable: `ATMOS_LIST_ON_ERROR`</dd>
 </dl>
 
 ## Configuration

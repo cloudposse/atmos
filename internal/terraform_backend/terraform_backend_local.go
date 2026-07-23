@@ -35,7 +35,12 @@ func ReadTerraformBackendLocal(
 	componentPath := resolveLocalBackendComponentPath(atmosConfig, componentSections)
 
 	var tfStateFilePath string
-	if workspace == "" || workspace == "default" {
+	if backendPath := configuredLocalBackendPath(componentSections); backendPath != "" {
+		tfStateFilePath = backendPath
+		if !filepath.IsAbs(tfStateFilePath) {
+			tfStateFilePath = filepath.Join(componentPath, tfStateFilePath)
+		}
+	} else if workspace == "" || workspace == "default" {
 		// Default workspace: state is stored directly at terraform.tfstate.
 		tfStateFilePath = filepath.Join(componentPath, "terraform.tfstate")
 	} else {
@@ -62,6 +67,20 @@ func ReadTerraformBackendLocal(
 	}
 
 	return content, nil
+}
+
+func configuredLocalBackendPath(sections *map[string]any) string {
+	backend := GetComponentBackend(sections)
+	if backend == nil {
+		return ""
+	}
+	if path := GetBackendAttribute(&backend, "path"); path != "" {
+		return path
+	}
+	if localBackend, ok := backend["local"].(map[string]any); ok {
+		return GetBackendAttribute(&localBackend, "path")
+	}
+	return ""
 }
 
 // resolveLocalBackendComponentPath returns the directory that contains the local

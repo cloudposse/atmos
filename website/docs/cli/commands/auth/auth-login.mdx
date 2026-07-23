@@ -6,7 +6,7 @@ sidebar_position: 3
 id: login
 description: Authenticate to cloud providers using an identity defined in atmos.yaml.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -16,12 +16,12 @@ Authenticate with a configured identity using SSO, SAML, OIDC, or static credent
 
 <DemoVideo id="auth-login" title="atmos auth login" showCaption={false} />
 
-<Screengrab title="atmos auth login --help" slug="atmos-auth-login--help" />
+<CastPlayer title="atmos auth login --help" src="/casts/screengrabs/atmos-auth-login--help.cast" static chrome />
 
 ## Usage
 
 ```shell
-atmos auth login [--identity <name>]
+atmos auth login [--identity <name>] [--tags <tags>]
 ```
 
 ## Examples
@@ -41,6 +41,9 @@ atmos auth login -i admin
 
 # Interactive selection with short form
 atmos auth login -i
+
+# Login using tags (auto-selects if exactly one identity matches, otherwise shows a picker)
+atmos auth login --tags admin,production
 ```
 
 ## Arguments
@@ -78,6 +81,19 @@ atmos auth login -i
     When no identities are configured and no `--provider` flag is specified, Atmos automatically
     falls back to provider authentication: a single provider is auto-selected, multiple providers
     prompt for selection (interactive) or require `--provider` flag (non-interactive).
+  </dd>
+
+  <dt>`--tags`</dt>
+  <dd>
+    Filter identities by tags (comma-separated, matches any): `--tags admin,production`. Identities are tagged via an optional `tags: [...]` list in `atmos.yaml`.
+
+    - **Exactly one match**: Atmos automatically authenticates with that identity
+    - **Multiple matches**: Shows an interactive picker restricted to the matching identities
+    - **No matches**: Returns an error listing the available tags
+
+    ```shell
+    atmos auth login --tags admin,production
+    ```
   </dd>
 </dl>
 

@@ -216,6 +216,93 @@ func TestNormalizeLineEndings(t *testing.T) {
 	}
 }
 
+func TestNormalizeSnapshotOutputUnwrapsMarkdownProse(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name: "invalid command prose",
+			input: "**Error:** The atmos invalidCommand command has no steps or subcommands\n" +
+				"configured.\n",
+			expected: "**Error:** The atmos invalidCommand command has no steps or subcommands configured.\n",
+		},
+		{
+			name: "flag split after dash",
+			input: "**Error:** stack is required; specify it on the command line using the flag --\n" +
+				"stack <stack> (shorthand -s)\n",
+			expected: "**Error:** stack is required; specify it on the command line using the flag -- stack <stack> (shorthand -s)\n",
+		},
+		{
+			name: "key value continuation",
+			input: "**Error:** ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion?\n" +
+				"current=11, max=10\n",
+			expected: "**Error:** ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion? current=11, max=10\n",
+		},
+		{
+			name: "hint prose",
+			input: "💡 Run atmos list stacks to see all available stacks. Verify the stack name\n" +
+				"matches your stack manifest files\n",
+			expected: "💡 Run atmos list stacks to see all available stacks. Verify the stack name matches your stack manifest files\n",
+		},
+		{
+			name: "preserves yaml-like output",
+			input: "settings:\n" +
+				"  terminal:\n" +
+				"    max_width: 80\n",
+			expected: "settings:\n" +
+				"  terminal:\n" +
+				"    max_width: 80\n",
+		},
+		{
+			name: "preserves fenced content",
+			input: "```\n" +
+				"this long shell command should stay split because it is inside a code\n" +
+				"fence\n" +
+				"```\n",
+			expected: "```\n" +
+				"this long shell command should stay split because it is inside a code\n" +
+				"fence\n" +
+				"```\n",
+		},
+		{
+			name:     "normalizes final blank lines",
+			input:    "Usage:\n\n",
+			expected: "Usage:\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeSnapshotOutput(tt.input, false)
+			if got != tt.expected {
+				t.Errorf("normalizeSnapshotOutput() mismatch:\nExpected: %q\nGot:      %q", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestNormalizeSnapshotOutputHonorsIgnoreTrailingWhitespace(t *testing.T) {
+	input := "line1  \r\nline2\t\r\nProgress\r"
+
+	t.Run("preserves trailing whitespace by default", func(t *testing.T) {
+		got := normalizeSnapshotOutput(input, false)
+		expected := "line1  \nline2\t\nProgress\r"
+		if got != expected {
+			t.Errorf("normalizeSnapshotOutput() mismatch:\nExpected: %q\nGot:      %q", expected, got)
+		}
+	})
+
+	t.Run("strips trailing spaces and tabs when enabled", func(t *testing.T) {
+		got := normalizeSnapshotOutput(input, true)
+		expected := "line1\nline2\nProgress\r"
+		if got != expected {
+			t.Errorf("normalizeSnapshotOutput() mismatch:\nExpected: %q\nGot:      %q", expected, got)
+		}
+	})
+}
+
 // TestSnapshotRoundTripWithNormalization verifies that CRLF content is normalized
 // when written and read back.
 func TestSnapshotRoundTripWithNormalization(t *testing.T) {

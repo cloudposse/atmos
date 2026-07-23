@@ -17,6 +17,22 @@
 # are considered paths relative to 'base_path'.
 base_path: "."
 
+# Toolchain management configures HOW required tools are installed; WHICH tools and
+# versions are declared in the stacks via `dependencies.tools` (e.g. OpenTofu in
+# stacks/orgs/acme/_defaults.yaml). Tools are resolved from the Aqua registry and
+# locked in `toolchain.lock.yaml` (commit it) for reproducible installs.
+# https://atmos.tools/cli/commands/toolchain
+toolchain:
+  # Where installed tool binaries live (relative to the base path).
+  install_path: .tools
+  # Resolve installs against the committed lockfile for reproducibility.
+  use_lock_file: true
+  registries:
+    # The official Aqua registry provides metadata for standard tools (opentofu, …).
+    - name: aqua
+      type: aqua
+      priority: 100
+
 components:
   terraform:
     # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
@@ -28,7 +44,19 @@ components:
     # command: tofu
     # command: /usr/local/bin/tofu-1.7.1
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_COMMAND' ENV var, or '--terraform-command' command-line argument
-    command: terraform
+    # This example uses OpenTofu (pinned via the toolchain below and `dependencies.tools`).
+    command: tofu
+    # Keep provider lockfiles complete for local development and CI platforms.
+    # The post-init providers-lock hook uses this list when a provider cache or
+    # mirror causes OpenTofu to record only host-platform checksums.
+    platforms:
+      - darwin_arm64
+      - linux_amd64
+    # Cache provider and module registry downloads behind Atmos's local registry
+    # proxy. The first init warms the cache; repeated plans avoid re-downloading
+    # the same artifacts.
+    cache:
+      enabled: true
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "components/terraform"
@@ -39,21 +67,9 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
     init_run_reconfigure: true
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+    # Generate `backend.tf.json` per component so OpenTofu uses the S3 backend
+    # (provisioned in the emulator via `provision.backend.enabled`).
     auto_generate_backend_file: true
-  helmfile:
-    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
-    # Supports both absolute and relative paths
-    base_path: "components/helmfile"
-    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
-    # If not specified, defaults to 'false'. Set to 'true' to enable EKS integration.
-    use_eks: true
-    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
-    kubeconfig_path: "/dev/shm"
-    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_TEMPLATE' ENV var
-    # Uses Go template syntax with access to component vars
-    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
-    # For AWS authentication, use the --identity flag with helmfile commands:
-    # atmos helmfile apply my-component -s prod --identity=prod-admin
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
@@ -65,118 +81,171 @@ stacks:
   # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
   excluded_paths:
     - "**/_defaults.yaml"
-  # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
-  name_pattern: "{tenant}-{environment}-{stage}"
+  # Can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  name_template: "{{ if eq .vars.stage \"local\" }}local{{ else }}{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}{{ end }}"
 
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
   # Supports both absolute and relative paths
   base_path: "stacks/workflows"
 
+# Authentication identities.
+# The `local-aws` identity targets the `local/aws` emulator instance. Identities
+# are project-scoped, so every platform stack can use this one local sandbox.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: local/aws
+      default: true
+
+# Stores for sharing data between components and for storing secrets.
+# All stores authenticate to the local AWS emulator via the `local-aws` identity.
+stores:
+  config/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    options:
+      region: us-east-1
+      prefix: /atmos/quickstart/config
+  secrets/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    secret: true
+    options:
+      region: us-east-1
+      prefix: /atmos/quickstart/secrets
+  secrets/asm:
+    kind: aws/asm
+    identity: local-aws
+    secret: true
+    options:
+      region: us-east-1
+      prefix: /atmos/quickstart/secrets
+
 logs:
-  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
-  # File or standard file descriptor to write logs to
-  # Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`
-  file: "/dev/stderr"
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 
 # Custom CLI commands
 commands:
-  - name: tf
-    description: Execute 'terraform' commands
-    # subcommands
-    commands:
+  - name: test
+    description: Run the advanced quick-start stack end to end
+    flags:
+      - name: stack
+        shorthand: s
+        description: Target stack (for example, plat-ue2-dev)
+        required: true
+    steps:
+      - name: sandbox
+        type: stage
+        title: Start sandbox
+      - type: shell
+        command: atmos emulator up aws -s local
+      - name: validate
+        type: stage
+        title: Validate stack manifests
+      - type: shell
+        command: atmos validate stacks
+      - name: secrets
+        type: stage
+        title: Seed required secrets
+      - type: shell
+        command: atmos secret set API_KEY=sk-quickstart-example -s {{ .Flags.stack }} -c app-config --force
+      - type: shell
+        command: atmos secret set 'DB_CONFIG={"username":"app","password":"s3cr3t"}' -s {{ .Flags.stack }} -c app-config --force
       - name: plan
-        description: This command plans terraform components
-        arguments:
-          - name: component
-            description: Name of the component
-        flags:
-          - name: stack
-            shorthand: s
-            description: Name of the stack
-            required: true
-        env:
-          - key: ENV_VAR_1
-            value: ENV_VAR_1_value
-          - key: ENV_VAR_2
-            # 'valueCommand' is an external command to execute to get the value for the ENV var
-            # Either 'value' or 'valueCommand' can be specified for the ENV var, but not both
-            valueCommand: echo ENV_VAR_2_value
-        # steps support Go templates
-        steps:
-          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
-  - name: terraform
-    description: Execute 'terraform' commands
-    # subcommands
+        type: stage
+        title: Plan component graph
+      - type: shell
+        command: atmos terraform plan --all -s {{ .Flags.stack }} || [ "$?" -eq 2 ]
+      - name: deploy
+        type: stage
+        title: Deploy component graph
+      - type: shell
+        command: atmos terraform deploy --all -s {{ .Flags.stack }}
+      - name: inspect
+        type: stage
+        title: Inspect deployed configuration
+      - type: shell
+        command: atmos terraform output app-config -s {{ .Flags.stack }}
+      - type: shell
+        command: atmos describe component app-config -s {{ .Flags.stack }} --provenance
+      - name: destroy
+        type: stage
+        title: Destroy component graph
+      - type: shell
+        command: atmos terraform destroy --all -s {{ .Flags.stack }} -auto-approve
+      - name: stop
+        type: stage
+        title: Stop sandbox
+      - type: shell
+        command: atmos emulator down aws -s local
+      - type: toast
+        level: success
+        content: "Advanced quick-start test complete."
+  - name: operator
+    description: Operator shortcuts for exploring and running the quick-start stack
     commands:
-      - name: provision
-        description: This command provisions terraform components
-        arguments:
-          - name: component
-            description: Name of the component
+      - name: status
+        description: Show the stack/component tree and next operator checks
         flags:
           - name: stack
             shorthand: s
-            description: Name of the stack
+            description: Target stack (for example, plat-ue2-dev)
             required: true
-        # ENV var values support Go templates
-        env:
-          - key: ATMOS_COMPONENT
-            value: "{{ .Arguments.component }}"
-          - key: ATMOS_STACK
-            value: "{{ .Flags.stack }}"
         steps:
-          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
-          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
-  - name: show
-    description: Execute 'show' commands
-    # subcommands
-    commands:
-      - name: component
-        description: Execute 'show component' command
+          - name: stacks
+            type: stage
+            title: Stack import tree
+          - type: shell
+            command: atmos list stacks --format tree --provenance
+          - name: instances
+            type: stage
+            title: Component instances in {{ .Flags.stack }}
+          - type: shell
+            command: atmos list instances --stack {{ .Flags.stack }} --format tree --provenance
+          - name: catalog
+            type: stage
+            title: Component catalog
+          - type: spin
+            title: Resolving component catalog
+            command: atmos list components
+          - type: table
+            title: Next operator commands
+            columns:
+              - task
+              - command
+            data:
+              - task: Validate manifests
+                command: atmos validate stacks
+              - task: Deploy stack
+                command: atmos terraform deploy --all -s {{ .Flags.stack }}
+              - task: Destroy stack
+                command: atmos terraform destroy --all -s {{ .Flags.stack }} -auto-approve
+          - type: toast
+            level: success
+            content: "Operator status complete for {{ .Flags.stack }}."
+      - name: inspect
+        description: Inspect a component and show where its values came from
         arguments:
           - name: component
-            description: Name of the component
+            description: Component to inspect
         flags:
           - name: stack
             shorthand: s
-            description: Name of the stack
+            description: Target stack (for example, plat-ue2-dev)
             required: true
-        # ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-        env:
-          - key: ATMOS_COMPONENT
-            value: "{{ .Arguments.component }}"
-          - key: ATMOS_STACK
-            value: "{{ .Flags.stack }}"
-          - key: ATMOS_TENANT
-            value: "{{ .ComponentConfig.vars.tenant }}"
-          - key: ATMOS_STAGE
-            value: "{{ .ComponentConfig.vars.stage }}"
-          - key: ATMOS_ENVIRONMENT
-            value: "{{ .ComponentConfig.vars.environment }}"
-        # If a custom command defines 'component_config' section with 'component' and 'stack', 'atmos' generates the config for the component in the stack
-        # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
-        # exposing all the component sections (which are also shown by 'atmos describe component' command)
-        component_config:
-          component: "{{ .Arguments.component }}"
-          stack: "{{ .Flags.stack }}"
-        # Steps support using Go templates and can access all configuration settings (e.g. {{ .ComponentConfig.xxx.yyy.zzz }})
-        # Steps also have access to the ENV vars defined in the 'env' section of the 'command'
         steps:
-          - 'echo Atmos component from argument: "{{ .Arguments.component }}"'
-          - 'echo ATMOS_COMPONENT: "$ATMOS_COMPONENT"'
-          - 'echo Atmos stack: "{{ .Flags.stack }}"'
-          - 'echo Terraform component: "{{ .ComponentConfig.component }}"'
-          - 'echo Backend S3 bucket: "{{ .ComponentConfig.backend.bucket }}"'
-          - 'echo Terraform workspace: "{{ .ComponentConfig.workspace }}"'
-          - 'echo Namespace: "{{ .ComponentConfig.vars.namespace }}"'
-          - 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
-          - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
-          - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
-          - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
+          - name: provenance
+            type: stage
+            title: Component configuration provenance
+          - type: shell
+            command: atmos describe component {{ .Arguments.component }} -s {{ .Flags.stack }} --provenance
+          - type: toast
+            level: info
+            content: "Use `atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}` to preview changes, or omit the component/stack in an interactive terminal and Atmos will prompt you."
 
 # Validation schemas (for validating atmos stacks and components)
 schemas:
@@ -221,6 +290,7 @@ templates:
       datasources: {}
 
 settings:
+  experimental: silence
   # `list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
   # Can also be set using 'ATMOS_SETTINGS_LIST_MERGE_STRATEGY' environment variable, or '--settings-list-merge-strategy' command-line argument
   # The following strategies are supported:

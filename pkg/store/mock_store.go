@@ -82,3 +82,248 @@ func (mr *MockStoreMockRecorder) Set(stack, component, key, value any) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockStore)(nil).Set), stack, component, key, value)
 }
+
+// MockDeletableStore is a mock of DeletableStore interface.
+type MockDeletableStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockDeletableStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockDeletableStoreMockRecorder is the mock recorder for MockDeletableStore.
+type MockDeletableStoreMockRecorder struct {
+	mock *MockDeletableStore
+}
+
+// NewMockDeletableStore creates a new mock instance.
+func NewMockDeletableStore(ctrl *gomock.Controller) *MockDeletableStore {
+	mock := &MockDeletableStore{ctrl: ctrl}
+	mock.recorder = &MockDeletableStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDeletableStore) EXPECT() *MockDeletableStoreMockRecorder {
+	return m.recorder
+}
+
+// Delete mocks base method.
+func (m *MockDeletableStore) Delete(stack, component, key string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", stack, component, key)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockDeletableStoreMockRecorder) Delete(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockDeletableStore)(nil).Delete), stack, component, key)
+}
+
+// Get mocks base method.
+func (m *MockDeletableStore) Get(stack, component, key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", stack, component, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockDeletableStoreMockRecorder) Get(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockDeletableStore)(nil).Get), stack, component, key)
+}
+
+// GetKey mocks base method.
+func (m *MockDeletableStore) GetKey(key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKey", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKey indicates an expected call of GetKey.
+func (mr *MockDeletableStoreMockRecorder) GetKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockDeletableStore)(nil).GetKey), key)
+}
+
+// Set mocks base method.
+func (m *MockDeletableStore) Set(stack, component, key string, value any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", stack, component, key, value)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockDeletableStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockDeletableStore)(nil).Set), stack, component, key, value)
+}
+
+// MockStatusStore is a mock of StatusStore interface.
+type MockStatusStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockStatusStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockStatusStoreMockRecorder is the mock recorder for MockStatusStore.
+type MockStatusStoreMockRecorder struct {
+	mock *MockStatusStore
+}
+
+// NewMockStatusStore creates a new mock instance.
+func NewMockStatusStore(ctrl *gomock.Controller) *MockStatusStore {
+	mock := &MockStatusStore{ctrl: ctrl}
+	mock.recorder = &MockStatusStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockStatusStore) EXPECT() *MockStatusStoreMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockStatusStore) Get(stack, component, key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", stack, component, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockStatusStoreMockRecorder) Get(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStatusStore)(nil).Get), stack, component, key)
+}
+
+// GetKey mocks base method.
+func (m *MockStatusStore) GetKey(key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKey", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKey indicates an expected call of GetKey.
+func (mr *MockStatusStoreMockRecorder) GetKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockStatusStore)(nil).GetKey), key)
+}
+
+// Has mocks base method.
+func (m *MockStatusStore) Has(stack, component, key string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Has", stack, component, key)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Has indicates an expected call of Has.
+func (mr *MockStatusStoreMockRecorder) Has(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockStatusStore)(nil).Has), stack, component, key)
+}
+
+// Set mocks base method.
+func (m *MockStatusStore) Set(stack, component, key string, value any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", stack, component, key, value)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockStatusStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockStatusStore)(nil).Set), stack, component, key, value)
+}
+
+// MockSecretAwareStore is a mock of SecretAwareStore interface.
+type MockSecretAwareStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockSecretAwareStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockSecretAwareStoreMockRecorder is the mock recorder for MockSecretAwareStore.
+type MockSecretAwareStoreMockRecorder struct {
+	mock *MockSecretAwareStore
+}
+
+// NewMockSecretAwareStore creates a new mock instance.
+func NewMockSecretAwareStore(ctrl *gomock.Controller) *MockSecretAwareStore {
+	mock := &MockSecretAwareStore{ctrl: ctrl}
+	mock.recorder = &MockSecretAwareStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSecretAwareStore) EXPECT() *MockSecretAwareStoreMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockSecretAwareStore) Get(stack, component, key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", stack, component, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockSecretAwareStoreMockRecorder) Get(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockSecretAwareStore)(nil).Get), stack, component, key)
+}
+
+// GetKey mocks base method.
+func (m *MockSecretAwareStore) GetKey(key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKey", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKey indicates an expected call of GetKey.
+func (mr *MockSecretAwareStoreMockRecorder) GetKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockSecretAwareStore)(nil).GetKey), key)
+}
+
+// Set mocks base method.
+func (m *MockSecretAwareStore) Set(stack, component, key string, value any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", stack, component, key, value)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockSecretAwareStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockSecretAwareStore)(nil).Set), stack, component, key, value)
+}
+
+// SetSecret mocks base method.
+func (m *MockSecretAwareStore) SetSecret(secret bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetSecret", secret)
+}
+
+// SetSecret indicates an expected call of SetSecret.
+func (mr *MockSecretAwareStoreMockRecorder) SetSecret(secret any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSecret", reflect.TypeOf((*MockSecretAwareStore)(nil).SetSecret), secret)
+}

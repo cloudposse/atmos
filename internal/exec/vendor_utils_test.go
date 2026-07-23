@@ -921,3 +921,59 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 	assert.Contains(t, pkgs[1].uri, "ref=2.0.0")
 	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/2.0.0")
 }
+
+func TestValidateTagsAndComponents(t *testing.T) {
+	sources := []schema.AtmosVendorSource{
+		{Component: "vpc", Tags: []string{"network"}},
+		{Component: "eks", Tags: []string{"compute"}},
+	}
+
+	tests := []struct {
+		name      string
+		sources   []schema.AtmosVendorSource
+		component string
+		tags      []string
+		wantErr   error
+	}{
+		{
+			name:      "requested component is defined",
+			sources:   sources,
+			component: "vpc",
+			wantErr:   nil,
+		},
+		{
+			name:      "requested component is not defined",
+			sources:   sources,
+			component: "missing",
+			wantErr:   ErrComponentNotDefined,
+		},
+		{
+			name:    "tag matches at least one source",
+			sources: sources,
+			tags:    []string{"network"},
+			wantErr: nil,
+		},
+		{
+			name:    "no source matches the requested tags",
+			sources: sources,
+			tags:    []string{"nonexistent"},
+			wantErr: ErrNoComponentsWithTags,
+		},
+		{
+			name:    "duplicate component names are rejected",
+			sources: []schema.AtmosVendorSource{{Component: "dup"}, {Component: "dup"}},
+			wantErr: ErrDuplicateComponents,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTagsAndComponents(tt.sources, "vendor.yaml", tt.component, tt.tags)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}

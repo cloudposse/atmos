@@ -3,9 +3,12 @@ package auth
 import (
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -278,6 +281,184 @@ func TestMergeComponentAuthFromConfig(t *testing.T) {
 			tt.verify(t, result, err)
 		})
 	}
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyUndefinedIdentityIsIgnored(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {
+				Kind:    "mock",
+				Default: true,
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{
+					"default": true,
+				},
+				"unavailable": map[string]any{
+					"default": false,
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.NotContains(t, mergedAuth.Identities, "unavailable")
+	assert.Contains(t, componentConfig[cfg.AuthSectionName].(map[string]any)["identities"].(map[string]any), "unavailable",
+		"normalizing markers must not mutate the resolved component configuration")
+
+	m := &manager{
+		config:     mergedAuth,
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{ProfilesFromArg: []string{"test"}},
+	}
+
+	err = m.initializeIdentities()
+	assert.NoError(t, err)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyFalseMarkerOverridesExistingIdentity(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{"default": false},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.Equal(t, "mock", mergedAuth.Identities["selected"].Kind)
+	assert.False(t, mergedAuth.Identities["selected"].Default)
+}
+
+// TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch covers a component
+// marker spelled with different casing than the global identity it targets (Viper lower-cases
+// config keys during load, so a component section's own casing isn't guaranteed to match). The
+// global identity key is genuinely mixed-case ("Identity") and distinct from both the
+// lowercase IdentityCaseMap key and the lowercase component marker, so this can only pass by
+// actually resolving through IdentityCaseMap — not by an exact or already-lowercase match. The
+// marker must write back under the identity's own canonical key ("Identity"), not create a
+// separate, lowercase "identity" entry.
+func TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch(t *testing.T) {
+	tests := []struct {
+		name        string
+		markerValue bool
+	}{
+		{name: "true marker", markerValue: true},
+		{name: "false marker", markerValue: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			globalAuth := &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"Identity": {Kind: "mock", Default: !tt.markerValue},
+				},
+				IdentityCaseMap: map[string]string{"identity": "Identity"},
+			}
+			componentConfig := map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"identity": map[string]any{"default": tt.markerValue},
+					},
+				},
+			}
+
+			mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+			require.NoError(t, err)
+			assert.Equal(t, "mock", mergedAuth.Identities["Identity"].Kind)
+			assert.Equal(t, tt.markerValue, mergedAuth.Identities["Identity"].Default)
+			_, hasSeparateEntry := mergedAuth.Identities["identity"]
+			assert.False(t, hasSeparateEntry, "marker must target the existing 'Identity' entry, not create a separate lowercase 'identity' one")
+		})
+	}
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyTrueMarkerSelectsExistingIdentity(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {Kind: "mock", Default: false},
+			"fallback": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{"default": true},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.True(t, mergedAuth.Identities["selected"].Default)
+	assert.False(t, mergedAuth.Identities["fallback"].Default)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyTrueUndefinedIdentityFailsWithoutMutatingGlobalAuth(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"fallback": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"unavailable": map[string]any{"default": true},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.Error(t, err)
+	assert.Nil(t, mergedAuth)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "unavailable")
+	assert.Contains(t, details[0], "active global auth configuration")
+	assert.True(t, globalAuth.Identities["fallback"].Default,
+		"an invalid component default must not clear the caller's global default")
+}
+
+func TestMergeComponentAuthFromConfig_IncompleteIdentityDeclarationStillFailsValidation(t *testing.T) {
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"incomplete": map[string]any{
+					"default": false,
+					"alias":   "not-a-marker",
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(&schema.AuthConfig{}, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	require.Contains(t, mergedAuth.Identities, "incomplete")
+
+	m := &manager{
+		config:     mergedAuth,
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{ProfilesFromArg: []string{"test"}},
+	}
+
+	err = m.initializeIdentities()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "incomplete")
+	assert.Contains(t, details[0], "is not configured")
 }
 
 func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
@@ -644,6 +825,7 @@ func TestMergeComponentAuthConfig_DoesNotMutateInput(t *testing.T) {
 	globalAuth := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"global-default": {Kind: "aws/assume-role", Default: true},
+			"comp-default":   {Kind: "aws/assume-role", Default: false},
 		},
 	}
 

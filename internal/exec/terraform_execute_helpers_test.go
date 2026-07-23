@@ -6,15 +6,20 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -609,6 +614,215 @@ func TestAddRegionEnvVarForImport_SkipsForNonImportSubcommands(t *testing.T) {
 			}
 			addRegionEnvVarForImport(&info)
 			assert.Empty(t, info.ComponentEnvList, "should not add AWS_REGION for %s", subCmd)
+		})
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Secret variables never hit disk (computeTerraformSecretVarKeys / diskSafeVars / secretVarEnv)
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestTerraformSecretVars_NeverHitDisk(t *testing.T) {
+	const secret = "tf-disk-guard-SECRET-abc123xyz"
+	atmosio.RegisterSecret(secret)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{
+			"plain_password": secret,
+			"db_url":         "postgres://user:" + secret + "@db.example.com/app",
+			"nested":         map[string]any{"token": secret},
+			"region":         "us-east-1-tfdiskguard",
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+
+	// Secret-bearing keys (direct, composed substring, nested) are flagged; the plain
+	// non-secret one is not.
+	require.NotNil(t, info.TerraformSecretVarKeys)
+	assert.True(t, info.TerraformSecretVarKeys["plain_password"], "direct secret must be flagged")
+	assert.True(t, info.TerraformSecretVarKeys["db_url"], "secret composed into a string must be flagged")
+	assert.True(t, info.TerraformSecretVarKeys["nested"], "secret nested in a map must be flagged")
+	assert.False(t, info.TerraformSecretVarKeys["region"], "non-secret var must not be flagged")
+
+	// Write the disk-safe vars exactly as logAndWriteComponentVars does, then assert the
+	// bytes on disk contain no representation of the secret.
+	dir := t.TempDir()
+	varFile := filepath.Join(dir, "test.terraform.tfvars.json")
+	require.NoError(t, u.WriteToFileAsJSON(varFile, diskSafeVars(info), 0o600))
+
+	onDisk, err := os.ReadFile(varFile)
+	require.NoError(t, err)
+	assert.NotContains(t, string(onDisk), secret, "secret must never be written to the varfile on disk")
+	assert.Contains(t, string(onDisk), "us-east-1-tfdiskguard", "non-secret vars must still be written")
+
+	// The secret-bearing vars are instead injected as TF_VAR_* env entries.
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	joined := strings.Join(env, "\n")
+	assert.Contains(t, joined, "TF_VAR_plain_password=")
+	assert.Contains(t, joined, "TF_VAR_db_url=")
+	assert.Contains(t, joined, secret, "secret value is carried in the TF_VAR_ env entry")
+}
+
+func TestTerraformSecretVars_NoSecrets(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"region": "us-west-2-nosecret-xyz", "count": 1},
+	}
+	computeTerraformSecretVarKeys(info)
+	assert.Nil(t, info.TerraformSecretVarKeys, "no secret keys expected when no secrets present")
+
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	assert.Empty(t, env, "no TF_VAR_ entries expected when no secrets present")
+}
+
+func TestTerraformSensitiveDeclaredVars_NeverHitDisk(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{
+			"sensitive_value": "ordinary-resolved-value",
+			"region":          "us-east-1-sensitive-declaration",
+		},
+		ComponentSection: map[string]any{
+			componentInfoKey: map[string]any{
+				terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+					"sensitive_value": {Name: "sensitive_value", Sensitive: true},
+					"not_supplied":    {Name: "not_supplied", Sensitive: true},
+					"region":          {Name: "region", Sensitive: false},
+				}},
+			},
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+	require.True(t, info.TerraformSecretVarKeys["sensitive_value"])
+	assert.False(t, info.TerraformSecretVarKeys["region"])
+	assert.NotContains(t, diskSafeVars(info), "sensitive_value")
+	assert.Equal(t, "us-east-1-sensitive-declaration", diskSafeVars(info)["region"])
+	assert.NotContains(t, varfileVarsToWrite(info, true, "test.tfvars.json"), "sensitive_value")
+	assert.Equal(t, "us-east-1-sensitive-declaration", varfileVarsToWrite(info, true, "test.tfvars.json")["region"])
+
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(env, "\n"), "TF_VAR_sensitive_value=ordinary-resolved-value")
+}
+
+func TestTerraformSensitiveDeclaredVars_MaskingDisabledPreservesJSONCompatibility(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	atmosio.GetContext().Masker().SetEnabled(false)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"sensitive_value": map[string]any{"id": "typed-value"}},
+		ComponentSection: map[string]any{
+			componentInfoKey: map[string]any{
+				terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+					"sensitive_value": {Name: "sensitive_value", Sensitive: true},
+				}},
+			},
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+	assert.Nil(t, info.TerraformSecretVarKeys)
+	assert.Equal(t, info.ComponentVarsSection, diskSafeVars(info))
+}
+
+func TestRejectComputedTerraformVars(t *testing.T) {
+	assert.NoError(t, rejectComputedTerraformVars(map[string]any{"region": "us-east-1"}))
+	err := rejectComputedTerraformVars(map[string]any{"value": degradation.AtmosComputedValue{}})
+	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
+	err = rejectComputedTerraformVars(map[string]any{
+		"nested": []any{map[string]any{"value": degradation.AtmosComputedValue{}}},
+	})
+	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
+}
+
+func TestHandleDeploySubcommand(t *testing.T) {
+	tests := []struct {
+		name             string
+		subCommand       string
+		useTerraformPlan bool
+		applyAutoApprove bool
+		initialArgs      []string
+		wantSubCommand   string
+		wantArgs         []string
+	}{
+		{
+			name:           "deploy rewrites to apply and adds auto-approve",
+			subCommand:     subcommandDeploy,
+			initialArgs:    []string{},
+			wantSubCommand: subcommandApply,
+			wantArgs:       []string{autoApproveFlag},
+		},
+		{
+			name:             "deploy with UseTerraformPlan does not add auto-approve",
+			subCommand:       subcommandDeploy,
+			useTerraformPlan: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{},
+		},
+		{
+			name:           "deploy does not duplicate an existing auto-approve flag",
+			subCommand:     subcommandDeploy,
+			initialArgs:    []string{autoApproveFlag},
+			wantSubCommand: subcommandApply,
+			wantArgs:       []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove adds auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove does not duplicate auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			initialArgs:      []string{autoApproveFlag},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove and UseTerraformPlan does not add auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			useTerraformPlan: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{},
+		},
+		{
+			name:           "plan is left untouched",
+			subCommand:     "plan",
+			initialArgs:    []string{},
+			wantSubCommand: "plan",
+			wantArgs:       []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			atmosConfig.Components.Terraform.ApplyAutoApprove = tt.applyAutoApprove
+			info := &schema.ConfigAndStacksInfo{
+				SubCommand:             tt.subCommand,
+				UseTerraformPlan:       tt.useTerraformPlan,
+				AdditionalArgsAndFlags: tt.initialArgs,
+			}
+
+			handleDeploySubcommand(atmosConfig, info)
+
+			assert.Equal(t, tt.wantSubCommand, info.SubCommand)
+			assert.Equal(t, tt.wantArgs, info.AdditionalArgsAndFlags)
 		})
 	}
 }

@@ -2,9 +2,13 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -37,6 +41,61 @@ func createInitialCommit(t *testing.T, repo *git.Repository, tempDir string) {
 		},
 	})
 	require.NoError(t, err)
+}
+
+func initNativeGitRepo(t *testing.T) string {
+	t.Helper()
+
+	tests.RequireExecutable(t, "git", "worktreeConfig regression tests")
+
+	repoDir := t.TempDir()
+	runNativeGit(t, repoDir, "init")
+	runNativeGit(t, repoDir, "remote", "add", "origin", "https://github.com/example/repo.git")
+
+	err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# test\n"), 0o644)
+	require.NoError(t, err)
+	runNativeGit(t, repoDir, "add", "README.md")
+	runNativeGit(t, repoDir, "-c", "user.name=Atmos Test", "-c", "user.email=atmos@example.com", "commit", "-m", "initial")
+
+	return repoDir
+}
+
+func runNativeGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", gitTestArgs(args...)...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+}
+
+func runNativeGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", gitTestArgs(args...)...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	return string(output)
+}
+
+func requireSamePath(t *testing.T, expected, actual string) {
+	t.Helper()
+
+	expectedEval, err := filepath.EvalSymlinks(expected)
+	require.NoError(t, err)
+	actualEval, err := filepath.EvalSymlinks(actual)
+	require.NoError(t, err)
+	require.Equal(t, expectedEval, actualEval)
+}
+
+func TestGitRepositoryPathsWrapsRevParseExitError(t *testing.T) {
+	tests.RequireExecutable(t, "git", "git rev-parse error classification")
+
+	_, _, _, err := gitRepositoryPaths(t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitCommandExited)
 }
 
 // Helper function to create a repository with a remote.
@@ -249,6 +308,58 @@ func TestGetRepoConfig(t *testing.T) {
 	}
 }
 
+func TestGetLocalRepoWithWorktreeConfigExtension(t *testing.T) {
+	repoDir := initNativeGitRepo(t)
+	runNativeGit(t, repoDir, "config", "extensions.worktreeConfig", "true")
+	runNativeGit(t, repoDir, "config", "core.untrackedCache", "true")
+
+	t.Chdir(repoDir)
+
+	repo, err := GetLocalRepo()
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+
+	cfg, err := GetRepoConfig(repo)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.Empty(t, cfg.Raw.Section("core").Option("untrackedCache"))
+	require.Equal(t, "true", strings.TrimSpace(runNativeGitOutput(t, repoDir, "config", "--get", "extensions.worktreeConfig")))
+
+	info, err := GetRepoInfo(repo)
+	require.NoError(t, err)
+	requireSamePath(t, repoDir, info.LocalWorktreePath)
+	require.Equal(t, "example", info.RepoOwner)
+	require.Equal(t, "repo", info.RepoName)
+}
+
+func TestOpenWorktreeAwareRepoWithWorktreeConfigExtension(t *testing.T) {
+	repoDir := initNativeGitRepo(t)
+	runNativeGit(t, repoDir, "config", "extensions.worktreeConfig", "true")
+
+	worktreeDir := filepath.Join(t.TempDir(), "linked-worktree")
+	runNativeGit(t, repoDir, "worktree", "add", "--detach", worktreeDir, "HEAD")
+
+	var repo *git.Repository
+	var worktree *git.Worktree
+	t.Cleanup(func() {
+		repo = nil
+		worktree = nil
+		if runtime.GOOS == "windows" {
+			runtime.GC()
+			runtime.Gosched()
+		}
+	})
+
+	var err error
+	repo, err = OpenWorktreeAwareRepo(worktreeDir)
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+
+	worktree, err = repo.Worktree()
+	require.NoError(t, err)
+	requireSamePath(t, worktreeDir, worktree.Filesystem.Root())
+}
+
 func TestGetRepoInfo(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -369,8 +480,69 @@ func TestGetRepoInfo(t *testing.T) {
 			},
 			expectError: true,
 			validate: func(t *testing.T, info RepoInfo) {
-				// Should return error due to invalid URL format.
+				// Should return error due to invalid URL format —
+				// neither the canonical parser nor the generic
+				// fallback can recognize this shape.
 				assert.Empty(t, info)
+			},
+		},
+		{
+			name: "self-hosted GitHub Enterprise Server SSH remote (kubescape rejects, fallback handles)",
+			setup: func(t *testing.T) *git.Repository {
+				return createRepoWithRemote(t, "git@ghe.example.com:acme/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "git@ghe.example.com:acme/widgets.git", info.RepoUrl)
+				assert.Equal(t, "ghe.example.com", info.RepoHost)
+				assert.Equal(t, "acme", info.RepoOwner)
+				assert.Equal(t, "widgets", info.RepoName)
+				assert.NotEmpty(t, info.LocalRepoPath)
+				assert.NotNil(t, info.LocalWorktree)
+			},
+		},
+		{
+			name: "self-hosted GitHub Enterprise Server HTTPS remote",
+			setup: func(t *testing.T) *git.Repository {
+				return createRepoWithRemote(t, "https://ghe.example.com/acme/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "https://ghe.example.com/acme/widgets.git", info.RepoUrl)
+				assert.Equal(t, "ghe.example.com", info.RepoHost)
+				assert.Equal(t, "acme", info.RepoOwner)
+				assert.Equal(t, "widgets", info.RepoName)
+			},
+		},
+		{
+			name: "self-hosted nested-path HTTPS remote (host kubescape doesn't recognize)",
+			setup: func(t *testing.T) *git.Repository {
+				// `code.example.com` doesn't contain any of kubescape's
+				// hardcoded host substrings (github / gitlab / azure),
+				// so the canonical parser rejects it and the generic
+				// fallback handles it. (Note: `gitlab.example.com`
+				// would be ACCEPTED by kubescape via substring match,
+				// so it doesn't exercise this path.)
+				return createRepoWithRemote(t, "https://code.example.com/group/sub/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "code.example.com", info.RepoHost)
+				assert.Equal(t, "group", info.RepoOwner)
+				// Nested paths: first segment is owner, remainder is name.
+				assert.Equal(t, "sub/widgets", info.RepoName)
+			},
+		},
+		{
+			name: "self-hosted SSH remote with port (Bitbucket-style)",
+			setup: func(t *testing.T) *git.Repository {
+				return createRepoWithRemote(t, "ssh://git@bitbucket.example.com:7999/proj/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "bitbucket.example.com", info.RepoHost)
+				assert.Equal(t, "proj", info.RepoOwner)
+				assert.Equal(t, "widgets", info.RepoName)
 			},
 		},
 	}

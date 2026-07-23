@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,10 +26,27 @@ func processTagTerraformState(
 	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
-// isRecoverableTerraformError checks if an error is recoverable (can use YQ default).
+// isRecoverableTerraformError checks if an error is recoverable (can use YQ default). Used
+// by the always-on local `//`-default evaluation regardless of --error-mode, so this stays
+// deliberately narrow: only "state genuinely doesn't exist yet" — an infrastructure/API
+// failure (e.g. an S3 credential or network error) must NOT silently fall back to a literal
+// default outside of an explicit --error-mode=warn/silent opt-in (see
+// TestTerraformOutput_APIErrorWithDefaultReturnsError). Warn-mode's broader tolerance lives
+// in isRecoverableInWarnMode below, consumed only by processNodesWithContext's onWarning path.
 func isRecoverableTerraformError(err error) bool {
 	return errors.Is(err, errUtils.ErrTerraformStateNotProvisioned) ||
 		errors.Is(err, errUtils.ErrTerraformOutputNotFound)
+}
+
+// isRecoverableInWarnMode is the classification processNodesWithContext uses when the
+// caller explicitly opted into --error-mode=warn/silent (onWarning != nil). It's broader
+// than isRecoverableTerraformError: on top of "state not yet provisioned", it also tolerates
+// ErrGetObjectFromS3 — a backend read that failed for any other reason (credential refresh,
+// network, permissions) — since the user has already said "continue past values that can't
+// resolve right now" by choosing warn/silent. This must NOT be used by the always-on local
+// `//`-default path (see isRecoverableTerraformError's doc comment for why).
+func isRecoverableInWarnMode(err error) bool {
+	return isRecoverableTerraformError(err) || errors.Is(err, errUtils.ErrGetObjectFromS3)
 }
 
 // hasYqDefault checks if a YQ expression contains a default (fallback) operator.
@@ -62,32 +80,20 @@ func processTagTerraformStateWithContext(
 	var stack string
 	var output string
 
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
+	parsed, err := fnparser.ParseTerraform(str)
 	if err != nil {
 		return nil, err
 	}
-
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	component = parsed.Component
+	stack = parsed.Stack
+	output = parsed.Expression
+	if stack == "" {
 		stack = currentStack
-		output = strings.TrimSpace(parts[1])
 		log.Debug(
 			"Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
-	default:
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// Check for circular dependencies if resolution context is provided.
@@ -106,6 +112,10 @@ func processTagTerraformStateWithContext(
 
 		// Defer pop to ensure we clean up even if there's an error.
 		defer resolutionCtx.Pop(atmosConfig)
+	}
+
+	if value, mocked, mockErr := resolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
+		return value, mockErr
 	}
 
 	// Extract authContext and authManager from stackInfo if available.

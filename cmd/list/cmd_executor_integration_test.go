@@ -1,6 +1,7 @@
 package list
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -22,6 +23,8 @@ import (
 // Built with filepath.Join for Windows compatibility.
 var completeFixturePath = filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete")
 
+var dependenciesFixturePath = filepath.Join("..", "..", "tests", "fixtures", "scenarios", "dependencies-components-inheritance")
+
 // initExecutorTestIO initializes the I/O, UI, and data contexts expected
 // by the executor functions. Safe to call multiple times (init guards
 // against double registration).
@@ -41,6 +44,12 @@ func chdirToCompleteFixture(t *testing.T) {
 	t.Helper()
 	tests.RequireFilePath(t, completeFixturePath, "test fixture directory")
 	t.Chdir(completeFixturePath)
+}
+
+func chdirToDependenciesFixture(t *testing.T) {
+	t.Helper()
+	tests.RequireFilePath(t, dependenciesFixturePath, "test fixture directory")
+	t.Chdir(dependenciesFixturePath)
 }
 
 // newCmdWithListParser returns a fresh cobra command with the given list
@@ -148,6 +157,30 @@ func TestExecuteListSources_CoverageIntegration(t *testing.T) {
 		"executeListSources should return nil when no matching sources — prints an info message")
 }
 
+// TestExecuteListDependenciesCmd_CoverageIntegration exercises the cmd-layer
+// `executeListDependenciesCmd` against a dependency-focused fixture. This covers
+// the command glue path — ProcessCommandLineArgs → InitCliConfig →
+// createAuthManagerForList → ExecuteDescribeStacksWithAuthDisabled →
+// dependencies.BuildGraph/Render.
+func TestExecuteListDependenciesCmd_CoverageIntegration(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	opts := &DependenciesOptions{
+		Format:           "json",
+		Direction:        "both",
+		Stack:            "dev",
+		Component:        "vpc",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+		AuthDisabled:     true,
+	}
+
+	require.NoError(t, executeListDependenciesCmd(cmd, []string{"vpc"}, opts),
+		"dependencies fixture should list vpc dependencies cleanly")
+}
+
 // TestListStacksWithOptions_CoverageIntegration exercises the cmd-layer
 // `listStacksWithOptions` + `executeAndExtractStacks` against the
 // `complete` fixture for the non-tree format path and asserts a clean
@@ -165,6 +198,38 @@ func TestListStacksWithOptions_CoverageIntegration(t *testing.T) {
 
 	require.NoError(t, listStacksWithOptions(cmd, []string{}, opts),
 		"complete fixture should list stacks cleanly")
+}
+
+// TestListStacksWithOptions_NoStacksYet exercises `listStacksWithOptions` against a
+// brand-new project with no stack manifests at all (no stacks/ directory). It must
+// report a friendly "No stacks found" message instead of the raw config error
+// ("failed to find import") that `cfg.InitCliConfig` returns for zero glob matches.
+func TestListStacksWithOptions_NoStacksYet(t *testing.T) {
+	initExecutorTestIO(t)
+
+	tmpDir := t.TempDir()
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	atmosYaml := `
+base_path: "` + filepath.ToSlash(tmpDir) + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+components:
+  terraform:
+    base_path: components/terraform
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Chdir(tmpDir)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	opts := &StacksOptions{Format: "json"}
+
+	require.NoError(t, listStacksWithOptions(cmd, []string{}, opts),
+		"a project with no stacks yet should report a friendly message, not an error")
 }
 
 // TestListStacksWithOptions_TreeFormat exercises the tree-format branch

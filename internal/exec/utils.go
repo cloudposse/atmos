@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -407,7 +408,7 @@ func processStackContextPrefix(
 
 	switch {
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return err
 		}
@@ -775,6 +776,14 @@ func ProcessStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// Component mocks are literal fixture data. Keep them out of template and YAML
+	// function processing so a mock cannot resolve the real dependency it is meant
+	// to replace when --use-mocks is enabled.
+	literalMocks, hasLiteralMocks := configAndStacksInfo.ComponentSection[cfg.MocksSectionName]
+	if hasLiteralMocks {
+		delete(configAndStacksInfo.ComponentSection, cfg.MocksSectionName)
+	}
+
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
@@ -800,13 +809,27 @@ func ProcessStacks(
 			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
+		componentTemplateContext := make(map[string]any, len(configAndStacksInfo.ComponentSection))
+		for k, v := range configAndStacksInfo.ComponentSection {
+			componentTemplateContext[k] = v
+		}
+		componentTemplateContext, err = manager.AddTemplateContext(
+			atmosConfig,
+			componentSectionStr,
+			componentTemplateContext,
+			manager.EffectiveTrackFromStack(atmosConfig, &configAndStacksInfo),
+		)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
+
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
 			atmosConfig,
 			&configAndStacksInfo,
 			settingsSectionStruct,
 			"templates-all-atmos-sections",
 			componentSectionStr,
-			configAndStacksInfo.ComponentSection,
+			componentTemplateContext,
 			true,
 		)
 		if err != nil {
@@ -841,6 +864,9 @@ func ProcessStacks(
 
 	if processTemplates || processYamlFunctions {
 		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
+	}
+	if hasLiteralMocks {
+		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
 	}
 
 	// Spacelift stack.
