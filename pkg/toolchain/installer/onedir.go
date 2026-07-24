@@ -325,18 +325,11 @@ func moveEntrypointFile(src, dst string) error {
 // moveEntrypointFileForOS supports testable Windows .exe handling.
 func moveEntrypointFileForOS(src, dst, goos string) error {
 	if _, err := os.Stat(src); os.IsNotExist(err) {
-		if goos != "windows" {
-			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, src)
+		var ferr error
+		src, dst, ferr = resolveWindowsExeFallback(src, dst, goos)
+		if ferr != nil {
+			return ferr
 		}
-		srcWithExe := src + windowsExeExt
-		if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
-			if !os.IsNotExist(exeErr) {
-				return fmt.Errorf("%w: failed to stat file in archive: %s: %w", ErrFileOperation, srcWithExe, exeErr)
-			}
-			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, src)
-		}
-		src = srcWithExe
-		dst = ensureWindowsExeExtensionForOS(dst, goos)
 	}
 
 	if err := MoveFile(src, dst); err != nil {
@@ -346,6 +339,23 @@ func moveEntrypointFileForOS(src, dst, goos string) error {
 		return fmt.Errorf("%w: failed to make file executable: %w", ErrFileOperation, err)
 	}
 	return nil
+}
+
+// resolveWindowsExeFallback checks for a `.exe`-suffixed sibling of src when the original
+// entrypoint file is missing from the archive, since Windows archives are sometimes packaged
+// with the extension omitted from the entrypoint manifest.
+func resolveWindowsExeFallback(src, dst, goos string) (string, string, error) {
+	if goos != "windows" {
+		return "", "", fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, src)
+	}
+	srcWithExe := src + windowsExeExt
+	if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
+		if !os.IsNotExist(exeErr) {
+			return "", "", fmt.Errorf("%w: failed to stat file in archive: %s: %w", ErrFileOperation, srcWithExe, exeErr)
+		}
+		return "", "", fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, src)
+	}
+	return srcWithExe, ensureWindowsExeExtensionForOS(dst, goos), nil
 }
 
 // installOnedir preserves the archive tree and writes its manifest.

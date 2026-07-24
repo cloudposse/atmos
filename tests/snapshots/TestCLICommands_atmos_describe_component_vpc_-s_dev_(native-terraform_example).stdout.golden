@@ -20,6 +20,7 @@
         "plan": {
           "skip_planfile": false
         },
+        "lint": {},
         "planfiles": {
           "default": ""
         },

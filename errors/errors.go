@@ -204,6 +204,12 @@ var (
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
+	// Terraform lint errors.
+	ErrTerraformLint             = errors.New("terraform lint failed")
+	ErrTerraformLintAuth         = errors.New("failed to initialize authentication for terraform lint")
+	ErrTerraformLintAffected     = errors.New("failed to determine affected terraform lint targets")
+	ErrBuildTerraformLintTargets = errors.New("failed to build terraform lint targets")
+
 	// --use-mocks errors.
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
 	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
@@ -641,6 +647,7 @@ var (
 	ErrInvalidTerraformDependencies       = errors.New("invalid terraform dependencies section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
+	ErrUnresolvedComputedTerraformVar     = errors.New("terraform variable contains an unresolved computed value")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand      = errors.New("invalid helmfile command")
@@ -843,6 +850,7 @@ var (
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrCreateFile          = errors.New("failed to create file")
 	ErrOpenFile            = errors.New("failed to open file")
 	ErrWriteFile           = errors.New("failed to write to file")
 	ErrStatFile            = errors.New("failed to stat file")
