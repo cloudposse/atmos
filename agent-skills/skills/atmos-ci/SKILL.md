@@ -258,16 +258,9 @@ details.
 
 ## Concurrency Warning
 
-Do not add or retain GitHub Actions workflow- or job-level `concurrency` groups that govern an
-`atmos` command. Remove them when modernizing Native CI workflows. They are not a dependable FIFO
-deployment queue: default concurrency replaces older pending work, `cancel-in-progress: true`
-cancels active work, and bounded queues still do not guarantee dispatch order. An interrupted
-Terraform invocation can leave a remote state lock that requires operator recovery.
-
-Use remote Terraform state locking for state safety. For deployment control, use GitHub environments,
-merge queues, an explicit promotion workflow, or an external queue/orchestrator. This guidance is
-limited to concurrency groups around Atmos invocations; unrelated workflow concurrency is out of
-scope.
+Do not treat GitHub Actions `concurrency` groups around Atmos/Terraform commands as a FIFO
+deployment queue: cancellation can interrupt Terraform and leave a state lock that needs recovery.
+Use explicit deployment controls when strict ordering is required.
 
 ## Component Dependencies
 

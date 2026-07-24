@@ -43,6 +43,10 @@ permissions:
   contents: read
   actions: read # GITHUB_TOKEN reads artifacts via the REST API (fallback path).
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   # Pin the SHA so the plan upload and the deploy download derive the identical

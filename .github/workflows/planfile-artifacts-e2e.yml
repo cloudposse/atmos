@@ -38,6 +38,10 @@ permissions:
   contents: read
   actions: read # Required for the GITHUB_TOKEN to list/download artifacts via the REST API.
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   # Pin the SHA so the plan upload and the apply download derive the identical
