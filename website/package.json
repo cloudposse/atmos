@@ -123,7 +123,7 @@
       "node-forge@^1": "^1.4.0",
       "path-to-regexp@^0.1": "^0.1.13",
       "picomatch@^2": "^2.3.2",
-      "postcss@^8": "^8.5.10",
+      "postcss@^8": "^8.5.18",
       "qs@^6": "^6.15.2",
       "serialize-javascript@^6": "^7.0.5",
       "shell-quote@^1": "^1.8.4",
