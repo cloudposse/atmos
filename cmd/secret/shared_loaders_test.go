@@ -151,6 +151,34 @@ func TestInjectSecretStoreAuthResolver_ResolverOnly(t *testing.T) {
 	injectSecretStoreAuthResolver(atmosConfig, authManager, secretScope{Identity: "explicit-identity"})
 }
 
+func TestInjectSecretStoreAuthResolver_AppliesDefaultIdentity(t *testing.T) {
+	// With no explicit --identity, the effective identity is the tail of the auth chain.
+	// injectSecretStoreAuthResolver computes it and records it on SecretsAuth (consumed by the
+	// cloud-KMS SOPS path). This test asserts that CLI-side computation and wiring, and exercises
+	// the SetAuthContextResolverWithDefaultIdentity call against a real registry; it does not itself
+	// assert the per-store result. The store-level application of the default (identity-less stores
+	// adopt it, explicit-identity stores keep theirs) is asserted in
+	// pkg/store.TestSetAuthContextResolverWithDefaultIdentity_DefaultsOnlyEmptyStores.
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{}).AnyTimes()
+	authManager.EXPECT().GetChain().Return([]string{"sso", "role-b"}).AnyTimes()
+
+	// A real, identity-less SSM store (client init is deferred, so no credentials are needed).
+	ssmStore, err := storepkg.NewSSMStore(storepkg.SSMStoreOptions{Region: "us-east-1"}, "")
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stores: storepkg.StoreRegistry{"secrets/ssm": ssmStore},
+	}
+
+	injectSecretStoreAuthResolver(atmosConfig, authManager, secretScope{})
+
+	require.NotNil(t, atmosConfig.SecretsAuth)
+	assert.Equal(t, "role-b", atmosConfig.SecretsAuth.DefaultIdentity)
+	assert.NotNil(t, atmosConfig.SecretsAuth.Resolver)
+}
+
 func TestLoadServiceAndConfig_ComponentNotFound(t *testing.T) {
 	t.Chdir(writeMinimalAtmosProject(t))
 
