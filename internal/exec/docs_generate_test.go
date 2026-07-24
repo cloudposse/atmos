@@ -2,6 +2,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -388,6 +389,226 @@ func TestRunTerraformDocs_Error(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error for invalid terraform module directory, got nil")
 	}
+}
+
+// writeTerraformDocsFixture writes a minimal module with one input, one output, and one
+// resource (which implies one provider) so section-visibility settings are observable.
+func writeTerraformDocsFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	content := `
+variable "example_input" {
+  type        = string
+  description = "An example input"
+}
+
+output "example_output" {
+  value       = var.example_input
+  description = "An example output"
+}
+
+resource "null_resource" "example" {}
+`
+	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(content), defaultFilePermissions); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	return dir
+}
+
+// TestRunTerraformDocs_SectionsRespected verifies that ShowInputs, ShowOutputs, and
+// ShowProviders actually control which sections appear in the rendered output. The
+// runTerraformDocs function builds a print.Config with these settings applied, but must pass
+// that same config to the formatter -- constructing the formatter with a fresh, uncustomized
+// config silently ignores the settings.
+func TestRunTerraformDocs_SectionsRespected(t *testing.T) {
+	dir := writeTerraformDocsFixture(t)
+
+	out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:       true,
+		Format:        "markdown table",
+		ShowInputs:    false,
+		ShowOutputs:   true,
+		ShowProviders: false,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+
+	if strings.Contains(out, "example_input") {
+		t.Errorf("expected Inputs section to be hidden (ShowInputs=false), got output containing it:\n%s", out)
+	}
+	if strings.Contains(out, "Providers") {
+		t.Errorf("expected Providers section to be hidden (ShowProviders=false), got output containing it:\n%s", out)
+	}
+	if !strings.Contains(out, "example_output") {
+		t.Errorf("expected Outputs section to be shown (ShowOutputs=true), got output missing it:\n%s", out)
+	}
+
+	// Flip every flag and confirm the output flips too.
+	out, err = runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:       true,
+		Format:        "markdown table",
+		ShowInputs:    true,
+		ShowOutputs:   false,
+		ShowProviders: true,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if !strings.Contains(out, "example_input") {
+		t.Errorf("expected Inputs section to be shown (ShowInputs=true), got output missing it:\n%s", out)
+	}
+	if !strings.Contains(out, "Providers") {
+		t.Errorf("expected Providers section to be shown (ShowProviders=true), got output missing it:\n%s", out)
+	}
+	if strings.Contains(out, "example_output") {
+		t.Errorf("expected Outputs section to be hidden (ShowOutputs=false), got output containing it:\n%s", out)
+	}
+}
+
+// TestRunTerraformDocs_HideEmptyRespected verifies that HideEmpty suppresses the heading and
+// "No inputs." placeholder for a section with no content, instead of always rendering it.
+func TestRunTerraformDocs_HideEmptyRespected(t *testing.T) {
+	dir := t.TempDir()
+	// No variables defined, so the Inputs section is empty.
+	content := `
+output "example_output" {
+  value       = "x"
+  description = "An example output"
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(content), defaultFilePermissions); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+
+	out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:    true,
+		Format:     "markdown table",
+		ShowInputs: true,
+		HideEmpty:  false,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if !strings.Contains(out, "No inputs.") {
+		t.Errorf("expected empty Inputs section to render the placeholder when HideEmpty=false, got:\n%s", out)
+	}
+
+	out, err = runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:    true,
+		Format:     "markdown table",
+		ShowInputs: true,
+		HideEmpty:  true,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if strings.Contains(out, "Inputs") || strings.Contains(out, "No inputs.") {
+		t.Errorf("expected empty Inputs section to be fully suppressed when HideEmpty=true, got:\n%s", out)
+	}
+}
+
+// TestRunTerraformDocs_IndentLevelRespected verifies that IndentLevel controls the heading depth
+// of rendered sections, confirming it reaches the formatter instead of being silently dropped.
+func TestRunTerraformDocs_IndentLevelRespected(t *testing.T) {
+	dir := writeTerraformDocsFixture(t)
+
+	out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:    true,
+		Format:     "markdown table",
+		ShowInputs: true,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if !strings.Contains(out, "## Inputs") {
+		t.Errorf("expected default IndentLevel to render a level-2 (##) Inputs heading, got:\n%s", out)
+	}
+
+	out, err = runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:     true,
+		Format:      "markdown table",
+		ShowInputs:  true,
+		IndentLevel: 3,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if !strings.Contains(out, "### Inputs") {
+		t.Errorf("expected IndentLevel=3 to render a level-3 (###) Inputs heading, got:\n%s", out)
+	}
+	// "## Inputs" is a substring of "### Inputs", so anchor on a preceding newline to check for
+	// an actual level-2 heading line rather than matching inside the level-3 one.
+	if strings.Contains(out, "\n## Inputs") {
+		t.Errorf("expected IndentLevel=3 to replace the level-2 (##) heading, got:\n%s", out)
+	}
+}
+
+// TestRunTerraformDocs_FormatVariants covers the "markdown", "tfvars hcl", and "tfvars json"
+// formatters (in addition to "markdown table" and the default, covered elsewhere), verifying each
+// produces format-appropriate content now that they all receive the customized config.
+func TestRunTerraformDocs_FormatVariants(t *testing.T) {
+	dir := writeTerraformDocsFixture(t)
+
+	t.Run("markdown", func(t *testing.T) {
+		out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+			Enabled:    true,
+			Format:     "markdown",
+			ShowInputs: true,
+		})
+		if err != nil {
+			t.Fatalf("runTerraformDocs failed: %v", err)
+		}
+		if !strings.Contains(out, "## Required Inputs") {
+			t.Errorf("expected markdown (non-table) format to render a 'Required Inputs' subsection, got:\n%s", out)
+		}
+	})
+
+	t.Run("tfvars hcl", func(t *testing.T) {
+		out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+			Enabled:    true,
+			Format:     "tfvars hcl",
+			ShowInputs: true,
+		})
+		if err != nil {
+			t.Fatalf("runTerraformDocs failed: %v", err)
+		}
+		if !strings.Contains(out, "example_input") {
+			t.Errorf("expected tfvars hcl output to assign example_input, got:\n%s", out)
+		}
+	})
+
+	t.Run("tfvars json", func(t *testing.T) {
+		out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+			Enabled:    true,
+			Format:     "tfvars json",
+			ShowInputs: true,
+		})
+		if err != nil {
+			t.Fatalf("runTerraformDocs failed: %v", err)
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+			t.Fatalf("expected valid JSON, got error %v for output:\n%s", err, out)
+		}
+		if _, ok := parsed["example_input"]; !ok {
+			t.Errorf("expected tfvars json output to contain key example_input, got:\n%s", out)
+		}
+	})
+
+	t.Run("unrecognized format falls back to markdown table", func(t *testing.T) {
+		out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+			Enabled:    true,
+			Format:     "not-a-real-format",
+			ShowInputs: true,
+		})
+		if err != nil {
+			t.Fatalf("runTerraformDocs failed: %v", err)
+		}
+		if !strings.Contains(out, "| Name | Description | Type | Default | Required |") {
+			t.Errorf("expected unrecognized format to fall back to markdown table output, got:\n%s", out)
+		}
+	})
 }
 
 // TestResolvePath tests the resolvePath function with various path types.

@@ -137,7 +137,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | AWS ECR: registry login, ECR auth integrations, Docker credential writes                                          | `atmos-aws-ecr`         | `agent-skills/skills/atmos-aws-ecr/SKILL.md`         |
 | AWS compliance: Security Hub standards, compliance reports, CIS AWS, PCI DSS, SOC2, HIPAA, NIST                   | `atmos-aws-compliance`  | `agent-skills/skills/atmos-aws-compliance/SKILL.md`  |
 | AWS security: analyze findings, map to components/stacks, structured remediation                                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |
-| Migrating to Atmos from native Terraform/OpenTofu or Terraform Workspaces: layout, workspace mapping, remote-state bridge | `atmos-migration`       | `agent-skills/skills/atmos-migration/SKILL.md`       |
+| Migrating to Atmos from native Terraform/OpenTofu, Terraform Workspaces, or standalone terraform-docs: layout, workspace mapping, remote-state bridge, docs generation | `atmos-migration`       | `agent-skills/skills/atmos-migration/SKILL.md`       |
 | Atmos Modernization: replace deprecated patterns with current Atmos naming, CI, Pro, auth, secrets, and dependencies | `atmos-modernization`   | `agent-skills/skills/atmos-modernization/SKILL.md`   |
 
 ## Common Patterns
