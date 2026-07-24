@@ -98,6 +98,13 @@ components:
         # Test case 13: Template expression with toJson for a map
         template_map: !template '{{ toJson (dict "x" 1 "y" 2 "z" 3) }}'
 
+        # Test cases 13a-13b: Whitespace trimming removes the separator after !template.
+        # The rendered JSON must still be decoded to native values.
+        trimmed_template_list: !template |
+          {{- toJson (list "one" "two") -}}
+        trimmed_template_map: !template |
+          {{- toJson (dict "key" "value") -}}
+
         # Test case 14: Template expression accessing stack variable
         stack_var: !template '{{ .stack }}'
 
