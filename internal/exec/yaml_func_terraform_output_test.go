@@ -26,7 +26,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	if err != nil {
 		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
 	}
-	isolateTerraformOutputTestBinary(t, tofuPath)
+	isolateTerraformTestBinary(t, tofuPath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")
 
@@ -179,13 +179,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	})
 }
 
-// isolateTerraformOutputTestBinary copies the OpenTofu executable used by this
-// integration test into a per-test directory and prepends it to PATH. The
-// Windows acceptance job runs packages concurrently and other package tests
-// can uninstall the shared Atmos toolchain cache after LookPath succeeds.
-// Keeping a private copy prevents that race from turning later
-// !terraform.output calls into a spurious missing-executable failure.
-func isolateTerraformOutputTestBinary(t *testing.T, source string) {
+// isolateTerraformTestBinary copies a Terraform-compatible executable into a
+// per-test directory and prepends it to PATH. The Windows acceptance job runs
+// packages concurrently and other package tests can uninstall the shared
+// Atmos toolchain cache after LookPath succeeds. Keeping a private copy
+// prevents that race from turning later Terraform calls into a spurious
+// missing-executable failure.
+func isolateTerraformTestBinary(t *testing.T, source string) {
 	t.Helper()
 
 	contents, err := os.ReadFile(source)
@@ -207,11 +207,11 @@ func isolateTerraformOutputTestBinary(t *testing.T, source string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func TestIsolateTerraformOutputTestBinary(t *testing.T) {
+func TestIsolateTerraformTestBinary(t *testing.T) {
 	source, err := os.Executable()
 	assert.NoError(t, err)
 
-	isolateTerraformOutputTestBinary(t, source)
+	isolateTerraformTestBinary(t, source)
 
 	resolved, err := exec.LookPath(filepath.Base(source))
 	assert.NoError(t, err)
