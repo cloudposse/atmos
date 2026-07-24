@@ -7,7 +7,7 @@
 The Linux Acceptance Tests job failed with `TestDescribeAffectedDeletedComponentWithDependents`
 in `internal/exec`, panicking on an unexpected error:
 
-```
+```text
 stat ../../.git/objects/pack/tmp_rev_G500qY: no such file or directory
 ```
 

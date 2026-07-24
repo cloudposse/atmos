@@ -300,6 +300,9 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 		if err == nil || !os.IsNotExist(err) {
 			return err
 		}
+		if attempt == maxAttempts {
+			return err
+		}
 		// Remove any partial copy before retrying so the next attempt starts clean.
 		require.NoError(t, os.RemoveAll(dest))
 		time.Sleep(50 * time.Millisecond)
