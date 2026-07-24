@@ -144,6 +144,64 @@ func TestGetStringAfterTag_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestMatchesTag(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		prefix   string
+		expected bool
+	}{
+		{
+			name:     "whitespace-delimited tag",
+			input:    "!template [\"one\"]",
+			prefix:   u.AtmosYamlFuncTemplate,
+			expected: true,
+		},
+		{
+			name:     "JSON array delimiter",
+			input:    "!template[\"one\",\"two\"]",
+			prefix:   u.AtmosYamlFuncTemplate,
+			expected: true,
+		},
+		{
+			name:     "JSON object delimiter",
+			input:    "!template{\"key\":\"value\"}",
+			prefix:   u.AtmosYamlFuncTemplate,
+			expected: true,
+		},
+		{
+			name:     "end-of-string tag",
+			input:    "!aws.account_id",
+			prefix:   u.AtmosYamlFuncAwsAccountID,
+			expected: true,
+		},
+		{
+			name:     "JSON delimiter applies to every YAML function",
+			input:    "!env[\"value\"]",
+			prefix:   u.AtmosYamlFuncEnv,
+			expected: true,
+		},
+		{
+			name:     "near-miss tag name",
+			input:    "!templateExtra value",
+			prefix:   u.AtmosYamlFuncTemplate,
+			expected: false,
+		},
+		{
+			name:     "unseparated primitive remains invalid",
+			input:    "!templatetrue",
+			prefix:   u.AtmosYamlFuncTemplate,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, matchesTag(tt.input, tt.prefix))
+		})
+	}
+}
+
 func TestSkipFunc(t *testing.T) {
 	tests := []struct {
 		name     string

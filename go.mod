@@ -148,6 +148,12 @@ require (
 	google.golang.org/genai v1.64.0
 	google.golang.org/grpc v1.82.1
 	gopkg.in/ini.v1 v1.67.3
+	golang.org/x/term v0.44.0
+	golang.org/x/text v0.38.0
+	google.golang.org/api v0.280.0
+	google.golang.org/genai v1.58.0
+	google.golang.org/grpc v1.82.1
+	gopkg.in/ini.v1 v1.67.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v4 v4.2.3
