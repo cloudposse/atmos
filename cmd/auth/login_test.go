@@ -135,6 +135,7 @@ func TestAuthLoginCommand_Structure(t *testing.T) {
 	providerFlag := authLoginCmd.Flags().Lookup("provider")
 	assert.NotNil(t, providerFlag)
 	assert.Equal(t, "p", providerFlag.Shorthand)
+	assert.NotNil(t, authLoginCmd.Flags().Lookup("webflow"))
 }
 
 func TestLoginParser_Initialization(t *testing.T) {
@@ -166,6 +167,75 @@ func TestAuthenticateIdentity_WithForceSelect(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, whoami)
 	assert.Equal(t, "selected-identity", whoami.Identity)
+}
+
+func TestAuthenticateIdentity_ForceWebflow(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String(IdentityFlagName, "", "identity")
+	require.NoError(t, cmd.Flags().Set(IdentityFlagName, "cp-root/admin"))
+
+	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"cp-root/admin": {Kind: authTypes.ProviderKindAWSUser},
+	})
+	mockAuthManager.EXPECT().Authenticate(gomock.Any(), "cp-root/admin").
+		DoAndReturn(func(ctx context.Context, _ string) (*authTypes.WhoamiInfo, error) {
+			assert.True(t, authTypes.ForceAWSWebflow(ctx), "--webflow must reach the identity through context")
+			return &authTypes.WhoamiInfo{Identity: "cp-root/admin", Provider: "aws-user"}, nil
+		})
+
+	whoami, needsFallback, err := authenticateIdentity(
+		authTypes.WithForceAWSWebflow(context.Background(), true), cmd, auth.AuthManager(mockAuthManager),
+	)
+	require.NoError(t, err)
+	assert.False(t, needsFallback)
+	require.NotNil(t, whoami)
+	assert.Equal(t, "cp-root/admin", whoami.Identity)
+}
+
+func TestAuthenticateIdentity_ForceWebflowRejectsNonAWSUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String(IdentityFlagName, "", "identity")
+	require.NoError(t, cmd.Flags().Set(IdentityFlagName, "prod-admin"))
+
+	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: authTypes.ProviderKindAWSPermissionSet},
+	})
+	mockAuthManager.EXPECT().Authenticate(gomock.Any(), gomock.Any()).Times(0)
+
+	_, _, err := authenticateIdentity(
+		authTypes.WithForceAWSWebflow(context.Background(), true), cmd, auth.AuthManager(mockAuthManager),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--webflow requires an aws/user identity")
+	assert.Contains(t, err.Error(), authTypes.ProviderKindAWSPermissionSet)
+}
+
+func TestAuthenticateIdentity_ForceWebflowRejectsProviderFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+	mockAuthManager.EXPECT().GetDefaultIdentity(false).Return("", errUtils.ErrNoIdentitiesAvailable)
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String(IdentityFlagName, "", "identity")
+
+	_, needsFallback, err := authenticateIdentity(
+		authTypes.WithForceAWSWebflow(context.Background(), true), cmd, auth.AuthManager(mockAuthManager),
+	)
+	require.Error(t, err)
+	assert.False(t, needsFallback)
+	assert.ErrorContains(t, err, "--webflow requires an aws/user identity")
+}
+
+func TestValidateWebflowProviderMode(t *testing.T) {
+	assert.NoError(t, validateWebflowProviderMode(false, "sso"))
+	require.Error(t, validateWebflowProviderMode(true, "sso"))
+	assert.ErrorContains(t, validateWebflowProviderMode(true, "sso"), "cannot be used with --provider")
 }
 
 func TestAuthLoginCommand_ValidArgsFunction(t *testing.T) {

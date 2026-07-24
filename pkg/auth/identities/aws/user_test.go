@@ -2325,6 +2325,135 @@ func TestUserIdentity_Authenticate_WebflowFallbackSuccess(t *testing.T) {
 	assert.Equal(t, "us-east-2", awsCreds.Region)
 }
 
+// TestUserIdentity_Authenticate_ForceWebflow verifies that an explicit browser
+// login bypasses every reusable credential source: AWS session files, refresh
+// tokens, YAML IAM keys, and keyring IAM keys. The resulting temporary session
+// is still written to the normal AWS session-file cache.
+func TestUserIdentity_Authenticate_ForceWebflow(t *testing.T) {
+	blockStdin(t)
+
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "authorization_code", r.Form.Get("grant_type"),
+			"forced webflow must start a browser authorization-code exchange, not refresh a token")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_FORCED_WEBFLOW",
+				"secret_access_key": "SECRET_FORCED_WEBFLOW",
+				"session_token":     "TOKEN_FORCED_WEBFLOW",
+			},
+			"expires_in": 900,
+		})
+	}))
+	defer tokenServer.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{doFunc: func(req *http.Request) (*http.Response, error) {
+		req.URL, _ = urlpkg.Parse(tokenServer.URL + req.URL.Path)
+		return http.DefaultClient.Do(req)
+	}}
+	defer func() { defaultHTTPClient = origClient }()
+
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return false }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	origDisplay := displayWebflowPlainTextFunc
+	displayWebflowPlainTextFunc = func(authURL string) {
+		go func() {
+			time.Sleep(30 * time.Millisecond)
+			parsed, _ := urlpkg.Parse(authURL)
+			callbackURL := parsed.Query().Get("redirect_uri") + "?code=forced-webflow-code&state=" + parsed.Query().Get("state")
+			resp, err := http.Get(callbackURL)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	identityName := "test-force-webflow-" + t.Name()
+	identity, err := NewUserIdentity(identityName, &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"access_key_id":     "AKID_CONFIGURED_IAM",
+			"secret_access_key": "SECRET_CONFIGURED_IAM",
+			"region":            "us-east-2",
+		},
+	})
+	require.NoError(t, err)
+	userIdent := identity.(*userIdentity)
+
+	// A valid cached session would normally end authentication before IAM keys
+	// are considered. --webflow must bypass it.
+	require.NoError(t, userIdent.writeAWSFiles(&types.AWSCredentials{
+		AccessKeyID: "AKID_CACHED_SESSION", SecretAccessKey: "SECRET_CACHED_SESSION", SessionToken: "CACHED_TOKEN",
+		Region: "us-east-2", Expiration: time.Now().Add(2 * time.Hour).Format(time.RFC3339),
+	}, "us-east-2"))
+
+	// Seed a valid refresh token too; the forced path must not redeem it.
+	userIdent.saveRefreshCache(&webflowRefreshCache{
+		RefreshToken: "cached-refresh-token", Region: "us-east-2", ExpiresAt: time.Now().Add(11 * time.Hour), DPoPKey: testEncodedDPoPKey(t),
+	})
+
+	// Keep a separate IAM entry in the configured credential store and prove it
+	// survives the forced login unchanged.
+	store := atmosCreds.NewCredentialStoreWithConfig(&schema.AuthConfig{
+		Keyring: schema.KeyringConfig{Type: types.CredentialStoreTypeMemory},
+	})
+	keyringCreds := &types.AWSCredentials{AccessKeyID: "AKID_KEYRING_IAM", SecretAccessKey: "SECRET_KEYRING_IAM"}
+	require.NoError(t, store.Store(identityName, keyringCreds, ""))
+	userIdent.SetCredentialStore(store)
+
+	ctx, cancel := context.WithTimeout(types.WithForceAWSWebflow(context.Background(), true), 10*time.Second)
+	defer cancel()
+	result, err := userIdent.Authenticate(ctx, nil)
+	require.NoError(t, err)
+
+	awsCreds, ok := result.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "AKID_FORCED_WEBFLOW", awsCreds.AccessKeyID)
+	assert.Equal(t, "TOKEN_FORCED_WEBFLOW", awsCreds.SessionToken)
+
+	storedCreds, err := store.Retrieve(identityName, "")
+	require.NoError(t, err)
+	assert.Equal(t, keyringCreds, storedCreds, "forced webflow must not overwrite IAM credentials in the keyring")
+
+	cachedCreds, err := userIdent.LoadCredentials(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AKID_FORCED_WEBFLOW", cachedCreds.(*types.AWSCredentials).AccessKeyID,
+		"forced webflow must replace the temporary AWS session-file cache")
+}
+
+func TestUserIdentity_Authenticate_ForceWebflowDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	identity, err := NewUserIdentity("test-force-webflow-disabled", &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"webflow_enabled": false,
+			"region":          "us-east-1",
+		},
+	})
+	require.NoError(t, err)
+	userIdent := identity.(*userIdentity)
+	require.NoError(t, userIdent.writeAWSFiles(&types.AWSCredentials{
+		AccessKeyID: "AKID_CACHED_SESSION", SecretAccessKey: "SECRET_CACHED_SESSION", SessionToken: "CACHED_TOKEN",
+		Region: "us-east-1", Expiration: time.Now().Add(2 * time.Hour).Format(time.RFC3339),
+	}, "us-east-1"))
+
+	result, err := userIdent.Authenticate(types.WithForceAWSWebflow(context.Background(), true), nil)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowDisabled,
+		"--webflow must honor webflow_enabled: false even when a cached session is valid")
+}
+
 // TestUserIdentity_Authenticate_PartialYAMLCredsSurfacesConfigError verifies
 // the guard that prevents silent principal hijack: partial YAML credentials
 // (only access_key_id, no secret_access_key) must surface ErrInvalidAuthConfig

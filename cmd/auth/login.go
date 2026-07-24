@@ -45,6 +45,7 @@ func init() {
 	loginParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "p", "", "Provider name to authenticate with (for SSO auto-provisioning)"),
 		flags.WithStringFlag("tags", "", "", "Select an identity by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithBoolFlag("webflow", "", false, "Force a fresh browser login for an aws/user identity"),
 	)
 
 	// Register flags with the command.
@@ -86,12 +87,19 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 
 	// Check if --provider flag was provided.
 	providerName := v.GetString("provider")
+	forceWebflow := v.GetBool("webflow")
 
 	// Perform authentication based on whether provider or identity was specified.
 	ctx := context.Background()
+	if forceWebflow {
+		ctx = authTypes.WithForceAWSWebflow(ctx, true)
+	}
 	var whoami *authTypes.WhoamiInfo
 
 	if providerName != "" {
+		if err := validateWebflowProviderMode(forceWebflow, providerName); err != nil {
+			return err
+		}
 		// Provider-level authentication (e.g., for SSO auto-provisioning).
 		whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 		if err != nil {
@@ -121,6 +129,15 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	// Display success message using Atmos theme.
 	displayAuthSuccess(whoami)
 
+	return nil
+}
+
+// validateWebflowProviderMode rejects --webflow before provider authentication.
+// Browser webflow is implemented only by standalone aws/user identities.
+func validateWebflowProviderMode(forceWebflow bool, providerName string) error {
+	if forceWebflow && providerName != "" {
+		return fmt.Errorf("--webflow requires an aws/user identity and cannot be used with --provider")
+	}
 	return nil
 }
 
@@ -164,9 +181,22 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 			// This happens when no identities are available (e.g., first login with auto_provision_identities).
 			if errors.Is(err, errUtils.ErrNoIdentitiesAvailable) ||
 				errors.Is(err, errUtils.ErrNoDefaultIdentity) {
+				if authTypes.ForceAWSWebflow(ctx) {
+					return nil, false, fmt.Errorf("--webflow requires an aws/user identity; no identity was resolved")
+				}
 				return nil, true, nil
 			}
 			return nil, false, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
+		}
+	}
+
+	if authTypes.ForceAWSWebflow(ctx) {
+		identity, ok := authManager.GetIdentities()[identityName]
+		if !ok {
+			return nil, false, fmt.Errorf("--webflow requires an aws/user identity; identity %q was not found", identityName)
+		}
+		if identity.Kind != authTypes.ProviderKindAWSUser {
+			return nil, false, fmt.Errorf("--webflow requires an aws/user identity; identity %q has kind %q", identityName, identity.Kind)
 		}
 	}
 
