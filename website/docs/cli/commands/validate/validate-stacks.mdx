@@ -106,6 +106,21 @@ atmos validate stacks --schemas-atmos-manifest https://atmos.tools/schemas/atmos
   <dd>Path to JSON Schema to validate Atmos stack manifests.<br/>Can be a URL, an absolute path,<br/>or a path relative to the `base_path` setting in `atmos.yaml`.</dd>
 </dl>
 
+## Deprecation Warnings
+
+Stack manifest fields the JSON Schema marks `deprecated: true` — for example the legacy
+component-level `depends_on` in favor of `dependencies.components` — produce warnings, not
+validation errors. A deprecated field is still valid input; it never causes
+`atmos validate stacks` (or its `atmos stack validate` alias) to exit non-zero:
+
+<Terminal title="atmos validate stacks">
+```console
+stacks/deploy/dev.yaml:14:7: warning: `application.depends_on` is deprecated; use `dependencies.components`
+```
+</Terminal>
+
+Where the schema provides migration guidance, the warning names the field to use instead.
+
 ## Validate Atmos Manifests using JSON Schema
 
 Atmos uses the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to validate Atmos manifests, and has a default (embedded) JSON Schema.
