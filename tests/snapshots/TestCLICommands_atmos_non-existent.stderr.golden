@@ -34,6 +34,7 @@ Valid subcommands are:
   • packer
   • pro
   • profile
+  • sbom
   • scaffold
   • secret
   • stack

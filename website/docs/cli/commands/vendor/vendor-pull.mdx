@@ -304,4 +304,10 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
   <dt>`--dry-run` <em>(optional)</em></dt>
   <dd>Dry run.</dd>
+
+  <dt>`--refresh-lock` <em>(optional)</em></dt>
+  <dd>Refresh immutable `vendor.lock.yaml` entries from declared sources instead of failing on drift.</dd>
+
+  <dt>`--lock-enforcement` <em>(optional)</em></dt>
+  <dd>Override `vendor.lock.enforcement` for this run: `strict`, `warn`, or `silent`.</dd>
 </dl>

@@ -1,0 +1,93 @@
+---
+slug: vendor-lock-verify
+title: "Verify Vendored Files Never Silently Drift"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-21T12:00:00.000Z
+---
+
+Vendoring pulls external code into your own repository so it's reviewable, diffable, and not
+subject to an upstream registry going away. But once those files land on disk, nothing has watched
+them since. A teammate edits a vendored file directly to work around a bug. A pull gets interrupted
+partway through. A CI runner's disk gets reused across jobs. Every one of these leaves your
+checkout silently out of sync with what was actually vendored, and the first sign of trouble is
+usually a broken `terraform plan` weeks later — not the moment the drift happened.
+
+<!--truncate-->
+
+## The Problem
+
+The `atmos vendor pull` command always re-fetches everything, every time, whether or not anything
+actually changed. That makes it slow to lean on as a drift check, so most teams just don't run it that
+way — they trust the checkout and find out otherwise the hard way. There was also no way to answer
+"does what's on disk still match what was vendored" without a network round trip, and no way to
+choose how loudly a stale checkout should complain before it gets quietly re-fetched out from under
+you.
+
+## The Fix
+
+Every `atmos vendor pull` now records a `vendor.lock.yaml` receipt for each vendored source: its
+declared origin, a resolved identity, and a checksum for every file it wrote. That receipt is what
+`atmos vendor verify` checks against, with zero network access:
+
+```shell
+atmos vendor verify
+```
+
+```text
+COMPONENT  PATH                              REASON
+vpc        components/terraform/vpc/main.tf  checksum mismatch
+```
+
+It exits non-zero the moment anything doesn't match — a missing file or a modified one — so it
+drops straight into a CI gate. Add `--component <name>` to scope the check, or `--format json` for
+machine-readable output.
+
+You also get to choose how a drifted checkout behaves on the next `atmos vendor pull`, instead of
+always silently re-fetching:
+
+```yaml
+vendor:
+  lock:
+    enforcement: warn # silent | warn | strict
+```
+
+- `silent` re-fetches with no reporting — the behavior every `vendor pull` had before this existed.
+- `warn` (the default) re-fetches and prints one line naming what drifted and why.
+- `strict` refuses to run at all until you pass `--refresh-lock`, so an unreviewed local edit can
+  never get silently overwritten — or silently kept — without someone noticing.
+
+## How to Use It
+
+Gate CI on drift the same way you'd gate on any other check:
+
+```shell
+atmos vendor verify || exit 1
+```
+
+Override enforcement for a single invocation without touching `atmos.yaml`:
+
+```shell
+atmos vendor pull --lock-enforcement=strict
+```
+
+And when a source genuinely needs to move — not just recover from drift — `version:` can now be a
+semver range instead of only an exact pin:
+
+```yaml
+sources:
+  - component: vpc
+    source: github.com/cloudposse/terraform-aws-vpc.git
+    version: "^1.0.0"
+```
+
+The first `atmos vendor pull` resolves that range to a concrete tag and locks it there — every
+later pull reuses the locked version with no network call at all, until an explicit
+`atmos vendor update` or `--refresh-lock` re-resolves it. An exact pin like `version: v1.5.0`
+behaves exactly as it always has: the manifest itself remains the single source of truth for what
+gets fetched.
+
+## Get Involved
+
+Questions about lock enforcement, `vendor verify`, or version ranges are welcome in the
+[Atmos GitHub repository](https://github.com/cloudposse/atmos) and the community Slack.

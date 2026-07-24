@@ -19,7 +19,7 @@ anchors, and Go templates such as `{{.Version}}` in source URLs.
 ## Usage
 
 ```shell
-atmos vendor update [--check] [--pull] [--component <name>] [--tags <a,b>] [--outdated] [--component-manifests]
+atmos vendor update [--check] [--pull] [--pull-request] [--group <name>] [--component <name>]... [--tags <a,b>] [--outdated] [--component-manifests]
 ```
 
 Sources whose version is templated (`{{...}}`) or whose source is not a Git repository
@@ -49,8 +49,9 @@ atmos vendor update
 # Update versions and then pull the new components.
 atmos vendor update --pull
 
-# Update a single component, or by tags.
+# Update one or more components, or by tags.
 atmos vendor update --component vpc
+atmos vendor update --component vpc --component eks
 atmos vendor update --tags networking,aws
 
 # Show only sources with an available update.
@@ -58,7 +59,15 @@ atmos vendor update --check --outdated
 
 # Also sweep per-component component.yaml manifests alongside an existing vendor.yaml.
 atmos vendor update --check --component-manifests
+
+# Commit, push, and open (or update) a pull request with available updates.
+atmos vendor update --pull-request
+
+# Only update the named vendor.update.groups selection, and open a pull request for it.
+atmos vendor update --group platform --pull-request
 ```
+
+See <a href="/changelog/component-updater-pull-requests">Native Pull Requests for Vendored Component Updates</a> for the full `--pull-request` workflow, including CI wiring.
 
 ## Version constraints
 
@@ -84,18 +93,41 @@ sources:
   <dd>Dry run: show available updates without modifying any files.</dd>
   <dt>`--pull`</dt>
   <dd>After updating versions, run <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>.</dd>
-  <dt>`--component` / `-c` (string)</dt>
-  <dd>Update only this component.</dd>
+  <dt>`--all`</dt>
+  <dd>Update all discoverable vendor sources. This is the default when no `--component`, `--tags`, or `--group` selector is given.</dd>
+  <dt>`--component` / `-c` (string, repeatable)</dt>
+  <dd>Update only these components. Repeat the flag to select more than one (`--component vpc --component eks`).</dd>
   <dt>`--tags` (string)</dt>
   <dd>Update only components carrying any of these comma-separated tags.</dd>
+  <dt>`--group` (string)</dt>
+  <dd>Update only the named `vendor.update.groups` selection.</dd>
+  <dt>`--pull-request`</dt>
+  <dd>Commit, push, and create or update a pull request for the available updates. See <a href="/changelog/component-updater-pull-requests">Native Pull Requests for Vendored Component Updates</a>.</dd>
   <dt>`--outdated`</dt>
   <dd>Show only sources with an available update.</dd>
+  <dt>`--archived`</dt>
+  <dd>Show only sources whose upstream repository is archived.</dd>
+  <dt>`--format` (string, default `table`)</dt>
+  <dd>Output format: `table` or `json`.</dd>
   <dt>`--type` / `-t` (string, default `terraform`)</dt>
   <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`, or to restrict a `--component-manifests` sweep to one type.</dd>
   <dt>`--component-manifests`</dt>
   <dd>Also check per-component `component.yaml` manifests when a `vendor.yaml` is present (this sweep runs automatically when no `vendor.yaml` exists). Only applies when `--component` is not set.</dd>
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
   <dd>The vendor manifest to start from (imports are followed).</dd>
+</dl>
+
+The following flags apply only together with `--pull`, and are passed through to <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>:
+
+<dl>
+  <dt>`--everything`</dt>
+  <dd>Pull all components, not just the ones that were updated.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Simulate the pull without writing any files.</dd>
+  <dt>`--refresh-lock`</dt>
+  <dd>Refresh immutable `vendor.lock.yaml` entries from declared sources instead of failing on drift.</dd>
+  <dt>`--lock-enforcement` (string)</dt>
+  <dd>Override `vendor.lock.enforcement` for this run: `strict`, `warn`, or `silent`.</dd>
 </dl>
 
 :::note

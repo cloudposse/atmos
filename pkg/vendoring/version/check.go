@@ -57,3 +57,23 @@ func IsTemplatedVersion(version string) bool {
 
 	return strings.Contains(version, "{{")
 }
+
+// IsSemverConstraint reports whether v is a semver *range* expression (e.g. "^1.0.0", "~1.2.3",
+// ">=1.0.0 <2.0.0", "*") as opposed to an exact version. An exact version -- even one that would
+// also technically parse as a (degenerate) constraint, such as a bare "1.2.3" -- always returns
+// false: exact pins take priority, so every existing manifest's "version: is templated verbatim"
+// behavior stays byte-for-byte unchanged. An opaque literal that is neither a valid exact semver
+// nor a valid constraint (a commit SHA, a branch name, "") also returns false, falling through to
+// today's literal-templating behavior rather than erroring.
+func IsSemverConstraint(v string) bool {
+	defer perf.Track(nil, "version.IsSemverConstraint")()
+
+	if v == "" {
+		return false
+	}
+	if _, err := semver.NewVersion(v); err == nil {
+		return false
+	}
+	_, err := semver.NewConstraint(v)
+	return err == nil
+}

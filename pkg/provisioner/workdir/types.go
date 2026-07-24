@@ -29,6 +29,14 @@ type WorkdirMetadata struct {
 	// SourceVersion is the remote source version (for remote sources).
 	SourceVersion string `json:"source_version,omitempty"`
 
+	// SourceResolved is the credential-free canonical source recorded after
+	// materialization. It can differ from a mutable declared URI.
+	SourceResolved string `json:"source_resolved,omitempty"`
+
+	// SourceIdentity is immutable provenance (Git commit, OCI manifest digest,
+	// or content-tree SHA-256) for the materialized source.
+	SourceIdentity string `json:"source_identity,omitempty"`
+
 	// CreatedAt is when the workdir was created.
 	CreatedAt time.Time `json:"created_at"`
 

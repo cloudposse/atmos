@@ -105,12 +105,12 @@ func TestInstallerLockFileErrors(t *testing.T) {
 
 func TestInstallerLockFileGetOrCreateTool(t *testing.T) {
 	lf := &installerLockFile{}
-	entry := lf.getOrCreateTool("owner/tool")
+	entry := getOrCreateInstallerTool(lf, "owner/tool")
 	require.NotNil(t, entry)
 	assert.NotEmpty(t, entry.InstalledAt)
 	assert.NotNil(t, entry.Platforms)
 
 	entry.Platforms = nil
-	assert.Same(t, entry, lf.getOrCreateTool("owner/tool"))
+	assert.Same(t, entry, getOrCreateInstallerTool(lf, "owner/tool"))
 	assert.NotNil(t, entry.Platforms)
 }

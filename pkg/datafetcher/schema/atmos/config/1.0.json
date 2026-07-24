@@ -3854,7 +3854,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Deprecated indicates if this configuration should no longer be used."
+          "description": "Deprecated: this configuration should no longer be used."
         }
       },
       "type": "object",
@@ -12154,6 +12154,17 @@
           ],
           "description": "Path to vendor configuration file or directory containing vendor files.\nIf a directory is specified, all .yaml files in the directory will be processed in lexicographical order."
         },
+        "lock_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "LockFile is the committed vendor materialization lock. Relative paths are\nresolved from the Atmos base path. It defaults to vendor.lock.yaml."
+        },
         "list": {
           "anyOf": [
             {
@@ -12181,9 +12192,417 @@
             }
           ],
           "description": "Retry configuration for vendor operations (global default)."
+        },
+        "update": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Update configures selection and execution policy for `atmos vendor update`."
+        },
+        "ci": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorCIConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "CI configures optional CI-only publishing and reporting for vendor updates."
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorLockConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift."
         }
       },
       "type": "object"
+    },
+    "VendorCIConfig": {
+      "properties": {
+        "pull_request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorPullRequestConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorSummaryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorCIConfig configures provider-backed publishing for vendor updates."
+    },
+    "VendorLockConfig": {
+      "properties": {
+        "enforcement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Enforcement is \"warn\" (the default when omitted), \"silent\", or \"strict\".\n  - \"silent\": re-fetch the drifted package with no reporting.\n  - \"warn\": re-fetch the drifted package and print one warning per package naming why it\n    drifted.\n  - \"strict\": refuse to run (before any fetch/copy/write) when a drifted package is found and\n    `--refresh-lock` was not explicitly passed, naming every drifted package and its reason."
+        }
+      },
+      "type": "object",
+      "description": "VendorLockConfig configures how `atmos vendor pull` reacts when a package's on-disk state no\nlonger matches its vendor.lock.yaml receipt."
+    },
+    "VendorPullRequestConfig": {
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "base_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "branch_prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "reviewers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "assignees": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorPullRequestConfig configures pull request publishing for vendor CI."
+    },
+    "VendorSummaryConfig": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Enabled defaults to true when omitted. The command treats false as an\nexplicit opt-out only when the summary map is present in configuration."
+        }
+      },
+      "type": "object",
+      "description": "VendorSummaryConfig configures CI summary output for vendor updates."
+    },
+    "VendorUpdateBatchingConfig": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode is \"scope\" (the only supported value today - one branch/PR for the whole update run).\nPer-component batching (one isolated branch/PR per updated component) is a deferred future\nfeature; see docs/prd/vendor-lock.md's Known Limitations."
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateBatchingConfig configures the batching strategy for vendor updates."
+    },
+    "VendorUpdateConfig": {
+      "properties": {
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateExecutionConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "batching": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateBatchingConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "groups": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/VendorUpdateGroupConfig"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateConfig configures the local part of component updates. Publishing\nconfiguration intentionally lives under VendorCIConfig so normal updates stay\nindependent of a CI provider."
+    },
+    "VendorUpdateExecutionConfig": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode is \"current\" (the default) or \"worktree\"."
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateExecutionConfig configures the execution mode for vendor updates."
+    },
+    "VendorUpdateGroupConfig": {
+      "properties": {
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateGroupConfig selects components for a named vendor update group."
     },
     "Version": {
       "properties": {

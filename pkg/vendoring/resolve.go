@@ -3,6 +3,7 @@ package vendoring
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -189,44 +190,85 @@ func notFoundError(component, vendorFile string, vendorFileChecked bool, compone
 		errUtils.ErrVendorSourceNotFound, component, DefaultVendorFile, componentDir)
 }
 
-// DiscoverComponentManifests finds every component.yaml/component.yml declared directly under a
-// component type's base directory (one level deep: <basePath>/<component>/component.yaml), for
-// the opt-in repo-wide component-manifest sweep ("vendor update --component-manifests").
-// Directories without a manifest are silently skipped — not every component vendors this way; a
-// manifest that IS found but is malformed is a hard error.
+// DiscoverComponentManifests finds every component.yaml/component.yml under a component type's
+// base directory, at any nesting depth (e.g. <basePath>/eks/cluster/component.yaml, not just
+// <basePath>/<component>/component.yaml), for the opt-in repo-wide component-manifest sweep
+// ("vendor update --component-manifests"). Component identity for a nested manifest is the
+// slash-joined path relative to basePath (e.g. "eks/cluster"), matching the existing convention
+// that component names are already path-like. The moment a manifest is found in a directory, its
+// own subtree (modules, examples, .terraform) stops being descended into — a component's internals
+// are never treated as containing further components. Directories without a manifest are silently
+// skipped — not every component vendors this way; a manifest that IS found but is malformed is a
+// hard error. ".git"/".terraform" are never descended into, for --everything performance on large
+// repos.
 func DiscoverComponentManifests(basePath, componentType string) ([]*ResolvedSource, error) {
 	defer perf.Track(nil, "vendoring.DiscoverComponentManifests")()
 
-	entries, err := os.ReadDir(basePath)
+	info, err := os.Stat(basePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrReadVendorFile, err)
 	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("%w: %s is not a directory", errUtils.ErrReadVendorFile, basePath)
+	}
 
 	var sources []*ResolvedSource
-	for _, entry := range entries {
+	walkErr := filepath.WalkDir(basePath, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if !entry.IsDir() {
-			continue
+			return nil
 		}
-		componentDir := filepath.Join(basePath, entry.Name())
-		manifestFile, err := FindComponentManifestFile(componentDir)
-		if err != nil {
-			continue
+		if path != basePath && skipComponentDiscoveryDir(entry.Name()) {
+			return filepath.SkipDir
 		}
-		compCfg, err := ReadComponentManifest(manifestFile)
-		if err != nil {
-			return nil, err
+
+		manifestFile, findErr := FindComponentManifestFile(path)
+		if findErr != nil {
+			if errors.Is(findErr, errUtils.ErrComponentManifestNotFound) {
+				// No manifest directly in this directory - keep descending into it.
+				return nil
+			}
+			return findErr
 		}
+		compCfg, readErr := ReadComponentManifest(manifestFile)
+		if readErr != nil {
+			return readErr
+		}
+		rel, relErr := filepath.Rel(basePath, path)
+		if relErr != nil {
+			return relErr
+		}
+		component := filepath.ToSlash(rel)
 		sources = append(sources, &ResolvedSource{
-			Source:                ComponentManifestSource(compCfg, entry.Name(), componentType),
+			Source:                ComponentManifestSource(compCfg, component, componentType),
 			File:                  manifestFile,
 			FromComponentManifest: true,
 			ComponentType:         componentType,
 		})
+		// A component's own subtree is never treated as containing further components.
+		return filepath.SkipDir
+	})
+	if walkErr != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrReadVendorFile, walkErr)
 	}
 	return sources, nil
+}
+
+// skipComponentDiscoveryDir reports whether name should never be descended into while discovering
+// component.yaml manifests: version control metadata and Terraform's local cache/state directory
+// can both be large and never contain a real component.
+func skipComponentDiscoveryDir(name string) bool {
+	switch name {
+	case ".git", ".terraform":
+		return true
+	default:
+		return false
+	}
 }
 
 // DiscoverAllComponentManifests sweeps every configured component type (or just componentType,

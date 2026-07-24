@@ -1,6 +1,6 @@
 ---
 name: atmos-ci
-description: "Atmos CI: Native CI with GitHub Actions containers, native outputs, collapsible log groups, affected/all matrix workflows, OIDC profiles, toolchain-aware jobs, drift routing to Atmos Pro, deployment approvals, merge queues, environments, statuses, and Atlantis integration"
+description: "Atmos CI: Native CI with GitHub Actions containers, native outputs, SBOM workflow-artifact publication, collapsible log groups, affected/all matrix workflows, OIDC profiles, toolchain-aware jobs, drift routing to Atmos Pro, deployment approvals, merge queues, environments, statuses, and Atlantis integration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -32,6 +32,7 @@ Atmos commands directly.
 | Tool versions, `dependencies.tools`, explicit job tool installs, PATH behavior | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
 | OIDC providers, identities, trust policies, cloud auth conventions | [atmos-auth](../atmos-auth/SKILL.md) |
 | Profile mechanics for `ATMOS_PROFILE` and `--profile` | [atmos-profiles](../atmos-profiles/SKILL.md) |
+| Provenance SBOM formats, evidence coverage, NTIA validation, and `--include-files` | [atmos-sbom](../atmos-sbom/SKILL.md) |
 
 ## Native CI First
 
@@ -152,6 +153,35 @@ jobs:
 ```
 
 For new workflows, use the container image and direct Atmos commands.
+
+### SBOM Workflow Artifacts
+
+Use `atmos sbom generate --upload` to retain the generated CycloneDX or SPDX document with a
+native CI run. This is an optional provider capability: it must not be modeled as a status check,
+PR comment, or dependency-graph submission.
+
+GitHub Actions does not expose its artifact-runtime credentials to ordinary `run:` steps. Surface
+them with the Atmos `github-runtime` action, then run the command. The generated file is still
+written to `--output` (or stdout); `--upload` additionally stores the same bytes as a workflow
+artifact.
+
+```yaml
+permissions:
+  contents: read
+
+steps:
+  - uses: actions/checkout@v6
+  - uses: cloudposse/atmos/actions/github-runtime@v1
+    with:
+      mode: env
+  - run: atmos sbom generate --format spdx-json --output sbom.spdx.json --upload
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+```
+
+GitHub's SBOM APIs export or request GitHub-generated SPDX reports; they do not accept an
+arbitrary Atmos SBOM. Say "workflow artifact" or "CI publication," never "Dependency Graph
+upload." See [atmos-sbom](../atmos-sbom/SKILL.md) for evidence and coverage semantics.
 
 ## Matrix Patterns
 

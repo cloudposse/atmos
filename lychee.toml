@@ -85,11 +85,17 @@ exclude = [
   "\\?raw=true",
   # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
   "img\\.shields\\.io/github/release/",
-  # Shields badge endpoints intermittently return 503/520 from CI runners even
-  # though the badges resolve in browsers. These are decorative status badges,
-  # so exclude the unstable badge and GitHub-status endpoints from link checks.
-  "shields\\.io/badge/",
-  "img\\.shields\\.io/github/(actions/workflow/status|last-commit)/",
+  # shields.io's dynamic GitHub-sourced badges (workflow status, last-commit) query
+  # GitHub's API server-side to render and intermittently return 520/timeout under
+  # load; a plain static shields.io badge (verified) resolves fine, so this is
+  # scoped to just these two dynamic badge types, not shields.io as a whole.
+  "img\\.shields\\.io/github/actions/workflow/status/",
+  "img\\.shields\\.io/github/last-commit/",
+  # The bare shields.io domain (distinct infrastructure from img.shields.io, which
+  # serves the actual badge images and resolves fine) is currently unreachable
+  # from CI runners - verified via direct curl, consistent timeout with zero bytes
+  # received. Used by static badge markdown in the terraform CI plugin templates.
+  "^https?://shields\\.io/badge/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
@@ -144,6 +150,10 @@ exclude = [
   # it is the canonical NO_COLOR spec site referenced from the help-system and
   # io-handling PRDs, and resolves in a real browser)
   "no-color\\.org",
+  # bixense.com (intermittent 503 Service Unavailable from CI runners; it is the
+  # canonical CLICOLOR spec site referenced alongside NO_COLOR in the help-system
+  # PRD, and resolves fine outside CI)
+  "bixense\\.com",
   # Algolia DocSearch docs (intermittent timeouts from CI runners)
   "docsearch\\.algolia\\.com",
   # Open Group POSIX specs (intermittent timeouts from CI runners)
@@ -160,6 +170,10 @@ exclude = [
   # Server Error from GitHub's gateway in CI; the page is valid and loads in
   # a browser (verified via `gh api repos/cloudposse/atmos/releases/tags/v1.203.0`).
   "github\\.com/cloudposse/atmos/releases/tag/v1\\.203\\.0",
+  # NTIA's 2021 SBOM minimum-elements report is authoritative, but its TLS
+  # chain is not trusted by GitHub-hosted runners. It resolves locally and in
+  # browsers; keep the citation while excluding only this known-valid URL.
+  "ntia\\.gov/report/2021/minimum-elements-software-bill-materials-sbom",
   # Otelic (intermittent "Connection reset by peer" from CI runners; the page
   # returns 200 and loads fine outside CI, verified via curl).
   "otelic\\.com",

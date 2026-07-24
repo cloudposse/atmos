@@ -8,8 +8,10 @@ import (
 	goyaml "go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -52,6 +54,45 @@ func ReadComponentManifest(file string) (*schema.VendorComponentConfig, error) {
 		return nil, fmt.Errorf("%w: %q in %s", errUtils.ErrInvalidComponentManifestKind, cfg.Kind, file)
 	}
 	return &cfg, nil
+}
+
+// ResolveComponentPath resolves the absolute base directory for component of componentType,
+// joining atmosConfig's global BasePath with the component type's own configured BasePath and the
+// component name -- the layout every component.yaml source has always assumed
+// ("components/terraform/<name>", etc.). The returned path is always absolute so the vendor
+// lock's target-containment check (pkg/vendoring/lockfile) can compare it against BasePath; a
+// relative atmosConfig.BasePath would otherwise make it relative to CWD instead, which the lock
+// validation cannot reliably relate back to BasePath. Returns an error when componentType isn't
+// one of terraform/helmfile/packer, or when the resolved directory does not exist.
+func ResolveComponentPath(atmosConfig *schema.AtmosConfiguration, component, componentType string) (string, error) {
+	defer perf.Track(atmosConfig, "vendoring.ResolveComponentPath")()
+
+	var componentBasePath string
+	switch componentType {
+	case cfg.TerraformComponentType:
+		componentBasePath = atmosConfig.Components.Terraform.BasePath
+	case cfg.HelmfileComponentType:
+		componentBasePath = atmosConfig.Components.Helmfile.BasePath
+	case cfg.PackerComponentType:
+		componentBasePath = atmosConfig.Components.Packer.BasePath
+	default:
+		return "", fmt.Errorf("%s: %w", componentType, errUtils.ErrUnsupportedComponentType)
+	}
+
+	componentPath, err := filepath.Abs(filepath.Join(atmosConfig.BasePath, componentBasePath, component))
+	if err != nil {
+		return "", fmt.Errorf("resolve component path: %w", err)
+	}
+
+	dirExists, err := u.IsDirectory(componentPath)
+	if err != nil {
+		return "", err
+	}
+	if !dirExists {
+		return "", fmt.Errorf("%w: %s", errUtils.ErrComponentFolderNotFound, componentPath)
+	}
+
+	return componentPath, nil
 }
 
 // ComponentManifestSource converts a decoded component.yaml into the same schema.AtmosVendorSource

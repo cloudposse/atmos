@@ -69,7 +69,7 @@ type ConfigMetadata struct {
 	// Tags are labels for filtering and organization.
 	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 
-	// Deprecated indicates if this configuration should no longer be used.
+	// Deprecated: this configuration should no longer be used.
 	Deprecated bool `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
 }
 
@@ -1481,6 +1481,7 @@ type GCPAuthContext struct {
 	// ServiceAccountEmail is the service account being used (when impersonating).
 	ServiceAccountEmail string `json:"service_account_email,omitempty" yaml:"service_account_email,omitempty" mapstructure:"service_account_email"`
 	// AccessToken is the OAuth2 access token.
+	//nolint:gosec // This runtime context intentionally carries a token for SDK authentication.
 	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty" mapstructure:"access_token"`
 	// TokenExpiry is when the token expires.
 	TokenExpiry time.Time `json:"token_expiry,omitempty" yaml:"token_expiry,omitempty" mapstructure:"token_expiry"`
@@ -1975,10 +1976,19 @@ type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files.
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order.
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// LockFile is the committed vendor materialization lock. Relative paths are
+	// resolved from the Atmos base path. It defaults to vendor.lock.yaml.
+	LockFile string `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
 	// List configuration for vendor list output.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	// Retry configuration for vendor operations (global default).
 	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	// Update configures selection and execution policy for `atmos vendor update`.
+	Update VendorUpdateConfig `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
+	// CI configures optional CI-only publishing and reporting for vendor updates.
+	CI VendorCIConfig `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+	// Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift.
+	Lock VendorLockConfig `yaml:"lock,omitempty" json:"lock,omitempty" mapstructure:"lock"`
 }
 
 type ChromaStyle struct {

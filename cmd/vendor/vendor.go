@@ -2,12 +2,22 @@ package vendor
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
+
+var vendorPullParser *flags.StandardParser
+
+// componentTypeFlagHelp is the canonical --type help text shared by every vendor subcommand that
+// registers the flag (vendor pull, vendor update, vendor diff) -- a single source of truth so a
+// future component type (or a corrected description) can't drift out of sync across subcommands
+// the way it previously did (this flag said "terraform or helmfile" on vendor pull well after
+// packer-inclusive discovery landed on vendor update/diff).
+const componentTypeFlagHelp = "Component type (terraform, helmfile, or packer)"
 
 // vendorCmd executes 'atmos vendor' CLI commands.
 var vendorCmd = &cobra.Command{
@@ -32,15 +42,23 @@ var vendorPullCmd = &cobra.Command{
 }
 
 func init() {
-	// Set up vendor pull flags.
-	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
-	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
-	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "The type of the vendor (terraform or helmfile).")
-	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
-	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
-	vendorPullCmd.PersistentFlags().Bool("everything", false, "Vendor all components")
+	// Set up vendor pull flags. Registered via Flags() (not PersistentFlags()): vendorPullCmd has
+	// no subcommands of its own, so persistent inheritance was never needed here.
+	vendorPullParser = flags.NewStandardParser(
+		flags.WithStringFlag("component", "c", "", "Only vendor the specified component"),
+		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
+		flags.WithBoolFlag("dry-run", "", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes."),
+		flags.WithStringFlag("tags", "", "", "Only vendor the components that have the specified tags"),
+		flags.WithBoolFlag("everything", "", false, "Vendor all components"),
+		flags.WithBoolFlag("refresh-lock", "", false, "Refresh immutable vendor lock entries from declared sources"),
+		flags.WithStringFlag("lock-enforcement", "", "", "Override vendor.lock.enforcement (strict, warn, or silent)"),
+	)
+	vendorPullParser.RegisterFlags(vendorPullCmd)
+	if err := vendorPullParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
-	// Add subcommands. The 'update', 'diff', 'get', and 'set' subcommands are
+	// Add subcommands. The 'clean', 'update', 'diff', 'get', and 'set' subcommands are
 	// attached in their own files' init() functions.
 	vendorCmd.AddCommand(vendorPullCmd)
 

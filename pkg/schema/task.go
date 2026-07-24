@@ -255,6 +255,8 @@ type Task struct {
 //   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
 //   - `background` : boolean async marker, or a string style color.
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
+//
+//nolint:dupl // Task and WorkflowStep need distinct receivers while decoding the same YAML shape.
 func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 	type plain Task
 	// Decode into a zero-value temp first so a reused receiver does not retain
@@ -340,6 +342,8 @@ func (t *Tasks) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // ToWorkflowStep converts a Task to a WorkflowStep for backward compatibility.
+//
+//nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func (task *Task) ToWorkflowStep() WorkflowStep {
 	// Convert time.Duration to string for WorkflowStep.
 	var timeoutStr string
@@ -503,6 +507,8 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 }
 
 // TaskFromWorkflowStep creates a Task from a WorkflowStep.
+//
+//nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func TaskFromWorkflowStep(step *WorkflowStep) Task {
 	// Parse timeout string to time.Duration.
 	var timeout time.Duration
@@ -933,53 +939,60 @@ func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error
 	case string:
 		return m, nil
 	case map[string]any:
-		if m["type"] == TaskTypeCast {
-			var cfg CastOutput
-			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-				Result:           &cfg,
-				TagName:          "mapstructure",
-				WeaklyTypedInput: true,
-			})
-			if err != nil {
-				return nil, err
-			}
-			if err := decoder.Decode(v); err != nil {
-				return nil, err
-			}
-			task.CastOutput = &cfg
-			task.Output = cfg.Mode
-			copied := make(map[string]any, len(m)-1)
-			for key, val := range m {
-				if key == "output" {
-					continue
-				}
-				copied[key] = val
-			}
-			return copied, nil
-		}
-		var cfg ParallelOutputConfig
-		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-			Result:           &cfg,
-			TagName:          "mapstructure",
-			WeaklyTypedInput: true,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err := decoder.Decode(v); err != nil {
-			return nil, err
-		}
-		task.Output = cfg.Mode
-		task.ParallelOutput = &cfg
-		copied := make(map[string]any, len(m)-1)
-		for key, val := range m {
-			if key == "output" {
-				continue
-			}
-			copied[key] = val
-		}
-		return copied, nil
+		return normalizeStructuredTaskOutput(m, task, v)
 	default:
 		return m, nil
 	}
+}
+
+func normalizeStructuredTaskOutput(m map[string]any, task *Task, output map[string]any) (map[string]any, error) {
+	if m["type"] == TaskTypeCast {
+		return normalizeCastTaskOutput(m, task, output)
+	}
+	return normalizeParallelTaskOutput(m, task, output)
+}
+
+func normalizeCastTaskOutput(m map[string]any, task *Task, output map[string]any) (map[string]any, error) {
+	var cfg CastOutput
+	if err := decodeTaskOutput(output, &cfg); err != nil {
+		return nil, err
+	}
+	task.CastOutput = &cfg
+	task.Output = cfg.Mode
+	return withoutTaskMapKey(m, "output"), nil
+}
+
+func normalizeParallelTaskOutput(m map[string]any, task *Task, output map[string]any) (map[string]any, error) {
+	var cfg ParallelOutputConfig
+	if err := decodeTaskOutput(output, &cfg); err != nil {
+		return nil, err
+	}
+	task.Output = cfg.Mode
+	task.ParallelOutput = &cfg
+	return withoutTaskMapKey(m, "output"), nil
+}
+
+func decodeTaskOutput(input map[string]any, output any) error {
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           output,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create decoder: %w", err)
+	}
+	if err := decoder.Decode(input); err != nil {
+		return fmt.Errorf("failed to decode task output: %w", err)
+	}
+	return nil
+}
+
+func withoutTaskMapKey(m map[string]any, key string) map[string]any {
+	copied := make(map[string]any, len(m)-1)
+	for mapKey, value := range m {
+		if mapKey != key {
+			copied[mapKey] = value
+		}
+	}
+	return copied
 }

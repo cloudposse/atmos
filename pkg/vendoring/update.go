@@ -48,8 +48,9 @@ type SourceUpdateResult struct {
 	// resolved under, populated only for component.yaml-declared sources (ResolvedSource.ComponentType;
 	// see updateResolvedSource). Empty for vendor.yaml-declared sources, which don't carry a single
 	// type the same way (each source's own Targets can point anywhere). Used by
-	// cmd/vendor/update.go's partitionUpdatedResults to group a repo-wide "--pull" batch by type,
-	// since a component-manifest sweep (DiscoverAllComponentManifests) can mix types in one report.
+	// cmd/vendor/update.go's partitionPullResults/partitionReportResults to group a repo-wide
+	// "--pull" batch by type, since a component-manifest sweep (DiscoverAllComponentManifests) can
+	// mix types in one report.
 	ComponentType string
 }
 

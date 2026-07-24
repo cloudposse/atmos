@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -445,6 +446,14 @@ func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *sche
 		UpdatedAt:     now,
 		LastAccessed:  now,
 		ContentHash:   "", // Content hash is computed separately for local sources.
+	}
+	// The common artifact resolver records a local, credential-free receipt for
+	// JIT workdirs. Failure is deliberately non-fatal: the provisioning result
+	// remains usable, while SBOM coverage can report the missing evidence.
+	if artifact, err := downloader.ResolveArtifact(context.Background(), nil, sourceSpec.Uri, workdirPath); err == nil {
+		metadata.SourceURI = artifact.Declared
+		metadata.SourceResolved = artifact.Resolved
+		metadata.SourceIdentity = artifact.Identity
 	}
 
 	// Preserve original CreatedAt and ContentHash if metadata already existed.

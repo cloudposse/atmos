@@ -1,0 +1,80 @@
+---
+slug: sbom-provenance
+title: "Generate Verifiable Terraform Provenance SBOMs"
+authors: [osterman]
+tags: [feature, experimental]
+date: 2026-07-17T12:00:00.000Z
+---
+
+Compliance reviews often start with a deceptively simple question: what exactly is in this infrastructure release? Answering it by hand means reconciling vendored sources, provider locks, module downloads, and registry artifacts—then hoping no missing evidence is mistaken for an empty dependency set. Atmos now makes that evidence visible in one SBOM while keeping coverage boundaries explicit, and integrates with native CI to upload it as a GitHub Actions workflow artifact when enabled.
+
+<!--truncate-->
+
+## The Problem
+
+An SBOM that quietly excludes a dependency category can create more risk than no SBOM at all. A provider version without its checksum, a module selected from a mutable ref, or an unavailable module graph must be visible to the person deciding whether an artifact is ready for compliance review.
+
+Terraform's provider lock file, vendored source receipts, and OCI artifact digests already contain much of the evidence infrastructure teams need. Until now, that evidence lived in separate places and could not be rendered as a single standards-based document.
+
+## The Fix
+
+Generate a provenance/build-input SBOM for Terraform-managed infrastructure:
+
+```shell
+atmos sbom generate --format cyclonedx-json --output infra.sbom.json
+```
+
+The first release inventories four evidence domains:
+
+- Atmos-managed sources recorded in `vendor.lock.yaml`, including `vendor.yaml`, `component.yaml`, and mixins
+- OCI source artifacts pinned by their selected manifest digest
+- Terraform providers from `.terraform.lock.hcl`, including recorded archive checksums
+- Terraform modules from `terraform modules -json`, resolved to a commit, OCI digest, or content hash when possible
+
+The command emits CycloneDX JSON or SPDX JSON from the same graph, so the two documents describe the same components and relationships.
+
+### Compliance Without False Confidence
+
+An SBOM is only useful when its coverage is clear. The default `provenance` mode includes adapter coverage diagnostics and emits the evidence that is available. It is deliberately not a statement that every dependency or deployed workload in the environment is represented.
+
+For a Terraform-scoped NTIA-baseline check, use `--mode ntia` and identify the subject:
+
+```shell
+atmos sbom generate \
+  --mode ntia \
+  --subject-name infra-live \
+  --subject-version "$(git rev-parse --short HEAD)" \
+  --subject-supplier "Example, Inc." \
+  --format spdx-json \
+  --output infra-live.spdx.json
+```
+
+NTIA mode fails when required provenance is incomplete. That includes missing subject information, a provider lock without a SHA-256 archive checksum, a module without immutable resolution evidence, or an unavailable module-graph interface. A failed compliance-mode invocation is more useful than a document that silently leaves evidence out.
+
+## How to Use It
+
+Start with the default provenance mode to inspect the evidence and coverage for initialized Terraform components:
+
+```shell
+atmos sbom generate --format cyclonedx-json --output infra.sbom.json
+```
+
+Add `--include-files` when the exact `vendor.lock.yaml` file inventory belongs in the document:
+
+```shell
+atmos sbom generate --include-files --output infra.sbom.json
+```
+
+The command uses the Terraform executable configured by `components.terraform.command` in each component directory. If it is unset, Atmos uses `terraform`. Module inventory currently requires Terraform 1.10 or later because it relies on the stable `terraform modules -json` interface.
+
+If your project configures `tofu`, Atmos honors that choice. It does not parse Terraform's internal module-installation files as a fallback; until OpenTofu exposes an equivalent stable structured interface, module coverage is marked unavailable and NTIA mode refuses the scope.
+
+### What's Next
+
+This is the foundation for broader dependency coverage — it's not yet feature complete. Helm and Helmfile locks, Kubernetes manifests, typed deployed-container image discovery, OCI SBOM attestations or scanner integration for image contents, and OpenTofu module graphs are next adapters, extending coverage across the other component types Atmos already supports. The shared graph and coverage contract mean those additions will extend both CycloneDX and SPDX consistently.
+
+Read the full [SBOM command reference](/cli/commands/sbom/usage) and the [provenance design](https://github.com/cloudposse/atmos/blob/main/docs/prd/sbom-provenance.md).
+
+## Get Involved
+
+The initial release is experimental. Questions about the evidence model, new adapters, or compliance workflows are welcome in the [Atmos GitHub repository](https://github.com/cloudposse/atmos) and the community Slack.

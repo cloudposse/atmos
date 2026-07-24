@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -107,10 +108,15 @@ spec:
 		assert.Nil(t, err)
 		assert.False(t, exists)
 
-		// Test component vendoring
+		// Test component vendoring. Test Case 2 above leaves an empty
+		// components/terraform/mock directory behind (it removes only the component.yaml
+		// it wrote, not the directory), so this exercises "directory exists, manifest file
+		// doesn't" (ErrComponentManifestNotFound), not "directory doesn't exist"
+		// (ErrComponentFolderNotFound) -- both are real, distinct failure modes this
+		// package's ResolveComponentPath/FindComponentManifestFile split covers.
 		_, _, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "does not exist")
+		assert.ErrorIs(t, err, errUtils.ErrComponentManifestNotFound)
 	})
 
 	// Test Case 4: No component specified with vendor.yaml
