@@ -176,6 +176,32 @@ func TestShouldUseColor(t *testing.T) {
 	assert.IsType(t, false, result)
 }
 
+func TestShouldUseColorInCI(t *testing.T) {
+	t.Setenv("CI", "true")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("FORCE_COLOR", "")
+
+	assert.True(t, shouldUseColor(), "CI output supports ANSI color without a TTY")
+}
+
+func TestFormatInCIUsesColorUnlessDisabled(t *testing.T) {
+	t.Setenv("CI", "true")
+	t.Setenv("NO_COLOR", "")
+
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	result := Format(errors.New("test error"), DefaultFormatterConfig())
+	assert.Contains(t, result, "\x1b[", "CI error output should retain ANSI styling")
+
+	t.Setenv("NO_COLOR", "1")
+	result = Format(errors.New("test error"), DefaultFormatterConfig())
+	assert.NotContains(t, result, "\x1b[", "NO_COLOR must override CI color support")
+}
+
 func TestWrapText(t *testing.T) {
 	tests := []struct {
 		name     string
