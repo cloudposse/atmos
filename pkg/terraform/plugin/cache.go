@@ -90,18 +90,30 @@ func IsValidDirectory(path, source string) bool {
 }
 
 // InitLockPath returns a stable, machine-local lock path for serializing
-// Terraform init calls that share this cache. It intentionally lives outside
-// the cache and working directories so it never becomes provider-cache data or
-// a repository artifact.
+// Terraform init calls that share this cache. Relative cache directories are
+// resolved from the current process directory.
 func (c Cache) InitLockPath() string {
 	defer perf.Track(nil, "plugin.Cache.InitLockPath")()
+	return c.InitLockPathForWorkdir("")
+}
+
+// InitLockPathForWorkdir returns a stable, machine-local lock path for a
+// Terraform working directory. It intentionally lives outside the cache and
+// working directories so it never becomes provider-cache data or a repository
+// artifact.
+func (c Cache) InitLockPathForWorkdir(workdir string) string {
+	defer perf.Track(nil, "plugin.Cache.InitLockPathForWorkdir")()
 
 	if c.Directory == "" {
 		return ""
 	}
-	abs, err := absolutePath(c.Directory)
+	directory := c.Directory
+	if workdir != "" && !filepath.IsAbs(directory) {
+		directory = filepath.Join(workdir, directory)
+	}
+	abs, err := absolutePath(directory)
 	if err != nil {
-		abs = c.Directory
+		abs = directory
 	}
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(abs))

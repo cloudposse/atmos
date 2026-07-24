@@ -54,12 +54,17 @@ func (e *Executor) runInit(
 	if pluginCache.Directory == "" {
 		return run()
 	}
-	if err := filelock.New(pluginCache.InitLockPath()).WithExclusive(ctx, run); err != nil {
+
+	var initErr error
+	if err := filelock.New(pluginCache.InitLockPathForWorkdir(config.ComponentPath)).WithExclusive(ctx, func() error {
+		initErr = run()
+		return nil
+	}); err != nil {
 		return errUtils.Build(errUtils.ErrTerraformInit).
 			WithCause(fmt.Errorf("lock provider plugin cache: %w", err)).
 			Err()
 	}
-	return nil
+	return initErr
 }
 
 // runOutput executes terraform output with retry logic.

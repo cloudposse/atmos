@@ -221,35 +221,6 @@ func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration) (string, bool) 
 	return "", false
 }
 
-// getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
-// Returns the valid path if set, or empty string if not set or invalid.
-// Invalid values (empty string or "/") are logged as warnings.
-func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
-	// Check OS environment first.
-	if osEnvDir, inOsEnv := os.LookupEnv(terraformPluginCacheDirEnv); inOsEnv {
-		if isValidPluginCacheDir(osEnvDir, "environment variable") {
-			return osEnvDir
-		}
-		return ""
-	}
-
-	// Check global env section in atmos.yaml.
-	if globalEnvDir, inGlobalEnv := atmosConfig.Env[terraformPluginCacheDirEnv]; inGlobalEnv {
-		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
-			return globalEnvDir
-		}
-		return ""
-	}
-
-	return ""
-}
-
-// isValidPluginCacheDir checks if a plugin cache directory path is valid.
-// Invalid paths (empty string or "/") are logged as warnings and return false.
-func isValidPluginCacheDir(path, source string) bool {
-	return tfplugin.IsValidDirectory(path, source)
-}
-
 // disableTerraformPluginCacheForExecution removes Terraform/OpenTofu plugin-cache
 // configuration from this execution. This is intentionally scoped to the current
 // subprocess environment and config copy so concurrent graph runs can keep full

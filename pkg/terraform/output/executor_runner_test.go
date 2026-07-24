@@ -2,6 +2,7 @@ package output
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -10,18 +11,42 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
 
 type blockingInitRunner struct {
 	started chan struct{}
 	release <-chan struct{}
+	initErr error
 }
 
 func (r *blockingInitRunner) Init(context.Context, ...tfexec.InitOption) error {
-	r.started <- struct{}{}
-	<-r.release
-	return nil
+	if r.started != nil {
+		r.started <- struct{}{}
+	}
+	if r.release != nil {
+		<-r.release
+	}
+	return r.initErr
+}
+
+func TestRunInitReturnsRunnerErrorWithoutLockWrapping(t *testing.T) {
+	runner := &blockingInitRunner{initErr: errors.New("runner init failed")}
+	err := (&Executor{}).runInit(
+		context.Background(),
+		runner,
+		&ComponentConfig{ComponentPath: t.TempDir()},
+		"component",
+		"stack",
+		nil,
+		tfplugin.Cache{Directory: t.TempDir()},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformInit)
+	assert.Contains(t, err.Error(), "runner init failed")
+	assert.NotContains(t, err.Error(), "lock provider plugin cache")
 }
 
 func (r *blockingInitRunner) WorkspaceNew(context.Context, string, ...tfexec.WorkspaceNewCmdOption) error {

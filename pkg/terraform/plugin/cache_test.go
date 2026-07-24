@@ -15,6 +15,8 @@ import (
 func TestResolve(t *testing.T) {
 	cacheHome := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	configuredCacheDir := filepath.Join(t.TempDir(), "configured-cache")
+	userCacheDir := filepath.Join(t.TempDir(), "user-cache")
 
 	tests := []struct {
 		name        string
@@ -26,8 +28,8 @@ func TestResolve(t *testing.T) {
 	}{
 		{
 			name:      "uses configured cache directory",
-			terraform: schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"},
-			wantDir:   "/configured/cache",
+			terraform: schema.Terraform{PluginCache: true, PluginCacheDir: configuredCacheDir},
+			wantDir:   configuredCacheDir,
 			automatic: true,
 		},
 		{
@@ -38,10 +40,10 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name:        "explicit override wins",
-			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"},
-			override:    "/user/cache",
+			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: configuredCacheDir},
+			override:    userCacheDir,
 			overrideSet: true,
-			wantDir:     "/user/cache",
+			wantDir:     userCacheDir,
 		},
 		{
 			name:      "disabled cache stays disabled",
@@ -49,18 +51,18 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name:        "invalid explicit override falls back to automatic cache",
-			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"},
+			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: configuredCacheDir},
 			override:    "/",
 			overrideSet: true,
-			wantDir:     "/configured/cache",
+			wantDir:     configuredCacheDir,
 			automatic:   true,
 		},
 		{
 			name:        "empty explicit override falls back to automatic cache",
-			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"},
+			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: configuredCacheDir},
 			override:    "",
 			overrideSet: true,
-			wantDir:     "/configured/cache",
+			wantDir:     configuredCacheDir,
 			automatic:   true,
 		},
 	}
@@ -79,7 +81,7 @@ func TestResolve(t *testing.T) {
 		})
 	}
 
-	cache := Resolve(&schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"}}}, "", false)
+	cache := Resolve(&schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{PluginCache: true, PluginCacheDir: configuredCacheDir}}}, "", false)
 	require.NotEmpty(t, cache.InitLockPath())
 	assert.Equal(t, cache.InitLockPath(), cache.InitLockPath())
 	assert.Empty(t, (Cache{}).InitLockPath())
@@ -91,16 +93,30 @@ func TestResolveXDGCacheFallbacks(t *testing.T) {
 	t.Cleanup(func() { getXDGCacheDir = original })
 
 	config := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{PluginCache: true}}}
-
-	getXDGCacheDir = func(string, os.FileMode) (string, error) {
-		return "", errors.New("unavailable")
+	tests := []struct {
+		name   string
+		lookup func(string, os.FileMode) (string, error)
+	}{
+		{
+			name: "XDG cache directory lookup fails",
+			lookup: func(string, os.FileMode) (string, error) {
+				return "", errors.New("unavailable")
+			},
+		},
+		{
+			name: "XDG cache directory lookup returns empty path",
+			lookup: func(string, os.FileMode) (string, error) {
+				return "", nil
+			},
+		},
 	}
-	assert.Empty(t, Resolve(config, "", false).Directory)
 
-	getXDGCacheDir = func(string, os.FileMode) (string, error) {
-		return "", nil
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getXDGCacheDir = tt.lookup
+			assert.Empty(t, Resolve(config, "", false).Directory)
+		})
 	}
-	assert.Empty(t, Resolve(config, "", false).Directory)
 }
 
 func TestCacheInitLockPathUsesDirectoryWhenAbsolutePathFails(t *testing.T) {
@@ -110,5 +126,17 @@ func TestCacheInitLockPathUsesDirectoryWhenAbsolutePathFails(t *testing.T) {
 		return "", errors.New("unavailable")
 	}
 
-	assert.NotEmpty(t, Cache{Directory: "relative/cache"}.InitLockPath())
+	cache := Cache{Directory: "relative/cache"}
+	firstLockPath := cache.InitLockPath()
+	assert.NotEmpty(t, firstLockPath)
+	assert.Equal(t, firstLockPath, cache.InitLockPath())
+	assert.NotEqual(t, firstLockPath, Cache{Directory: "other/cache"}.InitLockPath())
+}
+
+func TestCacheInitLockPathForWorkdirUsesRelativeCacheDirectory(t *testing.T) {
+	cache := Cache{Directory: "relative/cache"}
+	workdir := t.TempDir()
+
+	assert.Equal(t, cache.InitLockPathForWorkdir(workdir), cache.InitLockPathForWorkdir(workdir))
+	assert.NotEqual(t, cache.InitLockPathForWorkdir(workdir), cache.InitLockPathForWorkdir(t.TempDir()))
 }
