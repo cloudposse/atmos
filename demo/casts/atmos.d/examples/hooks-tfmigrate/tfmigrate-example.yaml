@@ -1,0 +1,87 @@
+commands:
+  - name: casts generate examples hooks-tfmigrate tfmigrate-example
+    description: Regenerate the tfmigrate hooks example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: tfmigrate-example
+        title: "Terraform state migrations with tfmigrate"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/hooks-tfmigrate/tfmigrate-example.cast"
+        steps:
+          - type: simulate
+            text: "# inspect the migration context Atmos passes to tfmigrate"
+          - type: simulate
+            text: atmos terraform migrate list service -s test
+          - type: shell
+            name: migrate-list-output
+            duration: 450ms
+            interval: 750ms
+            command: |
+              printf '\033[1;36mComponent\033[0m  \033[1;36mStack\033[0m  \033[1;36mWorkspace\033[0m  \033[1;36mHistory Key\033[0m\n'
+              printf 'service    test   default    tfmigrate/test/service/default/history.json\n'
+          - type: simulate
+            text: "# preview the migration before Terraform plan"
+          - type: simulate
+            text: atmos terraform migrate plan service -s test
+          - type: shell
+            name: migrate-plan-output
+            duration: 450ms
+            interval: 750ms
+            command: |
+              printf '\033[1;34mRunning tfmigrate plan for service in stack test\033[0m\n'
+              printf 'Plan: move random_pet.legacy to random_pet.service\n'
+              printf '\033[1;32mMigration plan completed successfully\033[0m\n'
+          - type: simulate
+            text: "# apply runs in the same component context and records history"
+          - type: simulate
+            text: atmos terraform migrate apply service -s test
+          - type: shell
+            name: migrate-apply-output
+            duration: 450ms
+            interval: 750ms
+            command: |
+              printf '\033[1;34mRunning tfmigrate apply for service in stack test\033[0m\n'
+              printf 'Moved random_pet.legacy to random_pet.service\n'
+              printf 'History: tfmigrate/test/service/default/history.json\n'
+              printf '\033[1;32mMigration applied successfully\033[0m\n'
+      - type: shell
+        name: validate
+        command: atmos casts validate examples hooks-tfmigrate tfmigrate-example
+  - name: casts validate examples hooks-tfmigrate tfmigrate-example
+    description: Validate the tfmigrate hooks example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/hooks-tfmigrate/tfmigrate-example.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos terraform migrate list service -s test",
+              "atmos terraform migrate plan service -s test",
+              "atmos terraform migrate apply service -s test",
+              "tfmigrate/test/service/default/history.json",
+              "random_pet.legacy",
+              "random_pet.service",
+              "Migration applied successfully",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"hooks-tfmigrate cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

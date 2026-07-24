@@ -5,6 +5,8 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos can now run user-authored [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) migrations manually from the CLI and automatically from Terraform lifecycle hooks, all in the same component context as `atmos terraform plan` and `apply`.
 
 ```shell
@@ -13,6 +15,8 @@ atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
 <!--truncate-->
+
+<CastPlayer src="/casts/examples/hooks-tfmigrate/tfmigrate-example.cast" title="atmos terraform migrate" chrome controls scrubber />
 
 ## What Changed
 
