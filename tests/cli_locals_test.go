@@ -1403,3 +1403,49 @@ func TestLocalsGoTemplateConditionalWithEnvEmpty(t *testing.T) {
 	assert.Equal(t, "", vars["pr_number"],
 		"pr_number should be empty when env var is not set")
 }
+
+// TestLocalsNameTemplateVarsFromImportsDescribeLocals is a regression test for GitHub issue
+// #2343 against the `describe locals` path. When `name_template` references vars (e.g.
+// `namespace`) defined in a parent `_defaults.yaml`, and the leaf stack file declares a
+// `locals:` block, stack-name derivation must merge the imported vars so the stack resolves
+// by its logical name ("acme-prod") rather than a malformed one ("-prod").
+//
+// This exercises the derivation fix (deriveStackNameSections import-walk + vars/settings/env
+// in deriveStackNameFromTemplate). The full describe-stacks pipeline variant is covered
+// separately once the import-recursion vars merge is in place.
+func TestLocalsNameTemplateVarsFromImportsDescribeLocals(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-name-template-vars-imports")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// describe locals must resolve the logical stack name derived from imported vars.
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "acme-prod")
+	require.NoError(t, err, "describe locals -s acme-prod must succeed (namespace merged from imports)")
+	require.NotNil(t, result)
+
+	locals, ok := result["locals"].(map[string]any)
+	require.True(t, ok, "locals must be a map; got: %v", result)
+	assert.Equal(t, "vpc", locals["app"], "locals.app must match the leaf file's value")
+}
+
+// TestLocalsNameTemplateSettingsFromImportsDescribeLocals is a regression test for GitHub issue
+// #2374 against the `describe locals` path. Same shape as #2343 but `name_template` references
+// `.settings.*`. The reporter saw `describe locals -s cloudlabs-plat-ue1-prod` return
+// "stack not found" because the derivation only carried `vars` (never `settings`) and did not
+// merge imports. After the derivation fix it resolves by logical name with non-empty locals.
+func TestLocalsNameTemplateSettingsFromImportsDescribeLocals(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-name-template-settings-imports")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "cloudlabs-plat-ue1-prod")
+	require.NoError(t, err, "describe locals -s cloudlabs-plat-ue1-prod must succeed")
+	require.NotNil(t, result)
+
+	locals, ok := result["locals"].(map[string]any)
+	require.True(t, ok, "locals must be a map; got: %v", result)
+	assert.Equal(t, "cloudlabs-plat-ue1-prod", locals["prefix"],
+		"locals.prefix must match the leaf file's value")
+}

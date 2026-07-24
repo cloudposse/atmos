@@ -1,0 +1,8 @@
+# Identity settings live in the parent file. The locals pre-pass must
+# merge these when deriving the stack name. Before #2374 was fixed,
+# `templateData` only carried `vars` (never `settings`), so
+# name_template could never resolve when it referenced `.settings.*`.
+settings:
+  namespace: cloudlabs
+  tenant: plat
+  environment: ue1
