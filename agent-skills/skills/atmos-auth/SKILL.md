@@ -12,7 +12,7 @@ Atmos Auth provides a unified authentication layer for multiple cloud providers.
 OIDC, GitHub Actions, GCP Workload Identity Federation, Azure, Atmos Pro, and static credentials into a single configuration
 model in `atmos.yaml`. Credentials are managed through providers (upstream authentication systems) and identities
 (the roles and accounts obtained from those providers), with support for identity chaining, keyring-based
-credential storage, and integrations like ECR, EKS, and GitHub STS.
+credential storage, and integrations like ECR, EKS, ACR, AKS, and GitHub STS.
 
 ## Architecture Overview
 
@@ -21,7 +21,7 @@ The auth system has four layers configured under the `auth:` key in `atmos.yaml`
 1. **Providers** -- Upstream systems that issue initial credentials (SSO, SAML, OIDC, GCP ADC/WIF).
 2. **Identities** -- Roles, permission sets, or accounts obtained from providers or chained from other identities.
 3. **Keyring** -- Secure credential storage backend (system keyring, encrypted file, or in-memory).
-4. **Integrations** -- Client-side credential materializations (ECR Docker login, EKS kubeconfig, GitHub STS).
+4. **Integrations** -- Client-side credential materializations (ECR/ACR Docker login, EKS/AKS kubeconfig, GitHub STS).
 
 ```yaml
 auth:
@@ -410,25 +410,28 @@ ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 Keep this skill focused on the auth sections inside a profile, such as providers, identities, and
 keyring settings.
 
-## ECR Integrations
+## ECR/ACR and EKS/AKS Integrations
 
-ECR integrations auto-trigger on identity login when `auto_provision: true` (default):
+Registry login (`aws/ecr`, `azure/acr`) and kubeconfig provisioning (`aws/eks`, `azure/aks`)
+auto-trigger on identity login when `auto_provision: true` (default). `spec.registry` and
+`spec.cluster` are single structs shared across both clouds — each integration's `kind` picks
+which fields matter (`account_id`/`region` vs `name`/`tenant_id`; `name`/`region` vs
+`name`/`resource_group`/`subscription_id`):
 
 ```yaml
 auth:
   integrations:
-    dev/ecr:
-      kind: aws/ecr
-      via:
-        identity: dev-admin
-      spec:
-        auto_provision: true
-        registry:
-          account_id: "123456789012"
-          region: us-east-2
+    dev/ecr: { kind: aws/ecr, via: { identity: dev-admin }, spec: { registry: { account_id: "123456789012", region: us-east-2 } } }
+    dev/acr: { kind: azure/acr, via: { identity: azure-dev }, spec: { registry: { name: myregistry } } }
+    dev/eks: { kind: aws/eks, via: { identity: dev-admin }, spec: { cluster: { name: dev-cluster, region: us-east-2 } } }
+    dev/aks: { kind: azure/aks, via: { identity: azure-dev }, spec: { cluster: { name: dev-cluster, resource_group: dev-rg } } }
 ```
 
-Integration failures are non-blocking during `atmos auth login`. Use `atmos auth ecr-login` to retry.
+Integration failures are non-blocking during `atmos auth login`; retry with
+`atmos aws ecr login` / `atmos azure acr login` / `atmos aws eks update-kubeconfig` /
+`atmos azure aks update-kubeconfig`. See [atmos-aws-ecr](../atmos-aws-ecr/SKILL.md),
+[atmos-azure-acr](../atmos-azure-acr/SKILL.md), [atmos-aws-eks](../atmos-aws-eks/SKILL.md), and
+[atmos-azure-aks](../atmos-azure-aks/SKILL.md) for command details.
 
 ## GitHub STS Integration
 

@@ -1,0 +1,8 @@
+{
+  "label": "aks",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/azure/aks/aks"
+  }
+}

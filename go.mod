@@ -141,7 +141,7 @@ require (
 	golang.org/x/text v0.38.0
 	google.golang.org/api v0.280.0
 	google.golang.org/genai v1.58.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.82.1
 	gopkg.in/ini.v1 v1.67.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -479,6 +479,7 @@ require github.com/testcontainers/testcontainers-go v0.42.0
 require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v6 v6.6.0
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/minamijoyo/hcledit v0.2.18

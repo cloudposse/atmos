@@ -528,8 +528,21 @@ components:
 	})
 
 	t.Run("missing packer binary", func(t *testing.T) {
-		// Temporarily modify PATH to ensure packer is not found
-		t.Setenv("PATH", "/nonexistent/path")
+		// Use a deliberately nonexistent executable instead of changing the
+		// process-wide PATH. Mutating PATH can leak into later tests on
+		// Windows. Set via ATMOS_COMPONENTS_PACKER_COMMAND (not info.Command
+		// directly) so the override reaches the final command resolution in
+		// stack_processor_merge.go, which reads atmosConfig.Components.Packer.Command.
+		t.Setenv("ATMOS_COMPONENTS_PACKER_COMMAND", "atmos-test-missing-packer-binary")
+
+		// Earlier subtests in this function resolved "aws/bastion"'s command
+		// with the real "packer" default and cached the result. Both caches
+		// key on stack-file identity (mtime/size) or stack:component name,
+		// not on env-var-driven atmos.yaml settings, so without clearing
+		// them this subtest's override above is silently ignored and the
+		// stale "packer" command wins.
+		ClearBaseComponentConfigCache()
+		ClearFindStacksMapCache()
 
 		info := schema.ConfigAndStacksInfo{
 			Stack:            "nonprod",

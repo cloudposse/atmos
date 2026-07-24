@@ -238,6 +238,11 @@ commands:
           atmos ansible playbook --help
           atmos ansible version --help
           atmos aws ecr login --help
+          atmos azure --help
+          atmos azure acr login --help
+          atmos azure aks --help
+          atmos azure aks token --help
+          atmos azure aks update-kubeconfig --help
           atmos describe config
           atmos describe locals --help
           atmos devcontainer --help
@@ -618,6 +623,11 @@ commands:
           atmos ansible playbook --help
           atmos ansible version --help
           atmos aws ecr login --help
+          atmos azure --help
+          atmos azure acr login --help
+          atmos azure aks --help
+          atmos azure aks token --help
+          atmos azure aks update-kubeconfig --help
           atmos describe config
           atmos describe locals --help
           atmos devcontainer --help

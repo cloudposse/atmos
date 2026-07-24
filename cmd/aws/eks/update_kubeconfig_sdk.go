@@ -94,7 +94,7 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	if _, err := kubeMgr.WriteClusterConfig(info, alias, identityName, "merge"); err != nil {
+	if _, err := kubeMgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, identityName), alias, "merge"); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 

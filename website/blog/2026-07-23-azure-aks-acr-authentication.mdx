@@ -1,0 +1,96 @@
+---
+slug: azure-aks-acr-authentication
+title: "Azure AKS and ACR Authentication: Native kubectl and Docker Access Without the Azure CLI"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-23T12:00:00.000Z
+---
+
+Getting `kubectl` and `docker` working against Azure resources has always meant a side trip
+through the Azure CLI. `az aks get-credentials` writes a kubeconfig entry — and for AAD-enabled
+clusters, the modern default, that entry calls out to a separate `kubelogin` binary just to mint
+a token. `az acr login` does the same dance for container registries. Both assume you're already
+logged into `az`, which may not match the identity you just authenticated with in Atmos.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos already solves this for AWS: authenticate once with `atmos auth login`, and linked EKS
+clusters and ECR registries are configured automatically. Azure had no equivalent — every AKS or
+ACR session meant switching tools and re-authenticating outside of Atmos, and every extra tool is
+another thing to install and keep in sync with the credentials you're actually using.
+
+## The Fix
+
+Atmos now extends its `auth.integrations` system to Azure AKS and ACR. Authenticate with an
+Azure identity and Atmos provisions kubeconfig and Docker credentials for any linked clusters and
+registries in the same step:
+
+```yaml
+auth:
+  identities:
+    azure-dev:
+      kind: azure/subscription
+      via:
+        provider: azure-device-code
+      principal:
+        subscription_id: 11111111-1111-1111-1111-111111111111
+
+  integrations:
+    dev/aks:
+      kind: azure/aks
+      via:
+        identity: azure-dev
+      spec:
+        cluster:
+          name: dev-cluster
+          resource_group: dev-rg
+
+    dev/acr:
+      kind: azure/acr
+      via:
+        identity: azure-dev
+      spec:
+        registry:
+          name: myregistry
+```
+
+```bash
+$ atmos auth login azure-dev
+✓ AKS kubeconfig: dev-cluster → ~/.config/atmos/kube/config
+✓ ACR login: myregistry.azurecr.io (expires in 2h59m)
+
+$ kubectl get pods
+$ docker pull myregistry.azurecr.io/myimage:latest
+```
+
+No `az` CLI, no `kubelogin` binary — kubectl calls `atmos azure aks token` for a fresh token the
+same way it would call `kubelogin`, and ACR credentials land in the standard Docker config
+location.
+
+## How to Use It
+
+Both integrations also work as standalone commands, independent of `atmos auth login`:
+
+```bash
+# AKS: write or refresh a kubeconfig entry
+atmos azure aks update-kubeconfig --integration dev/aks
+
+# ACR: log Docker into a registry
+atmos azure acr login dev/acr
+
+# Or drive either from an identity directly
+atmos azure aks update-kubeconfig --cluster-name dev-cluster --resource-group dev-rg --identity azure-dev
+atmos azure acr login --identity azure-dev
+```
+
+See the [Azure AKS](/cli/commands/azure/aks/update-kubeconfig) and
+[Azure ACR](/cli/commands/azure/acr-login) command docs for the full set of flags and
+configuration options.
+
+## Get Involved
+
+Atmos is open source and we'd love your feedback. Join the conversation in the
+[Cloud Posse community](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).

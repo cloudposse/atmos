@@ -1244,6 +1244,21 @@ var (
 	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
 	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
 
+	// AKS server errors.
+	ErrAKSDescribeCluster      = errors.New("failed to describe AKS cluster")
+	ErrAKSClusterNotFound      = errors.New("AKS cluster not found")
+	ErrAKSClusterNotAADEnabled = errors.New("AKS cluster is not AAD-enabled")
+	ErrAKSIntegrationFailed    = errors.New("AKS integration failed")
+	ErrAKSTokenGeneration      = errors.New("failed to generate AKS token")
+
+	// ACR authentication errors.
+	ErrACRAuthFailed       = errors.New("ACR authentication failed")
+	ErrACRTokenExpired     = errors.New("ACR authorization token expired")
+	ErrACRRegistryNotFound = errors.New("ACR registry not found")
+	ErrACRInvalidRegistry  = errors.New("invalid ACR registry URL")
+	ErrACRLoginNoArgs      = errors.New("specify an integration, --identity, or --registry")
+	ErrACRLoginFailed      = errors.New("ACR login failed")
+
 	// Atmos Pro authentication (atmos/pro provider) errors.
 	ErrProAuthFailed         = errors.New("authentication to Atmos Pro failed")
 	ErrProWorkspaceIDMissing = errors.New("workspace ID for Atmos Pro is required (set via auth provider spec.workspace_id, settings.pro.workspace_id, or ATMOS_PRO_WORKSPACE_ID)")

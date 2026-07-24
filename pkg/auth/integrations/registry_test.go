@@ -138,7 +138,7 @@ func TestIntegrationConfig_Fields(t *testing.T) {
 			},
 			Spec: &schema.IntegrationSpec{
 				AutoProvision: &autoProvision,
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					AccountID: "123456789012",
 					Region:    "us-east-1",
 				},

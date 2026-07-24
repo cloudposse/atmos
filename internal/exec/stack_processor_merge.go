@@ -336,6 +336,12 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	if opts.ComponentType == cfg.HelmfileComponentType && opts.AtmosConfig.Components.Helmfile.Command != "" {
 		finalComponentCommand = opts.AtmosConfig.Components.Helmfile.Command
 	}
+	if opts.ComponentType == cfg.PackerComponentType && opts.AtmosConfig.Components.Packer.Command != "" {
+		finalComponentCommand = opts.AtmosConfig.Components.Packer.Command
+	}
+	if opts.ComponentType == cfg.AnsibleComponentType && opts.AtmosConfig.Components.Ansible.Command != "" {
+		finalComponentCommand = opts.AtmosConfig.Components.Ansible.Command
+	}
 	if opts.GlobalCommand != "" {
 		finalComponentCommand = opts.GlobalCommand
 	}
