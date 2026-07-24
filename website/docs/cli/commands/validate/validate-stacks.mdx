@@ -120,6 +120,10 @@ stacks/deploy/dev.yaml:14:7: warning: `application.depends_on` is deprecated; us
 </Terminal>
 
 Where the schema provides migration guidance, the warning names the field to use instead.
+The scanner only resolves `deprecated` annotations reached through local `$ref`s within the
+configured `--schemas-atmos-manifest` document — a remote schema that declares deprecated
+fields only in a separately fetched, externally referenced document validates without a
+warning for those fields.
 
 ## Validate Atmos Manifests using JSON Schema
 

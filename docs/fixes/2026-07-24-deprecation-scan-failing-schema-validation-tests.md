@@ -20,7 +20,7 @@ continues on a read/scan failure), `deprecationDiagnostics` returned a hard `err
 propagated all the way up and aborted validation — even though the primary schema check
 (`av.validator.ValidateYAMLSchema`, itself mockable) had already succeeded.
 
-CI surfaced this as 7 failing subtests in `internal/exec`, all in
+CI surfaced this as 6 failing subtests in `internal/exec`, all in
 `internal/exec/validate_schema_test.go`:
 `TestExecuteAtmosValidateSchemaCmd/successful_validation`,
 `.../validation_errors`, `.../built-in_config_entry_validates_atmos.yaml_by_default`,
@@ -45,7 +45,7 @@ command.
 
 - `go build ./...` — passed.
 - `go test ./internal/exec/... -run 'TestExecuteAtmosValidateSchemaCmd|TestValidateAtmosSchemaReport' -v`
-  — all 7 previously-failing subtests now pass.
+  — all 6 previously-failing subtests now pass.
 - `go test ./internal/exec/...` (full package) — passed, no regressions.
 - `go test ./pkg/validator/... ./pkg/lsp/server/... ./cmd/...` — passed.
 - `go test ./tests -run 'TestCLICommands/deprecated_config_compatibility'` — passed; confirms
