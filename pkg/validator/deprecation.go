@@ -7,9 +7,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/datafetcher"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"go.yaml.in/yaml/v3"
+
+	"github.com/cloudposse/atmos/pkg/datafetcher"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // DeprecatedField is a schema-declared compatibility field found in authored YAML.
@@ -19,30 +21,56 @@ type DeprecatedField struct {
 	Replacement string
 }
 
+// DeprecatedYAMLSchema is a parsed schema that can be reused to scan multiple
+// YAML documents for deprecated fields.
+type DeprecatedYAMLSchema struct {
+	document map[string]any
+}
+
 // FindDeprecatedYAMLFields finds authored properties marked with the standard
 // JSON Schema deprecated annotation. x-atmos-replacement is optional guidance
 // emitted alongside the warning. The scanner deliberately follows only local
 // references: remote schemas are still validated normally, but must be a single
 // self-contained document before their annotations can be inspected.
 func FindDeprecatedYAMLFields(atmosConfig *schema.AtmosConfiguration, schemaSource string, yamlContent []byte) ([]DeprecatedField, error) {
-	schemaData, err := datafetcher.NewDataFetcher(atmosConfig).GetData(schemaSource)
+	defer perf.Track(atmosConfig, "validator.FindDeprecatedYAMLFields")()
+
+	deprecatedSchema, err := LoadDeprecatedYAMLSchema(atmosConfig, schemaSource)
 	if err != nil {
 		return nil, err
 	}
+	return deprecatedSchema.FindYAMLFields(yamlContent)
+}
+
+// LoadDeprecatedYAMLSchema loads and parses a schema for reuse when scanning
+// multiple YAML documents.
+func LoadDeprecatedYAMLSchema(atmosConfig *schema.AtmosConfiguration, schemaSource string) (*DeprecatedYAMLSchema, error) {
+	defer perf.Track(atmosConfig, "validator.LoadDeprecatedYAMLSchema")()
+
+	schemaData, err := datafetcher.NewDataFetcher(atmosConfig).GetData(schemaSource)
+	if err != nil {
+		return nil, fmt.Errorf("fetch deprecation schema %q: %w", schemaSource, err)
+	}
 	var schemaDoc map[string]any
 	if err := json.Unmarshal(schemaData, &schemaDoc); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode deprecation schema %q: %w", schemaSource, err)
 	}
+	return &DeprecatedYAMLSchema{document: schemaDoc}, nil
+}
+
+// FindYAMLFields returns deprecated fields in yamlContent using the parsed
+// schema. The scanner follows only local references.
+func (s *DeprecatedYAMLSchema) FindYAMLFields(yamlContent []byte) ([]DeprecatedField, error) {
 	var node yaml.Node
 	if err := yaml.Unmarshal(yamlContent, &node); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode YAML for deprecation scan: %w", err)
 	}
 	if len(node.Content) == 0 {
 		return nil, nil
 	}
 
 	findings := make(map[string]DeprecatedField)
-	walkDeprecatedSchema(schemaDoc, schemaDoc, node.Content[0], "", findings)
+	walkDeprecatedSchema(s.document, s.document, node.Content[0], "", findings)
 	result := make([]DeprecatedField, 0, len(findings))
 	for path, finding := range findings {
 		if hasMoreSpecificDeprecatedField(path, findings) {
@@ -116,6 +144,10 @@ func deprecatedSchemaAnnotation(root, current map[string]any) (bool, string) {
 		return true, replacement
 	}
 	current = resolveLocalRef(root, current)
+	if deprecated, _ := current["deprecated"].(bool); deprecated {
+		replacement, _ := current["x-atmos-replacement"].(string)
+		return true, replacement
+	}
 	for _, key := range []string{"allOf", "anyOf", "oneOf"} {
 		for _, branch := range schemaArray(current[key]) {
 			if deprecated, replacement := deprecatedSchemaAnnotation(root, branch); deprecated {

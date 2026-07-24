@@ -57,13 +57,13 @@ func (p *DependencyParser) ParseComponentDependencies(
 	// component-level location accepted for backward compatibility.
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
 	var dependsOn any
-	if ok {
+	if ok && hasDependencies(settingsSection["depends_on"]) {
 		dependsOn = settingsSection["depends_on"]
 	}
-	if dependsOn == nil {
+	if !hasDependencies(dependsOn) {
 		dependsOn = componentSection["depends_on"]
 	}
-	if dependsOn == nil {
+	if !hasDependencies(dependsOn) {
 		return nil
 	}
 
@@ -81,6 +81,19 @@ func (p *DependencyParser) ParseComponentDependencies(
 	default:
 		log.Warn("Unknown depends_on format", logFieldType, fmt.Sprintf("%T", deps), logFieldFrom, fromID)
 		return fmt.Errorf("%w: %s -> unsupported depends_on format %T", errUtils.ErrUnsupportedDependencyType, fromID, deps)
+	}
+}
+
+func hasDependencies(value any) bool {
+	switch dependencies := value.(type) {
+	case []any:
+		return len(dependencies) > 0
+	case map[string]any:
+		return len(dependencies) > 0
+	case map[any]any:
+		return len(dependencies) > 0
+	default:
+		return value != nil
 	}
 }
 

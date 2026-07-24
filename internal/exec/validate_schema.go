@@ -358,16 +358,16 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 		if err != nil {
 			return count, err
 		}
+		positions := schemaFilePositions(file)
+		warnings, warningErr := av.deprecationDiagnostics(schema, file, positions)
+		if warningErr != nil {
+			return count, warningErr
+		}
+		for _, warning := range warnings {
+			ui.Warningf("%s:%d:%d: warning: %s", warning.File, warning.Line, warning.Column, warning.Message)
+		}
 		if len(validationErrors) == 0 {
 			ui.Successf("Validated %s", displayPath(file))
-			positions := schemaFilePositions(file)
-			warnings, warningErr := av.deprecationDiagnostics(schema, file, positions)
-			if warningErr != nil {
-				return count, warningErr
-			}
-			for _, warning := range warnings {
-				ui.Warningf("%s:%d:%d: warning: %s", warning.File, warning.Line, warning.Column, warning.Message)
-			}
 			log.Debug("Schema validation passed", "file", file, "schema", schema)
 			continue
 		}
@@ -383,11 +383,11 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 func (av *atmosValidatorExecutor) deprecationDiagnostics(schemaSource, file string, positions u.PositionMap) ([]validation.Diagnostic, error) {
 	content, err := os.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %q for deprecation scan: %w", file, err)
 	}
 	fields, err := validator.FindDeprecatedYAMLFields(av.atmosConfig, schemaSource, content)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan %q for deprecated fields: %w", file, err)
 	}
 	diagnostics := make([]validation.Diagnostic, 0, len(fields))
 	for _, field := range fields {

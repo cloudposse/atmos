@@ -175,9 +175,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	if err != nil {
 		return err
 	}
-	if err := warnDeprecatedStackFields(atmosConfig, atmosManifestJsonSchemaFilePath, stackConfigFilesAbsolutePaths); err != nil {
-		return err
-	}
+	warnDeprecatedStackFields(atmosConfig, atmosManifestJsonSchemaFilePath, stackConfigFilesAbsolutePaths)
 
 	log.Debug("Validating all YAML files in the folder and all subfolders (excluding template files)",
 		"folder", filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
@@ -290,15 +288,22 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-func warnDeprecatedStackFields(atmosConfig *schema.AtmosConfiguration, schemaPath string, files []string) error {
+func warnDeprecatedStackFields(atmosConfig *schema.AtmosConfiguration, schemaPath string, files []string) {
+	deprecatedSchema, err := validator.LoadDeprecatedYAMLSchema(atmosConfig, schemaPath)
+	if err != nil {
+		log.Warn("Unable to load schema for deprecated-field warnings", "schema", schemaPath, "error", err)
+		return
+	}
 	for _, file := range files {
 		content, err := os.ReadFile(file)
 		if err != nil {
-			return err
+			log.Warn("Unable to read stack file for deprecated-field warnings", "file", file, "error", err)
+			continue
 		}
-		fields, err := validator.FindDeprecatedYAMLFields(atmosConfig, schemaPath, content)
+		fields, err := deprecatedSchema.FindYAMLFields(content)
 		if err != nil {
-			return err
+			log.Warn("Unable to scan stack file for deprecated-field warnings", "file", file, "error", err)
+			continue
 		}
 		positions := schemaFilePositions(file)
 		for _, field := range fields {
@@ -307,7 +312,6 @@ func warnDeprecatedStackFields(atmosConfig *schema.AtmosConfiguration, schemaPat
 			ui.Warningf("%s:%d:%d: warning: %s", displayPath(file), position.Line, position.Column, message)
 		}
 	}
-	return nil
 }
 
 // dedupeStrings drops exact-duplicate entries while preserving first-seen order.

@@ -97,6 +97,9 @@ func TestValidateConfigSchema(t *testing.T) {
 		require.Len(t, diagnostics, 1)
 		assert.Equal(t, protocol.DiagnosticSeverityWarning, *diagnostics[0].Severity)
 		assert.Contains(t, diagnostics[0].Message, "`stacks.name_pattern` is deprecated")
+		// documentPositions records the authored value's start position for a YAML path.
+		assert.Equal(t, protocol.Position{Line: 1, Character: 16}, diagnostics[0].Range.Start)
+		assert.Equal(t, protocol.Position{Line: 1, Character: 16}, diagnostics[0].Range.End)
 	})
 }
 
