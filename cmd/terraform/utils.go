@@ -261,10 +261,19 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	// and ComponentFolderPrefix must reflect metadata.component before engines
 	// derive a component working directory. Keep template and YAML-function
 	// processing disabled here because hook discovery runs before auth.
-	authManager, _ := info.AuthManager.(auth.AuthManager)
-	info, err = e.ProcessStacks(&atmosConfig, info, true, false, false, nil, authManager)
-	if err != nil {
-		return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
+	//
+	// Multi-component invocations (--all/--affected/--components/--query/--tags/
+	// --labels) fire the global before/after hook with no single component
+	// resolved yet — ProcessStacks requires ComponentFromArg and would reject
+	// that with "component is required". Per-component hooks inside the
+	// component walker call GetHooks/RunAll directly with an already-resolved
+	// component, so they are unaffected by skipping this step here.
+	if info.ComponentFromArg != "" {
+		authManager, _ := info.AuthManager.(auth.AuthManager)
+		info, err = e.ProcessStacks(&atmosConfig, info, true, false, false, nil, authManager)
+		if err != nil {
+			return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
+		}
 	}
 	injectHookStoreAuthResolver(&atmosConfig, &info)
 

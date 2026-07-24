@@ -939,6 +939,25 @@ func TestPrepareHookContextResolvesMetadataComponent(t *testing.T) {
 	assert.Empty(t, ctx.info.ComponentFolderPrefix)
 }
 
+// TestPrepareHookContextSkipsComponentResolutionForMultiComponent verifies that
+// the global before/after hook context for multi-component invocations
+// (--all/--affected/--components/--query/--tags/--labels) does not fail with
+// "component is required": no positional component is resolved yet at that
+// point (only per-component hooks inside the component walker have one), so
+// prepareHookContext must skip the metadata.component-resolving ProcessStacks
+// call rather than call it with an empty ComponentFromArg. Regression test
+// for the #2799 fix breaking `atmos terraform plan --all`.
+func TestPrepareHookContextSkipsComponentResolutionForMultiComponent(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-all-dependencies")
+	cmd := newHookTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+
+	ctx, err := prepareHookContext(cmd, []string{})
+	require.NoError(t, err)
+	assert.Empty(t, ctx.info.ComponentFromArg)
+	assert.Empty(t, ctx.info.FinalComponent)
+}
+
 // TestInjectHookStoreAuthResolver_InheritsDefaultIdentity verifies that the after-apply hook path
 // now wires the resolver AND lets identity-less stores inherit the run's auto-detected identity
 // (matching the main terraform path), so hook store writes work under Atmos auth. Auto-detection

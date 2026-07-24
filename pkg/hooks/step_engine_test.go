@@ -342,8 +342,8 @@ func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	explicitDir := t.TempDir()
 	t.Run("steps preserve explicit directory", func(t *testing.T) {
-		explicitDir := t.TempDir()
 		ctx.Hook = &Hook{
 			Kind: stepsKindName,
 			With: []any{
@@ -356,8 +356,37 @@ func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
 	})
 
 	require.Len(t, captured, 3)
-	assert.Equal(t, []string{componentDir, componentDir, captured[2]}, captured)
-	assert.NotEqual(t, componentDir, captured[2])
+	assert.Equal(t, []string{componentDir, componentDir, explicitDir}, captured)
+}
+
+// TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType verifies that
+// type: atmos steps are never defaulted to the component directory: that
+// step type re-invokes the atmos binary itself and must inherit the ambient
+// process working directory so the nested run resolves the project's own
+// atmos.yaml/stacks, not the target component's directory (see #2799
+// regression: forcing this default broke `type: atmos` steps that shell out
+// to `atmos terraform ...` from a component subdirectory with no atmos.yaml
+// of its own).
+func TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "app")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "app"},
+	}
+
+	atmosStep := &schema.WorkflowStep{Type: "atmos", Command: "terraform apply vpc -s fixtures"}
+	setDefaultStepWorkingDirectory(ctx, atmosStep)
+	assert.Empty(t, atmosStep.WorkingDirectory, "type: atmos steps must keep inheriting the ambient working directory")
+
+	shellStep := &schema.WorkflowStep{Type: "shell", Command: "echo hi"}
+	setDefaultStepWorkingDirectory(ctx, shellStep)
+	assert.Equal(t, componentDir, shellStep.WorkingDirectory)
+
+	explicitStep := &schema.WorkflowStep{Type: "atmos", WorkingDirectory: "/explicit"}
+	setDefaultStepWorkingDirectory(ctx, explicitStep)
+	assert.Equal(t, "/explicit", explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
 }
 
 func TestStepsSummary(t *testing.T) {

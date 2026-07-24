@@ -270,10 +270,18 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	return vars
 }
 
+// atmosStepType is the step type that re-invokes the atmos binary itself
+// (pkg/runner/step.AtmosHandler). It must keep inheriting the ambient process
+// working directory rather than defaulting to the component directory: the
+// nested atmos process resolves its own atmos.yaml/stacks relative to that
+// directory, and a component subdirectory won't necessarily contain (or sit
+// under) the project's config root.
+const atmosStepType = "atmos"
+
 // setDefaultStepWorkingDirectory gives lifecycle steps the same component
 // directory as command hooks while preserving an explicit step-level target.
 func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep) {
-	if step != nil && step.WorkingDirectory == "" {
+	if step != nil && step.WorkingDirectory == "" && step.Type != atmosStepType {
 		step.WorkingDirectory = ComponentPath(ctx)
 	}
 }
