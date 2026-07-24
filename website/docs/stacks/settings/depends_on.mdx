@@ -13,6 +13,12 @@ import File from '@site/src/components/File'
 
 `settings.depends_on` is supported only for backward compatibility. New and updated configurations must use [`dependencies.components`](/stacks/dependencies/components). Use [`dependencies.files`](/stacks/dependencies/components#file-and-folder-dependencies) and [`dependencies.folders`](/stacks/dependencies/components#file-and-folder-dependencies) for external paths.
 
+The same map is also accepted directly on the component (without the `settings` wrapper),
+also for backward compatibility only. Both forms remain fully functional — no dependency
+edges are dropped — but [`atmos validate stacks`](/cli/commands/validate/stacks) prints a
+non-failing warning wherever either legacy form is used, naming `dependencies.components`
+as the replacement.
+
 :::
 
 ## Migration
