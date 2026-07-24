@@ -51,6 +51,9 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, override string, overrideSe
 	}
 
 	directory := atmosConfig.Components.Terraform.PluginCacheDir
+	if directory != "" && !IsValidDirectory(directory, "components.terraform.plugin_cache_dir") {
+		return Cache{}
+	}
 	if directory == "" {
 		cacheDir, err := getXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
 		if err != nil {
@@ -74,7 +77,10 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, override string, overrideSe
 	}
 }
 
-// IsValidDirectory reports whether path is a safe provider-cache directory.
+// IsValidDirectory reports whether path is a safe, absolute provider-cache directory.
+// Relative paths are rejected because they would resolve against whichever
+// working directory happens to be current, producing a different effective
+// cache location per component instead of one shared cache.
 func IsValidDirectory(path, source string) bool {
 	defer perf.Track(nil, "plugin.IsValidDirectory")()
 
@@ -84,6 +90,10 @@ func IsValidDirectory(path, source string) bool {
 	}
 	if path == "/" {
 		log.Warn("TF_PLUGIN_CACHE_DIR is set to root '/', ignoring and using Atmos default", "source", source)
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		log.Warn("Provider plugin cache directory must be an absolute path, ignoring and using Atmos default", "source", source, "path", path)
 		return false
 	}
 	return true

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,9 +20,26 @@ type blockingInitRunner struct {
 	started chan struct{}
 	release <-chan struct{}
 	initErr error
+
+	mu        sync.Mutex
+	active    int
+	maxActive int
 }
 
 func (r *blockingInitRunner) Init(context.Context, ...tfexec.InitOption) error {
+	r.mu.Lock()
+	r.active++
+	if r.active > r.maxActive {
+		r.maxActive = r.active
+	}
+	r.mu.Unlock()
+
+	defer func() {
+		r.mu.Lock()
+		r.active--
+		r.mu.Unlock()
+	}()
+
 	if r.started != nil {
 		r.started <- struct{}{}
 	}
@@ -87,4 +105,13 @@ func TestRunInitSerializesSharedPluginCache(t *testing.T) {
 	require.Eventually(t, func() bool { return len(runner.started) == 2 }, time.Second, 10*time.Millisecond)
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
+
+	// maxActive records the peak number of concurrently active Init calls,
+	// updated under a mutex at each call's entry/exit. It stays accurate
+	// regardless of scheduling delays: if the lock ever let both calls run
+	// concurrently, this would deterministically show 2 no matter when the
+	// second goroutine happened to be scheduled.
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	assert.Equal(t, 1, runner.maxActive, "runInit must serialize concurrent Init calls sharing one plugin cache")
 }

@@ -65,6 +65,18 @@ func TestResolve(t *testing.T) {
 			wantDir:     configuredCacheDir,
 			automatic:   true,
 		},
+		{
+			name:        "relative explicit override falls back to automatic cache",
+			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: configuredCacheDir},
+			override:    filepath.Join("relative", "cache"),
+			overrideSet: true,
+			wantDir:     configuredCacheDir,
+			automatic:   true,
+		},
+		{
+			name:      "relative configured cache directory disables cache",
+			terraform: schema.Terraform{PluginCache: true, PluginCacheDir: filepath.Join("relative", "cache")},
+		},
 	}
 
 	for _, tt := range tests {
