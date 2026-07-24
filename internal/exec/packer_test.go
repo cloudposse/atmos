@@ -528,14 +528,14 @@ components:
 	})
 
 	t.Run("missing packer binary", func(t *testing.T) {
-		// Temporarily modify PATH to ensure packer is not found
-		t.Setenv("PATH", "/nonexistent/path")
-
 		info := schema.ConfigAndStacksInfo{
 			Stack:            "nonprod",
 			ComponentType:    "packer",
 			ComponentFromArg: "aws/bastion",
 			SubCommand:       "validate",
+			// Use a deliberately nonexistent executable instead of changing the
+			// process-wide PATH. Mutating PATH can leak into later tests on Windows.
+			Command: "atmos-test-missing-packer-binary",
 		}
 		packerFlags := PackerFlags{}
 
