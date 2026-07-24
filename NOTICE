@@ -125,6 +125,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/ec2/imds/v1.18.23/feature/ec2/imds/LICENSE.txt
 
+  - github.com/aws/aws-sdk-go-v2/feature/rds/auth
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/rds/auth/v1.6.31/feature/rds/auth/LICENSE.txt
+
   - github.com/aws/aws-sdk-go-v2/feature/s3/manager
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.22.19/feature/s3/manager/LICENSE.txt
