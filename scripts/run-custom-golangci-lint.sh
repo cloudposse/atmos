@@ -47,6 +47,20 @@ if [[ -n "${GOLANGCI_CONCURRENCY:-}" ]]; then
     args+=(--concurrency="${GOLANGCI_CONCURRENCY}")
 fi
 
+# --allow-serial-runners: within a single checkout, queue concurrent runs around
+# the cache lock (wait) instead of failing fast. Cross-checkout runs already use
+# separate caches and never contend, so this only smooths the same-checkout case
+# (e.g. a manual `make lint` racing a pre-commit). The lock is kept, so the cache
+# is never written by two runners at once.
+args+=(--allow-serial-runners)
+
+# --allow-parallel-runners drops the lock entirely (real risk of racing writes to
+# the same cache), so it stays opt-in via GOLANGCI_ALLOW_PARALLEL rather than on
+# by default.
+if [[ "${GOLANGCI_ALLOW_PARALLEL:-0}" != "0" ]]; then
+    args+=(--allow-parallel-runners)
+fi
+
 staged_patch=""
 cleanup() {
     if [[ -n "${staged_patch}" ]]; then
@@ -56,14 +70,8 @@ cleanup() {
 trap cleanup EXIT
 
 if git diff --cached --quiet -- '*.go'; then
-    if [[ "${GOLANGCI_ALLOW_PARALLEL:-0}" != "0" ]]; then
-        args+=(--allow-parallel-runners)
-    fi
     ./custom-gcl "${args[@]}" --new-from-rev="${GOLANGCI_NEW_FROM_REV:-origin/main}"
 else
-    if [[ "${GOLANGCI_ALLOW_PARALLEL:-0}" != "0" ]]; then
-        args+=(--allow-parallel-runners)
-    fi
     staged_patch="$(mktemp "${TMPDIR:-/tmp}/atmos-golangci-staged.XXXXXX")"
     git diff --cached --binary -- '*.go' > "${staged_patch}"
     package_list="$(

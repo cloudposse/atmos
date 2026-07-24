@@ -30,8 +30,7 @@ import (
 // filesystem paths like `dir:file`.
 var scpLikeURLPattern = regexp.MustCompile(`^[^@/]+@([^:/]+):(.+?)(?:\.git)?$`)
 
-// GitURLParts holds the host, owner, and repository name resolved from a
-// remote Git URL by ParseGenericGitURL/ParseRepoURL.
+// GitURLParts holds the host, owner, and repository name parsed from a Git remote URL.
 type GitURLParts struct {
 	Host  string
 	Owner string
@@ -181,12 +180,12 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 
 // ParseRepoURL resolves host, owner, and repo name from a remote URL.
 //
-// Kubescape/go-git-url ships hardcoded support for github.com, gitlab.com,
-// and azure DevOps. Self-hosted instances (GitHub Enterprise Server, GitLab
-// self-managed, Bitbucket Server, etc.) fall back to ParseGenericGitURL,
-// which handles the URL shapes Git itself supports. If both parsers fail,
-// the canonical error is returned so genuinely-malformed URLs still
-// propagate as before.
+// The kubescape/go-git-url package ships hardcoded support for github.com,
+// gitlab.com, and azure DevOps. Self-hosted instances (GitHub Enterprise
+// Server, GitLab self-managed, Bitbucket Server, etc.) fall back to
+// ParseGenericGitURL, which handles the URL shapes Git itself supports. If
+// both parsers fail, the canonical error is returned so genuinely-malformed
+// URLs still propagate as before.
 func ParseRepoURL(repoUrl string) (GitURLParts, error) {
 	if gitURL, gerr := giturl.NewGitURL(repoUrl); gerr == nil {
 		return GitURLParts{Host: gitURL.GetHostName(), Owner: gitURL.GetOwnerName(), Name: gitURL.GetRepoName()}, nil

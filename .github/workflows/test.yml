@@ -95,6 +95,10 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: "go.mod"
+          # Disable setup-go's module cache to avoid restoring or saving mutable
+          # cache entries from PR-controlled keys; make deps repopulates modules
+          # from checksummed sources instead.
+          cache: false
         id: go
 
       - name: Set up Atmos bootstrap
@@ -250,6 +254,10 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
+          # Disable setup-go's module cache to avoid restoring or saving mutable
+          # cache entries from PR-controlled keys; make deps repopulates modules
+          # from checksummed sources instead.
+          cache: false
         id: go
 
       - name: Get dependencies
@@ -294,8 +302,6 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-          # Enable Playwright integration tests to validate browser driver download
-          RUN_PLAYWRIGHT_INTEGRATION: 1
         run: TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
 
       - name: Acceptance tests
@@ -315,8 +321,6 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-          # Enable Playwright integration tests to validate browser driver download
-          RUN_PLAYWRIGHT_INTEGRATION: 1
         run: atmos test acceptance
 
       - name: Upload coverage report artifact

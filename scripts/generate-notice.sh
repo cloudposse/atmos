@@ -40,6 +40,9 @@ export PATH="${GO_BIN}:${PATH}"
 REPO_OVERRIDES="
 dario.cat/mergo|github.com/imdario/mergo||LICENSE
 inet.af/netaddr|github.com/inetaf/netaddr||LICENSE
+go4.org/intern|github.com/go4org/intern||LICENSE
+go4.org/netipx|github.com/go4org/netipx||LICENSE
+go4.org/unsafe/assume-no-moving-gc|github.com/go4org/unsafe-assume-no-moving-gc||LICENSE
 cloud.google.com/go|github.com/googleapis/google-cloud-go||LICENSE
 cloud.google.com/go/auth|github.com/googleapis/google-cloud-go|auth|auth/LICENSE
 cloud.google.com/go/auth/oauth2adapt|github.com/googleapis/google-cloud-go|auth/oauth2adapt|auth/oauth2adapt/LICENSE
