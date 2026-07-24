@@ -1,0 +1,101 @@
+---
+title: atmos terraform migrate plan
+sidebar_label: migrate plan
+sidebar_class_name: command
+description: Preview Terraform state migrations with tfmigrate.
+id: migrate-plan
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use `atmos terraform migrate plan` to preview a user-authored `tfmigrate` migration for an Atmos Terraform component.
+</Intro>
+
+<Screengrab title="atmos terraform migrate plan --help" slug="atmos-terraform-migrate-plan--help" />
+
+## Usage
+
+```shell
+atmos terraform migrate plan [component] -s <stack> [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Atmos Terraform component to migrate. Omit when selecting multiple components with `--all`, `--components`, `--query`, or `--affected`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack where the component is defined.</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to authenticate before resolving the component and running `tfmigrate plan`. Environment variable: `ATMOS_IDENTITY`.</dd>
+
+  <dt>`--migration`</dt>
+  <dd>Path to a single `tfmigrate` migration file. Omit this flag to let `tfmigrate` run history mode.</dd>
+
+  <dt>`--tfmigrate-config`</dt>
+  <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
+
+  <dt>`--backend-config`</dt>
+  <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
+
+  <dt>`--all`</dt>
+  <dd>Run the migration plan for all selected component instances.</dd>
+
+  <dt>`--components`</dt>
+  <dd>Run the migration plan for the listed component names.</dd>
+
+  <dt>`--query`</dt>
+  <dd>Run the migration plan for component instances matching a YQ expression.</dd>
+
+  <dt>`--affected`</dt>
+  <dd>Run the migration plan for affected Terraform components. `--include-dependents` is not supported for migrate yet.</dd>
+
+  <dt>`--skip-init`</dt>
+  <dd>Skip the normal Terraform init path before `tfmigrate` runs.</dd>
+</dl>
+
+## Examples
+
+Preview history-mode migrations:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev
+```
+
+Preview with an explicit identity:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --identity aws-prod
+```
+
+Preview a single-file migration:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+```
+
+Preview migrations across selected components:
+
+```shell
+atmos terraform migrate plan --all --components s3-bucket
+atmos terraform migrate plan --query '.settings.requires_migration == true'
+```
+
+Override the default `tfmigrate` config path:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
+```
+
+## Related
+
+- [`atmos terraform migrate`](/cli/commands/terraform/migrate)
+- [`atmos terraform migrate apply`](/cli/commands/terraform/migrate-apply)
+- [`atmos terraform migrate list`](/cli/commands/terraform/migrate-list)

@@ -92,6 +92,95 @@ and your value wins. See [Overriding Kind Defaults](#overriding-kind-defaults)
 for the override rules (notably: `args` and `env` are full replacement,
 not merge).
 
+### `kind: tfmigrate`
+
+Runs [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) before Terraform
+plans, applies, or deploys. The hook delegates to the Atmos command path:
+
+```shell
+atmos terraform migrate plan <component> -s <stack>
+atmos terraform migrate apply <component> -s <stack>
+```
+
+This means Atmos authenticates the component identity, provisions source and
+workdir directories, generates backend and var files, runs Terraform init,
+selects the workspace, resolves `tfmigrate` from the toolchain or PATH, and
+sets `TFMIGRATE_EXEC_PATH` before the migration runs.
+
+The hook reuses the identity already resolved for the Terraform command. If the
+command used `--identity aws-prod`, `ATMOS_IDENTITY=aws-prod`, or a component
+default identity, the hook passes that identity to the nested
+`atmos terraform migrate` invocation. The nested command also sets
+`ATMOS_SKIP_HOOKS=*` so the migration hook does not recursively trigger itself.
+
+```yaml
+components:
+  terraform:
+    s3-bucket:
+      dependencies:
+        tools:
+          tfmigrate: "0.4.x"
+
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic
+```
+
+<dl>
+  <dt>`migration`</dt>
+  <dd>Path to a single `tfmigrate` migration file. Omit this field to let `tfmigrate` run history mode.</dd>
+
+  <dt>`config`</dt>
+  <dd>Optional override for the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
+
+  <dt>`backend_config`</dt>
+  <dd>List of entries passed through as repeated `tfmigrate --backend-config` arguments. This configures the Terraform state backend used by `tfmigrate`; it is not the `tfmigrate` history backend.</dd>
+
+  <dt>`mode`</dt>
+  <dd>`dynamic` (default), `plan`, or `apply`. Dynamic mode runs `tfmigrate plan` for `before.terraform.plan` and `tfmigrate apply` for `before.terraform.apply` / `before.terraform.deploy`.</dd>
+</dl>
+
+History mode is enabled by omitting `migration`. By default, `tfmigrate` discovers `.tfmigrate.hcl` from the component working directory:
+
+```yaml
+hooks:
+  state-migration:
+    events:
+      - before.terraform.plan
+      - before.terraform.apply
+    kind: tfmigrate
+    mode: dynamic
+```
+
+Set `config` only when the config file lives somewhere else.
+
+Atmos exposes helper variables so the `tfmigrate` config can reuse the component's
+Terraform backend bucket and stack-specific history key:
+
+```hcl
+tfmigrate {
+  migration_dir = "./tfmigrate"
+
+  history {
+    storage "s3" {
+      bucket   = env.ATMOS_TFMIGRATE_HISTORY_BUCKET
+      key      = env.ATMOS_TFMIGRATE_HISTORY_KEY
+      region   = env.ATMOS_TFMIGRATE_HISTORY_REGION
+      role_arn = env.ATMOS_TFMIGRATE_HISTORY_ROLE_ARN
+    }
+  }
+}
+```
+
+The history key is `tfmigrate/<stack>/<component>/<workspace>/history.json`,
+so components sharing a Terraform backend bucket do not collide. Atmos v1
+does not persist `tfmigrate` history itself; durable `tfmigrate` history
+storage is required for rerun-safe automation.
+
 ### `kind: infracost`
 
 Runs [Infracost](https://www.infracost.io/) to compute monthly cloud cost

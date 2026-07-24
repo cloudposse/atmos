@@ -734,6 +734,7 @@ func TestForceRecordingUIEnvForcesTrueColorAndRestoresEnv(t *testing.T) {
 	}
 
 	const key = "ATMOS_FORCE_COLOR"
+	withRestoredEnv(t, "NO_COLOR")
 	withRestoredEnv(t, key)
 
 	restore := forceRecordingUIEnv(map[string]string{key: "1"})

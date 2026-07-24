@@ -2318,6 +2318,7 @@
                       "kics",
                       "trivy",
                       "tflint",
+                      "tfmigrate",
                       "git",
                       "step",
                       "steps",
@@ -2414,6 +2415,31 @@
                   },
                   "push": {
                     "type": "boolean"
+                  },
+                  "migration": {
+                    "type": "string",
+                    "description": "Path to a tfmigrate migration file for kind: tfmigrate hooks."
+                  },
+                  "config": {
+                    "type": "string",
+                    "description": "Optional tfmigrate config path override for kind: tfmigrate hooks. When omitted, tfmigrate uses its own config discovery."
+                  },
+                  "backend_config": {
+                    "type": "array",
+                    "description": "Backend config entries passed to tfmigrate.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "tfmigrate hook mode. dynamic maps the Terraform lifecycle event to plan or apply.",
+                    "enum": [
+                      "dynamic",
+                      "plan",
+                      "apply"
+                    ],
+                    "default": "dynamic"
                   }
                 },
                 "additionalProperties": true

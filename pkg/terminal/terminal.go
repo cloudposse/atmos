@@ -435,7 +435,7 @@ func buildConfig() *Config {
 		// From flags (bound via viper in cmd/root.go)
 		NoColor:    viper.GetBool("no-color"),
 		Color:      viper.GetBool("color"),
-		ForceColor: viper.GetBool("force-color"),
+		ForceColor: viper.GetBool("force-color") || os.Getenv("ATMOS_FORCE_COLOR") != "" || os.Getenv("FORCE_COLOR") != "", //nolint:forbidigo // Standard and Atmos force-color env vars.
 		ForceTTY:   viper.GetBool("force-tty"),
 
 		// From environment variables (standard terminal env vars, not Atmos-specific)
