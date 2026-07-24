@@ -2,6 +2,7 @@ package output
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,41 +13,46 @@ import (
 )
 
 func TestConfigurePluginCache(t *testing.T) {
+	atmosCacheDir := filepath.Join(t.TempDir(), "atmos-cache")
+	componentCacheDir := filepath.Join(t.TempDir(), "component-cache")
+	processCacheDir := filepath.Join(t.TempDir(), "process-cache")
+	globalCacheDir := filepath.Join(t.TempDir(), "global-cache")
+
 	t.Run("applies automatic cache to internal output environment", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{
 			PluginCache:    true,
-			PluginCacheDir: "/atmos/cache",
+			PluginCacheDir: atmosCacheDir,
 		}}}
 		environ := map[string]string{}
 
 		cache := configurePluginCache(atmosConfig, &ComponentConfig{}, environ)
 
 		assert.True(t, cache.Automatic)
-		assert.Equal(t, "/atmos/cache", environ[tfplugin.CacheDirEnv])
+		assert.Equal(t, atmosCacheDir, environ[tfplugin.CacheDirEnv])
 		assert.Equal(t, "true", environ[tfplugin.CacheMayBreakLockFileEnv])
 	})
 
 	t.Run("preserves component cache override", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{
 			PluginCache:    true,
-			PluginCacheDir: "/atmos/cache",
+			PluginCacheDir: atmosCacheDir,
 		}}}
 		environ := map[string]string{}
 
 		cache := configurePluginCache(atmosConfig, &ComponentConfig{Env: map[string]any{
-			tfplugin.CacheDirEnv: "/component/cache",
+			tfplugin.CacheDirEnv: componentCacheDir,
 		}}, environ)
 
 		assert.False(t, cache.Automatic)
-		assert.Equal(t, "/component/cache", environ[tfplugin.CacheDirEnv])
+		assert.Equal(t, componentCacheDir, environ[tfplugin.CacheDirEnv])
 		_, mayBreakSet := environ[tfplugin.CacheMayBreakLockFileEnv]
 		assert.False(t, mayBreakSet)
 	})
 
 	t.Run("process environment beats inherited global cache", func(t *testing.T) {
-		t.Setenv(tfplugin.CacheDirEnv, "/process/cache")
+		t.Setenv(tfplugin.CacheDirEnv, processCacheDir)
 		atmosConfig := &schema.AtmosConfiguration{
-			Env: map[string]string{tfplugin.CacheDirEnv: "/global/cache"},
+			Env: map[string]string{tfplugin.CacheDirEnv: globalCacheDir},
 			Components: schema.Components{Terraform: schema.Terraform{
 				PluginCache: true,
 			}},
@@ -54,11 +60,11 @@ func TestConfigurePluginCache(t *testing.T) {
 		environ := map[string]string{}
 
 		cache := configurePluginCache(atmosConfig, &ComponentConfig{Env: map[string]any{
-			tfplugin.CacheDirEnv: "/global/cache",
+			tfplugin.CacheDirEnv: globalCacheDir,
 		}}, environ)
 
 		assert.False(t, cache.Automatic)
-		assert.Equal(t, "/process/cache", environ[tfplugin.CacheDirEnv])
+		assert.Equal(t, processCacheDir, environ[tfplugin.CacheDirEnv])
 	})
 
 	t.Run("disabled cache does not add cache environment", func(t *testing.T) {

@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +10,10 @@ import (
 )
 
 func TestConfigurePluginCache(t *testing.T) {
+	customCacheDir := filepath.Join(t.TempDir(), "custom", "terraform", "plugins")
+	userCacheDir := filepath.Join(t.TempDir(), "user", "custom", "cache")
+	globalCacheDir := filepath.Join(t.TempDir(), "global", "custom", "cache")
+
 	tests := []struct {
 		name              string
 		pluginCache       bool
@@ -31,12 +36,12 @@ func TestConfigurePluginCache(t *testing.T) {
 		{
 			name:              "caching enabled with custom dir",
 			pluginCache:       true,
-			pluginCacheDir:    "/custom/terraform/plugins",
+			pluginCacheDir:    customCacheDir,
 			osEnvVar:          "",
 			globalEnvDir:      "",
 			expectEnvVars:     true,
 			expectCustomDir:   true,
-			expectedDirPrefix: "/custom/terraform/plugins",
+			expectedDirPrefix: customCacheDir,
 		},
 		{
 			name:            "caching disabled returns no env vars",
@@ -51,7 +56,7 @@ func TestConfigurePluginCache(t *testing.T) {
 			name:            "user OS env var takes precedence",
 			pluginCache:     true,
 			pluginCacheDir:  "",
-			osEnvVar:        "/user/custom/cache",
+			osEnvVar:        userCacheDir,
 			globalEnvDir:    "",
 			expectEnvVars:   false, // User manages their own cache.
 			expectCustomDir: false,
@@ -70,7 +75,7 @@ func TestConfigurePluginCache(t *testing.T) {
 			pluginCache:     true,
 			pluginCacheDir:  "",
 			osEnvVar:        "",
-			globalEnvDir:    "/global/custom/cache",
+			globalEnvDir:    globalCacheDir,
 			expectEnvVars:   false, // User manages their own cache.
 			expectCustomDir: false,
 		},

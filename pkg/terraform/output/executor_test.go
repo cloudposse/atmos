@@ -365,13 +365,14 @@ func TestExecutor_ExecuteWithSections_AppliesAutomaticPluginCache(t *testing.T) 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(
 		func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil },
 	))
+	pluginCacheDir := filepath.Join(t.TempDir(), "plugin-cache")
 	atmosConfig := validAtmosConfig()
 	atmosConfig.Components.Terraform.PluginCache = true
-	atmosConfig.Components.Terraform.PluginCacheDir = "/atmos/plugin-cache"
+	atmosConfig.Components.Terraform.PluginCacheDir = pluginCacheDir
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", validSections(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, "/atmos/plugin-cache", capturedEnv["TF_PLUGIN_CACHE_DIR"])
+	assert.Equal(t, pluginCacheDir, capturedEnv["TF_PLUGIN_CACHE_DIR"])
 	assert.Equal(t, "true", capturedEnv["TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"])
 }
 
