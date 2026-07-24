@@ -19,6 +19,7 @@ FLAGS
 
       --tags string      Select an identity by tags (comma-separated, matches any): --tags=production,admin
 
+      --webflow          Force a fresh browser login for an aws/user identity
 
 
 Use --help=usage for examples or --help=all for all flags and full help.
