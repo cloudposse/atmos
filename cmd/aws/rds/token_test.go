@@ -137,6 +137,8 @@ func TestRunRDSTokenGeneration_MissingFlags(t *testing.T) {
 		{"missing port", tokenOptions{Host: "db", Username: "app", Region: "us-east-2"}, "--port"},
 		{"missing username", tokenOptions{Host: "db", Port: 5432, Region: "us-east-2"}, "--username"},
 		{"missing region", tokenOptions{Host: "db", Port: 5432, Username: "app"}, "--region"},
+		{"port too high", tokenOptions{Host: "db", Port: 70000, Username: "app", Region: "us-east-2"}, "between 1 and 65535"},
+		{"port negative", tokenOptions{Host: "db", Port: -1, Username: "app", Region: "us-east-2"}, "between 1 and 65535"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,6 +217,38 @@ func TestExecuteTokenCommand_ReadsFlags(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("port", "5432"))
 	require.NoError(t, cmd.Flags().Set("username", "app"))
 	require.NoError(t, cmd.Flags().Set("region", "us-east-2"))
+
+	var err error
+	out := captureStdout(t, func() { err = executeTokenCommand(cmd, []string{}) })
+	require.NoError(t, err)
+	assert.Equal(t, wantToken, out)
+}
+
+func TestExecuteTokenCommand_ReadsEnvVars(t *testing.T) {
+	initTestIO(t)
+	// The documented ATMOS_AWS_RDS_* env interface must populate the flags via the "rds" Viper
+	// prefix, and a colliding sibling env var (ATMOS_AWS_SECURITY_REGION, bound by `aws security`
+	// on the shared global Viper) must NOT leak into --region. This guards the WithViperPrefix fix.
+	t.Setenv("ATMOS_AWS_RDS_HOST", "envhost")
+	t.Setenv("ATMOS_AWS_RDS_PORT", "5432")
+	t.Setenv("ATMOS_AWS_RDS_USERNAME", "envuser")
+	t.Setenv("ATMOS_AWS_RDS_REGION", "eu-west-1")
+	t.Setenv("ATMOS_AWS_SECURITY_REGION", "us-west-2")
+
+	const wantToken = "envhost:5432/?Action=connect&DBUser=envuser&X-Amz-Signature=abc"
+	stubTokenDeps(t,
+		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
+		nil,
+		func(endpoint, region, dbUser string) (string, time.Time, error) {
+			assert.Equal(t, "envhost:5432", endpoint)
+			assert.Equal(t, "eu-west-1", region, "region must come from ATMOS_AWS_RDS_REGION, not the colliding ATMOS_AWS_SECURITY_REGION")
+			assert.Equal(t, "envuser", dbUser)
+			return wantToken, time.Now().Add(15 * time.Minute), nil
+		},
+	)
+
+	cmd := &cobra.Command{Use: "token", RunE: executeTokenCommand}
+	rdsTokenParser.RegisterFlags(cmd)
 
 	var err error
 	out := captureStdout(t, func() { err = executeTokenCommand(cmd, []string{}) })
