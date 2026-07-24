@@ -136,7 +136,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 // Browser webflow is implemented only by standalone aws/user identities.
 func validateWebflowProviderMode(forceWebflow bool, providerName string) error {
 	if forceWebflow && providerName != "" {
-		return fmt.Errorf("--webflow requires an aws/user identity and cannot be used with --provider")
+		return fmt.Errorf("%w: cannot be used with --provider", errUtils.ErrWebflowRequiresAWSUser)
 	}
 	return nil
 }
@@ -182,7 +182,7 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 			if errors.Is(err, errUtils.ErrNoIdentitiesAvailable) ||
 				errors.Is(err, errUtils.ErrNoDefaultIdentity) {
 				if authTypes.ForceAWSWebflow(ctx) {
-					return nil, false, fmt.Errorf("--webflow requires an aws/user identity; no identity was resolved")
+					return nil, false, fmt.Errorf("%w: no identity was resolved", errUtils.ErrWebflowRequiresAWSUser)
 				}
 				return nil, true, nil
 			}
@@ -193,10 +193,10 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 	if authTypes.ForceAWSWebflow(ctx) {
 		identity, ok := authManager.GetIdentities()[identityName]
 		if !ok {
-			return nil, false, fmt.Errorf("--webflow requires an aws/user identity; identity %q was not found", identityName)
+			return nil, false, fmt.Errorf("%w: identity %q was not found", errUtils.ErrWebflowRequiresAWSUser, identityName)
 		}
 		if identity.Kind != authTypes.ProviderKindAWSUser {
-			return nil, false, fmt.Errorf("--webflow requires an aws/user identity; identity %q has kind %q", identityName, identity.Kind)
+			return nil, false, fmt.Errorf("%w: identity %q has kind %q", errUtils.ErrWebflowRequiresAWSUser, identityName, identity.Kind)
 		}
 	}
 

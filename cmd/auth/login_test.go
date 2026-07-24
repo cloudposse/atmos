@@ -214,6 +214,7 @@ func TestAuthenticateIdentity_ForceWebflowRejectsNonAWSUser(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--webflow requires an aws/user identity")
 	assert.Contains(t, err.Error(), authTypes.ProviderKindAWSPermissionSet)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRequiresAWSUser)
 }
 
 func TestAuthenticateIdentity_ForceWebflowRejectsUnknownIdentity(t *testing.T) {
@@ -231,6 +232,7 @@ func TestAuthenticateIdentity_ForceWebflowRejectsUnknownIdentity(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "identity \"missing\" was not found")
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRequiresAWSUser)
 }
 
 func TestAuthenticateIdentity_ForceWebflowRejectsProviderFallback(t *testing.T) {
@@ -247,12 +249,15 @@ func TestAuthenticateIdentity_ForceWebflowRejectsProviderFallback(t *testing.T) 
 	require.Error(t, err)
 	assert.False(t, needsFallback)
 	assert.ErrorContains(t, err, "--webflow requires an aws/user identity")
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRequiresAWSUser)
 }
 
 func TestValidateWebflowProviderMode(t *testing.T) {
 	assert.NoError(t, validateWebflowProviderMode(false, "sso"))
-	require.Error(t, validateWebflowProviderMode(true, "sso"))
-	assert.ErrorContains(t, validateWebflowProviderMode(true, "sso"), "cannot be used with --provider")
+	err := validateWebflowProviderMode(true, "sso")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "cannot be used with --provider")
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRequiresAWSUser)
 }
 
 func TestAuthLoginCommand_ValidArgsFunction(t *testing.T) {
@@ -427,5 +432,6 @@ func TestExecuteAuthLoginCommand_ForceWebflowRejectsProviderMode(t *testing.T) {
 
 	err := executeAuthLoginCommand(cmd, nil)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "--webflow requires an aws/user identity and cannot be used with --provider")
+	assert.ErrorContains(t, err, "cannot be used with --provider")
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRequiresAWSUser)
 }

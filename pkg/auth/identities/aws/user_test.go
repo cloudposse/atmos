@@ -2449,7 +2449,9 @@ func TestUserIdentity_Authenticate_ForceWebflowDisabled(t *testing.T) {
 	}, "us-east-1"))
 
 	result, err := userIdent.Authenticate(types.WithForceAWSWebflow(context.Background(), true), nil)
-	assert.Nil(t, result)
+	if result != nil {
+		t.Fatalf("forced webflow error must return a nil credentials interface, got %T", result)
+	}
 	assert.ErrorIs(t, err, errUtils.ErrWebflowDisabled,
 		"--webflow must honor webflow_enabled: false even when a cached session is valid")
 }

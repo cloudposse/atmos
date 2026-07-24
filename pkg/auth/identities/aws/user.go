@@ -108,7 +108,11 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	// Do this before reading the session file, YAML, or keyring so none of those
 	// long-lived credentials are consulted or modified.
 	if types.ForceAWSWebflow(ctx) {
-		return i.authenticateViaBrowserWebflow(ctx)
+		creds, err := i.authenticateViaBrowserWebflow(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return creds, nil
 	}
 
 	// First, try to load existing session credentials from AWS files.
