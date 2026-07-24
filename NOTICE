@@ -715,7 +715,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - google.golang.org/genproto/googleapis/rpc
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/0a33c5d7ca68/googleapis/rpc/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/7ab31c22f7ad/googleapis/rpc/LICENSE
 
   - google.golang.org/grpc
     License: Apache-2.0
@@ -1100,7 +1100,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.55.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.56.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
@@ -1132,11 +1132,11 @@ BSD LICENSED DEPENDENCIES
 
   - google.golang.org/api
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.280.0/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.286.0/LICENSE
 
   - google.golang.org/api/internal/third_party/uritemplates
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.280.0/internal/third_party/uritemplates/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.286.0/internal/third_party/uritemplates/LICENSE
 
   - google.golang.org/protobuf
     License: BSD-3-Clause
