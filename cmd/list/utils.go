@@ -194,18 +194,28 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
-// createAuthManagerForList creates an AuthManager only when list commands are
-// explicitly asked to authenticate. Inventory commands such as `list stacks`,
-// `list components`, and `list instances` can span many stacks; implicitly
-// resolving default identities for every stack makes discovery fail when one
-// unrelated emulator or external provider is offline.
-func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
+// createAuthManagerWithStackScan is replaceable in tests so command-level auth policy can
+// be verified without performing real authentication.
+var createAuthManagerWithStackScan = auth.CreateAndAuthenticateManagerWithStackScan
+
+// createAuthManagerForList creates an AuthManager when the command will evaluate values
+// that can require credentials, or when the caller explicitly selected an identity. Plain
+// inventory runs with both template and YAML-function processing disabled remain credential-free.
+// An explicit --identity=false always disables authentication.
+func createAuthManagerForList(
+	cmd *cobra.Command,
+	atmosConfig *schema.AtmosConfiguration,
+	processTemplates, processYamlFunctions bool,
+) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
-	if identityName == "" || identityName == cfg.IdentityFlagDisabledValue {
+	if identityName == cfg.IdentityFlagDisabledValue {
+		return nil, nil
+	}
+	if identityName == "" && !processTemplates && !processYamlFunctions {
 		return nil, nil
 	}
 
-	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
+	authManager, err := createAuthManagerWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
@@ -270,7 +280,11 @@ func getComponentFilter(args []string) string {
 
 // initConfigAndAuth initializes CLI config and creates an auth manager.
 // The cmd and v parameters allow honoring config selection flags (--base-path, --config, --config-path, --profile).
-func initConfigAndAuth(cmd *cobra.Command, v *viper.Viper) (schema.AtmosConfiguration, auth.AuthManager, error) {
+func initConfigAndAuth(
+	cmd *cobra.Command,
+	v *viper.Viper,
+	processTemplates, processYamlFunctions bool,
+) (schema.AtmosConfiguration, auth.AuthManager, error) {
 	// Parse global flags and build ConfigAndStacksInfo to honor config selection flags.
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
 	configAndStacksInfo := buildConfigAndStacksInfo(&globalFlags)
@@ -279,7 +293,7 @@ func initConfigAndAuth(cmd *cobra.Command, v *viper.Viper) (schema.AtmosConfigur
 		return schema.AtmosConfiguration{}, nil, &listerrors.InitConfigError{Cause: err}
 	}
 
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, processTemplates, processYamlFunctions)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, err
 	}

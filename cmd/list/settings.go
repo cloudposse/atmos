@@ -138,7 +138,7 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	componentFilter := getComponentFilter(args)
 
 	// Initialize CLI config and auth manager (honors --base-path, --config, --config-path, --profile).
-	atmosConfig, authManager, err := initConfigAndAuth(cmd, v)
+	atmosConfig, authManager, err := initConfigAndAuth(cmd, v, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return "", nil, err
 	}

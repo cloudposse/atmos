@@ -152,7 +152,7 @@ func describeStacksForDependencies(cmd *cobra.Command, args []string, opts *Depe
 		return nil, err
 	}
 
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return nil, err
 	}

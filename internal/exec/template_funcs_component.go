@@ -18,6 +18,10 @@ import (
 
 var componentFuncSyncMap = sync.Map{}
 
+// executeComponentFuncTerraformOutputs is replaceable in tests so the component template
+// path can be verified without invoking Terraform or a remote backend.
+var executeComponentFuncTerraformOutputs = tfoutput.ExecuteWithSections
+
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -96,7 +100,7 @@ func componentFunc(
 					authContext = si.AuthContext
 				}
 			}
-			terraformOutputs, err = tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
+			terraformOutputs, err = executeComponentFuncTerraformOutputs(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
 				return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get terraform outputs: %w", component, stack, err)
 			}
