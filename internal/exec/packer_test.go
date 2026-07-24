@@ -540,9 +540,17 @@ components:
 		// key on stack-file identity (mtime/size) or stack:component name,
 		// not on env-var-driven atmos.yaml settings, so without clearing
 		// them this subtest's override above is silently ignored and the
-		// stale "packer" command wins.
+		// stale "packer" command wins. ExecutePacker below repopulates both
+		// caches with this subtest's nonexistent command, so clear them again
+		// afterward too — otherwise a later subtest (or another test file
+		// sharing this stack:component key) could reuse the stale entry once
+		// t.Setenv restores the real env var.
 		ClearBaseComponentConfigCache()
 		ClearFindStacksMapCache()
+		t.Cleanup(func() {
+			ClearBaseComponentConfigCache()
+			ClearFindStacksMapCache()
+		})
 
 		info := schema.ConfigAndStacksInfo{
 			Stack:            "nonprod",
