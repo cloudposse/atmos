@@ -77,6 +77,35 @@ func TestGenerateModelsAuthoredSections(t *testing.T) {
 	}
 }
 
+func TestGenerateMarksDeprecatedConfigurationFields(t *testing.T) {
+	defs := definitions(t)
+	for _, test := range []struct {
+		definition  string
+		property    string
+		replacement string
+	}{
+		{"Stacks", "name_pattern", "stacks.name_template"},
+		{"Helmfile", "helm_aws_profile_pattern", "--identity"},
+		{"Helmfile", "cluster_name_pattern", "components.helmfile.cluster_name_template"},
+		{"Terminal", "no_color", "settings.terminal.color (invert the value)"},
+		{"AtmosSettings", "docs", "docs"},
+		{"Docs", "max-width", "settings.terminal.max-width"},
+		{"Docs", "pagination", "settings.terminal.pagination"},
+		{"Provider", "provider_type", "driver"},
+		{"VersionProvider", "type", "kind"},
+	} {
+		t.Run(test.definition+"/"+test.property, func(t *testing.T) {
+			definition := defs[test.definition].(map[string]any)
+			properties := definition["properties"].(map[string]any)
+			field := properties[test.property].(map[string]any)
+			variants := field["anyOf"].([]any)
+			metadata := variants[0].(map[string]any)
+			assert.Equal(t, true, metadata["deprecated"])
+			assert.Equal(t, test.replacement, metadata["x-atmos-replacement"])
+		})
+	}
+}
+
 func TestGenerateExcludesRuntimeFields(t *testing.T) {
 	props := rootProperties(t)
 
