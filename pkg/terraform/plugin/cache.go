@@ -22,6 +22,11 @@ const (
 	CacheMayBreakLockFileEnv = "TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"
 )
 
+var (
+	getXDGCacheDir = xdg.GetXDGCacheDir
+	absolutePath   = filepath.Abs
+)
+
 // Cache describes the effective provider plugin cache for one Terraform subprocess.
 // Environment is populated only when Atmos selected the cache automatically; callers
 // retain complete control over an explicit TF_PLUGIN_CACHE_DIR override.
@@ -47,7 +52,7 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, override string, overrideSe
 
 	directory := atmosConfig.Components.Terraform.PluginCacheDir
 	if directory == "" {
-		cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
+		cacheDir, err := getXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
 		if err != nil {
 			log.Warn("Failed to create plugin cache directory", "error", err)
 			return Cache{}
@@ -94,7 +99,7 @@ func (c Cache) InitLockPath() string {
 	if c.Directory == "" {
 		return ""
 	}
-	abs, err := filepath.Abs(c.Directory)
+	abs, err := absolutePath(c.Directory)
 	if err != nil {
 		abs = c.Directory
 	}

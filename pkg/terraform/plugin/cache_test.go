@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -53,6 +55,14 @@ func TestResolve(t *testing.T) {
 			wantDir:     "/configured/cache",
 			automatic:   true,
 		},
+		{
+			name:        "empty explicit override falls back to automatic cache",
+			terraform:   schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"},
+			override:    "",
+			overrideSet: true,
+			wantDir:     "/configured/cache",
+			automatic:   true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -72,4 +82,33 @@ func TestResolve(t *testing.T) {
 	cache := Resolve(&schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"}}}, "", false)
 	require.NotEmpty(t, cache.InitLockPath())
 	assert.Equal(t, cache.InitLockPath(), cache.InitLockPath())
+	assert.Empty(t, (Cache{}).InitLockPath())
+	assert.Empty(t, Resolve(nil, "", false).Directory)
+}
+
+func TestResolveXDGCacheFallbacks(t *testing.T) {
+	original := getXDGCacheDir
+	t.Cleanup(func() { getXDGCacheDir = original })
+
+	config := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{PluginCache: true}}}
+
+	getXDGCacheDir = func(string, os.FileMode) (string, error) {
+		return "", errors.New("unavailable")
+	}
+	assert.Empty(t, Resolve(config, "", false).Directory)
+
+	getXDGCacheDir = func(string, os.FileMode) (string, error) {
+		return "", nil
+	}
+	assert.Empty(t, Resolve(config, "", false).Directory)
+}
+
+func TestCacheInitLockPathUsesDirectoryWhenAbsolutePathFails(t *testing.T) {
+	original := absolutePath
+	t.Cleanup(func() { absolutePath = original })
+	absolutePath = func(string) (string, error) {
+		return "", errors.New("unavailable")
+	}
+
+	assert.NotEmpty(t, Cache{Directory: "relative/cache"}.InitLockPath())
 }
