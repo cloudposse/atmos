@@ -88,8 +88,7 @@ go test ./cmd/... -run TestShouldCreateDescribeStacksAuthManager -v
 go test ./internal/exec/... -run 'TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput|TestResolveComponentFuncAuthManager|TestIsRecoverableInWarnMode|TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn' -v
 ```
 
-`go build ./...` passed cleanly. `go test ./cmd/... ./internal/exec/...` (full package
-run) and all four targeted runs above passed.
+`go build ./...` passed cleanly. The full package run and all three targeted runs above passed.
 
 ## Follow-ups
 

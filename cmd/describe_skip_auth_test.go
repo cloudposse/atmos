@@ -48,6 +48,33 @@ func newTestCmdWithFunctionsDisabled(t *testing.T) *cobra.Command {
 	return cmd
 }
 
+// newTestCmdWithFunctionsDisabledTemplatesDefault creates a minimal cobra.Command with
+// --process-functions=false and a registered --process-templates flag that is left
+// unset (so its default of true applies), mirroring describeStacksCmd's real flag
+// registration (see cmd/describe_stacks.go's init()).
+//
+// Note on how getRunnableDescribeStacksCmd actually populates describe.ProcessTemplates
+// in these tests: the dispatch closure calls the package-level setCliArgsForDescribeStackCli
+// function directly against the real cmd.Flags() — NOT the injectable
+// getRunnableDescribeStacksCmdProps.setCliArgsForDescribeStackCli field (see the identical
+// finding documented on TestDescribeStacksRunnable_InvalidErrorMode in
+// describe_stacks_test.go). So the `func(_ *pflag.FlagSet, _ *exec.DescribeStacksArgs) error
+// { return nil }` stub passed as that prop below is never invoked; it is only present to
+// satisfy the getRunnableDescribeStacksCmdProps struct literal.
+// The describe.ProcessTemplates and describe.ProcessYamlFunctions fields are genuinely
+// derived from this cmd's real Flags() state via the production setCliArgsForDescribeStackCli,
+// which is what makes the assertions below a real (not coincidental) proof of the auth guard's
+// behavior.
+func newTestCmdWithFunctionsDisabledTemplatesDefault(t *testing.T) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("process-templates", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+	cmd.Flags().StringP("identity", "i", "", "")
+	require.NoError(t, cmd.Flags().Set("process-functions", "false"))
+	return cmd
+}
+
 // newTestCmdWithTemplatesAndFunctionsDisabled creates a minimal cobra.Command with both
 // --process-templates=false and --process-functions=false. Describe stacks creates an
 // AuthManager when either evaluation path is enabled (see shouldCreateDescribeStacksAuthManager),
@@ -103,6 +130,7 @@ func TestDescribeStacks_SkipsAuthWhenTemplatesAndFunctionsDisabled(t *testing.T)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
 			assert.Nil(t, args.AuthManager, "AuthManager must be nil when both templates and functions are disabled")
+			assert.False(t, args.ProcessTemplates, "ProcessTemplates must be false")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
@@ -142,10 +170,15 @@ func TestDescribeStacks_CreatesAuthWhenTemplatesEnabledEvenIfFunctionsDisabled(t
 	defer ctrl.Finish()
 
 	// Mock should NOT be called — auth resolution fails (broken identity) before execution.
+	// No .EXPECT() is registered on mockExec, so gomock fails the test immediately if
+	// Execute is ever invoked, which is what proves the auth error happens first.
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 
-	// --process-templates is left at its default (true); only --process-functions is disabled.
-	testCmd := newTestCmdWithFunctionsDisabled(t)
+	// --process-templates is registered with its real default (true) and left unset;
+	// only --process-functions is disabled. See newTestCmdWithFunctionsDisabledTemplatesDefault
+	// for why describe.ProcessTemplates is genuinely true here (derived from this cmd's
+	// real Flags() by the production setCliArgsForDescribeStackCli), not merely assumed.
+	testCmd := newTestCmdWithFunctionsDisabledTemplatesDefault(t)
 
 	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		func(opts ...AtmosValidateOption) {},
@@ -183,11 +216,16 @@ func TestDescribeStacks_SkipsAuthWhenEnvVarSetButTemplatesAndFunctionsDisabled(t
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
 			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var is set but templates/functions are disabled and no explicit --identity flag")
+			assert.False(t, args.ProcessTemplates, "ProcessTemplates must be false")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
 	).Times(1)
 
+	// testCmd carries the real, explicitly-disabled --process-templates=false and
+	// --process-functions=false flag values (see newTestCmdWithTemplatesAndFunctionsDisabled),
+	// so the env-var guard below is exercised against genuine disabled state rather than
+	// zero-value defaults.
 	testCmd := newTestCmdWithTemplatesAndFunctionsDisabled(t)
 
 	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
