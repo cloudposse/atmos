@@ -71,7 +71,7 @@ jobs:
             target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
         if: matrix.target == 'linux'
 
       - name: Announce build target
@@ -85,14 +85,14 @@ jobs:
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
         id: go
@@ -176,7 +176,7 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -246,7 +246,7 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
@@ -338,7 +338,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -393,7 +393,7 @@ jobs:
       security-events: write
     steps:
       - name: Check out code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -409,7 +409,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -439,7 +439,7 @@ jobs:
     steps:
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -497,7 +497,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -508,7 +508,7 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
           cache: false
@@ -559,7 +559,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -675,13 +675,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           cache: false
           go-version-file: "go.mod"
@@ -761,7 +761,7 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -867,7 +867,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -957,7 +957,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -1000,7 +1000,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
