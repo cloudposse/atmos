@@ -216,6 +216,23 @@ func TestAuthenticateIdentity_ForceWebflowRejectsNonAWSUser(t *testing.T) {
 	assert.Contains(t, err.Error(), authTypes.ProviderKindAWSPermissionSet)
 }
 
+func TestAuthenticateIdentity_ForceWebflowRejectsUnknownIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String(IdentityFlagName, "", "identity")
+	require.NoError(t, cmd.Flags().Set(IdentityFlagName, "missing"))
+	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{})
+	mockAuthManager.EXPECT().Authenticate(gomock.Any(), gomock.Any()).Times(0)
+
+	_, _, err := authenticateIdentity(
+		authTypes.WithForceAWSWebflow(context.Background(), true), cmd, auth.AuthManager(mockAuthManager),
+	)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "identity \"missing\" was not found")
+}
+
 func TestAuthenticateIdentity_ForceWebflowRejectsProviderFallback(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
@@ -398,4 +415,17 @@ func TestExecuteAuthLoginCommand_WithMockAuth(t *testing.T) {
 	err := executeAuthLoginCommand(cmd, nil)
 	assert.NoError(t, err,
 		"login against the mock provider must succeed")
+}
+
+func TestExecuteAuthLoginCommand_ForceWebflowRejectsProviderMode(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authLoginCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--provider", "mock-provider", "--webflow"}))
+
+	err := executeAuthLoginCommand(cmd, nil)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "--webflow requires an aws/user identity and cannot be used with --provider")
 }

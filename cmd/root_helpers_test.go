@@ -1253,6 +1253,30 @@ func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 	}
 }
 
+func TestShowExperimentalCommandNotice_EdgeCases(t *testing.T) {
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	var notices []string
+	writeExperimentalNotice = func(feature string) { notices = append(notices, feature) }
+	t.Cleanup(func() { writeExperimentalNotice = originalWriteExperimentalNotice })
+
+	showExperimentalCommandNotice(nil, "ignored")
+	assert.Empty(t, notices, "a nil command must not emit a notice")
+
+	command := &cobra.Command{Use: "experimental"}
+	showExperimentalCommandNotice(command, "experimental")
+	showExperimentalCommandNotice(command, "experimental")
+	assert.Equal(t, []string{"experimental"}, notices, "a command must emit at most one notice")
+	require.NotNil(t, command.Annotations)
+	assert.Equal(t, experimentalNoticeEmitted, command.Annotations[experimentalNoticeAnnotation])
+
+	child := &cobra.Command{Use: "child", Annotations: map[string]string{experimentalNoticeAnnotation: experimentalNoticeEmitted}}
+	command.AddCommand(child)
+	resetExperimentalCommandNotices(nil)
+	resetExperimentalCommandNotices(command)
+	assert.NotContains(t, command.Annotations, experimentalNoticeAnnotation)
+	assert.NotContains(t, child.Annotations, experimentalNoticeAnnotation)
+}
+
 // TestIsTopLevelCommand tests the isTopLevelCommand helper.
 func TestIsTopLevelCommand(t *testing.T) {
 	root := &cobra.Command{Use: "atmos"}

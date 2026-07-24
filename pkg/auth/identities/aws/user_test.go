@@ -2454,6 +2454,64 @@ func TestUserIdentity_Authenticate_ForceWebflowDisabled(t *testing.T) {
 		"--webflow must honor webflow_enabled: false even when a cached session is valid")
 }
 
+func TestUserIdentity_WebflowHelpersPropagateErrorsAndPersistSessions(t *testing.T) {
+	t.Run("normal webflow returns browser errors", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+		t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+		identity, err := NewUserIdentity("webflow-error", &schema.Identity{Kind: "aws/user"})
+		require.NoError(t, err)
+
+		result, err := identity.Authenticate(types.WithAllowPrompts(context.Background(), false), nil)
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, errUtils.ErrWebflowAuthFailed)
+	})
+
+	t.Run("forced browser flow returns prompt errors", func(t *testing.T) {
+		identity, err := NewUserIdentity("forced-webflow-error", &schema.Identity{Kind: "aws/user"})
+		require.NoError(t, err)
+
+		creds, err := identity.(*userIdentity).authenticateViaBrowserWebflow(types.WithAllowPrompts(context.Background(), false))
+		assert.Nil(t, creds)
+		assert.ErrorIs(t, err, errUtils.ErrWebflowAuthFailed)
+	})
+
+	t.Run("webflow resolver returns disabled error", func(t *testing.T) {
+		identity, err := NewUserIdentity("webflow-disabled", &schema.Identity{
+			Kind: "aws/user", Credentials: map[string]any{"webflow_enabled": false},
+		})
+		require.NoError(t, err)
+
+		creds, err := identity.(*userIdentity).authenticateViaWebflow(context.Background())
+		assert.Nil(t, creds)
+		assert.ErrorIs(t, err, errUtils.ErrWebflowDisabled)
+	})
+
+	t.Run("persistence fills region and reports write failures", func(t *testing.T) {
+		identity, err := NewUserIdentity("webflow-persist", &schema.Identity{Kind: "aws/user"})
+		require.NoError(t, err)
+		userIdent := identity.(*userIdentity)
+
+		configHome := t.TempDir()
+		t.Setenv("ATMOS_XDG_CONFIG_HOME", configHome)
+		creds, err := userIdent.persistWebflowCredentials(&types.AWSCredentials{
+			AccessKeyID: "AKID", SecretAccessKey: "SECRET", SessionToken: "TOKEN",
+		}, "us-west-2")
+		require.NoError(t, err)
+		assert.Equal(t, "us-west-2", creds.Region)
+
+		blockedPath := filepath.Join(t.TempDir(), "not-a-directory")
+		require.NoError(t, os.WriteFile(blockedPath, []byte("blocked"), 0o600))
+		t.Setenv("ATMOS_XDG_CONFIG_HOME", blockedPath)
+		creds, err = userIdent.persistWebflowCredentials(&types.AWSCredentials{
+			AccessKeyID: "AKID", SecretAccessKey: "SECRET", SessionToken: "TOKEN", Region: "us-west-2",
+		}, "us-west-2")
+		assert.Nil(t, creds)
+		assert.ErrorIs(t, err, errUtils.ErrAwsAuth)
+	})
+}
+
 // TestUserIdentity_Authenticate_PartialYAMLCredsSurfacesConfigError verifies
 // the guard that prevents silent principal hijack: partial YAML credentials
 // (only access_key_id, no secret_access_key) must surface ErrInvalidAuthConfig
