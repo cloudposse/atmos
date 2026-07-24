@@ -6,6 +6,7 @@ import (
 	awscompliance "github.com/cloudposse/atmos/cmd/aws/compliance"
 	"github.com/cloudposse/atmos/cmd/aws/ecr"
 	"github.com/cloudposse/atmos/cmd/aws/eks"
+	"github.com/cloudposse/atmos/cmd/aws/rds"
 	awssecurity "github.com/cloudposse/atmos/cmd/aws/security"
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -32,6 +33,9 @@ func init() {
 
 	// Add EKS subcommand from the eks subpackage.
 	awsCmd.AddCommand(eks.EksCmd)
+
+	// Add RDS subcommand from the rds subpackage.
+	awsCmd.AddCommand(rds.RdsCmd)
 
 	// Add Security subcommand from the security subpackage.
 	awsCmd.AddCommand(awssecurity.SecurityCmd)
