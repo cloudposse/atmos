@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/joho/godotenv"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	goyaml "go.yaml.in/yaml/v3"
 	"gopkg.in/yaml.v3"
@@ -27,6 +25,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/flags/osargs"
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -102,39 +101,18 @@ const (
 	cwdKey = "cwd"
 )
 
-// ParseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
+// ParseProfilesFromOsArgs parses --profile flags from os.Args.
 // This is used both as a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer)
 // and for early profile extraction before Cobra parses flags (same pattern as --chdir).
-// Uses pflag's StringSlice parser to handle all syntax variations correctly.
 func ParseProfilesFromOsArgs(args []string) []string {
-	// Create temporary FlagSet just for parsing --profile.
-	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
-	fs.SetOutput(io.Discard)                    // Suppress usage/error output from leaking to stderr.
-	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
-
-	// Suppress pflag's automatic usage printout. When args contain `--help` or
-	// `-h`, pflag implicitly handles those flags and calls `fs.Usage()` (which
-	// writes "Usage of profile-parser: …" to stderr) before returning ErrHelp.
-	// Because LoadConfig may run multiple times during a single command (once
-	// in Execute() and again in PersistentPreRun), the user would otherwise
-	// see duplicate "Usage of profile-parser:" blocks in `atmos … --help`
-	// output. We only use this FlagSet to extract `--profile` values, so its
-	// usage block is never the right thing to display.
-	fs.Usage = func() {}
-
-	// Register profile flag using pflag's StringSlice (handles comma-separated values).
-	profiles := fs.StringSlice(profileKey, []string{}, "Configuration profiles")
-
-	// Parse args - pflag handles both --profile=value and --profile value syntax.
-	_ = fs.Parse(args) // Ignore errors from unknown flags.
-
-	if profiles == nil || len(*profiles) == 0 {
+	profiles := osargs.ParseStringSlice(args, profileKey)
+	if len(profiles) == 0 {
 		return nil
 	}
 
 	// Post-process: trim whitespace and filter empty values (maintains compatibility with manual parsing).
-	result := make([]string, 0, len(*profiles))
-	for _, profile := range *profiles {
+	result := make([]string, 0, len(profiles))
+	for _, profile := range profiles {
 		trimmed := strings.TrimSpace(profile)
 		if trimmed != "" {
 			result = append(result, trimmed)
@@ -199,38 +177,24 @@ type ConfigSelection struct {
 }
 
 // ParseConfigSelectionFromOsArgs parses --base-path, --config, and --config-path
-// flags from os.Args using pflag. This is used for early extraction before Cobra
-// parses flags, so that InitCliConfig receives the correct config location.
+// flags from os.Args. This is used for early extraction before Cobra parses
+// flags, so that InitCliConfig receives the correct config location.
 func ParseConfigSelectionFromOsArgs(args []string) ConfigSelection {
-	fs := pflag.NewFlagSet("config-selection-parser", pflag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.ParseErrorsAllowlist.UnknownFlags = true
-
-	basePath := fs.String("base-path", "", "Base path")
-	config := fs.StringSlice("config", []string{}, "Config files")
-	configPath := fs.StringSlice("config-path", []string{}, "Config dirs")
-
-	_ = fs.Parse(args)
-
 	var sel ConfigSelection
 
-	if basePath != nil && *basePath != "" {
-		sel.BasePath = strings.TrimSpace(*basePath)
+	if basePath := strings.TrimSpace(osargs.ParseString(args, "base-path")); basePath != "" {
+		sel.BasePath = basePath
 	}
 
-	if config != nil {
-		for _, v := range *config {
-			if trimmed := strings.TrimSpace(v); trimmed != "" {
-				sel.Config = append(sel.Config, trimmed)
-			}
+	for _, v := range osargs.ParseStringSlice(args, "config") {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			sel.Config = append(sel.Config, trimmed)
 		}
 	}
 
-	if configPath != nil {
-		for _, v := range *configPath {
-			if trimmed := strings.TrimSpace(v); trimmed != "" {
-				sel.ConfigPath = append(sel.ConfigPath, trimmed)
-			}
+	for _, v := range osargs.ParseStringSlice(args, "config-path") {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			sel.ConfigPath = append(sel.ConfigPath, trimmed)
 		}
 	}
 
@@ -501,6 +465,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			"count", len(configAndStacksInfo.ProfilesFromArg))
 	}
 
+	// Apply the edition pin (if any) as a rollback overlay on the defaults layer.
+	// This must run after every config source has merged (so the `edition:` key is
+	// visible) and before the final unmarshal; SetDefault never beats user-set values.
+	if err := applyEditionDefaults(v); err != nil {
+		return atmosConfig, fmt.Errorf("apply edition defaults: %w", err)
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())
@@ -591,6 +562,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.force_color", "ATMOS_FORCE_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
 	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
+	bindEnv(v, "settings.terminal.help.filter", "ATMOS_HELP_FILTER")
 
 	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
 	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
@@ -598,6 +570,13 @@ func setEnv(v *viper.Viper) {
 
 	// Experimental feature handling
 	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
+
+	// Edition pin (date anchor for defaults; see pkg/edition).
+	bindEnv(v, "edition", "ATMOS_EDITION")
+
+	// Describe command defaults.
+	bindEnv(v, "describe.provenance", "ATMOS_DESCRIBE_PROVENANCE")
+	bindEnv(v, "describe.component.filter", "ATMOS_DESCRIBE_COMPONENT_FILTER")
 
 	// Atmos Pro settings
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
@@ -646,12 +625,21 @@ func bindEnv(v *viper.Viper, key ...string) {
 }
 
 // setDefaultConfiguration set default configuration for the viper instance.
+//
+// EDITIONS CONTRACT: this function always states the CURRENT defaults. Changing
+// any value here changes behavior for every user on upgrade, so it requires a
+// dated journal entry in pkg/edition/journal.go in the same PR (the snapshot
+// test in default_snapshot_test.go enforces this). Adding a NEW key needs no
+// journal entry — only regenerate the snapshot. Projects pinned to an earlier
+// edition get pre-change values re-applied by applyEditionDefaults.
 func setDefaultConfiguration(v *viper.Viper) {
 	// Start or initialize the Podman machine when it is selected and not running.
 	// Docker remains preferred whenever it is already available.
 	v.SetDefault("container.runtime.auto_start", true)
 
-	v.SetDefault("components.helmfile.use_eks", true)
+	// EKS is opt-in since PR #1903 (journaled in pkg/edition; previously this
+	// SetDefault contradicted defaultCliConfig and kept the old behavior alive).
+	v.SetDefault("components.helmfile.use_eks", false)
 	v.SetDefault("components.terraform.append_user_agent",
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	// Plugin cache enabled by default for zero-config performance.
@@ -663,6 +651,9 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_bitbucket_token", true)
 	v.SetDefault("settings.inject_gitlab_token", true)
 
+	// Both logging defaults are journaled in pkg/edition (stderr since PR #1050,
+	// Warning since PR #1430). The embedded atmos.yaml must never set them — it
+	// would shadow these values and break edition rollback (test-enforced).
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Warning")
 	v.SetDefault("diagnostics.enabled", false)
@@ -674,6 +665,24 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
 	v.SetDefault("settings.terminal.speed", 0.0)
 	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
+	// Provenance annotations in `describe component` output, on by default (journaled in pkg/edition).
+	v.SetDefault("describe.provenance", true)
+	// Scope of `describe component` output: the stack-manifest ("schema") sections
+	// by default rather than every computed internal field (journaled in pkg/edition).
+	v.SetDefault("describe.component.filter", "schema")
+	// Focused bare `--help` output (no GLOBAL FLAGS section), on by default (journaled in pkg/edition).
+	v.SetDefault("settings.terminal.help.filter", true)
+	// Tree is the default output format for the list commands that showcase import
+	// hierarchies (journaled in pkg/edition; previously the renderer fell back to a table).
+	v.SetDefault("stacks.list.format", "tree")
+	v.SetDefault("list.instances.format", "tree")
+	// Graceful degradation for unresolved YAML functions in list/describe commands
+	// (journaled in pkg/edition; previously any unresolved value aborted the command).
+	v.SetDefault("list.error_mode", "warn")
+	v.SetDefault("describe.error_mode", "warn")
+	// Metadata inheritance from base components (journaled in pkg/edition; previously
+	// metadata was per-component only).
+	v.SetDefault("stacks.inherit.metadata", true)
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("cast.recording.width", 120)
 	v.SetDefault("cast.recording.height", 36)

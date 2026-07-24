@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestNormalizeHelpTopicArgs(t *testing.T) {
@@ -164,6 +166,24 @@ func TestTopicHelpRendering_RootDefaultFiltersPersistentGlobals(t *testing.T) {
 	assert.Contains(t, output, "FLAGS")
 	assert.Contains(t, output, "--version")
 	assert.NotContains(t, output, "--global")
+}
+
+func TestPrintDefaultHelpUsesFullHelpWhenFilterDisabled(t *testing.T) {
+	var buf bytes.Buffer
+	renderer := lipgloss.NewRenderer(&buf)
+	styles := createHelpStyles(renderer)
+	ctx := &helpRenderContext{
+		writer:      &buf,
+		renderer:    renderer,
+		styles:      &styles,
+		atmosConfig: &schema.AtmosConfiguration{Settings: schema.AtmosSettings{Terminal: schema.Terminal{Help: schema.HelpSettings{Filter: false}}}},
+	}
+
+	printDefaultHelp(ctx, testHelpCommand(t))
+	output := buf.String()
+	assert.Contains(t, output, "GLOBAL FLAGS")
+	assert.Contains(t, output, "--global")
+	assert.NotContains(t, output, "--help=usage")
 }
 
 func TestCommandSpecificFlagSetNilCommand(t *testing.T) {

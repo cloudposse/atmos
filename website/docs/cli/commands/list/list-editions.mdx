@@ -1,0 +1,122 @@
+---
+title: atmos list editions
+sidebar_label: editions
+sidebar_class_name: command
+id: editions
+description: Use this command to list the journal of default changes between Atmos editions.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to list the editions journal: every change to a previously shipped default, with the date it changed, the old and new values, and a description of the change. Use `--from` and `--to` to diff two editions and see exactly which defaults differ between them.
+</Intro>
+
+<Experimental/>
+
+<CastPlayer title="atmos list editions --help" src="/casts/screengrabs/atmos-list-editions--help.cast" static chrome />
+
+<ActionCard title="Pin Your Project to an Edition">
+    Learn how to pin your project's defaults to a date anchor with the top-level `edition` setting in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/edition">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos list editions [flags]
+```
+
+## Description
+
+Atmos journals every change to a previously shipped default. The `atmos list editions` command displays that journal, newest first, where each row shows:
+
+- **Date** — the day the default changed
+- **Key** — the configuration key whose default changed
+- **Old** — the default before the change (what an earlier-pinned project gets)
+- **New** — the default after the change
+- **Description** — what the change means in practice
+
+This command is useful for:
+
+- Deciding which [`edition`](/cli/configuration/edition) to pin your project to
+- Reviewing what changes when you unpin (or move your pin forward): `atmos list editions --from=<pin>`
+- Diffing two editions before an upgrade: `atmos list editions --from=<old> --to=<new>`
+
+## Flags
+
+<dl>
+  <dt>`--from string`</dt>
+  <dd>Show only changes after this edition anchor. Anchors accept `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`; partial dates round to the end of the period they name.</dd>
+
+  <dt>`--to string`</dt>
+  <dd>Show only changes up to and including this edition anchor. Same anchor formats as `--from`.</dd>
+
+  <dt>`--format, -f string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+</dl>
+
+## Examples
+
+List every journaled default change:
+
+```shell
+atmos list editions
+```
+
+Diff two editions — show only the default changes that took effect between the 2025 and 2026 editions:
+
+```shell
+atmos list editions --from=2025 --to=2026
+```
+
+Answer "what changes if I unpin?" — show everything that changed after your current pin:
+
+```shell
+atmos list editions --from=2025-09
+```
+
+Output in machine-readable formats:
+
+```shell
+atmos list editions --format=json
+atmos list editions --format=yaml
+atmos list editions --format=csv
+```
+
+## Example Output
+
+```shell
+> atmos list editions
+
+ Date        Key                            Old          New          Description
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 2026-07-17  describe.component.filter      full         schema       Component descriptions show only stack-manifest sections; set the filter to full for computed internals.
+ 2026-07-16  stacks.list.format             table        tree         Stack listings render the import hierarchy as a tree by default instead of a flat table.
+ 2026-07-16  list.instances.format          table        tree         Instance listings render as a tree by default instead of a flat table.
+ 2026-07-16  describe.provenance            false        true         Component descriptions include provenance annotations (which stack file set each value) by default.
+ 2026-07-13  list.error_mode                strict       warn         List commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+ 2026-07-13  describe.error_mode            strict       warn         Describe commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+ 2026-07-06  settings.terminal.help.filter  false        true         Bare --help shows a focused view without the GLOBAL FLAGS section; --help=all prints the full output.
+ 2026-02-10  components.helmfile.use_eks    true         false        Helmfile EKS integration is opt-in; kubeconfig is no longer downloaded automatically before Helmfile commands.
+ 2025-12-06  stacks.inherit.metadata        false        true         Component metadata is inherited from base components like vars and settings; previously metadata was per-component only.
+ 2025-10-16  settings.terminal.pager        true         false        The built-in pager is disabled by default; long output prints directly to the terminal.
+ 2025-09-23  logs.level                     Info         Warning      The default log level is Warning; informational log messages are hidden unless requested.
+ 2025-02-11  logs.file                      /dev/stdout  /dev/stderr  Logs are written to stderr so they never contaminate pipeable command output on stdout.
+
+12 default changes journaled. Pin with `edition:` in atmos.yaml.
+```
+
+:::tip
+Use `atmos describe edition` to see which of these changes an active pin actually rolls back for your project.
+:::
+
+## See Also
+
+- [`edition` configuration](/cli/configuration/edition) — Pin your project's defaults to a date anchor
+- [`atmos describe edition`](/cli/commands/describe/edition) — Show the active pin and every default it rolls back

@@ -1,0 +1,34 @@
+# Snapshot of setDefaultConfiguration (pkg/config/load.go), the editions guardrail baseline.
+# Do not edit by hand. Regenerate with:
+#   ATMOS_REGENERATE_DEFAULTS_SNAPSHOT=true go test ./pkg/config -run TestDefaultConfigurationSnapshot
+# Changing an existing value here requires a journal entry in pkg/edition/journal.go.
+cast.recording.height: 36
+cast.recording.width: 120
+components.helmfile.use_eks: false
+components.terraform.auto_provision_workdir_for_outputs: true
+components.terraform.plugin_cache: true
+container.runtime.auto_start: true
+describe.component.filter: schema
+describe.error_mode: warn
+describe.provenance: true
+diagnostics.enabled: false
+diagnostics.file: ""
+diagnostics.include_output: false
+docs.generate.readme.output: ./README.md
+list.error_mode: warn
+list.instances.format: tree
+logs.file: /dev/stderr
+logs.level: Warning
+settings.experimental: warn
+settings.inject_bitbucket_token: true
+settings.inject_github_token: true
+settings.inject_gitlab_token: true
+settings.pro.base_url: https://atmos-pro.com
+settings.pro.endpoint: api/v1
+settings.terminal.color: true
+settings.terminal.help.filter: true
+settings.terminal.no_color: false
+settings.terminal.pager: "false"
+settings.terminal.speed: 0
+stacks.inherit.metadata: true
+stacks.list.format: tree

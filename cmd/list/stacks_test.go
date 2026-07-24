@@ -438,3 +438,58 @@ func TestStacksProcessTemplatesAndFunctionsFlags(t *testing.T) {
 		assert.Equal(t, "true", processFunctionsFlag.DefValue)
 	}
 }
+
+// TestApplyConfigDefaultedFormat covers stacks.list.format defaulting from atmos.yaml,
+// including the tree-vs-columns conflict resolution: a config-defaulted "tree" steps
+// aside when the caller also requested explicit --columns (tree has no rows/columns to
+// select from), but an explicit --format=tree flag or a columns-less request keeps tree.
+func TestApplyConfigDefaultedFormat(t *testing.T) {
+	tests := []struct {
+		name         string
+		optsFormat   string
+		configFormat string
+		columns      []string
+		want         string
+	}{
+		{
+			name:         "no config default, format stays empty",
+			optsFormat:   "",
+			configFormat: "",
+			want:         "",
+		},
+		{
+			name:         "config default applied when flag unset",
+			optsFormat:   "",
+			configFormat: "table",
+			want:         "table",
+		},
+		{
+			name:         "explicit flag format wins over config default",
+			optsFormat:   "json",
+			configFormat: "tree",
+			want:         "json",
+		},
+		{
+			name:         "config-defaulted tree kept when no columns requested",
+			optsFormat:   "",
+			configFormat: "tree",
+			columns:      nil,
+			want:         "tree",
+		},
+		{
+			name:         "config-defaulted tree steps aside for explicit columns",
+			optsFormat:   "",
+			configFormat: "tree",
+			columns:      []string{"name"},
+			want:         "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &StacksOptions{Format: tt.optsFormat, Columns: tt.columns}
+			applyConfigDefaultedFormat(opts, tt.configFormat)
+			assert.Equal(t, tt.want, opts.Format)
+		})
+	}
+}

@@ -83,13 +83,15 @@ exclude = [
   "github\\.com/codespaces",
   # Raw file URLs redirect through GitHub's CDN (by design)
   "\\?raw=true",
-  # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
-  "img\\.shields\\.io/github/release/",
-  # Shields badge endpoints intermittently return 503/520 from CI runners even
-  # though the badges resolve in browsers. These are decorative status badges,
-  # so exclude the unstable badge and GitHub-status endpoints from link checks.
-  "shields\\.io/badge/",
-  "img\\.shields\\.io/github/(actions/workflow/status|last-commit)/",
+  # shields.io (both the bare domain and the img. subdomain used for dynamic
+  # GitHub badges) is Cloudflare-fronted and intermittently returns non-200
+  # (500, 520 "Unknown Error") to automated/CI requests -- confirmed across
+  # multiple unrelated badge paths in different files, and reproduced outside
+  # CI too (curl returning 200 and 520 on back-to-back requests to the same
+  # badge). The badges render fine in a browser. Supersedes narrower
+  # path-scoped excludes for the same domain (img.shields.io/github/release/,
+  # shields.io/badge/, img.shields.io/github/(actions/workflow/status|last-commit)/).
+  "shields\\.io",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)

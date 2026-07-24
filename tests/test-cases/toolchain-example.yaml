@@ -12,6 +12,8 @@ tests:
     workdir: "../examples/toolchain/"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
+      ATMOS_DESCRIBE_PROVENANCE: "false"
     command: "atmos"
     args:
       - "describe"
@@ -33,6 +35,7 @@ tests:
     workdir: "../examples/toolchain/"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
     command: "atmos"
     args:
       - "describe"
@@ -58,6 +61,7 @@ tests:
     workdir: "../examples/toolchain/"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
     command: "atmos"
     args:
       - "describe"

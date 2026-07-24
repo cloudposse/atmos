@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // atmosConfigWithBrokenDefaultIdentity returns an AtmosConfiguration with a default
@@ -488,6 +489,77 @@ func TestDescribeComponent_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
 }
 
+// TestDescribeComponent_SkipsImplicitAuthWhenFunctionsEnabled verifies that an
+// inspection command can process YAML functions without first authenticating a
+// configured default identity. Function-level failures are handled later by
+// describe component's error mode.
+func TestDescribeComponent_SkipsImplicitAuthWhenFunctionsEnabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			assert.Nil(t, params.AuthManager, "AuthManager must be nil without an explicit --identity")
+			assert.True(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must remain enabled")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, atmosConfigWithBrokenDefaultIdentity()))
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err, "default identity must not be authenticated merely to describe a component")
+}
+
+// TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication verifies that an
+// identity-backed !store receives an auth manager without eagerly authenticating its identity.
+// The resolver authenticates only when the YAML function accesses the store.
+func TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	config := schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"store-identity": {
+					Kind: "aws/user",
+					Credentials: map[string]interface{}{
+						"access_key_id":     "test",
+						"secret_access_key": "test",
+					},
+				},
+			},
+		},
+		StoresConfig: store.StoresConfig{"outputs/ssm": {Identity: "store-identity"}},
+	}
+	ssmStore, err := store.NewSSMStore(store.SSMStoreOptions{Region: "us-east-1"}, "store-identity")
+	require.NoError(t, err)
+	config.Stores = store.StoreRegistry{"outputs/ssm": ssmStore}
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			assert.NotNil(t, params.AuthManager, "identity-backed stores need a resolver-backed auth manager")
+			assert.True(t, params.ProcessYamlFunctions)
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, config))
+
+	err = run(testCmd, []string{"test-component"})
+	assert.NoError(t, err)
+}
+
 // TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
 // ATMOS_IDENTITY env var does not bypass the guard for describe component.
 func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
@@ -619,9 +691,10 @@ func TestDescribeComponent_FunctionsEnabled_HappyPath(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent verifies that
-// ErrInvalidComponent from the auth probe is returned immediately.
-func TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent(t *testing.T) {
+// TestDescribeComponent_ComponentNotFound_PropagatesExecutorError verifies that a
+// describe-only invocation defers component lookup until execution, rather than
+// performing an eager auth probe.
+func TestDescribeComponent_ComponentNotFound_PropagatesExecutorError(t *testing.T) {
 	_ = NewTestKit(t)
 	clearIdentityEnvVars(t)
 
@@ -629,14 +702,10 @@ func TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent(t *testi
 	defer ctrl.Finish()
 
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
-	// Executor should NOT be called — error before execution.
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Return(errUtils.ErrInvalidComponent).Times(1)
 
 	testCmd := newTestCmdForDescribeComponent(t, true, "")
 	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
-	// Override executeDescribeComponent to return ErrInvalidComponent.
-	props.executeDescribeComponent = func(_ *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
-		return nil, errUtils.ErrInvalidComponent
-	}
 	run := getRunnableDescribeComponentCmd(props)
 
 	err := run(testCmd, []string{"nonexistent-component"})

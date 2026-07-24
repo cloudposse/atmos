@@ -397,12 +397,20 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// to forward slashes, which would turn \u003e into /u003e.
 	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
-	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	const shellContinuationPlaceholder = "\x00SHELL_CONTINUATION\x00"
+	// A trailing backslash in a help example is shell continuation syntax, not
+	// a path separator. Preserve it before Windows path normalization.
+	shellContinuation := regexp.MustCompile(`\\(\r?\n)`)
+	protectedOutput := shellContinuation.ReplaceAllString(output, shellContinuationPlaceholder+"$1")
+	protectedOutput = jsonUnicodeEscape.ReplaceAllString(protectedOutput, unicodePlaceholder+"$1")
 	normalizedOutput := filepath.ToSlash(protectedOutput)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
 	// Restore protected unicode escapes.
 	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
+
+	// Restore shell continuations after path normalization.
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, shellContinuationPlaceholder, `\`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -559,9 +567,10 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 
 	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
-	// Replace with a generic placeholder.
-	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
-	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+	// Its rendered padding also depends on that value's display width, so normalize
+	// both the value and the padding before the provenance comment.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+[ \t]*`)
+	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user ")
 
 	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
@@ -1733,7 +1742,15 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
 		return false
 	}
-	if looksLikeDataLine(trimmed) {
+	if looksLikeDataLine(trimmed) || strings.HasPrefix(nextTrimmed, "export ") {
+		return false
+	}
+	// A renderer can wrap prose at the terminal width, but it must not turn
+	// explicit boundaries between completed sentences, command examples, or
+	// URL lines into spaces while normalizing snapshots.
+	if strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, ")") || strings.HasSuffix(trimmed, ":") ||
+		strings.HasPrefix(nextTrimmed, "\"") || strings.HasPrefix(nextTrimmed, "http://") || strings.HasPrefix(nextTrimmed, "https://") ||
+		strings.HasPrefix(nextTrimmed, "atmos ") {
 		return false
 	}
 	if len([]rune(trimmed)) < 50 && !strings.HasPrefix(trimmed, "**Error:**") && !strings.HasPrefix(trimmed, "💡") {
@@ -1743,10 +1760,10 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 }
 
 // snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
-// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
-// at the start of a rendered log line. These must never be merged into
-// adjacent markdown prose during snapshot normalization.
-var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "TRCE ", "FATA ")
+// as emitted at the start of a rendered log line. These must never be merged
+// into adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|TRCE|FATA)\s`)
 
 // snapshotToastIconPrefixes lists the canonical single-line toast icons from
 // pkg/ui/theme/icons.go. A line starting with one of these icons is always an
@@ -1794,6 +1811,9 @@ func isSnapshotStructuralLine(line string) bool {
 }
 
 func looksLikeDataLine(line string) bool {
+	if strings.HasPrefix(line, "export ") {
+		return true
+	}
 	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "]") {
 		return true
 	}
@@ -1804,6 +1824,41 @@ func looksLikeDataLine(line string) bool {
 		return true
 	}
 	return false
+}
+
+func TestUnwrapMarkdownProseLinesPreservesSemanticBoundaries(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "shell exports",
+			input: "export FIRST=value\nexport SECOND=value\n",
+			want:  "export FIRST=value\nexport SECOND=value\n",
+		},
+		{
+			name:  "documentation URLs",
+			input: "For complete documentation, see:\nhttps://example.com/docs\n",
+			want:  "For complete documentation, see:\nhttps://example.com/docs\n",
+		},
+		{
+			name:  "separate command examples",
+			input: "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+			want:  "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+		},
+		{
+			name:  "terminal wrapped prose",
+			input: "This deliberately long sentence is wrapped by the terminal renderer before its final words\nare written to the output stream.\n",
+			want:  "This deliberately long sentence is wrapped by the terminal renderer before its final words are written to the output stream.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, unwrapMarkdownProseLines(tt.input))
+		})
+	}
 }
 
 // Generate a unified diff using gotextdiff.

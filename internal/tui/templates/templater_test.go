@@ -183,6 +183,26 @@ func TestGetTerminalWidthHonorsColumnsWithoutTTY(t *testing.T) {
 	assert.Equal(t, 80, GetTerminalWidth())
 }
 
+func TestGetTerminalWidthUsesDetectedWidthAndConfiguredLimit(t *testing.T) {
+	if terminal.New().IsTTY(terminal.Stdout) {
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
+	}
+
+	originalLimit := terminalWidthLimit.Load()
+	t.Cleanup(func() { terminalWidthLimit.Store(originalLimit) })
+
+	t.Setenv("COLUMNS", "182")
+	SetTerminalWidthLimit(0)
+	assert.Equal(t, 180, GetTerminalWidth(), "detected width is unlimited by default")
+
+	SetTerminalWidthLimit(120)
+	assert.Equal(t, 120, GetTerminalWidth(), "configured max_width is a ceiling")
+
+	t.Setenv("COLUMNS", "")
+	SetTerminalWidthLimit(72)
+	assert.Equal(t, 72, GetTerminalWidth(), "the limit also applies to the fallback width")
+}
+
 func TestWrappedFlagUsages_DoubleDashAtEnd(t *testing.T) {
 	// Create a new FlagSet with various flags
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)

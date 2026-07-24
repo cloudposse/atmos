@@ -36,7 +36,7 @@
     },
     "helmfile": {
       "base_path": "",
-      "use_eks": true,
+      "use_eks": false,
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
@@ -81,10 +81,12 @@
     "name_pattern": "{stage}",
     "name_template": "",
     "list": {
-      "format": "",
+      "format": "tree",
       "columns": null
     },
-    "inherit": {}
+    "inherit": {
+      "metadata": true
+    }
   },
   "imports": {},
   "workflows": {
@@ -144,6 +146,9 @@
       "no_color": false,
       "mask": {
         "enabled": false
+      },
+      "help": {
+        "filter": true
       }
     },
     "yaml": {
@@ -214,7 +219,12 @@
   },
   "describe": {
     "settings": {},
-    "affected": {}
+    "affected": {},
+    "error_mode": "warn",
+    "provenance": true,
+    "component": {
+      "filter": "schema"
+    }
   },
   "secrets": {},
   "vendor": {
@@ -303,13 +313,14 @@
       "columns": null
     },
     "instances": {
-      "format": "",
+      "format": "tree",
       "columns": null
     },
     "stacks": {
       "format": "",
       "columns": null
-    }
+    },
+    "error_mode": "warn"
   },
   "ci": {
     "output": {},

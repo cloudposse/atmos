@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -994,6 +996,45 @@ func TestManager_Authenticate_ExpiredCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "dev", info.Identity)
 	assert.True(t, called, "PostAuthenticate should be called for fresh authentication")
+}
+
+func TestManager_Authenticate_PostAuthenticateErrorDoesNotPrint(t *testing.T) {
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postErr: assert.AnError}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+	})
+
+	_, err = m.Authenticate(context.Background(), "dev")
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	require.ErrorIs(t, err, assert.AnError)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "Post-authentication failed.")
+
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+
+	var output bytes.Buffer
+	_, err = io.Copy(&output, r)
+	require.NoError(t, err)
+	require.Empty(t, output.String(), "Authenticate must return post-authentication errors for the command boundary to render")
 }
 
 func TestManager_ListProviders(t *testing.T) {

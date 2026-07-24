@@ -54,6 +54,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/osargs"
 	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -124,6 +125,8 @@ const (
 	ansiEscapePrefix = "\x1b["
 	// ProfileFlagName is the name of the profile flag.
 	profileFlagName = "profile"
+	// EditionFlagName is the name of the edition flag (and the atmos.yaml key it mirrors).
+	editionFlagName = "edition"
 	// RootCommandName is the root command's Use value.
 	rootCommandName = "atmos"
 	// HelpFlagName is the standard --help flag name.
@@ -168,40 +171,10 @@ func parseUseVersionFromArgs() string {
 	return pkgversion.ParseUseVersionFromArgs(os.Args)
 }
 
-// parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
+// parseChdirFromArgsInternal parses --chdir or -C flag from the provided args.
 // This internal version accepts args as a parameter for testability.
 func parseChdirFromArgsInternal(args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-
-		// Check for --chdir=value format.
-		if strings.HasPrefix(arg, "--chdir=") {
-			return strings.TrimPrefix(arg, "--chdir=")
-		}
-
-		// Check for -C=value format.
-		if strings.HasPrefix(arg, "-C=") {
-			return strings.TrimPrefix(arg, "-C=")
-		}
-
-		// Check for -C<value> format (concatenated, e.g., -C../foo).
-		if strings.HasPrefix(arg, "-C") && len(arg) > 2 {
-			return arg[2:]
-		}
-
-		// Check for --chdir value or -C value format (next arg is the value).
-		if arg == "--chdir" || arg == "-C" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		}
-	}
-	return ""
+	return osargs.ParseStringWithShorthand(args, "chdir", "C")
 }
 
 // processEarlyChdirFlag processes --chdir flag before RootCmd is fully initialized.
@@ -294,6 +267,14 @@ func syncGlobalFlagsToViper(cmd *cobra.Command) {
 	if cmd.Flags().Changed("identity") {
 		if identity, err := cmd.Flags().GetString("identity"); err == nil {
 			v.Set("identity", identity)
+		}
+	}
+
+	// Sync edition flag if explicitly set, so LoadConfig sees the pin
+	// before it applies edition default overrides.
+	if cmd.Flags().Changed(editionFlagName) {
+		if editionPin, err := cmd.Flags().GetString(editionFlagName); err == nil {
+			v.Set(editionFlagName, editionPin)
 		}
 	}
 }
@@ -636,6 +617,10 @@ var RootCmd = &cobra.Command{
 		// Check for experimental settings (non-command features gated by config values).
 		// This extends the experimental check above to cover settings like key_delimiter.
 		checkExperimentalSettings(&tmpConfig)
+
+		// Honor settings.terminal.max_width everywhere widths are computed
+		// (tables, help output). Zero leaves the detected width unclamped.
+		templates.SetTerminalWidthLimit(tmpConfig.Settings.Terminal.MaxWidth)
 
 		// Configure lipgloss color profile based on terminal capabilities.
 		// Forced color is intentionally honored even when stdout is non-TTY,
@@ -1069,6 +1054,9 @@ func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
 	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
 		features = append(features, "settings.yaml.key_delimiter")
 	}
+	if atmosConfig.Edition != "" {
+		features = append(features, editionFlagName)
+	}
 
 	if len(features) == 0 {
 		return
@@ -1241,7 +1229,10 @@ func formatFlagName(f *pflag.Flag) string {
 // configured (config refines, but is never required — help must lay out
 // correctly with no atmos.yaml at all).
 func getTerminalWidth() int {
-	const defaultWidth = 120 // Fang's max width
+	// Fallback ONLY when the width cannot be detected; never a ceiling. The
+	// detected terminal width is used as-is — width is unlimited by default,
+	// and an explicit settings.terminal.max_width acts as the only ceiling.
+	const defaultWidth = 120
 
 	width := castcmd.ActiveRecordingWidth()
 	if width <= 0 {
@@ -1251,11 +1242,7 @@ func getTerminalWidth() int {
 		width = defaultWidth
 	}
 
-	maxWidth := defaultWidth
-	if atmosConfig.Settings.Terminal.MaxWidth > 0 {
-		maxWidth = atmosConfig.Settings.Terminal.MaxWidth
-	}
-	if width > maxWidth {
+	if maxWidth := atmosConfig.Settings.Terminal.MaxWidth; maxWidth > 0 && width > maxWidth {
 		return maxWidth
 	}
 	return width

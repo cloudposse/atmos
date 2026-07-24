@@ -18,13 +18,15 @@ tests:
       ATMOS_TELEMETRY_ENABLED: "false"
     expect:
       exit_code: 0
+      # The default format is tree (import hierarchy, stacks as branches);
+      # journaled in pkg/edition. Row-shaped assertions live in the CSV tests below.
       tty:
-        - "Component.*Stack"
-        - "mock/disabled.*nonprod"
-        - "mock/drift.*nonprod"
-        - "mock/nodrift.*nonprod"
-        - "mock/drift.*prod"
-        - "mock/nodrift.*prod"
+        - "Component Instances"
+        - "nonprod"
+        - "mock/disabled"
+        - "mock/drift"
+        - "mock/nodrift"
+        - "prod"
 
   - name: atmos list instances no tty
     snapshot: true

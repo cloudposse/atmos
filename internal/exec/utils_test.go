@@ -571,3 +571,35 @@ func TestGetFindStacksMapCacheKey(t *testing.T) {
 	assert.NotEmpty(t, key4)
 	assert.NotEmpty(t, key5)
 }
+
+// TestProcessStacks_DirectoryStackType covers the atmosConfig.StackType == "Directory"
+// branch in processStacks: when the `--stack` argument is a physical path (contains a
+// "/") that matches a stack manifest file directly rather than a logical stack name,
+// config.InitCliConfig resolves atmosConfig.StackType to "Directory" and processStacks
+// must route through processComponentConfig using that literal file path instead of the
+// logical-name lookup used by the "Logical" branch (exercised by the sibling
+// TestProcessStacks_FindsComponentByManifestName/ByTemplateName tests in
+// stack_manifest_name_test.go, which both use logical names against a name_template).
+func TestProcessStacks_DirectoryStackType(t *testing.T) {
+	// atmos-functions' stacks/deploy/nonprod.yaml has no name_template/name_pattern
+	// configured, so "deploy/nonprod" only resolves via the physical-path (Directory)
+	// lookup, not as a logical stack name.
+	fixturesDir := "../../tests/fixtures/scenarios/atmos-functions"
+	t.Chdir(fixturesDir)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "component-1",
+		Stack:            "deploy/nonprod",
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+	require.Equal(t, "Directory", atmosConfig.StackType, "a slash-containing stack argument that matches a manifest file must resolve to the Directory stack type")
+
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+	require.NoError(t, err, "ProcessStacks should resolve the component via the Directory stack-type branch")
+
+	assert.Equal(t, "component-1", result.ComponentFromArg)
+	assert.Equal(t, "deploy/nonprod", result.StackFile, "StackFile should be the physical manifest path used for lookup")
+	assert.Equal(t, "foo-component-1", result.ComponentVarsSection["foo"], "component vars from the matched manifest should be populated")
+}

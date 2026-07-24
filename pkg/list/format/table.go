@@ -12,7 +12,9 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -524,8 +526,40 @@ func renderInlineMarkdown(content string) string {
 	// Collapse multiple spaces into single space.
 	singleLine = regexp.MustCompile(`\s+`).ReplaceAllString(singleLine, " ")
 
-	// Trim leading and trailing whitespace.
-	return strings.TrimSpace(singleLine)
+	// Trim leading and trailing whitespace. Glamour's Document block carries a
+	// left margin/indent (DocumentIndent, see theme/converter.go) meant for
+	// full markdown documents; here it survives as literal leading space
+	// characters wrapped in ANSI escapes, which strings.TrimSpace cannot see
+	// past (the boundary runes are escape bytes, not whitespace). trimANSISpace
+	// removes that visible padding while leaving the color codes intact, so
+	// the cell's first visible character lines up with the header.
+	return trimANSISpace(singleLine)
+}
+
+// trimANSISpace removes leading and trailing space characters from
+// ANSI-styled text without disturbing the escape sequences that carry
+// color/style. A plain strings.TrimSpace cannot do this because ANSI-wrapped
+// text often starts/ends with escape bytes rather than whitespace runes, even
+// when the rendered (visible) text has leading/trailing spaces.
+func trimANSISpace(s string) string {
+	plain := ansi.Strip(s)
+	leading := len(plain) - len(strings.TrimLeft(plain, fmtSpace))
+	trailing := len(plain) - len(strings.TrimRight(plain, fmtSpace))
+	if leading == 0 && trailing == 0 {
+		return s
+	}
+
+	if leading > 0 {
+		s = ansi.TruncateLeft(s, leading, "")
+	}
+
+	if trailing > 0 {
+		if width := lipgloss.Width(s); width-trailing >= 0 {
+			s = ansi.Truncate(s, width-trailing, "")
+		}
+	}
+
+	return s
 }
 
 // ColumnWidthParams contains parameters for column width calculation.
@@ -563,7 +597,11 @@ func calculateColumnWidths(header []string, rows [][]string, terminalWidth int) 
 
 // calculateAvailableWidth calculates the available width for table content.
 func calculateAvailableWidth(terminalWidth, numColumns int) int {
-	const paddingPerColumn = 5
+	// Each cell renders with lipgloss Padding(0,1) — one column each side —
+	// and the table draws no vertical borders, so the real overhead is exactly
+	// two columns per cell. Budgeting more than that strands usable width and
+	// force-wraps content that would otherwise fit.
+	const paddingPerColumn = 2
 	totalPadding := numColumns * paddingPerColumn
 	availableWidth := terminalWidth - totalPadding
 
@@ -624,13 +662,57 @@ func distributeWidths(params columnWidthParams) []int {
 
 // distributeWithDescriptionColumn distributes width when a Description column exists.
 func distributeWithDescriptionColumn(params columnWidthParams) []int {
+	// When every column fits at its natural content width, use it — wide
+	// terminals get unwrapped columns. Caps only apply under width pressure,
+	// matching distributeProportionally's behavior for description-less tables.
+	naturalTotal := 0
+	for _, w := range params.minWidths {
+		naturalTotal += w
+	}
+	if naturalTotal <= params.availableWidth {
+		widths := make([]int, params.numColumns)
+		copy(widths, params.minWidths)
+		return widths
+	}
+
 	widths := allocateInitialWidths(params)
 	usedWidth := calculateUsedWidth(widths, params.descriptionColIndex)
 
 	descWidth := calculateDescriptionWidth(params.availableWidth, usedWidth)
 	widths[params.descriptionColIndex] = descWidth
 
-	return shrinkIfNeeded(widths, params.availableWidth, params.descriptionColIndex)
+	widths = shrinkIfNeeded(widths, params.availableWidth, params.descriptionColIndex)
+	return expandIntoSlack(widths, params)
+}
+
+// expandIntoSlack returns unused width to capped columns, never past a column's
+// natural content width. Narrow non-description columns are satisfied first —
+// unwrapping a config key costs a few cells and reads far better than giving
+// those cells to the description — then the description takes the remainder.
+func expandIntoSlack(widths []int, params columnWidthParams) []int {
+	used := 0
+	for _, w := range widths {
+		used += w
+	}
+	slack := params.availableWidth - used
+
+	for pass := 0; pass < 2 && slack > 0; pass++ {
+		for i := range widths {
+			isDescription := i == params.descriptionColIndex
+			if (pass == 0) == isDescription {
+				continue // Pass 0: non-description columns; pass 1: description.
+			}
+			if deficit := params.minWidths[i] - widths[i]; deficit > 0 {
+				grow := min(deficit, slack)
+				widths[i] += grow
+				slack -= grow
+			}
+			if slack == 0 {
+				break
+			}
+		}
+	}
+	return widths
 }
 
 // allocateInitialWidths allocates initial widths to all columns.
@@ -693,18 +775,27 @@ func shrinkIfNeeded(widths []int, availableWidth, descriptionColIndex int) []int
 		return widths
 	}
 
+	// Take width from the widest non-description column first, one cell at a
+	// time, so narrow columns (dates, booleans) keep their content intact while
+	// wide columns (dotted keys) absorb the wrapping.
 	excess := totalWidth - availableWidth
-	for i := range widths {
-		if i != descriptionColIndex && excess > 0 {
-			reduction := widths[i] - MinColumnWidth
-			if reduction > 0 {
-				if reduction > excess {
-					reduction = excess
-				}
-				widths[i] -= reduction
-				excess -= reduction
+	for excess > 0 {
+		widest := -1
+		widestWidth := 0
+		for i, w := range widths {
+			if i == descriptionColIndex || w <= MinColumnWidth {
+				continue
+			}
+			if widest < 0 || w > widestWidth {
+				widest = i
+				widestWidth = w
 			}
 		}
+		if widest < 0 {
+			break
+		}
+		widths[widest]--
+		excess--
 	}
 
 	return widths
@@ -773,70 +864,80 @@ func padToWidth(s string, width int) string {
 	return s
 }
 
-// createStyledTable creates a styled table with headers and rows.
+// ColumnRole names a semantic per-column color treatment applied to every
+// cell in the column regardless of its value. Unlike SemanticCellStyling
+// (which colors a cell by its content — true/false, numbers, placeholders),
+// a column role gives a table gentle positional contrast — e.g. a muted
+// timestamp column next to an accented identifier column — without implying
+// pass/fail semantics. Roles apply color only (Foreground); they never touch
+// padding, width, or weight, so column-width math is unaffected.
+type ColumnRole int
+
+const (
+	// ColumnRoleNone applies no column-level override; the cell falls back to
+	// the plain base style (and semantic styling, if enabled).
+	ColumnRoleNone ColumnRole = iota
+	// ColumnRoleMuted dims secondary or historical information (e.g. dates, past values).
+	ColumnRoleMuted
+	// ColumnRoleIdentifier accents identifiers/keys using the theme's command/primary color.
+	ColumnRoleIdentifier
+	// ColumnRoleAccent applies a subtle secondary accent for emphasized-but-not-alarming values.
+	ColumnRoleAccent
+)
+
+// TableOptions controls optional styled-table behaviors.
+type TableOptions struct {
+	// SemanticCellStyling colors cells by detected content type (booleans
+	// green/red, numbers, placeholders). Disable it for tables whose values are
+	// plain data rather than statuses, where the coloring reads as noise.
+	SemanticCellStyling bool
+
+	// ColumnRoles, when set, assigns a ColumnRole to each column by index
+	// (aligned with the header slice). A shorter slice (or a nil entry) leaves
+	// the remaining columns unstyled. When SemanticCellStyling is also enabled,
+	// the column role becomes the base style that semantic content-type
+	// coloring is layered on top of.
+	ColumnRoles []ColumnRole
+}
+
+// columnRoleForeground resolves the theme foreground color for a column role.
+// Returns false when the role has no color override (ColumnRoleNone).
+func columnRoleForeground(role ColumnRole, styles *theme.StyleSet) (lipgloss.TerminalColor, bool) {
+	switch role {
+	case ColumnRoleMuted:
+		return styles.Muted.GetForeground(), true
+	case ColumnRoleIdentifier:
+		return styles.Command.GetForeground(), true
+	case ColumnRoleAccent:
+		return styles.PackageName.GetForeground(), true
+	case ColumnRoleNone:
+		return nil, false
+	default:
+		return nil, false
+	}
+}
+
+// CreateStyledTable creates a styled table with headers and rows.
 // Uses intelligent column width calculation to optimize space usage.
 func CreateStyledTable(header []string, rows [][]string) string {
+	return CreateStyledTableWithOptions(header, rows, TableOptions{SemanticCellStyling: true})
+}
+
+// CreateStyledTableWithOptions is CreateStyledTable with explicit behavior options.
+func CreateStyledTableWithOptions(header []string, rows [][]string, options TableOptions) string {
+	defer perf.Track(nil, "format.CreateStyledTableWithOptions")()
+
 	// Get terminal width - use exactly what's detected.
 	detectedWidth := templates.GetTerminalWidth()
 
-	// Get theme-aware styles.
-	styles := theme.GetCurrentStyles()
-
-	// Find the index of the "Description" column if it exists.
-	descriptionColIndex := -1
-	for i, h := range header {
-		if h == "Description" {
-			descriptionColIndex = i
-			break
-		}
-	}
-
 	// Apply markdown rendering to Description column cells.
-	processedRows := rows
-	if descriptionColIndex >= 0 {
-		processedRows = make([][]string, len(rows))
-		for i, row := range rows {
-			processedRows[i] = make([]string, len(row))
-			copy(processedRows[i], row)
-			if descriptionColIndex < len(row) && row[descriptionColIndex] != "" {
-				// Render markdown content inline (strip block elements).
-				processedRows[i][descriptionColIndex] = renderInlineMarkdown(row[descriptionColIndex])
-			}
-		}
-	}
+	processedRows := renderDescriptionCells(header, rows)
 
 	// Calculate optimal column widths.
 	columnWidths := calculateColumnWidths(header, processedRows, detectedWidth)
 
-	// Pad headers to match column widths.
-	paddedHeaders := make([]string, len(header))
-	for i, h := range header {
-		if i < len(columnWidths) {
-			paddedHeaders[i] = padToWidth(h, columnWidths[i])
-		} else {
-			paddedHeaders[i] = h
-		}
-	}
-
-	// Pad cells to match column widths (don't truncate, just pad).
-	constrainedRows := make([][]string, len(processedRows))
-	for i, row := range processedRows {
-		constrainedRows[i] = make([]string, len(row))
-		for j, cell := range row {
-			if j < len(columnWidths) {
-				// Pad to width, but allow wrapping for long content.
-				constrainedRows[i][j] = padToWidth(cell, columnWidths[j])
-			} else {
-				constrainedRows[i][j] = cell
-			}
-		}
-	}
-
-	// Table styling - simple and clean like version list.
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(theme.GetHeaderTextColor()))
-	cellStyle := lipgloss.NewStyle()
+	paddedHeaders := padHeadersToWidths(header, columnWidths)
+	constrainedRows := constrainCellsToWidths(processedRows, columnWidths)
 
 	t := table.New().
 		Headers(paddedHeaders...).
@@ -849,25 +950,106 @@ func CreateStyledTable(header []string, rows [][]string) string {
 		BorderRow(false).                                                 // No row separators.
 		BorderColumn(false).                                              // No column separators.
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
-		StyleFunc(func(row, col int) lipgloss.Style {
-			switch row {
-			case table.HeaderRow:
-				return headerStyle.Padding(0, 1)
-			default:
-				// Apply semantic styling based on cell content.
-				baseStyle := cellStyle.Padding(0, 1)
-				// Row indices for data start at 0, matching the rows array.
-				if row >= 0 && row < len(constrainedRows) && col < len(constrainedRows[row]) {
-					cellValue := constrainedRows[row][col]
-					return getCellStyle(cellValue, &baseStyle, styles)
-				}
-				return baseStyle
-			}
-		})
+		StyleFunc(buildTableStyleFunc(constrainedRows, options))
 
 	// Add blank lines before and after the table for visual separation.
 	lineEnding := utils.GetLineEnding()
 	return lineEnding + t.String() + lineEnding + lineEnding
+}
+
+// renderDescriptionCells renders markdown inline in the Description column, if present.
+func renderDescriptionCells(header []string, rows [][]string) [][]string {
+	descriptionColIndex := findDescriptionColumnIndex(header)
+	if descriptionColIndex < 0 {
+		return rows
+	}
+
+	processedRows := make([][]string, len(rows))
+	for i, row := range rows {
+		processedRows[i] = make([]string, len(row))
+		copy(processedRows[i], row)
+		if descriptionColIndex < len(row) && row[descriptionColIndex] != "" {
+			// Render markdown content inline (strip block elements).
+			processedRows[i][descriptionColIndex] = renderInlineMarkdown(row[descriptionColIndex])
+		}
+	}
+	return processedRows
+}
+
+// padHeadersToWidths pads headers to their computed column widths.
+func padHeadersToWidths(header []string, columnWidths []int) []string {
+	paddedHeaders := make([]string, len(header))
+	for i, h := range header {
+		if i < len(columnWidths) {
+			paddedHeaders[i] = padToWidth(h, columnWidths[i])
+		} else {
+			paddedHeaders[i] = h
+		}
+	}
+	return paddedHeaders
+}
+
+// constrainCellsToWidths wraps and pads cells to their computed column widths.
+// Without the wrap, any cell longer than its computed width pushes the table
+// past the terminal edge and the terminal hard-wraps it mid-word.
+func constrainCellsToWidths(rows [][]string, columnWidths []int) [][]string {
+	constrainedRows := make([][]string, len(rows))
+	for i, row := range rows {
+		constrainedRows[i] = make([]string, len(row))
+		for j, cell := range row {
+			if j < len(columnWidths) {
+				constrainedRows[i][j] = padToWidth(wrapCellToWidth(cell, columnWidths[j]), columnWidths[j])
+			} else {
+				constrainedRows[i][j] = cell
+			}
+		}
+	}
+	return constrainedRows
+}
+
+// buildTableStyleFunc returns the per-cell style callback for the styled table.
+func buildTableStyleFunc(constrainedRows [][]string, options TableOptions) func(row, col int) lipgloss.Style {
+	// Get theme-aware styles.
+	styles := theme.GetCurrentStyles()
+
+	// Table styling - simple and clean like version list.
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(theme.GetHeaderTextColor()))
+	cellStyle := lipgloss.NewStyle()
+
+	return func(row, col int) lipgloss.Style {
+		switch row {
+		case table.HeaderRow:
+			return headerStyle.Padding(0, 1)
+		default:
+			// Start from the plain cell style, then layer the column's role
+			// color (if any) as the base that semantic styling builds on.
+			baseStyle := cellStyle.Padding(0, 1)
+			if col >= 0 && col < len(options.ColumnRoles) {
+				if fg, ok := columnRoleForeground(options.ColumnRoles[col], styles); ok {
+					baseStyle = baseStyle.Foreground(fg)
+				}
+			}
+			// Apply semantic styling based on cell content.
+			// Row indices for data start at 0, matching the rows array.
+			if options.SemanticCellStyling && row >= 0 && row < len(constrainedRows) && col < len(constrainedRows[row]) {
+				cellValue := constrainedRows[row][col]
+				return getCellStyle(cellValue, &baseStyle, styles)
+			}
+			return baseStyle
+		}
+	}
+}
+
+// wrapCellToWidth wraps cell content that exceeds the column width at word
+// boundaries, hard-breaking only tokens (e.g. a dotted config key) that are
+// themselves wider than the column.
+func wrapCellToWidth(cell string, width int) string {
+	if width <= 0 || getMaxLineWidth(cell) <= width {
+		return cell
+	}
+	return ansi.Wrap(cell, width, "")
 }
 
 // Format implements the Formatter interface for TableFormatter.

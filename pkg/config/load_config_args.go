@@ -47,6 +47,12 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 
 	setEnv(v)
 
+	// Apply the edition pin (if any) before unmarshaling, same as the main
+	// LoadConfig flow (this path returns early and skips that hook).
+	if err := applyEditionDefaults(v); err != nil {
+		return err
+	}
+
 	if err := v.Unmarshal(atmosConfig, atmosDecodeHook()); err != nil {
 		return err
 	}

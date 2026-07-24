@@ -1,0 +1,124 @@
+---
+title: Edition
+sidebar_label: edition
+sidebar_class_name: command
+description: Pin your project to an Atmos edition (a date anchor) so upgrading Atmos never silently changes default behavior.
+id: edition
+slug: /cli/configuration/edition
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Pin your project to an Atmos edition — a date anchor for defaults — so upgrading Atmos never silently changes behavior. Every change to a previously shipped default is journaled with the date it changed; a pinned project keeps the defaults as they stood on the pinned date.
+</Intro>
+
+<Experimental/>
+
+## Configuration
+
+The edition pin is a top-level key in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+# Pin defaults to a date anchor: "YYYY", "YYYY-MM", or "YYYY-MM-DD"
+# Can also be set using the 'ATMOS_EDITION' ENV var, or the '--edition' global flag
+edition: "2026-01"
+```
+</File>
+
+<dl>
+  <dt>`edition`</dt>
+  <dd>
+    A date anchor for defaults, written as `"YYYY"`, `"YYYY-MM"`, or `"YYYY-MM-DD"` (quote it — a bare `2026-01` is a YAML date, not a string). Defaults that changed *after* the anchor keep their pre-change values; everything else follows the latest defaults. When unset, the project always follows the latest defaults — nothing changes for existing projects. Can also be set using the `ATMOS_EDITION` environment variable or the `--edition` global flag.
+  </dd>
+</dl>
+
+### Precedence
+
+When the edition is set in more than one place, the effective value is resolved in this order (highest wins):
+
+1. `--edition` global flag
+2. `ATMOS_EDITION` environment variable
+3. `edition` in `atmos.yaml`
+
+Run [`atmos describe edition`](/cli/commands/describe/edition) to see the effective pin and where it came from (`flag`, `env`, or `config`).
+
+## How Editions Work
+
+Atmos defaults change over time. Before editions, each change silently altered behavior for every project the moment it upgraded. Now, every change to a previously shipped default is recorded in a journal with the date it changed, the old and new values, and the pull request that changed it. Browse the journal with [`atmos list editions`](/cli/commands/list/editions).
+
+A pinned project resolves defaults as a rollback overlay:
+
+- **Defaults that changed after the pinned date keep their pre-change values.** For example, the built-in pager default changed from on to off on `2025-10-16`, so a project pinned to `edition: "2025-09"` keeps the pager on.
+- **Explicit configuration always wins.** A value you set in `atmos.yaml` (or via environment variables or flags) beats the pin, exactly as it beats the latest defaults.
+- **New features are unaffected.** Only *changes* to previously shipped defaults are journaled — never new keys. A feature introduced after your pinned date still works, with its initial defaults.
+- **No pin means latest defaults.** Projects without an `edition` key behave exactly as before.
+
+### End-of-Period Rounding
+
+Partial dates round to the **end** of the period they name — "the 2026 edition" includes every default change shipped during 2026, matching Rust's edition semantics:
+
+| Pin            | Resolves to  | Includes default changes through |
+| -------------- | ------------ | -------------------------------- |
+| `"2026"`       | `2026-12-31` | the end of 2026                  |
+| `"2026-01"`    | `2026-01-31` | the end of January 2026          |
+| `"2026-01-15"` | `2026-01-15` | January 15, 2026                 |
+
+## Example
+
+The journal currently records twelve default changes, reaching back to February 2025:
+
+| Date         | Key                             | Old           | New           | Description |
+| ------------ | ------------------------------- | ------------- | ------------- | ----------- |
+| `2025-02-11` | `logs.file`                     | `/dev/stdout` | `/dev/stderr` | Logs are written to stderr so they never contaminate pipeable command output on stdout |
+| `2025-09-23` | `logs.level`                    | `Info`        | `Warning`     | Informational log messages are hidden unless requested |
+| `2025-10-16` | `settings.terminal.pager`       | `true`        | `false`       | The built-in pager is disabled by default; long output prints directly to the terminal |
+| `2025-12-06` | `stacks.inherit.metadata`       | `false`       | `true`        | Component metadata is inherited from base components like vars and settings |
+| `2026-02-10` | `components.helmfile.use_eks`   | `true`        | `false`       | Helmfile EKS integration is opt-in; kubeconfig is no longer downloaded automatically |
+| `2026-07-06` | `settings.terminal.help.filter` | `false`       | `true`        | Bare `--help` shows a focused view without the GLOBAL FLAGS section; `--help=all` prints everything |
+| `2026-07-13` | `describe.error_mode`           | `strict`      | `warn`        | Describe commands substitute `(computed)` for unresolved YAML function values and continue |
+| `2026-07-13` | `list.error_mode`               | `strict`      | `warn`        | List commands substitute `(computed)` for unresolved YAML function values and continue |
+| `2026-07-17` | `describe.component.filter`     | `full`        | `schema`      | Component descriptions show only the sections a stack manifest can define |
+| `2026-07-16` | `describe.provenance`           | `false`       | `true`        | Component descriptions include provenance annotations (which stack file set each value) |
+| `2026-07-16` | `list.instances.format`         | `table`       | `tree`        | Instance listings render as a tree by default instead of a flat table |
+| `2026-07-16` | `stacks.list.format`            | `table`       | `tree`        | Stack listings render the import hierarchy as a tree by default instead of a flat table |
+
+A project pinned to September 2025 predates ten of these changes (everything from the pager change onward), so it keeps the pager enabled, the Helmfile EKS integration on, metadata inheritance off, unfiltered help, strict error modes, the full component-description filter, table-formatted listings, and provenance off:
+
+<File title="atmos.yaml">
+```yaml
+edition: "2025-09"
+```
+</File>
+
+Pin a single invocation instead with the global flag:
+
+```shell
+atmos --edition=2025-09 helmfile apply demo --stack=dev
+```
+
+Preview what changes if you unpin (or upgrade your pin):
+
+```shell
+atmos list editions --from=2025-09
+```
+
+## Experimental Status
+
+Editions are an experimental feature. With the default `settings.experimental: warn`, a pinned project prints an experimental notice; `settings.experimental: disable` blocks the feature entirely. See [Experimental Features](/cli/configuration/settings/experimental) for the available modes.
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_EDITION`</dt>
+  <dd>Edition pin (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`). Overrides `edition` in `atmos.yaml`; overridden by the `--edition` flag.</dd>
+</dl>
+
+## See Also
+
+- [`atmos list editions`](/cli/commands/list/editions) — Browse the journal of default changes, or diff two editions
+- [`atmos describe edition`](/cli/commands/describe/edition) — Show the active pin and every default it rolls back
+- [Experimental Features](/cli/configuration/settings/experimental) — Control how Atmos handles experimental features
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration

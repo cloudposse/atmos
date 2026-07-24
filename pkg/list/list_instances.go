@@ -680,6 +680,22 @@ func processInstances(
 	)
 }
 
+// applyConfigDefaultedInstancesFormat applies list.instances.format from atmos.yaml when
+// --format wasn't set via flag (tree by default — journaled in pkg/edition, so an edition
+// pin restores the table). A defaulted tree steps aside for row-shaped flags (tree renders
+// the import hierarchy and has no rows or columns to filter, query, or upload); only an
+// explicit --format=tree conflicts with them.
+func applyConfigDefaultedInstancesFormat(formatFlag, configFormat string, rowShapedFlags bool) string {
+	if formatFlag != "" {
+		return formatFlag
+	}
+	formatFlag = configFormat
+	if formatFlag == string(format.FormatTree) && rowShapedFlags {
+		return ""
+	}
+	return formatFlag
+}
+
 // ExecuteListInstancesCmd executes the list instances command.
 //
 //nolint:revive,cyclop,funlen // Complexity and length from format branching and upload handling (unavoidable pattern).
@@ -698,7 +714,8 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// like ATMOS_FORMAT / ATMOS_UPLOAD are honored). Reading from
 	// opts.Cmd.Flags() here would bypass viper precedence.
 	upload := opts.Upload
-	formatFlag := opts.Format
+	rowShapedFlags := upload || opts.FilterSpec != "" || opts.Query != "" || len(opts.ColumnsFlag) > 0
+	formatFlag := applyConfigDefaultedInstancesFormat(opts.Format, atmosConfig.List.Instances.Format, rowShapedFlags)
 
 	// Handle matrix format specially - it bypasses the normal rendering pipeline.
 	if formatFlag == string(format.FormatMatrix) {

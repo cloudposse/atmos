@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -884,6 +885,42 @@ func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 
 	assert.Error(t, err, "should error with nil config")
 	assert.Nil(t, manager, "manager should be nil on error")
+}
+
+// TestCreateManagerWithAtmosConfigForStack covers the no-auth (deferred-identity) manager
+// constructor: it must reject an unconfigured auth section, and otherwise create a manager
+// without authenticating any identity, threading atmosConfig.CliConfigPath and the target
+// stack through to the underlying AuthManager.
+func TestCreateManagerWithAtmosConfigForStack(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"local-aws": {Kind: "aws/emulator", Emulator: "aws"},
+		},
+	}
+
+	t.Run("errors when auth is not configured", func(t *testing.T) {
+		manager, err := CreateManagerWithAtmosConfigForStack(&schema.AuthConfig{}, nil, "")
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrAuthNotConfigured))
+		assert.Nil(t, manager)
+	})
+
+	t.Run("nil atmosConfig creates manager without authenticating", func(t *testing.T) {
+		manager, err := CreateManagerWithAtmosConfigForStack(authConfig, nil, "")
+		require.NoError(t, err)
+		require.NotNil(t, manager)
+	})
+
+	t.Run("threads atmosConfig.CliConfigPath and stack into the manager", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{CliConfigPath: "/tmp/atmos-config"}
+		manager, err := CreateManagerWithAtmosConfigForStack(authConfig, atmosConfig, "plat-ue2-dev")
+		require.NoError(t, err)
+		require.NotNil(t, manager)
+
+		si := manager.GetStackInfo()
+		require.NotNil(t, si, "manager should carry stack info")
+		assert.Equal(t, "plat-ue2-dev", si.Stack, "target stack must be threaded into the manager at construction")
+	})
 }
 
 // TestAutoDetectDefaultIdentity_UserAbortPropagation tests that ErrUserAborted

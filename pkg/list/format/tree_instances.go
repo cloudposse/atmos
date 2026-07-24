@@ -37,7 +37,9 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 	treeOutput := root.String()
 	cleanedOutput := cleanupSpacerMarkers(treeOutput, []string{spacerMarker, componentSpacerMarker})
 
-	return header + cleanedOutput + treeNewline
+	// Keep one trailing newline here; callers use data.Writeln, which adds a
+	// second newline and leaves a deliberate blank line before the shell prompt.
+	return header + strings.TrimRight(cleanedOutput, treeNewline) + treeNewline
 }
 
 // renderTreeHeader creates and renders a styled header for tree output.
@@ -48,7 +50,11 @@ func renderTreeHeader(title string) string {
 		Bold(true).
 		Padding(0, 1)
 
-	return h1Style.Render(title) + treeNewline
+	// Lipgloss padding is useful in a terminal, but its right-hand space leaks
+	// into plain-text output and makes snapshots and pipelines carry trailing
+	// whitespace. Keep the visual left padding while trimming the data-channel
+	// suffix.
+	return strings.TrimRight(h1Style.Render(title), " ") + treeNewline
 }
 
 // buildInstancesRootTree builds the root tree structure for instances.

@@ -25,5 +25,4 @@
       kreuzwerker/m1-terraform-provider-helper      github_release      aqua-public       
       terraform-linters/tflint                      github_release      aqua-public       
 
-💡 Use atmos toolchain info <tool> for details
-💡 Use atmos toolchain install <tool>@<version> to install
+💡 Use atmos toolchain info <tool> for details 💡 Use atmos toolchain install <tool>@<version> to install

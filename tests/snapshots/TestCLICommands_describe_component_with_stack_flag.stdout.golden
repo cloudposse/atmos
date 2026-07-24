@@ -20,7 +20,7 @@ atmos_cli_config:
       auto_provision_workdir_for_outputs: true
     helmfile:
       base_path: ""
-      use_eks: true
+      use_eks: false
       kubeconfig_path: ""
       helm_aws_profile_pattern: ""
       cluster_name_pattern: ""
@@ -51,6 +51,11 @@ atmos_cli_config:
       - '**/_defaults.yaml'
     name_pattern: ""
     name_template: '{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.region }}'
+    list:
+      format: tree
+      columns: []
+    inherit:
+      metadata: true
   workflows:
     base_path: ""
     list:

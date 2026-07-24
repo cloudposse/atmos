@@ -249,6 +249,8 @@ func ExecuteDescribeStacks(
 // ExecuteDescribeStacksWithMocks processes stacks with Terraform lookup mocks enabled.
 // It is used by Terraform's multi-component execution paths. It resolves declared
 // secrets eagerly so missing required values fail before the scheduler starts.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with one compatibility parameter.
 func ExecuteDescribeStacksWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
@@ -263,6 +265,8 @@ func ExecuteDescribeStacksWithMocks(
 	authManager auth.AuthManager,
 	useMocks bool,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithMocks")()
+
 	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, true, DescribeStacksErrorOptions{})
 }
 
@@ -290,6 +294,8 @@ func ExecuteDescribeStacksWithAuthDisabled(
 
 // ExecuteDescribeStacksWithAuthDisabledAndMocks is the auth-disabled variant used
 // by affected Terraform plan execution when --use-mocks is selected.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with one compatibility parameter.
 func ExecuteDescribeStacksWithAuthDisabledAndMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
@@ -305,6 +311,8 @@ func ExecuteDescribeStacksWithAuthDisabledAndMocks(
 	authDisabled bool,
 	useMocks bool,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithAuthDisabledAndMocks")()
+
 	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, useMocks, true, DescribeStacksErrorOptions{})
 }
 

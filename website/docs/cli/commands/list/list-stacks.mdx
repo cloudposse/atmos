@@ -100,7 +100,7 @@ atmos list stacks --component vpc --format tree --provenance
   <dd>Filter stacks by component name.<br/>Environment variable: `ATMOS_COMPONENT`</dd>
 
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `stacks.list.format` configuration in atmos.yaml (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `stacks.list.format` configuration in atmos.yaml (default: `tree`).<br/>The default changed from `table` to `tree` in the 2026-07-16 [edition](/cli/configuration/edition); an explicit `--format` always wins, so scripts that parsed the plain piped output should pass `--format=csv` or `--format=json`.<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
 
   <dt>`--columns`</dt>
   <dd>Columns to display. Supports simple field names (e.g., `stack`), named columns with templates (e.g., `"Name={{ .stack }}"`), or named with field reference (e.g., `"MyStack=stack"`). Overrides `stacks.list.columns` configuration in atmos.yaml. Environment variable: `ATMOS_LIST_COLUMNS`</dd>
@@ -179,14 +179,18 @@ You can customize the default output format and columns displayed by `atmos list
 
 ### Default Format
 
+The default output format is `tree` (since the 2026-07-16 [edition](/cli/configuration/edition); it was previously a flat table). To restore the flat table by default, set `stacks.list.format` in your `atmos.yaml`:
+
 ```yaml
 # atmos.yaml
 stacks:
   list:
-    format: tree  # Default format: table, json, yaml, csv, tsv, tree
+    format: table  # Supported formats: table, json, yaml, csv, tsv, tree
 ```
 
-**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+**Precedence**: CLI `--format` flag > Environment variable `ATMOS_LIST_FORMAT` > Config file > Default (`tree`)
+
+Scripts that parse the output should always pass an explicit format (e.g., `--format=csv` or `--format=json`) rather than relying on the default.
 
 ### Custom Columns
 

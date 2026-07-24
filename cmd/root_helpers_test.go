@@ -1941,6 +1941,26 @@ func TestCheckExperimentalSettings(t *testing.T) {
 			expectedExitCode: 1,
 		},
 		{
+			name: "edition pin warn mode",
+			config: &schema.AtmosConfiguration{
+				Edition: "2026-01",
+				Settings: schema.AtmosSettings{
+					Experimental: "warn",
+				},
+			},
+		},
+		{
+			name: "edition pin disable mode exits",
+			config: &schema.AtmosConfiguration{
+				Edition: "2026-01",
+				Settings: schema.AtmosSettings{
+					Experimental: "disable",
+				},
+			},
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
 			name: "key delimiter error mode exits",
 			config: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{

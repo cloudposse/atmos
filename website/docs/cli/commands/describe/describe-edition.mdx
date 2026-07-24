@@ -1,0 +1,182 @@
+---
+title: atmos describe edition
+sidebar_label: edition
+sidebar_class_name: command
+id: edition
+description: Use this command to show the active edition pin and every default it rolls back.
+---
+import Terminal from '@site/src/components/Terminal'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to show whether the project is pinned to an edition (a date anchor for defaults), where the pin came from, the resolved anchor date, and every default the pin keeps at its pre-change value.
+</Intro>
+
+<Experimental/>
+
+<CastPlayer title="atmos describe edition --help" src="/casts/screengrabs/atmos-describe-edition--help.cast" static chrome />
+
+<ActionCard title="Pin Your Project to an Edition">
+    Learn how to pin your project's defaults to a date anchor with the top-level `edition` setting in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/edition">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos describe edition [flags]
+```
+
+## Description
+
+The `atmos describe edition` command reports the effect of the active edition pin:
+
+- **pinned** — whether an edition is set at all
+- **edition** — the raw pin as you wrote it (e.g. `2025-09`)
+- **resolved_date** — the fully resolved anchor date (partial dates round to the end of the period they name)
+- **granularity** — how much of the date the pin specified: `year`, `month`, or `day`
+- **source** — where the pin came from: `flag` (`--edition`), `env` (`ATMOS_EDITION`), or `config` (`atmos.yaml`)
+- **overrides** — every default the pin rolls back, with the pinned (effective) value, the latest default you would get by unpinning, and the journal entries behind the change
+
+Without a pin, it reports `pinned: false` with no overrides — the project follows the latest defaults.
+
+## Flags
+
+<dl>
+  <dt>`--format, -f string`</dt>
+  <dd>Output format: `yaml` or `json` (default: `yaml`)</dd>
+</dl>
+
+## Examples
+
+Show the active pin and its effect:
+
+```shell
+atmos describe edition
+```
+
+Output as JSON:
+
+```shell
+atmos describe edition --format=json
+```
+
+Preview the effect of a pin without changing your configuration, using the `--edition` global flag:
+
+```shell
+atmos --edition=2026-01 describe edition
+```
+
+## Example Output
+
+<Terminal title="atmos describe edition">
+```yaml
+pinned: true
+edition: 2026-06
+resolved_date: "2026-06-30"
+granularity: month
+source: config
+overrides:
+    - key: describe.component.filter
+      kind: value
+      from_value: full
+      to_value: schema
+      entries:
+        - date: "2026-07-17"
+          key: describe.component.filter
+          kind: value
+          old: full
+          new: schema
+          description: Component descriptions show only stack-manifest sections; set the filter to full for computed internals.
+          ref: https://atmos.tools/changelog/config-editions
+    - key: describe.error_mode
+      kind: value
+      from_value: strict
+      to_value: warn
+      entries:
+        - date: "2026-07-13"
+          key: describe.error_mode
+          kind: value
+          old: strict
+          new: warn
+          description: Describe commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+          ref: https://atmos.tools/changelog/list-describe-graceful-degradation
+    - key: describe.provenance
+      kind: value
+      from_value: false
+      to_value: true
+      entries:
+        - date: "2026-07-16"
+          key: describe.provenance
+          kind: value
+          old: false
+          new: true
+          description: Component descriptions include provenance annotations (which stack file set each value) by default.
+          ref: https://atmos.tools/changelog/config-editions
+    - key: list.error_mode
+      kind: value
+      from_value: strict
+      to_value: warn
+      entries:
+        - date: "2026-07-13"
+          key: list.error_mode
+          kind: value
+          old: strict
+          new: warn
+          description: List commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+          ref: https://atmos.tools/changelog/list-describe-graceful-degradation
+    - key: list.instances.format
+      kind: value
+      from_value: table
+      to_value: tree
+      entries:
+        - date: "2026-07-16"
+          key: list.instances.format
+          kind: value
+          old: table
+          new: tree
+          description: Instance listings render as a tree by default instead of a flat table.
+          ref: https://atmos.tools/changelog/config-editions
+    - key: settings.terminal.help.filter
+      kind: value
+      from_value: false
+      to_value: true
+      entries:
+        - date: "2026-07-06"
+          key: settings.terminal.help.filter
+          kind: value
+          old: false
+          new: true
+          description: Bare --help shows a focused view without the GLOBAL FLAGS section; --help=all prints the full output.
+          ref: https://github.com/cloudposse/atmos/pull/2696
+    - key: stacks.list.format
+      kind: value
+      from_value: table
+      to_value: tree
+      entries:
+        - date: "2026-07-16"
+          key: stacks.list.format
+          kind: value
+          old: table
+          new: tree
+          description: Stack listings render the import hierarchy as a tree by default instead of a flat table.
+          ref: https://atmos.tools/changelog/config-editions
+```
+</Terminal>
+
+In each override, `from_value` is the default your pinned project actually uses, and `to_value` is the latest default the project would get by unpinning.
+
+:::tip
+Use `atmos list editions` to browse the full journal of default changes, or to diff two editions with `--from` and `--to`.
+:::
+
+## See Also
+
+- [`edition` configuration](/cli/configuration/edition) — Pin your project's defaults to a date anchor
+- [`atmos list editions`](/cli/commands/list/editions) — Browse the journal of default changes, or diff two editions

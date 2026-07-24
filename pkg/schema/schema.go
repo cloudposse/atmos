@@ -39,6 +39,23 @@ type Describe struct {
 	// provisioned yet). Values: "strict", "warn" (default), "silent". An explicit --error-mode
 	// flag or ATMOS_DESCRIBE_ERROR_MODE env var overrides this.
 	ErrorMode string `yaml:"error_mode,omitempty" json:"error_mode,omitempty" mapstructure:"error_mode"`
+	// Provenance is the project-wide default for `describe component --provenance`:
+	// annotate the component configuration with the stack file each value came from.
+	// Enabled by default (journaled in pkg/edition); an explicit --provenance flag
+	// or ATMOS_DESCRIBE_PROVENANCE env var overrides this.
+	Provenance bool `yaml:"provenance,omitempty" json:"provenance,omitempty" mapstructure:"provenance"`
+	// Component configures `describe component` output.
+	Component DescribeComponentSettings `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"`
+}
+
+// DescribeComponentSettings configures `describe component` output.
+type DescribeComponentSettings struct {
+	// Filter selects the output scope: "schema" (default; only the sections a
+	// stack manifest can define — vars, settings, env, backend, metadata, and
+	// friends) or "full" (every internal field Atmos computes during
+	// processing). Journaled in pkg/edition; ATMOS_DESCRIBE_COMPONENT_FILTER
+	// overrides.
+	Filter string `yaml:"filter,omitempty" json:"filter,omitempty" mapstructure:"filter"`
 }
 
 // ProfilesConfig defines configuration for the profiles system.
@@ -76,7 +93,8 @@ type ConfigMetadata struct {
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
+	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"`                                       // "runtime" if from env var/CLI/provider, "" if from config file.
+	Edition                       string             `yaml:"edition,omitempty" json:"edition,omitempty" mapstructure:"edition"` // Date anchor ("YYYY", "YYYY-MM", or "YYYY-MM-DD") that pins defaults to how they stood on that date.
 	Cast                          *CastConfig        `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
@@ -403,6 +421,15 @@ type Terminal struct {
 	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
 	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
 	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
+	Help               HelpSettings       `yaml:"help,omitempty" json:"help,omitempty" mapstructure:"help"`
+}
+
+// HelpSettings controls how `--help` output is rendered.
+type HelpSettings struct {
+	// Filter renders a focused bare `--help` (local flags only, no GLOBAL FLAGS
+	// section, with a `--help=all` hint). Enabled by default (journaled in
+	// pkg/edition); disable to restore the full pre-filter help output.
+	Filter bool `yaml:"filter" json:"filter" mapstructure:"filter"`
 }
 
 // MaskSettings contains configuration for sensitive data masking.

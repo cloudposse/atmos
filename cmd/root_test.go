@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -74,6 +76,18 @@ func TestNoColorLog(t *testing.T) {
 			t.Logf("Command output: %s", output)
 		}
 	})
+}
+
+func TestSyncGlobalFlagsToViperIncludesEdition(t *testing.T) {
+	previous := viper.GetString(editionFlagName)
+	t.Cleanup(func() { viper.Set(editionFlagName, previous) })
+
+	command := &cobra.Command{Use: "atmos"}
+	command.Flags().String(editionFlagName, "", "Edition pin")
+	require.NoError(t, command.Flags().Set(editionFlagName, "2025-09"))
+
+	syncGlobalFlagsToViper(command)
+	assert.Equal(t, "2025-09", viper.GetString(editionFlagName))
 }
 
 func TestInitFunction(t *testing.T) {
@@ -960,14 +974,17 @@ func TestParseChdirFromArgs(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "multiple --chdir flags (first wins)",
+			// Last-flag-wins matches Cobra's own normal-path parsing of this same
+			// flag (both go through pflag) — the old hand-rolled scanner was
+			// actually the inconsistent one here, returning on first match.
+			name:     "multiple --chdir flags (last wins, matching Cobra's own flag parsing)",
 			args:     []string{"atmos", "--chdir=/first", "--chdir=/second", "terraform", "plan"},
-			expected: "/first",
+			expected: "/second",
 		},
 		{
-			name:     "mixed -C and --chdir (first wins)",
+			name:     "mixed -C and --chdir (last wins)",
 			args:     []string{"atmos", "-C/first", "--chdir=/second", "terraform", "plan"},
-			expected: "/first",
+			expected: "/second",
 		},
 		{
 			name:     "--chdir with tilde",
