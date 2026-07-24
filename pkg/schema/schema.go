@@ -395,8 +395,8 @@ type Terminal struct {
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
-	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
-	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
+	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color" jsonschema_extras:"deprecated=true,x-atmos-replacement=settings.terminal.color (invert the value)"` // Deprecated in config, use Color instead
+	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`                                                                                                               // ENV-only: ATMOS_FORCE_COLOR
 	Speed              float64            `yaml:"speed,omitempty" json:"speed,omitempty" mapstructure:"speed"`
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
@@ -469,7 +469,7 @@ type AtmosSettings struct {
 	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
 	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
-	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs" jsonschema_extras:"deprecated=true,x-atmos-replacement=docs"`
 	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
@@ -556,9 +556,9 @@ type ProvisionWorkdirSettings struct {
 
 type Docs struct {
 	// Deprecated: this has moved to `settings.terminal.max-width`
-	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width" jsonschema_extras:"deprecated=true,x-atmos-replacement=settings.terminal.max-width"`
 	// Deprecated: this has moved to `settings.terminal.pagination`
-	Pagination bool                    `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	Pagination bool                    `yaml:"pagination" json:"pagination" mapstructure:"pagination" jsonschema_extras:"deprecated=true,x-atmos-replacement=settings.terminal.pagination"`
 	Generate   map[string]DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
 
@@ -1081,8 +1081,8 @@ type Helmfile struct {
 	BasePath              string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	UseEKS                bool   `yaml:"use_eks" json:"use_eks" mapstructure:"use_eks"`
 	KubeconfigPath        string `yaml:"kubeconfig_path" json:"kubeconfig_path" mapstructure:"kubeconfig_path"`
-	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"` // Deprecated: use --identity flag instead.
-	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`             // Deprecated: use ClusterNameTemplate with Go template syntax.
+	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern" jsonschema_extras:"deprecated=true,x-atmos-replacement=--identity"`                    // Deprecated: use --identity flag instead.
+	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern" jsonschema_extras:"deprecated=true,x-atmos-replacement=components.helmfile.cluster_name_template"` // Deprecated: use ClusterNameTemplate with Go template syntax.
 	ClusterNameTemplate   string `yaml:"cluster_name_template" json:"cluster_name_template" mapstructure:"cluster_name_template"`
 	ClusterName           string `yaml:"cluster_name" json:"cluster_name" mapstructure:"cluster_name"`
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
@@ -1221,7 +1221,7 @@ type Stacks struct {
 	BasePath      string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	IncludedPaths []string      `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
 	ExcludedPaths []string      `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern" jsonschema_extras:"deprecated=true,x-atmos-replacement=stacks.name_template"`
 	NameTemplate  string        `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
 	List          ListConfig    `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	Inherit       StacksInherit `yaml:"inherit,omitempty" json:"inherit,omitempty" mapstructure:"inherit"`

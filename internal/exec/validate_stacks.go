@@ -19,8 +19,10 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/validator"
 )
 
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
@@ -173,6 +175,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	if err != nil {
 		return err
 	}
+	warnDeprecatedStackFields(atmosConfig, atmosManifestJsonSchemaFilePath, stackConfigFilesAbsolutePaths)
 
 	log.Debug("Validating all YAML files in the folder and all subfolders (excluding template files)",
 		"folder", filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
@@ -283,6 +286,32 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	return nil
+}
+
+func warnDeprecatedStackFields(atmosConfig *schema.AtmosConfiguration, schemaPath string, files []string) {
+	deprecatedSchema, err := validator.LoadDeprecatedYAMLSchema(atmosConfig, schemaPath)
+	if err != nil {
+		log.Warn("Unable to load schema for deprecated-field warnings", "schema", schemaPath, "error", err)
+		return
+	}
+	for _, file := range files {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			log.Warn("Unable to read stack file for deprecated-field warnings", "file", file, "error", err)
+			continue
+		}
+		fields, err := deprecatedSchema.FindYAMLFields(content)
+		if err != nil {
+			log.Warn("Unable to scan stack file for deprecated-field warnings", "file", file, "error", err)
+			continue
+		}
+		positions := schemaFilePositions(file)
+		for _, field := range fields {
+			position := u.GetYAMLPosition(positions, validator.NormalizeSchemaPath(field.Path))
+			message := validator.FormatDeprecatedField(field)
+			ui.Warningf("%s:%d:%d: warning: %s", displayPath(file), position.Line, position.Column, message)
+		}
+	}
 }
 
 // dedupeStrings drops exact-duplicate entries while preserving first-seen order.

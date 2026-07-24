@@ -74,6 +74,26 @@ func (h *Handler) validateConfigSchema(doc *Document) []protocol.Diagnostic {
 		})
 	}
 
+	deprecated, err := validator.FindDeprecatedYAMLFields(h.serverAtmosConfig(), configSchemaSource, []byte(doc.Text))
+	if err != nil {
+		return diagnostics
+	}
+	for _, field := range deprecated {
+		position := u.GetYAMLPosition(positions, validator.NormalizeSchemaPath(field.Path))
+		line := uint32(max(0, position.Line-1))     //nolint:gosec // Bounded by max(0, ...).
+		column := uint32(max(0, position.Column-1)) //nolint:gosec // Bounded by max(0, ...).
+		message := validator.FormatDeprecatedField(field)
+		diagnostics = append(diagnostics, protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{Line: line, Character: column},
+				End:   protocol.Position{Line: line, Character: column},
+			},
+			Severity: severityPtr(protocol.DiagnosticSeverityWarning),
+			Source:   stringPtr("atmos-lsp"),
+			Message:  message,
+		})
+	}
+
 	return diagnostics
 }
 

@@ -32,6 +32,11 @@ const (
 	// The embedded generated atmos.yaml JSON Schema — the same document
 	// `atmos config schema` prints.
 	configSchemaSource = "atmos://schema/atmos/config/1.0"
+
+	// Both the log-field key used for schema-related debug logging and the
+	// validation.Diagnostic.Source value for schema findings (validation
+	// errors and deprecation warnings alike).
+	diagnosticSourceSchema = "schema"
 )
 
 // builtinConfigSchemaMatches returns the project-local files the config loader
@@ -192,7 +197,7 @@ func (av *atmosValidatorExecutor) validateAtmosSchemaReport(sourceKey string, cu
 			for _, resultError := range errors {
 				position := u.GetYAMLPosition(positions, resultError.Field())
 				report.Diagnostics = append(report.Diagnostics, validation.Diagnostic{
-					Source:   "schema",
+					Source:   diagnosticSourceSchema,
 					RuleID:   resultError.Type(),
 					Severity: validation.SeverityError,
 					Message:  resultError.Description(),
@@ -201,6 +206,7 @@ func (av *atmosValidatorExecutor) validateAtmosSchemaReport(sourceKey string, cu
 					Column:   position.Column,
 				})
 			}
+			report.Diagnostics = append(report.Diagnostics, av.deprecationDiagnostics(schemaSource, file, positions)...)
 		}
 	}
 	return report, nil
@@ -285,7 +291,7 @@ func (av *atmosValidatorExecutor) buildValidationSchema(sourceKey, customSchema 
 		if err != nil {
 			return nil, err
 		}
-		log.Debug("Files matched", "schema", schemaValue.Schema, "matcher", schemaValue.Matches, "filesMatched", files)
+		log.Debug("Files matched", diagnosticSourceSchema, schemaValue.Schema, "matcher", schemaValue.Matches, "filesMatched", files)
 		validationSchemaWithFiles[schemaValue.Schema] = files
 	}
 	log.Debug("Validation schema with files", "validationSchemaWithFiles", validationSchemaWithFiles)
@@ -348,14 +354,18 @@ func displayPath(file string) string {
 func (av *atmosValidatorExecutor) printValidation(schema string, files []string) (uint, error) {
 	count := uint(0)
 	for _, file := range files {
-		log.Debug("validating", "schema", schema, "file", file)
+		log.Debug("validating", diagnosticSourceSchema, schema, "file", file)
 		validationErrors, err := av.validator.ValidateYAMLSchema(schema, file)
 		if err != nil {
 			return count, err
 		}
+		positions := schemaFilePositions(file)
+		for _, warning := range av.deprecationDiagnostics(schema, file, positions) {
+			ui.Warningf("%s:%d:%d: warning: %s", warning.File, warning.Line, warning.Column, warning.Message)
+		}
 		if len(validationErrors) == 0 {
 			ui.Successf("Validated %s", displayPath(file))
-			log.Debug("Schema validation passed", "file", file, "schema", schema)
+			log.Debug("Schema validation passed", "file", file, diagnosticSourceSchema, schema)
 			continue
 		}
 		log.Error("Invalid YAML", "file", file)
@@ -365,4 +375,33 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 		}
 	}
 	return count, nil
+}
+
+// deprecationDiagnostics scans a validated file for deprecated fields. Deprecation
+// warnings are best-effort: a file that can't be re-read or a schema source the
+// data fetcher can't resolve (e.g. an ad hoc source used only for the primary
+// schema check) must never fail validation that already succeeded, so failures
+// here are logged and swallowed rather than propagated, mirroring
+// warnDeprecatedStackFields in validate_stacks.go.
+func (av *atmosValidatorExecutor) deprecationDiagnostics(schemaSource, file string, positions u.PositionMap) []validation.Diagnostic {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		log.Debug("Unable to read file for deprecation scan", "file", file, "error", err)
+		return nil
+	}
+	fields, err := validator.FindDeprecatedYAMLFields(av.atmosConfig, schemaSource, content)
+	if err != nil {
+		log.Debug("Unable to scan file for deprecated fields", "file", file, diagnosticSourceSchema, schemaSource, "error", err)
+		return nil
+	}
+	diagnostics := make([]validation.Diagnostic, 0, len(fields))
+	for _, field := range fields {
+		position := u.GetYAMLPosition(positions, validator.NormalizeSchemaPath(field.Path))
+		message := validator.FormatDeprecatedField(field)
+		diagnostics = append(diagnostics, validation.Diagnostic{
+			Source: diagnosticSourceSchema, RuleID: "deprecated", Severity: validation.SeverityWarning,
+			Message: message, File: displayPath(file), Line: position.Line, Column: position.Column,
+		})
+	}
+	return diagnostics
 }

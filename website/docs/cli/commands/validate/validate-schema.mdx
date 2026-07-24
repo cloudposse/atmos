@@ -44,6 +44,25 @@ prints). Define your own `schemas.config` entry to override or disable it.
 Run `atmos validate schema --help` to see all the available options
 :::
 
+## Deprecation Warnings
+
+Fields the JSON Schema marks `deprecated: true` produce warnings instead of validation
+errors. A deprecated field is still valid input — it never causes `atmos validate schema`
+(or its `atmos validate config` / `atmos config validate` aliases) to exit non-zero, only
+schema violations do:
+
+```console
+atmos.yaml:12:3: warning: `stacks.name_pattern` is deprecated; use `stacks.name_template`
+✓ Validated atmos.yaml
+```
+
+Where the schema provides migration guidance (an `x-atmos-replacement` hint), the warning
+names the field to use instead. This applies to every schema validated through this
+command, not just the built-in `config` entry — but only to `deprecated` annotations the
+scanner can resolve locally, within the same schema document (including local `$ref`s). A
+field marked `deprecated` only inside a separately fetched, externally referenced schema
+document validates without a warning.
+
 ## Examples
 
 ```shell
