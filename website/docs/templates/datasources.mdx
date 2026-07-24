@@ -246,7 +246,125 @@ components:
 ```
 </File>
 
+## Practical AWS Example: Externalizing Environment-Specific Configuration
+
+Many Atmos users manage multiple AWS environments such as `dev`, `staging`, and `prod` where the infrastructure code remains the same, but environment-specific values differ.
+
+Instead of hardcoding environment details in stack manifests, you can store them in a separate configuration file and load them using a Gomplate datasource.
+
+<File title="config/dev.yaml">
+
+```yaml
+account_id: "111111111111"
+
+region: "eu-west-2"
+
+terraform_backend:
+  bucket: "acme-dev-tfstate"
+  dynamodb_table: "acme-dev-locks"
+
+network:
+  vpc_id: "vpc-0123456789abcdef0"
+
+  private_subnet_ids:
+    - "subnet-11111111"
+    - "subnet-22222222"
+
+  security_group_ids:
+    - "sg-11111111"
+
+ecs:
+  cluster_arn: "arn:aws:ecs:eu-west-2:111111111111:cluster/dev"
+
+alb:
+  target_group_name: "app-dev"
+
+tags:
+  Environment: "dev"
+  Team: "platform"
+  ManagedBy: "atmos"
+```
+
+</File>
+
+### Configure the Datasource
+
+<File title="stack.yaml">
+
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        datasources:
+          config:
+            url: "file://config/dev.yaml"
+```
+
+</File>
+
+### Use Datasource Values in a Component
+
+<File title="stack.yaml">
+
+```yaml
+templates:
+  settings:
+    evaluations: 2
+
+components:
+  terraform:
+    app:
+      vars:
+        account_id: '{{ (datasource "config").account_id }}'
+        region: '{{ (datasource "config").region }}'
+        vpc_id: '{{ (datasource "config").network.vpc_id }}'
+        subnet_ids: '{{ (datasource "config").network.private_subnet_ids }}'
+        security_group_ids: '{{ (datasource "config").network.security_group_ids }}'
+        ecs_cluster_arn: '{{ (datasource "config").ecs.cluster_arn }}'
+        alb_target_group_name: '{{ (datasource "config").alb.target_group_name }}'
+        tags: '{{ (datasource "config").tags }}'
+```
+
+</File>
+
+### Terraform Backend Example
+
+<File title="stack.yaml">
+
+```yaml
+terraform:
+  vars:
+    terraform_state_bucket: '{{ (datasource "config").terraform_backend.bucket }}'
+    terraform_lock_table: '{{ (datasource "config").terraform_backend.dynamodb_table }}'
+```
+
+</File>
+
+### Validate the Rendered Configuration
+
+<Terminal>
+
+```bash
+atmos describe component app -s dev
+```
+
+</Terminal>
+
+Example output:
+
+```yaml
+account_id: 111111111111
+region: eu-west-2
+vpc_id: vpc-0123456789abcdef0
+ecs_cluster_arn: arn:aws:ecs:eu-west-2:111111111111:cluster/dev
+alb_target_group_name: app-dev
+```
+
+This approach keeps stack manifests DRY while centralizing environment-specific configuration such as AWS account IDs, networking information, Terraform backend settings, infrastructure tags, and service-specific identifiers.
+
 ## Using templates in the URLs of `datasources`
+
 
 <PillBox>Advanced</PillBox>
 
