@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,111 +9,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestIsValidPluginCacheDir(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		expected bool
-	}{
-		{
-			name:     "valid path",
-			path:     "/home/user/.cache/terraform",
-			expected: true,
-		},
-		{
-			name:     "valid relative path",
-			path:     ".terraform-cache",
-			expected: true,
-		},
-		{
-			name:     "empty string is invalid",
-			path:     "",
-			expected: false,
-		},
-		{
-			name:     "root path is invalid",
-			path:     "/",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isValidPluginCacheDir(tt.path, "test")
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestGetValidUserPluginCacheDir(t *testing.T) {
-	tests := []struct {
-		name           string
-		osEnvVar       string
-		globalEnvDir   string
-		expectedResult string
-	}{
-		{
-			name:           "valid OS env var takes precedence",
-			osEnvVar:       "/custom/cache",
-			globalEnvDir:   "/global/cache",
-			expectedResult: "/custom/cache",
-		},
-		{
-			name:           "fallback to global env when OS env not set",
-			osEnvVar:       "",
-			globalEnvDir:   "/global/cache",
-			expectedResult: "/global/cache",
-		},
-		{
-			name:           "no env vars set returns empty",
-			osEnvVar:       "",
-			globalEnvDir:   "",
-			expectedResult: "",
-		},
-		{
-			name:           "empty OS env var is invalid, uses default",
-			osEnvVar:       "SET_BUT_EMPTY", // Special marker to set env var to empty.
-			globalEnvDir:   "/global/cache",
-			expectedResult: "", // OS env is set but empty, so it's invalid.
-		},
-		{
-			name:           "root OS env var is invalid, uses default",
-			osEnvVar:       "/",
-			globalEnvDir:   "/global/cache",
-			expectedResult: "", // OS env is set to "/", so it's invalid.
-		},
-		{
-			name:           "root global env var is invalid",
-			osEnvVar:       "",
-			globalEnvDir:   "/",
-			expectedResult: "", // Global env is set to "/", so it's invalid.
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Set up OS environment variable.
-			if tt.osEnvVar == "SET_BUT_EMPTY" {
-				t.Setenv("TF_PLUGIN_CACHE_DIR", "")
-			} else if tt.osEnvVar != "" {
-				t.Setenv("TF_PLUGIN_CACHE_DIR", tt.osEnvVar)
-			}
-
-			// Set up atmosConfig with global env.
-			atmosConfig := &schema.AtmosConfiguration{
-				Env: make(map[string]string),
-			}
-			if tt.globalEnvDir != "" {
-				atmosConfig.Env["TF_PLUGIN_CACHE_DIR"] = tt.globalEnvDir
-			}
-
-			result := getValidUserPluginCacheDir(atmosConfig)
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
 func TestConfigurePluginCache(t *testing.T) {
+	customCacheDir := filepath.Join(t.TempDir(), "custom", "terraform", "plugins")
+	userCacheDir := filepath.Join(t.TempDir(), "user", "custom", "cache")
+	globalCacheDir := filepath.Join(t.TempDir(), "global", "custom", "cache")
+
 	tests := []struct {
 		name              string
 		pluginCache       bool
@@ -135,12 +36,12 @@ func TestConfigurePluginCache(t *testing.T) {
 		{
 			name:              "caching enabled with custom dir",
 			pluginCache:       true,
-			pluginCacheDir:    "/custom/terraform/plugins",
+			pluginCacheDir:    customCacheDir,
 			osEnvVar:          "",
 			globalEnvDir:      "",
 			expectEnvVars:     true,
 			expectCustomDir:   true,
-			expectedDirPrefix: "/custom/terraform/plugins",
+			expectedDirPrefix: customCacheDir,
 		},
 		{
 			name:            "caching disabled returns no env vars",
@@ -155,7 +56,7 @@ func TestConfigurePluginCache(t *testing.T) {
 			name:            "user OS env var takes precedence",
 			pluginCache:     true,
 			pluginCacheDir:  "",
-			osEnvVar:        "/user/custom/cache",
+			osEnvVar:        userCacheDir,
 			globalEnvDir:    "",
 			expectEnvVars:   false, // User manages their own cache.
 			expectCustomDir: false,
@@ -174,7 +75,7 @@ func TestConfigurePluginCache(t *testing.T) {
 			pluginCache:     true,
 			pluginCacheDir:  "",
 			osEnvVar:        "",
-			globalEnvDir:    "/global/custom/cache",
+			globalEnvDir:    globalCacheDir,
 			expectEnvVars:   false, // User manages their own cache.
 			expectCustomDir: false,
 		},

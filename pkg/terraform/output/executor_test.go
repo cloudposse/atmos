@@ -343,6 +343,39 @@ func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
 	assert.False(t, ok, "pass_vars=false must not forward vars as TF_VAR_*")
 }
 
+// TestExecutor_ExecuteWithSections_AppliesAutomaticPluginCache verifies the
+// full internal-output path receives the same default cache environment as an
+// `atmos terraform` command. This is the regression for provider copies being
+// written to each !terraform.output workdir in CI.
+func TestExecutor_ExecuteWithSections_AppliesAutomaticPluginCache(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	var capturedEnv map[string]string
+	mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
+		capturedEnv = env
+		return nil
+	}).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(
+		func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil },
+	))
+	pluginCacheDir := filepath.Join(t.TempDir(), "plugin-cache")
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Components.Terraform.PluginCache = true
+	atmosConfig.Components.Terraform.PluginCacheDir = pluginCacheDir
+
+	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", validSections(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, pluginCacheDir, capturedEnv["TF_PLUGIN_CACHE_DIR"])
+	assert.Equal(t, "true", capturedEnv["TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"])
+}
+
 func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
