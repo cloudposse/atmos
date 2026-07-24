@@ -2,7 +2,7 @@
 
 **Status**: 🟡 In Progress (kind system, scanner kinds, `--skip-hooks`, dependency auto-install, and workdir compatibility have shipped on the in-flight PR; Pro upload backend still pending — see Implementation Plan below)
 
-**Last Updated**: 2026-05-22
+**Last Updated**: 2026-07-24
 
 **Related PRDs**: [Hooks Component Scoping](./hooks-component-scoping.md) | [Tool Dependencies Integration](./tool-dependencies-integration.md) | [Native CI Integration](./native-ci-integration.md) | [CI Summary Templates](./ci-summary-templates.md) | [Run custom step types as component lifecycle hooks](./hooks-step-types.md) (the `kind: step` bridge — new hook capabilities like [`type: archive`](./archive-step.md) ship as step types, not new hook kinds)
 
@@ -96,7 +96,7 @@ Two distinct interpolation surfaces:
 - `ATMOS_OUTPUT_DIR` — temp directory containing `ATMOS_OUTPUT_FILE` (for tools like KICS that write to a directory rather than a file)
 - `ATMOS_STACK`, `ATMOS_COMPONENT` — names
 
-Tools consume these directly (e.g. `infracost --path "$ATMOS_COMPONENT_PATH"`).
+Tools consume these directly (e.g. `infracost --path "$ATMOS_COMPONENT_PATH"`). Every command-engine hook also starts with this same directory as its process working directory. The path is resolved from the processed component metadata, so a stack-facing alias using `metadata.component` runs against its resolved local module (or provisioned workdir), not the alias name. A missing resolved directory prevents the subprocess from starting; the hook's `on_failure` policy controls whether that failure stops the parent lifecycle command.
 
 ### Pro integration — implicit upload, kind-driven
 

@@ -248,8 +248,6 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	if err != nil {
 		return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
-	injectHookStoreAuthResolver(&atmosConfig, &info)
-
 	// Resolve path-based component arguments before getting hooks. GetHooks calls
 	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
@@ -257,6 +255,18 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 			return hookContext{info: info, atmosConfig: atmosConfig}, err
 		}
 	}
+
+	// InitCliConfig processes stack configuration on its private copy of info.
+	// Hooks need that resolved information too: in particular, FinalComponent
+	// and ComponentFolderPrefix must reflect metadata.component before engines
+	// derive a component working directory. Keep template and YAML-function
+	// processing disabled here because hook discovery runs before auth.
+	authManager, _ := info.AuthManager.(auth.AuthManager)
+	info, err = e.ProcessStacks(&atmosConfig, info, true, false, false, nil, authManager)
+	if err != nil {
+		return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
+	}
+	injectHookStoreAuthResolver(&atmosConfig, &info)
 
 	return hookContext{info: info, atmosConfig: atmosConfig}, nil
 }

@@ -18,7 +18,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // On-failure modes for the command engine.
@@ -155,6 +157,10 @@ type subprocessPrep struct {
 	binary string
 	args   []string
 	env    []string
+	// dir is the component directory the hook runs from. It is deliberately
+	// separate from ATMOS_COMPONENT_PATH so tools that use relative paths also
+	// operate on the same component Terraform uses.
+	dir string
 	// captureStdoutPath, when non-empty, is the file the subprocess's stdout
 	// is redirected into (instead of the terminal). Set for kinds with
 	// CaptureStdout — tools that emit structured output to stdout and have no
@@ -222,6 +228,7 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 		binary:            resolved,
 		args:              args,
 		env:               env,
+		dir:               ComponentPath(ctx),
 		captureStdoutPath: captureStdoutPath,
 	}, nil
 }
@@ -237,6 +244,7 @@ func runSubprocess(p *subprocessPrep) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Env = p.env
+	cmd.Dir = p.dir
 
 	if p.captureStdoutPath != "" {
 		f, err := os.Create(p.captureStdoutPath) // #nosec G304 -- engine-controlled temp path (makeOutputDir)
@@ -626,7 +634,7 @@ func ciResultsEnabled(ctx *ExecContext) bool {
 
 // buildAtmosEnv builds the ATMOS_* env-var map for the subprocess.
 func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]string {
-	componentPath := componentPathFor(ctx)
+	componentPath := ComponentPath(ctx)
 	env := map[string]string{
 		"ATMOS_COMPONENT_PATH": componentPath,
 		"ATMOS_OUTPUT_FILE":    outputFile,
@@ -652,44 +660,94 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	return env
 }
 
-// componentPathFor resolves the on-disk path the tool should scan. It is
-// the SAME directory Terraform/OpenTofu runs in — this is what the user
+// ComponentPath resolves the on-disk path the hook should run in. It is
+// the same directory the component executor runs in — this is what the user
 // expects when they configure a hook against a component, and it keeps
-// scanners aligned with the actual workdir (which may be a provisioned
-// copy, not the in-repo component path) when the workdir feature is
-// enabled.
+// scanners aligned with the actual workdir (which may be a provisioned copy,
+// not the in-repo component path) when the workdir feature is enabled.
 //
 // Resolution order:
 //
 //  1. If the workdir feature resolves an existing directory for this
 //     component, use that.
-//  2. Otherwise fall back to TerraformDirAbsolutePath /
-//     ComponentFolderPrefix / FinalComponent (the legacy in-repo path).
+//  2. Otherwise resolve the configured component-type base path plus
+//     ComponentFolderPrefix and FinalComponent (the in-repo path).
 //  3. As a last resort (mostly tests), the process working directory.
 //
 // Errors from the workdir resolver are non-fatal: hooks should still run
 // even if workdir resolution fails for a reason unrelated to the hook.
-func componentPathFor(ctx *ExecContext) string {
+func ComponentPath(ctx *ExecContext) string {
 	if ctx == nil || ctx.AtmosConfig == nil || ctx.Info == nil {
 		wd, _ := os.Getwd()
 		return wd
 	}
 
-	// Prefer the provisioned workdir if one resolves and exists on disk.
-	if path, exists, err := component.BuildAndResolveWorkdirPath(ctx.AtmosConfig, ctx.Info, cfg.TerraformComponentType); err == nil && exists && path != "" {
+	componentType := ctx.Info.ComponentType
+	if componentType == "" {
+		componentType = cfg.TerraformComponentType
+	}
+
+	if path, ok := resolveProvisionedWorkdir(ctx, componentType); ok {
 		return path
 	}
 
-	base := ctx.AtmosConfig.TerraformDirAbsolutePath
-	if base == "" {
-		wd, _ := os.Getwd()
-		return wd
+	if path, ok := resolveInRepoComponentPath(ctx, componentType); ok {
+		return path
 	}
+
+	wd, _ := os.Getwd()
+	return wd
+}
+
+// resolveProvisionedWorkdir prefers the provisioned workdir if one resolves
+// and exists on disk. The workdir resolver currently supports these
+// provisionable component types.
+func resolveProvisionedWorkdir(ctx *ExecContext, componentType string) (string, bool) {
+	switch componentType {
+	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.AnsibleComponentType:
+		if path, exists, err := component.BuildAndResolveWorkdirPath(ctx.AtmosConfig, ctx.Info, componentType); err == nil && exists && path != "" {
+			return path, true
+		}
+	}
+	return "", false
+}
+
+// resolveInRepoComponentPath falls back to the configured component-type base
+// path plus ComponentFolderPrefix and FinalComponent (the in-repo path).
+func resolveInRepoComponentPath(ctx *ExecContext, componentType string) (string, bool) {
+	if componentBasePath(ctx.AtmosConfig, componentType) == "" {
+		return "", false
+	}
+
 	finalComponent := ctx.Info.FinalComponent
 	if finalComponent == "" {
 		finalComponent = ctx.Info.ComponentFromArg
 	}
-	return filepath.Join(base, ctx.Info.ComponentFolderPrefix, finalComponent)
+
+	path, err := u.GetComponentPath(ctx.AtmosConfig, componentType, ctx.Info.ComponentFolderPrefix, finalComponent)
+	if err != nil || path == "" {
+		return "", false
+	}
+	return path, true
+}
+
+func componentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) string {
+	switch componentType {
+	case cfg.TerraformComponentType:
+		return atmosConfig.TerraformDirAbsolutePath
+	case cfg.HelmfileComponentType:
+		return atmosConfig.HelmfileDirAbsolutePath
+	case cfg.PackerComponentType:
+		return atmosConfig.PackerDirAbsolutePath
+	case cfg.AnsibleComponentType:
+		return atmosConfig.AnsibleDirAbsolutePath
+	case cfg.KubernetesComponentType:
+		return atmosConfig.KubernetesDirAbsolutePath
+	case cfg.HelmComponentType:
+		return atmosConfig.HelmDirAbsolutePath
+	default:
+		return ""
+	}
 }
 
 // planfileFor returns the planfile path for after-plan events when known.

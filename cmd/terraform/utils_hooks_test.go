@@ -923,6 +923,22 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	assert.Equal(t, "mock-auth-manager", gotMgr)
 }
 
+// TestPrepareHookContextResolvesMetadataComponent verifies that the execution
+// context retains ProcessStacks' component resolution. InitCliConfig processes
+// a value copy, so this explicit pass is what makes lifecycle hooks use the
+// metadata.component target rather than the stack-facing alias.
+func TestPrepareHookContextResolvesMetadataComponent(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-all-dependencies")
+	cmd := newHookTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+
+	ctx, err := prepareHookContext(cmd, []string{"platform-kms"})
+	require.NoError(t, err)
+	assert.Equal(t, "platform-kms", ctx.info.ComponentFromArg)
+	assert.Equal(t, "mock", ctx.info.FinalComponent)
+	assert.Empty(t, ctx.info.ComponentFolderPrefix)
+}
+
 // TestInjectHookStoreAuthResolver_InheritsDefaultIdentity verifies that the after-apply hook path
 // now wires the resolver AND lets identity-less stores inherit the run's auto-detected identity
 // (matching the main terraform path), so hook store writes work under Atmos auth. Auto-detection

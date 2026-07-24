@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,8 @@ func testExePath(t *testing.T) string {
 // runEngine builds an ExecContext from a Hook and runs the CommandEngine.
 func runEngine(t *testing.T, hook *Hook) (*Output, error) {
 	t.Helper()
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "test-component"), 0o755))
 	kind := &Kind{
 		Name:      "command",
 		OnFailure: OnFailureWarn,
@@ -36,7 +39,7 @@ func runEngine(t *testing.T, hook *Hook) (*Output, error) {
 		Hook: resolved,
 		Kind: kind,
 		AtmosConfig: &schema.AtmosConfiguration{
-			TerraformDirAbsolutePath: t.TempDir(),
+			TerraformDirAbsolutePath: terraformDir,
 		},
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "test-stack",
@@ -115,12 +118,14 @@ func TestCommandEngine_CapturesOutputFile(t *testing.T) {
 // kind, so tests can exercise kind-level behavior such as CaptureStdout.
 func runEngineWithKind(t *testing.T, kind *Kind, hook *Hook) (*Output, error) {
 	t.Helper()
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "test-component"), 0o755))
 	resolved := kind.ResolveDefaults(hook)
 	ctx := &ExecContext{
 		Hook: resolved,
 		Kind: kind,
 		AtmosConfig: &schema.AtmosConfiguration{
-			TerraformDirAbsolutePath: t.TempDir(),
+			TerraformDirAbsolutePath: terraformDir,
 		},
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "test-stack",
@@ -275,6 +280,55 @@ func TestCommandEngine_ExpandsAtmosVarsInArgs(t *testing.T) {
 	assert.Equal(t, "test-stack", string(out.Artifact.Body))
 }
 
+func TestCommandEngine_UsesComponentDirectoryForCWDAndEnv(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	kind := &Kind{Name: "command", OnFailure: OnFailureFail, Engine: &CommandEngine{}}
+	ctx := &ExecContext{
+		Hook: kind.ResolveDefaults(&Hook{
+			Kind:    "command",
+			Command: testExePath(t),
+			Args:    []string{"-test.run", "^$"},
+			Env:     map[string]string{"_ATMOS_TEST_WRITE_CWD": "1"},
+		}),
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: terraformDir,
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+	}
+
+	out, err := kind.Engine.Run(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, out.Artifact)
+	paths := strings.Split(string(out.Artifact.Body), "\n")
+	require.Len(t, paths, 2)
+	for _, path := range paths {
+		resolved, resolveErr := filepath.EvalSymlinks(path)
+		require.NoError(t, resolveErr)
+		expected, expectedErr := filepath.EvalSymlinks(componentDir)
+		require.NoError(t, expectedErr)
+		assert.Equal(t, expected, resolved)
+	}
+}
+
+func TestRunSubprocess_FailsForMissingComponentDirectory(t *testing.T) {
+	prep := &subprocessPrep{
+		binary: testExePath(t),
+		args:   []string{"-test.run", "^$"},
+		env:    os.Environ(),
+		dir:    filepath.Join(t.TempDir(), "missing-component"),
+	}
+
+	require.Error(t, runSubprocess(prep))
+}
+
 func TestCommandEngine_InvokesResultHandler(t *testing.T) {
 	exe := testExePath(t)
 	handlerCalled := false
@@ -300,10 +354,12 @@ func TestCommandEngine_InvokesResultHandler(t *testing.T) {
 			"_ATMOS_TEST_OUTPUT_BODY":  "ignored",
 		},
 	}
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "c"), 0o755))
 	ctx := &ExecContext{
 		Hook:        kind.ResolveDefaults(hook),
 		Kind:        kind,
-		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: t.TempDir()},
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
 		Info:        &schema.ConfigAndStacksInfo{Stack: "s", ComponentFromArg: "c"},
 	}
 	out, err := kind.Engine.Run(ctx)
@@ -516,6 +572,19 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 			want: filepath.Join(terraformBasePath, "catalog", "vpc-final"),
 		},
 		{
+			name: "uses the configured component type base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{HelmfileDirAbsolutePath: filepath.Join(string(filepath.Separator), "repo", "components", "helmfile")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "helmfile",
+					ComponentFolderPrefix: "catalog",
+					ComponentFromArg:      "app-alias",
+					FinalComponent:        "shared-app",
+				},
+			},
+			want: filepath.Join(string(filepath.Separator), "repo", "components", "helmfile", "catalog", "shared-app"),
+		},
+		{
 			name: "falls back to component argument",
 			ctx: &ExecContext{
 				AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformBasePath},
@@ -530,7 +599,7 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, componentPathFor(tt.ctx))
+			assert.Equal(t, tt.want, ComponentPath(tt.ctx))
 		})
 	}
 }

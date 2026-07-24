@@ -54,6 +54,8 @@ hooks:
 4. Runs the step via the same `step.StepExecutor` workflows/custom-commands use, wrapping in `retry.Do` when `retry:` is set.
 5. Maps failure through `ApplyOnFailure` (warn/fail/ignore).
 
+When a lifecycle step does not set `with.working_directory`, the bridge supplies the resolved component directory (the same value exposed in `ATMOS_COMPONENT_PATH`). This includes `metadata.component` aliases and provisioned workdirs. An explicit `with.working_directory` always wins, so hooks can intentionally run a step elsewhere.
+
 `with:` rendering is free: `resolveHookForExecution` already recurses through nested maps/slices applying templates and YAML functions, so `{{ .Component }}` / `!store …` inside `with:` are resolved before the step runs.
 
 ### Operation outcome (success/failure context)

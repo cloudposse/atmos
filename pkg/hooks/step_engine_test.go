@@ -46,6 +46,20 @@ type envCaptureHandler struct {
 	captured *map[string]string
 }
 
+// workingDirectoryCaptureHandler records the working directory supplied to a
+// step so hook defaults can be checked without launching a subprocess.
+type workingDirectoryCaptureHandler struct {
+	runnerstep.BaseHandler
+	captured *[]string
+}
+
+func (h *workingDirectoryCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *workingDirectoryCaptureHandler) Execute(_ context.Context, step *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.captured = append(*h.captured, step.WorkingDirectory)
+	return runnerstep.NewStepResult("ok"), nil
+}
+
 func (h *envCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
 
 func (h *envCaptureHandler) Execute(_ context.Context, _ *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
@@ -300,6 +314,50 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 	assert.Equal(t, "test-stack", captured["ATMOS_STACK"])
 	assert.Equal(t, "test-component", captured["ATMOS_COMPONENT"])
 	assert.Equal(t, "from-hook", captured["CUSTOM_HOOK_VAR"])
+}
+
+func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
+	captured := []string{}
+	runnerstep.Register(&workingDirectoryCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("working-directory-capture-test", runnerstep.CategoryCommand, false),
+		captured:    &captured,
+	})
+
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+	}
+
+	t.Run("step defaults when unset", func(t *testing.T) {
+		hook := &Hook{Kind: stepKindName, Type: "working-directory-capture-test"}
+		ctx.Hook = hook
+		_, err := stepEngine{}.Run(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("steps preserve explicit directory", func(t *testing.T) {
+		explicitDir := t.TempDir()
+		ctx.Hook = &Hook{
+			Kind: stepsKindName,
+			With: []any{
+				map[string]any{"type": "working-directory-capture-test"},
+				map[string]any{"type": "working-directory-capture-test", "working_directory": explicitDir},
+			},
+		}
+		_, err := stepsEngine{}.Run(ctx)
+		require.NoError(t, err)
+	})
+
+	require.Len(t, captured, 3)
+	assert.Equal(t, []string{componentDir, componentDir, captured[2]}, captured)
+	assert.NotEqual(t, componentDir, captured[2])
 }
 
 func TestStepsSummary(t *testing.T) {
