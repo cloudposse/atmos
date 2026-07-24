@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 )
 
 // ghResp builds a *github.Response with the given HTTP status code and remaining rate.
@@ -106,8 +107,10 @@ func TestHandleGitHubAPIError_RateLimitHintBranches(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrGitHubRateLimitExceeded)
 		// Verify the original error is preserved as cause.
 		assert.ErrorIs(t, err, originalErr)
-		// Verify formatted output contains rate limit explanation.
-		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		// Verify formatted output contains rate limit explanation. Strip ANSI since
+		// CI-enabled color rendering syntax-highlights inline code spans (e.g. `gh
+		// auth status`) into separate escape-coded runs, splitting the plain substring.
+		formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		assert.Contains(t, formatted, "Rate limit exceeded")
 		assert.Contains(t, formatted, "Verify your token: gh auth status")
 		assert.Contains(t, formatted, "Try re-authenticating: gh auth login")
@@ -126,7 +129,7 @@ func TestHandleGitHubAPIError_RateLimitHintBranches(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrGitHubRateLimitExceeded)
 		assert.ErrorIs(t, err, originalErr)
-		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		assert.Contains(t, formatted, "Rate limit exceeded")
 		// Without token, hints should suggest authentication.
 		assert.True(t, strings.Contains(formatted, "ATMOS_GITHUB_TOKEN") ||

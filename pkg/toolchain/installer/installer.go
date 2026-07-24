@@ -64,6 +64,12 @@ const (
 	// path. New bundle-based metadata continues to use the current verifier.
 	// renovate: datasource=github-releases depName=sigstore/cosign.
 	legacyCosignVerifierVersion = "v2.6.1"
+
+	// VerifierSubprocessTimeout bounds a bootstrap verifier subprocess (e.g. cosign)
+	// when the caller's context has no deadline. The subprocess runs inside the
+	// tool version's install lock, so a hung verifier would otherwise block every
+	// other install or verification of that same tool version indefinitely.
+	verifierSubprocessTimeout = 5 * time.Minute
 )
 
 // EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
@@ -499,8 +505,10 @@ func (r verifierCommandRunner) runBootstrapVerifier(ctx context.Context, request
 	// ETXTBSY when the first process is already running it.
 	var runErr error
 	_, err := request.installer.installWithVersionLock(ctx, request.owner, request.repo, request.version, func(binaryPath string) error {
+		runCtx, cancel := boundedVerifierContext(ctx)
+		defer cancel()
 		runErr = runTrustedVerifier(binaryPath, r.policy, func() error {
-			return runVerifierCommand(ctx, binaryPath, request.args...)
+			return runVerifierCommand(runCtx, binaryPath, request.args...)
 		})
 		return runErr
 	})
@@ -629,6 +637,18 @@ func verifierVersionUnavailableError(owner, repo string, lookupErrs []error) err
 		return fmt.Errorf("%w: %s/%s: %w", ErrVerifierVersionUnavailable, owner, repo, errors.Join(lookupErrs...))
 	}
 	return fmt.Errorf("%w: %s/%s", ErrVerifierVersionUnavailable, owner, repo)
+}
+
+// boundedVerifierContext returns ctx unchanged when it already carries a
+// deadline (the caller owns that timeout). Otherwise it derives a context
+// bounded by verifierSubprocessTimeout so a hung verifier subprocess cannot
+// hold the caller's install-version lock forever. Callers must invoke the
+// returned cancel func once the subprocess completes.
+func boundedVerifierContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, verifierSubprocessTimeout)
 }
 
 func runVerifierCommand(ctx context.Context, path string, args ...string) error {

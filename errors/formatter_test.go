@@ -517,7 +517,9 @@ func TestFormat_SectionOrder(t *testing.T) {
 	config := DefaultFormatterConfig()
 	config.Verbose = true
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Example") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Find positions of each section.
 	errorPos := strings.Index(result, "# Error")
@@ -545,7 +547,9 @@ func TestFormat_ExampleAndHintsSeparation(t *testing.T) {
 
 	config := DefaultFormatterConfig()
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Example") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Should keep example content separate from standalone hints.
 	assert.Contains(t, result, "## Example")
@@ -622,7 +626,9 @@ func TestFormat_ContextMarkdownTable(t *testing.T) {
 	config := DefaultFormatterConfig()
 	config.Verbose = true
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Context") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Should have Context section (Glamour renders markdown tables with box-drawing chars).
 	assert.Contains(t, result, "## Context")
@@ -667,7 +673,9 @@ func TestFormat_VerboseStackTrace(t *testing.T) {
 	config := DefaultFormatterConfig()
 	config.Verbose = true
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Stack Trace") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Should contain Stack Trace section in verbose mode.
 	// Glamour renders code fences as styled blocks, so we just check for section header and content.
