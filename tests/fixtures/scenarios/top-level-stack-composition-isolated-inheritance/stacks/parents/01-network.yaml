@@ -1,0 +1,9 @@
+name: isolated-base
+
+components:
+  terraform:
+    dns-primary:
+      metadata:
+        component: mock
+      vars:
+        name: dns-primary

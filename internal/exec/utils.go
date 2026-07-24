@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -65,6 +66,52 @@ func getStackManifestName(stackSection any) string {
 		}
 	}
 	return ""
+}
+
+// normalizedComponentConfig returns the fields that determine a component's
+// effective configuration. Atmos adds the omitted fields while resolving a
+// component; they identify the source manifest or describe output, rather than
+// changing what the component executes.
+func normalizedComponentConfig(componentConfig map[string]any) map[string]any {
+	sourceSpecificFields := map[string]struct{}{
+		"atmos_cli_config": {},
+		"atmos_stack":      {},
+		"stack":            {},
+		"atmos_stack_file": {},
+		"atmos_manifest":   {},
+		"sources":          {},
+		"imports":          {},
+		"deps_all":         {},
+		"deps":             {},
+	}
+
+	normalized := make(map[string]any, len(componentConfig))
+	for key, value := range componentConfig {
+		if _, sourceSpecific := sourceSpecificFields[key]; !sourceSpecific {
+			normalized[key] = value
+		}
+	}
+
+	return normalized
+}
+
+// componentConfigsEqual reports whether every resolved candidate has the same
+// effective component configuration. It intentionally disregards the parent
+// stack file and other provenance-only fields so a component imported through
+// multiple top-level manifests remains usable.
+func componentConfigsEqual(componentConfigs []map[string]any) bool {
+	if len(componentConfigs) < 2 {
+		return true
+	}
+
+	first := normalizedComponentConfig(componentConfigs[0])
+	for _, componentConfig := range componentConfigs[1:] {
+		if !reflect.DeepEqual(first, normalizedComponentConfig(componentConfig)) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // ProcessComponentConfig processes component config sections.
@@ -447,13 +494,22 @@ func findComponentInStacks(
 	stacksMap map[string]any,
 	authManager auth.AuthManager,
 ) (int, []string, schema.ConfigAndStacksInfo, map[string]string) {
-	foundStackCount := 0
-	var foundStacks []string
-	var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
+	type componentCandidate struct {
+		stackFile string
+		info      schema.ConfigAndStacksInfo
+	}
+
+	var candidates []componentCandidate
 	// Track filename -> canonical name mappings for suggestion purposes.
 	stackNameMappings := make(map[string]string)
 
+	stackNames := make([]string, 0, len(stacksMap))
 	for stackName := range stacksMap {
+		stackNames = append(stackNames, stackName)
+	}
+	sort.Strings(stackNames)
+
+	for _, stackName := range stackNames {
 		// Extract manifest name FIRST (before checking component) for suggestion purposes.
 		// This allows us to suggest correct stack names even when the component isn't found.
 		stackManifestName := getStackManifestName(stacksMap[stackName])
@@ -465,20 +521,23 @@ func findComponentInStacks(
 		}
 
 		// Check if we've found the component in the stack.
+		// Resolve each parent manifest independently. Reusing the caller's info
+		// would let a prior candidate's component sections leak into the next one.
+		candidateInfo := *configAndStacksInfo
 		err := ProcessComponentConfig(
 			atmosConfig,
-			configAndStacksInfo,
+			&candidateInfo,
 			stackName,
 			stacksMap,
-			configAndStacksInfo.ComponentType,
-			configAndStacksInfo.ComponentFromArg,
+			candidateInfo.ComponentType,
+			candidateInfo.ComponentFromArg,
 			authManager,
 		)
 		if err != nil {
 			continue
 		}
 
-		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName); err != nil {
+		if err := processStackContextPrefix(atmosConfig, &candidateInfo, stackName, stackManifestName); err != nil {
 			continue
 		}
 
@@ -494,10 +553,10 @@ func findComponentInStacks(
 		case stackManifestName != "":
 			// Priority 1: Explicit name from manifest.
 			canonicalStackName = stackManifestName
-		case configAndStacksInfo.ContextPrefix != "" && configAndStacksInfo.ContextPrefix != stackName:
+		case candidateInfo.ContextPrefix != "" && candidateInfo.ContextPrefix != stackName:
 			// Priority 2/3: Generated from name_template or name_pattern.
 			// Only use if ContextPrefix differs from filename (indicates template/pattern was applied).
-			canonicalStackName = configAndStacksInfo.ContextPrefix
+			canonicalStackName = candidateInfo.ContextPrefix
 		default:
 			// Priority 4: Filename (when nothing else is configured).
 			canonicalStackName = stackName
@@ -509,30 +568,46 @@ func findComponentInStacks(
 		}
 
 		// Check if user's requested stack matches the canonical name.
-		stackMatches := configAndStacksInfo.Stack == canonicalStackName
+		stackMatches := candidateInfo.Stack == canonicalStackName
 
 		if stackMatches {
-			configAndStacksInfo.StackFile = stackName
+			candidateInfo.StackFile = stackName
 			// Set StackManifestName if the stack has an explicit name.
 			if stackManifestName != "" {
-				configAndStacksInfo.StackManifestName = stackManifestName
+				candidateInfo.StackManifestName = stackManifestName
 			}
-			foundConfigAndStacksInfo = *configAndStacksInfo
-			foundStackCount++
-			foundStacks = append(foundStacks, stackName)
+			candidates = append(candidates, componentCandidate{stackFile: stackName, info: candidateInfo})
 
 			log.Debug(
 				fmt.Sprintf(
 					"Found component '%s' in the stack '%s' in the stack manifest '%s'",
-					configAndStacksInfo.ComponentFromArg,
-					configAndStacksInfo.Stack,
+					candidateInfo.ComponentFromArg,
+					candidateInfo.Stack,
 					stackName,
 				),
 			)
 		}
 	}
 
-	return foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings
+	if len(candidates) == 0 {
+		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings
+	}
+
+	componentConfigs := make([]map[string]any, 0, len(candidates))
+	foundStacks := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		componentConfigs = append(componentConfigs, candidate.info.ComponentSection)
+		foundStacks = append(foundStacks, candidate.stackFile)
+	}
+
+	if !componentConfigsEqual(componentConfigs) {
+		return len(candidates), foundStacks, candidates[0].info, stackNameMappings
+	}
+
+	// candidates are resolved in lexical manifest-path order. Keep the first
+	// equivalent definition as the canonical source for stable execution,
+	// sources, and provenance output.
+	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings
 }
 
 // ProcessStacks processes stack config.
@@ -721,12 +796,12 @@ func ProcessStacks(
 				"%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
 					"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
 					"Check that all imports are valid",
-				errUtils.ErrInvalidComponent,
+				errUtils.ErrDuplicateComponentConfig,
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return configAndStacksInfo, err
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
