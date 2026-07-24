@@ -6,12 +6,13 @@
  DEBU  After ParseFlags identity.Value="" identity.Changed=false
  DEBU  Vendor config file not found file=vendor
  DEBU  No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
+ DEBU  Dry-run mode: custom detection required for component (or mixin) URI component=ipinfo uri="git::git@github.com:cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
  DEBU  CustomGitDetector.Detect called
  DEBU  Rewriting SCP-style SSH URL old_url="" new_url="ssh://***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
  DEBU  Token injection enabled for host host=github.com
  DEBU  Skipping token injection: URL already has user credentials url="ssh://***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
  DEBU  Final transformation url="git::ssh://***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?depth=1&ref=main"
-✓ ipinfo (main)
-▶ Done! Dry run completed. No components vendored
-✓ Vendored components (success: 1)
+ INFO  ✓ package=ipinfo version=(main)
+ INFO  Done! Dry run completed. No components vendored
+ INFO  Vendored components success=1
  DEBU  Telemetry event enqueued

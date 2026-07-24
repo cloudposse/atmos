@@ -8,11 +8,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	pkgvendor "github.com/cloudposse/atmos/pkg/vendor"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
@@ -219,7 +219,7 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 		if err := resetUnchangedFlag(cmd, "tags"); err != nil {
 			return err
 		}
-		return e.ExecuteVendorPullCmd(cmd, args)
+		return pullUpdatedComponent(cmd, args, p.component)
 	}
 
 	batchComponentsByType, fallback := partitionUpdatedResults(report)
@@ -281,7 +281,7 @@ func pullBatchedComponentManifests(components []string, componentType string, dr
 	if err != nil {
 		return err
 	}
-	return e.ExecuteComponentVendorPullBatch(&atmosConfig, components, componentType, dryRun)
+	return pkgvendor.ExecuteComponentVendorPullBatch(&atmosConfig, components, componentType, dryRun)
 }
 
 // pullUpdatedComponent drives a single "vendor pull --component <component>" call by resetting, on
@@ -315,7 +315,43 @@ func pullUpdatedComponent(cmd *cobra.Command, args []string, component string) e
 	if err := resetUnchangedFlag(cmd, "tags"); err != nil {
 		return err
 	}
-	return e.ExecuteVendorPullCmd(cmd, args)
+	componentType, err := cmd.Flags().GetString("type")
+	if err != nil {
+		return err
+	}
+	dryRun, err := cmd.Flags().GetBool("dry-run")
+	if err != nil {
+		return err
+	}
+	atmosConfig, err := initVendorPullConfig(cmd)
+	if err != nil {
+		return err
+	}
+	return pkgvendor.Pull(&atmosConfig,
+		pkgvendor.WithComponent(component),
+		pkgvendor.WithComponentType(componentType),
+		pkgvendor.WithDryRun(dryRun),
+	)
+}
+
+// initVendorPullConfig mirrors pull's CLI configuration setup. Update --pull
+// can invoke more than one component pull, so it must not reuse a package
+// global configuration left over from another command execution.
+func initVendorPullConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) {
+	info := schema.ConfigAndStacksInfo{}
+	if basePath, err := cmd.Flags().GetString("base-path"); err == nil {
+		info.BasePath = basePath
+	}
+	if config, err := cmd.Flags().GetStringSlice("config"); err == nil && len(config) > 0 {
+		info.AtmosConfigFilesFromArg = config
+	}
+	if configPath, err := cmd.Flags().GetStringSlice("config-path"); err == nil && len(configPath) > 0 {
+		info.AtmosConfigDirsFromArg = configPath
+	}
+	if profile, err := cmd.Flags().GetStringSlice("profile"); err == nil && len(profile) > 0 {
+		info.ProfilesFromArg = profile
+	}
+	return cfg.InitCliConfig(info, false)
 }
 
 // resetUnchangedFlag clears name's value back to "" and marks it Changed=false, rather than merely

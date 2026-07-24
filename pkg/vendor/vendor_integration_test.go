@@ -1,22 +1,35 @@
-package exec
+package vendor
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
 
-// TestVendorPullBasicExecution tests basic vendor pull command execution.
+// TestVendorPullConfigFileProcessing tests reading and processing vendor config files.
+func TestVendorPullConfigFileProcessing(t *testing.T) {
+	basePath := "../../tests/fixtures/scenarios/vendor2"
+	vendorConfigFile := "vendor.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: basePath,
+	}
+
+	_, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, false)
+	assert.NoError(t, err, "ReadAndProcessVendorConfigFile should execute without error")
+}
+
+// TestVendorPullBasicExecution tests basic vendor pull execution.
 // It verifies the command runs without errors using the vendor2 fixture.
 func TestVendorPullBasicExecution(t *testing.T) {
-	// Skip long tests in short mode (this test takes ~4 seconds due to network I/O and Git operations)
+	// Skip long tests in short mode (this test takes ~4 seconds due to network I/O and Git operations).
 	tests.SkipIfShort(t)
 
 	// Check for GitHub access with rate limit check.
@@ -31,45 +44,18 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	// Create command with global flags (including profile flag).
-	cmd := newTestCommandWithGlobalFlags("pull")
-	cmd.Short = "Pull the latest vendor configurations or dependencies"
-	cmd.Long = "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources."
-	cmd.FParseErrWhitelist = struct{ UnknownFlags bool }{UnknownFlags: false}
-	cmd.Args = cobra.NoArgs
-	cmd.RunE = ExecuteVendorPullCmd
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err, "Failed to initialize config")
 
-	// Add vendor-specific flags.
-	cmd.DisableFlagParsing = false
-	cmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
-	cmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
-	cmd.PersistentFlags().StringP("type", "t", "terraform", "The type of the vendor (terraform or helmfile).")
-	cmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
-	cmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
-	cmd.PersistentFlags().Bool("everything", false, "Vendor all components")
-
-	// Execute the command.
-	err := cmd.RunE(cmd, []string{})
-	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
-}
-
-// TestVendorPullConfigFileProcessing tests reading and processing vendor config files.
-func TestVendorPullConfigFileProcessing(t *testing.T) {
-	basePath := "../../tests/fixtures/scenarios/vendor2"
-	vendorConfigFile := "vendor.yaml"
-
-	atmosConfig := schema.AtmosConfiguration{
-		BasePath: basePath,
-	}
-
-	_, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, false)
-	assert.NoError(t, err, "ReadAndProcessVendorConfigFile should execute without error")
+	// Execute vendor pull with dry-run to avoid side effects.
+	err = Pull(&atmosConfig, WithDryRun(true))
+	assert.NoError(t, err, "'vendor pull' should execute without error")
 }
 
 // TestVendorPullFullWorkflow tests the complete vendor pull workflow including file verification.
 // It verifies that vendor components are correctly pulled from various sources (git, file, OCI).
 func TestVendorPullFullWorkflow(t *testing.T) {
-	// Skip long tests in short mode (this test requires network I/O and OCI pulls)
+	// Skip long tests in short mode (this test requires network I/O and OCI pulls).
 	tests.SkipIfShort(t)
 
 	// Check for GitHub access with rate limit check.
@@ -85,19 +71,12 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/vendor"
 	t.Chdir(workDir)
 
-	// Set up vendor pull command with global flags.
-	cmd := newTestCommandWithGlobalFlags("pull")
-
-	flags := cmd.Flags()
-	flags.String("component", "", "")
-	flags.String("stack", "", "")
-	flags.String("tags", "", "")
-	flags.Bool("dry-run", false, "")
-	flags.Bool("everything", false, "")
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err, "Failed to initialize config")
 
 	// Test 1: Execute vendor pull and verify files are created.
-	err := ExecuteVendorPullCommand(cmd, []string{})
-	require.NoError(t, err, "Failed to execute vendor pull command")
+	err = Pull(&atmosConfig)
+	require.NoError(t, err, "Failed to execute vendor pull")
 
 	expectedFiles := []string{
 		"./components/terraform/github/stargazers/main/main.tf",
@@ -135,26 +114,20 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	})
 
 	// Test 2: Dry-run flag should not fail.
-	err = flags.Set("dry-run", "true")
-	require.NoError(t, err, "Failed to set dry-run flag")
-
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err = Pull(&atmosConfig, WithDryRun(true))
 	require.NoError(t, err, "Dry run should execute without error")
 
 	// Test 3: Tag filtering should work.
-	err = flags.Set("dry-run", "false")
-	require.NoError(t, err, "Failed to reset dry-run flag")
-
-	err = flags.Set("tags", "demo")
-	require.NoError(t, err, "Failed to set tags flag")
-
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err = Pull(&atmosConfig, WithTags([]string{"demo"}))
 	require.NoError(t, err, "Tag filtering should execute without error")
 }
 
 // TestVendorPullTripleSlashNormalization tests end-to-end triple-slash URI normalization.
 // This complements the unit tests with integration-level verification.
 func TestVendorPullTripleSlashNormalization(t *testing.T) {
+	// Skip long tests in short mode.
+	tests.SkipIfShort(t)
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -168,18 +141,11 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 	t.Chdir(testDir)
 
-	// Set up command with global flags.
-	cmd := newTestCommandWithGlobalFlags("pull")
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err, "Failed to initialize config")
 
-	flags := cmd.Flags()
-	flags.String("component", "s3-bucket", "")
-	flags.String("stack", "", "")
-	flags.String("tags", "", "")
-	flags.Bool("dry-run", false, "")
-	flags.Bool("everything", false, "")
-
-	// Execute vendor pull command.
-	err := ExecuteVendorPullCommand(cmd, []string{})
+	// Execute vendor pull command with specific component.
+	err = Pull(&atmosConfig, WithComponent("s3-bucket"))
 	require.NoError(t, err, "Vendor pull command with triple-slash URI should execute without error")
 
 	// Verify target directory was created.

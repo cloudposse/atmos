@@ -49,6 +49,12 @@ func NormalizeURI(uri string) string {
 	return uri
 }
 
+// normalizeVendorURI preserves the package-local helper used by existing
+// vendor config tests and call sites.
+func normalizeVendorURI(uri string) string {
+	return NormalizeURI(uri)
+}
+
 // normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
 // Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
 func normalizeTripleSlash(uri string) string {
