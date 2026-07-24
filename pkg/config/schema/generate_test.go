@@ -77,6 +77,22 @@ func TestGenerateModelsAuthoredSections(t *testing.T) {
 	}
 }
 
+func TestGenerateMarksDeprecatedConfigurationFields(t *testing.T) {
+	document := string(generatedSchema(t))
+	for _, replacement := range []string{
+		"stacks.name_template",
+		"components.helmfile.cluster_name_template",
+		"settings.terminal.color (invert the value)",
+		"settings.terminal.max-width",
+		"settings.terminal.pagination",
+		"driver",
+		"kind",
+	} {
+		assert.Contains(t, document, `"deprecated": true`)
+		assert.Contains(t, document, replacement)
+	}
+}
+
 func TestGenerateExcludesRuntimeFields(t *testing.T) {
 	props := rootProperties(t)
 

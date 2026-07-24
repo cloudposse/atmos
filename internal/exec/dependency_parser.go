@@ -53,13 +53,16 @@ func (p *DependencyParser) ParseComponentDependencies(
 
 	fromID := fmt.Sprintf(nodeIDFormat, componentName, stackName)
 
-	// Check for dependencies in settings.depends_on.
+	// Check for dependencies in settings.depends_on, then the historical
+	// component-level location accepted for backward compatibility.
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
-	if !ok {
-		return nil
+	var dependsOn any
+	if ok {
+		dependsOn = settingsSection["depends_on"]
 	}
-
-	dependsOn := settingsSection["depends_on"]
+	if dependsOn == nil {
+		dependsOn = componentSection["depends_on"]
+	}
 	if dependsOn == nil {
 		return nil
 	}

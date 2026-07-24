@@ -135,7 +135,7 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 	if err != nil {
 		return err
 	}
-	if !report.HasErrors() {
+	if !report.HasErrors() && len(report.Diagnostics) == 0 {
 		_, err := fmt.Fprintln(cmd.OutOrStdout(), "✓ All YAML schemas validated successfully")
 		return err
 	}
@@ -145,6 +145,9 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 	}
 	if _, err := fmt.Fprintln(cmd.OutOrStdout(), validation.Rich(report, validation.DefaultRichOptions(root))); err != nil {
 		return err
+	}
+	if !report.HasErrors() {
+		return nil
 	}
 	return errUtils.ExitCodeError{Code: 1, Silent: true}
 }
