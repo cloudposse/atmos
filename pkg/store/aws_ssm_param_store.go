@@ -286,12 +286,18 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 
 	ctx := context.TODO()
 
-	// Convert value to JSON string
-	jsonValue, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
+	// Secret strings are commonly consumed directly by AWS-native integrations,
+	// so preserve their exact bytes instead of JSON-encoding them with quotes.
+	// Regular stores and non-string values retain JSON serialization for their
+	// existing structured-value round-trip contract.
+	strValue, isString := value.(string)
+	if !s.secret || !isString {
+		jsonValue, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
+		}
+		strValue = string(jsonValue)
 	}
-	strValue := string(jsonValue)
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)

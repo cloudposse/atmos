@@ -146,7 +146,7 @@ stores:
     options:
       region: us-east-1
       # Optional
-      prefix: myapp
+      prefix: /myapp
       stack_delimiter: "/"
       # Optional: custom endpoint for AWS-compatible local/test APIs
       # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
@@ -156,6 +156,8 @@ stores:
       write_role_arn: arn:aws:iam::123456789012:role/SSMWriter
 ```
 </File>
+
+SSM parameter names use hierarchical paths, so a configured `prefix` must start with `/` (for example, `/myapp`).
 
 ### AWS Secrets Manager
 

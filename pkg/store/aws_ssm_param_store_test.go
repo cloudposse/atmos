@@ -88,6 +88,7 @@ func TestSSMStore_Set(t *testing.T) {
 		component    string
 		key          string
 		value        interface{}
+		secret       bool
 		writeRoleArn *string
 		mockSetup    func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
 		wantErr      bool
@@ -103,6 +104,38 @@ func TestSSMStore_Set(t *testing.T) {
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
+			name:      "secret_string_is_stored_raw",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			value:     "test-value",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					Value:     aws.String("test-value"),
+					Type:      types.ParameterTypeSecureString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
+			name:      "secret_structured_value_is_json_encoded",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-config",
+			value:     map[string]interface{}{"key": "value"},
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-config"),
+					Value:     aws.String(`{"key":"value"}`),
+					Type:      types.ParameterTypeSecureString,
 					Overwrite: aws.Bool(true),
 				}).Return(&ssm.PutParameterOutput{}, nil)
 			},
@@ -288,6 +321,7 @@ func TestSSMStore_Set(t *testing.T) {
 			}
 
 			store.writeRoleArn = tt.writeRoleArn
+			store.secret = tt.secret
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SSMStore.Set() error = %v, wantErr %v", err, tt.wantErr)
