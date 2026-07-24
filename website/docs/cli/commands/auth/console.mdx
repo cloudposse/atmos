@@ -233,7 +233,7 @@ atmos auth console --destination iam
 
 For AWS identities, Atmos uses the [AWS Federation Endpoint](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html) to generate temporary console sign-in URLs:
 
-1. **Authentication**: Atmos authenticates using your configured identity (AWS SSO, SAML, etc.) to obtain temporary credentials with a session token.
+1. **Authentication**: Atmos authenticates using your configured identity (AWS IAM Identity Center, SAML, or an IAM user) to obtain temporary credentials with a session token.
 
 2. **Federation Token**: The temporary credentials are sent to the AWS federation endpoint (`https://signin.aws.amazon.com/federation`) to request a signin token.
 
@@ -255,6 +255,7 @@ Support for Google Cloud Console is planned for future releases. The command str
 |----------|--------|-------|
 | AWS (IAM Identity Center) | ✅ Supported | Full support with federation endpoint |
 | AWS (SAML) | ✅ Supported | Full support with federation endpoint |
+| AWS (IAM user) | ✅ Supported | Atmos obtains temporary STS session credentials before console federation |
 | Azure | ✅ Supported | Opens Azure Portal with configured subscription |
 | GCP | 🚧 Planned | Coming in future release |
 
@@ -297,7 +298,7 @@ atmos auth console --issuer platform-team --duration 4h
 
 **Problem**: You're using permanent IAM user credentials instead of temporary credentials.
 
-**Solution**: AWS console access requires temporary credentials with a session token. Ensure your identity is configured to use AWS SSO, SAML, or assumed roles.
+**Solution**: AWS console access requires temporary credentials with a session token. Atmos obtains these automatically for `aws/user` identities; other identities should use AWS IAM Identity Center or SAML.
 
 ### "Failed to open browser automatically"
 

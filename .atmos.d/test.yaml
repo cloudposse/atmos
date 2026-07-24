@@ -50,6 +50,13 @@ commands:
     commands:
       - name: acceptance
         description: Run acceptance tests
+        # Acceptance tests execute both Terraform and OpenTofu directly. Declare
+        # them so custom-command subprocesses receive their toolchain paths on
+        # every platform, including Windows.
+        dependencies:
+          tools:
+            hashicorp/terraform: 1.15.6
+            opentofu/opentofu: 1.12.2
         env: &go_auto_env
           GOTOOLCHAIN: &go_auto_toolchain auto
           CGO_ENABLED: &go_cgo_disabled "0"

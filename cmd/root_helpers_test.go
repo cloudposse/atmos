@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,12 +15,14 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1208,6 +1211,70 @@ func TestFindExperimentalParent_RegistryBased(t *testing.T) {
 		result := findExperimentalParent(fix)
 		assert.Equal(t, "", result)
 	})
+}
+
+func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
+	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EXPERIMENTAL", "warn")
+	var output strings.Builder
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	writeExperimentalNotice = func(feature string) {
+		output.WriteString(feature)
+		output.WriteByte('\n')
+	}
+	t.Cleanup(func() {
+		writeExperimentalNotice = originalWriteExperimentalNotice
+	})
+
+	command := &cobra.Command{
+		Use:         "experimental-notice-test",
+		Annotations: map[string]string{"experimental": "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Simulate an integration that invokes the root pre-run a second time.
+			RootCmd.PersistentPreRun(cmd, args)
+			return nil
+		},
+	}
+	RootCmd.AddCommand(command)
+	t.Cleanup(func() { RootCmd.RemoveCommand(command) })
+
+	runCommand := func() string {
+		output.Reset()
+		iolib.Reset()
+		RootCmd.SetArgs([]string{"experimental-notice-test"})
+		require.NoError(t, Execute())
+		return output.String()
+	}
+	t.Cleanup(iolib.Reset)
+
+	for range 2 {
+		output := runCommand()
+		assert.Equal(t, 1, strings.Count(output, "experimental-notice-test"))
+	}
+}
+
+func TestShowExperimentalCommandNotice_EdgeCases(t *testing.T) {
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	var notices []string
+	writeExperimentalNotice = func(feature string) { notices = append(notices, feature) }
+	t.Cleanup(func() { writeExperimentalNotice = originalWriteExperimentalNotice })
+
+	showExperimentalCommandNotice(nil, "ignored")
+	assert.Empty(t, notices, "a nil command must not emit a notice")
+
+	command := &cobra.Command{Use: "experimental"}
+	showExperimentalCommandNotice(command, "experimental")
+	showExperimentalCommandNotice(command, "experimental")
+	assert.Equal(t, []string{"experimental"}, notices, "a command must emit at most one notice")
+	require.NotNil(t, command.Annotations)
+	assert.Equal(t, experimentalNoticeEmitted, command.Annotations[experimentalNoticeAnnotation])
+
+	child := &cobra.Command{Use: "child", Annotations: map[string]string{experimentalNoticeAnnotation: experimentalNoticeEmitted}}
+	command.AddCommand(child)
+	resetExperimentalCommandNotices(nil)
+	resetExperimentalCommandNotices(command)
+	assert.NotContains(t, command.Annotations, experimentalNoticeAnnotation)
+	assert.NotContains(t, child.Annotations, experimentalNoticeAnnotation)
 }
 
 // TestIsTopLevelCommand tests the isTopLevelCommand helper.

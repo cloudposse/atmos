@@ -103,6 +103,14 @@ func (i *userIdentity) GetProviderName() (string, error) {
 func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
 	defer perf.Track(nil, "aws.userIdentity.Authenticate")()
 
+	// --webflow is an invocation-scoped escape hatch for users that have IAM
+	// credentials configured but want to sign in through the browser instead.
+	// Do this before reading the session file, YAML, or keyring so none of those
+	// long-lived credentials are consulted or modified.
+	if types.ForceAWSWebflow(ctx) {
+		return i.authenticateViaBrowserWebflow(ctx)
+	}
+
 	// First, try to load existing session credentials from AWS files.
 	// This prevents unnecessary GetSessionToken API calls when valid credentials already exist.
 	existingCreds, err := i.LoadCredentials(ctx)
@@ -128,21 +136,9 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 		//     is unreadable (locked keychain, permission denial, corrupted entry). Falling
 		//     through to webflow would mask the real problem and ignore configured creds.
 		if i.shouldFallBackToWebflow(err) {
-			log.Info(
-				"No AWS credentials in YAML or keyring; starting browser-based authentication",
-				logKeyIdentity, i.name,
-				"reason", err.Error(),
-				"hint", fmt.Sprintf("Run 'atmos auth user configure --identity %s' to store credentials, or set credentials.webflow_enabled: false to disable browser auth", i.name),
-			)
-			webflowCreds, webflowErr := i.resolveCredentialsViaWebflow(ctx)
+			log.Debug("Starting browser-based authentication", logKeyIdentity, i.name, "reason", err.Error())
+			webflowCreds, webflowErr := i.authenticateViaWebflow(ctx)
 			if webflowErr == nil {
-				region := i.resolveRegion()
-				if webflowCreds.Region == "" {
-					webflowCreds.Region = region
-				}
-				if writeErr := i.writeAWSFiles(webflowCreds, region); writeErr != nil {
-					return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, writeErr)
-				}
 				return webflowCreds, nil
 			}
 			log.Debug("Browser webflow failed", logKeyIdentity, i.name, "error", webflowErr)
@@ -160,6 +156,45 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 
 	// Generate a session token (handles MFA when configured).
 	return i.generateSessionToken(ctx, longLivedCreds, region)
+}
+
+// authenticateViaBrowserWebflow performs a fresh browser OAuth2/PKCE flow.
+// It deliberately skips refresh-token reuse, which is required when the caller
+// explicitly requests --webflow.
+func (i *userIdentity) authenticateViaBrowserWebflow(ctx context.Context) (*types.AWSCredentials, error) {
+	if !i.isWebflowEnabled() {
+		return nil, errUtils.ErrWebflowDisabled
+	}
+
+	log.Debug("Starting forced browser-based authentication", logKeyIdentity, i.name)
+	region := i.resolveRegion()
+	webflowCreds, err := i.browserWebflow(ctx, region)
+	if err != nil {
+		return nil, err
+	}
+	return i.persistWebflowCredentials(webflowCreds, region)
+}
+
+// authenticateViaWebflow obtains credentials from the normal webflow path,
+// which may reuse a refresh token before opening the browser.
+func (i *userIdentity) authenticateViaWebflow(ctx context.Context) (*types.AWSCredentials, error) {
+	webflowCreds, err := i.resolveCredentialsViaWebflow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return i.persistWebflowCredentials(webflowCreds, i.resolveRegion())
+}
+
+// persistWebflowCredentials stores temporary credentials in the AWS session-file
+// cache. It intentionally does not interact with the configured credential store.
+func (i *userIdentity) persistWebflowCredentials(creds *types.AWSCredentials, region string) (*types.AWSCredentials, error) {
+	if creds.Region == "" {
+		creds.Region = region
+	}
+	if err := i.writeAWSFiles(creds, region); err != nil {
+		return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, err)
+	}
+	return creds, nil
 }
 
 // shouldFallBackToWebflow reports whether a credential-resolution error is
