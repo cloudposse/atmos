@@ -141,6 +141,15 @@ func TestSSMStore_Set(t *testing.T) {
 			},
 		},
 		{
+			name:      "secret_non_serializable_value_returns_error",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-config",
+			value:     make(chan int),
+			secret:    true,
+			wantErr:   true,
+		},
+		{
 			name:      "successful_set_with_slice",
 			stack:     "dev/usw2/app",
 			component: "service",
