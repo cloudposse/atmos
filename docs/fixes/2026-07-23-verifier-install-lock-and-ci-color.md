@@ -62,8 +62,8 @@ Fixed on this branch for PR [#2794](https://github.com/cloudposse/atmos/pull/279
   (`pkg/toolchain/installer/installer.go`).
 - Added `boundedVerifierContext`, which derives a `verifierSubprocessTimeout` (5 minute) bounded context
   only when the incoming context has no deadline. `runBootstrapVerifier` applies it only around the
-  `runVerifierCommand` subprocess call, leaving `installWithVersionLock` and trust repair on the caller's
-  original context (`pkg/toolchain/installer/installer.go`).
+  `runVerifierCommand` subprocess call; installation uses the caller context for lock acquisition, while
+  trust repair is not context-bound (`pkg/toolchain/installer/installer.go`).
 - `shouldUseColor()` now includes `EnvCI: os.Getenv("CI") != ""` in the `lipgloss.EnvColorProfileParams`
   passed to lipgloss's environment-based color detection, so `CI=true` enables ANSI color in structured
   error output while `NO_COLOR`/`CLICOLOR_FORCE` continue to take precedence (`errors/formatter.go`).
