@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	rdsauth "github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -22,12 +24,39 @@ const rdsTokenExpiry = 15 * time.Minute
 // a TLS connection. It is generated offline (no network call) and is valid for ~15 minutes.
 //
 // The endpoint must be in host:port form (e.g. mydb.abc123.us-east-2.rds.amazonaws.com:5432). If
-// region is empty, the region carried by the credentials is used. This mirrors GetToken (EKS) so
-// both AWS auth flows share the same credentials-to-config bridge.
+// region is empty, the region carried by the credentials is used. The AWS config is loaded in
+// isolation (LoadIsolatedAWSConfig) so an ambient AWS_PROFILE or shared config file cannot
+// interfere with signing or corrupt the region.
 func GetRDSToken(ctx context.Context, creds types.ICredentials, endpoint, region, dbUser string) (string, time.Time, error) {
 	defer perf.Track(nil, "aws.GetRDSToken")()
 
-	cfg, err := BuildAWSConfigFromCreds(ctx, creds, region)
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	if !ok {
+		return "", time.Time{}, fmt.Errorf("%w: expected AWS credentials", errUtils.ErrRDSTokenGeneration)
+	}
+
+	// Determine the signing region: an explicit region wins; otherwise fall back to the region
+	// carried by the identity's credentials.
+	effectiveRegion := region
+	if effectiveRegion == "" {
+		effectiveRegion = awsCreds.Region
+	}
+
+	// Build an ISOLATED AWS config from the identity's static credentials. Isolation is required
+	// for correctness, not hygiene: an ambient AWS_PROFILE (common in CI, this command's advertised
+	// use case) otherwise makes the SDK read ~/.aws/config and fail with SharedConfigProfileNotExistError
+	// before the static credentials take effect, and an ambient AWS_REGION or shared config could sign
+	// the token for the wrong region. Token signing needs nothing from the shared config files, so we
+	// exclude them entirely. This also keeps the offline unit tests hermetic.
+	cfg, err := LoadIsolatedAWSConfig(
+		ctx,
+		config.WithRegion(effectiveRegion),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			awsCreds.AccessKeyID,
+			awsCreds.SecretAccessKey,
+			awsCreds.SessionToken,
+		)),
+	)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("%w: %w", errUtils.ErrRDSTokenGeneration, err)
 	}

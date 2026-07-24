@@ -77,12 +77,13 @@ func executeTokenCommand(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Keys are namespaced under the "rds" Viper prefix (see the parser's WithViperPrefix in init).
 	return runRDSTokenGeneration(tokenOptions{
-		Host:     v.GetString("host"),
-		Port:     v.GetInt("port"),
-		Username: v.GetString("username"),
-		Region:   v.GetString("region"),
-		Identity: v.GetString("identity"),
+		Host:     v.GetString("rds.host"),
+		Port:     v.GetInt("rds.port"),
+		Username: v.GetString("rds.username"),
+		Region:   v.GetString("rds.region"),
+		Identity: v.GetString("rds.identity"),
 	})
 }
 
@@ -137,6 +138,8 @@ func validateTokenOptions(opts tokenOptions) error {
 		return fmt.Errorf("%w: --host is required", errUtils.ErrRDSTokenGeneration)
 	case opts.Port == 0:
 		return fmt.Errorf("%w: --port is required", errUtils.ErrRDSTokenGeneration)
+	case opts.Port < 1 || opts.Port > 65535:
+		return fmt.Errorf("%w: --port must be between 1 and 65535, got %d", errUtils.ErrRDSTokenGeneration, opts.Port)
 	case opts.Username == "":
 		return fmt.Errorf("%w: --username is required", errUtils.ErrRDSTokenGeneration)
 	case opts.Region == "":
@@ -209,6 +212,12 @@ func init() {
 		flags.WithEnvVars("username", "ATMOS_AWS_RDS_USERNAME"),
 		flags.WithEnvVars("region", "ATMOS_AWS_RDS_REGION"),
 		flags.WithEnvVars("identity", "ATMOS_IDENTITY"),
+		// Namespace the Viper keys to rds.* so the bare "region"/"identity"/"host"/"port"/"username"
+		// keys do not collide with the sibling `aws security`/`compliance`/`eks`/`workflow` commands
+		// that bind the same bare keys (with different env vars) on the shared global Viper. Without
+		// this, viper.BindEnv is last-writer-wins per key across nondeterministic package init order,
+		// so e.g. ATMOS_AWS_SECURITY_REGION could satisfy this command's --region.
+		flags.WithViperPrefix("rds"),
 	)
 
 	rdsTokenParser.RegisterFlags(tokenCmd)

@@ -76,11 +76,11 @@ generation runs under `auth.ContextWithSkipIntegrations(ctx)` so it has no side 
 
 | Flag | Env | Required | Default | Description |
 |---|---|---|---|---|
-| `--host` (`--hostname`) | `ATMOS_AWS_RDS_HOST` | ✅ | – | DB / cluster / proxy endpoint hostname. |
+| `--host` | `ATMOS_AWS_RDS_HOST` | ✅ | – | DB / cluster / proxy / RDS endpoint hostname. |
 | `--port` | `ATMOS_AWS_RDS_PORT` | ✅ | – | DB port (required, engine-agnostic — matches the AWS CLI). |
 | `--username` (`-u`) | `ATMOS_AWS_RDS_USERNAME` | ✅ | – | DB account name; must match the IAM `dbuser` ARN (case-sensitive). |
-| `--region` | `ATMOS_AWS_RDS_REGION` | ✅* | – | Region of the DB endpoint. *Falls back to the identity's region; **hard error** if still empty.* |
-| `--identity` (`-i`) | `ATMOS_IDENTITY` | – | default | Atmos identity to authenticate. No value → interactive select; non-TTY errors. |
+| `--region` | `ATMOS_AWS_RDS_REGION` | ✅ | – | Region of the DB endpoint. **Required**; the command errors if empty and never silently defaults (a wrong-region token fails only at connect time). |
+| `--identity` (`-i`) | `ATMOS_IDENTITY` | – | – | Atmos identity to authenticate. If omitted, uses `ATMOS_IDENTITY`, or the single configured identity when exactly one exists; otherwise errors. |
 
 Precedence: CLI > env > config > default (Viper via `flags.StandardParser`). All env binding goes through
 `flags.WithEnvVars` — **never** `viper.BindEnv`/`viper.BindPFlag`/`os.Getenv` (forbidigo-enforced). This is
