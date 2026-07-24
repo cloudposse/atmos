@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -955,7 +956,9 @@ func TestFindOrInstallVersionWithConfig_InvalidVersionFormat(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
-	assert.Contains(t, errUtils.Format(err, errUtils.DefaultFormatterConfig()), "ref:<name> (e.g., ref:main)")
+	// Strip ANSI since CI-enabled color rendering syntax-highlights inline code
+	// spans (e.g. `ref:main`) into separate escape-coded runs, splitting the substring.
+	assert.Contains(t, atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig())), "ref:<name> (e.g., ref:main)")
 	assert.Empty(t, path)
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath for invalid version")
 	assert.Equal(t, 0, installer.callCount, "Should not call Install for invalid version")

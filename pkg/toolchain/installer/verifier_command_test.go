@@ -321,56 +321,76 @@ func TestVerifierCommandRunnerSkipsTrustStepWhenDisabled(t *testing.T) {
 	assert.Equal(t, 0, callCount, "trust step must not run when VerifierTrust is disabled")
 }
 
-func TestRunTrustedVerifierSerializesTrustAndExecution(t *testing.T) {
+func TestRunBootstrapVerifierHoldsVersionLockThroughTrustAndExecution(t *testing.T) {
+	testBinary, err := os.ReadFile(os.Args[0])
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(testBinary)
+	}))
+	t.Cleanup(ts.Close)
+
+	reg := &verifierBootstrapRegistry{
+		tool: &registry.Tool{
+			Type:       "http",
+			RepoOwner:  "sigstore",
+			RepoName:   "cosign",
+			Asset:      ts.URL + "/{{.Version}}/cosign",
+			Format:     "raw",
+			BinaryName: "cosign",
+		},
+	}
+	inst := &Installer{
+		cacheDir:         t.TempDir(),
+		binDir:           t.TempDir(),
+		configuredReg:    reg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: reg},
+	}
+
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
+
 	previousTrustFunc := trustVerifierBinaryFunc
 	t.Cleanup(func() { trustVerifierBinaryFunc = previousTrustFunc })
 
-	var mu sync.Mutex
-	active := 0
-	maxActive := 0
+	trustStarted := make(chan struct{})
+	releaseTrust := make(chan struct{})
+	var trustOnce sync.Once
 	trustCalls := 0
-	enter := func() {
-		mu.Lock()
-		defer mu.Unlock()
-		active++
-		if active > maxActive {
-			maxActive = active
-		}
-	}
-	exit := func() {
-		mu.Lock()
-		defer mu.Unlock()
-		active--
-	}
 	trustVerifierBinaryFunc = func(string) error {
-		mu.Lock()
 		trustCalls++
-		mu.Unlock()
-		enter()
-		time.Sleep(25 * time.Millisecond)
-		exit()
+		trustOnce.Do(func() { close(trustStarted) })
+		<-releaseTrust
 		return nil
 	}
 
-	path := filepath.Join(t.TempDir(), "cosign")
 	errs := make(chan error, 2)
-	for range 2 {
-		go func() {
-			errs <- runTrustedVerifier(context.Background(), path, verification.Policy{
-				VerifierTrust: verification.VerifierTrustAuto,
-			}, func() error {
-				enter()
-				time.Sleep(25 * time.Millisecond)
-				exit()
-				return nil
-			})
-		}()
+	run := func() {
+		errs <- verifierCommandRunner{policy: verification.Policy{
+			VerifierInstall: verification.VerifierInstallAuto,
+			VerifierTrust:   verification.VerifierTrustAuto,
+		}}.runBootstrapVerifier(context.Background(), &verifierBootstrapRequest{
+			name:      "cosign",
+			version:   "v3.1.1",
+			owner:     "sigstore",
+			repo:      "cosign",
+			installer: *inst,
+			args:      []string{"-test.run=TestVerifierCommandHelperProcess", "--", "success"},
+		})
 	}
+	go run()
+	<-trustStarted
+	go run()
+
+	assert.Never(t, func() bool { return reg.getToolWithVersionCalls() > 1 }, 100*time.Millisecond, 10*time.Millisecond,
+		"the second bootstrap must not reinstall the verifier while the first lifecycle is active")
+	close(releaseTrust)
 	for range 2 {
 		require.NoError(t, <-errs)
 	}
-	assert.Equal(t, 1, maxActive, "shared verifier trust and execution must not overlap")
-	assert.Equal(t, 1, trustCalls, "trust repair must not mutate the same verifier before every invocation")
+	assert.Equal(t, 2, reg.getToolWithVersionCalls())
+	assert.Equal(t, 1, trustCalls, "the trust marker must avoid re-trusting the shared verifier")
 }
 
 func TestVerifierCommandRunnerAutoInstallFallsBackToPinnedCosignWhenLatestLookupFails(t *testing.T) {
@@ -488,7 +508,10 @@ func TestVerifierCommandHelperProcess(t *testing.T) {
 		return
 	}
 	for i, arg := range os.Args {
-		if arg == "--" && i+1 < len(os.Args) && os.Args[i+1] == "success" {
+		if arg != "--" || i+1 >= len(os.Args) {
+			continue
+		}
+		if os.Args[i+1] == "success" {
 			os.Exit(0)
 		}
 	}
@@ -504,12 +527,13 @@ func (f verifierBootstrapFactory) NewAquaRegistry() registry.ToolRegistry {
 }
 
 type verifierBootstrapRegistry struct {
-	mu               sync.Mutex
-	latest           string
-	latestErr        error
-	latestCalls      int
-	tool             *registry.Tool
-	requestedVersion string
+	mu                       sync.Mutex
+	latest                   string
+	latestErr                error
+	latestCalls              int
+	tool                     *registry.Tool
+	requestedVersion         string
+	toolWithVersionCallCount int
 }
 
 func (r *verifierBootstrapRegistry) GetTool(_, _ string) (*registry.Tool, error) {
@@ -520,7 +544,14 @@ func (r *verifierBootstrapRegistry) GetToolWithVersion(_, _, version string) (*r
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.requestedVersion = version
+	r.toolWithVersionCallCount++
 	return r.tool, nil
+}
+
+func (r *verifierBootstrapRegistry) getToolWithVersionCalls() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.toolWithVersionCallCount
 }
 
 func (r *verifierBootstrapRegistry) GetLatestVersion(_, _ string) (string, error) {

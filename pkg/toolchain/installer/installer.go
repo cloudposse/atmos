@@ -64,6 +64,12 @@ const (
 	// path. New bundle-based metadata continues to use the current verifier.
 	// renovate: datasource=github-releases depName=sigstore/cosign.
 	legacyCosignVerifierVersion = "v2.6.1"
+
+	// VerifierSubprocessTimeout bounds a bootstrap verifier subprocess (e.g. cosign)
+	// when the caller's context has no deadline. The subprocess runs inside the
+	// tool version's install lock, so a hung verifier would otherwise block every
+	// other install or verification of that same tool version indefinitely.
+	verifierSubprocessTimeout = 5 * time.Minute
 )
 
 // EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
@@ -325,6 +331,15 @@ func NewInstallerWithResolver(resolver ToolResolver, binDir string) *Installer {
 func (i *Installer) Install(owner, repo, version string) (string, error) {
 	defer perf.Track(nil, "installer.Install")()
 
+	return i.installWithVersionLock(context.Background(), owner, repo, version, nil)
+}
+
+// installWithVersionLock installs one tool version while holding its stable
+// sibling lock. Callers that immediately execute the installed binary can
+// provide afterInstall to keep that execution inside the same critical section.
+// This prevents a concurrent installer from replacing an executable while the
+// kernel is running it.
+func (i *Installer) installWithVersionLock(ctx context.Context, owner, repo, version string, afterInstall func(string) error) (string, error) {
 	// The complete check/extract/replace transaction for one installed version
 	// must be exclusive across Atmos processes. The stable sibling lock survives
 	// the atomic replacements performed by the extractor.
@@ -334,7 +349,7 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 	}
 	lock := filelock.New(versionDir + ".lock")
 	var binaryPath string
-	err := lock.WithExclusive(context.Background(), func() error {
+	err := lock.WithExclusive(ctx, func() error {
 		// Get tool from registry while the target is protected: registry metadata
 		// can choose different entrypoints for the same installed version.
 		tool, findErr := i.FindTool(owner, repo, version)
@@ -343,7 +358,13 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 		}
 		var installErr error
 		binaryPath, installErr = i.installFromTool(tool, version)
-		return installErr
+		if installErr != nil {
+			return installErr
+		}
+		if afterInstall != nil {
+			return afterInstall(binaryPath)
+		}
+		return nil
 	})
 	if err != nil {
 		return "", err
@@ -478,15 +499,26 @@ type verifierBootstrapRequest struct {
 }
 
 func (r verifierCommandRunner) runBootstrapVerifier(ctx context.Context, request *verifierBootstrapRequest) error {
-	// Keeping installation and invocation in one helper makes it explicit that
-	// latest and pinned compatibility versions follow the same execution path.
-	binaryPath, err := request.installer.Install(request.owner, request.repo, request.version)
+	// Keep installation, trust repair, and invocation under the verifier's
+	// version lock. A separate worker may otherwise reinstall this same binary
+	// between Install returning and exec starting, which Linux rejects with
+	// ETXTBSY when the first process is already running it.
+	var runErr error
+	_, err := request.installer.installWithVersionLock(ctx, request.owner, request.repo, request.version, func(binaryPath string) error {
+		runCtx, cancel := boundedVerifierContext(ctx)
+		defer cancel()
+		runErr = runTrustedVerifier(binaryPath, r.policy, func() error {
+			return runVerifierCommand(runCtx, binaryPath, request.args...)
+		})
+		return runErr
+	})
 	if err != nil {
+		if runErr != nil {
+			return runErr
+		}
 		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, request.name, err)
 	}
-	return runTrustedVerifier(ctx, binaryPath, r.policy, func() error {
-		return runVerifierCommand(ctx, binaryPath, request.args...)
-	})
+	return nil
 }
 
 // legacyVerifierVersion returns a compatible bootstrap version only for
@@ -517,25 +549,22 @@ func legacyVerifierVersion(name string, args []string) string {
 // darwin-only behavior.
 var trustVerifierBinaryFunc = trustVerifierBinary
 
-// runTrustedVerifier serializes bootstrap verifier execution. Trust repair is
-// performed at most once per installed binary: repeatedly re-signing a shared
-// executable makes macOS re-evaluate it and can itself interrupt a running
-// verifier. The persistent sibling lock and marker coordinate independent
-// Atmos processes using the same cache.
-func runTrustedVerifier(ctx context.Context, binaryPath string, policy verification.Policy, run func() error) error {
-	return filelock.New(binaryPath+".run.lock").WithExclusive(ctx, func() error {
-		trustMarkerPath := binaryPath + ".trusted"
-		if policy.VerifierTrust != verification.VerifierTrustDisabled && !fileExists(trustMarkerPath) {
-			if trustErr := trustVerifierBinaryFunc(binaryPath); trustErr != nil {
-				log.Warn("Could not mark downloaded verifier binary as locally trusted; the next command may fail",
-					"path", binaryPath, "error", trustErr)
-			} else if markerErr := os.WriteFile(trustMarkerPath, nil, defaultFileWritePermissions); markerErr != nil {
-				log.Warn("Could not record local verifier trust state; it will be retried before the next command",
-					"path", binaryPath, "error", markerErr)
-			}
+// The caller holds the installed version's lock for the full verifier lifecycle.
+// Trust repair is performed at most once per installed binary: repeatedly
+// re-signing a shared executable makes macOS re-evaluate it and can itself
+// interrupt a running verifier.
+func runTrustedVerifier(binaryPath string, policy verification.Policy, run func() error) error {
+	trustMarkerPath := binaryPath + ".trusted"
+	if policy.VerifierTrust != verification.VerifierTrustDisabled && !fileExists(trustMarkerPath) {
+		if trustErr := trustVerifierBinaryFunc(binaryPath); trustErr != nil {
+			log.Warn("Could not mark downloaded verifier binary as locally trusted; the next command may fail",
+				"path", binaryPath, "error", trustErr)
+		} else if markerErr := os.WriteFile(trustMarkerPath, nil, defaultFileWritePermissions); markerErr != nil {
+			log.Warn("Could not record local verifier trust state; it will be retried before the next command",
+				"path", binaryPath, "error", markerErr)
 		}
-		return run()
-	})
+	}
+	return run()
 }
 
 func fileExists(path string) bool {
@@ -608,6 +637,18 @@ func verifierVersionUnavailableError(owner, repo string, lookupErrs []error) err
 		return fmt.Errorf("%w: %s/%s: %w", ErrVerifierVersionUnavailable, owner, repo, errors.Join(lookupErrs...))
 	}
 	return fmt.Errorf("%w: %s/%s", ErrVerifierVersionUnavailable, owner, repo)
+}
+
+// boundedVerifierContext returns ctx unchanged when it already carries a
+// deadline (the caller owns that timeout). Otherwise it derives a context
+// bounded by verifierSubprocessTimeout so a hung verifier subprocess cannot
+// hold the caller's install-version lock forever. Callers must invoke the
+// returned cancel func once the subprocess completes.
+func boundedVerifierContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, verifierSubprocessTimeout)
 }
 
 func runVerifierCommand(ctx context.Context, path string, args ...string) error {

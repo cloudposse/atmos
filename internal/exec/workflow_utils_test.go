@@ -19,6 +19,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
@@ -617,8 +618,10 @@ func TestBuildWorkflowStepError(t *testing.T) {
 			assert.Error(t, result)
 			assert.ErrorIs(t, result, tt.expectSentinel)
 
-			// Use Format to get the full formatted error including hints.
-			formattedErr := errUtils.Format(result, errUtils.DefaultFormatterConfig())
+			// Use Format to get the full formatted error including hints. Strip ANSI
+			// since CI-enabled color rendering can split an expected substring (e.g. a
+			// syntax-highlighted code fence) across separate escape-coded spans.
+			formattedErr := atmosansi.Strip(errUtils.Format(result, errUtils.DefaultFormatterConfig()))
 			for _, expected := range tt.expectContains {
 				assert.Contains(t, formattedErr, expected)
 			}
