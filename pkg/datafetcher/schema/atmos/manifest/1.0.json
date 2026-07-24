@@ -447,6 +447,11 @@
             "dependencies": {
               "$ref": "#/definitions/dependencies"
             },
+            "depends_on": {
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
+            },
             "provision": {
               "$ref": "#/definitions/provision"
             }
@@ -551,6 +556,11 @@
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
+            },
+            "depends_on": {
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             },
             "provision": {
               "$ref": "#/definitions/provision"
@@ -1846,7 +1856,9 @@
               "$ref": "#/definitions/validation"
             },
             "depends_on": {
-              "$ref": "#/definitions/depends_on"
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             },
             "spacelift": {
               "$ref": "#/definitions/spacelift"

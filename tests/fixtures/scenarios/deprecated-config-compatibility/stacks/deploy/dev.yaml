@@ -1,0 +1,37 @@
+vars:
+  stage: dev
+
+terraform:
+  dependencies:
+    tools:
+      terraform: ">= 1.6"
+  backend:
+    s3:
+      bucket: compatibility-state
+      key: dev.tfstate
+      region: us-east-1
+      use_lockfile: true
+      assume_role:
+        role_arn: arn:aws:iam::123456789012:role/state
+  remote_state_backend:
+    s3:
+      bucket: compatibility-state
+      key: remote.tfstate
+      region: us-east-1
+      assume_role:
+        role_arn: arn:aws:iam::123456789012:role/state
+
+components:
+  terraform:
+    network: {}
+    application:
+      dependencies:
+        components:
+          - component: network
+      depends_on:
+        network:
+          component: network
+      settings:
+        depends_on:
+          network:
+            component: network
