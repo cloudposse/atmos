@@ -32,7 +32,8 @@ func (r *blockingInitRunner) Init(context.Context, ...tfexec.InitOption) error {
 }
 
 func TestRunInitReturnsRunnerErrorWithoutLockWrapping(t *testing.T) {
-	runner := &blockingInitRunner{initErr: errors.New("runner init failed")}
+	runnerErr := errors.New("runner init failed")
+	runner := &blockingInitRunner{initErr: runnerErr}
 	err := (&Executor{}).runInit(
 		context.Background(),
 		runner,
@@ -45,6 +46,7 @@ func TestRunInitReturnsRunnerErrorWithoutLockWrapping(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTerraformInit)
+	assert.ErrorIs(t, err, runnerErr)
 	assert.Contains(t, err.Error(), "runner init failed")
 	assert.NotContains(t, err.Error(), "lock provider plugin cache")
 }
