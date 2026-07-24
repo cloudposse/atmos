@@ -258,10 +258,16 @@ details.
 
 ## Concurrency Warning
 
-Do not present GitHub Actions `concurrency` groups as a FIFO deployment queue. Default concurrency
-allows at most one running and one pending run per group, and a newer pending run replaces an older
-pending run. Even queueing modes have ordering caveats. For strict deployment ordering, use GitHub
-merge queues, GitHub environments, an explicit promotion workflow, or an external queue/orchestrator.
+Do not add or retain GitHub Actions workflow- or job-level `concurrency` groups that govern an
+`atmos` command. Remove them when modernizing Native CI workflows. They are not a dependable FIFO
+deployment queue: default concurrency replaces older pending work, `cancel-in-progress: true`
+cancels active work, and bounded queues still do not guarantee dispatch order. An interrupted
+Terraform invocation can leave a remote state lock that requires operator recovery.
+
+Use remote Terraform state locking for state safety. For deployment control, use GitHub environments,
+merge queues, an explicit promotion workflow, or an external queue/orchestrator. This guidance is
+limited to concurrency groups around Atmos invocations; unrelated workflow concurrency is out of
+scope.
 
 ## Component Dependencies
 

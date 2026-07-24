@@ -19,6 +19,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | `settings.depends_on` | `dependencies.components` |
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |
+| GitHub Actions `concurrency` around jobs or workflows that invoke `atmos` | Remove it; it is not a reliable deployment queue |
 | `hashicorp/setup-terraform` / `opentofu/setup-opentofu` in Atmos jobs | Atmos `dependencies.tools` and toolchain |
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |
@@ -89,6 +90,14 @@ jobs:
 
 Use `atmos describe affected --format=matrix` for PR matrices and `atmos list instances
 --format=matrix` for full estate operations.
+
+Remove GitHub Actions workflow- or job-level `concurrency` groups that govern an `atmos` command
+when modernizing Native CI. They are not a dependable FIFO deployment queue: the default replaces
+older pending work, `cancel-in-progress: true` cancels active work, and bounded queues still do not
+guarantee dispatch order. Canceling a Terraform invocation can leave a remote state lock that needs
+operator recovery. Use remote state locking for state safety; use GitHub environments, merge queues,
+an explicit promotion workflow, or an external orchestrator when deployment control is required.
+This migration applies only to concurrency groups around Atmos invocations, not unrelated jobs.
 
 ## Drift Direction
 

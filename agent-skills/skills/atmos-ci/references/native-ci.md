@@ -139,6 +139,18 @@ permissions:
   pull-requests: write  # PR comments
 ```
 
+## GitHub Actions Concurrency
+
+Do not add GitHub Actions workflow- or job-level `concurrency` groups around Atmos commands, and
+remove those groups when modernizing an existing Native CI workflow. They are not a reliable FIFO
+deployment queue: default concurrency replaces older pending work, `cancel-in-progress: true`
+cancels active work, and bounded queues do not guarantee dispatch order. A canceled Terraform run
+can leave a remote state lock that requires operator recovery.
+
+Use remote Terraform state locking for state safety. When deployment control is required, use
+GitHub environments, merge queues, an explicit promotion workflow, or an external
+queue/orchestrator. This guidance does not apply to unrelated workflow concurrency.
+
 ## Pull Request Plan
 
 ```yaml

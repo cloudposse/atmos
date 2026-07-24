@@ -112,6 +112,19 @@ The command reports the invalid `branch` key and exits with status 1.
 
 Atmos respects `.github/actionlint.yaml` or `.github/actionlint.yml`, including custom self-hosted runner labels. See [`atmos ci validate`](/cli/commands/ci/validate) for file selection, output formats, and configuration details.
 
+### Concurrency Groups Around Atmos Commands
+
+The Native CI examples intentionally omit GitHub Actions workflow- and job-level `concurrency`
+groups around `atmos` commands. Do not use them as a deployment queue: default concurrency replaces
+older pending work, `cancel-in-progress: true` cancels active work, and bounded queues do not
+guarantee dispatch order. Canceling Terraform can leave a remote state lock that requires operator
+recovery.
+
+Use remote Terraform state locking for state safety. When deployment control is required, prefer
+GitHub environments, merge queues, an explicit promotion workflow, or an external
+queue/orchestrator. This guidance is limited to concurrency groups that govern Atmos invocations;
+unrelated workflow concurrency is unaffected.
+
 ### Plan on Pull Request
 
 <File title=".github/workflows/plan.yml">
