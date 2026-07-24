@@ -939,6 +939,58 @@ func TestPrepareHookContextResolvesMetadataComponent(t *testing.T) {
 	assert.Empty(t, ctx.info.ComponentFolderPrefix)
 }
 
+// TestEnsureComponentSourceProvisioned verifies that a `before.terraform.*`
+// hook is a "run before Terraform" event, not a "run before the component's
+// JIT source is provisioned" event: ensureComponentSourceProvisioned vendors
+// a configured `source:` into the component directory synchronously, so by
+// the time hooks fire, ComponentPath() (the env var and hook subprocess cwd)
+// resolves to a real, populated directory instead of one that won't exist
+// until Terraform itself runs moments later in RunE.
+func TestEnsureComponentSourceProvisioned(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# fixture\n"), 0o644))
+
+	terraformDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "app",
+		FinalComponent:   "app",
+		ComponentSection: schema.AtmosSectionMapType{
+			"component": "app",
+			"source":    sourceDir,
+		},
+	}
+
+	ensureComponentSourceProvisioned(atmosConfig, info)
+
+	componentPath := filepath.Join(terraformDir, "app")
+	entries, err := os.ReadDir(componentPath)
+	require.NoError(t, err, "component directory should exist after provisioning")
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Contains(t, names, "main.tf")
+}
+
+// TestEnsureComponentSourceProvisioned_NoSourceIsNoOp verifies components
+// without a configured `source:` are left untouched (no directory created) —
+// ensureComponentSourceProvisioned only matters for JIT-provisioned components.
+func TestEnsureComponentSourceProvisioned_NoSourceIsNoOp(t *testing.T) {
+	terraformDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "app",
+		FinalComponent:   "app",
+		ComponentSection: schema.AtmosSectionMapType{"component": "app"},
+	}
+
+	ensureComponentSourceProvisioned(atmosConfig, info)
+
+	_, err := os.Stat(filepath.Join(terraformDir, "app"))
+	assert.True(t, os.IsNotExist(err), "no source configured should mean no directory is created")
+}
+
 // TestPrepareHookContextSkipsComponentResolutionForMultiComponent verifies that
 // the global before/after hook context for multi-component invocations
 // (--all/--affected/--components/--query/--tags/--labels) does not fail with

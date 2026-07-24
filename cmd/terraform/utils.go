@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,6 +23,7 @@ import (
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -30,6 +32,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // errWrapFormat is the format string for wrapping errors with a cause.
@@ -274,10 +277,46 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 		if err != nil {
 			return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
 		}
+		// A `before.terraform.*` hook (other than before.terraform.init, which is
+		// the provisioner's own hook) is a "run before Terraform" event, not a
+		// "run before the component's source is provisioned" event — provisioning
+		// a JIT `source:` component is a prerequisite of the component existing at
+		// all, not a lifecycle stage hooks observe. Ensure it here so ComponentPath
+		// (env var and hook subprocess cwd) points at a real, populated directory
+		// by the time any hook fires. Best-effort: a provisioning failure here is
+		// surfaced authoritatively moments later when RunE performs the same
+		// provisioning for the actual Terraform command.
+		ensureComponentSourceProvisioned(&atmosConfig, &info)
 	}
 	injectHookStoreAuthResolver(&atmosConfig, &info)
 
 	return hookContext{info: info, atmosConfig: atmosConfig}, nil
+}
+
+// componentSourceProvisionTimeout bounds JIT source provisioning triggered from
+// hook context preparation, matching ExecuteTerraform's own provisioning timeout.
+const componentSourceProvisionTimeout = 5 * time.Minute
+
+// ensureComponentSourceProvisioned JIT-provisions the component's `source:`
+// (if configured) so lifecycle hooks observe the same resolved, populated
+// directory Terraform itself will use. No-op for components with no `source:`
+// (component.ProvisionAndResolveComponentPath short-circuits on that) and for
+// components that are already provisioned and not TTL-expired. Errors are
+// logged, not returned: hooks should still attempt to run (and the actual
+// Terraform command will surface the same provisioning error authoritatively)
+// rather than aborting hook discovery over a problem unrelated to any hook.
+func ensureComponentSourceProvisioned(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	fallbackPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		log.Debug("hook source provisioning: failed to resolve fallback component path", "error", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), componentSourceProvisionTimeout)
+	defer cancel()
+	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
+		log.Debug("hook source provisioning failed; the Terraform command will report this authoritatively", "component", info.ComponentFromArg, "error", err)
+	}
 }
 
 // runUserHooks runs user-defined hooks from stack configuration for the given

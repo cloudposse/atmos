@@ -384,9 +384,10 @@ func TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType(t *testing.T) {
 	setDefaultStepWorkingDirectory(ctx, shellStep)
 	assert.Equal(t, componentDir, shellStep.WorkingDirectory)
 
-	explicitStep := &schema.WorkflowStep{Type: "atmos", WorkingDirectory: "/explicit"}
+	explicitDir := t.TempDir()
+	explicitStep := &schema.WorkflowStep{Type: "atmos", WorkingDirectory: explicitDir}
 	setDefaultStepWorkingDirectory(ctx, explicitStep)
-	assert.Equal(t, "/explicit", explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
+	assert.Equal(t, explicitDir, explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
 }
 
 func TestStepsSummary(t *testing.T) {

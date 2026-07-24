@@ -98,6 +98,8 @@ Two distinct interpolation surfaces:
 
 Tools consume these directly (e.g. `infracost --path "$ATMOS_COMPONENT_PATH"`). Every command-engine hook also starts with this same directory as its process working directory. The path is resolved from the processed component metadata, so a stack-facing alias using `metadata.component` runs against its resolved local module (or provisioned workdir), not the alias name. A missing resolved directory prevents the subprocess from starting; the hook's `on_failure` policy controls whether that failure stops the parent lifecycle command.
 
+A `before.terraform.*` hook (other than `before.terraform.init`, which is the source provisioner's own hook) is a "run before Terraform" event, not a "run before the component's source is provisioned" event: for a component with a JIT `source:`, `prepareHookContext` provisions the source synchronously before firing any hook for that component, so `$ATMOS_COMPONENT_PATH` always resolves to a real, populated directory rather than one that would not exist until Terraform's own execution provisions it moments later. This provisioning is best-effort at the hook layer — a failure here is only logged, since the Terraform command itself performs the same provisioning and surfaces the authoritative error.
+
 ### Pro integration — implicit upload, kind-driven
 
 If Pro is configured for the project (same connection that drives instance-status and affected-stacks uploads today), hook output flows to Pro automatically.
