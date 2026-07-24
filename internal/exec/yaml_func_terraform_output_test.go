@@ -8,6 +8,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -190,18 +191,18 @@ func isolateTerraformTestBinary(t *testing.T, source string) {
 
 	contents, err := os.ReadFile(source)
 	if err != nil {
-		t.Fatalf("read OpenTofu executable %q: %v", source, err)
+		t.Fatalf("read Terraform-compatible executable %q: %v", source, err)
 	}
 
 	info, err := os.Stat(source)
 	if err != nil {
-		t.Fatalf("stat OpenTofu executable %q: %v", source, err)
+		t.Fatalf("stat Terraform-compatible executable %q: %v", source, err)
 	}
 
 	dir := t.TempDir()
 	destination := filepath.Join(dir, filepath.Base(source))
 	if err := os.WriteFile(destination, contents, info.Mode()); err != nil {
-		t.Fatalf("copy OpenTofu executable to test directory: %v", err)
+		t.Fatalf("copy Terraform-compatible executable to test directory: %v", err)
 	}
 
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -209,12 +210,12 @@ func isolateTerraformTestBinary(t *testing.T, source string) {
 
 func TestIsolateTerraformTestBinary(t *testing.T) {
 	source, err := os.Executable()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	isolateTerraformTestBinary(t, source)
 
 	resolved, err := exec.LookPath(filepath.Base(source))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.FileExists(t, resolved)
 	assert.NotEqual(t, filepath.Dir(source), filepath.Dir(resolved))
 	assert.Equal(t, filepath.Base(source), filepath.Base(resolved))
