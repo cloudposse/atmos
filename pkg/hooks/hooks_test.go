@@ -1566,3 +1566,155 @@ func TestCheckExperimental(t *testing.T) {
 		})
 	}
 }
+
+func TestEnrichInfoFromDescribe(t *testing.T) {
+	tests := []struct {
+		name           string
+		info           schema.ConfigAndStacksInfo
+		sections       map[string]any
+		wantFinal      string
+		wantFolderPref string
+	}{
+		{
+			name:           "backfills final component from describe output",
+			info:           schema.ConfigAndStacksInfo{ComponentFromArg: "nat-gateway-alias"},
+			sections:       map[string]any{"component": "nat-gateway"},
+			wantFinal:      "nat-gateway",
+			wantFolderPref: "",
+		},
+		{
+			name:           "splits folder prefix from metadata.component subpath",
+			info:           schema.ConfigAndStacksInfo{ComponentFromArg: "nat-gateway-alias"},
+			sections:       map[string]any{"component": "shared/networking/nat-gateway"},
+			wantFinal:      "nat-gateway",
+			wantFolderPref: "shared/networking",
+		},
+		{
+			name:           "does not overwrite populated final component",
+			info:           schema.ConfigAndStacksInfo{FinalComponent: "already-set"},
+			sections:       map[string]any{"component": "nat-gateway"},
+			wantFinal:      "already-set",
+			wantFolderPref: "",
+		},
+		{
+			name:           "does not touch info with populated folder prefix",
+			info:           schema.ConfigAndStacksInfo{ComponentFolderPrefix: "catalog"},
+			sections:       map[string]any{"component": "shared/nat-gateway"},
+			wantFinal:      "",
+			wantFolderPref: "catalog",
+		},
+		{
+			name:           "no-op when component section is missing",
+			info:           schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
+			sections:       map[string]any{},
+			wantFinal:      "",
+			wantFolderPref: "",
+		},
+		{
+			name:           "no-op when component section is not a string",
+			info:           schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
+			sections:       map[string]any{"component": 42},
+			wantFinal:      "",
+			wantFolderPref: "",
+		},
+		{
+			name:           "no-op when component section is empty",
+			info:           schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
+			sections:       map[string]any{"component": ""},
+			wantFinal:      "",
+			wantFolderPref: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			enrichInfoFromDescribe(&tc.info, tc.sections)
+			assert.Equal(t, tc.wantFinal, tc.info.FinalComponent)
+			assert.Equal(t, tc.wantFolderPref, tc.info.ComponentFolderPrefix)
+		})
+	}
+}
+
+// TestGetHooks_ResolvesMetadataComponentForHookPath reproduces
+// https://github.com/cloudposse/atmos/issues/2799: for a plain (non-JIT) component
+// that points at a different component folder via `metadata.component`, hook kinds
+// consuming $ATMOS_COMPONENT_PATH must resolve the target folder, not the
+// stack-facing component name.
+func TestGetHooks_ResolvesMetadataComponentForHookPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// The real component folder (the metadata.component target) exists on disk;
+	// the stack-facing alias has no folder of its own.
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "terraform", "nat-gateway"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "components", "terraform", "nat-gateway", "main.tf"),
+		[]byte("# placeholder\n"),
+		0o644,
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+logs:
+  level: Info
+`),
+		0o644,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "test.yaml"),
+		[]byte(`vars:
+  stage: test
+components:
+  terraform:
+    nat-gateway-alias:
+      metadata:
+        component: nat-gateway
+      hooks:
+        cost:
+          events:
+            - after.terraform.plan
+          kind: infracost
+`),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "nat-gateway-alias",
+		Stack:            "test",
+	}
+
+	hooks, err := GetHooks(atmosConfig, info)
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	assert.Contains(t, hooks.items, "cost")
+
+	// GetHooks must backfill the resolved metadata.component target so path-based
+	// hook kinds do not fall back to the raw stack-facing component name.
+	assert.Equal(t, "nat-gateway", info.FinalComponent,
+		"FinalComponent should resolve metadata.component (issue #2799)")
+
+	// The full path resolution used for $ATMOS_COMPONENT_PATH must point at the
+	// metadata.component target folder, not the (nonexistent) alias folder.
+	execCtx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		},
+		Info: info,
+	}
+	assert.Equal(t, filepath.Join(tempDir, "components", "terraform", "nat-gateway"),
+		componentPathFor(execCtx),
+		"$ATMOS_COMPONENT_PATH should resolve to the metadata.component target folder (issue #2799)")
+}

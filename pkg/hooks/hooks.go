@@ -99,6 +99,8 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 		return &Hooks{}, err
 	}
 
+	enrichInfoFromDescribe(info, sections)
+
 	hooksSection, ok := sections["hooks"].(map[string]any)
 	if !ok {
 		// No hooks defined or wrong type, return empty hooks.
@@ -128,6 +130,35 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	}
 
 	return &hooks, nil
+}
+
+// enrichInfoFromDescribe backfills the resolved Terraform component onto the hook
+// ConfigAndStacksInfo from the `component` section of the describe output.
+//
+// The hook context is built from CLI parsing only (ProcessCommandLineArgs), which
+// never runs stack processing, so FinalComponent is empty for components that
+// point at a different component folder via `metadata.component`. Without this
+// backfill, path-based hook kinds (infracost, trivy, checkov, kics, tflint,
+// command) resolve `$ATMOS_COMPONENT_PATH` from the raw stack-facing component
+// name and scan a directory that does not exist (#2799).
+//
+// It mirrors ProcessStacks: a `metadata.component` value may include a folder
+// prefix (e.g. `shared/nat-gateway`) — the last path segment is the component,
+// the rest is the folder prefix. Both fields are only set when empty so a fully
+// populated info (e.g. from the CI hook path) is never overwritten.
+func enrichInfoFromDescribe(info *schema.ConfigAndStacksInfo, sections map[string]any) {
+	if info.FinalComponent != "" || info.ComponentFolderPrefix != "" {
+		return
+	}
+	component, ok := sections[cfg.ComponentSectionName].(string)
+	if !ok || component == "" {
+		return
+	}
+	parts := strings.Split(component, "/")
+	info.FinalComponent = parts[len(parts)-1]
+	if len(parts) > 1 {
+		info.ComponentFolderPrefix = strings.Join(parts[:len(parts)-1], "/")
+	}
 }
 
 // SetOutcome records the lifecycle operation outcome (success/failure) for the
