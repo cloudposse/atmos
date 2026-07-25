@@ -563,6 +563,7 @@ func (e *Executor) execute(
 	if err != nil {
 		return nil, err
 	}
+	pluginCache := configurePluginCache(atmosConfig, config, environMap)
 	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
 	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
 	// any PATH overrides from the component's env section.
@@ -584,7 +585,7 @@ func (e *Executor) execute(
 		workspaceMgr := &defaultWorkspaceManager{}
 		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
 
-		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture); err != nil {
+		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache); err != nil {
 			return nil, err
 		}
 
