@@ -34,7 +34,7 @@ detect_package_manager() {
 		echo "brew"
 	elif command -v apt-get &> /dev/null; then
 		echo "deb"
-	elif command -v apt &> /dev/null; then
+	elif command -v apk &> /dev/null; then
 		echo "alpine"
 	elif command -v yum &> /dev/null; then
 		echo "rpm"
