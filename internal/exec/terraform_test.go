@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -492,24 +493,30 @@ func TestExecuteTerraform_Version(t *testing.T) {
 		workDir        string
 		expectedOutput string
 		requireTool    func(*testing.T)
+		binary         string
 	}{
 		{
 			name:           "terraform version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-terraform-version",
 			expectedOutput: "Terraform v",
 			requireTool:    tests.RequireTerraform,
+			binary:         "terraform",
 		},
 		{
 			name:           "tofu version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-tofu-version",
 			expectedOutput: "OpenTofu v",
 			requireTool:    tests.RequireTofu,
+			binary:         "tofu",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.requireTool(t)
+			binaryPath, err := exec.LookPath(tt.binary)
+			require.NoError(t, err)
+			isolateTerraformTestBinary(t, binaryPath)
 
 			// Set info for ExecuteTerraform.
 			info := schema.ConfigAndStacksInfo{
