@@ -25,9 +25,9 @@ stay empty. `componentPathFor()` in `pkg/hooks/command_engine.go` resolves the
 scan path as:
 
 1. The provisioned JIT workdir, if one resolves and exists (covers the
-   `source.uri` family of fixes: #2364/#2371, #2134/#2137, #2309 Bug 2, #2684).
+  `source.uri` family of fixes: #2364/#2371, #2134/#2137, #2309 Bug 2, #2684).
 2. Otherwise `TerraformDirAbsolutePath / ComponentFolderPrefix / FinalComponent`,
-   falling back to `ComponentFromArg` when `FinalComponent` is empty.
+  falling back to `ComponentFromArg` when `FinalComponent` is empty.
 
 For a plain (non-JIT) aliased component, branch 1 finds no workdir and branch 2
 hits the empty-`FinalComponent` fallback, joining the raw CLI/stack-facing name
