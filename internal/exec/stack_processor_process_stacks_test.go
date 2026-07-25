@@ -369,6 +369,33 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			},
 			expectedError: errUtils.ErrInvalidAnsibleDependencies,
 		},
+		{
+			name: "invalid global metadata section type",
+			config: map[string]any{
+				cfg.MetadataSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidGlobalMetadataSection,
+		},
+		{
+			name: "global metadata with disallowed inherits field",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					cfg.InheritsSectionName: []any{"foo"},
+				},
+			},
+			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
+		},
+		{
+			name: "global metadata with disallowed component/type/name fields",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"component": "vpc/network",
+					"type":      "abstract",
+					"name":      "vpc",
+				},
+			},
+			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
+		},
 	}
 
 	for _, tt := range tests {
@@ -633,6 +660,53 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				require.True(t, ok, "component must inherit the global 'cost' hook, got: %v", hooks)
 				assert.Equal(t, "infracost", cost["kind"])
 				assert.Equal(t, []any{"after-terraform-plan"}, cost["events"])
+			},
+		},
+		{
+			// Global metadata.labels flowing into a component with no local
+			// metadata of its own — this is the original bug report: a
+			// top-level `metadata:` block used to be silently inert.
+			name: "global metadata labels and enabled inherited by component with no own metadata",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"labels":  map[string]any{"org": "acme"},
+					"enabled": false,
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				metadata := resultComponentMetadata(t, result, "vpc")
+				assert.Equal(t, map[string]any{"org": "acme"}, metadata["labels"])
+				assert.Equal(t, false, metadata["enabled"])
+			},
+		},
+		{
+			// Component-local metadata overrides the global default for the same key.
+			name: "component-local metadata overrides global metadata",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"labels": map[string]any{"org": "acme"},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+							cfg.MetadataSectionName: map[string]any{
+								"labels": map[string]any{"org": "platform-team"},
+							},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				metadata := resultComponentMetadata(t, result, "vpc")
+				assert.Equal(t, map[string]any{"org": "platform-team"}, metadata["labels"])
 			},
 		},
 		{
@@ -1258,6 +1332,19 @@ func componentHooks(t *testing.T, result map[string]any, component string) map[s
 	hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
 	require.True(t, ok, "component %q must have a hooks section, got: %v", component, comp[cfg.HooksSectionName])
 	return hooks
+}
+
+func resultComponentMetadata(t *testing.T, result map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+	comp, ok := terraform[component].(map[string]any)
+	require.True(t, ok, "terraform component %q must exist", component)
+	metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "component %q must have a metadata section, got: %v", component, comp[cfg.MetadataSectionName])
+	return metadata
 }
 
 // TestProcessStackConfig_HooksWrongScopeNotInherited locks in the scope
