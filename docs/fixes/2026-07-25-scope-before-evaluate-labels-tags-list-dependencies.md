@@ -34,18 +34,18 @@ deliberately disables even the `-s` early filter, to preserve cross-stack edge r
 ## Symptom
 
 1. `atmos terraform apply --all --labels=team=platform` (or `--tags=...`) in a repo where `--all` is
-   given without `-s`: every stack in the repo is fully evaluated (templates, YAML functions, auth,
-   backend config) before label/tag matching is ever consulted, because
-   `filterTerraformGraphByTagsAndLabels` (`pkg/scheduler/adapters/terraform.go`) only runs on the graph
-   built from an already-fully-described stack set. Labels/tags gave the customer a way to *express*
-   the selection they wanted, but not a way to avoid evaluating everything else first — the exact
-   failure mode `-s` alone does not have.
+  given without `-s`: every stack in the repo is fully evaluated (templates, YAML functions, auth,
+  backend config) before label/tag matching is ever consulted, because
+  `filterTerraformGraphByTagsAndLabels` (`pkg/scheduler/adapters/terraform.go`) only runs on the graph
+  built from an already-fully-described stack set. Labels/tags gave the customer a way to *express*
+  the selection they wanted, but not a way to avoid evaluating everything else first — the exact
+  failure mode `-s` alone does not have.
 1. `atmos list dependencies --stack <stack>` fails when *any other* stack in the repo has an
-   inaccessible backend, unresolved `!terraform.state`, or (in the reported case) a physically
-   unreachable AWS account. `cmd/list/dependencies.go`'s `describeStacksForDependencies` hardcoded the
-   stack filter to `""` when calling describe-stacks, with a comment explaining this was deliberate —
-   cross-stack dependency edges need every stack described to resolve. `opts.Stack` was only applied
-   afterward, for display filtering.
+  inaccessible backend, unresolved `!terraform.state`, or (in the reported case) a physically
+  unreachable AWS account. `cmd/list/dependencies.go`'s `describeStacksForDependencies` hardcoded the
+  stack filter to `""` when calling describe-stacks, with a comment explaining this was deliberate —
+  cross-stack dependency edges need every stack described to resolve. `opts.Stack` was only applied
+  afterward, for display filtering.
 
 ## Root Cause
 
