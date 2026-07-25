@@ -270,6 +270,64 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 	return &cfg, nil
 }
 
+// encodeParameterValue serializes a value for PutParameter.
+//
+// Secret strings are commonly consumed directly by AWS-native integrations,
+// so preserve their exact bytes instead of JSON-encoding them with quotes.
+// Regular stores and non-string values retain JSON serialization for their
+// existing structured-value round-trip contract.
+func (s *SSMStore) encodeParameterValue(value any) (string, error) {
+	strValue, isString := value.(string)
+	if s.secret && isString {
+		return strValue, nil
+	}
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
+	}
+	return string(jsonValue), nil
+}
+
+// decodeParameterValue converts a raw SSM parameter value into the store's return type.
+//
+// Non-secret stores keep the legacy contract: JSON-decode when possible, raw string
+// otherwise (legacy or 3rd-party parameters that are not JSON-encoded).
+//
+// Secret stores write scalar strings raw (see Set), so a secret whose exact bytes happen
+// to parse as a JSON scalar (`1e5`, `12345678901234567890`, `true`, `null`) must not be
+// re-typed on read: json.Unmarshal would turn it into float64/bool/nil, and the `%v`
+// formatting in `atmos secret get`/`env`/`exec` would then corrupt it (`1e5` -> `100000`,
+// precision loss on large integers, `null` -> `<nil>`). For secret stores only two
+// decoded shapes are kept:
+//   - maps and slices: structured secrets, which Set still JSON-encodes; the YQ query
+//     path depends on receiving them decoded.
+//   - strings: parameters written JSON-quoted by Atmos before raw scalar writes were
+//     introduced; decoding preserves backward compatibility with existing parameters.
+//
+// A raw secret that is itself a JSON document (or wrapped in literal double quotes) is
+// indistinguishable from the JSON-encoded form of a structured (or quoted-string) secret,
+// so those still decode; every other JSON scalar is returned byte-exact.
+func (s *SSMStore) decodeParameterValue(raw string) any {
+	var result any
+	// A JSON unmarshal error is intentionally not returned: legacy or 3rd-party
+	// parameters may not be JSON-encoded, and raw secret strings usually aren't.
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		// If it's not valid JSON, return the raw string value.
+		return raw
+	}
+	if !s.secret {
+		return result
+	}
+	switch result.(type) {
+	case map[string]any, []any, string:
+		return result
+	default:
+		// A non-string JSON scalar (number/bool/null) in a secret store was written
+		// raw by Set, so return its exact bytes.
+		return raw
+	}
+}
+
 // Set stores a key-value pair in AWS SSM Parameter Store. An empty stack and/or component is
 // permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *SSMStore) Set(stack string, component string, key string, value any) error {
@@ -286,17 +344,9 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 
 	ctx := context.TODO()
 
-	// Secret strings are commonly consumed directly by AWS-native integrations,
-	// so preserve their exact bytes instead of JSON-encoding them with quotes.
-	// Regular stores and non-string values retain JSON serialization for their
-	// existing structured-value round-trip contract.
-	strValue, isString := value.(string)
-	if !s.secret || !isString {
-		jsonValue, err := json.Marshal(value)
-		if err != nil {
-			return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
-		}
-		strValue = string(jsonValue)
+	strValue, err := s.encodeParameterValue(value)
+	if err != nil {
+		return err
 	}
 
 	// Construct the full parameter name using getKey
@@ -382,15 +432,7 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
 	}
 
-	// Try to unmarshal the value as JSON
-	var result any
-	//nolint:nilerr // Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party parameters that might not be JSON-encoded
-	if err := json.Unmarshal([]byte(*output.Parameter.Value), &result); err != nil {
-		// If it's not valid JSON, return the raw string value
-		return *output.Parameter.Value, nil
-	}
-
-	return result, nil
+	return s.decodeParameterValue(*output.Parameter.Value), nil
 }
 
 // GetKey retrieves a value by key from AWS SSM Parameter Store.
@@ -444,15 +486,7 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
 	}
 
-	// Try to unmarshal the value as JSON
-	var result any
-	//nolint:nilerr // Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party parameters that might not be JSON-encoded
-	if err := json.Unmarshal([]byte(*output.Parameter.Value), &result); err != nil {
-		// If it's not valid JSON, return the raw string value
-		return *output.Parameter.Value, nil
-	}
-
-	return result, nil
+	return s.decodeParameterValue(*output.Parameter.Value), nil
 }
 
 // Delete removes a parameter for an Atmos component in a stack from AWS SSM Parameter Store.
