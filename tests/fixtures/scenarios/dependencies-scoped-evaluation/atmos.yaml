@@ -1,0 +1,40 @@
+# Fixture for testing that `atmos list dependencies --stack <stack>` never evaluates
+# (templates/YAML functions/backend) an unrelated stack — see
+# docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
+#
+# app-a is the bounded root under test; it has no relationship to app-b.
+# app-b's `broken` component unconditionally fails template rendering the
+# moment it is evaluated at all — standing in for "an unrelated stack whose
+# backend cannot be reached" without requiring real cloud credentials in CI.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 10
+      datasources: {}

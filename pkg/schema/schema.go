@@ -18,6 +18,13 @@ type AtmosSectionMapType = map[string]any
 // DescribeSettings contains settings for the describe command output.
 type DescribeSettings struct {
 	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
+	// EagerEvaluation disables the early-skip scope optimization for `--tags`/`--labels`
+	// bulk Terraform selection and `list dependencies`: when true, every stack is fully
+	// evaluated (templates, YAML functions, auth) before filtering, matching pre-optimization
+	// behavior. Use as a rollback if a repo has templated metadata.tags/metadata.labels that
+	// the lightweight scope pass cannot safely resolve. See
+	// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
+	EagerEvaluation *bool `yaml:"eager_evaluation,omitempty" json:"eager_evaluation,omitempty" mapstructure:"eager_evaluation"`
 }
 
 // DescribeAffected contains configuration for the `atmos describe affected` command.

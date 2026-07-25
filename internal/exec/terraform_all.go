@@ -77,6 +77,8 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		info.Skip,
 		authManager,
 		info.UseMocks,
+		info.Tags,
+		info.Labels,
 	)
 	if err != nil {
 		preflight.Error("Failed to resolve Terraform component instances")

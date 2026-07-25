@@ -66,6 +66,8 @@ func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAn
 		info.Skip,
 		authManager,
 		info.UseMocks,
+		info.Tags,
+		info.Labels,
 	)
 	if err != nil {
 		return err

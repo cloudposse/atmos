@@ -17,6 +17,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
@@ -74,6 +75,15 @@ type describeStacksProcessor struct {
 	processYamlFunctions bool
 	authDisabled         bool
 	useMocks             bool
+	// tagsFilter/labelsFilter narrow the result to components matching info.Tags
+	// (any-match) / info.Labels (all-match), mirroring
+	// pkg/scheduler/adapters/terraform.go's matchesTerraformTagsAndLabels post-filter.
+	// When non-empty, components that can be cheaply proven out-of-scope from
+	// already-inherited metadata.tags/metadata.labels are skipped before auth/template/
+	// YAML-function evaluation (see scopeDecision). The post-filter remains the
+	// authoritative answer for every component this early gate cannot decide.
+	tagsFilter   []string
+	labelsFilter map[string]string
 	// resolveSecrets makes this processor retrieve !secret values while it resolves
 	// YAML functions. It is used by Terraform graph execution preflight; inspection
 	// commands retain their mask-only behavior even when output masking is enabled.
@@ -419,6 +429,14 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		return nil
 	}
 
+	// Filter: skip this component if requested tags/labels don't match, using only
+	// already-inherited metadata (no auth/template/YAML-function evaluation triggered).
+	// Generalizes the -s early-skip above to --tags/--labels. See
+	// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
+	if inScope, decidable := p.scopeDecision(secs.metadata); decidable && !inScope {
+		return nil
+	}
+
 	if stackName == "" {
 		stackName = stackFileName
 	}
@@ -698,6 +716,76 @@ func resolveStackName(
 // does not belong to the requested stack filter.  An empty filterByStack means no filtering.
 func shouldFilterByStack(filterByStack, stackFileName, stackName string) bool {
 	return filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName
+}
+
+// scopeDecision reports whether a component is in scope for this processor's
+// tags/labels filter, using only cheaply-available metadata (no auth/template/
+// YAML-function evaluation). Decidable is false when the metadata itself is
+// templated and cannot be safely evaluated yet, or when eager evaluation is
+// forced via settings.describe.settings.eager_evaluation: in both cases the
+// caller must fall through to full evaluation, leaving
+// pkg/scheduler/adapters/terraform.go's post-filter as the authoritative answer.
+func (p *describeStacksProcessor) scopeDecision(metadata map[string]any) (inScope bool, decidable bool) {
+	if len(p.tagsFilter) == 0 && len(p.labelsFilter) == 0 {
+		return true, true
+	}
+	if GetEagerEvaluationSetting(p.atmosConfig) {
+		return true, false
+	}
+	return inScopeByTagsAndLabels(metadata, p.tagsFilter, p.labelsFilter)
+}
+
+// inScopeByTagsAndLabels mirrors matchesTerraformTagsAndLabels in
+// pkg/scheduler/adapters/terraform.go (tags: any-match, labels: all-match) so the
+// early-skip gate here and that later post-filter can never disagree. Returns
+// decidable=false when metadata.tags/metadata.labels contain an unresolved Go
+// template marker, since their real value cannot be determined without the full
+// template/YAML-function evaluation this gate exists to avoid for out-of-scope
+// components.
+func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filterLabels map[string]string) (inScope bool, decidable bool) {
+	if len(filterTags) == 0 && len(filterLabels) == 0 {
+		return true, true
+	}
+
+	rawTags := metadata["tags"]
+	rawLabels := metadata["labels"]
+
+	if isMetadataSelectorTemplated(rawTags) || isMetadataSelectorTemplated(rawLabels) {
+		return true, false
+	}
+
+	if len(filterTags) > 0 && !tags.MatchesTags(tags.ToStringSlice(rawTags), filterTags, tags.TagModeAny) {
+		return false, true
+	}
+	if len(filterLabels) > 0 && !tags.MatchesLabels(tags.ToStringMap(rawLabels), filterLabels) {
+		return false, true
+	}
+	return true, true
+}
+
+// isMetadataSelectorTemplated reports whether a metadata.tags/metadata.labels value
+// contains an unresolved Go template marker ("{{"), meaning its real value can only
+// be known after template rendering. In this repo's own examples/tests, selector
+// metadata is always static, but a templated value must never be silently
+// misjudged as out-of-scope.
+func isMetadataSelectorTemplated(v any) bool {
+	switch value := v.(type) {
+	case string:
+		return strings.Contains(value, "{{")
+	case []any:
+		for _, item := range value {
+			if isMetadataSelectorTemplated(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		for _, item := range value {
+			if isMetadataSelectorTemplated(item) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that
