@@ -55,9 +55,59 @@ Because the token is the credential, it is written unmasked; the expiry is repor
 See the [`atmos aws rds token`](/cli/commands/aws/rds-token) command reference for flags, prerequisites,
 and MySQL/Aurora examples.
 
+## Connect in One Step
+
+Minting the token is only half the job — you still had to wire it into `PGPASSWORD`, quote the
+`psql`/`mysql` invocation correctly, and get the TLS flags right yourself. `atmos aws rds connect` does
+all of that for you: it mints the token and opens the interactive session in a single command.
+
+```shell
+atmos aws rds connect \
+  --host mydb.abc123.us-east-2.rds.amazonaws.com --port 5432 \
+  --username app --region us-east-2 --identity dev-admin
+```
+
+The token is generated fresh for this one connection and passed to `psql`/`mysql` **only through the
+child process environment** (`PGPASSWORD`/`MYSQL_PWD`) — it is never placed on the command line and
+never written to disk. The connection is required to use TLS (`verify-full` for PostgreSQL,
+`VERIFY_IDENTITY` for MySQL), trusting the Amazon RDS CA bundle embedded in Atmos unless you pass
+`--ca-bundle`.
+
+Name a database once and skip the flags entirely with an `aws/rds` integration:
+
+```yaml
+auth:
+  integrations:
+    dev/rds/app-db:
+      kind: aws/rds
+      via:
+        identity: dev-admin
+      spec:
+        database:
+          host: mydb.abc123.us-east-2.rds.amazonaws.com
+          port: 5432
+          username: app
+          region: us-east-2
+```
+
+```shell
+atmos aws rds connect dev/rds/app-db
+```
+
+One real-world wrinkle it sidesteps for you: RDS server certificates chain to Amazon's own RDS CA,
+which is usually absent from the OS trust store — a common cause of `verify-full`/`VERIFY_IDENTITY`
+failures with other tools. `atmos aws rds connect` embeds the
+[Amazon RDS global certificate bundle](https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem)
+and trusts it by default, so this just works without you tracking down and wiring up a bundle
+yourself. Pass `--ca-bundle` only if you need to verify against a different one.
+
+See the [`atmos aws rds connect`](/cli/commands/aws/rds-connect) command reference and the
+[RDS Authentication tutorial](/tutorials/rds-authentication) for the full flag list, integration
+schema, and troubleshooting.
+
 ## Get Involved
 
-This is the first step: on-demand token generation. Stack- and component-aware endpoint discovery
-(resolving the host, port, and user straight from a component's Terraform outputs) is a natural
-follow-up. Have feedback or ideas? Open an issue on
+This is the first step: on-demand token generation and one-step interactive connections. Stack- and
+component-aware endpoint discovery (resolving the host, port, and user straight from a component's
+Terraform outputs) is a natural follow-up. Have feedback or ideas? Open an issue on
 [GitHub](https://github.com/cloudposse/atmos/issues).
