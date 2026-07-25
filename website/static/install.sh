@@ -10,6 +10,24 @@ command_exists() {
   command -v "$@" >/dev/null 2>&1
 }
 
+# Function to run a command with root privileges if needed, using sudo when available.
+maybe_sudo() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+    return
+  fi
+
+  if command_exists sudo; then
+    sudo "$@"
+    return
+  fi
+
+  echo "Error: this step requires root privileges, and 'sudo' is not available." >&2
+  echo "Either re-run this script as root, or install the Atmos binary directly (no root required):" >&2
+  echo "  curl -fsSL https://atmos.tools/install.sh | bash -s -- binary" >&2
+  exit 1
+}
+
 # Function to detect package manager
 detect_package_manager() {
     if command -v brew &> /dev/null; then
@@ -30,19 +48,19 @@ detect_package_manager() {
 # Function for CloudSmith package registry installation
 install_via_cloudsmith() {
 		local package_manager=$(detect_package_manager)
-    curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" | bash
+    curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" | maybe_sudo bash
 		case $package_manager in
 			alpine)
 				echo "Using apk installation method..."
-				apk add atmos
+				maybe_sudo apk add atmos
 				;;
 			deb)
 				echo "Using apt package manager..."
-				apt-get -y install atmos
+				maybe_sudo apt-get -y install atmos
 				;;
 			rpm)
 				echo "Using yum installation method..."
-				yum -y install atmos
+				maybe_sudo yum -y install atmos
 				;;
 			*)
 				echo "Invalid method specified. Use 'alpine', 'deb', or 'rpm'."

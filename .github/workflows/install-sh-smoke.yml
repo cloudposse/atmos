@@ -31,6 +31,11 @@ jobs:
         shell: bash
         run: bash website/static/install.sh binary
 
+      - name: Run installer (package method)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: bash website/static/install.sh package
+
       - name: Verify installed Atmos
         shell: bash
         run: |

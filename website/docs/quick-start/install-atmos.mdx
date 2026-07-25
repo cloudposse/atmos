@@ -57,11 +57,11 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 
     ```shell
     # Add the Cloud Posse package repository hosted by Cloudsmith
-    apt-get update && apt-get install -y apt-utils curl
-    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' │ bash
+    sudo apt-get update && sudo apt-get install -y apt-utils curl
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
     # Install atmos
-    apt-get install atmos@="${ATMOS_VERSION}-*"
+    sudo apt-get install atmos@="${ATMOS_VERSION}-*"
     ```
   </TabItem>
 
@@ -71,7 +71,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     On RedHat or CentOS, use the Cloud Posse package repository provided by Cloudsmith:
 
     ```shell
-    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' │ sudo -E bash
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' | sudo -E bash
 
     # Install atmos
     sudo yum install atmos-${ATMOS_VERSION}.x86_64
@@ -85,7 +85,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 
     ```shell
     # Install the Cloud Posse package repository hosted by Cloudsmith
-    curl -fsSL 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.alpine.sh' │ bash
+    curl -fsSL 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.alpine.sh' | bash
 
     # Install atmos
     apk add atmos@cloudposse
