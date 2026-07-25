@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -153,6 +154,15 @@ func TestResolveIdentityName(t *testing.T) {
 		Identities: map[string]schema.Identity{"a": {}, "b": {}},
 	}, "")
 	require.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity)
+
+	// A bare -i (the __SELECT__ sentinel) forces the interactive identity picker.
+	mockMgrSel := types.NewMockAuthManager(ctrl)
+	mockMgrSel.EXPECT().GetDefaultIdentity(true).Return("picked", nil)
+	got, err = resolveIdentityName(mockMgrSel, &schema.AuthConfig{
+		Identities: map[string]schema.Identity{"a": {}, "b": {}},
+	}, cfg.IdentityFlagSelectValue)
+	require.NoError(t, err)
+	assert.Equal(t, "picked", got)
 }
 
 func TestRunRDSTokenGeneration_MissingFlags(t *testing.T) {

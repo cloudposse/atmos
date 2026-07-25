@@ -195,6 +195,10 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 // disambiguates multiple defaults, and prompts on a TTY (erroring in CI). This deliberately does
 // not reimplement the weak "single identity only" heuristic that silently ignored default:true.
 func resolveIdentityName(mgr types.AuthManager, authConfig *schema.AuthConfig, identityName string) (string, error) {
+	// A bare --identity/-i (the interactive-select sentinel) forces the identity picker.
+	if identityName == cfg.IdentityFlagSelectValue {
+		return mgr.GetDefaultIdentity(true)
+	}
 	if identityName != "" {
 		return identityName, nil
 	}
