@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -17,13 +18,18 @@ import (
 type listAuthManagerSentinel struct{ auth.AuthManager }
 
 func TestCreateAuthManagerForList_EvaluationPolicy(t *testing.T) {
-	originalFactory := createAuthManagerWithStackScan
-	t.Cleanup(func() { createAuthManagerWithStackScan = originalFactory })
+	ctrl := gomock.NewController(t)
+	mockFactory := NewMockAuthManagerFactory(ctrl)
+	originalFactory := listAuthManagerFactory
+	t.Cleanup(func() { listAuthManagerFactory = originalFactory })
+	listAuthManagerFactory = mockFactory
 
 	sentinel := &listAuthManagerSentinel{}
 	var calls int
 	var gotIdentity string
-	createAuthManagerWithStackScan = func(
+	mockFactory.EXPECT().CreateWithStackScan(
+		gomock.Any(), gomock.Any(), cfg.IdentityFlagSelectValue, gomock.Any(),
+	).DoAndReturn(func(
 		identity string,
 		_ *schema.AuthConfig,
 		_ string,
@@ -32,7 +38,7 @@ func TestCreateAuthManagerForList_EvaluationPolicy(t *testing.T) {
 		calls++
 		gotIdentity = identity
 		return sentinel, nil
-	}
+	}).AnyTimes()
 
 	newCommand := func(identity string) *cobra.Command {
 		cmd := &cobra.Command{Use: "list-test"}

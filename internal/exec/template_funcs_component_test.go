@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -232,10 +233,16 @@ func TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput(t 
 		ConfigFile:      "/tmp/atmos-test-config",
 	}}
 
-	originalOutputExecutor := executeComponentFuncTerraformOutputs
-	t.Cleanup(func() { executeComponentFuncTerraformOutputs = originalOutputExecutor })
+	ctrl := gomock.NewController(t)
+	mockExecutor := NewMockComponentFuncOutputsExecutor(ctrl)
+	originalOutputExecutor := componentFuncOutputsExecutor
+	t.Cleanup(func() { componentFuncOutputsExecutor = originalOutputExecutor })
+	componentFuncOutputsExecutor = mockExecutor
+
 	var gotContext *schema.AuthContext
-	executeComponentFuncTerraformOutputs = func(
+	mockExecutor.EXPECT().ExecuteWithSections(
+		gomock.Any(), "mixed-inherit-component", "test", gomock.Any(), gomock.Any(),
+	).DoAndReturn(func(
 		_ *schema.AtmosConfiguration,
 		component, stack string,
 		_ map[string]any,
@@ -245,7 +252,7 @@ func TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput(t 
 		assert.Equal(t, "test", stack)
 		gotContext = authContext
 		return map[string]any{"value": "from-test"}, nil
-	}
+	})
 
 	_, err = componentFunc(
 		&atmosConfig,

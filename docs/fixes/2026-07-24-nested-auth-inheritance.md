@@ -44,9 +44,9 @@ state/output remains eligible for the `//` default or warn/silent degradation.
 - `cmd/list/utils.go`: `createAuthManagerForList` gains `processTemplates`/
   `processYamlFunctions` parameters and creates the stack-scan `AuthManager` whenever
   either is enabled or an identity is explicitly named. Only an explicit
-  `--identity=false` opts out unconditionally. `createAuthManagerWithStackScan` is
-  extracted as a package-level var so the policy can be tested without real
-  authentication.
+  `--identity=false` opts out unconditionally. The auth-manager creation call is behind
+  a new `AuthManagerFactory` interface (`listAuthManagerFactory`, mockgen-generated
+  `mock_utils.go`) so the policy can be tested without real authentication.
 - All `list` command call sites (`components.go`, `dependencies.go`, `instances.go`,
   `metadata.go` and `stacks.go`, `settings.go` via `initConfigAndAuth`, `values.go`) now
   pass their resolved `ProcessTemplates`/`ProcessFunctions` options through.
@@ -61,22 +61,38 @@ state/output remains eligible for the `//` default or warn/silent degradation.
   its condition to `processTemplates || processYamlFunctions || identityExplicit`
   (previously `processYamlFunctions || identityExplicit`).
 - `internal/exec/template_funcs_component.go`: extracted the `tfoutput.ExecuteWithSections`
-  call to a package-level var (`executeComponentFuncTerraformOutputs`) so a test can
-  assert the `AuthContext` `atmos.Component()` passes to terraform-output without
-  contacting AWS. No behavior change.
+  call behind a new `ComponentFuncOutputsExecutor` interface (`componentFuncOutputsExecutor`,
+  mockgen-generated `mock_template_funcs_component.go`) so a test can assert the
+  `AuthContext` `atmos.Component()` passes to terraform-output without contacting AWS. No
+  behavior change.
+- Replaced the remaining bare-func-var test seams for auth-manager creation with the same
+  interface + generated-mock pattern, following up on CodeRabbit's PR #2801 review rather
+  than deferring it: `internal/exec/terraform_query.go`'s `authManagerFactory` (used by
+  `ExecuteTerraformQuery`'s multi-component path) is now typed as `AuthManagerQueryFactory`,
+  backed by `defaultAuthManagerQueryFactory` and a generated `mock_terraform_query.go`. All
+  three auth-manager-factory seams touched by this PR now share one consistent style
+  (exported one-method interface, `default*` struct delegating to the real `pkg/auth` call,
+  package var of the interface type, `mockgen -source=$GOFILE` directive) instead of a mix
+  of hand-rolled closures — matching the existing `TerraformOutputGetter` pattern in
+  `internal/exec/terraform_output_getter.go`.
 - `internal/exec/yaml_func_terraform_state.go`, `internal/exec/yaml_func_utils.go`:
   `isRecoverableInWarnMode` reverted to equal `isRecoverableTerraformError` — drops the
   `ErrGetObjectFromS3` tolerance added 2026-07-21 (see Context above).
 - Tests: new `cmd/list/utils_auth_test.go`
   (`TestCreateAuthManagerForList_EvaluationPolicy`, a table test covering
   templates-only, yaml-functions-only, both disabled, explicit identity, and explicit
-  `--identity=false`); `cmd/describe_stacks_test.go`
+  `--identity=false`, now driven by the generated `MockAuthManagerFactory`);
+  `cmd/describe_stacks_test.go`
   (`TestShouldCreateDescribeStacksAuthManager`); `internal/exec/template_funcs_component_test.go`
-  (`TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput` and a new
-  `resolveComponentFuncAuthManager` subtest for an auth-less target); updated
+  (`TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput`, now driven by
+  the generated `MockComponentFuncOutputsExecutor`, and a new `resolveComponentFuncAuthManager`
+  subtest for an auth-less target); updated
   `internal/exec/describe_stacks_component_processor_test.go`,
   `internal/exec/yaml_func_terraform_state_yq_defaults_test.go`, and
-  `internal/exec/yaml_func_utils_lenient_test.go` for the `ErrGetObjectFromS3` reversal.
+  `internal/exec/yaml_func_utils_lenient_test.go` for the `ErrGetObjectFromS3` reversal;
+  updated `internal/exec/terraform_query_test.go`, `internal/exec/terraform_utils_test.go`,
+  and `internal/exec/terraform_all_test.go` to drive `authManagerFactory` through the
+  generated `MockAuthManagerQueryFactory` instead of hand-written closures.
 
 ## Validation
 
@@ -86,10 +102,15 @@ go test ./cmd/... ./internal/exec/...
 go test ./cmd/list/... -run TestCreateAuthManagerForList_EvaluationPolicy -v
 go test ./cmd/... -run TestShouldCreateDescribeStacksAuthManager -v
 go test ./internal/exec/... -run 'TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput|TestResolveComponentFuncAuthManager|TestIsRecoverableInWarnMode|TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn' -v
+go test ./internal/exec/... -run 'TestCreateQueryAuthManager|TestExecuteTerraformQueryRoutesThroughSchedulerAdapter|TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter|TestCreateQueryAuthManagerPropagatesFactoryError|TestExecuteTerraformAll_AuthManagerResolverWired|TestExecuteTerraformAll_AuthManagerCreationError' -v
 ```
 
-`go build ./...` passed cleanly. The full package run and all three targeted runs above passed.
+`go build ./...` passed cleanly. The full package run and all targeted runs above passed.
 
 ## Follow-ups
 
-None.
+None. CodeRabbit's PR #2801 review offered to file a follow-up issue to migrate
+`createAuthManagerWithStackScan` and `executeComponentFuncTerraformOutputs` to a
+generated-mock interface; that migration (plus the equivalent, previously
+unflagged `authManagerFactory` seam in `internal/exec/terraform_query.go`) was
+done directly in this PR instead, so no follow-up issue is needed.

@@ -1,5 +1,7 @@
 package list
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
 	"errors"
 	"fmt"
@@ -194,9 +196,35 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
-// createAuthManagerWithStackScan is replaceable in tests so command-level auth policy can
-// be verified without performing real authentication.
-var createAuthManagerWithStackScan = auth.CreateAndAuthenticateManagerWithStackScan
+// AuthManagerFactory abstracts auth.CreateAndAuthenticateManagerWithStackScan so
+// createAuthManagerForList's evaluation policy can be verified without performing real
+// authentication.
+type AuthManagerFactory interface {
+	// CreateWithStackScan creates and authenticates an AuthManager, first running the stack-file
+	// pre-scan to discover stack-level default identities.
+	CreateWithStackScan(
+		identity string,
+		authConfig *schema.AuthConfig,
+		selectValue string,
+		atmosConfig *schema.AtmosConfiguration,
+	) (auth.AuthManager, error)
+}
+
+// defaultAuthManagerFactory implements AuthManagerFactory using pkg/auth.
+type defaultAuthManagerFactory struct{}
+
+func (defaultAuthManagerFactory) CreateWithStackScan(
+	identity string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+) (auth.AuthManager, error) {
+	return auth.CreateAndAuthenticateManagerWithStackScan(identity, authConfig, selectValue, atmosConfig)
+}
+
+// listAuthManagerFactory is replaceable in tests so command-level auth policy can be verified
+// without performing real authentication.
+var listAuthManagerFactory AuthManagerFactory = defaultAuthManagerFactory{}
 
 // createAuthManagerForList creates an AuthManager when the command will evaluate values
 // that can require credentials, or when the caller explicitly selected an identity. Plain
@@ -215,7 +243,7 @@ func createAuthManagerForList(
 		return nil, nil
 	}
 
-	authManager, err := createAuthManagerWithStackScan(
+	authManager, err := listAuthManagerFactory.CreateWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
