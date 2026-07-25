@@ -187,12 +187,17 @@ install_atmos
 # Resolve via the real PATH only (no leading "."): the package managers
 # handled here (brew/nix/apt/yum/apk) always install into a directory
 # already on PATH, and searching "." risks matching an unrelated same-named
-# file in the current directory instead, plus that relative path would break
+# file in the current directory instead. Even so, normalize to an absolute
+# path here: if the caller's own PATH contains "." or another relative
+# entry, command -v can still return a relative path, which would break
 # once we cd into verify_dir below.
 if [ -n "$installed_atmos_path" ]; then
 	atmos="$(pwd)/${installed_atmos_path#./}"
 else
-	atmos=$(command -v atmos)
+	atmos="$(command -v atmos)"
+	if [[ "$atmos" != /* ]]; then
+		atmos="$(cd -- "$(dirname -- "$atmos")" && pwd -P)/$(basename -- "$atmos")"
+	fi
 fi
 
 verify_dir=$(mktemp -d 2>/dev/null || mktemp -d -t atmos-verify)
