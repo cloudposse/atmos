@@ -169,6 +169,7 @@ type IntegrationSpec struct {
 	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
 	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
 	Cluster       *EKSCluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // EKS cluster for aws/eks integrations.
+	Database      *RDSDatabase `yaml:"database,omitempty" json:"database,omitempty" mapstructure:"database"`                   // RDS/Aurora database for aws/rds integrations.
 
 	// GitHub STS integration (github/sts) fields.
 	Repos         []string `yaml:"repos,omitempty" json:"repos,omitempty" mapstructure:"repos"`                               // Optional source repos (sent as sts sources[]).
@@ -210,4 +211,29 @@ type KubeconfigSettings struct {
 
 	// Update determines how to handle existing kubeconfig: "merge" (default), "replace", or "error".
 	Update string `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
+}
+
+// RDSDatabase represents an RDS/Aurora database endpoint for aws/rds integrations.
+//
+// The aws/rds integration is declarative connection metadata only: its Execute is a no-op at
+// login. An RDS IAM authentication token is short-lived (~15 minutes) and is minted fresh on
+// each "atmos aws rds connect" invocation, never provisioned at login.
+type RDSDatabase struct {
+	// Host is the RDS/Aurora endpoint hostname (required).
+	Host string `yaml:"host" json:"host" mapstructure:"host"`
+
+	// Port is the database port, for example 5432 (PostgreSQL) or 3306 (MySQL) (required).
+	Port int `yaml:"port" json:"port" mapstructure:"port"`
+
+	// Username is the database account name mapped to IAM authentication (required).
+	Username string `yaml:"username" json:"username" mapstructure:"username"`
+
+	// Region is the AWS region of the endpoint. Optional; defaults to the identity's credential region.
+	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+
+	// Database is the initial database or schema name to connect to. Optional.
+	Database string `yaml:"database,omitempty" json:"database,omitempty" mapstructure:"database"`
+
+	// Engine selects the client: "postgres" (psql) or "mysql" (mysql). Optional; inferred from the port when empty.
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty" mapstructure:"engine"`
 }

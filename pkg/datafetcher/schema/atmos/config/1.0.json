@@ -5988,6 +5988,20 @@
           ],
           "description": "EKS cluster for aws/eks integrations."
         },
+        "database": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RDSDatabase"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "RDS/Aurora database for aws/rds integrations."
+        },
         "repos": {
           "anyOf": [
             {
@@ -8202,6 +8216,81 @@
       },
       "type": "object",
       "description": "ProvisionWorkdirSettings contains default settings for workdir provisioning."
+    },
+    "RDSDatabase": {
+      "properties": {
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Host is the RDS/Aurora endpoint hostname (required)."
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Port is the database port, for example 5432 (PostgreSQL) or 3306 (MySQL) (required)."
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Username is the database account name mapped to IAM authentication (required)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the AWS region of the endpoint. Optional; defaults to the identity's credential region."
+        },
+        "database": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Database is the initial database or schema name to connect to. Optional."
+        },
+        "engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Engine selects the client: \"postgres\" (psql) or \"mysql\" (mysql). Optional; inferred from the port when empty."
+        }
+      },
+      "type": "object",
+      "description": "RDSDatabase represents an RDS/Aurora database endpoint for aws/rds integrations.\n\nThe aws/rds integration is declarative connection metadata only: its Execute is a no-op at\nlogin. An RDS IAM authentication token is short-lived (~15 minutes) and is minted fresh on\neach \"atmos aws rds connect\" invocation, never provisioned at login."
     },
     "ResourcePath": {
       "properties": {
