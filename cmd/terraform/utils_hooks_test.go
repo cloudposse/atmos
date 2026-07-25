@@ -939,6 +939,27 @@ func TestPrepareHookContextResolvesMetadataComponent(t *testing.T) {
 	assert.Empty(t, ctx.info.ComponentFolderPrefix)
 }
 
+// TestPrepareHookContextToleratesProcessStacksFailure verifies the
+// metadata.component resolution added to prepareHookContext is genuinely
+// best-effort: a ProcessStacks failure (here, no --stack provided, so
+// ProcessStacks(checkStack=true) returns errUtils.ErrMissingStack) must not
+// become PreRunE's user-facing error. GetHooks (called next, in
+// runUserHooks) already tolerates an empty Stack/unresolved component by
+// returning no hooks, so info is left exactly as ProcessCommandLineArgs
+// produced it, and RunE's own validation — not this hook-prep step —
+// produces the correct, authoritative error and message.
+func TestPrepareHookContextToleratesProcessStacksFailure(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-all-dependencies")
+	cmd := newHookTestCmd()
+	// Deliberately leave --stack unset: ProcessStacks(checkStack=true) fails
+	// with ErrMissingStack, which prepareHookContext must swallow.
+
+	ctx, err := prepareHookContext(cmd, []string{"platform-kms"})
+	require.NoError(t, err, "a ProcessStacks failure during hook-context prep must not surface as PreRunE's error")
+	assert.Equal(t, "platform-kms", ctx.info.ComponentFromArg)
+	assert.Empty(t, ctx.info.FinalComponent, "on ProcessStacks failure, info must be left unresolved rather than partially mutated")
+}
+
 // TestEnsureComponentSourceProvisioned verifies that a `before.terraform.*`
 // hook is a "run before Terraform" event, not a "run before the component's
 // JIT source is provisioned" event: ensureComponentSourceProvisioned vendors
@@ -989,6 +1010,35 @@ func TestEnsureComponentSourceProvisioned_NoSourceIsNoOp(t *testing.T) {
 
 	_, err := os.Stat(filepath.Join(terraformDir, "app"))
 	assert.True(t, os.IsNotExist(err), "no source configured should mean no directory is created")
+}
+
+// TestEnsureComponentSourceProvisioned_ProvisioningFailureIsLoggedNotReturned
+// verifies that a JIT source that fails to provision (here, a `source:`
+// pointing at a nonexistent local directory) is logged rather than returned:
+// ensureComponentSourceProvisioned has no error return, precisely so hooks
+// still attempt to run even when provisioning fails — the real Terraform
+// command surfaces the same provisioning error authoritatively moments
+// later. Regression coverage for that error branch: a failed provisioning
+// attempt must leave no component directory behind.
+func TestEnsureComponentSourceProvisioned_ProvisioningFailureIsLoggedNotReturned(t *testing.T) {
+	terraformDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "app",
+		FinalComponent:   "app",
+		ComponentSection: schema.AtmosSectionMapType{
+			"component": "app",
+			"source":    filepath.Join(terraformDir, "does-not-exist-source"),
+		},
+	}
+
+	// ensureComponentSourceProvisioned has no error return: a provisioning
+	// failure (here, the source path doesn't exist) must be logged and
+	// swallowed, not panic or otherwise abort the caller (runUserHooks),
+	// so hooks still get a chance to run.
+	require.NotPanics(t, func() {
+		ensureComponentSourceProvisioned(atmosConfig, info)
+	}, "a provisioning failure must be logged, not propagated as a panic")
 }
 
 // writeMinimalSourceFixture builds a self-contained atmos project (atmos.yaml,

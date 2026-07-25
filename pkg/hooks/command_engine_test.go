@@ -586,6 +586,12 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 	// platform.
 	terraformBasePath := filepath.Join(wd, "repo", "components", "terraform")
 
+	// Pre-create a provisioned workdir directory so a test case below can
+	// exercise resolveProvisionedWorkdir's "exists on disk" true branch,
+	// which the fallback-only cases above never reach.
+	provisionedWorkdirPath := filepath.Join(wd, ".workdir", "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(provisionedWorkdirPath, 0o755))
+
 	tests := []struct {
 		name string
 		ctx  *ExecContext
@@ -649,6 +655,84 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 				},
 			},
 			want: filepath.Join(terraformBasePath, "catalog", "vpc"),
+		},
+		{
+			// Exercises resolveProvisionedWorkdir's true branch: BasePath +
+			// componentType + stack + component match the pre-created
+			// directory above, so the provisioned workdir wins over the
+			// in-repo fallback that the other cases exercise.
+			name: "prefers an actually provisioned workdir over the in-repo fallback",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{BasePath: wd, TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					FinalComponent:   "vpc",
+					Stack:            "dev",
+					ComponentSection: schema.AtmosSectionMapType{},
+				},
+			},
+			want: provisionedWorkdirPath,
+		},
+		{
+			name: "uses the packer component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{PackerDirAbsolutePath: filepath.Join(wd, "repo", "components", "packer")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "packer",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "image",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "packer", "catalog", "image"),
+		},
+		{
+			name: "uses the ansible component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{AnsibleDirAbsolutePath: filepath.Join(wd, "repo", "components", "ansible")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "ansible",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "playbook",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "ansible", "catalog", "playbook"),
+		},
+		{
+			name: "uses the kubernetes component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{KubernetesDirAbsolutePath: filepath.Join(wd, "repo", "components", "kubernetes")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "kubernetes",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "deployment",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "kubernetes", "catalog", "deployment"),
+		},
+		{
+			name: "uses the helm component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{HelmDirAbsolutePath: filepath.Join(wd, "repo", "components", "helm")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "helm",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "chart",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "helm", "catalog", "chart"),
+		},
+		{
+			// componentBasePath's default case: an unrecognized component
+			// type has no configured base path to fall back to, so
+			// ComponentPath degrades all the way to the working directory.
+			name: "unknown component type falls back to working directory",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:  "unknown-type",
+					FinalComponent: "vpc",
+				},
+			},
+			want: wd,
 		},
 	}
 
