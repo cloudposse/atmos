@@ -88,6 +88,7 @@ func TestSSMStore_Set(t *testing.T) {
 		component    string
 		key          string
 		value        interface{}
+		secret       bool
 		writeRoleArn *string
 		mockSetup    func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
 		wantErr      bool
@@ -106,6 +107,65 @@ func TestSSMStore_Set(t *testing.T) {
 					Overwrite: aws.Bool(true),
 				}).Return(&ssm.PutParameterOutput{}, nil)
 			},
+		},
+		{
+			name:      "secret_string_is_stored_raw",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			value:     "test-value",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					Value:     aws.String("test-value"),
+					Type:      types.ParameterTypeSecureString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
+			name:      "secret_structured_value_is_json_encoded",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-config",
+			value:     map[string]interface{}{"key": "value"},
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-config"),
+					Value:     aws.String(`{"key":"value"}`),
+					Type:      types.ParameterTypeSecureString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
+			// SSM PutParameter rejects zero-length values, so an empty secret string
+			// must keep its JSON encoding (`""`) instead of being written raw.
+			name:      "secret_empty_string_is_json_encoded",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			value:     "",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					Value:     aws.String(`""`),
+					Type:      types.ParameterTypeSecureString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
+			name:      "secret_non_serializable_value_returns_error",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-config",
+			value:     make(chan int),
+			secret:    true,
+			wantErr:   true,
 		},
 		{
 			name:      "successful_set_with_slice",
@@ -288,6 +348,7 @@ func TestSSMStore_Set(t *testing.T) {
 			}
 
 			store.writeRoleArn = tt.writeRoleArn
+			store.secret = tt.secret
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SSMStore.Set() error = %v, wantErr %v", err, tt.wantErr)
@@ -449,6 +510,7 @@ func TestSSMStore_Get(t *testing.T) {
 		stack       string
 		component   string
 		key         string
+		secret      bool
 		readRoleArn *string
 		mockSetup   func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
 		want        interface{}
@@ -661,6 +723,164 @@ func TestSSMStore_Get(t *testing.T) {
 			want: "42",
 		},
 		{
+			// Secret stores write scalar strings raw (see Set), so a secret whose bytes
+			// parse as a JSON number must round-trip byte-exact instead of being re-typed
+			// to float64 (which would corrupt it to "100000" via %v formatting).
+			name:      "secret_raw_scientific_notation_string_round_trips",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`1e5`),
+					},
+				}, nil)
+			},
+			want: "1e5",
+		},
+		{
+			// json.Unmarshal into any would lose precision on large integers (float64
+			// mantissa); the raw bytes must survive.
+			name:      "secret_raw_large_integer_round_trips",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`12345678901234567890`),
+					},
+				}, nil)
+			},
+			want: "12345678901234567890",
+		},
+		{
+			// A secret literally set to the string "null" must not come back as nil
+			// (which %v formatting would render as "<nil>").
+			name:      "secret_raw_null_string_round_trips",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`null`),
+					},
+				}, nil)
+			},
+			want: "null",
+		},
+		{
+			name:      "secret_raw_boolean_string_round_trips",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`true`),
+					},
+				}, nil)
+			},
+			want: "true",
+		},
+		{
+			// Empty secret strings are written JSON-encoded (`""`) because SSM rejects
+			// zero-length values; they must decode back to an empty string.
+			name:      "secret_empty_string_round_trips",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`""`),
+					},
+				}, nil)
+			},
+			want: "",
+		},
+		{
+			// Parameters written JSON-quoted by Atmos before raw scalar writes were
+			// introduced must keep decoding, so existing stored secrets stay readable.
+			name:      "secret_legacy_json_quoted_string_still_decodes",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`"legacy-value"`),
+					},
+				}, nil)
+			},
+			want: "legacy-value",
+		},
+		{
+			// Structured secrets are still JSON-encoded by Set and must decode so the
+			// YQ query path receives a map.
+			name:      "secret_structured_value_still_decodes",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`{"key":"value"}`),
+					},
+				}, nil)
+			},
+			want: map[string]interface{}{"key": "value"},
+		},
+		{
+			// Non-JSON secret strings (the common case after raw writes) come back verbatim.
+			name:      "secret_raw_plain_string_round_trips",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`hello world`),
+					},
+				}, nil)
+			},
+			want: "hello world",
+		},
+		{
 			name:        "successful_get_with_read_role",
 			stack:       "dev/usw2/app",
 			component:   "service",
@@ -715,6 +935,7 @@ func TestSSMStore_Get(t *testing.T) {
 			}
 
 			store.readRoleArn = tt.readRoleArn
+			store.secret = tt.secret
 			got, err := store.Get(tt.stack, tt.component, tt.key)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SSMStore.Get() error = %v, wantErr %v", err, tt.wantErr)
@@ -1054,11 +1275,30 @@ func TestSSMStore_GetKey(t *testing.T) {
 	tests := []struct {
 		name        string
 		key         string
+		secret      bool
 		readRoleArn *string
 		mockSetup   func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
 		want        interface{}
 		wantErr     bool
 	}{
+		{
+			// GetKey shares decodeParameterValue with Get: secret-store JSON scalars
+			// that are not strings return byte-exact instead of being re-typed.
+			name:   "secret_raw_number_string_round_trips",
+			key:    "dev/usw2/app/service/secret-key",
+			secret: true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`1e5`),
+					},
+				}, nil)
+			},
+			want: "1e5",
+		},
 		{
 			name: "successful_get",
 			key:  "dev/usw2/app/service/config-key",
@@ -1258,6 +1498,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			}
 
 			store.readRoleArn = tt.readRoleArn
+			store.secret = tt.secret
 			got, err := store.GetKey(tt.key)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SSMStore.GetKey() error = %v, wantErr %v", err, tt.wantErr)
