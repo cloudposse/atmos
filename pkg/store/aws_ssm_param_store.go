@@ -278,7 +278,10 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 // existing structured-value round-trip contract.
 func (s *SSMStore) encodeParameterValue(value any) (string, error) {
 	strValue, isString := value.(string)
-	if s.secret && isString {
+	// Empty strings must stay JSON-encoded (`""`): SSM PutParameter rejects
+	// zero-length values (Value must have length >= 1), and the JSON form
+	// decodes back to an empty string on read.
+	if s.secret && isString && strValue != "" {
 		return strValue, nil
 	}
 	jsonValue, err := json.Marshal(value)

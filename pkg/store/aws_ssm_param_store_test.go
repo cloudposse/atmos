@@ -141,6 +141,24 @@ func TestSSMStore_Set(t *testing.T) {
 			},
 		},
 		{
+			// SSM PutParameter rejects zero-length values, so an empty secret string
+			// must keep its JSON encoding (`""`) instead of being written raw.
+			name:      "secret_empty_string_is_json_encoded",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			value:     "",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					Value:     aws.String(`""`),
+					Type:      types.ParameterTypeSecureString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
 			name:      "secret_non_serializable_value_returns_error",
 			stack:     "dev/usw2/app",
 			component: "service",
@@ -782,6 +800,26 @@ func TestSSMStore_Get(t *testing.T) {
 				}, nil)
 			},
 			want: "true",
+		},
+		{
+			// Empty secret strings are written JSON-encoded (`""`) because SSM rejects
+			// zero-length values; they must decode back to an empty string.
+			name:      "secret_empty_string_round_trips",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "secret-key",
+			secret:    true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`""`),
+					},
+				}, nil)
+			},
+			want: "",
 		},
 		{
 			// Parameters written JSON-quoted by Atmos before raw scalar writes were

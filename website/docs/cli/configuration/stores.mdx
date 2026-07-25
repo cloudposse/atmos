@@ -159,6 +159,8 @@ stores:
 
 SSM parameter names use hierarchical paths, so a configured `prefix` must start with `/` (for example, `/myapp`).
 
+When a store is marked `secret: true`, string values are written to SSM verbatim (no JSON quoting), so AWS-native consumers (ECS, Lambda, the `aws` CLI) read the exact secret bytes. Structured values (maps and lists) and empty strings are still stored JSON-encoded — SSM rejects zero-length values. On read, Atmos decodes JSON objects, arrays, and quoted strings (the pre-existing storage format) and returns all other values byte-exact. One consequence: a string secret whose entire value is itself a JSON document (or is wrapped in literal double quotes) is indistinguishable from the encoded form of a structured secret, so Atmos readers (`!secret`, `atmos secret get`/`env`/`exec`) decode it rather than returning the exact original string; external consumers always receive the exact stored bytes.
+
 ### AWS Secrets Manager
 
 <File title="atmos.yaml">
