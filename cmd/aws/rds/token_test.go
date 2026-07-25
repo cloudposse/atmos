@@ -3,6 +3,7 @@ package rds
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -79,12 +81,17 @@ func captureStdout(t *testing.T, fn func()) string {
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	os.Stdout = w
+	// Drain the pipe concurrently so output larger than the pipe buffer cannot deadlock, and so
+	// the full output is captured (a single fixed-size Read could silently truncate).
+	done := make(chan string, 1)
+	go func() {
+		out, _ := io.ReadAll(r)
+		done <- string(out)
+	}()
 	fn()
 	w.Close()
 	os.Stdout = old
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	return string(buf[:n])
+	return <-done
 }
 
 func TestRdsCmd_Structure(t *testing.T) {
@@ -115,16 +122,37 @@ func TestTokenCmd_HasFlags(t *testing.T) {
 	assert.Equal(t, "i", tokenCmd.Flags().Lookup("identity").Shorthand)
 }
 
-func TestResolveDefaultIdentity(t *testing.T) {
-	assert.Equal(t, "", resolveDefaultIdentity(nil))
-	assert.Equal(t, "", resolveDefaultIdentity(&schema.AuthConfig{Identities: map[string]schema.Identity{}}))
-	assert.Equal(t, "dev-admin", resolveDefaultIdentity(&schema.AuthConfig{
-		Identities: map[string]schema.Identity{"dev-admin": {Kind: "aws/user"}},
-	}))
-	// Multiple identities cannot be auto-selected.
-	assert.Equal(t, "", resolveDefaultIdentity(&schema.AuthConfig{
+func TestResolveIdentityName(t *testing.T) {
+	// An explicit identity is used as-is (no resolver call).
+	got, err := resolveIdentityName(nil, &schema.AuthConfig{}, "explicit")
+	require.NoError(t, err)
+	assert.Equal(t, "explicit", got)
+
+	// Exactly one configured identity is auto-selected (no resolver call).
+	got, err = resolveIdentityName(nil, &schema.AuthConfig{
+		Identities: map[string]schema.Identity{"only": {Kind: "aws/user"}},
+	}, "")
+	require.NoError(t, err)
+	assert.Equal(t, "only", got)
+
+	// Multiple identities defer to the canonical resolver, which honors default:true. This guards
+	// the fix for the earlier len==1-only helper that silently ignored default:true.
+	ctrl := gomock.NewController(t)
+	mockMgr := types.NewMockAuthManager(ctrl)
+	mockMgr.EXPECT().GetDefaultIdentity(false).Return("primary", nil)
+	got, err = resolveIdentityName(mockMgr, &schema.AuthConfig{
+		Identities: map[string]schema.Identity{"primary": {Default: true}, "secondary": {}},
+	}, "")
+	require.NoError(t, err)
+	assert.Equal(t, "primary", got)
+
+	// A resolver error (e.g. no default identity in CI) propagates unchanged.
+	mockMgr2 := types.NewMockAuthManager(ctrl)
+	mockMgr2.EXPECT().GetDefaultIdentity(false).Return("", errUtils.ErrNoDefaultIdentity)
+	_, err = resolveIdentityName(mockMgr2, &schema.AuthConfig{
 		Identities: map[string]schema.Identity{"a": {}, "b": {}},
-	}))
+	}, "")
+	require.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity)
 }
 
 func TestRunRDSTokenGeneration_MissingFlags(t *testing.T) {
@@ -152,8 +180,12 @@ func TestRunRDSTokenGeneration_MissingFlags(t *testing.T) {
 
 func TestRunRDSTokenGeneration_Success(t *testing.T) {
 	initTestIO(t)
-	const wantToken = "mydb.abc123.us-east-2.rds.amazonaws.com:5432/?Action=connect&DBUser=app&X-Amz-Signature=deadbeef"
-	stubTokenDeps(t,
+	// wantToken embeds X-Amz-Credential=AKIA... (as a real RDS presigned token does) so this test
+	// actually guards the WriteUnmasked decision: the masked data.Write path would rewrite the
+	// AKIA... access-key-id to *** and fail the exact-match assertion below.
+	const wantToken = "mydb.abc123.us-east-2.rds.amazonaws.com:5432/?Action=connect&DBUser=app&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20260724%2Fus-east-2%2Frds-db%2Faws4_request&X-Amz-Signature=deadbeef"
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(endpoint, region, dbUser string) (string, time.Time, error) {
@@ -176,7 +208,8 @@ func TestRunRDSTokenGeneration_Success(t *testing.T) {
 }
 
 func TestRunRDSTokenGeneration_AuthError(t *testing.T) {
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		errors.New("no identity"),
 		func(_, _, _ string) (string, time.Time, error) { return "", time.Time{}, nil },
@@ -187,7 +220,8 @@ func TestRunRDSTokenGeneration_AuthError(t *testing.T) {
 }
 
 func TestRunRDSTokenGeneration_TokenError(t *testing.T) {
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(_, _, _ string) (string, time.Time, error) {
@@ -199,10 +233,25 @@ func TestRunRDSTokenGeneration_TokenError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrRDSTokenGeneration)
 }
 
+func TestRunRDSTokenGeneration_ConfigError(t *testing.T) {
+	stubTokenDeps(
+		t,
+		func() (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, errors.New("config load boom")
+		},
+		nil,
+		func(_, _, _ string) (string, time.Time, error) { return "", time.Time{}, nil },
+	)
+	err := runRDSTokenGeneration(tokenOptions{Host: "db", Port: 5432, Username: "app", Region: "us-east-2"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+}
+
 func TestExecuteTokenCommand_ReadsFlags(t *testing.T) {
 	initTestIO(t)
 	const wantToken = "db:5432/?Action=connect&DBUser=app&X-Amz-Signature=abc"
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(endpoint, _, _ string) (string, time.Time, error) {
@@ -236,7 +285,8 @@ func TestExecuteTokenCommand_ReadsEnvVars(t *testing.T) {
 	t.Setenv("ATMOS_AWS_SECURITY_REGION", "us-west-2")
 
 	const wantToken = "envhost:5432/?Action=connect&DBUser=envuser&X-Amz-Signature=abc"
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(endpoint, region, dbUser string) (string, time.Time, error) {

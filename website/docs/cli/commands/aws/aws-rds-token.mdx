@@ -106,6 +106,7 @@ RDS IAM authentication must already be enabled for the target database, independ
 ## Notes
 
 - Tokens expire after approximately 15 minutes (AWS-enforced) and are single-use per connection.
+- The token is a live credential. Do not record this command with `--cast`/`ATMOS_CAST`: the token is written to `stdout` unmasked and would be captured verbatim into the recording.
 - IAM database authentication is supported for RDS for PostgreSQL, MySQL, and MariaDB, and the
   Aurora PostgreSQL- and MySQL-compatible editions.
 - The token is generated offline; the command makes no RDS API calls.

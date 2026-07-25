@@ -64,3 +64,16 @@ func TestGetRDSToken_RegionFromCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(token, "eu-west-1"), "token should be signed for the credentials' region")
 }
+
+func TestGetRDSToken_NoRegion(t *testing.T) {
+	// When neither an explicit region nor the credentials carry a region, signing would use an
+	// empty region and produce a token that fails only at connect time, so GetRDSToken errors up
+	// front instead of emitting it.
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+	}
+	_, _, err := GetRDSToken(context.Background(), creds, "mydb.internal.example:5432", "", "app")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrRDSTokenGeneration)
+}
