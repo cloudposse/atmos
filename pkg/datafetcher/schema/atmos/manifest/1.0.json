@@ -1814,7 +1814,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "Custom configuration per component, not inherited by derived components",
+                  "description": "Custom configuration per component. Inherited from base components via metadata.inherits when stacks.inherit.metadata is enabled (the default); component-local values override inherited ones.",
                   "additionalProperties": true,
                   "title": "custom"
                 }
@@ -1877,7 +1877,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "Custom configuration, not inherited by derived components",
+                  "description": "Custom configuration, deep-merged into every component's own metadata.custom as a stack-wide default; a component's metadata.inherits chain and its own local metadata.custom both override this.",
                   "additionalProperties": true,
                   "title": "custom"
                 }
