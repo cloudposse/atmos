@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -320,7 +321,9 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	_, err := io.Copy(&output, r)
 	require.NoError(t, err)
 
-	got := output.String()
+	// Strip ANSI since CI-enabled color rendering can wrap this message across
+	// separate escape-coded spans, splitting the plain substring below.
+	got := atmosansi.Strip(output.String())
 	assert.Contains(t, got, argErr.Error(), "must surface Cobra's own argument-count message")
 	assert.NotContains(t, got, "Unknown command", "must not misreport a wrong-argument-count error as an unknown command")
 }
