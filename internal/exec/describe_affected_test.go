@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -280,6 +281,35 @@ func shouldSkipRepoCopyPath(src string) bool {
 	return false
 }
 
+// copyRepoWithRetry copies the live repository at src into dest, retrying a few times
+// if the copy fails because a source file vanished mid-copy. The source is the actual
+// checked-out repository, which can have transient files appear and disappear under
+// .git/objects/pack while git performs routine background housekeeping (e.g. an
+// automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes
+// them within milliseconds). The otiai10/copy directory walk stats every entry it
+// lists, so it can observe one of these files mid-flight and fail the whole copy with
+// "no such file or directory". Retrying a moment later almost always succeeds, since
+// the transient file is long gone by the next attempt.
+func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
+	t.Helper()
+
+	const maxAttempts = 5
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = cp.Copy(src, dest, *opts)
+		if err == nil || !os.IsNotExist(err) {
+			return err
+		}
+		if attempt == maxAttempts {
+			return err
+		}
+		// Remove any partial copy before retrying so the next attempt starts clean.
+		require.NoError(t, os.RemoveAll(dest))
+		time.Sleep(50 * time.Millisecond)
+	}
+	return err
+}
+
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
 func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfiguration, repoPath, componentPath string) {
 	t.Helper()
@@ -323,7 +353,7 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	}
 
 	// Copy the local repository into a temp dir.
-	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	err = copyRepoWithRetry(t, pathPrefix, tempDir, &copyOptions)
 	require.NoError(t, err)
 
 	// Copy the affected stacks into the `stacks` folder in the temp dir.
@@ -1246,7 +1276,7 @@ func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStac
 	}
 
 	// Copy the local repository into a temp dir.
-	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	err = copyRepoWithRetry(t, pathPrefix, tempDir, &copyOptions)
 	require.NoError(t, err)
 
 	// Copy the affected stacks into the `stacks` folder in the temp dir.
