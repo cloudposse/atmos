@@ -991,6 +991,86 @@ func TestEnsureComponentSourceProvisioned_NoSourceIsNoOp(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "no source configured should mean no directory is created")
 }
 
+// writeMinimalSourceFixture builds a self-contained atmos project (atmos.yaml,
+// one deploy stack, and a local JIT source directory) under a temp root, so
+// prepareHookContext-level provisioning tests don't depend on network access
+// or a checked-in fixture. Returns the project root and the component name.
+func writeMinimalSourceFixture(t *testing.T) (root, component string) {
+	t.Helper()
+
+	root = t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# fixture\n"), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/*.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Debug
+`), 0o644))
+
+	stacksDeployDir := filepath.Join(root, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(stacksDeployDir, 0o755))
+	stackYAML := "vars:\n  stage: test\n\ncomponents:\n  terraform:\n    app:\n      source:\n        uri: \"" +
+		filepath.ToSlash(sourceDir) + "\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDeployDir, "test.yaml"), []byte(stackYAML), 0o644))
+
+	return root, "app"
+}
+
+// TestPrepareHookContextProvisionsSourceBeforeHooks verifies prepareHookContext
+// provisions a component's JIT `source:` before firing a `before.terraform.plan`
+// hook, so ComponentPath()/$ATMOS_COMPONENT_PATH point at a real, populated
+// directory instead of one Terraform itself wouldn't create until RunE.
+func TestPrepareHookContextProvisionsSourceBeforeHooks(t *testing.T) {
+	root, component := writeMinimalSourceFixture(t)
+	t.Chdir(root)
+
+	cmd := newHookTestCmd() // Use: "plan"
+	require.NoError(t, cmd.Flags().Set("stack", "test"))
+
+	_, err := prepareHookContext(cmd, []string{component})
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(root, "components", "terraform", component, "main.tf"))
+	assert.NoError(t, statErr, "before.terraform.plan must see a provisioned component directory")
+}
+
+// TestPrepareHookContextSkipsProvisioningForInit verifies before.terraform.init
+// is excluded from prepareHookContext's pre-provisioning: it is the source
+// provisioner's own lifecycle event (HookEventBeforeTerraformInit), so
+// pre-provisioning here would fire it after provisioning already happened,
+// inverting the one event whose entire point is to run before the source
+// exists. Regression test for a CodeRabbit review finding on PR #2802.
+func TestPrepareHookContextSkipsProvisioningForInit(t *testing.T) {
+	root, component := writeMinimalSourceFixture(t)
+	t.Chdir(root)
+
+	cmd := &cobra.Command{Use: "init"}
+	cmd.Flags().String("base-path", "", "base path")
+	cmd.Flags().StringSlice("config", nil, "config")
+	cmd.Flags().StringSlice("config-path", nil, "config path")
+	cmd.Flags().StringSlice("profile", nil, "profile")
+	cmd.Flags().String("stack", "", "stack flag")
+	cmd.Flags().Bool("ci", false, "ci flag")
+	require.NoError(t, cmd.Flags().Set("stack", "test"))
+
+	_, err := prepareHookContext(cmd, []string{component})
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(root, "components", "terraform", component))
+	assert.True(t, os.IsNotExist(statErr), "before.terraform.init must NOT trigger pre-provisioning")
+}
+
 // TestPrepareHookContextSkipsComponentResolutionForMultiComponent verifies that
 // the global before/after hook context for multi-component invocations
 // (--all/--affected/--components/--query/--tags/--labels) does not fail with

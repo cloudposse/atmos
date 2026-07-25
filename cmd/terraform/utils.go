@@ -286,7 +286,15 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 		// by the time any hook fires. Best-effort: a provisioning failure here is
 		// surfaced authoritatively moments later when RunE performs the same
 		// provisioning for the actual Terraform command.
-		ensureComponentSourceProvisioned(&atmosConfig, &info)
+		//
+		// `init` is excluded: before.terraform.init IS the provisioner's own
+		// lifecycle event (see pkg/provisioner/source's HookEventBeforeTerraformInit
+		// registration) — pre-provisioning here would fire it after provisioning
+		// already happened, inverting the one event whose whole point is to run
+		// before the source exists.
+		if cmd_.Name() != "init" {
+			ensureComponentSourceProvisioned(&atmosConfig, &info)
+		}
 	}
 	injectHookStoreAuthResolver(&atmosConfig, &info)
 
