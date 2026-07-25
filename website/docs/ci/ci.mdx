@@ -114,9 +114,6 @@ Atmos respects `.github/actionlint.yaml` or `.github/actionlint.yml`, including 
 
 ### Plan on Pull Request
 
-Do not treat GitHub Actions `concurrency` around Atmos/Terraform commands as a FIFO deployment
-queue: cancellation can interrupt Terraform and leave a state lock that needs recovery.
-
 <File title=".github/workflows/plan.yml">
 ```yaml
 name: Plan
@@ -411,6 +408,17 @@ For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concep
       <PrimaryCTA to="https://github.com/cloudposse-examples/atmos-native-ci-advanced">Matrix Example</PrimaryCTA>
     </div>
 </ActionCard>
+
+:::warning Concurrency groups aren't a deployment queue
+A GitHub Actions `concurrency` group holds at most two runs at a time: one **in progress** and
+one **pending**. Triggering a third run cancels the pending one and takes its place — this
+eviction happens regardless of `cancel-in-progress`, so intermediate triggers can be silently
+dropped. Setting `cancel-in-progress: true` additionally cancels the **in-progress** run itself,
+which can interrupt a Terraform apply and leave a remote state lock that needs manual recovery.
+
+Use remote state locking for safety, and reach for GitHub environments, merge queues, or an
+explicit promotion workflow when you need deployment ordering guarantees.
+:::
 
 ## Features
 
