@@ -19,7 +19,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | `settings.depends_on` | `dependencies.components` |
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |
-| GitHub Actions `concurrency` around jobs or workflows that invoke `atmos` | Do not treat it as a FIFO deployment queue; reconsider it if cancellation can leave Terraform locks |
+| GitHub Actions `concurrency` around jobs or workflows that invoke `atmos` | Explicit deployment controls (environments, merge queues, a promotion workflow) — a concurrency group evicts its pending run regardless of `cancel-in-progress` |
 | `hashicorp/setup-terraform` / `opentofu/setup-opentofu` in Atmos jobs | Atmos `dependencies.tools` and toolchain |
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |

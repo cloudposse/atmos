@@ -258,9 +258,12 @@ details.
 
 ## Concurrency Warning
 
-Do not treat GitHub Actions `concurrency` groups around Atmos/Terraform commands as a FIFO
-deployment queue: cancellation can interrupt Terraform and leave a state lock that needs recovery.
-Use explicit deployment controls when strict ordering is required.
+By default (`queue: single`), a GitHub Actions `concurrency` group holds one in-progress and one
+pending run; a third trigger evicts the pending run regardless of `cancel-in-progress`.
+`cancel-in-progress: true` also cancels a running Terraform command, which can leave a state lock
+that needs recovery. `queue: max` allows up to 100 pending runs instead, but cannot be combined
+with `cancel-in-progress: true`. Use explicit deployment controls (GitHub environments, merge
+queues, a promotion workflow) when strict ordering is required.
 
 ## Component Dependencies
 

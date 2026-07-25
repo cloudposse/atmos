@@ -410,11 +410,13 @@ For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concep
 </ActionCard>
 
 :::warning Concurrency groups aren't a deployment queue
-A GitHub Actions `concurrency` group holds at most two runs at a time: one **in progress** and
-one **pending**. Triggering a third run cancels the pending one and takes its place — this
-eviction happens regardless of `cancel-in-progress`, so intermediate triggers can be silently
-dropped. Setting `cancel-in-progress: true` additionally cancels the **in-progress** run itself,
-which can interrupt a Terraform apply and leave a remote state lock that needs manual recovery.
+By default (`concurrency.queue: single`), a GitHub Actions `concurrency` group holds at most two
+runs at a time: one **in progress** and one **pending**. Triggering a third run cancels the
+pending one and takes its place — this eviction happens regardless of `cancel-in-progress`, so
+intermediate triggers can be silently dropped. Setting `cancel-in-progress: true` additionally
+cancels the **in-progress** run itself, which can interrupt a Terraform apply and leave a remote
+state lock that needs manual recovery. Setting `queue: max` instead allows up to 100 pending runs
+before any get canceled, but it cannot be combined with `cancel-in-progress: true`.
 
 Use remote state locking for safety, and reach for GitHub environments, merge queues, or an
 explicit promotion workflow when you need deployment ordering guarantees.
