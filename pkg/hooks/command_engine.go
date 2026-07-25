@@ -228,9 +228,26 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 		binary:            resolved,
 		args:              args,
 		env:               env,
-		dir:               ComponentPath(ctx),
+		dir:               existingComponentDir(ctx),
 		captureStdoutPath: captureStdoutPath,
 	}, nil
+}
+
+// existingComponentDir resolves ComponentPath(ctx) but only returns it when
+// the directory actually exists on disk. A component can legitimately have
+// no directory yet — e.g. an early failure before Terraform ever provisions
+// it, which a `when: always` after-hook must still be able to observe (see
+// TestHelmfileRun_NodeHooksFallbackOnEarlyFailure). Returning "" here leaves
+// cmd.Dir unset in runSubprocess, so the hook subprocess starts from the
+// ambient process working directory instead of refusing to start entirely;
+// $ATMOS_COMPONENT_PATH still reports the resolved (possibly nonexistent)
+// path unconditionally via buildAtmosEnv.
+func existingComponentDir(ctx *ExecContext) string {
+	dir := ComponentPath(ctx)
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		return dir
+	}
+	return ""
 }
 
 // runSubprocess executes the prepared command, wiring stdin/stdout/stderr

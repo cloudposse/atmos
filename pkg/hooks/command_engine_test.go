@@ -329,6 +329,55 @@ func TestRunSubprocess_FailsForMissingComponentDirectory(t *testing.T) {
 	require.Error(t, runSubprocess(prep))
 }
 
+// TestCommandEngine_FallsBackToAmbientCWDWhenComponentDirMissing verifies that
+// a `kind: command` hook still runs when the resolved component directory
+// doesn't exist yet (e.g. an early failure before Terraform ever provisions
+// it), rather than refusing to start. `runSubprocess` itself still fails
+// outright for an explicit missing cmd.Dir (see the test above) — the fix
+// is that prepareSubprocess never hands it one: it falls back to leaving
+// cmd.Dir unset, so the subprocess inherits the ambient process working
+// directory. $ATMOS_COMPONENT_PATH still reports the resolved (nonexistent)
+// path unconditionally; only the subprocess's actual cwd degrades.
+// Regression test for a `when: always` after-hook needing to fire even when
+// the component was never provisioned (see cmd/helmfile's
+// TestHelmfileRun_NodeHooksFallbackOnEarlyFailure, which exercises this
+// through the real early-failure call path).
+func TestCommandEngine_FallsBackToAmbientCWDWhenComponentDirMissing(t *testing.T) {
+	ambientCWD, err := os.Getwd()
+	require.NoError(t, err)
+
+	terraformDir := t.TempDir()
+	missingComponentDir := filepath.Join(terraformDir, "myapp")
+
+	kind := &Kind{Name: "command", OnFailure: OnFailureFail, Engine: &CommandEngine{}}
+	ctx := &ExecContext{
+		Hook: kind.ResolveDefaults(&Hook{
+			Kind:    "command",
+			Command: testExePath(t),
+			Args:    []string{"-test.run", "^$"},
+			Env:     map[string]string{"_ATMOS_TEST_WRITE_CWD": "1"},
+		}),
+		Kind:        kind,
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "myapp", FinalComponent: "myapp"},
+	}
+
+	out, runErr := kind.Engine.Run(ctx)
+	require.NoError(t, runErr, "the hook must still run when the component directory doesn't exist")
+	require.NotNil(t, out.Artifact)
+
+	lines := strings.Split(string(out.Artifact.Body), "\n")
+	require.Len(t, lines, 2)
+	actualCWD, componentPath := lines[0], lines[1]
+
+	resolvedActual, err := filepath.EvalSymlinks(actualCWD)
+	require.NoError(t, err)
+	resolvedAmbient, err := filepath.EvalSymlinks(ambientCWD)
+	require.NoError(t, err)
+	assert.Equal(t, resolvedAmbient, resolvedActual, "subprocess must inherit the ambient cwd, not fail to start")
+	assert.Equal(t, missingComponentDir, componentPath, "$ATMOS_COMPONENT_PATH still reports the resolved path even though it doesn't exist")
+}
+
 func TestCommandEngine_InvokesResultHandler(t *testing.T) {
 	exe := testExePath(t)
 	handlerCalled := false
@@ -529,7 +578,13 @@ func TestCommandEngine_PathHelpers(t *testing.T) {
 func TestComponentPathFor_Fallbacks(t *testing.T) {
 	wd := t.TempDir()
 	t.Chdir(wd)
-	terraformBasePath := filepath.Join(string(filepath.Separator), "repo", "components", "terraform")
+	// Rooted at wd (not a hand-rolled filepath.Separator-prefixed path): on
+	// Windows, a driveless path like `\repo\...` is not "absolute" per
+	// filepath.IsAbs, so u.GetComponentPath's Abs() call would silently
+	// prepend the current drive and break equality against the literal
+	// `want` value below. wd is already a genuine absolute path on every
+	// platform.
+	terraformBasePath := filepath.Join(wd, "repo", "components", "terraform")
 
 	tests := []struct {
 		name string
@@ -574,7 +629,7 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 		{
 			name: "uses the configured component type base path",
 			ctx: &ExecContext{
-				AtmosConfig: &schema.AtmosConfiguration{HelmfileDirAbsolutePath: filepath.Join(string(filepath.Separator), "repo", "components", "helmfile")},
+				AtmosConfig: &schema.AtmosConfiguration{HelmfileDirAbsolutePath: filepath.Join(wd, "repo", "components", "helmfile")},
 				Info: &schema.ConfigAndStacksInfo{
 					ComponentType:         "helmfile",
 					ComponentFolderPrefix: "catalog",
@@ -582,7 +637,7 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 					FinalComponent:        "shared-app",
 				},
 			},
-			want: filepath.Join(string(filepath.Separator), "repo", "components", "helmfile", "catalog", "shared-app"),
+			want: filepath.Join(wd, "repo", "components", "helmfile", "catalog", "shared-app"),
 		},
 		{
 			name: "falls back to component argument",
