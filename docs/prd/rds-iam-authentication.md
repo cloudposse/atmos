@@ -97,8 +97,9 @@ sets `Args: cobra.NoArgs`, `SilenceUsage: true`.
 
 ### AWS SDK Integration
 
-`GetRDSToken` reuses `BuildAWSConfigFromCreds` (existing `config.go`) to turn Atmos identity credentials
-into a static-credential `aws.Config`, then calls `github.com/aws/aws-sdk-go-v2/feature/rds/auth`:
+`GetRDSToken` builds an **isolated** static-credential `aws.Config` via `LoadIsolatedAWSConfig` (existing
+`env.go`) — isolation stops an ambient `AWS_PROFILE` or shared config from breaking signing or corrupting the
+region — then calls `github.com/aws/aws-sdk-go-v2/feature/rds/auth`:
 
 ```go
 const rdsTokenExpiry = 15 * time.Minute // AWS-fixed; BuildAuthToken returns no expiry.
@@ -106,7 +107,10 @@ const rdsTokenExpiry = 15 * time.Minute // AWS-fixed; BuildAuthToken returns no 
 func GetRDSToken(ctx context.Context, creds types.ICredentials, endpoint, region, dbUser string) (string, time.Time, error) {
     defer perf.Track(nil, "aws.GetRDSToken")()
 
-    cfg, err := BuildAWSConfigFromCreds(ctx, creds, region)
+    // Isolated config: an explicit region wins over the credentials' region; ambient AWS_PROFILE
+    // and shared config are excluded so they cannot break signing.
+    cfg, err := LoadIsolatedAWSConfig(ctx, config.WithRegion(effectiveRegion),
+        config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(/* from creds */)))
     if err != nil {
         return "", time.Time{}, fmt.Errorf("%w: %w", errUtils.ErrRDSTokenGeneration, err)
     }
@@ -132,10 +136,10 @@ The token is therefore emitted via **`data.WriteUnmasked(token)`** — the same 
 uses to emit real AWS credentials — with the required justification:
 
 ```go
-// #nosec G104 -- intentional credential output; the token IS the requested credential and masking it
-// (AKIA... -> ***) would corrupt the DB password.
-// codeql[go/clear-text-logging]: intentional
-_ = data.WriteUnmasked(token)
+// The token IS the requested credential; masking it (AKIA... -> ***) would corrupt the DB password.
+if err := data.WriteUnmasked(token); err != nil {
+    return fmt.Errorf("%w: %w", errUtils.ErrRDSTokenGeneration, err)
+}
 ```
 
 The expiry is written to **stderr** via `ui.*` (not sensitive), keeping stdout a clean, pipeable token.

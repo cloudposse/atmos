@@ -3,6 +3,8 @@ package rds
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -57,6 +59,9 @@ The database, user, and IAM permissions must already be configured for IAM authe
 (EnableIAMDatabaseAuthentication on the instance, an rds-db:connect IAM policy, and the
 in-database grant). This command only mints the token.
 
+The token is a live credential: do not record this command with --cast/ATMOS_CAST, since the token
+is written to stdout unmasked and would be captured verbatim into the recording.
+
 Examples:
   # Generate a token and use it as the database password
   PGPASSWORD="$(atmos aws rds token --host mydb.abc123.us-east-2.rds.amazonaws.com \
@@ -89,6 +94,8 @@ func executeTokenCommand(cmd *cobra.Command, _ []string) error {
 
 // runRDSTokenGeneration validates inputs, authenticates the identity, mints the token, and prints it.
 func runRDSTokenGeneration(opts tokenOptions) error {
+	defer perf.Track(nil, "rds.runRDSTokenGeneration")()
+
 	if err := validateTokenOptions(opts); err != nil {
 		return err
 	}
@@ -97,9 +104,9 @@ func runRDSTokenGeneration(opts tokenOptions) error {
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
-	defer perf.Track(&atmosConfig, "rds.runRDSTokenGeneration")()
 
-	endpoint := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
+	// net.JoinHostPort brackets IPv6 literals correctly (fmt.Sprintf("%s:%d") does not).
+	endpoint := net.JoinHostPort(opts.Host, strconv.Itoa(opts.Port))
 
 	log.Debug("Generating RDS IAM auth token", "endpoint", endpoint, "region", opts.Region, "identity", opts.Identity)
 
@@ -118,8 +125,8 @@ func runRDSTokenGeneration(opts tokenOptions) error {
 
 	// The token IS the database password. Emit it UNMASKED: the default data.Write path masks
 	// the embedded AKIA... access key ID, which would silently corrupt the token. This mirrors
-	// how `atmos auth env` emits real credentials.
-	// #nosec G104 -- intentional credential output; masking would corrupt the DB password.
+	// how `atmos auth env` emits real credentials. The error is handled below, so no gosec G104
+	// suppression is needed here.
 	if err := data.WriteUnmasked(token); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrRDSTokenGeneration, err)
 	}
@@ -164,12 +171,10 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// If no identity specified, try to resolve a default.
-	if identityName == "" {
-		identityName = resolveDefaultIdentity(authConfig)
-		if identityName == "" {
-			return nil, fmt.Errorf("%w: no identity specified and no default identity found", errUtils.ErrRDSTokenGeneration)
-		}
+	// Resolve which identity to authenticate (see resolveIdentityName).
+	identityName, err = resolveIdentityName(mgr, authConfig, identityName)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrRDSTokenGeneration, err)
 	}
 
 	whoami, err := mgr.Authenticate(ctx, identityName)
@@ -184,20 +189,21 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 	return whoami.Credentials, nil
 }
 
-// resolveDefaultIdentity finds a default identity from the auth config.
-func resolveDefaultIdentity(authConfig *schema.AuthConfig) string {
-	if authConfig == nil || len(authConfig.Identities) == 0 {
-		return ""
+// resolveIdentityName determines which identity to authenticate. An explicit name is used as-is;
+// otherwise a single configured identity is used directly, and any other configuration defers to
+// the canonical resolver (GetDefaultIdentity), which honors an identity marked default:true,
+// disambiguates multiple defaults, and prompts on a TTY (erroring in CI). This deliberately does
+// not reimplement the weak "single identity only" heuristic that silently ignored default:true.
+func resolveIdentityName(mgr types.AuthManager, authConfig *schema.AuthConfig, identityName string) (string, error) {
+	if identityName != "" {
+		return identityName, nil
 	}
-
-	// If there's only one identity, use it.
-	if len(authConfig.Identities) == 1 {
+	if authConfig != nil && len(authConfig.Identities) == 1 {
 		for name := range authConfig.Identities {
-			return name
+			return name, nil
 		}
 	}
-
-	return ""
+	return mgr.GetDefaultIdentity(false)
 }
 
 func init() {

@@ -41,6 +41,9 @@ func GetRDSToken(ctx context.Context, creds types.ICredentials, endpoint, region
 	if effectiveRegion == "" {
 		effectiveRegion = awsCreds.Region
 	}
+	if effectiveRegion == "" {
+		return "", time.Time{}, fmt.Errorf("%w: region could not be resolved (pass a region or use credentials that carry one)", errUtils.ErrRDSTokenGeneration)
+	}
 
 	// Build an ISOLATED AWS config from the identity's static credentials. Isolation is required
 	// for correctness, not hygiene: an ambient AWS_PROFILE (common in CI, this command's advertised
