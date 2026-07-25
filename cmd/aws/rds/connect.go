@@ -15,6 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
 	"github.com/cloudposse/atmos/pkg/cacerts"
+	rdsca "github.com/cloudposse/atmos/pkg/cacerts/rds"
+	"github.com/cloudposse/atmos/pkg/data"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -31,8 +33,10 @@ var rdsConnectParser *flags.StandardParser
 // It sets the child's env verbatim and inherits the terminal, so the token is passed via env only.
 var runClientFn = shell.RunCommand
 
-// findCABundleFn locates the host's system CA bundle. Overridable in tests.
-var findCABundleFn = cacerts.Find
+// buildCABundleFn builds the default CA trust bundle (embedded Amazon RDS CA bundle plus the
+// host's system CA store) when --ca-bundle/ATMOS_AWS_RDS_CA_BUNDLE is not given. Overridable in
+// tests.
+var buildCABundleFn = cacerts.BuildBundle
 
 // connectOptions holds the resolved inputs for a connect invocation.
 type connectOptions struct {
@@ -56,11 +60,26 @@ type engineSpec struct {
 	defaultPort int
 }
 
+// Supported database engine identifiers, the shared "engine" flag/log key, each engine's default
+// port, and the valid TCP port ceiling. Named constants (rather than repeated literals) so the
+// engine registry, port inference, port validation, and flag registration below all stay in sync.
+const (
+	flagEngine = "engine"
+
+	enginePostgres = "postgres"
+	engineMySQL    = "mysql"
+
+	defaultPostgresPort = 5432
+	defaultMySQLPort    = 3306
+
+	maxValidPort = 65535
+)
+
 // engineSpecs is the closed set of supported database engines. Mirrors the flat table-dispatch
 // idiom of pkg/store's storeBuilders rather than the open mutex+Register integration registry.
 var engineSpecs = map[string]engineSpec{
-	"postgres": {name: "postgres", bin: "psql", passwordEnv: "PGPASSWORD", defaultPort: 5432},
-	"mysql":    {name: "mysql", bin: "mysql", passwordEnv: "MYSQL_PWD", defaultPort: 3306},
+	enginePostgres: {name: enginePostgres, bin: "psql", passwordEnv: "PGPASSWORD", defaultPort: defaultPostgresPort},
+	engineMySQL:    {name: engineMySQL, bin: "mysql", passwordEnv: "MYSQL_PWD", defaultPort: defaultMySQLPort},
 }
 
 // connectCmd opens an interactive psql/mysql session using a freshly minted RDS IAM token.
@@ -72,7 +91,8 @@ Atmos identity and a freshly minted RDS IAM authentication token — no static p
 
 A fresh ~15-minute token is minted for each invocation and passed to the client via the child
 process environment only (never on the command line or written to disk). The connection is made
-over TLS (verify-full), trusting the host's system CA bundle unless --ca-bundle is given.
+over TLS (verify-full), trusting the embedded Amazon RDS CA bundle plus the host's system CA store
+by default — override with --ca-bundle/ATMOS_AWS_RDS_CA_BUNDLE.
 
 Provide the connection details as flags, or reference an aws/rds integration declared in atmos.yaml
 by name (flags override the integration's declared values):
@@ -115,11 +135,11 @@ func executeConnectCommand(cmd *cobra.Command, args []string) error {
 		opts.Integration = args[0]
 	}
 
-	return runRDSConnect(opts)
+	return runRDSConnect(&opts)
 }
 
 // runRDSConnect resolves the connection, mints a fresh token, and execs the DB client.
-func runRDSConnect(opts connectOptions) error {
+func runRDSConnect(opts *connectOptions) error {
 	defer perf.Track(nil, "rds.runRDSConnect")()
 
 	atmosConfig, err := initCliConfigFn(schema.ConfigAndStacksInfo{}, false)
@@ -129,7 +149,7 @@ func runRDSConnect(opts connectOptions) error {
 
 	// A named integration supplies connection defaults; explicit flags override them.
 	if opts.Integration != "" {
-		if err := applyIntegration(&opts, &atmosConfig.Auth); err != nil {
+		if err := applyIntegration(opts, &atmosConfig.Auth); err != nil {
 			return err
 		}
 	}
@@ -143,17 +163,34 @@ func runRDSConnect(opts connectOptions) error {
 		return err
 	}
 
-	caPath := opts.CABundle
-	if caPath == "" {
-		caPath = findCABundleFn()
+	caPath, err := resolveCABundle(opts.CABundle)
+	if err != nil {
+		return err
 	}
 	clientArgs := buildClientArgs(spec, opts, caPath)
 
 	// --print-command renders the resolved command without minting a token or connecting.
 	if opts.PrintCommand {
-		ui.Writeln(fmt.Sprintf("%s  # with %s=<token> injected into the environment", strings.Join(clientArgs, " "), spec.passwordEnv))
-		return nil
+		return printResolvedCommand(clientArgs, spec, caPath)
 	}
+
+	return connectWithFreshToken(&atmosConfig, opts, spec, clientArgs, caPath)
+}
+
+// printResolvedCommand renders the --print-command output. Written to the data channel (stdout),
+// not the UI channel, so piping the output to a file captures it (ui.Writeln goes to stderr, which
+// would leave a piped redirect empty). The comment lists the env vars actually injected (token
+// redacted) so the printed line is faithful to what the real connection uses.
+func printResolvedCommand(clientArgs []string, spec engineSpec, caPath string) error {
+	line := fmt.Sprintf("%s  %s", strings.Join(clientArgs, " "), printCommandComment(spec, caPath))
+	return data.Writeln(line)
+}
+
+// connectWithFreshToken authenticates the identity, mints a fresh ~15-minute RDS IAM token, and
+// execs the resolved DB client with it. Split out of runRDSConnect to keep that function a short,
+// flat pipeline (see CLAUDE.md's cyclomatic-complexity refactor pattern).
+func connectWithFreshToken(atmosConfig *schema.AtmosConfiguration, opts *connectOptions, spec engineSpec, clientArgs []string, caPath string) error {
+	defer perf.Track(nil, "rds.connectWithFreshToken")()
 
 	// Skip integrations so connecting has no login-time side effects (kubeconfig/env rewrites).
 	ctx := auth.ContextWithSkipIntegrations(context.Background())
@@ -171,7 +208,7 @@ func runRDSConnect(opts connectOptions) error {
 
 	clientEnv := buildClientEnv(spec, token, caPath, atmosConfig.Env)
 
-	log.Debug("Connecting to RDS", "engine", spec.name, "endpoint", endpoint, "user", opts.Username, "identity", opts.Identity)
+	log.Debug("Connecting to RDS", flagEngine, spec.name, "endpoint", endpoint, "user", opts.Username, "identity", opts.Identity)
 	ui.Info(fmt.Sprintf("Connecting to %s (%s) as %s...", endpoint, spec.name, opts.Username))
 
 	// Return the runner error verbatim so its exit-code (ExitCodeError) and command-not-found
@@ -192,8 +229,14 @@ func applyIntegration(opts *connectOptions, authConfig *schema.AuthConfig) error
 		return fmt.Errorf("%w: integration %q has no spec.database", errUtils.ErrRDSIntegrationConfig, opts.Integration)
 	}
 
-	db := integ.Spec.Database
-	// Flags (already set) win over the integration's declared metadata.
+	applyIntegrationDefaults(opts, integ.Spec.Database, integ.Via)
+	return nil
+}
+
+// applyIntegrationDefaults fills any unset connection fields from the integration's declared
+// database metadata and identity. Flags (already set on opts) always win. Split out of
+// applyIntegration to keep each function's cyclomatic complexity low.
+func applyIntegrationDefaults(opts *connectOptions, db *schema.RDSDatabase, via *schema.IntegrationVia) {
 	if opts.Host == "" {
 		opts.Host = db.Host
 	}
@@ -212,25 +255,28 @@ func applyIntegration(opts *connectOptions, authConfig *schema.AuthConfig) error
 	if opts.Database == "" {
 		opts.Database = db.Database
 	}
-	if opts.Identity == "" && integ.Via != nil {
-		opts.Identity = integ.Via.Identity
+	if opts.Identity == "" && via != nil {
+		opts.Identity = via.Identity
 	}
-	return nil
 }
 
 // validateConnectOptions ensures the required connection inputs are present and in range.
-func validateConnectOptions(opts connectOptions) error {
+//
+// --region is intentionally NOT required here: schema.RDSDatabase.Region is documented as optional
+// (defaulting to the identity's credential region), and getRDSTokenFn (GetRDSToken) implements
+// that fallback. Rejecting an empty region here would run BEFORE that fallback ever gets a chance
+// to resolve it, breaking the documented contract. GetRDSToken errors clearly if both the flag and
+// the credentials fail to supply a region.
+func validateConnectOptions(opts *connectOptions) error {
 	switch {
 	case opts.Host == "":
 		return fmt.Errorf("%w: --host is required (or reference an aws/rds integration)", errUtils.ErrRDSConnectFailed)
 	case opts.Port == 0:
 		return fmt.Errorf("%w: --port is required", errUtils.ErrRDSConnectFailed)
-	case opts.Port < 1 || opts.Port > 65535:
-		return fmt.Errorf("%w: --port must be between 1 and 65535, got %d", errUtils.ErrRDSConnectFailed, opts.Port)
+	case opts.Port < 1 || opts.Port > maxValidPort:
+		return fmt.Errorf("%w: --port must be between 1 and %d, got %d", errUtils.ErrRDSConnectFailed, maxValidPort, opts.Port)
 	case opts.Username == "":
 		return fmt.Errorf("%w: --username is required", errUtils.ErrRDSConnectFailed)
-	case opts.Region == "":
-		return fmt.Errorf("%w: --region is required", errUtils.ErrRDSConnectFailed)
 	}
 	return nil
 }
@@ -239,10 +285,10 @@ func validateConnectOptions(opts connectOptions) error {
 func resolveEngine(engine string, port int) (engineSpec, error) {
 	if engine == "" {
 		switch port {
-		case 5432:
-			engine = "postgres"
-		case 3306:
-			engine = "mysql"
+		case defaultPostgresPort:
+			engine = enginePostgres
+		case defaultMySQLPort:
+			engine = engineMySQL
 		default:
 			return engineSpec{}, fmt.Errorf("%w: cannot infer engine from port %d; pass --engine postgres|mysql", errUtils.ErrRDSEngineUnknown, port)
 		}
@@ -254,10 +300,29 @@ func resolveEngine(engine string, port int) (engineSpec, error) {
 	return spec, nil
 }
 
+// resolveCABundle returns the CA bundle path to use for TLS verification. An explicit
+// --ca-bundle/ATMOS_AWS_RDS_CA_BUNDLE value wins verbatim; otherwise this builds the default via
+// buildCABundleFn: the embedded Amazon RDS CA bundle combined with the host's system CA store.
+// RDS/Aurora endpoints chain to Amazon's own private root CAs, which are never part of a host's
+// public system trust store, so the bare system store alone fails verify-full/VERIFY_IDENTITY
+// against real RDS — and on Windows the system store lookup returns nothing at all.
+func resolveCABundle(explicit string) (string, error) {
+	defer perf.Track(nil, "rds.resolveCABundle")()
+
+	if explicit != "" {
+		return explicit, nil
+	}
+	caPath, err := buildCABundleFn(rdsca.Bundle())
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errUtils.ErrRDSConnectFailed, err)
+	}
+	return caPath, nil
+}
+
 // buildClientArgs builds the client argv. The password is NEVER placed here — it goes in the env.
-func buildClientArgs(spec engineSpec, opts connectOptions, caPath string) []string {
+func buildClientArgs(spec engineSpec, opts *connectOptions, caPath string) []string {
 	port := strconv.Itoa(opts.Port)
-	if spec.name == "postgres" {
+	if spec.name == enginePostgres {
 		args := []string{spec.bin, "--host=" + opts.Host, "--port=" + port, "--username=" + opts.Username}
 		if opts.Database != "" {
 			args = append(args, "--dbname="+opts.Database)
@@ -276,14 +341,74 @@ func buildClientArgs(spec engineSpec, opts connectOptions, caPath string) []stri
 	return args
 }
 
+// printCommandComment renders the "# with ..." comment appended to --print-command output,
+// listing the env vars actually injected (token redacted) so the printed line is faithful to what
+// the real connection uses. Previously this omitted PGSSLMODE/PGSSLROOTCERT for postgres, so a
+// copied command could silently connect WITHOUT verify-full.
+func printCommandComment(spec engineSpec, caPath string) string {
+	comment := fmt.Sprintf("# with %s=<token>", spec.passwordEnv)
+	if spec.name == enginePostgres {
+		comment += " PGSSLMODE=verify-full"
+		if caPath != "" {
+			comment += " PGSSLROOTCERT=" + caPath
+		}
+	}
+	return comment + " injected"
+}
+
+// controlledEnvKeys lists the env keys buildClientEnv is about to inject for spec/caPath. These
+// must be the ONLY occurrence of each key in the child env (see stripEnvKeys), so callers strip
+// them from the merged env before appending. MySQL's TLS is enforced on argv (--ssl-mode/--ssl-ca,
+// see buildClientArgs), not env, so its password is the only controlled key.
+func controlledEnvKeys(spec engineSpec, caPath string) []string {
+	if spec.name != enginePostgres {
+		return []string{spec.passwordEnv}
+	}
+	keys := []string{spec.passwordEnv, "PGSSLMODE"}
+	if caPath != "" {
+		keys = append(keys, "PGSSLROOTCERT")
+	}
+	return keys
+}
+
+// stripEnvKeys returns env with every entry whose key is in keys removed, preserving the order of
+// the rest.
+func stripEnvKeys(env []string, keys []string) []string {
+	if len(keys) == 0 {
+		return env
+	}
+	drop := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		drop[k] = true
+	}
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		key, _, _ := strings.Cut(kv, "=")
+		if drop[key] {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
 // buildClientEnv builds the child environment. The token is injected here (env only), never argv.
+//
+// Our controlled keys (the password env, and for postgres PGSSLMODE/PGSSLROOTCERT) are stripped
+// from the merged env and appended exactly once, making them unconditionally authoritative
+// regardless of duplicate-key handling: MergeGlobalEnv appends atmos.yaml's `env:` AFTER
+// os.Environ() with no dedup, and Go's os/exec keeps the LAST duplicate of a key when it execs the
+// child — so without stripping first, a same-named atmos.yaml `env:` entry could silently override
+// our injected value (downgrading TLS, or dropping the token) depending on ordering.
 func buildClientEnv(spec engineSpec, token, caPath string, globalEnv map[string]string) []string {
 	env := envpkg.MergeGlobalEnv(os.Environ(), globalEnv)
-	env = envpkg.UpdateEnvVar(env, spec.passwordEnv, token)
-	if spec.name == "postgres" {
-		env = envpkg.UpdateEnvVar(env, "PGSSLMODE", "verify-full")
+	env = stripEnvKeys(env, controlledEnvKeys(spec, caPath))
+
+	env = append(env, spec.passwordEnv+"="+token)
+	if spec.name == enginePostgres {
+		env = append(env, "PGSSLMODE=verify-full")
 		if caPath != "" {
-			env = envpkg.UpdateEnvVar(env, "PGSSLROOTCERT", caPath)
+			env = append(env, "PGSSLROOTCERT="+caPath)
 		}
 	}
 	return env
@@ -294,18 +419,18 @@ func init() {
 		flags.WithStringFlag("host", "", "", "RDS/Aurora endpoint hostname (required unless an integration is named)"),
 		flags.WithIntFlag("port", "", 0, "Database port (required)"),
 		flags.WithStringFlag("username", "u", "", "Database user name (required)"),
-		flags.WithStringFlag("region", "", "", "AWS region of the database endpoint (required)"),
+		flags.WithStringFlag("region", "", "", "AWS region of the database endpoint (optional; defaults to the identity's credential region)"),
 		flags.WithIdentityFlag(),
-		flags.WithStringFlag("engine", "", "", "Database engine: postgres or mysql (inferred from the port when omitted)"),
-		flags.WithValidValues("engine", "postgres", "mysql"),
+		flags.WithStringFlag(flagEngine, "", "", "Database engine: postgres or mysql (inferred from the port when omitted)"),
+		flags.WithValidValues(flagEngine, enginePostgres, engineMySQL),
 		flags.WithStringFlag("database", "d", "", "Database name to connect to"),
-		flags.WithStringFlag("ca-bundle", "", "", "Path to a CA bundle for TLS verification (defaults to the host trust store)"),
+		flags.WithStringFlag("ca-bundle", "", "", "Path to a CA bundle for TLS verification (defaults to the embedded Amazon RDS CA bundle plus the host's system CA store)"),
 		flags.WithBoolFlag("print-command", "", false, "Print the resolved client command (token redacted) instead of connecting"),
 		flags.WithEnvVars("host", "ATMOS_AWS_RDS_HOST"),
 		flags.WithEnvVars("port", "ATMOS_AWS_RDS_PORT"),
 		flags.WithEnvVars("username", "ATMOS_AWS_RDS_USERNAME"),
 		flags.WithEnvVars("region", "ATMOS_AWS_RDS_REGION"),
-		flags.WithEnvVars("engine", "ATMOS_AWS_RDS_ENGINE"),
+		flags.WithEnvVars(flagEngine, "ATMOS_AWS_RDS_ENGINE"),
 		flags.WithEnvVars("database", "ATMOS_AWS_RDS_DATABASE"),
 		flags.WithEnvVars("ca-bundle", "ATMOS_AWS_RDS_CA_BUNDLE"),
 		// Namespace keys to rds-connect.* to avoid the shared-global-Viper bare-key collision.

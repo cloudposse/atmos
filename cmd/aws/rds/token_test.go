@@ -194,7 +194,8 @@ func TestRunRDSTokenGeneration_Success(t *testing.T) {
 	// actually guards the WriteUnmasked decision: the masked data.Write path would rewrite the
 	// AKIA... access-key-id to *** and fail the exact-match assertion below.
 	const wantToken = "mydb.abc123.us-east-2.rds.amazonaws.com:5432/?Action=connect&DBUser=app&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20260724%2Fus-east-2%2Frds-db%2Faws4_request&X-Amz-Signature=deadbeef"
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(endpoint, region, dbUser string) (string, time.Time, error) {
@@ -217,7 +218,8 @@ func TestRunRDSTokenGeneration_Success(t *testing.T) {
 }
 
 func TestRunRDSTokenGeneration_AuthError(t *testing.T) {
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		errors.New("no identity"),
 		func(_, _, _ string) (string, time.Time, error) { return "", time.Time{}, nil },
@@ -228,7 +230,8 @@ func TestRunRDSTokenGeneration_AuthError(t *testing.T) {
 }
 
 func TestRunRDSTokenGeneration_TokenError(t *testing.T) {
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(_, _, _ string) (string, time.Time, error) {
@@ -241,7 +244,8 @@ func TestRunRDSTokenGeneration_TokenError(t *testing.T) {
 }
 
 func TestRunRDSTokenGeneration_ConfigError(t *testing.T) {
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) {
 			return schema.AtmosConfiguration{}, errors.New("config load boom")
 		},
@@ -256,7 +260,8 @@ func TestRunRDSTokenGeneration_ConfigError(t *testing.T) {
 func TestExecuteTokenCommand_ReadsFlags(t *testing.T) {
 	initTestIO(t)
 	const wantToken = "db:5432/?Action=connect&DBUser=app&X-Amz-Signature=abc"
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(endpoint, _, _ string) (string, time.Time, error) {
@@ -290,7 +295,8 @@ func TestExecuteTokenCommand_ReadsEnvVars(t *testing.T) {
 	t.Setenv("ATMOS_AWS_SECURITY_REGION", "us-west-2")
 
 	const wantToken = "envhost:5432/?Action=connect&DBUser=envuser&X-Amz-Signature=abc"
-	stubTokenDeps(t,
+	stubTokenDeps(
+		t,
 		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
 		nil,
 		func(endpoint, region, dbUser string) (string, time.Time, error) {

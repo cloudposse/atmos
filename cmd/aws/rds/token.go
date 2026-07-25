@@ -145,8 +145,8 @@ func validateTokenOptions(opts tokenOptions) error {
 		return fmt.Errorf("%w: --host is required", errUtils.ErrRDSTokenGeneration)
 	case opts.Port == 0:
 		return fmt.Errorf("%w: --port is required", errUtils.ErrRDSTokenGeneration)
-	case opts.Port < 1 || opts.Port > 65535:
-		return fmt.Errorf("%w: --port must be between 1 and 65535, got %d", errUtils.ErrRDSTokenGeneration, opts.Port)
+	case opts.Port < 1 || opts.Port > maxValidPort:
+		return fmt.Errorf("%w: --port must be between 1 and %d, got %d", errUtils.ErrRDSTokenGeneration, maxValidPort, opts.Port)
 	case opts.Username == "":
 		return fmt.Errorf("%w: --username is required", errUtils.ErrRDSTokenGeneration)
 	case opts.Region == "":

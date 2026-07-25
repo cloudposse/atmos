@@ -76,10 +76,10 @@ func (r *RDSIntegration) Cleanup(_ context.Context) error {
 
 // Environment intentionally contributes nothing at `atmos auth env`/`auth shell`.
 //
-// Unlike EKS's composable KUBECONFIG, RDS connection coordinates (PGHOST/PGUSER/...) are
+// Unlike EKS's composable KUBECONFIG, RDS connection coordinates such as PGHOST and PGUSER are
 // single-valued and would collide across multiple aws/rds integrations linked to one identity, so
-// they are not exported globally. `atmos aws rds connect <name>` reads this integration's metadata
-// directly instead. The token/password is never exported here under any circumstances.
+// they are not exported globally. Use `atmos aws rds connect <name>` to read this integration's
+// metadata directly instead. The token/password is never exported here under any circumstances.
 func (r *RDSIntegration) Environment() (map[string]string, error) {
 	defer perf.Track(nil, "aws.RDSIntegration.Environment")()
 

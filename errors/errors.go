@@ -1249,9 +1249,11 @@ var (
 	// RDS IAM authentication errors.
 	ErrRDSTokenGeneration   = errors.New("failed to generate RDS IAM authentication token")
 	ErrRDSConnectFailed     = errors.New("failed to connect to RDS database")
-	ErrRDSClientNotFound    = errors.New("database client not found on PATH")
 	ErrRDSEngineUnknown     = errors.New("unknown or unsupported database engine")
 	ErrRDSIntegrationConfig = errors.New("invalid aws/rds integration configuration")
+
+	// CA trust bundle errors (pkg/cacerts).
+	ErrCABundleBuild = errors.New("failed to build CA trust bundle")
 
 	// Atmos Pro authentication (atmos/pro provider) errors.
 	ErrProAuthFailed         = errors.New("authentication to Atmos Pro failed")

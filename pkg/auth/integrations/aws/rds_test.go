@@ -86,10 +86,17 @@ func TestRDSIntegration_NoOpBehavior(t *testing.T) {
 	// Environment contributes nothing and MUST NEVER expose a token/password.
 	env, err := integ.Environment()
 	require.NoError(t, err)
-	assert.Empty(t, env)
-	for k := range env {
-		assert.NotContains(t, k, "PASSWORD")
-		assert.NotEqual(t, "MYSQL_PWD", k)
+	assert.Nil(t, env, "Environment must contribute nothing today")
+
+	// Regression guard: check membership of the forbidden keys DIRECTLY IN env, rather than
+	// ranging over env's own keys. Ranging over env is a no-op when env is nil/empty (as it is
+	// today) and would silently pass even if Environment() were later changed to leak a token —
+	// the previous version of this test did exactly that and never actually executed its body.
+	// Indexing a nil map is safe in Go (returns the zero value, ok=false), so this works whether
+	// Environment() returns nil or a populated map.
+	for _, forbiddenKey := range []string{"PGPASSWORD", "MYSQL_PWD"} {
+		_, leaked := env[forbiddenKey]
+		assert.False(t, leaked, "Environment() must never expose %s", forbiddenKey)
 	}
 }
 
