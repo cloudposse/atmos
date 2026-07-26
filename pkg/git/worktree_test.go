@@ -301,9 +301,11 @@ func TestRemoveWorktree(t *testing.T) {
 	})
 }
 
-func TestRemoveWorktreePrunesStaleRegistrationAfterTransientRemoveFailure(t *testing.T) {
+func TestRemoveWorktreeDoesNotReportSuccessWhenPruneLeavesWorktreePath(t *testing.T) {
 	maxAttempts := 1
 	config := &schema.RetryConfig{MaxAttempts: &maxAttempts}
+	worktreePath := filepath.Join(t.TempDir(), "worktree")
+	require.NoError(t, os.Mkdir(worktreePath, 0o755))
 	var commands [][]string
 	run := func(_ string, args ...string) (string, error) {
 		commands = append(commands, args)
@@ -313,11 +315,12 @@ func TestRemoveWorktreePrunesStaleRegistrationAfterTransientRemoveFailure(t *tes
 		return "", nil
 	}
 
-	output, err := removeWorktree("repo", "worktree", run, config)
-	require.NoError(t, err)
-	assert.Empty(t, output)
+	output, err := removeWorktree("repo", worktreePath, run, config)
+	require.ErrorContains(t, err, "still exists")
+	assert.Contains(t, output, "worktree remove:")
+	assert.Contains(t, output, "worktree prune:")
 	assert.Equal(t, [][]string{
-		{"worktree", "remove", "--force", "worktree"},
+		{"worktree", "remove", "--force", worktreePath},
 		{"worktree", "prune", "--expire", "now"},
 	}, commands)
 }

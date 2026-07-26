@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -195,6 +196,10 @@ func runWorktreeCommand(repoDir string, args ...string) (string, error) {
 	return string(output), err
 }
 
+func formatWorktreeCleanupOutput(removeOutput, pruneOutput string) string {
+	return "worktree remove:\n" + removeOutput + "\nworktree prune:\n" + pruneOutput
+}
+
 // removeWorktree retries removal failures caused by transient filesystem locks. If Git has already
 // removed the worktree directory but cannot remove its administrative metadata, it falls back to
 // `git worktree prune --expire now` to clear that stale registration. This occurs on Windows CI
@@ -217,9 +222,16 @@ func removeWorktree(repoDir, worktreePath string, run worktreeCommandRunner, con
 		return err
 	}, func(error) bool { return isTransientWorktreeRemoveError(pruneOutput) })
 	if pruneErr == nil {
+		if _, statErr := os.Stat(worktreePath); statErr == nil {
+			return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr,
+				fmt.Errorf("git worktree prune completed but worktree path %q still exists", worktreePath))
+		} else if !os.IsNotExist(statErr) {
+			return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr,
+				fmt.Errorf("checking whether worktree path %q was removed: %w", worktreePath, statErr))
+		}
 		return pruneOutput, nil
 	}
-	return "worktree remove:\n" + removeOutput + "\nworktree prune:\n" + pruneOutput, errors.Join(removeErr, pruneErr)
+	return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr, pruneErr)
 }
 
 // RemoveWorktree removes a git worktree using `git worktree remove`.
