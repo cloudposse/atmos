@@ -1,0 +1,41 @@
+name: "Set up Packer with retry"
+description: "Installs Packer with bounded retries for transient HashiCorp download failures"
+
+inputs:
+  version:
+    description: "Packer version to install"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: install-packer-first-attempt
+      name: Set up Packer (attempt 1 of 3)
+      continue-on-error: true
+      uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
+      with:
+        version: ${{ inputs.version }}
+
+    - name: Wait before retry
+      if: steps.install-packer-first-attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 5
+
+    - id: install-packer-second-attempt
+      name: Set up Packer (attempt 2 of 3)
+      if: steps.install-packer-first-attempt.outcome == 'failure'
+      continue-on-error: true
+      uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
+      with:
+        version: ${{ inputs.version }}
+
+    - name: Wait before final retry
+      if: steps.install-packer-first-attempt.outcome == 'failure' && steps.install-packer-second-attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 15
+
+    - name: Set up Packer (attempt 3 of 3)
+      if: steps.install-packer-first-attempt.outcome == 'failure' && steps.install-packer-second-attempt.outcome == 'failure'
+      uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
+      with:
+        version: ${{ inputs.version }}
