@@ -171,10 +171,33 @@ func TestParseTerraformMigrateListArgsPreservesIdentity(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, "dev", info.Stack)
-			assert.Equal(t, []string{"vpc"}, info.Components)
 			assert.Equal(t, tt.expected, info.Identity)
 		})
 	}
+}
+
+func TestApplyMigrateListComponentArgSurvivesRunOptions(t *testing.T) {
+	// Regression: shared.ApplyRunOptions replaces info.Components with the
+	// --components flag value, which used to silently drop the positional
+	// component argument so `migrate list <component>` listed every component.
+	info := schema.ConfigAndStacksInfo{}
+	shared.ApplyRunOptions(&info, &shared.RunOptions{})
+	applyMigrateListComponentArg(&info, []string{"vpc", "--stack", "dev"})
+	assert.Equal(t, []string{"vpc"}, info.Components)
+}
+
+func TestApplyMigrateListComponentArgMergesWithComponentsFlag(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{}
+	shared.ApplyRunOptions(&info, &shared.RunOptions{Components: []string{"eks"}})
+	applyMigrateListComponentArg(&info, []string{"vpc"})
+	assert.Equal(t, []string{"eks", "vpc"}, info.Components)
+}
+
+func TestApplyMigrateListComponentArgNoArgsListsAll(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{}
+	shared.ApplyRunOptions(&info, &shared.RunOptions{})
+	applyMigrateListComponentArg(&info, nil)
+	assert.Empty(t, info.Components)
 }
 
 func TestMigrateListParserFlags(t *testing.T) {

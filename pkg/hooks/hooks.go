@@ -773,11 +773,12 @@ func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
 		return nil
 	}
 	if err := verifyCommandAvailable(resolved.Command, h.toolchainPATH); err != nil {
-		return errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
+		// The cause already wraps ErrCommandNotFound with the command name, so
+		// build on it directly instead of stacking a second sentinel prefix.
+		return errUtils.Build(err).
 			WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command).
-			WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before terraform runs", resolved.Command).
-			WithHint("Or install it manually so it appears on PATH").
+			WithHintf("Declare `%s: \"<version>\"` in the component's dependencies.tools to auto-install it before terraform runs", resolved.Command).
+			WithHintf("Alternatively, install %s manually so it appears on PATH", resolved.Command).
 			WithContext("hook", name).
 			WithContext("kind", hook.Kind).
 			WithContext("command", resolved.Command).

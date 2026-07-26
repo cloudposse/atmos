@@ -3,6 +3,7 @@ package tfmigrate
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,6 +20,12 @@ const (
 
 	Command        = "tfmigrate"
 	ExecPathEnvVar = "TFMIGRATE_EXEC_PATH"
+
+	// EnvTfCliArgsPlan is honored by terraform/tofu for every `plan` they run.
+	// Tfmigrate verifies migrations by invoking `terraform plan` itself, without
+	// the -var-file argument Atmos normally passes, so the generated varfile is
+	// routed through this variable instead.
+	EnvTfCliArgsPlan = "TF_CLI_ARGS_plan"
 
 	EnvStack            = "ATMOS_STACK"
 	EnvComponent        = "ATMOS_COMPONENT"
@@ -95,6 +102,52 @@ func BuildArgs(opts Options) ([]string, error) {
 		args = append(args, opts.Migration)
 	}
 	return args, nil
+}
+
+// AppendPlanVarFile routes the Atmos-generated varfile to the terraform plan
+// runs tfmigrate performs internally, via TF_CLI_ARGS_plan. Without it, any
+// component with required variables fails tfmigrate's convergence plan with
+// "No value for required variable". Existing TF_CLI_ARGS_plan values (from the
+// component env or the process environment) are preserved and extended.
+func AppendPlanVarFile(env []string, varfile string) []string {
+	defer perf.Track(nil, "tfmigrate.AppendPlanVarFile")()
+
+	if varfile == "" {
+		return env
+	}
+	arg := "-var-file=" + varfile
+	prefix := EnvTfCliArgsPlan + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[i] = entry + " " + arg
+			return env
+		}
+	}
+	if existing, ok := os.LookupEnv(EnvTfCliArgsPlan); ok && existing != "" {
+		return append(env, prefix+existing+" "+arg)
+	}
+	return append(env, prefix+arg)
+}
+
+// EnsureResolved verifies that the resolved tfmigrate command points at an
+// installed binary. Toolchain resolution returns the bare command name
+// unchanged when the tool is neither toolchain-managed nor on PATH, which
+// would otherwise surface as a raw exec failure mid-run.
+func EnsureResolved(resolved string) error {
+	defer perf.Track(nil, "tfmigrate.EnsureResolved")()
+
+	if resolved != Command {
+		return nil
+	}
+	if _, err := exec.LookPath(Command); err == nil {
+		return nil
+	}
+	return errUtils.Build(errUtils.ErrCommandNotFound).
+		WithExplanationf("`atmos terraform migrate` requires %q, which is not installed and not on PATH", Command).
+		WithHintf("Declare `%s: \"<version>\"` in the component's dependencies.tools to auto-install it", Command).
+		WithHintf("Alternatively, install %s manually so it appears on PATH", Command).
+		WithContext("command", Command).
+		Err()
 }
 
 // ActionForMode resolves a hook mode and lifecycle event to a tfmigrate action.
@@ -217,7 +270,9 @@ func BackendHistoryValues(backendType string, backend map[string]any) map[string
 		if roleARN := s3RoleARN(backend); roleARN != "" {
 			values[EnvHistoryRoleARN] = roleARN
 		}
-		setBackendValue(EnvHistoryEndpoint, "endpoint")
+		if endpoint := s3Endpoint(backend); endpoint != "" {
+			values[EnvHistoryEndpoint] = endpoint
+		}
 		setBackendValue(EnvHistoryKMSKeyID, "kms_key_id")
 	case "gcs":
 		gcsBackend := backend
@@ -249,6 +304,18 @@ func historyPath(parts ...string) string {
 		return ""
 	}
 	return strings.Join(nonEmpty, "/")
+}
+
+// s3Endpoint reads the S3 endpoint from either the legacy top-level `endpoint`
+// argument or the Terraform 1.6+ nested `endpoints { s3 = ... }` form.
+func s3Endpoint(backend map[string]any) string {
+	if endpoint := backendString(backend, "endpoint"); endpoint != "" {
+		return endpoint
+	}
+	if endpoints, ok := backend["endpoints"].(map[string]any); ok {
+		return backendString(endpoints, "s3")
+	}
+	return ""
 }
 
 func s3RoleARN(backend map[string]any) string {

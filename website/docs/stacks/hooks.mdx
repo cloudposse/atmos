@@ -144,6 +144,8 @@ components:
   <dd>`dynamic` (default), `plan`, or `apply`. Dynamic mode runs `tfmigrate plan` for `before.terraform.plan` and `tfmigrate apply` for `before.terraform.apply` / `before.terraform.deploy`.</dd>
 </dl>
 
+**Requirements:** the `tfmigrate` binary on PATH. Declare it in `dependencies.tools` (e.g. `tfmigrate: "^0.4.5"`) to have Atmos auto-install through the toolchain before the hook runs.
+
 History mode is enabled by omitting `migration`. By default, `tfmigrate` discovers `.tfmigrate.hcl` from the component working directory:
 
 ```yaml

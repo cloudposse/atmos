@@ -10,10 +10,13 @@ import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use `atmos terraform migrate` to run user-authored `tfmigrate` migrations in an Atmos Terraform component context.
 </Intro>
+
+<CastPlayer src="/casts/examples/hooks-tfmigrate/tfmigrate-example.cast" title="atmos terraform migrate" chrome controls scrubber />
 
 <ActionCard title="Configure Tfmigrate Hooks">
     Run migrations automatically from Terraform lifecycle hooks.
@@ -52,7 +55,7 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   <dd>Identity to authenticate before resolving the component and running `tfmigrate`. Environment variable: `ATMOS_IDENTITY`.</dd>
 
   <dt>`--migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file for `plan` or `apply`. Omit this flag to let `tfmigrate` run history mode.</dd>
+  <dd>A single `tfmigrate` migration file for `plan` or `apply`. `tfmigrate` resolves the value relative to the `migration_dir` set in its config (default `.`), so pass just the filename when `migration_dir` already points at your migrations directory. Omit this flag to let `tfmigrate` run history mode.</dd>
 
   <dt>`--tfmigrate-config`</dt>
   <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
@@ -121,6 +124,8 @@ For every selected component instance, Atmos:
 - Selects the configured Terraform workspace.
 - Resolves `tfmigrate` and Terraform/OpenTofu through the Atmos toolchain or PATH.
 - Sets `TFMIGRATE_EXEC_PATH` to the resolved Terraform/OpenTofu binary unless already set.
+- Routes the generated varfile to the Terraform plans `tfmigrate` runs internally (via `TF_CLI_ARGS_plan`), so components with required variables plan cleanly.
+- Pre-creates the parent directory of a `storage "local"` history path from the `tfmigrate` config, so the first history save cannot fail on a missing directory.
 - Exports per-instance history helper variables for the `tfmigrate` config.
 
 ## History Mode

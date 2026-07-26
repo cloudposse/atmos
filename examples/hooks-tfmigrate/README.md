@@ -4,6 +4,12 @@ Demonstrates the **`tfmigrate`** hook kind: a Terraform state migration
 hook that runs through `atmos terraform migrate` before Terraform plan and
 apply operations.
 
+Watch this example as a recorded demo in the
+[Terraform state migrations with tfmigrate](https://atmos.tools/blog/terraform-tfmigrate)
+changelog post, or in the
+[`atmos terraform migrate`](https://atmos.tools/cli/commands/terraform/migrate)
+command docs.
+
 ## What this shows
 
 - `kind: tfmigrate` with `mode: dynamic`.
@@ -17,15 +23,16 @@ apply operations.
 
 ## Requirements
 
-- `tofu` (OpenTofu) or Terraform on PATH. This example uses `command: tofu`
-  in `atmos.yaml`.
-- `tfmigrate` on PATH.
-- No cloud credentials needed.
+Nothing needs to be pre-installed. The components declare `opentofu` and
+`tfmigrate` in `dependencies.tools`, so the Atmos toolchain downloads both
+automatically on first run (into the git-ignored `.tools/` directory). No
+cloud credentials are needed either — the example uses local Terraform state.
 
-Install tfmigrate with Homebrew:
+If you prefer managing the tools yourself, install them on PATH instead, for
+example with Homebrew:
 
 ```bash
-brew install minamijoyo/tfmigrate/tfmigrate
+brew install opentofu minamijoyo/tfmigrate/tfmigrate
 ```
 
 ## Run

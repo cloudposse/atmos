@@ -1,0 +1,41 @@
+vars:
+  stage: test
+
+# S3 backend on the Floci emulator. Explicit bucket and endpoints.s3 values
+# matter: tfmigrate history inherits them via ATMOS_TFMIGRATE_HISTORY_*.
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: !env ATMOS_TEST_TFMIGRATE_BUCKET
+      key: "svc/terraform.tfstate"
+      region: "us-east-1"
+      endpoints:
+        s3: !env AWS_ENDPOINT_URL
+      use_path_style: true
+      skip_credentials_validation: true
+      skip_requesting_account_id: true
+      skip_metadata_api_check: true
+      skip_region_validation: true
+      skip_s3_checksum: true
+
+components:
+  terraform:
+    service-legacy:
+      vars:
+        environment: test
+
+    service:
+      dependencies:
+        tools:
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          config: .tfmigrate.hcl
+          mode: dynamic

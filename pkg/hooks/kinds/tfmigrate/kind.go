@@ -43,7 +43,14 @@ func (e *Engine) Run(ctx *hooks.ExecContext) (*hooks.Output, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(os.Args[0], args...) // #nosec G204,G702 -- intentional nested Atmos invocation.
+	// Use os.Executable() to get the absolute path to the currently running binary.
+	// os.Args[0] can be a relative path (e.g. ./build/atmos), which breaks once the
+	// process working directory differs from the invocation directory (--chdir).
+	atmosBin, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("tfmigrate hook failed to determine atmos executable path: %w", err)
+	}
+	cmd := exec.Command(atmosBin, args...) // #nosec G204,G702 -- intentional nested Atmos invocation.
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

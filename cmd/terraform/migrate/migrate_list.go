@@ -72,6 +72,7 @@ func runTerraformMigrateList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	shared.ApplyRunOptions(&info, opts)
+	applyMigrateListComponentArg(&info, args)
 
 	rows, err := collectTfmigrateListRows(&info)
 	if err != nil {
@@ -90,10 +91,16 @@ func parseTerraformMigrateListArgs(args []string) (schema.ConfigAndStacksInfo, e
 	if err != nil {
 		return schema.ConfigAndStacksInfo{}, err
 	}
-	if len(args) > 0 {
-		info.Components = []string{args[0]}
-	}
 	return info, nil
+}
+
+// applyMigrateListComponentArg re-applies the positional component argument as
+// a component filter. It must run after shared.ApplyRunOptions, which replaces
+// info.Components with the --components flag value.
+func applyMigrateListComponentArg(info *schema.ConfigAndStacksInfo, args []string) {
+	if len(args) > 0 {
+		info.Components = append(info.Components, args[0])
+	}
 }
 
 func collectTfmigrateListRows(info *schema.ConfigAndStacksInfo) ([]map[string]any, error) {

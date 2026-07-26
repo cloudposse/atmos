@@ -78,8 +78,10 @@ atmos terraform migrate plan s3-bucket -s plat-ue2-dev --identity aws-prod
 Preview a single-file migration:
 
 ```shell
-atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration 001_remove_template_provider.hcl
 ```
+
+The value is resolved by `tfmigrate` relative to the `migration_dir` in its config, so pass just the filename when `migration_dir` already points at your migrations directory.
 
 Preview migrations across selected components:
 

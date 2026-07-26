@@ -128,22 +128,29 @@ func parseTerraformMigrate(cmd *cobra.Command, args []string, action string) (sc
 	}
 	shared.ApplyRunOptions(&info, opts)
 
-	if err := shared.ResolveAndPromptForArgs(&info, cmd); err != nil {
-		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
-	}
-	if info.NeedHelp {
-		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, cmd.Usage()
-	}
-	if info.Identity == cfg.IdentityFlagSelectValue {
-		if err := shared.HandleInteractiveIdentitySelection(&info); err != nil {
-			return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
-		}
-	}
-	if err := shared.CheckTerraformFlags(&info); err != nil {
+	if done, err := finalizeTerraformMigrateInfo(cmd, &info); done || err != nil {
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 	}
 
 	return info, migrateOpts, nil
+}
+
+// finalizeTerraformMigrateInfo runs the shared post-parse steps: argument
+// prompts, the help short-circuit (done=true), interactive identity selection,
+// and terraform flag validation.
+func finalizeTerraformMigrateInfo(cmd *cobra.Command, info *schema.ConfigAndStacksInfo) (bool, error) {
+	if err := shared.ResolveAndPromptForArgs(info, cmd); err != nil {
+		return false, err
+	}
+	if info.NeedHelp {
+		return true, cmd.Usage()
+	}
+	if info.Identity == cfg.IdentityFlagSelectValue {
+		if err := shared.HandleInteractiveIdentitySelection(info); err != nil {
+			return false, err
+		}
+	}
+	return false, shared.CheckTerraformFlags(info)
 }
 
 func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Options) error {
@@ -163,9 +170,22 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		return err
 	}
 
+	command := execCtx.Toolchain.Resolve(tfmigrate.Command)
+	if err := tfmigrate.EnsureResolved(command); err != nil {
+		return err
+	}
+
+	// Pre-create the local history directory (if configured) so tfmigrate's
+	// history save doesn't fail after it has already pushed the migrated state.
+	if !execCtx.Info.DryRun {
+		if err := tfmigrate.EnsureLocalHistoryDir(execCtx.ComponentDir, opts.Config, execCtx.Env); err != nil {
+			return err
+		}
+	}
+
 	return e.ExecuteShellCommand(
 		execCtx.AtmosConfig,
-		execCtx.Toolchain.Resolve(tfmigrate.Command),
+		command,
 		args,
 		execCtx.ComponentDir,
 		execCtx.Env,
@@ -304,6 +324,17 @@ func buildTfmigrateEnv(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		terraformCommand = tenv.Resolve(info.Command)
 	}
 	env = tfmigrate.AppendExecPath(env, terraformCommand)
+	// Tfmigrate verifies migrations by running `terraform plan` itself; pass the
+	// Atmos-generated varfile through TF_CLI_ARGS_plan so components with
+	// required variables plan cleanly.
+	env = tfmigrate.AppendPlanVarFile(env, e.ConstructTerraformComponentVarfileName(info))
+	// Secret-bearing and declared-sensitive variables are kept out of the
+	// generated varfile; inject them as TF_VAR_* just like the terraform path.
+	secretEnv, err := e.ComputeTerraformSecretVarEnv(info)
+	if err != nil {
+		return nil, err
+	}
+	env = append(env, secretEnv...)
 	return env, nil
 }
 

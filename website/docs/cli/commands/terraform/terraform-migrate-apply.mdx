@@ -80,8 +80,10 @@ atmos terraform migrate apply s3-bucket -s plat-ue2-dev --identity aws-prod
 Apply a single-file migration:
 
 ```shell
-atmos terraform migrate apply s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --migration 001_remove_template_provider.hcl
 ```
+
+The value is resolved by `tfmigrate` relative to the `migration_dir` in its config, so pass just the filename when `migration_dir` already points at your migrations directory.
 
 Override the default `tfmigrate` config path:
 

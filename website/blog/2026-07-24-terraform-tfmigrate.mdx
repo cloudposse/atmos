@@ -8,7 +8,7 @@ tags: [feature, dx]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Atmos can now run user-authored [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) migrations manually from the CLI and automatically from Terraform lifecycle hooks, all in the same component context as `atmos terraform plan` and `apply`.
+Refactoring Terraform code leaves state behind: rename a resource or move it between root modules, and every plan shows destroy-and-recreate for infrastructure that never changed. Hand-run `terraform state mv` commands fix one workspace at a time, are easy to get wrong, and are impossible to review. [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) turns those state surgeries into declarative, version-controlled migration files — and Atmos runs them for you, manually from the CLI or automatically from Terraform lifecycle hooks, in the same component context as `atmos terraform plan` and `apply`.
 
 ```shell
 atmos terraform migrate plan s3-bucket -s plat-ue2-dev
@@ -54,6 +54,40 @@ hooks:
 Hooks run through Atmos, so they use the same identity as the Terraform
 operation. If the Terraform command or component selects an Atmos auth
 identity, the migration gets that same authenticated environment.
+
+## Recovering From Skipped Releases
+
+Provider removals are where this bites hardest. When a component release drops
+a provider configuration, every workspace that skips the intermediate release
+is wedged — the state still holds resources from the removed provider, and
+Terraform refuses to plan:
+
+```text
+Error: Provider configuration not present
+
+To work with random_pet.legacy (orphan) its original provider configuration
+at provider["registry.opentofu.org/hashicorp/random"].legacy is required,
+but it has been removed.
+```
+
+Until now the escape hatch was hand-restoring a temporary provider override,
+applying, and deleting it again — per workspace. With a migration shipped
+alongside the release, the hook prunes the stale state entries before
+Terraform ever loads provider configurations, and workspaces can jump straight
+to the newest release:
+
+```hcl
+migration "state" "drop_legacy_provider_state" {
+  actions = [
+    "rm random_pet.legacy",
+  ]
+}
+```
+
+Note that `state rm` abandons the remote object rather than destroying it.
+That is usually the intent for provider-cleanup migrations; when the object
+must actually be destroyed, destroy it before upgrading, or temporarily
+restore the provider configuration.
 
 ## History Mode
 

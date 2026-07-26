@@ -9,3 +9,4 @@
 **/terraform.tfstate.backup
 **/terraform.tfstate.d/**
 state/**
+.tools/

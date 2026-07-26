@@ -114,6 +114,30 @@ func TestBackendHistoryEnv_S3(t *testing.T) {
 	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_KMS_KEY_ID=alias/tfstate")
 }
 
+func TestBackendHistoryEnv_S3NestedEndpoints(t *testing.T) {
+	// Terraform 1.6+ moved the S3 endpoint under `endpoints { s3 = ... }`.
+	env := BackendHistoryEnv("s3", map[string]any{
+		"bucket": "tfstate-bucket",
+		"endpoints": map[string]any{
+			"s3": "http://localhost:4566",
+		},
+	})
+
+	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_ENDPOINT=http://localhost:4566")
+}
+
+func TestBackendHistoryEnv_S3LegacyEndpointWins(t *testing.T) {
+	env := BackendHistoryEnv("s3", map[string]any{
+		"bucket":   "tfstate-bucket",
+		"endpoint": "http://legacy:4566",
+		"endpoints": map[string]any{
+			"s3": "http://nested:4566",
+		},
+	})
+
+	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_ENDPOINT=http://legacy:4566")
+}
+
 func TestBackendHistoryEnv_GCS(t *testing.T) {
 	env := BackendHistoryEnv("gcs", map[string]any{
 		"bucket": "tfstate-bucket",
