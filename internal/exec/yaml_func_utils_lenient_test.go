@@ -150,3 +150,54 @@ func TestProcessCustomYamlTagsLenient_NonRecoverableError_StillFails(t *testing.
 	assert.Contains(t, err.Error(), "S3 GetObject timeout")
 	assert.Empty(t, warnings, "non-recoverable errors must not trigger onWarning")
 }
+
+// TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn verifies the fix for an
+// unrelated component's broken/unavailable credentials (e.g. no EC2 IMDS role, an expired
+// SSO session) hard-failing `atmos terraform lint` and other --error-mode-aware commands
+// even in warn mode. ErrGetObjectFromS3 — a backend read that failed for a reason other than
+// "not yet provisioned" — must degrade like any other recoverable error once the caller has
+// opted into warn mode, without weakening the always-on `//`-default path's own stricter
+// classification (see TestTerraformOutput_APIErrorWithDefaultReturnsError, unaffected by this
+// fix). See docs/fixes/2026-07-22-terraform-lint-error-mode.md.
+func TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+
+	credErr := fmt.Errorf(
+		"failed to get object from S3: %w: get identity: get credentials: failed to refresh cached credentials, no EC2 IMDS role found",
+		errUtils.ErrGetObjectFromS3,
+	)
+	mockStateGetter.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, credErr).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"bucket":  `!terraform.state vpc test-stack bucket_name`,
+		"sibling": "unaffected-value",
+	}
+
+	stackInfo := &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}
+
+	var warnings []DegradationWarning
+	result, err := ProcessCustomYamlTagsLenient(atmosConfig, input, "test-stack", nil, stackInfo, func(w DegradationWarning) {
+		warnings = append(warnings, w)
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, degradation.AtmosComputedValue{}, result["bucket"])
+	assert.Equal(t, "unaffected-value", result["sibling"])
+
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "test-stack", warnings[0].Stack)
+	assert.Equal(t, "vpc", warnings[0].Component)
+	assert.Contains(t, warnings[0].Reason, "EC2 IMDS")
+}

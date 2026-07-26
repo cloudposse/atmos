@@ -70,6 +70,63 @@ func TestIsRecoverableTerraformError(t *testing.T) {
 	}
 }
 
+// TestIsRecoverableInWarnMode verifies the broader classification used only by
+// processNodesWithContext's onWarning path (--error-mode=warn/silent): on top of everything
+// isRecoverableTerraformError already covers, a backend read that failed for any other
+// reason (ErrGetObjectFromS3 — credential refresh, network, permissions) is ALSO tolerated,
+// since the caller explicitly opted into best-effort discovery. This must stay strictly
+// broader than, never narrower than, isRecoverableTerraformError.
+func TestIsRecoverableInWarnMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "ErrTerraformStateNotProvisioned is recoverable",
+			err:      errUtils.ErrTerraformStateNotProvisioned,
+			expected: true,
+		},
+		{
+			name:     "ErrTerraformOutputNotFound is recoverable",
+			err:      errUtils.ErrTerraformOutputNotFound,
+			expected: true,
+		},
+		{
+			name:     "ErrGetObjectFromS3 is recoverable in warn mode",
+			err:      errUtils.ErrGetObjectFromS3,
+			expected: true,
+		},
+		{
+			name:     "Wrapped ErrGetObjectFromS3 (credential failure) is recoverable in warn mode",
+			err:      fmt.Errorf("get identity: get credentials: failed to refresh cached credentials: %w", errUtils.ErrGetObjectFromS3),
+			expected: true,
+		},
+		{
+			name:     "ErrTerraformBackendAPIError is not recoverable even in warn mode",
+			err:      errUtils.ErrTerraformBackendAPIError,
+			expected: false,
+		},
+		{
+			name:     "Generic error is not recoverable",
+			err:      errors.New("some random error"),
+			expected: false,
+		},
+		{
+			name:     "Nil error is not recoverable",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isRecoverableInWarnMode(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 //nolint:dupl // Test structure is similar to TestHasSchemeSeparator but tests completely different function (YQ expressions vs URI schemes).
 func TestHasYqDefault(t *testing.T) {
 	tests := []struct {

@@ -2,6 +2,7 @@ package step
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -22,6 +23,8 @@ const (
 // TemplateRenderer renders one template pass with the provided data.
 type TemplateRenderer func(name, input string, data any) (string, error)
 
+type ComponentInfoResolver func(ctx context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error)
+
 // Variables holds step outputs accessible via Go templates.
 type Variables struct {
 	// Steps maps step names to their results.
@@ -31,6 +34,8 @@ type Variables struct {
 	// Flags contains workflow command-line flags exposed to step templates.
 	Flags            map[string]string
 	AtmosConfig      *schema.AtmosConfiguration
+	ToolchainPATH    string
+	componentInfo    ComponentInfoResolver
 	templateRoots    map[string]any
 	templateRenderer TemplateRenderer
 	templatePasses   int
@@ -184,6 +189,33 @@ func (v *Variables) SetAtmosConfig(config *schema.AtmosConfiguration) {
 	defer perf.Track(nil, "step.Variables.SetAtmosConfig")()
 
 	v.AtmosConfig = config
+}
+
+func (v *Variables) SetToolchainPATH(path string) {
+	defer perf.Track(nil, "step.Variables.SetToolchainPATH")()
+
+	v.ToolchainPATH = path
+}
+
+func (v *Variables) SetComponentInfoResolver(resolver ComponentInfoResolver) {
+	defer perf.Track(nil, "step.Variables.SetComponentInfoResolver")()
+
+	v.componentInfo = resolver
+}
+
+func (v *Variables) ResolveComponentInfo(ctx context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(nil, "step.Variables.ResolveComponentInfo")()
+
+	if v.componentInfo != nil {
+		return v.componentInfo(ctx, component, stack, componentType)
+	}
+	return &schema.ConfigAndStacksInfo{
+		Stack:            stack,
+		ComponentType:    componentType,
+		ComponentFromArg: component,
+		Component:        component,
+		FinalComponent:   component,
+	}, nil
 }
 
 // SetTemplateData sets extra root values exposed during template resolution.

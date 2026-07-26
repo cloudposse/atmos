@@ -395,8 +395,8 @@ type Terminal struct {
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
-	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
-	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
+	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color" jsonschema_extras:"deprecated=true,x-atmos-replacement=settings.terminal.color (invert the value)"` // Deprecated in config, use Color instead
+	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`                                                                                                               // ENV-only: ATMOS_FORCE_COLOR
 	Speed              float64            `yaml:"speed,omitempty" json:"speed,omitempty" mapstructure:"speed"`
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
@@ -469,7 +469,7 @@ type AtmosSettings struct {
 	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
 	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
-	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs" jsonschema_extras:"deprecated=true,x-atmos-replacement=docs"`
 	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
@@ -556,9 +556,9 @@ type ProvisionWorkdirSettings struct {
 
 type Docs struct {
 	// Deprecated: this has moved to `settings.terminal.max-width`
-	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width" jsonschema_extras:"deprecated=true,x-atmos-replacement=settings.terminal.max-width"`
 	// Deprecated: this has moved to `settings.terminal.pagination`
-	Pagination bool                    `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	Pagination bool                    `yaml:"pagination" json:"pagination" mapstructure:"pagination" jsonschema_extras:"deprecated=true,x-atmos-replacement=settings.terminal.pagination"`
 	Generate   map[string]DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
 
@@ -612,13 +612,17 @@ type Terraform struct {
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
 	// Generated files are defined in the component's generate section.
-	AutoGenerateFiles bool            `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
-	WorkspacesEnabled *bool           `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
-	Command           string          `yaml:"command" json:"command" mapstructure:"command"`
-	Shell             ShellConfig     `yaml:"shell" json:"shell" mapstructure:"shell"`
-	Init              TerraformInit   `yaml:"init" json:"init" mapstructure:"init"`
-	Plan              TerraformPlan   `yaml:"plan" json:"plan" mapstructure:"plan"`
-	Planfiles         PlanfilesConfig `yaml:"planfiles,omitempty" json:"planfiles,omitempty" mapstructure:"planfiles"`
+	AutoGenerateFiles bool          `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	WorkspacesEnabled *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
+	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
+	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
+	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
+	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// Lint configures the built-in `atmos terraform lint` command.
+	// A configured config path is used when a component does not provide its own
+	// .tflint.hcl file.
+	Lint      TerraformLint   `yaml:"lint,omitempty" json:"lint,omitempty" mapstructure:"lint"`
+	Planfiles PlanfilesConfig `yaml:"planfiles,omitempty" json:"planfiles,omitempty" mapstructure:"planfiles"`
 	// PluginCache enables automatic Terraform provider plugin caching.
 	// When true, Atmos sets TF_PLUGIN_CACHE_DIR to XDG cache or PluginCacheDir.
 	// Default: true.
@@ -650,6 +654,18 @@ type Terraform struct {
 	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
 	// Empty defaults to the current host platform.
 	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+}
+
+// TerraformLint configures TFLint for Terraform components. Config may be an
+// absolute path or a path relative to the Atmos base path.
+type TerraformLint struct {
+	Config string `yaml:"config,omitempty" json:"config,omitempty" mapstructure:"config"`
+	// ErrorMode is the project-wide default for `atmos terraform lint`'s `--error-mode` flag:
+	// how to handle a recoverable per-value YAML function error (e.g. a Terraform backend that
+	// has not been provisioned yet) or a component-specific auth failure encountered while
+	// discovering lint targets. Values: "strict", "warn" (default), "silent". An explicit
+	// --error-mode flag or ATMOS_TERRAFORM_LINT_ERROR_MODE env var overrides this.
+	ErrorMode string `yaml:"error_mode,omitempty" json:"error_mode,omitempty" mapstructure:"error_mode"`
 }
 
 // TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native
@@ -1065,8 +1081,8 @@ type Helmfile struct {
 	BasePath              string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	UseEKS                bool   `yaml:"use_eks" json:"use_eks" mapstructure:"use_eks"`
 	KubeconfigPath        string `yaml:"kubeconfig_path" json:"kubeconfig_path" mapstructure:"kubeconfig_path"`
-	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"` // Deprecated: use --identity flag instead.
-	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`             // Deprecated: use ClusterNameTemplate with Go template syntax.
+	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern" jsonschema_extras:"deprecated=true,x-atmos-replacement=--identity"`                    // Deprecated: use --identity flag instead.
+	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern" jsonschema_extras:"deprecated=true,x-atmos-replacement=components.helmfile.cluster_name_template"` // Deprecated: use ClusterNameTemplate with Go template syntax.
 	ClusterNameTemplate   string `yaml:"cluster_name_template" json:"cluster_name_template" mapstructure:"cluster_name_template"`
 	ClusterName           string `yaml:"cluster_name" json:"cluster_name" mapstructure:"cluster_name"`
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
@@ -1205,7 +1221,7 @@ type Stacks struct {
 	BasePath      string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	IncludedPaths []string      `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
 	ExcludedPaths []string      `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern" jsonschema_extras:"deprecated=true,x-atmos-replacement=stacks.name_template"`
 	NameTemplate  string        `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
 	List          ListConfig    `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	Inherit       StacksInherit `yaml:"inherit,omitempty" json:"inherit,omitempty" mapstructure:"inherit"`

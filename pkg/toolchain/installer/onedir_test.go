@@ -913,6 +913,49 @@ func TestResolveOnedirEntrypointSourceForOS(t *testing.T) {
 	})
 }
 
+func TestResolveWindowsExeFallback(t *testing.T) {
+	t.Run("non-windows goos always reports the entrypoint missing", func(t *testing.T) {
+		src, dst, err := resolveWindowsExeFallback(filepath.Join(t.TempDir(), "node"), "node", "linux")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+		assert.Empty(t, src)
+		assert.Empty(t, dst)
+	})
+
+	t.Run("windows: falls back to the .exe sibling when present", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "node")
+		require.NoError(t, os.WriteFile(src+".exe", []byte("NODE"), 0o600))
+
+		gotSrc, gotDst, err := resolveWindowsExeFallback(src, "node", "windows")
+		require.NoError(t, err)
+		assert.Equal(t, src+".exe", gotSrc)
+		assert.Equal(t, "node.exe", gotDst)
+	})
+
+	t.Run("windows: reports not-found when neither variant exists", func(t *testing.T) {
+		_, _, err := resolveWindowsExeFallback(filepath.Join(t.TempDir(), "node"), "node", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+	})
+
+	t.Run("windows: propagates a stat error that is not not-exist", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("a path that traverses through a file yields ENOTDIR on Unix; Windows maps this differently")
+		}
+		// A source path traversing THROUGH a regular file yields ENOTDIR (not
+		// IsNotExist) when stat'ing the .exe sibling, which must surface as an
+		// error rather than being treated as "the .exe variant is absent".
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "iamafile"), []byte("x"), 0o644))
+		src := filepath.Join(dir, "iamafile", "child")
+
+		_, _, err := resolveWindowsExeFallback(src, "child", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
 // TestInstallOnedir_FailedReinstallPreservesExistingTree verifies that an
 // incomplete replacement does not delete a known-good onedir installation.
 // Uses no symlinks (the existing install is represented purely via the

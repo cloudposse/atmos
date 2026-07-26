@@ -362,6 +362,12 @@ type WorkflowStep struct {
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
+	// Command/scanner step arguments (supports templates).
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+
+	// With holds type-specific step parameters for non-container step types.
+	With map[string]any `yaml:"-" json:"with,omitempty" mapstructure:"with"`
+
 	// Env step type fields.
 	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
 
@@ -493,6 +499,7 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		color:     &step.Background,
 		forList:   &step.For,
 		steps:     &step.Steps,
+		generic:   &step.With,
 		container: containerActionTargets{Build: &step.Build, Run: &step.Run, Push: &step.Push, Inspect: &step.Inspect},
 	})
 }
@@ -519,6 +526,7 @@ type stepPolyTargets struct {
 	color     *string
 	forList   *[]string
 	steps     *[]WorkflowStep
+	generic   *map[string]any
 	container containerActionTargets
 }
 
@@ -552,7 +560,25 @@ func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t *
 	if err := decodeWorkflowStepList(nodes.steps, t.steps); err != nil {
 		return err
 	}
-	return decodeContainerWith(nodes.with, action, t.container)
+	return decodeStepWith(nodes.with, stepType, action, t)
+}
+
+func decodeStepWith(node *yaml.Node, stepType, action string, t *stepPolyTargets) error {
+	if node == nil {
+		return nil
+	}
+	if strings.TrimSpace(stepType) == "container" || strings.TrimSpace(action) != "" {
+		return decodeContainerWith(node, action, t.container)
+	}
+	if t.generic == nil {
+		return nil
+	}
+	out := make(map[string]any)
+	if err := node.Decode(&out); err != nil {
+		return err
+	}
+	*t.generic = out
+	return nil
 }
 
 func decodeWorkflowStepList(node *yaml.Node, out *[]WorkflowStep) error {
