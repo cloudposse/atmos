@@ -26,27 +26,19 @@ func processTagTerraformState(
 	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
-// isRecoverableTerraformError checks if an error is recoverable (can use YQ default). Used
-// by the always-on local `//`-default evaluation regardless of --error-mode, so this stays
-// deliberately narrow: only "state genuinely doesn't exist yet" — an infrastructure/API
-// failure (e.g. an S3 credential or network error) must NOT silently fall back to a literal
-// default outside of an explicit --error-mode=warn/silent opt-in (see
-// TestTerraformOutput_APIErrorWithDefaultReturnsError). Warn-mode's broader tolerance lives
-// in isRecoverableInWarnMode below, consumed only by processNodesWithContext's onWarning path.
+// isRecoverableTerraformError checks whether a lookup is recoverable because state or an
+// output genuinely does not exist yet. Authentication, credential-refresh, network, and
+// backend API failures must remain visible rather than silently using a fallback value.
 func isRecoverableTerraformError(err error) bool {
 	return errors.Is(err, errUtils.ErrTerraformStateNotProvisioned) ||
 		errors.Is(err, errUtils.ErrTerraformOutputNotFound)
 }
 
 // isRecoverableInWarnMode is the classification processNodesWithContext uses when the
-// caller explicitly opted into --error-mode=warn/silent (onWarning != nil). It's broader
-// than isRecoverableTerraformError: on top of "state not yet provisioned", it also tolerates
-// ErrGetObjectFromS3 — a backend read that failed for any other reason (credential refresh,
-// network, permissions) — since the user has already said "continue past values that can't
-// resolve right now" by choosing warn/silent. This must NOT be used by the always-on local
-// `//`-default path (see isRecoverableTerraformError's doc comment for why).
+// caller selected --error-mode=warn/silent. Error mode only degrades a genuinely
+// unprovisioned state/output; it never hides credential or backend failures.
 func isRecoverableInWarnMode(err error) bool {
-	return isRecoverableTerraformError(err) || errors.Is(err, errUtils.ErrGetObjectFromS3)
+	return isRecoverableTerraformError(err)
 }
 
 // hasYqDefault checks if a YQ expression contains a default (fallback) operator.
