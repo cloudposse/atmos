@@ -21,7 +21,7 @@ Authenticate with a configured identity using SSO, SAML, OIDC, or static credent
 ## Usage
 
 ```shell
-atmos auth login [--identity <name>] [--tags <tags>]
+atmos auth login [--identity <name>] [--tags <tags>] [--webflow]
 ```
 
 ## Examples
@@ -44,6 +44,9 @@ atmos auth login -i
 
 # Login using tags (auto-selects if exactly one identity matches, otherwise shows a picker)
 atmos auth login --tags admin,production
+
+# Force a fresh browser sign-in for an AWS IAM user without changing stored IAM keys
+atmos auth login --profile=legacy --identity=cp-root/admin --webflow
 ```
 
 ## Arguments
@@ -94,6 +97,13 @@ atmos auth login --tags admin,production
     ```shell
     atmos auth login --tags admin,production
     ```
+  </dd>
+
+  <dt>`--webflow`</dt>
+  <dd>
+    Force a fresh browser-based OAuth2/PKCE sign-in for an `aws/user` identity. This bypasses
+    cached temporary credentials and configured IAM access keys for this invocation, while leaving
+    the configured keys unchanged. It cannot be used with `--provider` or any other identity kind.
   </dd>
 </dl>
 
