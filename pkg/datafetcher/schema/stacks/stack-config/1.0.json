@@ -466,6 +466,14 @@
             },
             "platforms": {
               "$ref": "#/definitions/terraform_platforms"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "depends_on": {
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             }
           },
           "required": []
@@ -1369,7 +1377,9 @@
               "$ref": "#/definitions/validation"
             },
             "depends_on": {
-              "$ref": "#/definitions/depends_on"
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             },
             "spacelift": {
               "$ref": "#/definitions/spacelift"

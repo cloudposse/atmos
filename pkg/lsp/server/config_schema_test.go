@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
 func TestIsAtmosConfigDocument(t *testing.T) {
@@ -83,6 +84,22 @@ func TestValidateConfigSchema(t *testing.T) {
 		// `level: 42` is on line 3 (0-based: 2).
 		assert.Equal(t, uint32(2), diagnostics[0].Range.Start.Line)
 		assert.Equal(t, "atmos-lsp", *diagnostics[0].Source)
+	})
+
+	t.Run("deprecated property produces a warning diagnostic", func(t *testing.T) {
+		doc := &Document{
+			URI:  "file:///repo/atmos.yaml",
+			Text: "stacks:\n  name_pattern: '{stage}'\n",
+		}
+
+		diagnostics := handler.validateConfigSchema(doc)
+
+		require.Len(t, diagnostics, 1)
+		assert.Equal(t, protocol.DiagnosticSeverityWarning, *diagnostics[0].Severity)
+		assert.Contains(t, diagnostics[0].Message, "`stacks.name_pattern` is deprecated")
+		// documentPositions records the authored value's start position for a YAML path.
+		assert.Equal(t, protocol.Position{Line: 1, Character: 16}, diagnostics[0].Range.Start)
+		assert.Equal(t, protocol.Position{Line: 1, Character: 16}, diagnostics[0].Range.End)
 	})
 }
 
