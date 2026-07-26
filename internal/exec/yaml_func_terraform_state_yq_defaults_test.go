@@ -70,12 +70,8 @@ func TestIsRecoverableTerraformError(t *testing.T) {
 	}
 }
 
-// TestIsRecoverableInWarnMode verifies the broader classification used only by
-// processNodesWithContext's onWarning path (--error-mode=warn/silent): on top of everything
-// isRecoverableTerraformError already covers, a backend read that failed for any other
-// reason (ErrGetObjectFromS3 — credential refresh, network, permissions) is ALSO tolerated,
-// since the caller explicitly opted into best-effort discovery. This must stay strictly
-// broader than, never narrower than, isRecoverableTerraformError.
+// TestIsRecoverableInWarnMode verifies that warn/silent mode only degrades an unprovisioned
+// state/output. Authentication and backend-read errors must stay fatal in every error mode.
 func TestIsRecoverableInWarnMode(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -93,14 +89,14 @@ func TestIsRecoverableInWarnMode(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "ErrGetObjectFromS3 is recoverable in warn mode",
+			name:     "ErrGetObjectFromS3 is not recoverable in warn mode",
 			err:      errUtils.ErrGetObjectFromS3,
-			expected: true,
+			expected: false,
 		},
 		{
-			name:     "Wrapped ErrGetObjectFromS3 (credential failure) is recoverable in warn mode",
+			name:     "wrapped ErrGetObjectFromS3 credential failure is not recoverable in warn mode",
 			err:      fmt.Errorf("get identity: get credentials: failed to refresh cached credentials: %w", errUtils.ErrGetObjectFromS3),
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "ErrTerraformBackendAPIError is not recoverable even in warn mode",
