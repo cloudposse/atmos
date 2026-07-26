@@ -14,7 +14,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
@@ -521,18 +520,19 @@ func TestExecuteTerraformAll_AuthManagerResolverWired(t *testing.T) {
 
 	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
 
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	// The bridge records the selected identity via GetChain, and
+	// ExecuteDescribeStacks calls GetStackInfo while processing each stack.
+	// The fixture has no auth-dependent YAML functions, so no other
+	// AuthManager methods should be invoked.
+	mgr.EXPECT().GetChain().Return([]string{"terraform"}).MinTimes(1)
+	mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
+
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mgr, nil)
 	original := authManagerFactory
-	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-		ctrl := gomock.NewController(t)
-		mgr := types.NewMockAuthManager(ctrl)
-		// The bridge records the selected identity via GetChain, and
-		// ExecuteDescribeStacks calls GetStackInfo while processing each stack.
-		// The fixture has no auth-dependent YAML functions, so no other
-		// AuthManager methods should be invoked.
-		mgr.EXPECT().GetChain().Return([]string{"terraform"}).MinTimes(1)
-		mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
-		return mgr, nil
-	}
+	authManagerFactory = mockFactory
 	t.Cleanup(func() { authManagerFactory = original })
 
 	info := &schema.ConfigAndStacksInfo{
@@ -561,10 +561,11 @@ func TestExecuteTerraformAll_AuthManagerCreationError(t *testing.T) {
 	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
 
 	sentinel := errors.New("simulated auth manager init failure")
+	ctrl := gomock.NewController(t)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, sentinel)
 	original := authManagerFactory
-	authManagerFactory = func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-		return nil, sentinel
-	}
+	authManagerFactory = mockFactory
 	t.Cleanup(func() { authManagerFactory = original })
 
 	info := &schema.ConfigAndStacksInfo{
