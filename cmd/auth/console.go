@@ -284,7 +284,7 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 
 	// Check if provider supports console access based on kind.
 	switch providerKind {
-	case types.ProviderKindAWSIAMIdentityCenter, types.ProviderKindAWSSAML:
+	case types.ProviderKindAWSIAMIdentityCenter, types.ProviderKindAWSSAML, types.ProviderKindAWSUser:
 		// Return AWS console URL generator with default HTTP client.
 		generator := awsAuth.NewConsoleURLGenerator(nil)
 		return generator, nil
