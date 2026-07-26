@@ -316,7 +316,7 @@ func TestProcessComponentEntry_TagsLabelsTemplatedMetadataFallsThroughToAuth(t *
 }
 
 // TestProcessComponentEntry_TagsLabelsEagerEvaluationOverride verifies the
-// settings.describe.settings.eager_evaluation rollback: with it set, a
+// describe.settings.eager_evaluation rollback: with it set, a
 // tag-mismatched component is still fully evaluated (auth resolver runs)
 // instead of being skipped by the early gate — an instant escape hatch if a
 // repo's templated metadata isn't safely detectable by isMetadataSelectorTemplated.

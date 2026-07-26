@@ -10,7 +10,7 @@ base_path: "./"
 
 components:
   terraform:
-    base_path: "../../components/terraform"
+    base_path: "components/terraform"
     apply_auto_approve: false
     deploy_run_init: true
     init_run_reconfigure: true

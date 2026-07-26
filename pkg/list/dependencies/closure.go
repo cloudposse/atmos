@@ -1,6 +1,8 @@
 package dependencies
 
 import (
+	"sort"
+
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -67,5 +69,6 @@ func StackNames(graph *dependency.Graph) []string {
 		seen[node.Stack] = struct{}{}
 		names = append(names, node.Stack)
 	}
+	sort.Strings(names)
 	return names
 }

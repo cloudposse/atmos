@@ -81,7 +81,7 @@ templates. Grepping this repo's own `examples/`/`tests/` found zero such occurre
 not assume that: `isMetadataSelectorTemplated` detects a `{{` marker in the raw value and returns
 `decidable=false`, which forces the component through full evaluation instead of being silently
 skipped — correctness is preserved (only the perf optimization is forfeited for that one component). A
-`settings.describe.settings.eager_evaluation` / `ATMOS_...`-style config escape hatch
+`describe.settings.eager_evaluation` / `ATMOS_...`-style config escape hatch
 (`schema.DescribeSettings.EagerEvaluation`, read via `GetEagerEvaluationSetting`) forces this path for
 every component, as an instant rollback.
 
@@ -146,5 +146,5 @@ unchanged: a single full-repo describe, exactly as before.
 - **Templated cross-stack dependency targets remain a residual gap.** `resolveClosure`'s convergence
   loop only discovers a new stack once a *previously-included* stack's resolved pass reveals an edge to
   it. A dependency target templated to point at a stack with **no** structural path from the root at
-  all (e.g., driven by a remote store lookup) cannot be discovered this way. `settings.describe.settings.eager_evaluation`
+  all (e.g., driven by a remote store lookup) cannot be discovered this way. `describe.settings.eager_evaluation`
   is the escape hatch for a repo that needs it.

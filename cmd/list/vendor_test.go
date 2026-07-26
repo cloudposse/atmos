@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestVendorOptions tests the VendorOptions structure.
@@ -93,12 +94,12 @@ func TestBuildVendorFilters_Tags(t *testing.T) {
 		var err error
 		for _, f := range filters {
 			result, err = f.Apply(result)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		filtered, ok := result.([]map[string]any)
-		assert.True(t, ok)
-		assert.Len(t, filtered, 1)
+		require.True(t, ok)
+		require.Len(t, filtered, 1)
 		assert.Equal(t, "vpc", filtered[0]["component"])
 	})
 }

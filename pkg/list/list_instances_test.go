@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -73,8 +74,32 @@ func TestBuildInstanceFilters_TagsLabels(t *testing.T) {
 	}
 }
 
+// applyInstanceFilters runs rows through every filter in sequence, returning the final result.
+func applyInstanceFilters(t *testing.T, rows []map[string]any, filters []filter.Filter) []map[string]any {
+	t.Helper()
+	result := any(rows)
+	var err error
+	for _, f := range filters {
+		result, err = f.Apply(result)
+		require.NoError(t, err)
+	}
+	filtered, ok := result.([]map[string]any)
+	require.True(t, ok)
+	return filtered
+}
+
+// instanceComponentsOf returns the "component" field of each row, for order-preserving assertions.
+func instanceComponentsOf(rows []map[string]any) []string {
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r["component"].(string))
+	}
+	return names
+}
+
 // TestBuildInstanceFilters_FiltersRows verifies the produced tag/label filters
-// actually narrow rows on the flattened tags/labels fields.
+// actually narrow rows on the flattened tags/labels fields, and that
+// multi-value tags are any-match while multi-value labels are all-match.
 func TestBuildInstanceFilters_FiltersRows(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	rows := []map[string]any{
@@ -83,19 +108,34 @@ func TestBuildInstanceFilters_FiltersRows(t *testing.T) {
 		{"component": "eks", "stack": "dev", "tags": []string{"network", "compute"}, "labels": map[string]string{"team": "platform", "env": "dev"}},
 	}
 
-	filters, err := buildInstanceFilters("", []string{"network"}, "team:platform", atmosConfig)
-	require.NoError(t, err)
-	require.Len(t, filters, 2)
-
-	result := any(rows)
-	for _, f := range filters {
-		result, err = f.Apply(result)
+	t.Run("multi-tag any-match", func(t *testing.T) {
+		// "database" and "compute" never co-occur on one row, but requesting
+		// both as an any-match still returns every row matching either one.
+		filters, err := buildInstanceFilters("", []string{"database", "compute"}, "", atmosConfig)
 		require.NoError(t, err)
-	}
+		require.Len(t, filters, 1)
 
-	filtered, ok := result.([]map[string]any)
-	require.True(t, ok)
-	require.Len(t, filtered, 2)
-	assert.Equal(t, "vpc", filtered[0]["component"])
-	assert.Equal(t, "eks", filtered[1]["component"])
+		filtered := applyInstanceFilters(t, rows, filters)
+		assert.Equal(t, []string{"rds", "eks"}, instanceComponentsOf(filtered))
+	})
+
+	t.Run("multi-label all-match", func(t *testing.T) {
+		// eks has both team=platform and env=dev; vpc has team=platform but no env.
+		filters, err := buildInstanceFilters("", nil, "team:platform,env:dev", atmosConfig)
+		require.NoError(t, err)
+		require.Len(t, filters, 1)
+
+		filtered := applyInstanceFilters(t, rows, filters)
+		require.Len(t, filtered, 1, "all-match must require every requested label, not just one")
+		assert.Equal(t, "eks", filtered[0]["component"])
+	})
+
+	t.Run("tags and labels combined match only the intersection", func(t *testing.T) {
+		filters, err := buildInstanceFilters("", []string{"network"}, "team:platform", atmosConfig)
+		require.NoError(t, err)
+		require.Len(t, filters, 2)
+
+		filtered := applyInstanceFilters(t, rows, filters)
+		assert.Equal(t, []string{"vpc", "eks"}, instanceComponentsOf(filtered))
+	})
 }

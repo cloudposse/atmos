@@ -253,14 +253,16 @@ func TestParseDependenciesOptions(t *testing.T) {
 		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
 	})
 
-	t.Run("tags_flag", func(t *testing.T) {
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
 		cmd := buildCmd()
 		setFlag(t, cmd, "tags", "network,tier-1")
+		setFlag(t, cmd, "labels", "team:platform")
 		v := bindFlagsToViper(t, cmd, dependenciesParser)
 
 		opts := parseDependenciesOptions(cmd, v, nil)
 
 		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed in the RunE closure")
 	})
 }
 

@@ -770,29 +770,58 @@ func TestExtractSourceEntry_TagsLabels(t *testing.T) {
 	assert.Nil(t, entry["labels"])
 }
 
+// sourceNamesOf returns the "component" field of each row, for order-preserving assertions.
+func sourceNamesOf(rows []map[string]any) []string {
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r["component"].(string))
+	}
+	return names
+}
+
 // TestFilterSourcesByTagsLabels tests the tags/labels source filter.
 func TestFilterSourcesByTagsLabels(t *testing.T) {
 	sources := []map[string]any{
-		{"component": "vpc", "tags": []string{"network"}, "labels": map[string]string{"team": "platform"}},
+		{"component": "vpc", "tags": []string{"network", "tier-1"}, "labels": map[string]string{"team": "platform", "env": "dev"}},
 		{"component": "rds", "tags": []string{"database"}, "labels": map[string]string{"team": "data"}},
 		{"component": "bare", "tags": []string(nil), "labels": map[string]string(nil)},
 	}
 
 	t.Run("no filters is passthrough", func(t *testing.T) {
 		result := filterSourcesByTagsLabels(sources, nil, nil)
-		assert.Len(t, result, 3)
+		require.Len(t, result, 3)
+		assert.Equal(t, []string{"vpc", "rds", "bare"}, sourceNamesOf(result))
 	})
 
-	t.Run("tags only", func(t *testing.T) {
+	t.Run("tags only, any-match", func(t *testing.T) {
+		// Neither tag alone appears on more than one row, but requesting both
+		// as an any-match still returns each row exactly once (not duplicated).
+		result := filterSourcesByTagsLabels(sources, []string{"network", "database"}, nil)
+		require.Len(t, result, 2)
+		assert.Equal(t, []string{"vpc", "rds"}, sourceNamesOf(result))
+	})
+
+	t.Run("tags only, single tag", func(t *testing.T) {
 		result := filterSourcesByTagsLabels(sources, []string{"network"}, nil)
 		require.Len(t, result, 1)
 		assert.Equal(t, "vpc", result[0]["component"])
 	})
 
-	t.Run("labels only", func(t *testing.T) {
+	t.Run("labels only, single label", func(t *testing.T) {
 		result := filterSourcesByTagsLabels(sources, nil, map[string]string{"team": "data"})
 		require.Len(t, result, 1)
 		assert.Equal(t, "rds", result[0]["component"])
+	})
+
+	t.Run("labels only, all-match requires every requested label", func(t *testing.T) {
+		// vpc has both team=platform and env=dev.
+		result := filterSourcesByTagsLabels(sources, nil, map[string]string{"team": "platform", "env": "dev"})
+		require.Len(t, result, 1)
+		assert.Equal(t, "vpc", result[0]["component"])
+
+		// rds has team=data but no env label at all: a multi-label all-match must exclude it.
+		result = filterSourcesByTagsLabels(sources, nil, map[string]string{"team": "data", "env": "dev"})
+		assert.Empty(t, result, "all-match must require every requested label, not just one")
 	})
 
 	t.Run("tags and labels must match the same row", func(t *testing.T) {

@@ -240,7 +240,9 @@ func TestStackNames(t *testing.T) {
 	graph, err := BuildGraph(stacks)
 	require.NoError(t, err)
 
-	assert.ElementsMatch(t, []string{"dev", "prod"}, StackNames(graph))
+	// Assert exact order (not just ElementsMatch) since graph.Nodes is a map;
+	// StackNames must sort so results are deterministic across runs.
+	assert.Equal(t, []string{"dev", "prod"}, StackNames(graph))
 	assert.Nil(t, StackNames(nil))
 }
 

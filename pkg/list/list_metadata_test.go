@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -350,28 +351,66 @@ func TestBuildMetadataFilters(t *testing.T) {
 	}
 }
 
-// TestBuildMetadataFilters_FiltersRows verifies the produced filters actually
-// narrow rows on the flattened tags/labels fields.
-func TestBuildMetadataFilters_FiltersRows(t *testing.T) {
-	rows := []map[string]any{
-		{"component": "vpc", "tags": []string{"network"}, "labels": map[string]string{"team": "platform"}},
-		{"component": "rds", "tags": []string{"database"}, "labels": map[string]string{"team": "data"}},
-	}
-
-	filters, err := buildMetadataFilters([]string{"network"}, "team:platform")
-	require.NoError(t, err)
-	require.Len(t, filters, 2)
-
+// applyMetadataFilters runs rows through every filter in sequence, returning the final result.
+func applyMetadataFilters(t *testing.T, rows []map[string]any, filters []filter.Filter) []map[string]any {
+	t.Helper()
 	result := any(rows)
+	var err error
 	for _, f := range filters {
 		result, err = f.Apply(result)
 		require.NoError(t, err)
 	}
-
 	filtered, ok := result.([]map[string]any)
 	require.True(t, ok)
-	require.Len(t, filtered, 1)
-	assert.Equal(t, "vpc", filtered[0]["component"])
+	return filtered
+}
+
+// metadataComponentsOf returns the "component" field of each row, for order-preserving assertions.
+func metadataComponentsOf(rows []map[string]any) []string {
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r["component"].(string))
+	}
+	return names
+}
+
+// TestBuildMetadataFilters_FiltersRows verifies the produced filters actually
+// narrow rows on the flattened tags/labels fields, and that multi-value tags
+// are any-match while multi-value labels are all-match.
+func TestBuildMetadataFilters_FiltersRows(t *testing.T) {
+	rows := []map[string]any{
+		{"component": "vpc", "tags": []string{"network"}, "labels": map[string]string{"team": "platform"}},
+		{"component": "rds", "tags": []string{"database"}, "labels": map[string]string{"team": "data"}},
+		{"component": "eks", "tags": []string{"network", "compute"}, "labels": map[string]string{"team": "platform", "env": "dev"}},
+	}
+
+	t.Run("multi-tag any-match", func(t *testing.T) {
+		filters, err := buildMetadataFilters([]string{"database", "compute"}, "")
+		require.NoError(t, err)
+		require.Len(t, filters, 1)
+
+		filtered := applyMetadataFilters(t, rows, filters)
+		assert.Equal(t, []string{"rds", "eks"}, metadataComponentsOf(filtered))
+	})
+
+	t.Run("multi-label all-match", func(t *testing.T) {
+		filters, err := buildMetadataFilters(nil, "team:platform,env:dev")
+		require.NoError(t, err)
+		require.Len(t, filters, 1)
+
+		filtered := applyMetadataFilters(t, rows, filters)
+		require.Len(t, filtered, 1, "all-match must require every requested label, not just one")
+		assert.Equal(t, "eks", filtered[0]["component"])
+	})
+
+	t.Run("tags and labels combined match only the intersection", func(t *testing.T) {
+		filters, err := buildMetadataFilters([]string{"network"}, "team:platform")
+		require.NoError(t, err)
+		require.Len(t, filters, 2)
+
+		filtered := applyMetadataFilters(t, rows, filters)
+		assert.Equal(t, []string{"vpc", "eks"}, metadataComponentsOf(filtered))
+	})
 }
 
 func TestDefaultMetadataColumns(t *testing.T) {

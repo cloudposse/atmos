@@ -722,7 +722,7 @@ func shouldFilterByStack(filterByStack, stackFileName, stackName string) bool {
 // tags/labels filter, using only cheaply-available metadata (no auth/template/
 // YAML-function evaluation). Decidable is false when the metadata itself is
 // templated and cannot be safely evaluated yet, or when eager evaluation is
-// forced via settings.describe.settings.eager_evaluation: in both cases the
+// forced via describe.settings.eager_evaluation: in both cases the
 // caller must fall through to full evaluation, leaving
 // pkg/scheduler/adapters/terraform.go's post-filter as the authoritative answer.
 func (p *describeStacksProcessor) scopeDecision(metadata map[string]any) (inScope bool, decidable bool) {
