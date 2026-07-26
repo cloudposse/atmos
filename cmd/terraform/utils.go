@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,6 +23,7 @@ import (
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -30,6 +32,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // errWrapFormat is the format string for wrapping errors with a cause.
@@ -248,8 +251,6 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	if err != nil {
 		return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
-	injectHookStoreAuthResolver(&atmosConfig, &info)
-
 	// Resolve path-based component arguments before getting hooks. GetHooks calls
 	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
@@ -258,7 +259,71 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 		}
 	}
 
+	// InitCliConfig processes stack configuration on its private copy of info.
+	// Hooks need that resolved information too: in particular, FinalComponent
+	// and ComponentFolderPrefix must reflect metadata.component before engines
+	// derive a component working directory. Keep template and YAML-function
+	// processing disabled here because hook discovery runs before auth.
+	//
+	// Multi-component invocations (--all/--affected/--components/--query/--tags/
+	// --labels) fire the global before/after hook with no single component
+	// resolved yet — ProcessStacks requires ComponentFromArg and would reject
+	// that with "component is required". Per-component hooks inside the
+	// component walker call GetHooks/RunAll directly with an already-resolved
+	// component, so they are unaffected by skipping this step here.
+	//
+	// Best-effort: a resolution failure here (missing/invalid stack, unknown
+	// component — cases prepareHookContext never used to validate before this
+	// resolution step existed) must not become the command's user-facing error.
+	// GetHooks (called next, in runUserHooks) already tolerates an empty Stack
+	// or an unresolved component by returning no hooks, so PreRunE proceeds
+	// with the original, unresolved info and RunE's own validation — not this
+	// hook-prep step — produces the correct, authoritative error and message.
+	if info.ComponentFromArg != "" {
+		authManager, _ := info.AuthManager.(auth.AuthManager)
+		if resolved, procErr := e.ProcessStacks(&atmosConfig, info, true, false, false, nil, authManager); procErr != nil {
+			log.Debug("hook context: failed to resolve component metadata; hooks will use the unresolved component/stack", "error", procErr)
+		} else {
+			info = resolved
+		}
+	}
+	injectHookStoreAuthResolver(&atmosConfig, &info)
+
 	return hookContext{info: info, atmosConfig: atmosConfig}, nil
+}
+
+// componentSourceProvisionTimeout bounds JIT source provisioning triggered from
+// hook context preparation, matching ExecuteTerraform's own provisioning timeout.
+const componentSourceProvisionTimeout = 5 * time.Minute
+
+// ensureComponentSourceProvisioned JIT-provisions the component's `source:`
+// (if configured) so lifecycle hooks observe the same resolved, populated
+// directory Terraform itself will use. No-op for components with no `source:`
+// (component.ProvisionAndResolveComponentPath short-circuits on that) and for
+// components that are already provisioned and not TTL-expired. Errors are
+// logged, not returned: hooks should still attempt to run (and the actual
+// Terraform command will surface the same provisioning error authoritatively)
+// rather than aborting hook discovery over a problem unrelated to any hook.
+//
+// Only called when the component actually has hooks configured (see
+// runUserHooks): every terraform subcommand already provisions its own
+// component independently in RunE (ExecuteTerraform), so calling this
+// unconditionally for every invocation would race a second, independent
+// provisioning attempt against that one — observed to intermittently wipe
+// or fail to (re)populate the directory for components with no hooks at all,
+// which have nothing to gain from provisioning this early.
+func ensureComponentSourceProvisioned(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	fallbackPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		log.Debug("hook source provisioning: failed to resolve fallback component path", "error", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), componentSourceProvisionTimeout)
+	defer cancel()
+	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
+		log.Debug("hook source provisioning failed; the Terraform command will report this authoritatively", "component", info.ComponentFromArg, "error", err)
+	}
 }
 
 // runUserHooks runs user-defined hooks from stack configuration for the given
@@ -271,6 +336,22 @@ func runUserHooks(hctx *hookContext, event h.HookEvent, cmd_ *cobra.Command, arg
 	}
 	if hooks == nil || !hooks.HasHooks() {
 		return nil
+	}
+	// A `before.terraform.*` hook (other than before.terraform.init, which is
+	// the provisioner's own hook) is a "run before Terraform" event, not a
+	// "run before the component's source is provisioned" event. Ensure a
+	// configured JIT `source:` is provisioned before firing hooks for this
+	// component, so ComponentPath (env var and hook subprocess cwd) points at
+	// a real, populated directory instead of one that would not exist until
+	// Terraform's own execution provisions it moments later.
+	//
+	// `init` is excluded: before.terraform.init IS the provisioner's own
+	// lifecycle event (see pkg/provisioner/source's HookEventBeforeTerraformInit
+	// registration) — pre-provisioning here would fire it after provisioning
+	// already happened, inverting the one event whose whole point is to run
+	// before the source exists.
+	if hctx.info.ComponentFromArg != "" && cmd_.Name() != "init" {
+		ensureComponentSourceProvisioned(&hctx.atmosConfig, &hctx.info)
 	}
 	hooks.SetOutcome(outcome)
 	log.Info("Running hooks", "event", event, "status", outcome.Status)
