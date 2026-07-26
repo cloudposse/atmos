@@ -138,7 +138,7 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	componentFilter := getComponentFilter(args)
 
 	// Initialize CLI config and auth manager (honors --base-path, --config, --config-path, --profile).
-	atmosConfig, authManager, err := initConfigAndAuth(cmd, v)
+	atmosConfig, authManager, err := initConfigAndAuth(cmd, v, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return "", nil, err
 	}
@@ -152,10 +152,12 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	// list.error_mode, else "warn".
 	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
 
-	// Execute describe stacks.
+	// Execute describe stacks. authManager is nil both when auth isn't needed and when the
+	// caller explicitly disabled it (--identity=false); either way, per-component auth
+	// resolution must be skipped rather than silently attempting real authentication.
 	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, false,
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, authManager == nil,
 		errOpts)
 	if err != nil {
 		return "", nil, &listerrors.DescribeStacksError{Cause: err}
