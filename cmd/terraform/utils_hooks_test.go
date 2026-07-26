@@ -1039,6 +1039,9 @@ func TestEnsureComponentSourceProvisioned_ProvisioningFailureIsLoggedNotReturned
 	require.NotPanics(t, func() {
 		ensureComponentSourceProvisioned(atmosConfig, info)
 	}, "a provisioning failure must be logged, not propagated as a panic")
+
+	assert.NoDirExists(t, filepath.Join(terraformDir, "app"),
+		"a failed provisioning attempt must leave no component directory behind")
 }
 
 // writeMinimalSourceFixture builds a self-contained atmos project (atmos.yaml,
