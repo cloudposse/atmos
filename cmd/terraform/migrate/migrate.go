@@ -165,6 +165,25 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		return err
 	}
 
+	// With no user-provided tfmigrate config, generate one that inherits the
+	// component's Terraform backend as history storage, so history mode works
+	// with zero configuration.
+	if opts.Config == "" {
+		generated, cleanupGenerated, err := tfmigrate.EnsureDefaultConfig(&tfmigrate.DefaultConfigInput{
+			ComponentDir: execCtx.ComponentDir,
+			BackendType:  execCtx.Info.ComponentBackendType,
+			Backend:      execCtx.Info.ComponentBackendSection,
+			History:      tfmigrate.HistoryNames(execCtx.Info.Stack, tfmigrateComponentName(&execCtx.Info), execCtx.Info.TerraformWorkspace),
+		})
+		if err != nil {
+			return err
+		}
+		if generated != "" {
+			defer cleanupGenerated()
+			opts.Config = generated
+		}
+	}
+
 	args, err := tfmigrate.BuildArgs(opts)
 	if err != nil {
 		return err

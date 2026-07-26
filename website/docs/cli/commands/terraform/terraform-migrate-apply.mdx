@@ -91,7 +91,7 @@ Override the default `tfmigrate` config path:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
 ```
 
-Use a durable S3 history file in `.tfmigrate.hcl`:
+Components with an S3 or GCS backend get durable history automatically: with no `.tfmigrate.hcl`, Atmos generates a config that stores history in the same bucket as the state. Provide your own `.tfmigrate.hcl` only to customize it, for example:
 
 ```hcl
 tfmigrate {

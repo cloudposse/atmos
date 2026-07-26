@@ -16,13 +16,13 @@ import (
 )
 
 // TestTerraformFlociTfmigrateS3History verifies that tfmigrate history storage
-// can inherit the component's S3 backend on an emulator: the fixture backend
-// sets bucket + endpoints.s3, Atmos exports them as ATMOS_TFMIGRATE_HISTORY_*,
-// and the component's .tfmigrate.hcl configures `history { storage "s3" }`
-// from those variables. The full lifecycle runs: seed legacy state, apply the
-// refactored component (the tfmigrate hook moves the state and records
-// history in the emulated bucket), then rerun to confirm history-mode
-// idempotency.
+// automatically inherits the component's S3 backend on an emulator: the
+// fixture has NO .tfmigrate.hcl, so Atmos generates a default config from the
+// backend section (bucket + endpoints.s3) that stores history in the same
+// bucket under the namespaced key. The full lifecycle runs: seed legacy
+// state, apply the refactored component (the tfmigrate hook moves the state
+// and records history in the emulated bucket), then rerun to confirm
+// history-mode idempotency.
 func TestTerraformFlociTfmigrateS3History(t *testing.T) {
 	endpoint := requireFlociEndpoint(t, "", "")
 	RequireTerraform(t)

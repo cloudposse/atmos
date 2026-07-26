@@ -27,6 +27,7 @@ The new `atmos terraform migrate` command family adds:
 - `atmos terraform migrate apply` to apply a migration.
 - `atmos terraform migrate list` to inspect per-component hook and history context.
 - `kind: tfmigrate` hooks for running migrations from Terraform lifecycle events.
+- Zero-config history storage that reuses the component's Terraform backend.
 
 Before `tfmigrate` runs, Atmos performs the normal Terraform component setup:
 auth identity resolution, source provisioning, workdir provisioning, generated
@@ -97,9 +98,16 @@ For idempotent migrations in automation, use `tfmigrate` history mode:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
-Atmos lets `tfmigrate` discover `.tfmigrate.hcl` by default. It also exports
+You don't have to configure it. When a component has no `.tfmigrate.hcl`,
+Atmos generates one on the fly that stores migration history in the
+component's own Terraform backend — the same S3 or GCS bucket as the state,
+under a stack/component/workspace-namespaced key, inheriting the region,
+role ARN, and endpoint; local backends get a history file beside the state.
+Applied migrations are recorded and never rerun, with nothing to set up.
+
+To take control, drop a `.tfmigrate.hcl` in the component. Atmos exports
 stack/component/workspace-scoped history variables and copies supported
-Terraform backend settings so the `tfmigrate` config can reuse the same bucket
+Terraform backend settings so a custom config can still reuse the same bucket
 and identity setup:
 
 ```hcl
@@ -129,11 +137,11 @@ Terraform backend bucket.
 ## Important Limitation
 
 Single-file `tfmigrate apply path.hcl` is not inherently idempotent. A rerun
-can fail after a state address has already moved or been removed.
-
-Atmos v1 passes `tfmigrate` config overrides and history settings through, but
-it does not persist history itself. Durable history storage in S3, GCS, or
-CI-persisted local storage is required for safe reruns.
+can fail after a state address has already moved or been removed. Prefer
+history mode, where the generated default already gives you durable storage
+whenever the component's backend is S3 or GCS; with a purely local backend,
+make sure the local history file survives between runs (for example, persisted
+by the CI workflow).
 
 ## Learn More
 

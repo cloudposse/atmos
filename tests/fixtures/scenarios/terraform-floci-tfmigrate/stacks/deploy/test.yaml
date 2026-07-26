@@ -1,8 +1,9 @@
 vars:
   stage: test
 
-# S3 backend on the Floci emulator. Explicit bucket and endpoints.s3 values
-# matter: tfmigrate history inherits them via ATMOS_TFMIGRATE_HISTORY_*.
+# S3 backend on the Floci emulator. The service component has no
+# .tfmigrate.hcl, so Atmos generates a default tfmigrate config that reuses
+# this backend (bucket + endpoints.s3) for history storage.
 terraform:
   backend_type: s3
   backend:
@@ -37,5 +38,4 @@ components:
             - before.terraform.plan
             - before.terraform.apply
           kind: tfmigrate
-          config: .tfmigrate.hcl
           mode: dynamic

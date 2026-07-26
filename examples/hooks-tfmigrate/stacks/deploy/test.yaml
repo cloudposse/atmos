@@ -35,5 +35,4 @@ components:
             - before.terraform.plan
             - before.terraform.apply
           kind: tfmigrate
-          config: .tfmigrate.hcl
           mode: dynamic

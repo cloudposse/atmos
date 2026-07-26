@@ -135,7 +135,7 @@ components:
   <dd>Path to a single `tfmigrate` migration file. Omit this field to let `tfmigrate` run history mode.</dd>
 
   <dt>`config`</dt>
-  <dd>Optional override for the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
+  <dd>Optional override for the `tfmigrate` config path. When omitted, Atmos uses the component's `.tfmigrate.hcl` if present; otherwise it generates a default config that reuses the component's Terraform backend as history storage.</dd>
 
   <dt>`backend_config`</dt>
   <dd>List of entries passed through as repeated `tfmigrate --backend-config` arguments. This configures the Terraform state backend used by `tfmigrate`; it is not the `tfmigrate` history backend.</dd>
@@ -146,7 +146,11 @@ components:
 
 **Requirements:** the `tfmigrate` binary on PATH. Declare it in `dependencies.tools` (e.g. `tfmigrate: "^0.4.5"`) to have Atmos auto-install through the toolchain before the hook runs.
 
-History mode is enabled by omitting `migration`. By default, `tfmigrate` discovers `.tfmigrate.hcl` from the component working directory:
+History mode is enabled by omitting `migration`, and needs no `tfmigrate`
+configuration at all: with no `.tfmigrate.hcl` in the component, Atmos
+generates one that stores history in the component's own Terraform backend
+(same S3/GCS bucket under a stack/component/workspace-namespaced key; a local
+file beside local-backend state):
 
 ```yaml
 hooks:
@@ -158,10 +162,9 @@ hooks:
     mode: dynamic
 ```
 
-Set `config` only when the config file lives somewhere else.
-
-Atmos exposes helper variables so the `tfmigrate` config can reuse the component's
-Terraform backend bucket and stack-specific history key:
+Add a `.tfmigrate.hcl` to the component (or set `config`) to take over. For
+custom configs, Atmos exposes helper variables so the file can still reuse the
+component's Terraform backend bucket and stack-specific history key:
 
 ```hcl
 tfmigrate {

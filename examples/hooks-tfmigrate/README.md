@@ -15,8 +15,12 @@ command docs.
 - `kind: tfmigrate` with `mode: dynamic`.
 - `before.terraform.plan` previews the migration with `tfmigrate plan`.
 - `before.terraform.apply` applies the migration with `tfmigrate apply`.
-- `config: .tfmigrate.hcl` enables tfmigrate history mode so reruns are
-  safe after the migration has already been applied.
+- Zero tfmigrate configuration: with no `.tfmigrate.hcl`, Atmos generates one
+  that reuses the component's Terraform backend for tfmigrate history storage,
+  so reruns are safe after the migration has already been applied. Here the
+  backend is local, so history lands next to the state file; with an S3 or GCS
+  backend the history goes to the same bucket under a namespaced key. Provide
+  your own `.tfmigrate.hcl` (or the hook's `config:` field) to override.
 - Local Terraform state keeps the example self-contained and avoids cloud
   credentials. Terraform workspaces are disabled so both components share the
   same local state file.
@@ -84,14 +88,14 @@ atmos terraform plan service -s test
 
 - `stacks/deploy/test.yaml` configures the legacy and refactored components.
 - `components/terraform/service-legacy/` creates the original state address.
-- `components/terraform/service/` contains the refactored address and the
-  `tfmigrate` history config. The local history file is written under
-  `state/tfmigrate-history/`, which is ignored by git.
+- `components/terraform/service/` contains the refactored address.
 - `components/terraform/service/migrations/` contains the migration HCL.
+  Atmos points the generated tfmigrate config at this directory automatically.
+  The local history file is written under `state/tfmigrate/`, which is ignored
+  by git.
 
 ## Notes
 
-This example intentionally keeps the migration config beside the refactored
-component because Atmos executes `tfmigrate` from the component working
-directory. In production, keep migration paths clear and confirm them with
-`atmos terraform migrate list`.
+Atmos executes `tfmigrate` from the component working directory, so migration
+files live beside the component. In production, confirm the migration context
+with `atmos terraform migrate list`.

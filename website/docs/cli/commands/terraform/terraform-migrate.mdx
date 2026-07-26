@@ -125,24 +125,31 @@ For every selected component instance, Atmos:
 - Resolves `tfmigrate` and Terraform/OpenTofu through the Atmos toolchain or PATH.
 - Sets `TFMIGRATE_EXEC_PATH` to the resolved Terraform/OpenTofu binary unless already set.
 - Routes the generated varfile to the Terraform plans `tfmigrate` runs internally (via `TF_CLI_ARGS_plan`), so components with required variables plan cleanly.
+- Generates a default `tfmigrate` config when you have not provided one, reusing the component's Terraform backend as history storage.
 - Pre-creates the parent directory of a `storage "local"` history path from the `tfmigrate` config, so the first history save cannot fail on a missing directory.
 - Exports per-instance history helper variables for the `tfmigrate` config.
 
 ## History Mode
 
-Enable `tfmigrate` history mode by omitting `--migration`. By default, `tfmigrate` discovers `.tfmigrate.hcl` from the component working directory:
+Enable `tfmigrate` history mode by omitting `--migration`:
 
 ```shell
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
-Use `--tfmigrate-config` only when the config file lives somewhere else:
+History storage works with zero configuration: when the component has no `.tfmigrate.hcl` (and no `--tfmigrate-config` or `TFMIGRATE_CONFIG`), Atmos generates a `tfmigrate` config that reuses the component's Terraform backend:
+
+- **S3 backend** — history is stored in the same bucket under `tfmigrate/<stack>/<component>/<workspace>/history.json`, inheriting the region, profile, assume-role ARN, KMS key, and custom endpoint.
+- **GCS backend** — history is stored in the same bucket under the same namespaced object name.
+- **Local or other backends** — history is stored as a local file next to a local-backend state file (or under the component working directory), and the directory is created automatically.
+
+The generated config points `migration_dir` at the component's `migrations/` directory when one exists, the component root otherwise.
+
+To take control, add a `.tfmigrate.hcl` to the component (discovered automatically) or point at one explicitly — the generated default is then skipped entirely:
 
 ```shell
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
 ```
-
-Atmos v1 passes config overrides and backend settings through to `tfmigrate`; it does not store or retrieve the history file for you. Durable history storage is required for rerun-safe automation.
 
 ## History Variables
 
