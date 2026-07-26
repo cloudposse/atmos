@@ -76,6 +76,7 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 	if err != nil {
 		return nil, err
 	}
+	setDefaultStepWorkingDirectory(ctx, ws)
 
 	executor := runnerstep.NewStepExecutorWithVars(stepVariables(ctx))
 
@@ -165,6 +166,9 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	steps, err := StepsFromHook(ctx.Hook)
 	if err != nil {
 		return nil, err
+	}
+	for i := range steps {
+		setDefaultStepWorkingDirectory(ctx, &steps[i])
 	}
 
 	var lastResult *runnerstep.StepResult
@@ -264,6 +268,22 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 		vars.SetEnv(k, v)
 	}
 	return vars
+}
+
+// atmosStepType is the step type that re-invokes the atmos binary itself
+// (pkg/runner/step.AtmosHandler). It must keep inheriting the ambient process
+// working directory rather than defaulting to the component directory: the
+// nested atmos process resolves its own atmos.yaml/stacks relative to that
+// directory, and a component subdirectory won't necessarily contain (or sit
+// under) the project's config root.
+const atmosStepType = "atmos"
+
+// setDefaultStepWorkingDirectory gives lifecycle steps the same component
+// directory as command hooks while preserving an explicit step-level target.
+func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep) {
+	if step != nil && step.WorkingDirectory == "" && step.Type != atmosStepType {
+		step.WorkingDirectory = ComponentPath(ctx)
+	}
 }
 
 // stepSummary builds a best-effort Output envelope for the step run. The step
