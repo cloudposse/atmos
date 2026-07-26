@@ -54,8 +54,7 @@ func ProcessCustomYamlTags(
 
 // ProcessCustomYamlTagsLenient behaves like ProcessCustomYamlTags, except that when a
 // per-value YAML function error is classified recoverable (see isRecoverableInWarnMode: a
-// Terraform backend/state that has not been provisioned yet, or a backend read that failed
-// for any other reason — credential refresh, network, permissions), it substitutes
+// Terraform backend/state that has not been provisioned yet), it substitutes
 // degradation.AtmosComputedValue{} for that value, invokes onWarning with details, and
 // continues processing sibling keys and the rest of the tree instead of failing the whole call.
 //
