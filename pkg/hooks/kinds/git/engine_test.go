@@ -3,6 +3,8 @@ package git
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -164,6 +166,26 @@ func TestEngineRunCurrentRepo(t *testing.T) {
 		"Atmos-Source-SHA": "deadbeef",
 	}, commit.Trailers)
 	assert.Empty(t, stub.pushCalls, "push not requested")
+}
+
+func TestEngineRunCurrentRepoUsesComponentDirectory(t *testing.T) {
+	root := t.TempDir()
+	componentDir := filepath.Join(root, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	stub := &stubProvider{commitResult: gitsvc.CommitResult{Committed: true, SHA: "abc123"}}
+	engine := newTestEngine(stub, root)
+
+	ctx := newExecCtx(t, &hooks.Hook{
+		Kind:   kindName,
+		Commit: &hooks.GitCommitSpec{Paths: []string{"generated.tf"}},
+	}, &schema.AtmosConfiguration{TerraformDirAbsolutePath: filepath.Join(root, "components", "terraform")})
+	ctx.Info.FinalComponent = "vpc"
+
+	_, err := engine.Run(ctx)
+	require.NoError(t, err)
+	require.Len(t, stub.commitCalls, 1)
+	assert.Equal(t, componentDir, stub.commitCalls[0].Workdir)
+	assert.Equal(t, []string{"generated.tf"}, stub.commitCalls[0].Paths)
 }
 
 func TestEngineRunCurrentRepoWithoutHEAD(t *testing.T) {

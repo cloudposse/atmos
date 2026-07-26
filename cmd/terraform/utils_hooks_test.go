@@ -923,6 +923,272 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	assert.Equal(t, "mock-auth-manager", gotMgr)
 }
 
+// TestPrepareHookContextResolvesMetadataComponent verifies that the execution
+// context retains ProcessStacks' component resolution. InitCliConfig processes
+// a value copy, so this explicit pass is what makes lifecycle hooks use the
+// metadata.component target rather than the stack-facing alias.
+func TestPrepareHookContextResolvesMetadataComponent(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-all-dependencies")
+	cmd := newHookTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+
+	ctx, err := prepareHookContext(cmd, []string{"platform-kms"})
+	require.NoError(t, err)
+	assert.Equal(t, "platform-kms", ctx.info.ComponentFromArg)
+	assert.Equal(t, "mock", ctx.info.FinalComponent)
+	assert.Empty(t, ctx.info.ComponentFolderPrefix)
+}
+
+// TestPrepareHookContextToleratesProcessStacksFailure verifies the
+// metadata.component resolution added to prepareHookContext is genuinely
+// best-effort: a ProcessStacks failure (here, no --stack provided, so
+// ProcessStacks(checkStack=true) returns errUtils.ErrMissingStack) must not
+// become PreRunE's user-facing error. GetHooks (called next, in
+// runUserHooks) already tolerates an empty Stack/unresolved component by
+// returning no hooks, so info is left exactly as ProcessCommandLineArgs
+// produced it, and RunE's own validation — not this hook-prep step —
+// produces the correct, authoritative error and message.
+func TestPrepareHookContextToleratesProcessStacksFailure(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-all-dependencies")
+	cmd := newHookTestCmd()
+	// Deliberately leave --stack unset: ProcessStacks(checkStack=true) fails
+	// with ErrMissingStack, which prepareHookContext must swallow.
+
+	ctx, err := prepareHookContext(cmd, []string{"platform-kms"})
+	require.NoError(t, err, "a ProcessStacks failure during hook-context prep must not surface as PreRunE's error")
+	assert.Equal(t, "platform-kms", ctx.info.ComponentFromArg)
+	assert.Empty(t, ctx.info.FinalComponent, "on ProcessStacks failure, info must be left unresolved rather than partially mutated")
+}
+
+// TestEnsureComponentSourceProvisioned verifies that a `before.terraform.*`
+// hook is a "run before Terraform" event, not a "run before the component's
+// JIT source is provisioned" event: ensureComponentSourceProvisioned vendors
+// a configured `source:` into the component directory synchronously, so by
+// the time hooks fire, ComponentPath() (the env var and hook subprocess cwd)
+// resolves to a real, populated directory instead of one that won't exist
+// until Terraform itself runs moments later in RunE.
+func TestEnsureComponentSourceProvisioned(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# fixture\n"), 0o644))
+
+	terraformDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "app",
+		FinalComponent:   "app",
+		ComponentSection: schema.AtmosSectionMapType{
+			"component": "app",
+			"source":    sourceDir,
+		},
+	}
+
+	ensureComponentSourceProvisioned(atmosConfig, info)
+
+	componentPath := filepath.Join(terraformDir, "app")
+	entries, err := os.ReadDir(componentPath)
+	require.NoError(t, err, "component directory should exist after provisioning")
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Contains(t, names, "main.tf")
+}
+
+// TestEnsureComponentSourceProvisioned_NoSourceIsNoOp verifies components
+// without a configured `source:` are left untouched (no directory created) —
+// ensureComponentSourceProvisioned only matters for JIT-provisioned components.
+func TestEnsureComponentSourceProvisioned_NoSourceIsNoOp(t *testing.T) {
+	terraformDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "app",
+		FinalComponent:   "app",
+		ComponentSection: schema.AtmosSectionMapType{"component": "app"},
+	}
+
+	ensureComponentSourceProvisioned(atmosConfig, info)
+
+	_, err := os.Stat(filepath.Join(terraformDir, "app"))
+	assert.True(t, os.IsNotExist(err), "no source configured should mean no directory is created")
+}
+
+// TestEnsureComponentSourceProvisioned_ProvisioningFailureIsLoggedNotReturned
+// verifies that a JIT source that fails to provision (here, a `source:`
+// pointing at a nonexistent local directory) is logged rather than returned:
+// ensureComponentSourceProvisioned has no error return, precisely so hooks
+// still attempt to run even when provisioning fails — the real Terraform
+// command surfaces the same provisioning error authoritatively moments
+// later. Regression coverage for that error branch: a failed provisioning
+// attempt must leave no component directory behind.
+func TestEnsureComponentSourceProvisioned_ProvisioningFailureIsLoggedNotReturned(t *testing.T) {
+	terraformDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "app",
+		FinalComponent:   "app",
+		ComponentSection: schema.AtmosSectionMapType{
+			"component": "app",
+			"source":    filepath.Join(terraformDir, "does-not-exist-source"),
+		},
+	}
+
+	// ensureComponentSourceProvisioned has no error return: a provisioning
+	// failure (here, the source path doesn't exist) must be logged and
+	// swallowed, not panic or otherwise abort the caller (runUserHooks),
+	// so hooks still get a chance to run.
+	require.NotPanics(t, func() {
+		ensureComponentSourceProvisioned(atmosConfig, info)
+	}, "a provisioning failure must be logged, not propagated as a panic")
+
+	assert.NoDirExists(t, filepath.Join(terraformDir, "app"),
+		"a failed provisioning attempt must leave no component directory behind")
+}
+
+// writeMinimalSourceFixture builds a self-contained atmos project (atmos.yaml,
+// one deploy stack, and a local JIT source directory) under a temp root, so
+// provisioning tests don't depend on network access or a checked-in fixture.
+// The withHooks parameter controls whether the component has a (lightweight,
+// in-process `type: log`) hook configured for both before.terraform.plan and
+// before.terraform.init — ensureComponentSourceProvisioned only runs when a
+// component actually has hooks (see runUserHooks), so tests proving that
+// behavior need one, while tests proving the no-hooks case is left alone
+// need its absence. Returns the project root and the component name.
+func writeMinimalSourceFixture(t *testing.T, withHooks bool) (root, component string) {
+	t.Helper()
+
+	root = t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# fixture\n"), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/*.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Debug
+`), 0o644))
+
+	hooksYAML := ""
+	if withHooks {
+		hooksYAML = "      hooks:\n" +
+			"        announce:\n" +
+			"          kind: step\n" +
+			"          type: log\n" +
+			"          events: [before.terraform.plan, before.terraform.init]\n" +
+			"          with:\n" +
+			"            content: \"hook ran\"\n"
+	}
+	stacksDeployDir := filepath.Join(root, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(stacksDeployDir, 0o755))
+	stackYAML := "vars:\n  stage: test\n\ncomponents:\n  terraform:\n    app:\n" +
+		hooksYAML +
+		"      source:\n        uri: \"" + filepath.ToSlash(sourceDir) + "\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDeployDir, "test.yaml"), []byte(stackYAML), 0o644))
+
+	return root, "app"
+}
+
+// newInitTestCmd builds a cobra.Command matching cmd/terraform/init.go's flag
+// surface, for tests exercising before.terraform.init specifically.
+func newInitTestCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "init"}
+	cmd.Flags().String("base-path", "", "base path")
+	cmd.Flags().StringSlice("config", nil, "config")
+	cmd.Flags().StringSlice("config-path", nil, "config path")
+	cmd.Flags().StringSlice("profile", nil, "profile")
+	cmd.Flags().String("stack", "", "stack flag")
+	cmd.Flags().Bool("ci", false, "ci flag")
+	return cmd
+}
+
+// TestRunUserHooksProvisionsSourceBeforeHooks verifies that when a component
+// actually has hooks configured, runUserHooks provisions its JIT `source:`
+// before firing a `before.terraform.plan` hook, so ComponentPath()/
+// $ATMOS_COMPONENT_PATH point at a real, populated directory instead of one
+// Terraform itself wouldn't create until RunE.
+func TestRunUserHooksProvisionsSourceBeforeHooks(t *testing.T) {
+	root, component := writeMinimalSourceFixture(t, true)
+	t.Chdir(root)
+	withoutCIDetection(t)
+
+	cmd := newHookTestCmd() // Use: "plan"
+	require.NoError(t, cmd.Flags().Set("stack", "test"))
+
+	require.NoError(t, runHooks(hooks.BeforeTerraformPlan, cmd, []string{component}))
+
+	_, statErr := os.Stat(filepath.Join(root, "components", "terraform", component, "main.tf"))
+	assert.NoError(t, statErr, "before.terraform.plan must see a provisioned component directory")
+}
+
+// TestRunUserHooksSkipsProvisioningWithoutHooks verifies ensureComponentSource
+// Provisioned is NOT invoked for a component with no hooks configured, even
+// though it has a JIT `source:`. Regression test: every terraform subcommand
+// already provisions its own component independently in RunE, so an
+// unconditional pre-provisioning attempt here raced that provisioning and
+// broke TestJITSource_WorkdirWithLocalComponent_AllSubcommands (all but the
+// first subcommand failed with "no such file or directory") for components
+// that have nothing to gain from it.
+func TestRunUserHooksSkipsProvisioningWithoutHooks(t *testing.T) {
+	root, component := writeMinimalSourceFixture(t, false)
+	t.Chdir(root)
+	withoutCIDetection(t)
+
+	cmd := newHookTestCmd() // Use: "plan"
+	require.NoError(t, cmd.Flags().Set("stack", "test"))
+
+	require.NoError(t, runHooks(hooks.BeforeTerraformPlan, cmd, []string{component}))
+
+	_, statErr := os.Stat(filepath.Join(root, "components", "terraform", component))
+	assert.True(t, os.IsNotExist(statErr), "a component with no hooks must not be pre-provisioned")
+}
+
+// TestRunUserHooksSkipsProvisioningForInit verifies before.terraform.init is
+// excluded from pre-provisioning even when the component has hooks: it is the
+// source provisioner's own lifecycle event (HookEventBeforeTerraformInit), so
+// pre-provisioning here would fire it after provisioning already happened,
+// inverting the one event whose entire point is to run before the source
+// exists. Regression test for a CodeRabbit review finding on PR #2802.
+func TestRunUserHooksSkipsProvisioningForInit(t *testing.T) {
+	root, component := writeMinimalSourceFixture(t, true)
+	t.Chdir(root)
+	withoutCIDetection(t)
+
+	cmd := newInitTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "test"))
+
+	require.NoError(t, runHooks(hooks.BeforeTerraformInit, cmd, []string{component}))
+
+	_, statErr := os.Stat(filepath.Join(root, "components", "terraform", component))
+	assert.True(t, os.IsNotExist(statErr), "before.terraform.init must NOT trigger pre-provisioning")
+}
+
+// TestPrepareHookContextSkipsComponentResolutionForMultiComponent verifies that
+// the global before/after hook context for multi-component invocations
+// (--all/--affected/--components/--query/--tags/--labels) does not fail with
+// "component is required": no positional component is resolved yet at that
+// point (only per-component hooks inside the component walker have one), so
+// prepareHookContext must skip the metadata.component-resolving ProcessStacks
+// call rather than call it with an empty ComponentFromArg. Regression test
+// for the #2799 fix breaking `atmos terraform plan --all`.
+func TestPrepareHookContextSkipsComponentResolutionForMultiComponent(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-all-dependencies")
+	cmd := newHookTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+
+	ctx, err := prepareHookContext(cmd, []string{})
+	require.NoError(t, err)
+	assert.Empty(t, ctx.info.ComponentFromArg)
+	assert.Empty(t, ctx.info.FinalComponent)
+}
+
 // TestInjectHookStoreAuthResolver_InheritsDefaultIdentity verifies that the after-apply hook path
 // now wires the resolver AND lets identity-less stores inherit the run's auto-detected identity
 // (matching the main terraform path), so hook store writes work under Atmos auth. Auto-detection
