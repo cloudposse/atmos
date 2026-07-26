@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -86,6 +87,13 @@ type InstancesCommandOptions struct {
 	// Use to skip a specific function (e.g. `terraform.state`) while leaving
 	// the rest of YAML function processing enabled.
 	Skip []string
+	// Tags filters instances to those whose component metadata.tags contains
+	// at least one of these tags (any-match). Empty means no filter.
+	Tags []string
+	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
+	// key:value pairs, all-match), parsed at filter-build time so an invalid
+	// value surfaces as a command error.
+	LabelsRaw string
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -711,6 +719,9 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		if opts.Query != "" {
 			return fmt.Errorf("%w: --query is not supported with --format=matrix", errUtils.ErrInvalidFlag)
 		}
+		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
+			return fmt.Errorf("%w: --tags/--labels is not supported with --format=matrix", errUtils.ErrInvalidFlag)
+		}
 		return executeMatrixFormat(&atmosConfig, opts)
 	}
 
@@ -733,6 +744,9 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		}
 		if opts.Query != "" {
 			return fmt.Errorf("%w: --query is not supported with --format=tree", errUtils.ErrInvalidFlag)
+		}
+		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
+			return fmt.Errorf("%w: --tags/--labels is not supported with --format=tree", errUtils.ErrInvalidFlag)
 		}
 
 		// Enable provenance tracking to capture import chains.
@@ -816,7 +830,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// Build filters from filter specification.
-	filters, err := buildInstanceFilters(opts.FilterSpec, &atmosConfig)
+	filters, err := buildInstanceFilters(opts.FilterSpec, opts.Tags, opts.LabelsRaw, &atmosConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build filters: %w", err)
 	}
@@ -971,18 +985,31 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 	return matrix.WriteOutput(entries, outputFile)
 }
 
-// buildInstanceFilters creates filters from a `--filter` specification. The
-// spec is interpreted as a YQ expression evaluated per row; rows for which
-// the expression is truthy are kept. An empty spec produces no filters.
-func buildInstanceFilters(filterSpec string, atmosConfig *schema.AtmosConfiguration) ([]filter.Filter, error) {
-	if filterSpec == "" {
-		return nil, nil
+// buildInstanceFilters creates filters from the `--filter`, `--tags`, and
+// `--labels` flags. The filter spec is interpreted as a YQ expression
+// evaluated per row; rows for which the expression is truthy are kept. Tags
+// use any-match, labels all-match semantics against the flattened `tags`/
+// `labels` row fields. Empty inputs produce no filters.
+func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw string, atmosConfig *schema.AtmosConfiguration) ([]filter.Filter, error) {
+	var filters []filter.Filter
+	if filterSpec != "" {
+		f, err := filter.NewYQPredicateFilter(filterSpec, atmosConfig)
+		if err != nil {
+			return nil, err
+		}
+		filters = append(filters, f)
 	}
-	f, err := filter.NewYQPredicateFilter(filterSpec, atmosConfig)
+	if len(tagsFilter) > 0 {
+		filters = append(filters, filter.NewTagFilter("tags", tagsFilter))
+	}
+	labels, err := tags.ParseLabelsFlag(labelsRaw)
 	if err != nil {
 		return nil, err
 	}
-	return []filter.Filter{f}, nil
+	if len(labels) > 0 {
+		filters = append(filters, filter.NewLabelFilter("labels", labels))
+	}
+	return filters, nil
 }
 
 // buildInstanceSorters creates sorters from sort specification.

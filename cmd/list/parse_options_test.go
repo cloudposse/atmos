@@ -124,6 +124,18 @@ func TestParseMetadataOptions(t *testing.T) {
 		assert.True(t, opts.ProcessFunctions)
 		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
 	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network")
+		setFlag(t, cmd, "labels", "team:platform")
+		v := bindFlagsToViper(t, cmd, metadataParser)
+
+		opts := parseMetadataOptions(cmd, v)
+
+		assert.Equal(t, []string{"network"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw)
+	})
 }
 
 // TestParseSourcesOptions verifies the viper→options mapping for
@@ -172,6 +184,18 @@ func TestParseSourcesOptions(t *testing.T) {
 		assert.True(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
 		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network")
+		setFlag(t, cmd, "labels", "team:platform")
+		v := bindFlagsToViper(t, cmd, sourcesParser)
+
+		opts := parseSourcesOptions(cmd, v, nil)
+
+		assert.Equal(t, []string{"network"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw)
 	})
 }
 
@@ -228,6 +252,16 @@ func TestParseDependenciesOptions(t *testing.T) {
 		assert.False(t, opts.ProcessFunctions)
 		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
 	})
+
+	t.Run("tags_flag", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network,tier-1")
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, nil)
+
+		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
+	})
 }
 
 // TestParseStacksOptions verifies the viper→options mapping for
@@ -273,6 +307,18 @@ func TestParseStacksOptions(t *testing.T) {
 		assert.False(t, opts.ProcessFunctions)
 		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
 		assert.Equal(t, "silent", opts.ErrorMode)
+	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network, tier-1")
+		setFlag(t, cmd, "labels", "team:platform")
+		v := bindFlagsToViper(t, cmd, stacksParser)
+
+		opts := parseStacksOptions(cmd, v)
+
+		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed at execution time")
 	})
 
 	t.Run("invalid_error_mode_value_rejected", func(t *testing.T) {

@@ -261,14 +261,14 @@ func WithTagsFlag(options *[]flags.Option) {
 	)
 }
 
-// WithLabelsFlag adds a labels filter flag (comma-separated key=value pairs, matches all).
+// WithLabelsFlag adds a labels filter flag (comma-separated key=value or key:value pairs, matches all).
 // Used by: components.
 func WithLabelsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithLabelsFlag")()
 
 	*options = append(
 		*options,
-		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 		flags.WithEnvVars("labels", "ATMOS_COMPONENT_LABELS"),
 	)
 }

@@ -739,6 +739,73 @@ func TestExtractSourceEntry(t *testing.T) {
 	assert.Nil(t, entry)
 }
 
+// TestExtractSourceEntry_TagsLabels tests that metadata tags/labels flow onto
+// the source entry.
+func TestExtractSourceEntry_TagsLabels(t *testing.T) {
+	componentData := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/vpc",
+			"version": "1.0.0",
+		},
+		"metadata": map[string]any{
+			"tags":   []any{"network", "tier-1"},
+			"labels": map[string]any{"team": "platform"},
+		},
+	}
+
+	entry := extractSourceEntry("dev", "terraform", "vpc", componentData)
+	require.NotNil(t, entry)
+	assert.Equal(t, []string{"network", "tier-1"}, entry["tags"])
+	assert.Equal(t, map[string]string{"team": "platform"}, entry["labels"])
+
+	// No metadata section: nil tags/labels (filter treats them as no match).
+	componentData = map[string]any{
+		"source": map[string]any{
+			"uri": "github.com/example/vpc",
+		},
+	}
+	entry = extractSourceEntry("dev", "terraform", "vpc", componentData)
+	require.NotNil(t, entry)
+	assert.Nil(t, entry["tags"])
+	assert.Nil(t, entry["labels"])
+}
+
+// TestFilterSourcesByTagsLabels tests the tags/labels source filter.
+func TestFilterSourcesByTagsLabels(t *testing.T) {
+	sources := []map[string]any{
+		{"component": "vpc", "tags": []string{"network"}, "labels": map[string]string{"team": "platform"}},
+		{"component": "rds", "tags": []string{"database"}, "labels": map[string]string{"team": "data"}},
+		{"component": "bare", "tags": []string(nil), "labels": map[string]string(nil)},
+	}
+
+	t.Run("no filters is passthrough", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, nil, nil)
+		assert.Len(t, result, 3)
+	})
+
+	t.Run("tags only", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, []string{"network"}, nil)
+		require.Len(t, result, 1)
+		assert.Equal(t, "vpc", result[0]["component"])
+	})
+
+	t.Run("labels only", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, nil, map[string]string{"team": "data"})
+		require.Len(t, result, 1)
+		assert.Equal(t, "rds", result[0]["component"])
+	})
+
+	t.Run("tags and labels must match the same row", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, []string{"network"}, map[string]string{"team": "data"})
+		assert.Empty(t, result)
+	})
+
+	t.Run("rows without metadata never match active filters", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, []string{"anything"}, nil)
+		assert.Empty(t, result)
+	})
+}
+
 // TestExtractSourcesFromStackData tests extraction from a single stack's data.
 func TestExtractSourcesFromStackData(t *testing.T) {
 	// Valid stack data with multiple component types.

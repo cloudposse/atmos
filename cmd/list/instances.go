@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 var instancesParser *flags.StandardParser
@@ -35,6 +36,8 @@ type InstancesOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	AuthDisabled     bool
+	Tags             []string
+	LabelsRaw        string
 }
 
 // instancesCmd lists atmos instances.
@@ -87,6 +90,8 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		AuthDisabled:     identityName == "" || identityName == cfg.IdentityFlagDisabledValue,
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 }
 
@@ -137,6 +142,8 @@ func init() {
 		WithFilterFlag,
 		WithQueryFlag,
 		WithSortFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 		WithUploadFlag,
 		WithProvenanceFlag,
 		WithOutputFileFlag,
@@ -204,5 +211,7 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
 		Skip:             skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
+		Tags:             opts.Tags,
+		LabelsRaw:        opts.LabelsRaw,
 	})
 }

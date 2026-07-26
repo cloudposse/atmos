@@ -64,6 +64,53 @@ func TestVendorOptions(t *testing.T) {
 	}
 }
 
+// TestBuildVendorFilters_Tags verifies --tags produces a filter against the
+// raw tags_list field, alone and combined with the --stack component glob.
+func TestBuildVendorFilters_Tags(t *testing.T) {
+	t.Run("no filters", func(t *testing.T) {
+		filters := buildVendorFilters(&VendorOptions{})
+		assert.Empty(t, filters)
+	})
+
+	t.Run("tags only", func(t *testing.T) {
+		filters := buildVendorFilters(&VendorOptions{Tags: []string{"networking"}})
+		assert.Len(t, filters, 1)
+	})
+
+	t.Run("stack glob plus tags", func(t *testing.T) {
+		filters := buildVendorFilters(&VendorOptions{Stack: "vpc*", Tags: []string{"networking"}})
+		assert.Len(t, filters, 2)
+	})
+
+	t.Run("tags filter narrows rows on tags_list", func(t *testing.T) {
+		rows := []map[string]any{
+			{"component": "vpc", "tags": "networking, aws", "tags_list": []string{"networking", "aws"}},
+			{"component": "rds", "tags": "database", "tags_list": []string{"database"}},
+		}
+		filters := buildVendorFilters(&VendorOptions{Tags: []string{"networking"}})
+
+		result := any(rows)
+		var err error
+		for _, f := range filters {
+			result, err = f.Apply(result)
+			assert.NoError(t, err)
+		}
+
+		filtered, ok := result.([]map[string]any)
+		assert.True(t, ok)
+		assert.Len(t, filtered, 1)
+		assert.Equal(t, "vpc", filtered[0]["component"])
+	})
+}
+
+// TestVendorCmd_LabelsFlagNotRegistered confirms --labels is rejected at flag
+// parsing (unknown flag) rather than silently ignored: vendor/component
+// manifests have no labels concept.
+func TestVendorCmd_LabelsFlagNotRegistered(t *testing.T) {
+	assert.Nil(t, vendorCmd.Flags().Lookup("labels"), "--labels must not be registered on list vendor")
+	assert.NotNil(t, vendorCmd.Flags().Lookup("tags"), "--tags must be registered on list vendor")
+}
+
 // TestObfuscateHomeDirInOutput verifies that home directory paths are properly obfuscated.
 func TestObfuscateHomeDirInOutput(t *testing.T) {
 	// Determine expected home directory.

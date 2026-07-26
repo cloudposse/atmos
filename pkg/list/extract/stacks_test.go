@@ -33,7 +33,7 @@ func TestStacks(t *testing.T) {
 		},
 	}
 
-	stacks, err := Stacks(stacksMap)
+	stacks, err := Stacks(stacksMap, nil, nil)
 	require.NoError(t, err)
 	assert.Len(t, stacks, 3)
 
@@ -53,12 +53,12 @@ func TestStacks(t *testing.T) {
 }
 
 func TestStacks_Nil(t *testing.T) {
-	_, err := Stacks(nil)
+	_, err := Stacks(nil, nil, nil)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 }
 
 func TestStacks_EmptyMap(t *testing.T) {
-	stacks, err := Stacks(map[string]any{})
+	stacks, err := Stacks(map[string]any{}, nil, nil)
 	require.NoError(t, err)
 	assert.Empty(t, stacks)
 }
@@ -90,7 +90,7 @@ func TestStacksForComponent(t *testing.T) {
 		},
 	}
 
-	stacks, err := StacksForComponent("vpc", stacksMap)
+	stacks, err := StacksForComponent("vpc", stacksMap, nil, nil)
 	require.NoError(t, err)
 	assert.Len(t, stacks, 2)
 
@@ -123,7 +123,7 @@ func TestStacksForComponent_MultipleTypes(t *testing.T) {
 		},
 	}
 
-	stacks, err := StacksForComponent("ingress", stacksMap)
+	stacks, err := StacksForComponent("ingress", stacksMap, nil, nil)
 	require.NoError(t, err)
 	assert.Len(t, stacks, 2)
 
@@ -144,12 +144,12 @@ func TestStacksForComponent_NotFound(t *testing.T) {
 		},
 	}
 
-	_, err := StacksForComponent("nonexistent", stacksMap)
+	_, err := StacksForComponent("nonexistent", stacksMap, nil, nil)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
 
 func TestStacksForComponent_Nil(t *testing.T) {
-	_, err := StacksForComponent("vpc", nil)
+	_, err := StacksForComponent("vpc", nil, nil, nil)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 }
 
@@ -158,7 +158,7 @@ func TestStacksForComponent_InvalidData(t *testing.T) {
 		"test": "invalid",
 	}
 
-	_, err := StacksForComponent("vpc", stacksMap)
+	_, err := StacksForComponent("vpc", stacksMap, nil, nil)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
 
@@ -169,7 +169,7 @@ func TestStacksForComponent_NoComponents(t *testing.T) {
 		},
 	}
 
-	_, err := StacksForComponent("vpc", stacksMap)
+	_, err := StacksForComponent("vpc", stacksMap, nil, nil)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
 
@@ -183,7 +183,7 @@ func TestStacksForComponent_EmptyComponents(t *testing.T) {
 		},
 	}
 
-	_, err := StacksForComponent("vpc", stacksMap)
+	_, err := StacksForComponent("vpc", stacksMap, nil, nil)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
 
@@ -210,7 +210,7 @@ func TestStacks_ExtractsVars(t *testing.T) {
 		},
 	}
 
-	stacks, err := Stacks(stacksMap)
+	stacks, err := Stacks(stacksMap, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, stacks, 1)
 
@@ -239,7 +239,7 @@ func TestStacks_NoVars(t *testing.T) {
 		},
 	}
 
-	stacks, err := Stacks(stacksMap)
+	stacks, err := Stacks(stacksMap, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, stacks, 1)
 
@@ -250,6 +250,155 @@ func TestStacks_NoVars(t *testing.T) {
 	vars, ok := stack["vars"].(map[string]any)
 	require.True(t, ok)
 	assert.Empty(t, vars)
+}
+
+// tagsLabelsStacksMap builds a two-stack fixture where, in "plat-ue2-dev",
+// component "vpc" carries only a tag and component "eks" carries only a
+// label — so a combined tags+labels filter must NOT match via a union of
+// different components. "plat-ue2-prod" has an unmatched component.
+func tagsLabelsStacksMap() map[string]any {
+	return map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{
+							"tags": []any{"network"},
+						},
+					},
+					"eks": map[string]any{
+						"metadata": map[string]any{
+							"labels": map[string]any{"team": "platform"},
+						},
+					},
+				},
+			},
+		},
+		"plat-ue2-prod": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"rds": map[string]any{
+						"metadata": map[string]any{
+							"tags": []any{"database"},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func stackNamesOf(stacks []map[string]any) []string {
+	names := make([]string, 0, len(stacks))
+	for _, s := range stacks {
+		names = append(names, s["stack"].(string))
+	}
+	return names
+}
+
+func TestStacks_TagsFilter(t *testing.T) {
+	stacks, err := Stacks(tagsLabelsStacksMap(), []string{"network"}, nil)
+	require.NoError(t, err)
+	require.Len(t, stacks, 1)
+	assert.Equal(t, "plat-ue2-dev", stacks[0]["stack"])
+}
+
+func TestStacks_LabelsFilter(t *testing.T) {
+	stacks, err := Stacks(tagsLabelsStacksMap(), nil, map[string]string{"team": "platform"})
+	require.NoError(t, err)
+	require.Len(t, stacks, 1)
+	assert.Equal(t, "plat-ue2-dev", stacks[0]["stack"])
+}
+
+func TestStacks_TagsAnyMatchAcrossStacks(t *testing.T) {
+	// Any-match tags: either tag qualifies its stack.
+	stacks, err := Stacks(tagsLabelsStacksMap(), []string{"network", "database"}, nil)
+	require.NoError(t, err)
+	assert.Len(t, stacks, 2)
+	assert.ElementsMatch(t, []string{"plat-ue2-dev", "plat-ue2-prod"}, stackNamesOf(stacks))
+}
+
+func TestStacks_NoCrossComponentUnionLeakage(t *testing.T) {
+	// The tag lives on "vpc" and the label on "eks": no single component
+	// satisfies both filters, so the stack must be excluded even though each
+	// condition is satisfied somewhere in the stack.
+	stacks, err := Stacks(tagsLabelsStacksMap(), []string{"network"}, map[string]string{"team": "platform"})
+	require.NoError(t, err)
+	assert.Empty(t, stacks)
+}
+
+func TestStacks_FilterMatchesNothing(t *testing.T) {
+	stacks, err := Stacks(tagsLabelsStacksMap(), []string{"nonexistent"}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, stacks)
+}
+
+func TestStacks_EmptyFiltersPreserveAllStacks(t *testing.T) {
+	stacks, err := Stacks(tagsLabelsStacksMap(), nil, nil)
+	require.NoError(t, err)
+	assert.Len(t, stacks, 2)
+}
+
+func TestStacks_InvalidStackDataExcludedByFilter(t *testing.T) {
+	stacksMap := map[string]any{
+		"broken": "not-a-map",
+	}
+
+	// Without filters the malformed stack is still listed (legacy behavior)...
+	stacks, err := Stacks(stacksMap, nil, nil)
+	require.NoError(t, err)
+	assert.Len(t, stacks, 1)
+
+	// ...but an active filter can never match a stack without component data.
+	stacks, err = Stacks(stacksMap, []string{"network"}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, stacks)
+}
+
+func TestStacksForComponent_TagsLabelsFilter(t *testing.T) {
+	stacksMap := tagsLabelsStacksMap()
+
+	// vpc matches its own tag in plat-ue2-dev only.
+	stacks, err := StacksForComponent("vpc", stacksMap, []string{"network"}, nil)
+	require.NoError(t, err)
+	require.Len(t, stacks, 1)
+	assert.Equal(t, "plat-ue2-dev", stacks[0]["stack"])
+	assert.Equal(t, "vpc", stacks[0]["component"])
+
+	// vpc exists but does not carry the label — empty result, NOT ErrNoStacksFound.
+	stacks, err = StacksForComponent("vpc", stacksMap, nil, map[string]string{"team": "platform"})
+	require.NoError(t, err)
+	assert.Empty(t, stacks)
+
+	// A component that is genuinely absent still errors.
+	_, err = StacksForComponent("nonexistent", stacksMap, []string{"network"}, nil)
+	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
+}
+
+func TestStacksForComponent_LabelsAllMatch(t *testing.T) {
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{
+							"labels": map[string]any{"team": "platform", "env": "dev"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// All requested labels present: match.
+	stacks, err := StacksForComponent("vpc", stacksMap, nil, map[string]string{"team": "platform", "env": "dev"})
+	require.NoError(t, err)
+	assert.Len(t, stacks, 1)
+
+	// One requested label missing: no match (labels are all-match).
+	stacks, err = StacksForComponent("vpc", stacksMap, nil, map[string]string{"team": "platform", "region": "us-east-1"})
+	require.NoError(t, err)
+	assert.Empty(t, stacks)
 }
 
 func TestStacks_VarsFromHelmfile(t *testing.T) {
@@ -269,7 +418,7 @@ func TestStacks_VarsFromHelmfile(t *testing.T) {
 		},
 	}
 
-	stacks, err := Stacks(stacksMap)
+	stacks, err := Stacks(stacksMap, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, stacks, 1)
 

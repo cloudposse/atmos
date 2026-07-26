@@ -399,7 +399,7 @@ atmos terraform deploy --affected --tags production
     <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
     <dt>`--labels`</dt>
-    <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
 
     <dt>`--include-dependents`</dt>
     <dd>With `--affected`, also deploy components that depend on affected components, recursively.</dd>

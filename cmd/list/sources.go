@@ -15,12 +15,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -32,6 +34,8 @@ const (
 	keyFolder    = "folder"
 	keyURI       = "uri"
 	keyVersion   = "version"
+	keyTags      = "tags"
+	keyLabels    = "labels"
 )
 
 // Package-level function variables for testing.
@@ -53,6 +57,8 @@ type SourcesOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	Tags             []string
+	LabelsRaw        string
 }
 
 // sourcesCmd lists components with source configuration.
@@ -90,6 +96,8 @@ func init() {
 	sourcesParser = NewListParser(
 		WithFormatFlag,
 		WithStackFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
@@ -119,6 +127,8 @@ func parseSourcesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *Sou
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 	if len(args) > 0 {
 		opts.Component = args[0]
@@ -202,6 +212,11 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 			Err()
 	}
 
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, err
+	}
+
 	var sources []map[string]any
 	if opts.Stack != "" {
 		sources = extractAllSourcesFromStack(stacksMap, opts.Stack)
@@ -209,7 +224,8 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 		sources = extractAllSourcesFromAllStacks(stacksMap)
 	}
 
-	return filterSourcesByComponent(sources, opts.Component), nil
+	sources = filterSourcesByComponent(sources, opts.Component)
+	return filterSourcesByTagsLabels(sources, opts.Tags, labels), nil
 }
 
 // printNoSourcesMessage prints an appropriate message when no sources are found.
@@ -309,6 +325,25 @@ func filterSourcesByComponent(sources []map[string]any, componentFilter string) 
 		folder, _ := s[keyFolder].(string)
 		// Match if component name OR folder matches the filter.
 		if component == componentFilter || folder == componentFilter {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
+}
+
+// filterSourcesByTagsLabels filters sources whose metadata tags (any-match)
+// and labels (all-match) satisfy the given filters. Mirrors
+// filterSourcesByComponent's plain-function convention (this file does not
+// use the filter.Filter pipeline).
+func filterSourcesByTagsLabels(sources []map[string]any, tagsFilter []string, labelsFilter map[string]string) []map[string]any {
+	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
+		return sources
+	}
+	var filtered []map[string]any
+	for _, s := range sources {
+		sourceTags, _ := s[keyTags].([]string)
+		sourceLabels, _ := s[keyLabels].(map[string]string)
+		if tags.MatchesTags(sourceTags, tagsFilter, tags.TagModeAny) && tags.MatchesLabels(sourceLabels, labelsFilter) {
 			filtered = append(filtered, s)
 		}
 	}
@@ -415,6 +450,7 @@ func extractSourceEntry(stackName, componentType, componentName string, componen
 	}
 
 	folder := extractSourceComponentFolder(componentMap, componentName)
+	sourceTags, sourceLabels := extractSourceMetadataTagsLabels(componentMap)
 
 	return map[string]any{
 		keyStack:     stackName,
@@ -423,7 +459,19 @@ func extractSourceEntry(stackName, componentType, componentName string, componen
 		keyFolder:    folder,
 		keyURI:       sourceSpec.Uri,
 		keyVersion:   sourceSpec.Version,
+		keyTags:      sourceTags,
+		keyLabels:    sourceLabels,
 	}
+}
+
+// extractSourceMetadataTagsLabels extracts metadata.tags/metadata.labels the
+// same way extractSourceComponentFolder extracts metadata.component.
+func extractSourceMetadataTagsLabels(componentMap map[string]any) ([]string, map[string]string) {
+	metadata, ok := componentMap["metadata"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	return extract.GetTagsFromMetadata(metadata), extract.GetLabelsFromMetadata(metadata)
 }
 
 // sortSourcesByStackTypeComponent sorts sources by stack, type, then component.

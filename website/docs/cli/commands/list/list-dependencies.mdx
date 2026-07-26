@@ -122,6 +122,12 @@ they can be inspected.
   <dt>`--stack` / `-s`</dt>
   <dd>Filter the top-level entries to a single stack. Cross-stack dependency edges are still resolved and displayed.<br/>Environment variable: `ATMOS_STACK`</dd>
 
+  <dt>`--tags`</dt>
+  <dd>Filter by component tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Like `--stack`, this scopes which components appear as top-level entries; dependency subtrees still traverse the full graph.<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Filter by component labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Like `--stack`, this scopes which components appear as top-level entries; dependency subtrees still traverse the full graph.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+
   <dt>`--format` / `-f`</dt>
   <dd>Output format: `tree` (default), `json`, or `yaml`.<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
 

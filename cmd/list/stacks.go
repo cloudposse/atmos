@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -42,6 +43,8 @@ type StacksOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	ErrorMode        string
+	Tags             []string
+	LabelsRaw        string
 }
 
 // stacksCmd lists atmos stacks.
@@ -88,6 +91,8 @@ func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 }
 
@@ -127,6 +132,8 @@ func init() {
 		WithStacksColumnsFlag,
 		WithSortFlag,
 		WithComponentFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 		WithProvenanceFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
@@ -267,11 +274,16 @@ func executeAndExtractStacks(
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	var stacks []map[string]any
 	if opts.Component != "" {
-		stacks, err = extract.StacksForComponent(opts.Component, stacksMap)
+		stacks, err = extract.StacksForComponent(opts.Component, stacksMap, opts.Tags, labels)
 	} else {
-		stacks, err = extract.Stacks(stacksMap)
+		stacks, err = extract.Stacks(stacksMap, opts.Tags, labels)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -306,8 +318,10 @@ func renderStacksTable(atmosConfig *schema.AtmosConfiguration, stacks []map[stri
 func buildStackFilters(opts *StacksOptions) []filter.Filter {
 	var filters []filter.Filter
 
-	// Component filter already handled by extraction logic.
-	// Add any additional filters here in the future.
+	// Component and tags/labels filters are already handled by extraction
+	// logic (extract.Stacks/extract.StacksForComponent), so the tree format
+	// and structured outputs honor them too. Add any additional
+	// renderer-level filters here in the future.
 
 	return filters
 }

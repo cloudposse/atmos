@@ -161,7 +161,7 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Name:        "labels",
 		Shorthand:   "",
 		Default:     "",
-		Description: "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		Description: "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox",
 		EnvVars:     []string{"ATMOS_LABELS"},
 	})
 }

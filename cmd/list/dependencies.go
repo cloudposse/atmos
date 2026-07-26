@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -33,6 +34,11 @@ type DependenciesOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	AuthDisabled     bool
+	// Tags filters top-level entries by metadata.tags (any-match).
+	Tags []string
+	// Labels holds the parsed --labels filter (all-match); populated from the
+	// raw flag value in the RunE closure so an invalid value errors early.
+	Labels map[string]string
 }
 
 // dependenciesCmd lists Atmos component dependencies as a tree.
@@ -66,6 +72,12 @@ component, and --format to emit json or yaml instead of a tree.`,
 
 		opts := parseDependenciesOptions(cmd, v, args)
 
+		labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+		if err != nil {
+			return err
+		}
+		opts.Labels = labels
+
 		return executeListDependenciesCmd(cmd, args, opts)
 	},
 }
@@ -91,6 +103,7 @@ func parseDependenciesOptions(cmd *cobra.Command, v *viper.Viper, args []string)
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		AuthDisabled:     identityName == "" || identityName == cfg.IdentityFlagDisabledValue,
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
 	}
 }
 
@@ -99,6 +112,8 @@ func init() {
 		WithDependenciesFormatFlag,
 		WithDirectionFlag,
 		WithStackFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
@@ -129,6 +144,8 @@ func executeListDependenciesCmd(cmd *cobra.Command, args []string, opts *Depende
 		Direction: dependencies.Direction(opts.Direction),
 		Component: opts.Component,
 		Stack:     opts.Stack,
+		Tags:      opts.Tags,
+		Labels:    opts.Labels,
 	})
 	if err != nil {
 		return err
@@ -211,7 +228,7 @@ func buildDependencyGraphForCommand(cmd *cobra.Command, args []string, opts *Dep
 		return nil, err
 	}
 
-	bounded := opts.Stack != "" || opts.Component != ""
+	bounded := opts.Stack != "" || opts.Component != "" || len(opts.Tags) > 0 || len(opts.Labels) > 0
 	needsEvaluation := opts.ProcessTemplates || opts.ProcessFunctions
 	eager := e.GetEagerEvaluationSetting(&describeCtx.atmosConfig)
 	if !bounded || !needsEvaluation || eager {
@@ -258,7 +275,7 @@ func buildScopedDependencyGraph(describeCtx *dependenciesDescribeContext, opts *
 	}
 
 	direction := dependencies.Direction(opts.Direction)
-	roots := dependencies.RootNodeIDs(graph, opts.Component, opts.Stack)
+	roots := dependencies.RootNodeIDs(graph, opts.Component, opts.Stack, opts.Tags, opts.Labels)
 	closure := dependencies.ReachableClosure(graph, roots, direction)
 	if closure.Size() == 0 {
 		return closure, nil

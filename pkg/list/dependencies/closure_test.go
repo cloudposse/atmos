@@ -21,7 +21,7 @@ func TestRootNodeIDs(t *testing.T) {
 
 	t.Run("empty_filter_matches_everything", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "", "")
+		ids := RootNodeIDs(graph, "", "", nil, nil)
 		assert.ElementsMatch(t, []string{
 			NodeID("app", "dev"), NodeID("vpc", "dev"), NodeID("app", "prod"),
 		}, ids)
@@ -29,20 +29,53 @@ func TestRootNodeIDs(t *testing.T) {
 
 	t.Run("stack_filter", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "", "dev")
+		ids := RootNodeIDs(graph, "", "dev", nil, nil)
 		assert.ElementsMatch(t, []string{NodeID("app", "dev"), NodeID("vpc", "dev")}, ids)
 	})
 
 	t.Run("component_filter", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "app", "")
+		ids := RootNodeIDs(graph, "app", "", nil, nil)
 		assert.ElementsMatch(t, []string{NodeID("app", "dev"), NodeID("app", "prod")}, ids)
 	})
 
 	t.Run("combined_filter", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "app", "prod")
+		ids := RootNodeIDs(graph, "app", "prod", nil, nil)
 		assert.Equal(t, []string{NodeID("app", "prod")}, ids)
+	})
+}
+
+func TestRootNodeIDs_TagsLabels(t *testing.T) {
+	t.Parallel()
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": withMetadata(map[string]any{
+				"tags":   []any{"network"},
+				"labels": map[string]any{"team": "platform"},
+			}),
+			"rds": withMetadata(map[string]any{"tags": []any{"database"}}),
+			"templated": withMetadata(map[string]any{
+				"tags": []any{"{{ .settings.tag }}"},
+			}),
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	t.Run("tags_filter", func(t *testing.T) {
+		t.Parallel()
+		// templated is conservatively included: its tags cannot be judged
+		// on a lightweight (unevaluated) graph.
+		ids := RootNodeIDs(graph, "", "", []string{"network"}, nil)
+		assert.ElementsMatch(t, []string{NodeID("vpc", "dev"), NodeID("templated", "dev")}, ids)
+	})
+
+	t.Run("labels_filter", func(t *testing.T) {
+		t.Parallel()
+		ids := RootNodeIDs(graph, "", "", nil, map[string]string{"team": "platform"})
+		assert.ElementsMatch(t, []string{NodeID("vpc", "dev"), NodeID("templated", "dev")}, ids)
 	})
 }
 

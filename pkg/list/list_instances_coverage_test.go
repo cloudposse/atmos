@@ -549,13 +549,13 @@ func TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix(t *testing.T) {
 // TestBuildInstanceFilters covers the YQ-predicate wiring of `--filter`.
 func TestBuildInstanceFilters(t *testing.T) {
 	t.Run("empty spec returns no filters", func(t *testing.T) {
-		result, err := buildInstanceFilters("", nil)
+		result, err := buildInstanceFilters("", nil, "", nil)
 		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
 
 	t.Run("non-empty spec yields one YQ filter", func(t *testing.T) {
-		result, err := buildInstanceFilters(".component == \"vpc\"", nil)
+		result, err := buildInstanceFilters(".component == \"vpc\"", nil, "", nil)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 	})

@@ -5,13 +5,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// RootNodeIDs returns the IDs of nodes matching the given component/stack
-// filters, for use as ReachableClosure roots. Mirrors selectTopNodes's
-// matching semantics: an empty filter matches every node.
-func RootNodeIDs(graph *dependency.Graph, component, stack string) []string {
+// RootNodeIDs returns the IDs of nodes matching the given component/stack/
+// tags/labels filters, for use as ReachableClosure roots. Mirrors
+// selectTopNodes's matching semantics: an empty filter matches every node,
+// and a templated (unresolvable) tags/labels selector conservatively matches
+// so a lightweight unevaluated graph can never wrongly exclude a root.
+func RootNodeIDs(graph *dependency.Graph, component, stack string, tagsFilter []string, labelsFilter map[string]string) []string {
 	defer perf.Track(nil, "dependencies.RootNodeIDs")()
 
-	tops := selectTopNodes(graph, component, stack)
+	tops := selectTopNodes(graph, component, stack, tagsFilter, labelsFilter)
 	ids := make([]string, len(tops))
 	for i, node := range tops {
 		ids[i] = node.ID

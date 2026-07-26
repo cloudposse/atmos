@@ -1,6 +1,7 @@
 package dependencies
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -124,17 +125,114 @@ func TestSelectTopNodes_Filters(t *testing.T) {
 	graph, err := BuildGraph(stacks)
 	require.NoError(t, err)
 
-	all := selectTopNodes(graph, "", "")
+	all := selectTopNodes(graph, "", "", nil, nil)
 	assert.Len(t, all, 3)
 
-	byStack := selectTopNodes(graph, "", "dev")
+	byStack := selectTopNodes(graph, "", "dev", nil, nil)
 	assert.Len(t, byStack, 2)
 
-	byComponent := selectTopNodes(graph, "vpc", "")
+	byComponent := selectTopNodes(graph, "vpc", "", nil, nil)
 	assert.Len(t, byComponent, 2)
 
-	single := selectTopNodes(graph, "vpc", "prod")
+	single := selectTopNodes(graph, "vpc", "prod", nil, nil)
 	require.Len(t, single, 1)
 	assert.Equal(t, "vpc", single[0].Component)
 	assert.Equal(t, "prod", single[0].Stack)
+}
+
+// withMetadata builds a component section holding a metadata subsection.
+func withMetadata(metadata map[string]any) map[string]any {
+	return map[string]any{"metadata": metadata}
+}
+
+func TestSelectTopNodes_TagsLabelsFilters(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": withMetadata(map[string]any{
+				"tags":   []any{"network"},
+				"labels": map[string]any{"team": "platform"},
+			}),
+			"rds": withMetadata(map[string]any{
+				"tags": []any{"database"},
+			}),
+			"bare": {},
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	t.Run("tags any-match", func(t *testing.T) {
+		tops := selectTopNodes(graph, "", "", []string{"network", "database"}, nil)
+		require.Len(t, tops, 2)
+		assert.Equal(t, "rds", tops[0].Component)
+		assert.Equal(t, "vpc", tops[1].Component)
+	})
+
+	t.Run("labels all-match", func(t *testing.T) {
+		tops := selectTopNodes(graph, "", "", nil, map[string]string{"team": "platform"})
+		require.Len(t, tops, 1)
+		assert.Equal(t, "vpc", tops[0].Component)
+
+		tops = selectTopNodes(graph, "", "", nil, map[string]string{"team": "platform", "env": "dev"})
+		assert.Empty(t, tops)
+	})
+
+	t.Run("tags and labels must match the same node", func(t *testing.T) {
+		tops := selectTopNodes(graph, "", "", []string{"database"}, map[string]string{"team": "platform"})
+		assert.Empty(t, tops)
+	})
+
+	t.Run("combined with stack and component filters", func(t *testing.T) {
+		tops := selectTopNodes(graph, "vpc", "dev", []string{"network"}, nil)
+		require.Len(t, tops, 1)
+		assert.Equal(t, "vpc", tops[0].Component)
+
+		tops = selectTopNodes(graph, "rds", "dev", []string{"network"}, nil)
+		assert.Empty(t, tops)
+	})
+
+	t.Run("node without metadata never matches active filters", func(t *testing.T) {
+		tops := selectTopNodes(graph, "bare", "", []string{"network"}, nil)
+		assert.Empty(t, tops)
+	})
+}
+
+func TestSelectTopNodes_TemplatedSelectorConservativelyMatches(t *testing.T) {
+	// A tags/labels value still containing an unresolved template marker
+	// cannot be judged on a lightweight (unevaluated) graph and must count as
+	// a match rather than wrongly excluding the node.
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"templated": withMetadata(map[string]any{
+				"tags": []any{"{{ .settings.tag }}"},
+			}),
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	tops := selectTopNodes(graph, "", "", []string{"anything"}, nil)
+	require.Len(t, tops, 1)
+	assert.Equal(t, "templated", tops[0].Component)
+}
+
+func TestRender_TagsFilterScopesTopEntries(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": withMetadata(map[string]any{"tags": []any{"network"}}),
+			"app": dependsOn(map[string]any{"component": "vpc"}),
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	out, err := Render(graph, Options{Format: "json", Direction: DirectionBoth, Tags: []string{"network"}})
+	require.NoError(t, err)
+
+	// vpc is the only top-level entry; its subtree still reaches app as a dependent.
+	var entries []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &entries))
+	require.Len(t, entries, 1)
+	assert.Equal(t, "vpc", entries[0]["component"])
+	assert.Contains(t, out, `"app"`, "app must still appear inside vpc's dependents subtree")
 }

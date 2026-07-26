@@ -289,29 +289,89 @@ func TestBuildMetadataSorters(t *testing.T) {
 }
 
 func TestBuildMetadataFilters(t *testing.T) {
-	// Currently buildMetadataFilters is a placeholder that returns nil.
-	// Test that it behaves as expected.
+	// The filter spec is still a placeholder (undefined format, ignored), but
+	// --tags/--labels now produce real filters.
 	tests := []struct {
-		name       string
-		filterSpec string
+		name          string
+		filterSpec    string
+		tags          []string
+		labelsRaw     string
+		expectedCount int
+		expectErr     bool
 	}{
 		{
-			name:       "empty filter spec",
-			filterSpec: "",
+			name:          "empty inputs produce no filters",
+			filterSpec:    "",
+			expectedCount: 0,
 		},
 		{
-			name:       "non-empty filter spec (currently ignored)",
-			filterSpec: "stack=dev*",
+			name:          "non-empty filter spec (currently ignored)",
+			filterSpec:    "stack=dev*",
+			expectedCount: 0,
+		},
+		{
+			name:          "tags only",
+			tags:          []string{"network"},
+			expectedCount: 1,
+		},
+		{
+			name:          "labels only",
+			labelsRaw:     "team=platform",
+			expectedCount: 1,
+		},
+		{
+			name:          "labels with colon separator",
+			labelsRaw:     "team:platform",
+			expectedCount: 1,
+		},
+		{
+			name:          "tags and labels",
+			tags:          []string{"network"},
+			labelsRaw:     "team=platform",
+			expectedCount: 2,
+		},
+		{
+			name:      "invalid labels error",
+			labelsRaw: "no-separator",
+			expectErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := buildMetadataFilters(tc.filterSpec)
+			result, err := buildMetadataFilters(tc.tags, tc.labelsRaw)
+			if tc.expectErr {
+				require.Error(t, err)
+				return
+			}
 			require.NoError(t, err)
-			assert.Nil(t, result)
+			assert.Len(t, result, tc.expectedCount)
 		})
 	}
+}
+
+// TestBuildMetadataFilters_FiltersRows verifies the produced filters actually
+// narrow rows on the flattened tags/labels fields.
+func TestBuildMetadataFilters_FiltersRows(t *testing.T) {
+	rows := []map[string]any{
+		{"component": "vpc", "tags": []string{"network"}, "labels": map[string]string{"team": "platform"}},
+		{"component": "rds", "tags": []string{"database"}, "labels": map[string]string{"team": "data"}},
+	}
+
+	filters, err := buildMetadataFilters([]string{"network"}, "team:platform")
+	require.NoError(t, err)
+	require.Len(t, filters, 2)
+
+	result := any(rows)
+	for _, f := range filters {
+		result, err = f.Apply(result)
+		require.NoError(t, err)
+	}
+
+	filtered, ok := result.([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "vpc", filtered[0]["component"])
 }
 
 func TestDefaultMetadataColumns(t *testing.T) {

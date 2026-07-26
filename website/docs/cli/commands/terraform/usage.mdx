@@ -437,7 +437,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
     <dt>`--labels` <em>(optional)</em></dt>
     <dd>
-        Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`. Cannot be combined with a single `component` argument.
+        Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`. Cannot be combined with a single `component` argument.
 
         ```shell
         atmos terraform apply --labels cost-center=platform

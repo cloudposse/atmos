@@ -21,6 +21,7 @@ import (
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -33,6 +34,11 @@ type VendorOptions struct {
 	Stack   string
 	Columns []string
 	Sort    string
+	// Tags filters vendor entries by the manifest's own declared tags
+	// (vendor.yaml source tags, any-match) — not stack component metadata.
+	// --labels is intentionally not supported: vendor/component manifests
+	// have no labels concept in their schema.
+	Tags []string
 }
 
 // vendorCmd lists vendor configurations.
@@ -61,6 +67,7 @@ var vendorCmd = &cobra.Command{
 			Stack:   v.GetString("stack"),
 			Columns: v.GetStringSlice("columns"),
 			Sort:    v.GetString("sort"),
+			Tags:    tags.ParseTagsFlag(v.GetString("tags")),
 		}
 
 		return listVendorWithOptions(opts)
@@ -94,11 +101,15 @@ func columnsCompletionForVendor(cmd *cobra.Command, args []string, toComplete st
 
 func init() {
 	// Create parser with vendor-specific flags using flag wrappers.
+	// WithLabelsFlag is deliberately omitted: vendor/component manifests have
+	// no labels concept, so --labels fails as an unknown flag instead of
+	// being silently ignored.
 	vendorParser = NewListParser(
 		WithFormatFlag,
 		WithVendorColumnsFlag,
 		WithSortFlag,
 		WithStackFlag,
+		WithTagsFlag,
 	)
 
 	// Register flags.
@@ -187,6 +198,13 @@ func buildVendorFilters(opts *VendorOptions) []filter.Filter {
 		if err == nil {
 			filters = append(filters, globFilter)
 		}
+	}
+
+	// Tags filter (any-match) against the manifest's declared tags, carried
+	// as the raw []string "tags_list" row field (the "tags" field is a
+	// comma-joined display string).
+	if len(opts.Tags) > 0 {
+		filters = append(filters, filter.NewTagFilter("tags_list", opts.Tags))
 	}
 
 	return filters
