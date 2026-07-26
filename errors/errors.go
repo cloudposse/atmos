@@ -144,8 +144,10 @@ var (
 	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
 
 	// Authentication and TTY errors.
-	ErrAuthConsole            = errors.New("auth console operation failed")
-	ErrProviderNotSupported   = errors.New("provider does not support this operation")
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	// ErrWebflowRequiresAWSUser indicates --webflow was used without a direct aws/user identity.
+	ErrWebflowRequiresAWSUser = errors.New("--webflow requires an aws/user identity")
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
 	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
