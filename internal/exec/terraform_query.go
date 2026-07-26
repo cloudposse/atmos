@@ -1,5 +1,7 @@
 package exec
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
 	"bytes"
 	"context"
@@ -17,12 +19,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// authManagerFactory creates an AuthManager from the given parameters.
-// Package-level variable to allow test injection.
-var authManagerFactory = func(identity string, authConfig schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
-	mergedAuthConfig := auth.CopyGlobalAuthConfig(&authConfig)
+// AuthManagerQueryFactory creates an AuthManager for ExecuteTerraformQuery's multi-component
+// execution path. This interface allows dependency injection and testing without performing
+// real authentication.
+type AuthManagerQueryFactory interface {
+	Create(identity string, authConfig *schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error)
+}
+
+// defaultAuthManagerQueryFactory implements AuthManagerQueryFactory using pkg/auth.
+type defaultAuthManagerQueryFactory struct{}
+
+func (defaultAuthManagerQueryFactory) Create(identity string, authConfig *schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.defaultAuthManagerQueryFactory.Create")()
+
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(authConfig)
 	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identity, mergedAuthConfig, flagSelectValue, atmosConfig)
 }
+
+// authManagerFactory creates an AuthManager from the given parameters.
+// Package-level variable to allow test injection.
+var authManagerFactory AuthManagerQueryFactory = defaultAuthManagerQueryFactory{}
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
@@ -88,8 +104,8 @@ func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAn
 func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	defer perf.Track(atmosConfig, "exec.createQueryAuthManager")()
 
-	authManager, err := authManagerFactory(
-		info.Identity, atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
+	authManager, err := authManagerFactory.Create(
+		info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {

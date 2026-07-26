@@ -89,7 +89,7 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		AuthDisabled:     identityName == "" || identityName == cfg.IdentityFlagDisabledValue,
+		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
 		LabelsRaw:        v.GetString("labels"),
 	}
@@ -187,7 +187,7 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return err
 	}

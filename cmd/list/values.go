@@ -328,7 +328,7 @@ func listValuesWithOptions(cmd *cobra.Command, opts *ValuesOptions, args []strin
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return "", err
 	}

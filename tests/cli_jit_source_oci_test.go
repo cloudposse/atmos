@@ -3,6 +3,7 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,10 @@ import (
 // registry (no real network or registry dependency, so it's safe and fast
 // in CI).
 func TestJITSource_OCIScheme(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows: in-process CLI invocation can stall while reading from the loopback OCI test registry")
+	}
+
 	root := t.TempDir()
 	t.Chdir(root)
 
@@ -42,9 +47,6 @@ stacks:
   included_paths:
     - "deploy/**/*"
   name_pattern: "{stage}"
-logs:
-  file: "/dev/stderr"
-  level: Info
 `
 	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(atmosYAML), 0o644))
 

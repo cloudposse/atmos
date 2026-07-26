@@ -56,6 +56,34 @@ func TestDescribeStacksRunnable(t *testing.T) {
 	assert.NoError(t, err, "describeStacksCmd should execute without error")
 }
 
+func TestShouldCreateDescribeStacksAuthManager(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                 string
+		processTemplates     bool
+		processYamlFunctions bool
+		identityExplicit     bool
+		want                 bool
+	}{
+		{name: "templates only", processTemplates: true, want: true},
+		{name: "yaml functions only", processYamlFunctions: true, want: true},
+		{name: "both disabled", want: false},
+		{name: "explicit identity without evaluation", identityExplicit: true, want: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, shouldCreateDescribeStacksAuthManager(
+				tc.processTemplates,
+				tc.processYamlFunctions,
+				tc.identityExplicit,
+			))
+		})
+	}
+}
+
 // TestDescribeStacksRunnable_InvalidErrorMode covers the dispatch call site inside
 // getRunnableDescribeStacksCmd that invokes validateErrorMode once --error-mode has
 // been resolved against atmos.yaml's describe.error_mode: an invalid resolved value

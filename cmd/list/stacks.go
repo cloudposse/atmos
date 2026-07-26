@@ -241,7 +241,7 @@ func initStacksConfig(
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
 	}
 
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, err
 	}

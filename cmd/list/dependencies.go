@@ -106,7 +106,7 @@ func parseDependenciesOptions(cmd *cobra.Command, v *viper.Viper, args []string)
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		AuthDisabled:     identityName == "" || identityName == cfg.IdentityFlagDisabledValue,
+		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
 		LabelsRaw:        v.GetString("labels"),
 	}
@@ -182,7 +182,7 @@ func newDependenciesDescribeContext(cmd *cobra.Command, args []string, opts *Dep
 		return nil, err
 	}
 
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return nil, err
 	}
