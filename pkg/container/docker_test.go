@@ -5,11 +5,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/network"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func TestGetString(t *testing.T) {
@@ -453,6 +457,61 @@ func TestDockerRuntime_EnsureBuilder_DefaultName(t *testing.T) {
 	// Unit test - verifies the default name is applied without requiring Docker.
 	cfg := &DriverConfig{Provider: "docker-container"}
 	assert.Equal(t, "atmos", effectiveDriverName(cfg))
+}
+
+func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
+	if os.Getenv("ATMOS_TEST_REGISTRY_CACHE") != "1" {
+		t.Skip("set ATMOS_TEST_REGISTRY_CACHE=1 to run the Docker Buildx registry-cache integration test")
+	}
+	if err := exec.Command("docker", "info").Run(); err != nil {
+		t.Skipf("Docker is unavailable: %v", err)
+	}
+
+	ctx := context.Background()
+	testNetwork, err := network.New(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = testNetwork.Remove(ctx) })
+
+	registry, err := testcontainers.Run(
+		ctx, "registry:2",
+		network.WithNetwork([]string{"cache-registry"}, testNetwork),
+		testcontainers.WithExposedPorts("5000/tcp"),
+		testcontainers.WithWaitStrategy(wait.ForListeningPort("5000/tcp").WithStartupTimeout(30*time.Second)),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = registry.Terminate(ctx) })
+
+	contextDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "Dockerfile"), []byte("FROM busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
+	cacheRef := "cache-registry:5000/atmos-buildx-cache:latest"
+	firstDriver := &DriverConfig{Name: "atmos-cache-export-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
+	secondDriver := &DriverConfig{Name: "atmos-cache-import-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "buildx", "rm", firstDriver.Name).Run()
+		_ = exec.Command("docker", "buildx", "rm", secondDriver.Name).Run()
+	})
+
+	runtime := NewDockerRuntime()
+	require.NoError(t, runtime.Build(ctx, &BuildConfig{
+		Engine:     "buildx",
+		Dockerfile: "Dockerfile",
+		Context:    contextDir,
+		Driver:     firstDriver,
+		Cache:      &CacheConfig{To: []map[string]string{{"type": "registry", "ref": cacheRef, "mode": "max"}}},
+	}))
+
+	require.NoError(t, ensureBuilder(ctx, runtime, secondDriver))
+	importArgs := buildBuildArgs(&BuildConfig{
+		Engine:     "buildx",
+		Dockerfile: "Dockerfile",
+		Context:    contextDir,
+		Driver:     secondDriver,
+		Cache:      &CacheConfig{From: []map[string]string{{"type": "registry", "ref": cacheRef}}},
+	})
+	importArgs = append(importArgs[:2], append([]string{"--progress=plain"}, importArgs[2:]...)...)
+	output, err := exec.Command("docker", importArgs...).CombinedOutput()
+	require.NoError(t, err, "Buildx cache import failed:\n%s", output)
+	assert.Contains(t, string(output), "CACHED", "second build should reuse the exported registry cache")
 }
 
 func TestDockerRuntime_Logs_Integration(t *testing.T) {
