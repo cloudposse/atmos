@@ -8,7 +8,5 @@ components:
     chatops:
       metadata:
         component: mock
-        inherits:
-          - dns-primary
       vars:
         name: chatops

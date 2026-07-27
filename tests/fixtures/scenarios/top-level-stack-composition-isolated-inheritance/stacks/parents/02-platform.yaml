@@ -1,4 +1,4 @@
-name: isolated-child
+name: isolated-shared
 
 components:
   terraform:

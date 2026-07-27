@@ -8,4 +8,5 @@ components:
       metadata:
         component: mock
       vars:
+        inherited_value: from-shared-catalog
         name: shared

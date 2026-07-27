@@ -75,7 +75,7 @@ func TestTopLevelStackComposition(t *testing.T) {
 			require.NoError(t, err)
 			platformParent := stacksMap["parents/02-platform"].(map[string]any)
 			platformComponents := platformParent["components"].(map[string]any)["terraform"].(map[string]any)
-			assert.Equal(t, "primary.example.com", platformComponents["chatops"].(map[string]any)["vars"].(map[string]any)["hostname"])
+			assert.Equal(t, "from-shared-catalog", platformComponents["chatops"].(map[string]any)["vars"].(map[string]any)["inherited_value"])
 
 			require.NoError(t, ValidateStacks(&atmosConfig))
 
@@ -98,7 +98,7 @@ func TestTopLevelStackComposition(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "parents/02-platform", inherited.StackFile)
 			assert.Equal(t, "chatops", inherited.ComponentSection["vars"].(map[string]any)["name"])
-			assert.Equal(t, "primary.example.com", inherited.ComponentSection["vars"].(map[string]any)["hostname"])
+			assert.Equal(t, "from-shared-catalog", inherited.ComponentSection["vars"].(map[string]any)["inherited_value"])
 		})
 	}
 }
@@ -144,61 +144,13 @@ func TestTopLevelStackCompositionPreservesParentScopes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "parents/02-platform", chatops.StackFile)
 	assert.Equal(t, "platform", chatops.ComponentSection["vars"].(map[string]any)["owner"])
-	assert.Equal(t, "primary.example.com", chatops.ComponentSection["vars"].(map[string]any)["hostname"])
 }
 
-func TestTopLevelStackCompositionRejectsCrossLogicalStackInheritance(t *testing.T) {
+func TestTopLevelStackCompositionRejectsPeerOnlyInheritance(t *testing.T) {
 	atmosConfig := initTopLevelStackCompositionConfig(t, "top-level-stack-composition-isolated-inheritance")
 
 	_, _, err := FindStacksMap(&atmosConfig, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "component 'chatops'")
 	assert.Contains(t, err.Error(), "inherits from 'dns-primary'")
-}
-
-func TestLogicalStackIdentityDefersMissingComponentContext(t *testing.T) {
-	tests := []struct {
-		name         string
-		stacksConfig schema.Stacks
-	}{
-		{
-			name:         "name template",
-			stacksConfig: schema.Stacks{NameTemplate: "{{ .vars.stage }}"},
-		},
-		{
-			name:         "name pattern",
-			stacksConfig: schema.Stacks{NamePattern: "{stage}"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			atmosConfig := &schema.AtmosConfiguration{Stacks: tt.stacksConfig}
-			identity, err := logicalStackIdentity(atmosConfig, "parents/component-scoped", map[string]any{})
-			require.NoError(t, err)
-			assert.Equal(t, "parents/component-scoped", identity)
-		})
-	}
-}
-
-func TestLogicalStackIdentityWithNilConfig(t *testing.T) {
-	identity, err := logicalStackIdentity(nil, "parents/component-scoped", map[string]any{"name": "ignored"})
-	require.NoError(t, err)
-	assert.Equal(t, "parents/component-scoped", identity)
-}
-
-func TestRetainOwnedComponentsRemovesAllPeerComponentsWhenOriginalHasNone(t *testing.T) {
-	finalConfig := map[string]any{
-		cfg.ComponentsSectionName: map[string]any{
-			cfg.TerraformSectionName: map[string]any{
-				"peer-component": map[string]any{"vars": map[string]any{"source": "peer"}},
-			},
-		},
-	}
-
-	retainOwnedComponents(finalConfig, map[string]any{})
-
-	components := finalConfig[cfg.ComponentsSectionName].(map[string]any)
-	terraform := components[cfg.TerraformSectionName].(map[string]any)
-	assert.Empty(t, terraform)
 }

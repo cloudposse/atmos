@@ -595,7 +595,8 @@ func findComponentInStacks(
 
 	componentConfigs := make([]map[string]any, 0, len(candidates))
 	foundStacks := make([]string, 0, len(candidates))
-	for _, candidate := range candidates {
+	for i := range candidates {
+		candidate := &candidates[i]
 		componentConfigs = append(componentConfigs, candidate.info.ComponentSection)
 		foundStacks = append(foundStacks, candidate.stackFile)
 	}

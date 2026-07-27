@@ -16,9 +16,9 @@ deep-merged configuration file.
 1. Allow a logical stack to be split into parent manifests by component.
 2. Keep every concrete component instance owned by one parent manifest.
 3. Permit the same imported component to appear through multiple parents when
-    its resolved configuration is identical.
-4. Permit a component to inherit a differently named base component owned by a
-    peer parent in the same logical stack.
+   its resolved configuration is identical.
+4. Keep each parent's inheritance graph self-contained: inherited bases must be
+   defined inline or available through that parent's import graph.
 5. Keep resolution deterministic and preserve source and provenance output.
 
 ## Non-Goals
@@ -26,7 +26,8 @@ deep-merged configuration file.
 - Deep-merging peer parent manifests.
 - Assembling one component definition from multiple peer parents.
 - Allowing conflicting definitions of the same component instance.
-- Resolving inheritance across different logical stacks.
+- Resolving inheritance from another parent solely because it shares the same
+  logical stack identity.
 
 ## Terminology
 
@@ -63,16 +64,16 @@ configuration after excluding source and provenance-only fields.
 - Different configurations are ambiguous and invalid. `validate stacks` and
   component resolution report every conflicting parent manifest.
 
-### Cross-Parent Inheritance
+### Explicit Inheritance Dependencies
 
-Atmos builds a group-scoped registry of distinct component definitions only for
-resolving `metadata.inherits`. A component may inherit a differently named base
-component from another parent in the same logical stack.
+Each parent resolves `metadata.inherits` from the components it defines inline
+or receives through its normal import graph. Grouping parent manifests under one
+logical stack does not expand inheritance visibility.
 
-The inherited component remains owned by its defining parent. Its parent scope
-is not replaced or merged with the base component's parent scope. A base in a
-parent with a different canonical stack identity is not visible and remains a
-configuration error.
+When multiple parents need the same base, place it in a shared catalog and
+explicitly import that catalog from each parent that depends on it. A base
+defined only by another parent remains unresolved even when both parents have
+the same canonical stack identity.
 
 ## Determinism and Compatibility
 
@@ -86,10 +87,11 @@ Single-manifest stacks and normal import behavior are unchanged.
 ## Success Criteria
 
 1. `describe stacks` lists one logical stack containing distinct components
-    from each parent.
+   from each parent.
 2. `describe component` and execution select the owning parent for unique
-    components and the lexical canonical source for equivalent duplicates.
-3. Same-logical-stack cross-parent `metadata.inherits` resolves successfully.
+   components and the lexical canonical source for equivalent duplicates.
+3. `metadata.inherits` resolves bases defined inline or explicitly imported by
+   the owning parent.
 4. Parent-specific scope does not leak between peer-owned components.
-5. Differing duplicate instances and cross-logical-stack inheritance fail with
-    actionable diagnostics.
+5. Differing duplicate instances and peer-only inheritance fail with actionable
+   diagnostics.

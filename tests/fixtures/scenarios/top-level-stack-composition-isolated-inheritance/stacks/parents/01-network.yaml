@@ -1,4 +1,4 @@
-name: isolated-base
+name: isolated-shared
 
 components:
   terraform:

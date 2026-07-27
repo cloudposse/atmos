@@ -23,9 +23,8 @@ them. Before this change, splitting one logical environment across parent
 manifests meant commands treated those files as separate stacks, or required a
 single large manifest that mixed unrelated scope and ownership.
 
-That also made cross-parent inheritance impractical: a component owned by the
-platform team could not safely inherit a base component owned by the network
-team without merging the parents themselves.
+That made it difficult to divide ownership without also changing how teams
+named, discovered, and operated the stack.
 
 ## The Fix
 
@@ -37,17 +36,28 @@ do not leak into another.
 Within that logical stack:
 
 - Distinct components from every parent appear together in stack discovery.
-- A component can inherit a differently named base component from a peer
-  parent.
 - Equivalent duplicate components choose a stable, lexical canonical source.
 - Conflicting duplicate components remain errors with the parent manifests
   identified in the diagnostic.
+- Inheritance stays self-contained: a base must be defined inline or explicitly
+  imported by the parent that uses it.
 
 ## How to Use It
 
 Give the related parent manifests the same stack identity through `name`,
 `name_template`, or `name_pattern`. For example, two manifests can use the same
 template-derived environment and stage:
+
+```yaml
+# stacks/catalog/shared.yaml
+components:
+  terraform:
+    chatops-base:
+      metadata:
+        component: mock
+      vars:
+        notifications_enabled: true
+```
 
 ```yaml
 # stacks/parents/01-network.yaml
@@ -64,6 +74,9 @@ components:
 
 ```yaml
 # stacks/parents/02-platform.yaml
+import:
+  - catalog/shared
+
 vars:
   environment: dev
   stage: shared
@@ -74,17 +87,19 @@ components:
       metadata:
         component: mock
         inherits:
-          - dns-primary
+          - chatops-base
 ```
 
 With a matching stack name configuration, `atmos describe stacks` reports one
 logical stack, while `atmos describe component chatops -s dev-shared` retains
-the platform parent's scope and inherits the base component from the network
-parent.
+the platform parent's scope and resolves its base through the platform
+manifest's explicit catalog import. A component defined only by the network
+parent is discoverable in the logical stack, but is not an implicit inheritance
+dependency of the platform parent.
 
 ## Get Involved
 
 Try splitting a large logical stack along your team's ownership boundaries. If
-you encounter an inheritance or duplicate-resolution case that is not clear,
-please [open an issue](https://github.com/cloudposse/atmos/issues) with a
-minimal stack example.
+you encounter an import, inheritance, or duplicate-resolution case that is not
+clear, please [open an issue](https://github.com/cloudposse/atmos/issues) with
+a minimal stack example.
