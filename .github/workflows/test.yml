@@ -586,6 +586,22 @@ jobs:
         timeout-minutes: 45
         uses: ./.github/actions/setup-colima
 
+      - name: Configure Docker Hub mirror on Linux
+        if: matrix.flavor.target == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0755 /etc/docker
+          if sudo test -s /etc/docker/daemon.json; then
+            sudo jq '."registry-mirrors" = ((."registry-mirrors" // []) + ["https://mirror.gcr.io"] | unique)' \
+              /etc/docker/daemon.json | sudo tee /etc/docker/daemon.json.tmp >/dev/null
+            sudo mv /etc/docker/daemon.json.tmp /etc/docker/daemon.json
+          else
+            printf '%s\n' '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json >/dev/null
+          fi
+          sudo systemctl restart docker
+          docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'
+
       - name: Write a default AWS profile to the AWS config file
         run: |
           mkdir -p ~/.aws
