@@ -145,7 +145,7 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return err
 	}

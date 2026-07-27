@@ -91,12 +91,12 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
-		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
-		// When functions are disabled (--process-functions=false), there are no YAML functions
-		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
+		// Go templates (notably atmos.Component()) and YAML functions can both require
+		// credentials. Resolve the default identity whenever either processing path is
+		// enabled, or when the caller explicitly selected an identity.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
-		if describe.ProcessYamlFunctions || identityExplicit {
+		if shouldCreateDescribeStacksAuthManager(describe.ProcessTemplates, describe.ProcessYamlFunctions, identityExplicit) {
 			// Category B: describe stacks operates on multiple stacks/components with no single
 			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
 			// (including those declared in imported _defaults.yaml files) are discovered. See
@@ -113,6 +113,13 @@ func getRunnableDescribeStacksCmd(
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
 		return err
 	}
+}
+
+// shouldCreateDescribeStacksAuthManager keeps the command-boundary auth policy explicit:
+// either evaluated path can need credentials, while a caller-selected identity must always
+// be honored even when evaluation is disabled.
+func shouldCreateDescribeStacksAuthManager(processTemplates, processYamlFunctions, identityExplicit bool) bool {
+	return processTemplates || processYamlFunctions || identityExplicit
 }
 
 func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {

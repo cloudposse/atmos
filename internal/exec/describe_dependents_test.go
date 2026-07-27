@@ -72,6 +72,20 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, dependencySourceSettingsDependsOn, source)
 	})
 
+	t.Run("falls back to component depends_on after settings", func(t *testing.T) {
+		componentMap := map[string]any{
+			"depends_on": map[any]any{
+				1: map[string]any{"component": "network"},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+
+		require.Len(t, deps, 1)
+		assert.Equal(t, "network", deps[0].Component)
+		assert.Equal(t, dependencySourceSettingsDependsOn, source)
+	})
+
 	t.Run("falls back to settings.depends_on when dependencies only has file and folder siblings", func(t *testing.T) {
 		componentMap := map[string]any{
 			"dependencies": map[string]any{

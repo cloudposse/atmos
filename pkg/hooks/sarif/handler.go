@@ -36,7 +36,11 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 		}
 
 		data, err := os.ReadFile(path)
-		if os.IsNotExist(err) {
+		// runSubprocess always pre-creates the capture file when CaptureStdout is set, so
+		// "file exists but is empty" and "file doesn't exist" are the same signal: the
+		// scanner produced nothing. missingReportSummary already knows how to turn that
+		// into success vs. failure based on ctx.ExitCode.
+		if os.IsNotExist(err) || (err == nil && len(data) == 0) {
 			return missingReportSummary(ctx, opts)
 		}
 		if err != nil {
@@ -56,6 +60,7 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 		body := RenderMarkdown(findings, RenderMarkdownOptions{
 			Tool:        label,
 			MaxFindings: opts.MaxFindings,
+			RepoBaseURL: githubBlobBaseURL(),
 		})
 
 		return &hooks.Summary{

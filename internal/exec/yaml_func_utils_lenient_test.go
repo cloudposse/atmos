@@ -150,3 +150,44 @@ func TestProcessCustomYamlTagsLenient_NonRecoverableError_StillFails(t *testing.
 	assert.Contains(t, err.Error(), "S3 GetObject timeout")
 	assert.Empty(t, warnings, "non-recoverable errors must not trigger onWarning")
 }
+
+// TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn verifies that warn mode does
+// not hide a broken/unavailable credential source (e.g. no EC2 IMDS role or an expired SSO
+// session). Only an unprovisioned state/output is eligible for degradation.
+func TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+
+	credErr := fmt.Errorf(
+		"failed to get object from S3: %w: get identity: get credentials: failed to refresh cached credentials, no EC2 IMDS role found",
+		errUtils.ErrGetObjectFromS3,
+	)
+	mockStateGetter.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, credErr).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"bucket":  `!terraform.state vpc test-stack bucket_name`,
+		"sibling": "unaffected-value",
+	}
+
+	stackInfo := &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}
+
+	var warnings []DegradationWarning
+	result, err := ProcessCustomYamlTagsLenient(atmosConfig, input, "test-stack", nil, stackInfo, func(w DegradationWarning) {
+		warnings = append(warnings, w)
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "EC2 IMDS")
+	assert.Empty(t, warnings)
+}

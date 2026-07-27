@@ -192,12 +192,10 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create("terraform", gomock.Any(), cfg.IdentityFlagSelectValue, gomock.Any()).Return(authManager, nil)
 	oldAuthManagerFactory := authManagerFactory
-	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-		require.Equal(t, "terraform", identity)
-		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
-		return authManager, nil
-	}
+	authManagerFactory = mockFactory
 	defer func() {
 		authManagerFactory = oldAuthManagerFactory
 	}()
@@ -273,12 +271,10 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create("terraform", gomock.Any(), cfg.IdentityFlagSelectValue, gomock.Any()).Return(authManager, nil)
 	oldAuthManagerFactory := authManagerFactory
-	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-		require.Equal(t, "terraform", identity)
-		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
-		return authManager, nil
-	}
+	authManagerFactory = mockFactory
 	defer func() {
 		authManagerFactory = oldAuthManagerFactory
 	}()
@@ -304,7 +300,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 		require.True(t, processStacks)
 		return schema.AtmosConfiguration{}, nil
 	})
-	patches.ApplyFunc(getAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+	patches.ApplyFunc(GetAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 		describedAffected = true
 		require.NotNil(t, args.CLIConfig)
 		require.Equal(t, repoPath, args.RepoPath)
@@ -405,10 +401,11 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 
 	t.Run("auth manager", func(t *testing.T) {
 		expectedErr := errors.New("auth failed")
+		ctrl := gomock.NewController(t)
+		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, expectedErr)
 		oldAuthManagerFactory := authManagerFactory
-		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-			return nil, expectedErr
-		}
+		authManagerFactory = mockFactory
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
@@ -425,10 +422,11 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 
 	t.Run("describe stacks", func(t *testing.T) {
 		expectedErr := errors.New("describe failed")
+		ctrl := gomock.NewController(t)
+		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 		oldAuthManagerFactory := authManagerFactory
-		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-			return nil, nil
-		}
+		authManagerFactory = mockFactory
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
@@ -461,10 +459,11 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 
 	t.Run("scheduler", func(t *testing.T) {
 		expectedErr := errors.New("scheduler failed")
+		ctrl := gomock.NewController(t)
+		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 		oldAuthManagerFactory := authManagerFactory
-		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-			return nil, nil
-		}
+		authManagerFactory = mockFactory
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
@@ -501,10 +500,11 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 
 func TestCreateQueryAuthManagerPropagatesFactoryError(t *testing.T) {
 	expectedErr := errors.New("auth failed")
+	ctrl := gomock.NewController(t)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, expectedErr)
 	oldAuthManagerFactory := authManagerFactory
-	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-		return nil, expectedErr
-	}
+	authManagerFactory = mockFactory
 	defer func() {
 		authManagerFactory = oldAuthManagerFactory
 	}()

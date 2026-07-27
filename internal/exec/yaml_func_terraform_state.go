@@ -26,10 +26,19 @@ func processTagTerraformState(
 	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
-// isRecoverableTerraformError checks if an error is recoverable (can use YQ default).
+// isRecoverableTerraformError checks whether a lookup is recoverable because state or an
+// output genuinely does not exist yet. Authentication, credential-refresh, network, and
+// backend API failures must remain visible rather than silently using a fallback value.
 func isRecoverableTerraformError(err error) bool {
 	return errors.Is(err, errUtils.ErrTerraformStateNotProvisioned) ||
 		errors.Is(err, errUtils.ErrTerraformOutputNotFound)
+}
+
+// isRecoverableInWarnMode is the classification processNodesWithContext uses when the
+// caller selected --error-mode=warn/silent. Error mode only degrades a genuinely
+// unprovisioned state/output; it never hides credential or backend failures.
+func isRecoverableInWarnMode(err error) bool {
+	return isRecoverableTerraformError(err)
 }
 
 // hasYqDefault checks if a YQ expression contains a default (fallback) operator.

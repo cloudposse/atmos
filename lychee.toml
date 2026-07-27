@@ -17,13 +17,19 @@ timeout = 60
 max_retries = 3
 
 # Accept these HTTP status codes as valid.
-# 500 is included alongside 403/429 because GitHub's gateway intermittently
-# rejects a handful of the ~800 unique links checked here with 500 Internal
-# Server Error under CI's request volume (verified to return 200 outside CI),
-# spanning arbitrary github.com issue/PR/repo URLs across different repos —
+# 500/502/504 are included alongside 403/429 because GitHub's gateway
+# intermittently rejects a handful of the ~800 unique links checked here with
+# 500 Internal Server Error, 502 Bad Gateway, or 504 Gateway Timeout under
+# CI's request volume (verified to return 200 outside CI), spanning arbitrary
+# github.com issue/PR/tree/blob/release/user URLs across different repos —
 # not any one specific broken link. See the v1.203.0 release-tag exclude below
-# for the single-URL precedent of this same GitHub-gateway flakiness.
-accept = ["200", "204", "301", "302", "403", "429", "500"]
+# for the single-URL precedent of this same GitHub-gateway flakiness; the
+# narrower google-gemini/gemini-cli and gruntwork-io/terragrunt excludes are
+# for repos that showed 502s repeatedly before this status code was accepted
+# broadly.
+# 503/520 cover the same class of flakiness on (img.)shields.io badge URLs,
+# which intermittently reject requests under CI's request volume.
+accept = ["200", "204", "301", "302", "403", "429", "500", "502", "503", "504", "520"]
 
 # Paths to exclude from checking (input files to scan)
 exclude_path = [
@@ -31,6 +37,9 @@ exclude_path = [
   "node_modules",
   ".git",
   ".conductor",
+  # Go template files (badge URLs contain unrendered `{{ }}` placeholders,
+  # e.g. pkg/ci/plugins/terraform/templates/test.md) — not real documentation.
+  "pkg/ci",
 ]
 
 # URL patterns to exclude (regex)
@@ -91,6 +100,12 @@ exclude = [
   "lfaidata\\.foundation",
   # Taskfile.dev (connection resets in CI)
   "taskfile\\.dev",
+  # Gemini CLI documentation resets connections from GitHub-hosted runners.
+  "geminicli\\.com",
+  # Concourse's public site intermittently resets CI connections.
+  "concourse-ci\\.org",
+  # Aqua's documentation host intermittently returns 503 from CI runners.
+  "aquaproj\\.github\\.io",
   # Gomplate docs (connection resets in CI)
   "docs\\.gomplate\\.ca",
   # regex101.com (intermittent timeouts in CI)
@@ -142,6 +157,9 @@ exclude = [
   # google-gemini/gemini-cli repo deep-links intermittently return 502 Bad Gateway
   # from GitHub's gateway in CI; the pages are valid and load in a browser.
   "github\\.com/google-gemini/gemini-cli",
+  # gruntwork-io/terragrunt repo deep-links intermittently return 502 Bad Gateway
+  # from GitHub's gateway in CI; the pages are valid and load in a browser.
+  "github\\.com/gruntwork-io/terragrunt",
   # This specific older release tag page intermittently returns 500 Internal
   # Server Error from GitHub's gateway in CI; the page is valid and loads in
   # a browser (verified via `gh api repos/cloudposse/atmos/releases/tags/v1.203.0`).
