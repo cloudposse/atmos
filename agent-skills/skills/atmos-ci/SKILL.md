@@ -262,8 +262,9 @@ By default (`queue: single`), a GitHub Actions `concurrency` group holds one in-
 pending run; a third trigger evicts the pending run regardless of `cancel-in-progress`.
 `cancel-in-progress: true` also cancels a running Terraform command, which can leave a state lock
 that needs recovery. `queue: max` allows up to 100 pending runs instead, but cannot be combined
-with `cancel-in-progress: true`. Use explicit deployment controls (GitHub environments, merge
-queues, a promotion workflow) when strict ordering is required.
+with `cancel-in-progress: true`. GitHub environments and merge queues add approval/merge-order
+controls, but only an explicit promotion workflow or deployment controller guarantees deployment
+execution order.
 
 ## Component Dependencies
 

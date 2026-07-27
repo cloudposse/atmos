@@ -418,8 +418,9 @@ cancels the **in-progress** run itself, which can interrupt a Terraform apply an
 state lock that needs manual recovery. Setting `queue: max` instead allows up to 100 pending runs
 before any get canceled, but it cannot be combined with `cancel-in-progress: true`.
 
-Use remote state locking for safety, and reach for GitHub environments, merge queues, or an
-explicit promotion workflow when you need deployment ordering guarantees.
+Use remote state locking for safety. GitHub environments add approval gates and merge queues
+order merges, but neither guarantees deployment *execution* order — reach for an explicit
+promotion workflow or deployment controller when you need that guarantee.
 :::
 
 ## Features
