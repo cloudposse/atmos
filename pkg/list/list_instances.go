@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/git"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -94,6 +95,19 @@ type InstancesCommandOptions struct {
 	// key:value pairs, all-match), parsed at filter-build time so an invalid
 	// value surfaces as a command error.
 	LabelsRaw string
+	// IncludeDependencies/IncludeDependents expand the selection preview with
+	// the dependency closure, matching the terraform bulk commands (0 = off,
+	// -1 = unlimited, N>0 = N levels). With either set, the rendered rows are
+	// exactly the terraform components a bulk run with the same selection
+	// flags would execute — the seed's tags/labels/stack filters choose the
+	// roots, and closure members are kept even when they don't match them.
+	IncludeDependencies int
+	IncludeDependents   int
+}
+
+// closureRequested reports whether the dependency-closure preview flags are set.
+func (o *InstancesCommandOptions) closureRequested() bool {
+	return o.IncludeDependencies != 0 || o.IncludeDependents != 0
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -573,7 +587,9 @@ func processInstancesWithDeps(
 	skip []string,
 	stackPattern string,
 	authDisabled bool,
-) ([]schema.Instance, error) {
+	tagsFilter []string,
+	labelsFilter map[string]string,
+) ([]schema.Instance, map[string]any, error) {
 	stacksMap, err := executeDescribeStacksForInstances(
 		atmosConfig,
 		stacksProcessor,
@@ -582,22 +598,24 @@ func processInstancesWithDeps(
 		processYamlFunctions,
 		skip,
 		authDisabled,
+		tagsFilter,
+		labelsFilter,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
-		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
+		return nil, nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Collect instances, applying the --stack glob filter when present.
 	instances, err := collectInstances(stacksMap, stackPattern)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Sort instances.
 	instances = sortInstances(instances)
 
-	return instances, nil
+	return instances, stacksMap, nil
 }
 
 type authDisabledStacksProcessor interface {
@@ -617,12 +635,35 @@ type authDisabledStacksProcessor interface {
 	) (map[string]any, error)
 }
 
-// executeDescribeStacksForInstances dispatches to ExecuteDescribeStacksWithAuthDisabled
-// when authDisabled is requested AND the processor implements the optional
-// authDisabledStacksProcessor interface; otherwise it falls back to the
-// standard ExecuteDescribeStacks call. The `skip` list is forwarded to both
-// paths so --skip continues to bypass the named YAML functions regardless of
-// whether auth is disabled.
+// scopedStacksProcessor is the optional interface for processors supporting
+// the tags/labels early-skip scope (components excluded by the filters skip
+// auth/template/YAML-function evaluation entirely).
+type scopedStacksProcessor interface {
+	ExecuteDescribeStacksScoped(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		authManager auth.AuthManager,
+		authDisabled bool,
+		tagsFilter []string,
+		labelsFilter map[string]string,
+	) (map[string]any, error)
+}
+
+// executeDescribeStacksForInstances dispatches to the most capable describe
+// variant the processor implements: the scoped variant when a tags/labels
+// early-skip filter is requested, the auth-disabled variant when authDisabled
+// is set, and the standard ExecuteDescribeStacks call otherwise. The `skip`
+// list is forwarded to every path so --skip continues to bypass the named
+// YAML functions. A processor without the optional scoped interface simply
+// describes unscoped — the row filters remain the authoritative final pass.
 //
 //nolint:revive // Helper mirrors the StacksProcessor call shape with skip + authDisabled passthrough.
 func executeDescribeStacksForInstances(
@@ -632,7 +673,26 @@ func executeDescribeStacksForInstances(
 	processTemplates, processYamlFunctions bool,
 	skip []string,
 	authDisabled bool,
+	tagsFilter []string,
+	labelsFilter map[string]string,
 ) (map[string]any, error) {
+	if len(tagsFilter) > 0 || len(labelsFilter) > 0 {
+		if processor, ok := stacksProcessor.(scopedStacksProcessor); ok {
+			return processor.ExecuteDescribeStacksScoped(
+				atmosConfig, "", nil, nil, nil,
+				false, // ignoreMissingFiles
+				processTemplates,
+				processYamlFunctions,
+				false, // includeEmptyStacks
+				skip,
+				authManager,
+				authDisabled,
+				tagsFilter,
+				labelsFilter,
+			)
+		}
+	}
+
 	if authDisabled {
 		if processor, ok := stacksProcessor.(authDisabledStacksProcessor); ok {
 			return processor.ExecuteDescribeStacksWithAuthDisabled(
@@ -675,7 +735,9 @@ func processInstances(
 	skip []string,
 	stackPattern string,
 	authDisabled bool,
-) ([]schema.Instance, error) {
+	tagsFilter []string,
+	labelsFilter map[string]string,
+) ([]schema.Instance, map[string]any, error) {
 	return processInstancesWithDeps(
 		atmosConfig,
 		&e.DefaultStacksProcessor{},
@@ -685,6 +747,8 @@ func processInstances(
 		skip,
 		stackPattern,
 		authDisabled,
+		tagsFilter,
+		labelsFilter,
 	)
 }
 
@@ -715,6 +779,9 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	if upload && (len(opts.Tags) > 0 || opts.LabelsRaw != "") {
 		return fmt.Errorf("%w: --tags/--labels is not supported with --upload (the inventory upload is always unfiltered)", errUtils.ErrInvalidFlag)
 	}
+	if upload && opts.closureRequested() {
+		return fmt.Errorf("%w: --include-dependencies/--include-dependents is not supported with --upload (the inventory upload is always unfiltered)", errUtils.ErrInvalidFlag)
+	}
 
 	// Handle matrix format specially - it bypasses the normal rendering pipeline.
 	if formatFlag == string(format.FormatMatrix) {
@@ -729,6 +796,9 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		}
 		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
 			return fmt.Errorf("%w: --tags/--labels is not supported with --format=matrix", errUtils.ErrInvalidFlag)
+		}
+		if opts.closureRequested() {
+			return fmt.Errorf("%w: --include-dependencies/--include-dependents is not supported with --format=matrix", errUtils.ErrInvalidFlag)
 		}
 		return executeMatrixFormat(&atmosConfig, opts)
 	}
@@ -755,6 +825,9 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		}
 		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
 			return fmt.Errorf("%w: --tags/--labels is not supported with --format=tree", errUtils.ErrInvalidFlag)
+		}
+		if opts.closureRequested() {
+			return fmt.Errorf("%w: --include-dependencies/--include-dependents is not supported with --format=tree", errUtils.ErrInvalidFlag)
 		}
 
 		// Enable provenance tracking to capture import chains.
@@ -803,18 +876,36 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return data.Writeln(output)
 	}
 
+	// Parse --labels once: both the early-skip describe scope and the closure
+	// seed need the parsed form (buildInstanceFilters re-parses for row filters).
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return err
+	}
+
 	// For non-tree formats, process instances normally. The single call threads
 	// every relevant option through one canonical path: --skip bypasses named
 	// YAML functions, opts.Stack applies the glob filter post-describe, and
 	// --identity=false (opts.AuthDisabled) short-circuits per-component auth.
-	instances, err := processInstances(
+	// Without closure flags, --tags/--labels also scope the describe pass
+	// (early-skip): excluded components never evaluate templates/functions/auth.
+	// With closure flags, the describe and the stack glob must NOT narrow —
+	// closure members outside the seed's filters have to stay visible; the
+	// membership filter below owns row selection instead.
+	describeTags, describeLabels, stackPattern := opts.Tags, labels, opts.Stack
+	if opts.closureRequested() {
+		describeTags, describeLabels, stackPattern = nil, nil, ""
+	}
+	instances, stacksMap, err := processInstances(
 		&atmosConfig,
 		opts.AuthManager,
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		opts.Skip,
-		opts.Stack,
+		stackPattern,
 		opts.AuthDisabled,
+		describeTags,
+		describeLabels,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
@@ -837,10 +928,23 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return fmt.Errorf("failed to create column selector: %w", err)
 	}
 
-	// Build filters from filter specification.
-	filters, err := buildInstanceFilters(opts.FilterSpec, opts.Tags, opts.LabelsRaw, &atmosConfig)
+	// Build filters from filter specification. With the closure preview, the
+	// tags/labels seed filters are replaced by the closure membership filter
+	// (closure members must not be re-pruned by the selectors that seeded them).
+	rowTags, rowLabelsRaw := opts.Tags, opts.LabelsRaw
+	if opts.closureRequested() {
+		rowTags, rowLabelsRaw = nil, ""
+	}
+	filters, err := buildInstanceFilters(opts.FilterSpec, rowTags, rowLabelsRaw, &atmosConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build filters: %w", err)
+	}
+	if opts.closureRequested() {
+		closureFilter, closureErr := buildInstanceClosureFilter(&atmosConfig, opts, labels, stacksMap)
+		if closureErr != nil {
+			return closureErr
+		}
+		filters = append(filters, closureFilter)
 	}
 
 	// Append the --query projector after filters so it rewrites only the
@@ -1018,6 +1122,34 @@ func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw stri
 		filters = append(filters, filter.NewLabelFilter("labels", labels))
 	}
 	return filters, nil
+}
+
+// buildInstanceClosureFilter builds the dependency-closure membership filter
+// for the --include-dependencies/--include-dependents preview: the seed
+// (stack glob + tags + labels) selects the roots on the described graph, the
+// closure expands them, and only rows inside the closure are kept. The graph
+// covers terraform components (the same set the bulk scheduler executes), so
+// the preview intentionally excludes other component types.
+func buildInstanceClosureFilter(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions, labels map[string]string, stacksMap map[string]any) (filter.Filter, error) {
+	graph, err := dependencies.BuildGraph(stacksMap)
+	if err != nil {
+		return nil, err
+	}
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	roots := dependencies.Roots(graph, &dependencies.Selector{
+		Stack:     opts.Stack,
+		Tags:      opts.Tags,
+		Labels:    labels,
+		LeftDelim: leftDelim,
+	})
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	members := dependencies.Membership(dependencies.ReachableClosure(graph, roots, direction, depths))
+	return filter.NewPredicateFilter("dependency-closure", func(row map[string]any) bool {
+		component, _ := row["component"].(string)
+		stack, _ := row["stack"].(string)
+		_, ok := members[dependencies.NodeID(component, stack)]
+		return ok
+	}), nil
 }
 
 // buildInstanceSorters creates sorters from sort specification.

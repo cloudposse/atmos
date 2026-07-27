@@ -47,6 +47,10 @@ type Options struct {
 	// Labels optionally filters the top-level entries to components whose
 	// metadata.labels contains every key=value pair (all-match).
 	Labels map[string]string
+	// LeftDelim is the configured left template delimiter ("{{" when empty),
+	// used to detect still-unresolved selector templates under custom
+	// 'templates.settings.delimiters' configurations.
+	LeftDelim string
 }
 
 // Render produces the dependency output for the given graph and options.
@@ -57,7 +61,11 @@ func Render(graph *dependency.Graph, opts Options) (string, error) {
 		return "", err
 	}
 
-	tops := selectTopNodes(graph, opts.Component, opts.Stack, opts.Tags, opts.Labels)
+	sel := &Selector{Stack: opts.Stack, Tags: opts.Tags, Labels: opts.Labels, LeftDelim: opts.LeftDelim}
+	if opts.Component != "" {
+		sel.Components = []string{opts.Component}
+	}
+	tops := selectTopNodes(graph, sel)
 
 	switch opts.Format {
 	case "", string(format.FormatTree):
@@ -87,16 +95,10 @@ func normalizeDirection(opts *Options) error {
 // honoring optional component, stack, tags, and labels filters. Tags/labels
 // filtering scopes which components appear as top-level tree entries (like
 // component/stack do); dependency subtrees still traverse the full graph.
-func selectTopNodes(graph *dependency.Graph, component, stack string, tagsFilter []string, labelsFilter map[string]string) []*dependency.Node {
+func selectTopNodes(graph *dependency.Graph, sel *Selector) []*dependency.Node {
 	var nodes []*dependency.Node
 	for _, node := range graph.Nodes {
-		if component != "" && node.Component != component {
-			continue
-		}
-		if stack != "" && node.Stack != stack {
-			continue
-		}
-		if !nodeMatchesTagsLabels(node, tagsFilter, labelsFilter) {
+		if !sel.matches(node) {
 			continue
 		}
 		nodes = append(nodes, node)
@@ -114,13 +116,13 @@ func selectTopNodes(graph *dependency.Graph, component, stack string, tagsFilter
 // match — the closure-scoping path calls this on a lightweight (unevaluated)
 // graph, and an unresolved selector must never wrongly exclude a component
 // there; the final render pass sees resolved values and filters exactly.
-func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFilter map[string]string) bool {
+func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFilter map[string]string, leftDelim string) bool {
 	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
 		return true
 	}
 
 	metadata, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
-	if tags.SelectorUnresolved(metadata[tagsMetadataKey]) || tags.SelectorUnresolved(metadata[labelsMetadataKey]) {
+	if tags.SelectorUnresolved(metadata[tagsMetadataKey], leftDelim) || tags.SelectorUnresolved(metadata[labelsMetadataKey], leftDelim) {
 		return true
 	}
 

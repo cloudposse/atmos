@@ -21,7 +21,7 @@ func TestRootNodeIDs(t *testing.T) {
 
 	t.Run("empty_filter_matches_everything", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "", "", nil, nil)
+		ids := Roots(graph, &Selector{})
 		assert.ElementsMatch(t, []string{
 			NodeID("app", "dev"), NodeID("vpc", "dev"), NodeID("app", "prod"),
 		}, ids)
@@ -29,19 +29,19 @@ func TestRootNodeIDs(t *testing.T) {
 
 	t.Run("stack_filter", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "", "dev", nil, nil)
+		ids := Roots(graph, &Selector{Stack: "dev"})
 		assert.ElementsMatch(t, []string{NodeID("app", "dev"), NodeID("vpc", "dev")}, ids)
 	})
 
 	t.Run("component_filter", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "app", "", nil, nil)
+		ids := Roots(graph, &Selector{Components: []string{"app"}})
 		assert.ElementsMatch(t, []string{NodeID("app", "dev"), NodeID("app", "prod")}, ids)
 	})
 
 	t.Run("combined_filter", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "app", "prod", nil, nil)
+		ids := Roots(graph, &Selector{Components: []string{"app"}, Stack: "prod"})
 		assert.Equal(t, []string{NodeID("app", "prod")}, ids)
 	})
 }
@@ -68,13 +68,13 @@ func TestRootNodeIDs_TagsLabels(t *testing.T) {
 		t.Parallel()
 		// templated is conservatively included: its tags cannot be judged
 		// on a lightweight (unevaluated) graph.
-		ids := RootNodeIDs(graph, "", "", []string{"network"}, nil)
+		ids := Roots(graph, &Selector{Tags: []string{"network"}})
 		assert.ElementsMatch(t, []string{NodeID("vpc", "dev"), NodeID("templated", "dev")}, ids)
 	})
 
 	t.Run("labels_filter", func(t *testing.T) {
 		t.Parallel()
-		ids := RootNodeIDs(graph, "", "", nil, map[string]string{"team": "platform"})
+		ids := Roots(graph, &Selector{Labels: map[string]string{"team": "platform"}})
 		assert.ElementsMatch(t, []string{NodeID("vpc", "dev"), NodeID("templated", "dev")}, ids)
 	})
 }
@@ -101,7 +101,7 @@ func TestReachableClosure_Forward(t *testing.T) {
 	require.NoError(t, err)
 
 	roots := []string{NodeID("routing", "dev")}
-	closure := ReachableClosure(graph, roots, DirectionForward)
+	closure := ReachableClosure(graph, roots, DirectionForward, Depths{})
 
 	assert.ElementsMatch(
 		t,
@@ -129,7 +129,7 @@ func TestReachableClosure_Reverse(t *testing.T) {
 	require.NoError(t, err)
 
 	roots := []string{NodeID("slot", "dev")}
-	closure := ReachableClosure(graph, roots, DirectionReverse)
+	closure := ReachableClosure(graph, roots, DirectionReverse, Depths{})
 
 	assert.ElementsMatch(
 		t,
@@ -162,10 +162,10 @@ func TestReachableClosure_Both(t *testing.T) {
 		NodeID("routing", "dev"), NodeID("consumer", "dev"),
 	}
 
-	both := ReachableClosure(graph, roots, DirectionBoth)
+	both := ReachableClosure(graph, roots, DirectionBoth, Depths{})
 	assert.ElementsMatch(t, want, closureNodeIDs(both), "DirectionBoth must union forward and reverse")
 
-	defaulted := ReachableClosure(graph, roots, Direction(""))
+	defaulted := ReachableClosure(graph, roots, Direction(""), Depths{})
 	assert.ElementsMatch(t, want, closureNodeIDs(defaulted), "empty Direction must behave like DirectionBoth")
 }
 
@@ -188,7 +188,7 @@ func TestReachableClosure_CrossStack(t *testing.T) {
 	require.NoError(t, err)
 
 	roots := []string{NodeID("eks", "app-slot1")}
-	closure := ReachableClosure(graph, roots, DirectionForward)
+	closure := ReachableClosure(graph, roots, DirectionForward, Depths{})
 
 	ids := closureNodeIDs(closure)
 	assert.ElementsMatch(t, []string{NodeID("eks", "app-slot1"), NodeID("kms", "app-account")}, ids)
@@ -212,7 +212,7 @@ func TestReachableClosure_ToleratesCycles(t *testing.T) {
 	require.NoError(t, err)
 
 	roots := []string{NodeID("a", "dev")}
-	closure := ReachableClosure(graph, roots, DirectionForward)
+	closure := ReachableClosure(graph, roots, DirectionForward, Depths{})
 
 	assert.ElementsMatch(t, []string{NodeID("a", "dev"), NodeID("b", "dev")}, closureNodeIDs(closure))
 }
@@ -226,7 +226,7 @@ func TestReachableClosure_EmptyRootsReturnsEmptyGraph(t *testing.T) {
 	graph, err := BuildGraph(stacks)
 	require.NoError(t, err)
 
-	closure := ReachableClosure(graph, nil, DirectionBoth)
+	closure := ReachableClosure(graph, nil, DirectionBoth, Depths{})
 	assert.Equal(t, 0, closure.Size())
 }
 

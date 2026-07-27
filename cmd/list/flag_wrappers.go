@@ -1,6 +1,8 @@
 package list
 
 import (
+	"github.com/spf13/viper"
+
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -523,6 +525,39 @@ func WithIncludeDependentsFlag(options *[]flags.Option) {
 		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components and stacks"),
 		flags.WithEnvVars("include-dependents", "ATMOS_AFFECTED_INCLUDE_DEPENDENTS"),
 	)
+}
+
+// WithClosureFlags adds the depth-carrying dependency-closure preview flags
+// (--include-dependencies/--include-dependents: bare = unlimited, =N bounds
+// the expansion), matching the terraform bulk commands so a list command can
+// preview the exact selection a bulk run would execute.
+// Used by: components, stacks, instances.
+func WithClosureFlags(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithClosureFlags")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag(flags.FlagIncludeDependencies, "", "", "Also include everything the selected components depend on (their prerequisites). Optionally bound the expansion: --include-dependencies=N"),
+		flags.WithEnvVars(flags.FlagIncludeDependencies, "ATMOS_INCLUDE_DEPENDENCIES"),
+		flags.WithNoOptDefValNoSpaceValue(flags.FlagIncludeDependencies, flags.ClosureDepthUnlimited),
+		flags.WithStringFlag(flags.FlagIncludeDependents, "", "", "Also include everything that depends on the selected components. Optionally bound the expansion: --include-dependents=N"),
+		flags.WithEnvVars(flags.FlagIncludeDependents, "ATMOS_INCLUDE_DEPENDENTS"),
+		flags.WithNoOptDefValNoSpaceValue(flags.FlagIncludeDependents, flags.ClosureDepthUnlimited),
+	)
+}
+
+// parseListClosureOptions parses the depth-carrying closure preview flags
+// registered by WithClosureFlags into their internal encoding (0 = off,
+// -1 = unlimited, N>0 = N levels).
+func parseListClosureOptions(v *viper.Viper, includeDependencies, includeDependents *int) error {
+	defer perf.Track(nil, "list.parseListClosureOptions")()
+
+	var err error
+	if *includeDependencies, err = flags.ParseClosureDepth(flags.FlagIncludeDependencies, v.GetString(flags.FlagIncludeDependencies)); err != nil {
+		return err
+	}
+	*includeDependents, err = flags.ParseClosureDepth(flags.FlagIncludeDependents, v.GetString(flags.FlagIncludeDependents))
+	return err
 }
 
 // WithExcludeLockedFlag adds exclude locked components flag.

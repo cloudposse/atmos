@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -44,6 +45,12 @@ type ComponentsOptions struct {
 	ErrorMode        string
 	Tags             []string
 	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels): the listed components are
+	// exactly the ones a terraform bulk run with the same selection flags
+	// would execute.
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // componentsCmd lists atmos components.
@@ -67,6 +74,9 @@ var componentsCmd = &cobra.Command{
 		}
 
 		opts := parseComponentsOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
+		}
 
 		return listComponentsWithOptions(cmd, args, opts)
 	},
@@ -158,6 +168,7 @@ func init() {
 		WithErrorModeFlag,
 		WithTagsFlag,
 		WithLabelsFlag,
+		WithClosureFlags,
 	)
 
 	// Register flags.
@@ -234,8 +245,22 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	}
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
+	// Without closure flags, --tags/--labels also scope the describe pass
+	// (early-skip): components excluded by the selectors never evaluate
+	// templates/YAML functions/auth. With closure flags, the describe must not
+	// narrow — closure members outside the selectors have to stay visible.
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return componentsExtractResult{}, err
+	}
+	closureRequested := opts.IncludeDependencies != 0 || opts.IncludeDependents != 0
+	describeTags, describeLabels := opts.Tags, labels
+	if closureRequested {
+		describeTags, describeLabels = nil, nil
+	}
+
 	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
-	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
+	stacksMap, err := e.ExecuteDescribeStacksScoped(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -244,6 +269,8 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		skip,
 		authManager,
 		authManager == nil,
+		describeTags,
+		describeLabels,
 		errOpts,
 	)
 	if err != nil {
@@ -253,12 +280,66 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// Extract unique components (deduplicated across all stacks).
 	// This is the original "list components" behavior - showing unique component definitions.
 	// Pass the stack pattern to filter which stacks to consider when deduplicating.
-	components, err := extract.UniqueComponents(stacksMap, opts.Stack)
+	// With the closure preview, the stack pattern instead scopes the closure
+	// SEED (below), so the extraction must span every stack.
+	extractStack := opts.Stack
+	if closureRequested {
+		extractStack = ""
+	}
+	components, err := extract.UniqueComponents(stacksMap, extractStack)
 	if err != nil {
 		return componentsExtractResult{}, err
 	}
 
+	if closureRequested {
+		components, err = filterComponentsByClosure(&atmosConfig, opts, labels, stacksMap, components)
+		if err != nil {
+			return componentsExtractResult{}, err
+		}
+	}
+
 	return componentsExtractResult{atmosConfig: &atmosConfig, components: components, collector: collector}, nil
+}
+
+// filterComponentsByClosure keeps only the components inside the dependency
+// closure: the seed (stack glob + tags/labels selectors) picks the roots, the
+// closure expands them in the requested direction/depth, and closure members
+// are kept even when they do not match the selectors that seeded them.
+func filterComponentsByClosure(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *ComponentsOptions,
+	labels map[string]string,
+	stacksMap map[string]any,
+	components []map[string]any,
+) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.components.filterComponentsByClosure")()
+
+	graph, err := dependencies.BuildGraph(stacksMap)
+	if err != nil {
+		return nil, err
+	}
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	roots := dependencies.Roots(graph, &dependencies.Selector{
+		Stack:     opts.Stack,
+		Tags:      opts.Tags,
+		Labels:    labels,
+		LeftDelim: leftDelim,
+	})
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	closure := dependencies.ReachableClosure(graph, roots, direction, depths)
+
+	allowed := make(map[string]struct{})
+	for _, name := range dependencies.ComponentNames(closure) {
+		allowed[name] = struct{}{}
+	}
+	filtered := make([]map[string]any, 0, len(components))
+	for _, row := range components {
+		name, _ := row["component"].(string)
+		if _, ok := allowed[name]; ok {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered, nil
 }
 
 // renderComponents builds the render pipeline and renders components.
@@ -322,18 +403,20 @@ func buildComponentFilters(opts *ComponentsOptions) ([]filter.Filter, error) {
 		filters = append(filters, filter.NewBoolFilter("locked", opts.Locked))
 	}
 
-	// Tags filter (any-match).
-	if len(opts.Tags) > 0 {
-		filters = append(filters, filter.NewTagFilter("tags", opts.Tags))
-	}
-
-	// Labels filter (all-match).
-	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
-	if err != nil {
-		return nil, err
-	}
-	if len(labels) > 0 {
-		filters = append(filters, filter.NewLabelFilter("labels", labels))
+	// Tags/labels row filters (any-match / all-match). Skipped with the
+	// closure preview: the closure membership already selected the rows, and
+	// closure members must not be re-pruned by the selectors that seeded them.
+	if opts.IncludeDependencies == 0 && opts.IncludeDependents == 0 {
+		if len(opts.Tags) > 0 {
+			filters = append(filters, filter.NewTagFilter("tags", opts.Tags))
+		}
+		labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+		if err != nil {
+			return nil, err
+		}
+		if len(labels) > 0 {
+			filters = append(filters, filter.NewLabelFilter("labels", labels))
+		}
 	}
 
 	return filters, nil

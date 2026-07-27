@@ -98,8 +98,12 @@ GLOBAL FLAGS
   -i, --identity string                      Specify the identity to authenticate to before running Terraform
                                              commands. Use without value to interactively select.
 
-      --include-dependents                   For each affected component, detect the dependent components and process
-                                             them in the dependency order
+      --include-dependencies string          Also process everything the selected components depend on (their
+                                             prerequisites), in dependency order. Optionally bound the expansion: --
+                                             include-dependencies=N
+
+      --include-dependents string            Also process everything that depends on the selected components, in
+                                             dependency order. Optionally bound the expansion: --include-dependents=N
 
       --init-pass-vars                       Pass the generated varfile to terraform init using --var-file flag (OpenTofu
                                              feature)

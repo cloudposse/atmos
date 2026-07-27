@@ -557,47 +557,45 @@ func TestExecuteTerraformAffectedSelectionIncludesDependentsWhenRequested(t *tes
 	require.Equal(t, []string{"database@dev", "app@dev"}, executed)
 }
 
-func TestFilterTerraformGraphBySelectionDoesNotTreatDuplicatesAsAllNodes(t *testing.T) {
+func TestFilterTerraformGraphSelectionDoesNotTreatDuplicatesAsAllNodes(t *testing.T) {
 	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
 	require.NoError(t, err)
 
-	filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+	filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 		NodeIDs: []string{"database-dev", "database-dev", "missing-dev"},
 	})
+	require.NoError(t, err)
 
 	require.Equal(t, 1, filtered.Size())
 	_, ok := filtered.GetNode("database-dev")
 	require.True(t, ok)
 }
 
-func TestFilterTerraformGraphBySelectionEdgeCases(t *testing.T) {
+func TestFilterTerraformGraphSelectionEdgeCases(t *testing.T) {
 	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
 	require.NoError(t, err)
 
 	t.Run("nil graph returns empty graph", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(nil, &TerraformSelection{NodeIDs: []string{"database-dev"}})
-		require.NotNil(t, filtered)
-		require.Equal(t, 0, filtered.Size())
-	})
-
-	t.Run("nil selection returns empty graph", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, nil)
+		filtered, err := FilterTerraformGraph(nil, nil, nil, &TerraformSelection{NodeIDs: []string{"database-dev"}})
+		require.NoError(t, err)
 		require.NotNil(t, filtered)
 		require.Equal(t, 0, filtered.Size())
 	})
 
 	t.Run("all valid nodes without closure returns original graph", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 			NodeIDs: []string{"app-dev", "database-dev", "vpc-dev"},
 		})
+		require.NoError(t, err)
 		require.Same(t, graph, filtered)
 	})
 
 	t.Run("dependencies closure includes prerequisites", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 			NodeIDs:             []string{"app-dev"},
 			IncludeDependencies: true,
 		})
+		require.NoError(t, err)
 		require.Equal(t, 3, filtered.Size())
 		for _, id := range []string{"app-dev", "database-dev", "vpc-dev"} {
 			_, ok := filtered.GetNode(id)
@@ -606,12 +604,27 @@ func TestFilterTerraformGraphBySelectionEdgeCases(t *testing.T) {
 	})
 
 	t.Run("dependents closure includes downstream nodes", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 			NodeIDs:           []string{"database-dev"},
 			IncludeDependents: true,
 		})
+		require.NoError(t, err)
 		require.Equal(t, 2, filtered.Size())
 		for _, id := range []string{"database-dev", "app-dev"} {
+			_, ok := filtered.GetNode(id)
+			require.True(t, ok, "expected node %s", id)
+		}
+	})
+
+	t.Run("dependency depth bounds selection closure", func(t *testing.T) {
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
+			NodeIDs:             []string{"app-dev"},
+			IncludeDependencies: true,
+			DependencyDepth:     1,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, filtered.Size())
+		for _, id := range []string{"app-dev", "database-dev"} {
 			_, ok := filtered.GetNode(id)
 			require.True(t, ok, "expected node %s", id)
 		}

@@ -116,6 +116,8 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledDispatchesToAuthDisabledM
 		true, // processYamlFunctions
 		nil,  // skip
 		true, // authDisabled — the bit under test.
+		nil,  // tagsFilter
+		nil,  // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -145,6 +147,8 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledFalseUsesRegularPath(t *t
 		false, // processYamlFunctions
 		nil,   // skip
 		false, // authDisabled=false — regular path expected.
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.executeDescribeStacksCalled,
@@ -169,6 +173,8 @@ func TestExecuteDescribeStacksForInstances_FallsBackWhenInterfaceNotImplemented(
 		false, // processYamlFunctions
 		nil,   // skip
 		true,  // authDisabled=true but processor doesn't implement the optional interface.
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.called,
@@ -199,7 +205,7 @@ func TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag(t *test
 	}
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	instances, err := processInstancesWithDeps(
+	instances, _, err := processInstancesWithDeps(
 		atmosConfig,
 		fake,
 		nil,   // authManager
@@ -208,6 +214,8 @@ func TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag(t *test
 		nil,   // skip
 		"",    // stackPattern
 		true,  // authDisabled
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	require.Len(t, instances, 1)
@@ -243,7 +251,7 @@ func TestProcessInstances_AuthDisabledConstructsDefaultProcessor(t *testing.T) {
 		},
 	}
 
-	instances, err := processInstances(
+	instances, _, err := processInstances(
 		atmosConfig,
 		nil,   // authManager
 		false, // processTemplates
@@ -251,6 +259,8 @@ func TestProcessInstances_AuthDisabledConstructsDefaultProcessor(t *testing.T) {
 		nil,   // skip
 		"",    // stackPattern
 		true,  // authDisabled
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	// With no stacks configured, ExecuteDescribeStacksWithAuthDisabled returns
 	// an empty map; the upstream collector then returns an empty slice. The

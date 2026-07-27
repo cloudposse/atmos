@@ -6,13 +6,16 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	listdeps "github.com/cloudposse/atmos/pkg/list/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -64,22 +67,7 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 	}
 
 	preflight.Update("Resolving Terraform component instances, secrets, and state references")
-	stacks, err = ExecuteDescribeStacksWithMocks(
-		&atmosConfig,
-		info.Stack,
-		nil, // all components
-		[]string{cfg.TerraformComponentType},
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-		authManager,
-		info.UseMocks,
-		info.Tags,
-		info.Labels,
-	)
+	stacks, err = describeTerraformStacksForExecution(&atmosConfig, info, authManager, nil)
 	if err != nil {
 		preflight.Error("Failed to resolve Terraform component instances")
 		return terraformPreflightDescribeError(err)
@@ -98,6 +86,99 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		Stacks:      stacks,
 		Executor:    executeTerraformQueryComponent,
 	})
+}
+
+// terraformClosureRequested reports whether the dependency-closure flags
+// (--include-dependencies/--include-dependents: 0 = off, -1 = unlimited,
+// N>0 = depth) request expansion for this run.
+func terraformClosureRequested(info *schema.ConfigAndStacksInfo) bool {
+	return info != nil && (info.IncludeDependencies != 0 || info.IncludeDependents != 0)
+}
+
+// describeTerraformStacksForExecution resolves the described-stacks map that
+// feeds graph-backed Terraform execution, for both the --all path (components
+// == nil) and the --components/--query path.
+//
+// Without closure flags, the describe pass narrows by -s/--components/--tags/
+// --labels exactly as before (the early-skip perf optimization). With closure
+// flags, the selection's prerequisites or dependents may live outside that
+// scope, so narrowing must not happen at describe time; instead, when the
+// selection is bounded and evaluation is on, the shared three-phase scoped
+// evaluation (pkg/list/dependencies.ResolveScopedClosure) fully evaluates only
+// the stacks the reachable closure touches. The scheduler adapter then
+// re-applies the selection filters as the seed and expands the closure on the
+// resulting graph, so the evaluation scope and execution set always agree.
+func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
+	describe := func(stackName string, processTemplates, processFunctions bool) (map[string]any, error) {
+		return ExecuteDescribeStacksWithMocks(
+			atmosConfig,
+			stackName,
+			nil, // components: never narrowed here — closure scoping owns selection.
+			[]string{cfg.TerraformComponentType},
+			nil,
+			false,
+			processTemplates,
+			processFunctions,
+			false,
+			info.Skip,
+			authManager,
+			info.UseMocks,
+			nil, // tagsFilter: see above.
+			nil, // labelsFilter: see above.
+		)
+	}
+
+	if !terraformClosureRequested(info) {
+		return describeTerraformStacksNarrowed(atmosConfig, info, authManager, components)
+	}
+
+	// Closure requested. Scoped evaluation only pays off when the selection is
+	// bounded (an unbounded closure covers every stack anyway), evaluation is
+	// actually on, and eager evaluation was not forced as the escape hatch.
+	bounded := info.Stack != "" || len(components) > 0 || len(info.Tags) > 0 || len(info.Labels) > 0
+	needsEvaluation := info.ProcessTemplates || info.ProcessFunctions
+	if !bounded || !needsEvaluation || GetEagerEvaluationSetting(atmosConfig) {
+		return describe("", info.ProcessTemplates, info.ProcessFunctions)
+	}
+
+	direction, depths := listdeps.ClosureScope(info.IncludeDependencies, info.IncludeDependents)
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := listdeps.ResolveScopedClosure(describe, &listdeps.ScopeRequest{
+		Components:       components,
+		Stack:            info.Stack,
+		Tags:             info.Tags,
+		Labels:           info.Labels,
+		Direction:        direction,
+		Depths:           depths,
+		ProcessTemplates: info.ProcessTemplates,
+		ProcessFunctions: info.ProcessFunctions,
+		LeftDelim:        leftDelim,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Stacks, nil
+}
+
+// describeTerraformStacksNarrowed is the historical (no-closure) describe:
+// narrowed by -s/--components and the tags/labels early-skip, bit for bit.
+func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
+	return ExecuteDescribeStacksWithMocks(
+		atmosConfig,
+		info.Stack,
+		components,
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+		authManager,
+		info.UseMocks,
+		info.Tags,
+		info.Labels,
+	)
 }
 
 // terraformPreflightDescribeError preserves structured errors from stack resolution
@@ -234,8 +315,9 @@ func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema
 	// IncludeDependencies is false to preserve the historical scope of `--all -s <stack>`:
 	// only components in the requested stack are processed. Cross-stack prerequisites are
 	// retained as graph edges within the requested stack (where both endpoints are present)
-	// but components outside the requested stack are not pulled in. A future flag may
-	// opt users in to cross-stack dependency execution.
+	// but components outside the requested stack are not pulled in. The
+	// --include-dependencies/--include-dependents flags opt users in to cross-stack
+	// closure execution on the production scheduler-adapter path.
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
 		IncludeDependencies: false,

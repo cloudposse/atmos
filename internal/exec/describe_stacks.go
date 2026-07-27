@@ -342,6 +342,36 @@ func ExecuteDescribeStacksWithOptions(
 	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, false, nil, nil, errOptions)
 }
 
+// ExecuteDescribeStacksScoped is ExecuteDescribeStacksWithOptions plus the
+// tags/labels early-skip scope: when non-empty, tagsFilter/labelsFilter let
+// out-of-scope components skip auth/template/YAML-function evaluation entirely
+// (see describeStacksProcessor.scopeDecision) instead of only being filtered
+// from the rows afterwards. Used by the list commands so a --tags/--labels
+// filter never forces evaluating unrelated components.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacksWithOptions with the scope parameters added.
+func ExecuteDescribeStacksScoped(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	tagsFilter []string,
+	labelsFilter map[string]string,
+	errOptions DescribeStacksErrorOptions,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksScoped")()
+
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, false, tagsFilter, labelsFilter, errOptions)
+}
+
 //nolint:revive // Internal wrapper preserves the existing ExecuteDescribeStacks call shape.
 func executeDescribeStacks(
 	atmosConfig *schema.AtmosConfiguration,

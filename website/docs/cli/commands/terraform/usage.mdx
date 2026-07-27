@@ -445,17 +445,40 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         ```
     </dd>
 
-    <dt>`--include-dependents` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dt>`--include-dependents` <em>(optional; requires a multi-component selection)</em></dt>
     <dd>
-        For each directly affected component, detect the dependent components and process them in dependency order, recursively.
-        Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
-        or configs, but they are configured as [dependencies](/stacks/dependencies/components) of the components that are modified.
+        For each selected component, detect the components that depend on it and process them in dependency order, recursively.
+        Dependents are components that are not selected themselves, but are configured as [dependencies](/stacks/dependencies/components) of the components that are.
+        Works with any multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`), and dependents run even when they do not match the selector flags.
+
+        Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=2` bounds the expansion to two levels.
+        Pass the depth with `=`; a space-separated value is not bound to the flag. Values `true` and `false` are accepted for backward compatibility (unlimited and off).
 
         ```shell
         atmos terraform plan --affected --include-dependents --logs-level=Debug
         atmos terraform apply --affected --include-dependents --dry-run
-        atmos terraform apply --affected --include-dependents --stack prod --dry-run
+        atmos terraform apply --labels=env=dev --include-dependents=2 --dry-run
         ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENTS`
+    </dd>
+
+    <dt>`--include-dependencies` <em>(optional; requires a multi-component selection)</em></dt>
+    <dd>
+        For each selected component, also process everything it depends on (its prerequisites), in dependency order, recursively.
+        Prerequisites run even when they do not match the selector flags, and they can live in other stacks — for example, `--include-dependencies` with `-s dev` legitimately processes prerequisite components outside the `dev` stack.
+
+        Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds the expansion to direct dependencies.
+        Pass the depth with `=`; a space-separated value is not bound to the flag. Values `true` and `false` are accepted for backward compatibility (unlimited and off).
+
+        With `terraform destroy`, this flag also destroys shared prerequisites of the selection, so Atmos prints a warning; prefer `--include-dependents` for safe dependents-first teardown.
+
+        ```shell
+        atmos terraform plan --labels=env=dev --include-dependencies
+        atmos terraform apply --components=eks/apps --stack=prod --include-dependencies=1 --dry-run
+        ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENCIES`
     </dd>
 
     <dt>`--ref` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>

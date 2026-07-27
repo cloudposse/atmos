@@ -134,7 +134,7 @@ func init() {
 func executeListDependenciesCmd(cmd *cobra.Command, args []string, opts *DependenciesOptions) error {
 	defer perf.Track(nil, "list.executeListDependenciesCmd")()
 
-	graph, err := buildDependencyGraphForCommand(cmd, args, opts)
+	graph, describeCtx, err := buildDependencyGraphForCommand(cmd, args, opts)
 	if err != nil {
 		return err
 	}
@@ -151,6 +151,7 @@ func executeListDependenciesCmd(cmd *cobra.Command, args []string, opts *Depende
 		Stack:     opts.Stack,
 		Tags:      opts.Tags,
 		Labels:    opts.Labels,
+		LeftDelim: describeCtx.leftDelim(),
 	})
 	if err != nil {
 		return err
@@ -168,6 +169,14 @@ type dependenciesDescribeContext struct {
 	authManager  auth.AuthManager
 	authDisabled bool
 	skip         []string
+}
+
+// leftDelim returns the configured left template delimiter ("{{" unless
+// 'templates.settings.delimiters' overrides it), used to detect unresolved
+// selector templates in lightweight (unevaluated) graphs.
+func (c *dependenciesDescribeContext) leftDelim() string {
+	left, _ := tags.TemplateDelims(c.atmosConfig.Templates.Settings.Delimiters)
+	return left
 }
 
 // newDependenciesDescribeContext initializes config and auth once for the command.
@@ -227,10 +236,10 @@ func (c *dependenciesDescribeContext) describeStacks(filterByStack string, proce
 // (the graph genuinely spans the whole repo), so behavior matches the
 // historical single full-repo describe call exactly. See
 // docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
-func buildDependencyGraphForCommand(cmd *cobra.Command, args []string, opts *DependenciesOptions) (*dependency.Graph, error) {
+func buildDependencyGraphForCommand(cmd *cobra.Command, args []string, opts *DependenciesOptions) (*dependency.Graph, *dependenciesDescribeContext, error) {
 	describeCtx, err := newDependenciesDescribeContext(cmd, args, opts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	bounded := opts.Stack != "" || opts.Component != "" || len(opts.Tags) > 0 || len(opts.Labels) > 0
@@ -239,107 +248,39 @@ func buildDependencyGraphForCommand(cmd *cobra.Command, args []string, opts *Dep
 	if !bounded || !needsEvaluation || eager {
 		stacksMap, err := describeCtx.describeStacks("", opts.ProcessTemplates, opts.ProcessFunctions)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return dependencies.BuildGraph(stacksMap)
+		graph, err := dependencies.BuildGraph(stacksMap)
+		return graph, describeCtx, err
 	}
 
-	return buildScopedDependencyGraph(describeCtx, opts)
+	graph, err := buildScopedDependencyGraph(describeCtx, opts)
+	return graph, describeCtx, err
 }
 
-// buildScopedDependencyGraph implements the two-phase scoped evaluation: a
-// lightweight structural pass across every stack (component identity plus
-// dependencies.components/settings.depends_on edges, which are static in
-// practice — see the fix doc's grep of examples/tests), then a closure-scoped
-// resolved pass limited to only the stacks the requested root's closure
-// touches. Reachability is recomputed against each resolved pass (never reused
-// from the lightweight pass) via resolveClosure, so a same-stack templated
-// dependency target (e.g. `stack: "{{ .vars.stage }}"` resolving to its own
-// stack — a real pattern in this repo's own dependencies-components-inheritance
-// fixture) still produces the correct closure.
-//
-// Known limitation: a dependency target `stack:` value templated to point at a
-// DIFFERENT stack the lightweight pass could not discover at all converges
-// once that stack is described (resolveClosure expands and redescribes until
-// stable), but only within the stacks reachable that way — it cannot discover
-// a target stack whose name depends on a value this pass never touches (e.g. a
-// remote store lookup). Set settings.describe.settings.eager_evaluation to
-// fall back to the historical full-repo-evaluation behavior if needed.
+// buildScopedDependencyGraph delegates to the shared three-phase scoped
+// evaluation in pkg/list/dependencies (dependencies.ResolveScopedClosure):
+// lightweight structural pass → reachable closure → resolved passes limited
+// to only the stacks the closure touches, re-converging until stable. See
+// that function's doc comment for the full behavior and known limitation
+// (and describe.settings.eager_evaluation as the fallback).
 func buildScopedDependencyGraph(describeCtx *dependenciesDescribeContext, opts *DependenciesOptions) (*dependency.Graph, error) {
-	lightweightStacks, err := describeCtx.describeStacks("", false, false)
+	var components []string
+	if opts.Component != "" {
+		components = []string{opts.Component}
+	}
+	result, err := dependencies.ResolveScopedClosure(describeCtx.describeStacks, &dependencies.ScopeRequest{
+		Components:       components,
+		Stack:            opts.Stack,
+		Tags:             opts.Tags,
+		Labels:           opts.Labels,
+		Direction:        dependencies.Direction(opts.Direction),
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
+		LeftDelim:        describeCtx.leftDelim(),
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	graph, err := dependencies.BuildGraph(lightweightStacks)
-	if err != nil {
-		return nil, err
-	}
-	if graph.Size() == 0 {
-		return graph, nil
-	}
-
-	direction := dependencies.Direction(opts.Direction)
-	roots := dependencies.RootNodeIDs(graph, opts.Component, opts.Stack, opts.Tags, opts.Labels)
-	closure := dependencies.ReachableClosure(graph, roots, direction)
-	if closure.Size() == 0 {
-		return closure, nil
-	}
-
-	return resolveClosure(describeCtx, opts, roots, direction, dependencies.StackNames(closure))
-}
-
-// resolveClosure re-describes (templates/YAML functions/auth ON) each stack in
-// stackNames, then recomputes the reachable closure against that resolved
-// graph. If the resolved edges reveal additional stacks the lightweight pass
-// could not see, it describes those too and recomputes again — repeating until
-// the touched-stack set stabilizes. This terminates in at most
-// len(repo stacks) rounds, since each round only adds genuinely new,
-// structurally-discovered stacks.
-func resolveClosure(
-	describeCtx *dependenciesDescribeContext,
-	opts *DependenciesOptions,
-	roots []string,
-	direction dependencies.Direction,
-	stackNames []string,
-) (*dependency.Graph, error) {
-	resolvedStacks := make(map[string]any)
-	described := make(map[string]bool)
-	var resolvedGraph *dependency.Graph
-
-	for {
-		pending := pendingStacks(stackNames, described)
-		if len(pending) == 0 {
-			return dependencies.ReachableClosure(resolvedGraph, roots, direction), nil
-		}
-
-		for _, stackName := range pending {
-			partial, err := describeCtx.describeStacks(stackName, opts.ProcessTemplates, opts.ProcessFunctions)
-			if err != nil {
-				return nil, err
-			}
-			for k, v := range partial {
-				resolvedStacks[k] = v
-			}
-			described[stackName] = true
-		}
-
-		var err error
-		resolvedGraph, err = dependencies.BuildGraph(resolvedStacks)
-		if err != nil {
-			return nil, err
-		}
-		stackNames = dependencies.StackNames(dependencies.ReachableClosure(resolvedGraph, roots, direction))
-	}
-}
-
-// pendingStacks returns the stack names not yet described.
-func pendingStacks(stackNames []string, described map[string]bool) []string {
-	pending := make([]string, 0, len(stackNames))
-	for _, stackName := range stackNames {
-		if !described[stackName] {
-			pending = append(pending, stackName)
-		}
-	}
-	return pending
+	return result.Closure, nil
 }

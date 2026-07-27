@@ -129,7 +129,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	// Process instances (same as list instances, but we'll extract metadata).
 	// authDisabled is false here because `list metadata` doesn't expose
 	// --identity=false yet; parity with `list instances` (#2412) is a follow-up.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack, false)
+	instances, _, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack, false, nil, nil)
 	if err != nil {
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}

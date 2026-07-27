@@ -125,16 +125,16 @@ func TestSelectTopNodes_Filters(t *testing.T) {
 	graph, err := BuildGraph(stacks)
 	require.NoError(t, err)
 
-	all := selectTopNodes(graph, "", "", nil, nil)
+	all := selectTopNodes(graph, &Selector{})
 	assert.Len(t, all, 3)
 
-	byStack := selectTopNodes(graph, "", "dev", nil, nil)
+	byStack := selectTopNodes(graph, &Selector{Stack: "dev"})
 	assert.Len(t, byStack, 2)
 
-	byComponent := selectTopNodes(graph, "vpc", "", nil, nil)
+	byComponent := selectTopNodes(graph, &Selector{Components: []string{"vpc"}})
 	assert.Len(t, byComponent, 2)
 
-	single := selectTopNodes(graph, "vpc", "prod", nil, nil)
+	single := selectTopNodes(graph, &Selector{Components: []string{"vpc"}, Stack: "prod"})
 	require.Len(t, single, 1)
 	assert.Equal(t, "vpc", single[0].Component)
 	assert.Equal(t, "prod", single[0].Stack)
@@ -162,37 +162,37 @@ func TestSelectTopNodes_TagsLabelsFilters(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("tags any-match", func(t *testing.T) {
-		tops := selectTopNodes(graph, "", "", []string{"network", "database"}, nil)
+		tops := selectTopNodes(graph, &Selector{Tags: []string{"network", "database"}})
 		require.Len(t, tops, 2)
 		assert.Equal(t, "rds", tops[0].Component)
 		assert.Equal(t, "vpc", tops[1].Component)
 	})
 
 	t.Run("labels all-match", func(t *testing.T) {
-		tops := selectTopNodes(graph, "", "", nil, map[string]string{"team": "platform"})
+		tops := selectTopNodes(graph, &Selector{Labels: map[string]string{"team": "platform"}})
 		require.Len(t, tops, 1)
 		assert.Equal(t, "vpc", tops[0].Component)
 
-		tops = selectTopNodes(graph, "", "", nil, map[string]string{"team": "platform", "env": "dev"})
+		tops = selectTopNodes(graph, &Selector{Labels: map[string]string{"team": "platform", "env": "dev"}})
 		assert.Empty(t, tops)
 	})
 
 	t.Run("tags and labels must match the same node", func(t *testing.T) {
-		tops := selectTopNodes(graph, "", "", []string{"database"}, map[string]string{"team": "platform"})
+		tops := selectTopNodes(graph, &Selector{Tags: []string{"database"}, Labels: map[string]string{"team": "platform"}})
 		assert.Empty(t, tops)
 	})
 
 	t.Run("combined with stack and component filters", func(t *testing.T) {
-		tops := selectTopNodes(graph, "vpc", "dev", []string{"network"}, nil)
+		tops := selectTopNodes(graph, &Selector{Components: []string{"vpc"}, Stack: "dev", Tags: []string{"network"}})
 		require.Len(t, tops, 1)
 		assert.Equal(t, "vpc", tops[0].Component)
 
-		tops = selectTopNodes(graph, "rds", "dev", []string{"network"}, nil)
+		tops = selectTopNodes(graph, &Selector{Components: []string{"rds"}, Stack: "dev", Tags: []string{"network"}})
 		assert.Empty(t, tops)
 	})
 
 	t.Run("node without metadata never matches active filters", func(t *testing.T) {
-		tops := selectTopNodes(graph, "bare", "", []string{"network"}, nil)
+		tops := selectTopNodes(graph, &Selector{Components: []string{"bare"}, Tags: []string{"network"}})
 		assert.Empty(t, tops)
 	})
 }
@@ -214,7 +214,7 @@ func TestSelectTopNodes_TemplatedSelectorConservativelyMatches(t *testing.T) {
 	graph, err := BuildGraph(stacks)
 	require.NoError(t, err)
 
-	tops := selectTopNodes(graph, "", "", []string{"anything"}, nil)
+	tops := selectTopNodes(graph, &Selector{Tags: []string{"anything"}})
 	require.Len(t, tops, 2)
 	assert.ElementsMatch(t, []string{"templated", "yamlfunc"},
 		[]string{tops[0].Component, tops[1].Component})

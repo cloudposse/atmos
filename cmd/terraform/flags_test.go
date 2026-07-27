@@ -76,8 +76,8 @@ func TestBackendExecutionFlags(t *testing.T) {
 func TestTerraformAffectedFlags(t *testing.T) {
 	registry := TerraformAffectedFlags()
 
-	// Should have 7 affected flags.
-	assert.Equal(t, 7, registry.Count())
+	// Should have 8 flags: 7 affected flags + the include-dependencies closure flag.
+	assert.Equal(t, 8, registry.Count())
 
 	// Should include all affected flags.
 	assert.True(t, registry.Has("repo-path"))
@@ -86,7 +86,19 @@ func TestTerraformAffectedFlags(t *testing.T) {
 	assert.True(t, registry.Has("ssh-key"))
 	assert.True(t, registry.Has("ssh-key-password"))
 	assert.True(t, registry.Has("include-dependents"))
+	assert.True(t, registry.Has("include-dependencies"))
 	assert.True(t, registry.Has("clone-target-ref"))
+
+	// The closure flags are depth-carrying strings: bare = unlimited via
+	// NoOptDefVal, =N bounds the expansion.
+	for _, name := range []string{"include-dependents", "include-dependencies"} {
+		closureFlag := registry.Get(name)
+		require.NotNil(t, closureFlag)
+		depthFlag, ok := closureFlag.(*flags.StringFlag)
+		require.True(t, ok, "%s must be a string flag", name)
+		assert.Equal(t, "", depthFlag.Default)
+		assert.Equal(t, flags.ClosureDepthUnlimited, depthFlag.NoOptDefVal)
+	}
 
 	// Check repo-path flag.
 	repoPathFlag := registry.Get("repo-path")
@@ -134,11 +146,12 @@ func TestWithTerraformAffectedFlags(t *testing.T) {
 
 	registry := parser.Registry()
 
-	// Should have all affected flags.
-	assert.Equal(t, 7, registry.Count())
+	// Should have all affected flags plus the include-dependencies closure flag.
+	assert.Equal(t, 8, registry.Count())
 	assert.True(t, registry.Has("repo-path"))
 	assert.True(t, registry.Has("ref"))
 	assert.True(t, registry.Has("include-dependents"))
+	assert.True(t, registry.Has("include-dependencies"))
 }
 
 func TestCombinedTerraformFlags(t *testing.T) {

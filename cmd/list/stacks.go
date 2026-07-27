@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -45,6 +46,11 @@ type StacksOptions struct {
 	ErrorMode        string
 	Tags             []string
 	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels): the listed stacks are exactly
+	// the ones a terraform bulk run with the same selection flags would touch.
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // stacksCmd lists atmos stacks.
@@ -71,6 +77,9 @@ var stacksCmd = &cobra.Command{
 		}
 
 		opts := parseStacksOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
+		}
 
 		return listStacksWithOptions(cmd, args, opts)
 	},
@@ -134,6 +143,7 @@ func init() {
 		WithComponentFlag,
 		WithTagsFlag,
 		WithLabelsFlag,
+		WithClosureFlags,
 		WithProvenanceFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
@@ -259,7 +269,21 @@ func executeAndExtractStacks(
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Without closure flags, --tags/--labels also scope the describe pass
+	// (early-skip): components excluded by the selectors never evaluate
+	// templates/YAML functions/auth. With closure flags, the describe must not
+	// narrow — closure members outside the selectors have to stay visible.
+	closureRequested := opts.IncludeDependencies != 0 || opts.IncludeDependents != 0
+	describeTags, describeLabels := opts.Tags, labels
+	if closureRequested {
+		describeTags, describeLabels = nil, nil
+	}
+	stacksMap, err := e.ExecuteDescribeStacksScoped(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -268,21 +292,21 @@ func executeAndExtractStacks(
 		skip,
 		authManager,
 		authManager == nil,
+		describeTags,
+		describeLabels,
 		errOpts,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	var stacks []map[string]any
-	if opts.Component != "" {
+	switch {
+	case closureRequested:
+		stacks, err = extractStacksInClosure(atmosConfig, opts, labels, stacksMap)
+	case opts.Component != "":
 		stacks, err = extract.StacksForComponent(opts.Component, stacksMap, opts.Tags, labels)
-	} else {
+	default:
 		stacks, err = extract.Stacks(stacksMap, opts.Tags, labels)
 	}
 	if err != nil {
@@ -290,6 +314,40 @@ func executeAndExtractStacks(
 	}
 
 	return stacks, stacksMap, nil
+}
+
+// extractStacksInClosure lists the stacks the dependency closure touches: the
+// seed (optional component + tags/labels selectors) picks the roots, the
+// closure expands them in the requested direction/depth, and only stacks with
+// at least one closure member are listed — exactly the stacks a terraform
+// bulk run with the same selection flags would touch. Closure members are
+// kept even when they do not match the selectors that seeded them.
+func extractStacksInClosure(atmosConfig *schema.AtmosConfiguration, opts *StacksOptions, labels map[string]string, stacksMap map[string]any) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.stacks.extractStacksInClosure")()
+
+	graph, err := dependencies.BuildGraph(stacksMap)
+	if err != nil {
+		return nil, err
+	}
+	var components []string
+	if opts.Component != "" {
+		components = []string{opts.Component}
+	}
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	roots := dependencies.Roots(graph, &dependencies.Selector{
+		Components: components,
+		Tags:       opts.Tags,
+		Labels:     labels,
+		LeftDelim:  leftDelim,
+	})
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	closure := dependencies.ReachableClosure(graph, roots, direction, depths)
+
+	stacks := make([]map[string]any, 0, closure.Size())
+	for _, stackName := range dependencies.StackNames(closure) {
+		stacks = append(stacks, map[string]any{"stack": stackName})
+	}
+	return stacks, nil
 }
 
 // renderStacksTable renders stacks in table format with filters, columns, and sorters.

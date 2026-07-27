@@ -69,22 +69,7 @@ func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAn
 		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
-	stacks, err := ExecuteDescribeStacksWithMocks(
-		&atmosConfig,
-		info.Stack,
-		info.Components,
-		[]string{cfg.TerraformComponentType},
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-		authManager,
-		info.UseMocks,
-		info.Tags,
-		info.Labels,
-	)
+	stacks, err := describeTerraformStacksForExecution(&atmosConfig, info, authManager, info.Components)
 	if err != nil {
 		return err
 	}

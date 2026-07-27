@@ -143,8 +143,11 @@ unchanged: a single full-repo describe, exactly as before.
   in-scope cross-stack edges but does not pull in prerequisite components from other stacks. This fix's
   lightweight-graph-plus-closure machinery (`dependencies.ReachableClosure`) is directly reusable for
   that follow-up (compute the closure, feed its node IDs as a `TerraformSelection`, flip
-  `IncludeDependencies` for the selected roots) but implementing it was out of scope here. Tracked
-  separately.
+  `IncludeDependencies` for the selected roots) but implementing it was out of scope here.
+  **Implemented in this same PR (#2807):** the `--include-dependencies[=N]`/`--include-dependents[=N]`
+  flags opt every multi-component terraform selection (and the `list components/stacks/instances`
+  preview) into exactly this closure expansion, via `dependencies.ResolveScopedClosure` and a
+  seed-then-expand restructure of `FilterTerraformGraph`.
 - **Templated cross-stack dependency targets remain a residual gap.** `resolveClosure`'s convergence
   loop only discovers a new stack once a *previously-included* stack's resolved pass reveals an edge to
   it. A dependency target templated to point at a stack with **no** structural path from the root at

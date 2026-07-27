@@ -38,6 +38,10 @@ type InstancesOptions struct {
 	AuthDisabled     bool
 	Tags             []string
 	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels).
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // instancesCmd lists atmos instances.
@@ -62,6 +66,9 @@ var instancesCmd = &cobra.Command{
 		}
 
 		opts := parseInstancesOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
+		}
 
 		return executeListInstancesCmd(cmd, args, opts)
 	},
@@ -144,6 +151,7 @@ func init() {
 		WithSortFlag,
 		WithTagsFlag,
 		WithLabelsFlag,
+		WithClosureFlags,
 		WithUploadFlag,
 		WithProvenanceFlag,
 		WithOutputFileFlag,
@@ -193,25 +201,27 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	}
 
 	return list.ExecuteListInstancesCmd(&list.InstancesCommandOptions{
-		Info:             &configAndStacksInfo,
-		Cmd:              cmd,
-		Args:             args,
-		Format:           opts.Format,
-		Upload:           opts.Upload,
-		Stack:            opts.Stack,
-		ShowImports:      opts.Provenance,
-		ColumnsFlag:      opts.Columns,
-		FilterSpec:       opts.Filter,
-		SortSpec:         opts.Sort,
-		Delimiter:        opts.Delimiter,
-		Query:            opts.Query,
-		AuthManager:      authManager,
-		AuthDisabled:     opts.AuthDisabled,
-		OutputFile:       opts.OutputFile,
-		ProcessTemplates: opts.ProcessTemplates,
-		ProcessFunctions: opts.ProcessFunctions,
-		Skip:             skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
-		Tags:             opts.Tags,
-		LabelsRaw:        opts.LabelsRaw,
+		Info:                &configAndStacksInfo,
+		Cmd:                 cmd,
+		Args:                args,
+		Format:              opts.Format,
+		Upload:              opts.Upload,
+		Stack:               opts.Stack,
+		ShowImports:         opts.Provenance,
+		ColumnsFlag:         opts.Columns,
+		FilterSpec:          opts.Filter,
+		SortSpec:            opts.Sort,
+		Delimiter:           opts.Delimiter,
+		Query:               opts.Query,
+		AuthManager:         authManager,
+		AuthDisabled:        opts.AuthDisabled,
+		OutputFile:          opts.OutputFile,
+		ProcessTemplates:    opts.ProcessTemplates,
+		ProcessFunctions:    opts.ProcessFunctions,
+		Skip:                skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
+		Tags:                opts.Tags,
+		LabelsRaw:           opts.LabelsRaw,
+		IncludeDependencies: opts.IncludeDependencies,
+		IncludeDependents:   opts.IncludeDependents,
 	})
 }

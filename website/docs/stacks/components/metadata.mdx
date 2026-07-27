@@ -273,6 +273,23 @@ components:
 
 `--labels` matches **all** of the given `key=value` pairs (AND semantics). For example, `atmos terraform apply --labels cost-center=platform,compliance=sox` only applies components whose `metadata.labels` contain both `cost-center: platform` **and** `compliance: sox`.
 
+### Selector Purity
+
+Labels and tags are selectors: Atmos evaluates them **before** authentication, template processing, and YAML function execution to decide which components a command operates on. By design, their values must be resolvable without authenticating or executing external processes — this keeps selection fast, deterministic, and credential-free.
+
+Allowed in `metadata.tags` and `metadata.labels`:
+
+- Plain strings
+- Simple Go templates over the stack context (for example, `{{ .vars.stage }}`)
+- Local YAML functions: `!env`, `!git.*`, `!include`
+
+Rejected with a hard error on any command that processes the manifest:
+
+- YAML functions that require authentication or process execution: `!terraform.state`, `!terraform.output`, `!store`, `!store.get`, `!secret`, `!aws.*`, `!emulator`, `!exec`, `!random`
+- Template calls to `atmos.Component`, `atmos.Store`, `atmos.GomplateDatasource`, and gomplate datasources (`ds`/`datasource`)
+
+If a value needs one of these, move it into `vars` or `settings` and reference it from there — the value stays available to the component while the selectors remain pure.
+
 ## Examples
 
 ### Multiple Instances from One Module

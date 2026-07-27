@@ -188,6 +188,12 @@ This means you can write simple `select()` expressions without worrying about th
   <dt>`--labels`</dt>
   <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
 
+  <dt>`--include-dependencies`</dt>
+  <dd>Expand the listing to everything the selected components depend on (their prerequisites) — previewing the exact set a terraform bulk command with the same selection flags would execute. The closure covers Terraform components (the dependency graph the scheduler executes) and is evaluated with this command's own `--process-templates`/`--process-functions` settings. Accepts an optional depth (for example, `--include-dependencies=1` for direct dependencies only).<br/>`atmos list components --labels=env=dev --include-dependencies`<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>Expand the listing to everything that depends on the selected components — previewing the exact set a terraform bulk command with the same selection flags would execute. Accepts an optional depth (for example, `--include-dependents=2` for two levels).<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
+
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
   <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
 

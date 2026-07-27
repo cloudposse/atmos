@@ -128,6 +128,142 @@ func TestGraph_Filter(t *testing.T) {
 	}
 }
 
+// TestGraph_FilterDepth covers the depth-bounded closure walk: DependencyDepth/
+// DependentDepth limit expansion to N levels from the nearest filtered node
+// (0 = unlimited), diamonds are counted from the shortest path, and cycles
+// terminate.
+func TestGraph_FilterDepth(t *testing.T) {
+	// Chain: a -> b -> c -> d (a depends on b, etc.).
+	chain := NewGraph()
+	for _, id := range []string{"a", "b", "c", "d"} {
+		_ = chain.AddNode(&Node{ID: id, Component: id, Stack: "dev", Type: config.TerraformComponentType})
+	}
+	_ = chain.AddDependency("a", "b")
+	_ = chain.AddDependency("b", "c")
+	_ = chain.AddDependency("c", "d")
+
+	// Diamond: top -> left -> bottom, top -> bottom (bottom at depths 2 and 1).
+	diamond := NewGraph()
+	for _, id := range []string{"top", "left", "bottom", "under"} {
+		_ = diamond.AddNode(&Node{ID: id, Component: id, Stack: "dev", Type: config.TerraformComponentType})
+	}
+	_ = diamond.AddDependency("top", "left")
+	_ = diamond.AddDependency("left", "bottom")
+	_ = diamond.AddDependency("top", "bottom")
+	_ = diamond.AddDependency("bottom", "under")
+
+	// Cycle: x -> y -> x plus y -> z.
+	cycle := NewGraph()
+	for _, id := range []string{"x", "y", "z"} {
+		_ = cycle.AddNode(&Node{ID: id, Component: id, Stack: "dev", Type: config.TerraformComponentType})
+	}
+	// Graph.AddDependency is cycle-tolerant (only the Builder validates acyclicity).
+	_ = cycle.AddDependency("x", "y")
+	_ = cycle.AddDependency("y", "x")
+	_ = cycle.AddDependency("y", "z")
+
+	tests := []struct {
+		name          string
+		graph         *Graph
+		filter        Filter
+		expectNodeIDs []string
+	}{
+		{
+			name:  "dependency depth 1 stops one level deep",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"a"},
+				IncludeDependencies: true,
+				DependencyDepth:     1,
+			},
+			expectNodeIDs: []string{"a", "b"},
+		},
+		{
+			name:  "dependency depth 2",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"a"},
+				IncludeDependencies: true,
+				DependencyDepth:     2,
+			},
+			expectNodeIDs: []string{"a", "b", "c"},
+		},
+		{
+			name:  "dependency depth 0 is unlimited",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"a"},
+				IncludeDependencies: true,
+			},
+			expectNodeIDs: []string{"a", "b", "c", "d"},
+		},
+		{
+			name:  "dependent depth 1 in reverse direction",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:           []string{"d"},
+				IncludeDependents: true,
+				DependentDepth:    1,
+			},
+			expectNodeIDs: []string{"d", "c"},
+		},
+		{
+			name:  "independent depths per direction",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"c"},
+				IncludeDependencies: true,
+				IncludeDependents:   true,
+				DependencyDepth:     1,
+				DependentDepth:      1,
+			},
+			expectNodeIDs: []string{"c", "d", "b"},
+		},
+		{
+			name:  "diamond measures from shortest path",
+			graph: diamond,
+			filter: Filter{
+				NodeIDs:             []string{"top"},
+				IncludeDependencies: true,
+				DependencyDepth:     2,
+			},
+			// bottom is depth 1 via the direct edge, so under (depth 2) is included.
+			expectNodeIDs: []string{"top", "left", "bottom", "under"},
+		},
+		{
+			name:  "cycle terminates with unlimited depth",
+			graph: cycle,
+			filter: Filter{
+				NodeIDs:             []string{"x"},
+				IncludeDependencies: true,
+			},
+			expectNodeIDs: []string{"x", "y", "z"},
+		},
+		{
+			name:  "cycle respects depth limit",
+			graph: cycle,
+			filter: Filter{
+				NodeIDs:             []string{"x"},
+				IncludeDependencies: true,
+				DependencyDepth:     1,
+			},
+			expectNodeIDs: []string{"x", "y"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filtered := tt.graph.Filter(tt.filter)
+
+			assert.Equal(t, len(tt.expectNodeIDs), filtered.Size())
+			for _, expectedID := range tt.expectNodeIDs {
+				_, exists := filtered.GetNode(expectedID)
+				assert.True(t, exists, "Expected node %s in filtered graph", expectedID)
+			}
+		})
+	}
+}
+
 func TestGraph_FilterByType(t *testing.T) {
 	graph := NewGraph()
 

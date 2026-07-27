@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -144,7 +145,7 @@ func TestInScopeByTagsAndLabels(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			inScope, decidable := inScopeByTagsAndLabels(tc.metadata, tc.filterTags, tc.filterLabels)
+			inScope, decidable := inScopeByTagsAndLabels(tc.metadata, tc.filterTags, tc.filterLabels, "")
 			assert.Equal(t, tc.wantInScope, inScope, "inScope")
 			assert.Equal(t, tc.wantDecidable, decidable, "decidable")
 		})
@@ -344,4 +345,106 @@ func TestProcessComponentEntry_TagsLabelsEagerEvaluationOverride(t *testing.T) {
 
 	require.NoError(t, err)
 	require.EqualValues(t, 1, spy.calls.Load(), "eager_evaluation=true must force full evaluation even for a mismatched component")
+}
+
+// TestProcessComponentEntry_ForbiddenSelectorErrorsByDesign verifies the
+// selector purity contract: metadata.tags/metadata.labels containing a
+// construct that requires authentication or process execution error
+// immediately — always, even when no --tags/--labels filter is active — and
+// never reach per-component auth resolution. This is by design, not a
+// limitation: selectors drive scoping decisions before evaluation.
+func TestProcessComponentEntry_ForbiddenSelectorErrorsByDesign(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		componentTag []any
+		componentLbl map[string]any
+		tagsFilter   []string
+	}{
+		{
+			name:         "forbidden_tag_no_filter_active",
+			componentTag: []any{"!terraform.state vpc dev id"},
+		},
+		{
+			name:         "forbidden_label_no_filter_active",
+			componentLbl: map[string]any{"env": "!store ssm env"},
+		},
+		{
+			name:         "forbidden_tag_with_filter_active",
+			componentTag: []any{"!exec ./tier.sh"},
+			tagsFilter:   []string{"prod"},
+		},
+		{
+			name:         "forbidden_template_call",
+			componentTag: []any{`{{ (atmos.Component "vpc" .stack).outputs.tier }}`},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			spy := &componentAuthResolverSpy{returnErr: nil}
+			componentSection := componentSectionWithTags(tc.componentTag, tc.componentLbl)
+			allTypeComponents := map[string]any{"test-component": componentSection}
+			p := &describeStacksProcessor{
+				atmosConfig:           &schema.AtmosConfiguration{},
+				tagsFilter:            tc.tagsFilter,
+				processTemplates:      true,
+				processYamlFunctions:  false,
+				componentAuthResolver: spy.resolver(),
+				finalStacksMap:        make(map[string]any),
+			}
+
+			err := p.processComponentEntry(
+				"test-stack",
+				"",
+				"helmfile",
+				"test-component",
+				componentSection,
+				allTypeComponents,
+				processComponentTypeOpts{},
+			)
+
+			require.Error(t, err)
+			require.ErrorIs(t, err, errUtils.ErrForbiddenSelectorFunction)
+			require.EqualValues(t, 0, spy.calls.Load(), "forbidden selectors must error before per-component auth")
+		})
+	}
+}
+
+// TestProcessComponentEntry_AllowedSelectorFunctionsPass is the positive
+// counterpart: cheap local YAML functions and simple templates in
+// metadata.tags/metadata.labels are allowed by the purity contract and
+// processing proceeds normally.
+func TestProcessComponentEntry_AllowedSelectorFunctionsPass(t *testing.T) {
+	t.Parallel()
+
+	spy := &componentAuthResolverSpy{returnErr: nil}
+	componentSection := componentSectionWithTags(
+		[]any{"!env DEPLOY_TIER", "!git.branch", "{{ .vars.stage }}"},
+		map[string]any{"team": "platform"},
+	)
+	allTypeComponents := map[string]any{"test-component": componentSection}
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+
+	err := p.processComponentEntry(
+		"test-stack",
+		"",
+		"helmfile",
+		"test-component",
+		componentSection,
+		allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	require.EqualValues(t, 1, spy.calls.Load(), "allowed selector values must not block processing")
 }

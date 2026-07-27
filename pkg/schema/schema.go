@@ -1640,14 +1640,22 @@ type ConfigAndStacksInfo struct {
 	ProcessFunctions          bool
 	// UseMocks resolves Terraform state/output YAML functions from the referenced
 	// component's literal `mocks` map instead of remote Terraform state.
-	UseMocks                   bool
-	Skip                       []string
-	CliArgs                    []string
-	Affected                   bool
-	All                        bool
-	Components                 []string
-	Tags                       []string
-	Labels                     map[string]string
+	UseMocks   bool
+	Skip       []string
+	CliArgs    []string
+	Affected   bool
+	All        bool
+	Components []string
+	Tags       []string
+	Labels     map[string]string
+	// IncludeDependencies expands a multi-component selection with everything
+	// the selected components depend on: 0 = off, -1 = unlimited depth,
+	// N>0 = N dependency levels.
+	IncludeDependencies int
+	// IncludeDependents expands a multi-component selection with everything
+	// that depends on the selected components: 0 = off, -1 = unlimited depth,
+	// N>0 = N dependent levels.
+	IncludeDependents          int
 	MaxConcurrency             int
 	TerraformFailureMode       string
 	FailFast                   bool

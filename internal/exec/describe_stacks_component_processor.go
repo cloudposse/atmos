@@ -404,6 +404,15 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		}
 	}
 
+	// Enforce the selector purity contract on metadata.tags/metadata.labels —
+	// always, whether or not a filter is active. Selectors drive scoping
+	// decisions before evaluation, so by design they may not contain constructs
+	// requiring authentication or process execution; this errors early with a
+	// by-design explanation instead of deferring to a later evaluation failure.
+	if err := p.validateSelectorMetadata(secs.metadata); err != nil {
+		return err
+	}
+
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
 
 	// Ensure the component key is present in the info's ComponentSection.
@@ -712,6 +721,13 @@ func resolveStackName(
 	}
 }
 
+// Metadata subsection keys read by the tags/labels scope gate and the
+// selector purity validation.
+const (
+	metadataTagsKey   = "tags"
+	metadataLabelsKey = "labels"
+)
+
 // shouldFilterByStack returns true when the component should be skipped because it
 // does not belong to the requested stack filter.  An empty filterByStack means no filtering.
 func shouldFilterByStack(filterByStack, stackFileName, stackName string) bool {
@@ -732,7 +748,29 @@ func (p *describeStacksProcessor) scopeDecision(metadata map[string]any) (inScop
 	if GetEagerEvaluationSetting(p.atmosConfig) {
 		return true, false
 	}
-	return inScopeByTagsAndLabels(metadata, p.tagsFilter, p.labelsFilter)
+	leftDelim, _ := p.templateDelims()
+	return inScopeByTagsAndLabels(metadata, p.tagsFilter, p.labelsFilter, leftDelim)
+}
+
+// templateDelims returns the effective template delimiters for this processor's
+// configuration ("{{"/"}}" unless 'templates.settings.delimiters' overrides them).
+func (p *describeStacksProcessor) templateDelims() (string, string) {
+	return tags.TemplateDelims(p.atmosConfig.Templates.Settings.Delimiters)
+}
+
+// validateSelectorMetadata enforces the selector purity contract on this
+// component's metadata.tags and metadata.labels (see tags.ValidateSelectorValue).
+func (p *describeStacksProcessor) validateSelectorMetadata(metadata map[string]any) error {
+	rawTags, hasTags := metadata[metadataTagsKey]
+	rawLabels, hasLabels := metadata[metadataLabelsKey]
+	if !hasTags && !hasLabels {
+		return nil
+	}
+	leftDelim, rightDelim := p.templateDelims()
+	if err := tags.ValidateSelectorValue("metadata.tags", rawTags, leftDelim, rightDelim); err != nil {
+		return err
+	}
+	return tags.ValidateSelectorValue("metadata.labels", rawLabels, leftDelim, rightDelim)
 }
 
 // inScopeByTagsAndLabels mirrors matchesTerraformTagsAndLabels in
@@ -742,15 +780,15 @@ func (p *describeStacksProcessor) scopeDecision(metadata map[string]any) (inScop
 // template or Atmos YAML-function marker (see tags.SelectorUnresolved), since
 // their real value cannot be determined without the full template/YAML-function
 // evaluation this gate exists to avoid for out-of-scope components.
-func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filterLabels map[string]string) (inScope bool, decidable bool) {
+func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filterLabels map[string]string, leftDelim string) (inScope bool, decidable bool) {
 	if len(filterTags) == 0 && len(filterLabels) == 0 {
 		return true, true
 	}
 
-	rawTags := metadata["tags"]
-	rawLabels := metadata["labels"]
+	rawTags := metadata[metadataTagsKey]
+	rawLabels := metadata[metadataLabelsKey]
 
-	if tags.SelectorUnresolved(rawTags) || tags.SelectorUnresolved(rawLabels) {
+	if tags.SelectorUnresolved(rawTags, leftDelim) || tags.SelectorUnresolved(rawLabels, leftDelim) {
 		return true, false
 	}
 

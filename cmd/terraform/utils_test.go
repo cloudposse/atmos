@@ -1096,3 +1096,57 @@ func TestPromptForStackDelegate(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
 	}
 }
+
+// TestCheckTerraformFlagsClosureFlags verifies the dependency-closure flags
+// require a multi-component selection: alone with a single component (or with
+// nothing at all) they error; with any multi-component selection (including
+// --affected) they pass.
+func TestCheckTerraformFlagsClosureFlags(t *testing.T) {
+	tests := []struct {
+		name          string
+		info          *schema.ConfigAndStacksInfo
+		expectedError error
+	}{
+		{
+			name:          "include-dependencies without any selection",
+			info:          &schema.ConfigAndStacksInfo{IncludeDependencies: -1},
+			expectedError: errUtils.ErrClosureFlagsRequireMultiComponent,
+		},
+		{
+			name:          "include-dependents without any selection",
+			info:          &schema.ConfigAndStacksInfo{IncludeDependents: 2},
+			expectedError: errUtils.ErrClosureFlagsRequireMultiComponent,
+		},
+		{
+			name: "include-dependencies with all",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true},
+		},
+		{
+			name: "include-dependencies with tags",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: 1, Tags: []string{"app"}},
+		},
+		{
+			name: "include-dependents with labels",
+			info: &schema.ConfigAndStacksInfo{IncludeDependents: -1, Labels: map[string]string{"env": "dev"}},
+		},
+		{
+			name: "include-dependents with affected",
+			info: &schema.ConfigAndStacksInfo{IncludeDependents: -1, Affected: true},
+		},
+		{
+			name: "include-dependencies with bare stack selection",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: -1, Stack: "dev"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkTerraformFlags(tt.info)
+			if tt.expectedError != nil {
+				assert.ErrorIs(t, err, tt.expectedError)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}

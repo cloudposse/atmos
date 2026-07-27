@@ -419,6 +419,23 @@ atmos terraform plan --labels cost-center=platform
 atmos terraform plan --affected --tags production
 ```
 
+### Include Dependencies and Dependents
+
+Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are planned even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately plans prerequisite components outside the `dev` stack:
+
+```shell
+# Plan dev-labeled components plus everything they depend on
+atmos terraform plan --labels=env=dev --include-dependencies
+
+# Bound the expansion to direct dependencies only
+atmos terraform plan --labels=env=dev --include-dependencies=1
+
+# Plan a stack plus everything that depends on it, up to two levels out
+atmos terraform plan -s dev --include-dependents=2
+```
+
+Pass the depth with `=` (for example, `--include-dependencies=2`); a space-separated value is not bound to the flag. The bare flag expands without a depth limit, and `true`/`false` values are accepted for backward compatibility.
+
 ### Multi-Component Flags
 
 <dl>
@@ -440,8 +457,11 @@ atmos terraform plan --affected --tags production
     <dt>`--labels`</dt>
     <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
 
+    <dt>`--include-dependencies`</dt>
+    <dd>Also plan everything the selected components depend on (their prerequisites), in dependency order — even when the prerequisites live in other stacks or do not match the selectors. Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds it to direct dependencies. Requires a multi-component selection.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
     <dt>`--include-dependents`</dt>
-    <dd>With `--affected`, also plan components that depend on affected components, recursively.</dd>
+    <dd>Also plan everything that depends on the selected components, in dependency order. Works with any multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`). Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=2` bounds it to two levels.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
 
     <dt>`--ref`</dt>
     <dd>Git reference to compare against (branch or tag). Default: `refs/remotes/origin/HEAD`.</dd>
