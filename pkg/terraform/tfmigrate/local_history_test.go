@@ -149,8 +149,11 @@ func TestAppendPlanVarFile_EmptyVarfileIsNoop(t *testing.T) {
 }
 
 func TestAppendPlanVarFile_ExtendsExistingEntry(t *testing.T) {
-	env := AppendPlanVarFile([]string{"TF_CLI_ARGS_plan=-lock=false"}, "vars.tfvars.json")
+	input := []string{"TF_CLI_ARGS_plan=-lock=false"}
+	env := AppendPlanVarFile(input, "vars.tfvars.json")
 	assert.Equal(t, []string{"TF_CLI_ARGS_plan=-lock=false -var-file=vars.tfvars.json"}, env)
+	// The input slice must not be mutated: callers may reuse it across components.
+	assert.Equal(t, []string{"TF_CLI_ARGS_plan=-lock=false"}, input)
 }
 
 func TestAppendPlanVarFile_ExtendsProcessEnvironment(t *testing.T) {

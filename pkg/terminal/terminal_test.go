@@ -1183,6 +1183,36 @@ func TestBuildConfig_CI(t *testing.T) {
 	assert.True(t, cfg.EnvCI, "Config should detect CI=true env var")
 }
 
+func TestBuildConfig_ForceColorEnvVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVar   string
+		value    string
+		expected bool
+	}{
+		{name: "FORCE_COLOR=1 forces color", envVar: "FORCE_COLOR", value: "1", expected: true},
+		{name: "FORCE_COLOR=true forces color", envVar: "FORCE_COLOR", value: "true", expected: true},
+		{name: "FORCE_COLOR=0 does not force color", envVar: "FORCE_COLOR", value: "0", expected: false},
+		{name: "FORCE_COLOR=false does not force color", envVar: "FORCE_COLOR", value: "false", expected: false},
+		{name: "FORCE_COLOR=FALSE does not force color", envVar: "FORCE_COLOR", value: "FALSE", expected: false},
+		{name: "FORCE_COLOR empty does not force color", envVar: "FORCE_COLOR", value: "", expected: false},
+		{name: "ATMOS_FORCE_COLOR=true forces color", envVar: "ATMOS_FORCE_COLOR", value: "true", expected: true},
+		{name: "ATMOS_FORCE_COLOR=0 does not force color", envVar: "ATMOS_FORCE_COLOR", value: "0", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := setupTest(t)
+			defer cleanup()
+
+			t.Setenv(tt.envVar, tt.value)
+
+			cfg := buildConfig()
+			assert.Equal(t, tt.expected, cfg.ForceColor)
+		})
+	}
+}
+
 func TestWidth_EdgeCases(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()

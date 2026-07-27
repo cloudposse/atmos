@@ -1,17 +1,17 @@
 package tfmigrate
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
 )
 
-var errMissingHookContext = errors.New("missing tfmigrate hook context")
+var errMissingHookContext = fmt.Errorf("%w: tfmigrate hook context", errUtils.ErrNilInput)
 
 func init() {
 	if err := hooks.RegisterKind(&hooks.Kind{
@@ -34,15 +34,16 @@ type Engine struct{}
 func (e *Engine) Run(ctx *hooks.ExecContext) (*hooks.Output, error) {
 	defer perf.Track(nil, "hooks.tfmigrate.Engine.Run")()
 
+	if ctx == nil || ctx.Hook == nil || ctx.Info == nil {
+		return nil, errMissingHookContext
+	}
+
 	action, err := tfmigrate.ActionForMode(ctx.Hook.Mode, string(ctx.Event))
 	if err != nil {
 		return nil, err
 	}
 
-	args, err := atmosArgs(ctx, action)
-	if err != nil {
-		return nil, err
-	}
+	args := atmosArgs(ctx, action)
 	// Use os.Executable() to get the absolute path to the currently running binary.
 	// os.Args[0] can be a relative path (e.g. ./build/atmos), which breaks once the
 	// process working directory differs from the invocation directory (--chdir).
@@ -61,10 +62,8 @@ func (e *Engine) Run(ctx *hooks.ExecContext) (*hooks.Output, error) {
 	return nil, nil
 }
 
-func atmosArgs(ctx *hooks.ExecContext, action string) ([]string, error) {
-	if ctx == nil || ctx.Hook == nil || ctx.Info == nil {
-		return nil, errMissingHookContext
-	}
+// atmosArgs assumes Run has already validated the context (non-nil ctx, Hook, and Info).
+func atmosArgs(ctx *hooks.ExecContext, action string) []string {
 	args := []string{"terraform", "migrate", action}
 	args = appendValue(args, ctx.Info.ComponentFromArg)
 	args = appendFlagValue(args, "--stack", ctx.Info.Stack)
@@ -74,7 +73,7 @@ func atmosArgs(ctx *hooks.ExecContext, action string) ([]string, error) {
 	for _, backendConfig := range ctx.Hook.BackendConfig {
 		args = appendFlagValue(args, "--backend-config", backendConfig)
 	}
-	return args, nil
+	return args
 }
 
 func appendValue(args []string, value string) []string {

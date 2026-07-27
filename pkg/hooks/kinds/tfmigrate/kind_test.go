@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,7 +37,7 @@ func TestKindRegistered(t *testing.T) {
 }
 
 func TestAtmosArgs(t *testing.T) {
-	args, err := atmosArgs(&hooks.ExecContext{
+	args := atmosArgs(&hooks.ExecContext{
 		Hook: &hooks.Hook{
 			Migration:     "migrations/001.hcl",
 			Config:        ".tfmigrate.hcl",
@@ -48,7 +49,6 @@ func TestAtmosArgs(t *testing.T) {
 			Identity:         "dev",
 		},
 	}, tfmigrate.ActionApply)
-	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"terraform", "migrate", "apply",
 		"vpc",
@@ -88,7 +88,7 @@ func TestAtmosArgsIdentityCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args, err := atmosArgs(&hooks.ExecContext{
+			args := atmosArgs(&hooks.ExecContext{
 				Hook: &hooks.Hook{},
 				Info: &schema.ConfigAndStacksInfo{
 					ComponentFromArg: "vpc",
@@ -96,7 +96,6 @@ func TestAtmosArgsIdentityCases(t *testing.T) {
 					Identity:         tt.identity,
 				},
 			}, tfmigrate.ActionPlan)
-			require.NoError(t, err)
 			assert.Equal(t, tt.expected, args)
 		})
 	}
@@ -118,7 +117,7 @@ func TestAtmosArgsDynamicModeActions(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, action)
 
-			args, err := atmosArgs(&hooks.ExecContext{
+			args := atmosArgs(&hooks.ExecContext{
 				Hook: &hooks.Hook{Mode: tfmigrate.ModeDynamic},
 				Info: &schema.ConfigAndStacksInfo{
 					ComponentFromArg: "vpc",
@@ -126,7 +125,6 @@ func TestAtmosArgsDynamicModeActions(t *testing.T) {
 					Identity:         "dev",
 				},
 			}, action)
-			require.NoError(t, err)
 			assert.Equal(t, []string{
 				"terraform", "migrate", tt.want,
 				"vpc",
@@ -138,7 +136,7 @@ func TestAtmosArgsDynamicModeActions(t *testing.T) {
 }
 
 func TestAtmosArgs_OmitsOptionalTfmigrateConfig(t *testing.T) {
-	args, err := atmosArgs(&hooks.ExecContext{
+	args := atmosArgs(&hooks.ExecContext{
 		Hook: &hooks.Hook{
 			Migration: "migrations/001.hcl",
 		},
@@ -147,7 +145,6 @@ func TestAtmosArgs_OmitsOptionalTfmigrateConfig(t *testing.T) {
 			Stack:            "plat-ue2-dev",
 		},
 	}, tfmigrate.ActionPlan)
-	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"terraform", "migrate", "plan",
 		"vpc",
@@ -177,12 +174,17 @@ func TestEngineRunReturnsBeforeSubprocessForInvalidDynamicEvent(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid configuration")
 }
 
-func TestAtmosArgsMissingContextAndEmptyAppendHelpers(t *testing.T) {
-	_, err := atmosArgs(nil, tfmigrate.ActionPlan)
-	require.ErrorIs(t, err, errMissingHookContext)
+func TestEngineRunMissingContextAndEmptyAppendHelpers(t *testing.T) {
+	engine := &Engine{}
 
-	_, err = atmosArgs(&hooks.ExecContext{}, tfmigrate.ActionPlan)
-	require.ErrorIs(t, err, errMissingHookContext)
+	_, err := engine.Run(nil)
+	require.ErrorIs(t, err, errUtils.ErrNilInput)
+
+	_, err = engine.Run(&hooks.ExecContext{})
+	require.ErrorIs(t, err, errUtils.ErrNilInput)
+
+	_, err = engine.Run(&hooks.ExecContext{Hook: &hooks.Hook{}})
+	require.ErrorIs(t, err, errUtils.ErrNilInput)
 
 	args := []string{"terraform"}
 	assert.Equal(t, args, appendValue(args, ""))

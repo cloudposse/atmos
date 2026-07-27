@@ -42,7 +42,7 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   <dd>Migration action to run. Supported values are `plan`, `apply`, and `list`.</dd>
 
   <dt>`component`</dt>
-  <dd>Atmos Terraform component to migrate or inspect. Omit when selecting multiple components with flags such as `--all`, `--components`, `--query`, or `--affected`.</dd>
+  <dd>Atmos Terraform component to migrate or inspect. Omit when selecting multiple components with flags such as `--all`, `--components`, `--query`, or (for `plan` and `apply`) `--affected`.</dd>
 </dl>
 
 ## Flags
@@ -64,7 +64,7 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
 
   <dt>`--all`, `--components`, `--query`, `--affected`</dt>
-  <dd>Select multiple Terraform component instances instead of passing one component argument.</dd>
+  <dd>Select multiple Terraform component instances instead of passing one component argument. `--affected` applies to `plan` and `apply` only; `list` supports the others.</dd>
 
   <dt>`--skip-init`</dt>
   <dd>Skip the normal Terraform init path before `tfmigrate` runs.</dd>

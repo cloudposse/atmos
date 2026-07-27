@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -119,8 +120,12 @@ func AppendPlanVarFile(env []string, varfile string) []string {
 	prefix := EnvTfCliArgsPlan + "="
 	for i, entry := range env {
 		if strings.HasPrefix(entry, prefix) {
-			env[i] = entry + " " + arg
-			return env
+			// Copy before extending the entry so the caller's slice (and anything
+			// sharing its backing array) is left untouched, matching the
+			// append-based branches below.
+			updated := slices.Clone(env)
+			updated[i] = entry + " " + arg
+			return updated
 		}
 	}
 	if existing, ok := os.LookupEnv(EnvTfCliArgsPlan); ok && existing != "" {

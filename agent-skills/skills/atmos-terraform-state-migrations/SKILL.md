@@ -42,19 +42,22 @@ specifically needs `tfmigrate` automation or multi-state moves.
 
 ## One-Off CLI Workflow
 
-Create a migration file in a project-owned migrations directory, then preview it before applying.
+Create a migration file in a project-owned migrations directory, then preview it before applying. `tfmigrate`
+resolves `--migration` relative to the `migration_dir` in its config, and the Atmos-generated default config points
+`migration_dir` at the component's `migrations/` directory when one exists — so pass just the filename, not a
+`migrations/`-prefixed path.
 
 ```bash
-atmos terraform migrate plan <component> -s <stack> --migration migrations/20260527090000_refactor_vpc.hcl
-atmos terraform migrate apply <component> -s <stack> --migration migrations/20260527090000_refactor_vpc.hcl
+atmos terraform migrate plan <component> -s <stack> --migration 20260527090000_refactor_vpc.hcl
+atmos terraform migrate apply <component> -s <stack> --migration 20260527090000_refactor_vpc.hcl
 ```
 
 For multiple selected component instances:
 
 ```bash
-atmos terraform migrate plan --components vpc,eks -s <stack> --migration migrations/20260527090000_refactor.hcl
+atmos terraform migrate plan --components vpc,eks -s <stack> --migration 20260527090000_refactor.hcl
 atmos terraform migrate plan --query '.settings.requires_migration == true' --tfmigrate-config .tfmigrate.hcl
-atmos terraform migrate plan --affected --migration migrations/20260527090000_refactor.hcl
+atmos terraform migrate plan --affected --migration 20260527090000_refactor.hcl
 ```
 
 Do not run `apply` until `plan` succeeds and the Terraform plan after migration does not show unintended destroy/create
@@ -103,7 +106,7 @@ components:
             - before.terraform.plan
             - before.terraform.apply
           kind: tfmigrate
-          migration: migrations/20260527090000_remove_template_provider.hcl
+          migration: 20260527090000_remove_template_provider.hcl
           mode: dynamic
 ```
 

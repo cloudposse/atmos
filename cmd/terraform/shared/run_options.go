@@ -37,10 +37,13 @@ type RunOptions struct {
 	InitRunReconfigure      string
 
 	// Plan/Apply/Deploy specific flags.
+	// NOTE: --verify-plan is deliberately NOT parsed here. Viper cannot
+	// distinguish `--verify-plan=false` from the flag being unset, so the
+	// tri-state resolution reads the Cobra flag directly via
+	// resolveVerifyPlanMode (cmd/terraform/utils.go).
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
-	VerifyPlan       bool
 
 	// Multi-component flags.
 	Query      string
@@ -85,7 +88,6 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
-		VerifyPlan:              v.GetBool("verify-plan"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
 		Tags:                    v.GetStringSlice("tags"),

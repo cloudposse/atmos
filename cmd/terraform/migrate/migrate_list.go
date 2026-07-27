@@ -74,6 +74,13 @@ func runTerraformMigrateList(cmd *cobra.Command, args []string) error {
 	shared.ApplyRunOptions(&info, opts)
 	applyMigrateListComponentArg(&info, args)
 
+	// Resolve the interactive `--identity` sentinel the same way plan/apply do.
+	if info.Identity == cfg.IdentityFlagSelectValue {
+		if err := shared.HandleInteractiveIdentitySelection(&info); err != nil {
+			return err
+		}
+	}
+
 	rows, err := collectTfmigrateListRows(&info)
 	if err != nil {
 		return err

@@ -429,13 +429,26 @@ func streamToFile(stream Stream) *os.File {
 	}
 }
 
+// forceColorEnvSet reports whether a force-color environment variable requests
+// color. Following the FORCE_COLOR convention (chalk, npm), the values "0" and
+// "false" disable forcing rather than enable it.
+func forceColorEnvSet(name string) bool {
+	value := os.Getenv(name) //nolint:forbidigo // Standard and Atmos force-color env vars.
+	switch strings.ToLower(value) {
+	case "", "0", "false":
+		return false
+	default:
+		return true
+	}
+}
+
 // buildConfig constructs Config from all sources.
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
 		NoColor:    viper.GetBool("no-color"),
 		Color:      viper.GetBool("color"),
-		ForceColor: viper.GetBool("force-color") || os.Getenv("ATMOS_FORCE_COLOR") != "" || os.Getenv("FORCE_COLOR") != "", //nolint:forbidigo // Standard and Atmos force-color env vars.
+		ForceColor: viper.GetBool("force-color") || forceColorEnvSet("ATMOS_FORCE_COLOR") || forceColorEnvSet("FORCE_COLOR"),
 		ForceTTY:   viper.GetBool("force-tty"),
 
 		// From environment variables (standard terminal env vars, not Atmos-specific)

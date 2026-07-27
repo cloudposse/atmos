@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -57,6 +58,8 @@ func CheckTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 
 // HandleInteractiveIdentitySelection handles the case where --identity was used without a value.
 func HandleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "terraform.shared.HandleInteractiveIdentitySelection")()
+
 	atmosConfig, err := initCliConfig(*info, false)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
@@ -90,6 +93,8 @@ func HandleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error 
 
 // ResolveAndPromptForArgs handles path resolution and interactive prompts for component/stack.
 func ResolveAndPromptForArgs(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) error {
+	defer perf.Track(nil, "terraform.shared.ResolveAndPromptForArgs")()
+
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
 		if err := ResolveComponentPath(info, cfg.TerraformComponentType); err != nil {
 			return err
@@ -100,6 +105,8 @@ func ResolveAndPromptForArgs(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 
 // HandleInteractiveComponentStackSelection prompts for missing component and stack.
 func HandleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) error {
+	defer perf.Track(nil, "terraform.shared.HandleInteractiveComponentStackSelection")()
+
 	if HasMultiComponentFlags(info) || info.NeedHelp {
 		return nil
 	}
@@ -150,6 +157,8 @@ func promptMissingStack(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) er
 
 // ResolveComponentPath resolves a path-based component argument to a component name.
 func ResolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
+	defer perf.Track(nil, "terraform.shared.ResolveComponentPath")()
+
 	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, errUtils.ErrPathResolutionFailed, err)

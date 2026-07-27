@@ -193,7 +193,7 @@ hooks:
       - before.terraform.plan
       - before.terraform.apply
     kind: tfmigrate
-    migration: migrations/20260527090000_refactor.hcl
+    migration: 20260527090000_refactor.hcl
     mode: dynamic
 ```
 
