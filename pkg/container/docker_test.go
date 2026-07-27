@@ -482,7 +482,8 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 	t.Cleanup(func() { _ = registry.Terminate(ctx) })
 
 	contextDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "Dockerfile"), []byte("FROM busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
+	dockerfile := filepath.Join(contextDir, "Dockerfile")
+	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
 	cacheRef := "cache-registry:5000/atmos-buildx-cache:latest"
 	firstDriver := &DriverConfig{Name: "atmos-cache-export-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
 	secondDriver := &DriverConfig{Name: "atmos-cache-import-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
@@ -494,7 +495,7 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 	runtime := NewDockerRuntime()
 	require.NoError(t, runtime.Build(ctx, &BuildConfig{
 		Engine:     "buildx",
-		Dockerfile: "Dockerfile",
+		Dockerfile: dockerfile,
 		Context:    contextDir,
 		Driver:     firstDriver,
 		Cache:      &CacheConfig{To: []map[string]string{{"type": "registry", "ref": cacheRef, "mode": "max"}}},
@@ -503,7 +504,7 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 	require.NoError(t, ensureBuilder(ctx, runtime, secondDriver))
 	importArgs := buildBuildArgs(&BuildConfig{
 		Engine:     "buildx",
-		Dockerfile: "Dockerfile",
+		Dockerfile: dockerfile,
 		Context:    contextDir,
 		Driver:     secondDriver,
 		Cache:      &CacheConfig{From: []map[string]string{{"type": "registry", "ref": cacheRef}}},
