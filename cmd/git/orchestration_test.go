@@ -8,6 +8,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -221,7 +222,11 @@ func TestRunCommit_EmptyMessageWithDryRunAllowed(t *testing.T) {
 func TestParseCloneFlags_Defaults(t *testing.T) {
 	// Use a fresh Viper instance so defaults are zero values.
 	v := viper.New()
-	opts := parseCloneFlags(v)
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool(flagCI, false, "")
+	t.Setenv("ATMOS_CI", "false")
+	opts, err := parseCloneFlags(cmd, v)
+	require.NoError(t, err)
 
 	assert.Equal(t, "", opts.RepoURI)
 	assert.Equal(t, "", opts.Branch)
@@ -232,6 +237,47 @@ func TestParseCloneFlags_Defaults(t *testing.T) {
 	assert.False(t, opts.SingleBranch)
 	assert.False(t, opts.Submodules)
 	assert.False(t, opts.All)
+	assert.Equal(t, ciCloneModeDisabled, opts.CIMode)
+}
+
+func TestResolveCICloneMode(t *testing.T) {
+	newCommand := func(t *testing.T, value string) *cobra.Command {
+		t.Helper()
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool(flagCI, false, "")
+		if value != "" {
+			require.NoError(t, cmd.Flags().Set(flagCI, value))
+		}
+		return cmd
+	}
+
+	t.Run("environment enables CI checkout", func(t *testing.T) {
+		t.Setenv("ATMOS_CI", "true")
+		mode, err := resolveCICloneMode(newCommand(t, ""))
+		require.NoError(t, err)
+		assert.Equal(t, ciCloneModeEnabled, mode)
+	})
+
+	t.Run("environment disables CI checkout", func(t *testing.T) {
+		t.Setenv("ATMOS_CI", "false")
+		mode, err := resolveCICloneMode(newCommand(t, ""))
+		require.NoError(t, err)
+		assert.Equal(t, ciCloneModeDisabled, mode)
+	})
+
+	t.Run("flag overrides environment", func(t *testing.T) {
+		t.Setenv("ATMOS_CI", "true")
+		mode, err := resolveCICloneMode(newCommand(t, "false"))
+		require.NoError(t, err)
+		assert.Equal(t, ciCloneModeDisabled, mode)
+	})
+
+	t.Run("invalid environment is rejected", func(t *testing.T) {
+		t.Setenv("ATMOS_CI", "sometimes")
+		_, err := resolveCICloneMode(newCommand(t, ""))
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig))
+	})
 }
 
 // ---- parseCommitFlags ----
@@ -397,19 +443,26 @@ func TestRunCICheckout_NoCloneURL(t *testing.T) {
 func TestIsCICloneEnabled_NilConfig(t *testing.T) {
 	setAtmosConfigPtr(t, nil)
 
-	assert.False(t, isCICloneEnabled())
+	assert.False(t, isCICloneEnabled(&cloneOptions{}))
 }
 
 func TestIsCICloneEnabled_Disabled(t *testing.T) {
 	setAtmosConfigPtr(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}})
 
-	assert.False(t, isCICloneEnabled())
+	assert.False(t, isCICloneEnabled(&cloneOptions{}))
 }
 
 func TestIsCICloneEnabled_Enabled(t *testing.T) {
 	setAtmosConfigPtr(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}})
 
-	assert.True(t, isCICloneEnabled())
+	assert.True(t, isCICloneEnabled(&cloneOptions{}))
+}
+
+func TestIsCICloneEnabled_ExplicitModeOverridesConfig(t *testing.T) {
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}})
+
+	assert.False(t, isCICloneEnabled(&cloneOptions{CIMode: ciCloneModeDisabled}))
+	assert.True(t, isCICloneEnabled(&cloneOptions{CIMode: ciCloneModeEnabled}))
 }
 
 // ---- runCloneAll with empty repositories ----

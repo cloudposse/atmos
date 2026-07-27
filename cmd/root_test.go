@@ -276,6 +276,54 @@ func TestHandleConfigInitError_AllowsCIGitCloneBootstrap(t *testing.T) {
 	assert.True(t, cfg.CI.Enabled, "CI clone bootstrap must enable the no-arg CI checkout path without repo-local config")
 }
 
+func TestHandleConfigInitError_CICloneExplicitFalseOptsOut(t *testing.T) {
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "git", "clone", "--ci=false"}
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	cfg := &schema.AtmosConfiguration{}
+	err := handleConfigInitError(assert.AnError, cfg)
+
+	assert.ErrorIs(t, err, assert.AnError)
+	assert.False(t, cfg.CI.Enabled)
+}
+
+func TestGitCloneBootstrapCIMode(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		env  string
+		want ciCloneBootstrapMode
+	}{
+		{name: "unset defaults to automatic", args: []string{"git", "clone"}, want: ciCloneBootstrapAuto},
+		{name: "environment enables", args: []string{"git", "clone"}, env: "true", want: ciCloneBootstrapEnabled},
+		{name: "environment disables", args: []string{"git", "clone"}, env: "false", want: ciCloneBootstrapDisabled},
+		{name: "flag enables", args: []string{"git", "clone", "--ci"}, env: "false", want: ciCloneBootstrapEnabled},
+		{name: "flag disables", args: []string{"git", "clone", "--ci=false"}, env: "true", want: ciCloneBootstrapDisabled},
+		{name: "non-clone command does not use a flag override", args: []string{"terraform", "plan", "--ci"}, env: "false", want: ciCloneBootstrapDisabled},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.env == "" {
+				original, wasSet := os.LookupEnv("ATMOS_CI")
+				os.Unsetenv("ATMOS_CI")
+				t.Cleanup(func() {
+					if wasSet {
+						_ = os.Setenv("ATMOS_CI", original)
+						return
+					}
+					os.Unsetenv("ATMOS_CI")
+				})
+			} else {
+				t.Setenv("ATMOS_CI", tt.env)
+			}
+			assert.Equal(t, tt.want, gitCloneBootstrapCIMode(tt.args))
+		})
+	}
+}
+
 func TestPreprocessArgs_NoArgs(t *testing.T) {
 	originalArgs := os.Args
 	t.Cleanup(func() { os.Args = originalArgs })

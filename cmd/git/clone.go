@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -34,8 +35,9 @@ var cloneCmd = &cobra.Command{
 	Long: `Clone a named Git repository (configured under git.repositories) or an ad hoc URI.
 
 When no argument is provided, Atmos clones the single configured repository.
-When ci.enabled is true and a CI provider is detected, the current CI repository
-is cloned into the working directory instead (replaces actions/checkout).
+When CI mode is enabled by ci.enabled, --ci, or ATMOS_CI and a CI provider is
+detected, the current CI repository is cloned into the working directory instead
+(replaces actions/checkout).
 
 URI forms supported:
   - Named repository:   atmos git clone flux-deploy
@@ -58,7 +60,10 @@ Arguments after -- are passed verbatim to the underlying git clone invocation:
 		}
 
 		positional, nativeArgs := flags.SplitArgsAtDash(cmd, args)
-		opts := parseCloneFlags(v)
+		opts, err := parseCloneFlags(cmd, v)
+		if err != nil {
+			return err
+		}
 		opts.ExtraArgs = nativeArgs
 		return runClone(cmd.Context(), opts, positional)
 	},
@@ -75,13 +80,28 @@ type cloneOptions struct {
 	SingleBranch bool
 	Submodules   bool
 	All          bool
+	// CIMode explicitly selects or opts out of the no-argument CI checkout.
+	CIMode ciCloneMode
 	// AllowUnsafeFork opts out of the fork-checkout safety gate.
 	AllowUnsafeFork bool
 	// ExtraArgs are native git arguments captured after "--" on the command line.
 	ExtraArgs []string
 }
 
-func parseCloneFlags(v *viper.Viper) *cloneOptions {
+type ciCloneMode uint8
+
+const (
+	ciCloneModeAuto ciCloneMode = iota
+	ciCloneModeEnabled
+	ciCloneModeDisabled
+)
+
+func parseCloneFlags(cmd *cobra.Command, v *viper.Viper) (*cloneOptions, error) {
+	ciMode, err := resolveCICloneMode(cmd)
+	if err != nil {
+		return nil, err
+	}
+
 	return &cloneOptions{
 		RepoURI:         v.GetString(viperKey(cloneViperPrefix, flagRepoURI)),
 		Branch:          v.GetString(viperKey(cloneViperPrefix, flagBranch)),
@@ -92,8 +112,45 @@ func parseCloneFlags(v *viper.Viper) *cloneOptions {
 		SingleBranch:    v.GetBool(viperKey(cloneViperPrefix, flagSingleBr)),
 		Submodules:      v.GetBool(viperKey(cloneViperPrefix, flagSubmodules)),
 		All:             v.GetBool(viperKey(cloneViperPrefix, flagAll)),
+		CIMode:          ciMode,
 		AllowUnsafeFork: v.GetBool(viperKey(cloneViperPrefix, flagAllowUnsafeFork)),
+	}, nil
+}
+
+// resolveCICloneMode gives an explicit clone flag precedence over ATMOS_CI.
+// The flag is intentionally clone-local: it only changes no-argument checkout
+// selection and does not enable CI behavior for other git subcommands.
+func resolveCICloneMode(cmd *cobra.Command) (ciCloneMode, error) {
+	if cmd != nil {
+		if flag := cmd.Flags().Lookup(flagCI); flag != nil && flag.Changed {
+			enabled, err := strconv.ParseBool(flag.Value.String())
+			if err != nil {
+				return ciCloneModeAuto, fmt.Errorf("invalid --%s value %q: %w", flagCI, flag.Value.String(), err)
+			}
+			return ciCloneModeFromBool(enabled), nil
+		}
 	}
+
+	value, ok := os.LookupEnv("ATMOS_CI")
+	if !ok {
+		return ciCloneModeAuto, nil
+	}
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		return ciCloneModeAuto, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanation("ATMOS_CI must be a boolean value when used with 'atmos git clone'.").
+			WithHint("Set ATMOS_CI=true to force CI checkout or ATMOS_CI=false to opt out.").
+			WithExitCode(2).
+			Err()
+	}
+	return ciCloneModeFromBool(enabled), nil
+}
+
+func ciCloneModeFromBool(enabled bool) ciCloneMode {
+	if enabled {
+		return ciCloneModeEnabled
+	}
+	return ciCloneModeDisabled
 }
 
 // runClone orchestrates the clone subcommand.
@@ -256,7 +313,7 @@ func resolveAdHocWorkdir(workdirFlag, repoName string) (string, error) {
 func runCloneNoArg(ctx context.Context, opts *cloneOptions) error {
 	defer perf.Track(nil, "git.runCloneNoArg")()
 
-	if isCICloneEnabled() {
+	if isCICloneEnabled(opts) {
 		detected := ci.Detect()
 		if detected != nil {
 			ciCtx, err := detected.Context()
@@ -279,7 +336,15 @@ func runCloneNoArg(ctx context.Context, opts *cloneOptions) error {
 		Err()
 }
 
-func isCICloneEnabled() bool {
+func isCICloneEnabled(opts *cloneOptions) bool {
+	if opts != nil {
+		switch opts.CIMode {
+		case ciCloneModeEnabled:
+			return true
+		case ciCloneModeDisabled:
+			return false
+		}
+	}
 	return atmosConfigPtr != nil && atmosConfigPtr.CI.Enabled
 }
 

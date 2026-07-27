@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -1654,7 +1655,55 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 }
 
 func isCIGitCloneBootstrapRequested() bool {
-	return ci.Detect() != nil && argsRequestNoArgGitClone(os.Args[1:])
+	return ci.Detect() != nil &&
+		gitCloneBootstrapCIMode(os.Args[1:]) != ciCloneBootstrapDisabled &&
+		argsRequestNoArgGitClone(os.Args[1:])
+}
+
+type ciCloneBootstrapMode uint8
+
+const (
+	ciCloneBootstrapAuto ciCloneBootstrapMode = iota
+	ciCloneBootstrapEnabled
+	ciCloneBootstrapDisabled
+)
+
+// gitCloneBootstrapCIMode resolves only the explicit selector needed before
+// Cobra and repository configuration are available. Runtime validation returns
+// a user-facing error for malformed ATMOS_CI values.
+func gitCloneBootstrapCIMode(args []string) ciCloneBootstrapMode {
+	mode := ciCloneBootstrapModeFromEnv()
+	cloneArgs := stripRootFlagsForBootstrapCheck(args)
+	if len(cloneArgs) < 2 || cloneArgs[0] != "git" || cloneArgs[1] != "clone" {
+		return mode
+	}
+
+	for _, arg := range cloneArgs[2:] {
+		switch arg {
+		case "--ci":
+			return ciCloneBootstrapEnabled
+		case "--ci=true":
+			return ciCloneBootstrapEnabled
+		case "--ci=false":
+			return ciCloneBootstrapDisabled
+		}
+	}
+	return mode
+}
+
+func ciCloneBootstrapModeFromEnv() ciCloneBootstrapMode {
+	value, ok := os.LookupEnv("ATMOS_CI")
+	if !ok {
+		return ciCloneBootstrapAuto
+	}
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		return ciCloneBootstrapAuto
+	}
+	if enabled {
+		return ciCloneBootstrapEnabled
+	}
+	return ciCloneBootstrapDisabled
 }
 
 const (
