@@ -287,7 +287,11 @@ func TestRunTerraformMigratePlanDryRunFixture(t *testing.T) {
 	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
 	viper.GetViper().Set("dry-run", true)
 	viper.GetViper().Set("skip-init", true)
-	configPath := filepath.Join("..", "..", "..", "examples", "hooks-tfmigrate")
+	// The hermetic testdata fixture declares no dependencies.tools, so the
+	// dry run stays offline. The examples/hooks-tfmigrate fixture declares
+	// opentofu+tfmigrate toolchain dependencies, which this execution path
+	// would download and install — unit tests must not hit the network.
+	configPath := filepath.Join("testdata", "dryrun")
 
 	err := runTerraformMigrate(cmd, []string{
 		"service",

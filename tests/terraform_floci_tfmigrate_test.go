@@ -25,7 +25,9 @@ import (
 // history-mode idempotency.
 func TestTerraformFlociTfmigrateS3History(t *testing.T) {
 	endpoint := requireFlociEndpoint(t, "", "")
-	RequireTerraform(t)
+	// No terraform/tofu precondition: the fixture declares opentofu and
+	// tfmigrate in dependencies.tools, so the Atmos toolchain installs both
+	// (the floci-go CI job does not provide a terraform binary).
 	ensureFlociAtmosRunner(t)
 
 	workdir := copyFlociScenarioFixture(t, filepath.Join("fixtures", "scenarios", "terraform-floci-tfmigrate"))

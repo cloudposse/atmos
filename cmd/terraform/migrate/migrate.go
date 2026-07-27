@@ -190,13 +190,14 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 	}
 
 	command := execCtx.Toolchain.Resolve(tfmigrate.Command)
-	if err := tfmigrate.EnsureResolved(command); err != nil {
-		return err
-	}
-
-	// Pre-create the local history directory (if configured) so tfmigrate's
-	// history save doesn't fail after it has already pushed the migrated state.
 	if !execCtx.Info.DryRun {
+		// A dry run only prints the command, so it must not require the
+		// tfmigrate binary or touch the filesystem.
+		if err := tfmigrate.EnsureResolved(command); err != nil {
+			return err
+		}
+		// Pre-create the local history directory (if configured) so tfmigrate's
+		// history save doesn't fail after it has already pushed the migrated state.
 		if err := tfmigrate.EnsureLocalHistoryDir(execCtx.ComponentDir, opts.Config, execCtx.Env); err != nil {
 			return err
 		}

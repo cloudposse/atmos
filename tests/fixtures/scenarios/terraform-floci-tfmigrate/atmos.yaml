@@ -3,7 +3,8 @@ base_path: "./"
 settings:
   experimental: warn
 
-# The tfmigrate binary is auto-installed into the (temp) fixture copy.
+# OpenTofu and tfmigrate are auto-installed into the (temp) fixture copy,
+# so the test needs no pre-installed binaries.
 toolchain:
   install_path: .tools
   versions_file: .tool-versions
@@ -16,7 +17,7 @@ toolchain:
 components:
   terraform:
     base_path: "components/terraform"
-    command: terraform
+    command: tofu
     apply_auto_approve: false
     deploy_run_init: true
     init_run_reconfigure: true
@@ -33,4 +34,3 @@ stacks:
 
 logs:
   level: Info
-  file: "/dev/stderr"

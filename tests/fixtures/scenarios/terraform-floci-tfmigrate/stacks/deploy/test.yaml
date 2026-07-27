@@ -23,12 +23,16 @@ terraform:
 components:
   terraform:
     service-legacy:
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
       vars:
         environment: test
 
     service:
       dependencies:
         tools:
+          opentofu: "^1.10.0"
           tfmigrate: "^0.4.5"
       vars:
         environment: test
