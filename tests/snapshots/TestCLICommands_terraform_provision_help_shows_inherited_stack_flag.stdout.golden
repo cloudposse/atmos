@@ -66,8 +66,8 @@ GLOBAL FLAGS
                                              flags using the sentinel pattern, and missing positional arguments
                                              (requires TTY, disabled in CI) (default true)
 
-      --labels string                        Filter by labels (comma-separated key=value pairs, matches all): --
-                                             labels=cost-center=platform,compliance=sox
+      --labels string                        Filter by labels (comma-separated key=value or key:value pairs, matches
+                                             all): --labels=cost-center=platform,compliance=sox
 
       --logs-file string                     The file to write Atmos logs to. Logs can be written to any file or any
                                              standard file descriptor, including '/dev/stdout', '/dev/stderr' and
@@ -147,4 +147,3 @@ GLOBAL FLAGS
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
                                              information
-

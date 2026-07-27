@@ -88,8 +88,8 @@ FLAGS
 
       --init-pass-vars            Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)
 
-      --labels string             Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-
-                                  center=platform,compliance=sox
+      --labels string             Filter by labels (comma-separated key=value or key:value pairs, matches all): --
+                                  labels=cost-center=platform,compliance=sox
 
       --process-functions         Enable/disable YAML functions processing in Atmos stack manifests (default true)
 
