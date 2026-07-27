@@ -17,15 +17,19 @@ timeout = 60
 max_retries = 3
 
 # Accept these HTTP status codes as valid.
-# 500 is included alongside 403/429 because GitHub's gateway intermittently
-# rejects a handful of the ~800 unique links checked here with 500 Internal
-# Server Error under CI's request volume (verified to return 200 outside CI),
-# spanning arbitrary github.com issue/PR/repo URLs across different repos —
+# 500/502/504 are included alongside 403/429 because GitHub's gateway
+# intermittently rejects a handful of the ~800 unique links checked here with
+# 500 Internal Server Error, 502 Bad Gateway, or 504 Gateway Timeout under
+# CI's request volume (verified to return 200 outside CI), spanning arbitrary
+# github.com issue/PR/tree/blob/release/user URLs across different repos —
 # not any one specific broken link. See the v1.203.0 release-tag exclude below
-# for the single-URL precedent of this same GitHub-gateway flakiness.
+# for the single-URL precedent of this same GitHub-gateway flakiness; the
+# narrower google-gemini/gemini-cli and gruntwork-io/terragrunt excludes are
+# for repos that showed 502s repeatedly before this status code was accepted
+# broadly.
 # 503/520 cover the same class of flakiness on (img.)shields.io badge URLs,
 # which intermittently reject requests under CI's request volume.
-accept = ["200", "204", "301", "302", "403", "429", "500", "503", "520"]
+accept = ["200", "204", "301", "302", "403", "429", "500", "502", "503", "504", "520"]
 
 # Paths to exclude from checking (input files to scan)
 exclude_path = [

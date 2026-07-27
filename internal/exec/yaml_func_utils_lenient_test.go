@@ -151,14 +151,9 @@ func TestProcessCustomYamlTagsLenient_NonRecoverableError_StillFails(t *testing.
 	assert.Empty(t, warnings, "non-recoverable errors must not trigger onWarning")
 }
 
-// TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn verifies the fix for an
-// unrelated component's broken/unavailable credentials (e.g. no EC2 IMDS role, an expired
-// SSO session) hard-failing `atmos terraform lint` and other --error-mode-aware commands
-// even in warn mode. ErrGetObjectFromS3 — a backend read that failed for a reason other than
-// "not yet provisioned" — must degrade like any other recoverable error once the caller has
-// opted into warn mode, without weakening the always-on `//`-default path's own stricter
-// classification (see TestTerraformOutput_APIErrorWithDefaultReturnsError, unaffected by this
-// fix). See docs/fixes/2026-07-22-terraform-lint-error-mode.md.
+// TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn verifies that warn mode does
+// not hide a broken/unavailable credential source (e.g. no EC2 IMDS role or an expired SSO
+// session). Only an unprovisioned state/output is eligible for degradation.
 func TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -191,13 +186,8 @@ func TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn(t *testing.T) {
 		warnings = append(warnings, w)
 	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, degradation.AtmosComputedValue{}, result["bucket"])
-	assert.Equal(t, "unaffected-value", result["sibling"])
-
-	require.Len(t, warnings, 1)
-	assert.Equal(t, "test-stack", warnings[0].Stack)
-	assert.Equal(t, "vpc", warnings[0].Component)
-	assert.Contains(t, warnings[0].Reason, "EC2 IMDS")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "EC2 IMDS")
+	assert.Empty(t, warnings)
 }

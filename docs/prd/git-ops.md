@@ -790,7 +790,7 @@ components:
           events:
             - after.terraform.apply
           kind: git
-          # repository omitted -> the current repository
+          # repository omitted -> the current repository, scoped to this component
           commit:
             message: "Update generated artifacts for {{ .component }} in {{ .stack }}"
             paths:
@@ -818,6 +818,8 @@ components:
             message: "Update generated artifacts for {{ .component }} in {{ .stack }}"
           push: true
 ```
+
+For a current-repository hook, Git operates from the resolved component directory, including a `metadata.component` target or provisioned workdir. Consequently, `commit.paths` are relative to that component directory. A named `repository` is explicit and continues to use its configured managed-repository workdir, with paths relative to that repository.
 
 The `git` hook kind is a standard `pkg/hooks` kind:
 
