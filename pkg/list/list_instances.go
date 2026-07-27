@@ -889,24 +889,26 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// --identity=false (opts.AuthDisabled) short-circuits per-component auth.
 	// Without closure flags, --tags/--labels also scope the describe pass
 	// (early-skip): excluded components never evaluate templates/functions/auth.
-	// With closure flags, the describe and the stack glob must NOT narrow —
-	// closure members outside the seed's filters have to stay visible; the
-	// membership filter below owns row selection instead.
-	describeTags, describeLabels, stackPattern := opts.Tags, labels, opts.Stack
+	// With closure flags, the whole flow goes through the shared scoped closure
+	// engine instead: only the closure's stacks and components are evaluated,
+	// and the membership filter below owns row selection.
+	var instances []schema.Instance
+	var stacksMap map[string]any
 	if opts.closureRequested() {
-		describeTags, describeLabels, stackPattern = nil, nil, ""
+		instances, stacksMap, err = processInstancesScopedClosure(&atmosConfig, opts, labels)
+	} else {
+		instances, stacksMap, err = processInstances(
+			&atmosConfig,
+			opts.AuthManager,
+			opts.ProcessTemplates,
+			opts.ProcessFunctions,
+			opts.Skip,
+			opts.Stack,
+			opts.AuthDisabled,
+			opts.Tags,
+			labels,
+		)
 	}
-	instances, stacksMap, err := processInstances(
-		&atmosConfig,
-		opts.AuthManager,
-		opts.ProcessTemplates,
-		opts.ProcessFunctions,
-		opts.Skip,
-		stackPattern,
-		opts.AuthDisabled,
-		describeTags,
-		describeLabels,
-	)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
@@ -1124,6 +1126,56 @@ func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw stri
 	return filters, nil
 }
 
+// processInstancesScopedClosure resolves instances for the closure preview
+// through the shared three-phase scoped evaluation: a lightweight structural
+// pass seeds the closure (stack glob + tags/labels selectors), and only the
+// closure's own components are then fully evaluated — nothing outside the
+// closure runs templates, YAML functions, or auth.
+func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions, labels map[string]string) ([]schema.Instance, map[string]any, error) {
+	defer perf.Track(nil, "list.processInstancesScopedClosure")()
+
+	processor := &e.DefaultStacksProcessor{}
+	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
+		return processor.ExecuteDescribeStacksScoped(
+			atmosConfig, stackName, closureComponents, nil, nil,
+			false, // ignoreMissingFiles
+			processTemplates,
+			processFunctions,
+			false, // includeEmptyStacks
+			opts.Skip,
+			opts.AuthManager,
+			opts.AuthDisabled,
+			nil, // tagsFilter: closure scoping owns selection.
+			nil, // labelsFilter: closure scoping owns selection.
+		)
+	}
+
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := dependencies.ResolveScopedClosure(describe, &dependencies.ScopeRequest{
+		Stack:            opts.Stack,
+		Tags:             opts.Tags,
+		Labels:           labels,
+		Direction:        direction,
+		Depths:           depths,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
+		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// No stack-glob narrowing here: the glob already scoped the closure SEED,
+	// and closure members outside the pattern must stay visible.
+	instances, err := collectInstances(result.Stacks, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	return sortInstances(instances), result.Stacks, nil
+}
+
 // buildInstanceClosureFilter builds the dependency-closure membership filter
 // for the --include-dependencies/--include-dependents preview: the seed
 // (stack glob + tags + labels) selects the roots on the described graph, the
@@ -1135,12 +1187,13 @@ func buildInstanceClosureFilter(atmosConfig *schema.AtmosConfiguration, opts *In
 	if err != nil {
 		return nil, err
 	}
-	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
 	roots := dependencies.Roots(graph, &dependencies.Selector{
-		Stack:     opts.Stack,
-		Tags:      opts.Tags,
-		Labels:    labels,
-		LeftDelim: leftDelim,
+		Stack:      opts.Stack,
+		Tags:       opts.Tags,
+		Labels:     labels,
+		LeftDelim:  leftDelim,
+		RightDelim: rightDelim,
 	})
 	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
 	members := dependencies.Membership(dependencies.ReachableClosure(graph, roots, direction, depths))

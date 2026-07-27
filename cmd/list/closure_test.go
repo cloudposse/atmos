@@ -6,17 +6,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 )
 
-// closurePreviewStacksMap builds a described-stacks map with a cross-tag,
-// cross-stack dependency chain: dev/app (tags: app) -> dev/db (tags: data)
-// -> core/vpc (tags: network), plus an unrelated stack that must never appear
-// in a bounded closure preview.
+// closurePreviewStacksMap builds a described-stacks map with a cross-stack
+// dependency chain: dev/app -> dev/db -> core/vpc, plus an unrelated stack.
 func closurePreviewStacksMap() map[string]any {
-	component := func(tags []any, dependsOn map[string]any) map[string]any {
+	component := func(dependsOn map[string]any) map[string]any {
 		section := map[string]any{
-			"metadata": map[string]any{"tags": tags},
+			"metadata": map[string]any{},
 			"vars":     map[string]any{},
 		}
 		if dependsOn != nil {
@@ -28,100 +26,56 @@ func closurePreviewStacksMap() map[string]any {
 		"dev": map[string]any{
 			"components": map[string]any{
 				"terraform": map[string]any{
-					"app": component([]any{"app"}, map[string]any{"1": map[string]any{"component": "db"}}),
-					"db":  component([]any{"data"}, map[string]any{"1": map[string]any{"component": "vpc", "stack": "core"}}),
+					"app": component(map[string]any{"1": map[string]any{"component": "db"}}),
+					"db":  component(map[string]any{"1": map[string]any{"component": "vpc", "stack": "core"}}),
 				},
 			},
 		},
 		"core": map[string]any{
 			"components": map[string]any{
 				"terraform": map[string]any{
-					"vpc": component([]any{"network"}, nil),
+					"vpc": component(nil),
 				},
 			},
 		},
 		"unrelated": map[string]any{
 			"components": map[string]any{
 				"terraform": map[string]any{
-					"poison": component([]any{"other"}, nil),
+					"poison": component(nil),
 				},
 			},
 		},
 	}
 }
 
-// TestExtractStacksInClosure verifies `list stacks --include-dependencies`
-// lists exactly the stacks the closure touches, including stacks whose only
-// members are non-matching prerequisites.
-func TestExtractStacksInClosure(t *testing.T) {
+// TestStackRowsFromClosure verifies the closure's stacks shape into sorted rows.
+func TestStackRowsFromClosure(t *testing.T) {
 	t.Parallel()
 
-	stackNames := func(stacks []map[string]any) []string {
-		var names []string
-		for _, stack := range stacks {
-			names = append(names, stack["stack"].(string))
-		}
-		return names
+	graph, err := dependencies.BuildGraph(closurePreviewStacksMap())
+	require.NoError(t, err)
+	roots := dependencies.Roots(graph, &dependencies.Selector{Components: []string{"app"}})
+	closure := dependencies.ReachableClosure(graph, roots, dependencies.DirectionForward, dependencies.Depths{})
+
+	rows := stackRowsFromClosure(closure)
+	var names []string
+	for _, row := range rows {
+		names = append(names, row["stack"].(string))
 	}
-
-	t.Run("tags seed spans prerequisite stacks", func(t *testing.T) {
-		t.Parallel()
-		opts := &StacksOptions{Tags: []string{"app"}, IncludeDependencies: -1}
-		stacks, err := extractStacksInClosure(&schema.AtmosConfiguration{}, opts, nil, closurePreviewStacksMap())
-		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"core", "dev"}, stackNames(stacks))
-	})
-
-	t.Run("depth 1 stays within the seed stack", func(t *testing.T) {
-		t.Parallel()
-		opts := &StacksOptions{Tags: []string{"app"}, IncludeDependencies: 1}
-		stacks, err := extractStacksInClosure(&schema.AtmosConfiguration{}, opts, nil, closurePreviewStacksMap())
-		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"dev"}, stackNames(stacks))
-	})
-
-	t.Run("component seed with dependents", func(t *testing.T) {
-		t.Parallel()
-		opts := &StacksOptions{Component: "vpc", IncludeDependents: -1}
-		stacks, err := extractStacksInClosure(&schema.AtmosConfiguration{}, opts, nil, closurePreviewStacksMap())
-		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"core", "dev"}, stackNames(stacks))
-	})
+	assert.Equal(t, []string{"core", "dev"}, names)
 }
 
-// TestFilterComponentsByClosure verifies `list components --include-dependencies`
-// keeps exactly the closure's components, including prerequisites that do not
-// match the seeding selectors.
-func TestFilterComponentsByClosure(t *testing.T) {
+// TestFilterRowsByComponentNames verifies the membership row gate.
+func TestFilterRowsByComponentNames(t *testing.T) {
 	t.Parallel()
 
 	rows := []map[string]any{
 		{"component": "app"},
 		{"component": "db"},
-		{"component": "vpc"},
 		{"component": "poison"},
 	}
-	componentNames := func(rows []map[string]any) []string {
-		var names []string
-		for _, row := range rows {
-			names = append(names, row["component"].(string))
-		}
-		return names
-	}
-
-	t.Run("tags seed keeps non-matching prerequisites", func(t *testing.T) {
-		t.Parallel()
-		opts := &ComponentsOptions{Tags: []string{"app"}, IncludeDependencies: -1}
-		filtered, err := filterComponentsByClosure(&schema.AtmosConfiguration{}, opts, nil, closurePreviewStacksMap(), rows)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"app", "db", "vpc"}, componentNames(filtered))
-	})
-
-	t.Run("stack glob seed", func(t *testing.T) {
-		t.Parallel()
-		opts := &ComponentsOptions{Stack: "de*", IncludeDependencies: -1}
-		filtered, err := filterComponentsByClosure(&schema.AtmosConfiguration{}, opts, nil, closurePreviewStacksMap(), rows)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"app", "db", "vpc"}, componentNames(filtered))
-	})
+	filtered := filterRowsByComponentNames(rows, []string{"app", "db"})
+	require.Len(t, filtered, 2)
+	assert.Equal(t, "app", filtered[0]["component"])
+	assert.Equal(t, "db", filtered[1]["component"])
 }

@@ -245,21 +245,26 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	}
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	// Without closure flags, --tags/--labels also scope the describe pass
-	// (early-skip): components excluded by the selectors never evaluate
-	// templates/YAML functions/auth. With closure flags, the describe must not
-	// narrow — closure members outside the selectors have to stay visible.
 	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
 	if err != nil {
 		return componentsExtractResult{}, err
 	}
-	closureRequested := opts.IncludeDependencies != 0 || opts.IncludeDependents != 0
-	describeTags, describeLabels := opts.Tags, labels
-	if closureRequested {
-		describeTags, describeLabels = nil, nil
+	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
+
+	// With closure flags, the whole describe/extract flow goes through the
+	// shared scoped closure engine: only the stacks (and components) the
+	// closure touches are ever evaluated, matching the terraform bulk paths.
+	if opts.IncludeDependencies != 0 || opts.IncludeDependents != 0 {
+		components, closureErr := extractComponentsViaScopedClosure(&atmosConfig, opts, labels, &scopedDescribeDeps{authManager: authManager, skip: skip, errOpts: errOpts})
+		if closureErr != nil {
+			return componentsExtractResult{}, closureErr
+		}
+		return componentsExtractResult{atmosConfig: &atmosConfig, components: components, collector: collector}, nil
 	}
 
-	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
+	// Without closure flags, --tags/--labels also scope the describe pass
+	// (early-skip): components excluded by the selectors never evaluate
+	// templates/YAML functions/auth.
 	stacksMap, err := e.ExecuteDescribeStacksScoped(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
@@ -269,8 +274,8 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		skip,
 		authManager,
 		authManager == nil,
-		describeTags,
-		describeLabels,
+		opts.Tags,
+		labels,
 		errOpts,
 	)
 	if err != nil {
@@ -280,66 +285,85 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// Extract unique components (deduplicated across all stacks).
 	// This is the original "list components" behavior - showing unique component definitions.
 	// Pass the stack pattern to filter which stacks to consider when deduplicating.
-	// With the closure preview, the stack pattern instead scopes the closure
-	// SEED (below), so the extraction must span every stack.
-	extractStack := opts.Stack
-	if closureRequested {
-		extractStack = ""
-	}
-	components, err := extract.UniqueComponents(stacksMap, extractStack)
+	components, err := extract.UniqueComponents(stacksMap, opts.Stack)
 	if err != nil {
 		return componentsExtractResult{}, err
-	}
-
-	if closureRequested {
-		components, err = filterComponentsByClosure(&atmosConfig, opts, labels, stacksMap, components)
-		if err != nil {
-			return componentsExtractResult{}, err
-		}
 	}
 
 	return componentsExtractResult{atmosConfig: &atmosConfig, components: components, collector: collector}, nil
 }
 
-// filterComponentsByClosure keeps only the components inside the dependency
-// closure: the seed (stack glob + tags/labels selectors) picks the roots, the
-// closure expands them in the requested direction/depth, and closure members
-// are kept even when they do not match the selectors that seeded them.
-func filterComponentsByClosure(
+// extractComponentsViaScopedClosure lists the unique components inside the
+// dependency closure using the shared three-phase scoped evaluation: the seed
+// (stack glob + tags/labels selectors) picks the roots on a lightweight
+// structural pass, and only the closure's own components are then fully
+// evaluated. Closure members are kept even when they do not match the
+// selectors that seeded them.
+func extractComponentsViaScopedClosure(
 	atmosConfig *schema.AtmosConfiguration,
 	opts *ComponentsOptions,
 	labels map[string]string,
-	stacksMap map[string]any,
-	components []map[string]any,
+	describeDeps *scopedDescribeDeps,
 ) ([]map[string]any, error) {
-	defer perf.Track(nil, "list.components.filterComponentsByClosure")()
+	defer perf.Track(nil, "list.components.extractComponentsViaScopedClosure")()
 
-	graph, err := dependencies.BuildGraph(stacksMap)
+	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
+		return e.ExecuteDescribeStacksScoped(
+			atmosConfig, stackName, closureComponents, nil, nil,
+			false, // ignoreMissingFiles
+			processTemplates,
+			processFunctions,
+			false, // includeEmptyStacks
+			describeDeps.skip,
+			describeDeps.authManager,
+			describeDeps.authManager == nil,
+			nil, // tagsFilter: closure scoping owns selection.
+			nil, // labelsFilter: closure scoping owns selection.
+			describeDeps.errOpts,
+		)
+	}
+
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := dependencies.ResolveScopedClosure(describe, &dependencies.ScopeRequest{
+		Stack:            opts.Stack,
+		Tags:             opts.Tags,
+		Labels:           labels,
+		Direction:        direction,
+		Depths:           depths,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
+		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	// The resolved stacks map holds only closure components, but keep the
+	// membership filter as the authoritative row gate (derived components can
+	// ride along with a components-narrowed describe).
+	components, err := extract.UniqueComponents(result.Stacks, "")
 	if err != nil {
 		return nil, err
 	}
-	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
-	roots := dependencies.Roots(graph, &dependencies.Selector{
-		Stack:     opts.Stack,
-		Tags:      opts.Tags,
-		Labels:    labels,
-		LeftDelim: leftDelim,
-	})
-	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
-	closure := dependencies.ReachableClosure(graph, roots, direction, depths)
+	return filterRowsByComponentNames(components, dependencies.ComponentNames(result.Closure)), nil
+}
 
-	allowed := make(map[string]struct{})
-	for _, name := range dependencies.ComponentNames(closure) {
+// filterRowsByComponentNames keeps rows whose "component" field is in names.
+func filterRowsByComponentNames(rows []map[string]any, names []string) []map[string]any {
+	allowed := make(map[string]struct{}, len(names))
+	for _, name := range names {
 		allowed[name] = struct{}{}
 	}
-	filtered := make([]map[string]any, 0, len(components))
-	for _, row := range components {
+	filtered := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
 		name, _ := row["component"].(string)
 		if _, ok := allowed[name]; ok {
 			filtered = append(filtered, row)
 		}
 	}
-	return filtered, nil
+	return filtered
 }
 
 // renderComponents builds the render pipeline and renders components.

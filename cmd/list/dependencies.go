@@ -144,14 +144,16 @@ func executeListDependenciesCmd(cmd *cobra.Command, args []string, opts *Depende
 		return nil
 	}
 
+	leftDelim, rightDelim := describeCtx.delims()
 	output, err := dependencies.Render(graph, dependencies.Options{
-		Format:    opts.Format,
-		Direction: dependencies.Direction(opts.Direction),
-		Component: opts.Component,
-		Stack:     opts.Stack,
-		Tags:      opts.Tags,
-		Labels:    opts.Labels,
-		LeftDelim: describeCtx.leftDelim(),
+		Format:     opts.Format,
+		Direction:  dependencies.Direction(opts.Direction),
+		Component:  opts.Component,
+		Stack:      opts.Stack,
+		Tags:       opts.Tags,
+		Labels:     opts.Labels,
+		LeftDelim:  leftDelim,
+		RightDelim: rightDelim,
 	})
 	if err != nil {
 		return err
@@ -171,12 +173,11 @@ type dependenciesDescribeContext struct {
 	skip         []string
 }
 
-// leftDelim returns the configured left template delimiter ("{{" unless
-// 'templates.settings.delimiters' overrides it), used to detect unresolved
-// selector templates in lightweight (unevaluated) graphs.
-func (c *dependenciesDescribeContext) leftDelim() string {
-	left, _ := tags.TemplateDelims(c.atmosConfig.Templates.Settings.Delimiters)
-	return left
+// delims returns the configured template delimiters ("{{"/"}}" unless
+// 'templates.settings.delimiters' overrides them), used to detect — and
+// best-effort resolve — templated selectors in lightweight graphs.
+func (c *dependenciesDescribeContext) delims() (string, string) {
+	return tags.TemplateDelims(c.atmosConfig.Templates.Settings.Delimiters)
 }
 
 // newDependenciesDescribeContext initializes config and auth once for the command.
@@ -205,12 +206,13 @@ func newDependenciesDescribeContext(cmd *cobra.Command, args []string, opts *Dep
 }
 
 // describeStacks runs one describe-stacks pass filtered to filterByStack (empty
-// means every stack), with the given template/YAML-function evaluation enabled.
-func (c *dependenciesDescribeContext) describeStacks(filterByStack string, processTemplates, processFunctions bool) (map[string]any, error) {
+// means every stack) and optionally to a set of component names within it
+// (nil = all), with the given template/YAML-function evaluation enabled.
+func (c *dependenciesDescribeContext) describeStacks(filterByStack string, components []string, processTemplates, processFunctions bool) (map[string]any, error) {
 	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		&c.atmosConfig,
 		filterByStack,
-		nil,
+		components,
 		[]string{cfg.TerraformComponentType},
 		nil,
 		false, // ignoreMissingFiles
@@ -246,7 +248,7 @@ func buildDependencyGraphForCommand(cmd *cobra.Command, args []string, opts *Dep
 	needsEvaluation := opts.ProcessTemplates || opts.ProcessFunctions
 	eager := e.GetEagerEvaluationSetting(&describeCtx.atmosConfig)
 	if !bounded || !needsEvaluation || eager {
-		stacksMap, err := describeCtx.describeStacks("", opts.ProcessTemplates, opts.ProcessFunctions)
+		stacksMap, err := describeCtx.describeStacks("", nil, opts.ProcessTemplates, opts.ProcessFunctions)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -269,6 +271,7 @@ func buildScopedDependencyGraph(describeCtx *dependenciesDescribeContext, opts *
 	if opts.Component != "" {
 		components = []string{opts.Component}
 	}
+	leftDelim, rightDelim := describeCtx.delims()
 	result, err := dependencies.ResolveScopedClosure(describeCtx.describeStacks, &dependencies.ScopeRequest{
 		Components:       components,
 		Stack:            opts.Stack,
@@ -277,7 +280,8 @@ func buildScopedDependencyGraph(describeCtx *dependenciesDescribeContext, opts *
 		Direction:        dependencies.Direction(opts.Direction),
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
-		LeftDelim:        describeCtx.leftDelim(),
+		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
 	})
 	if err != nil {
 		return nil, err

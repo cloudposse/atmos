@@ -11,6 +11,7 @@ import (
 // describeCall records one DescribeFunc invocation.
 type describeCall struct {
 	stack            string
+	components       []string
 	processTemplates bool
 	processFunctions bool
 }
@@ -23,18 +24,36 @@ type fakeDescribe struct {
 	err   error
 }
 
-func (f *fakeDescribe) describe(stack string, processTemplates, processFunctions bool) (map[string]any, error) {
-	f.calls = append(f.calls, describeCall{stack: stack, processTemplates: processTemplates, processFunctions: processFunctions})
+func (f *fakeDescribe) describe(stack string, components []string, processTemplates, processFunctions bool) (map[string]any, error) {
+	f.calls = append(f.calls, describeCall{stack: stack, components: components, processTemplates: processTemplates, processFunctions: processFunctions})
 	if f.err != nil {
 		return nil, f.err
 	}
 	if stack == "" {
 		return f.full, nil
 	}
-	if section, ok := f.full[stack]; ok {
+	section, ok := f.full[stack]
+	if !ok {
+		return map[string]any{}, nil
+	}
+	if len(components) == 0 {
 		return map[string]any{stack: section}, nil
 	}
-	return map[string]any{}, nil
+	// Honor the components narrowing the way the real describe pipeline does.
+	allowed := make(map[string]struct{}, len(components))
+	for _, name := range components {
+		allowed[name] = struct{}{}
+	}
+	stackMap, _ := section.(map[string]any)
+	comps, _ := stackMap["components"].(map[string]any)
+	terraform, _ := comps["terraform"].(map[string]any)
+	narrowed := make(map[string]any, len(terraform))
+	for name, comp := range terraform {
+		if _, ok := allowed[name]; ok {
+			narrowed[name] = comp
+		}
+	}
+	return map[string]any{stack: map[string]any{"components": map[string]any{"terraform": narrowed}}}, nil
 }
 
 // evaluatedStacks returns the stacks described with evaluation on.
@@ -93,6 +112,43 @@ func TestResolveScopedClosureEvaluatesOnlyClosureStacks(t *testing.T) {
 	assert.ElementsMatch(t, []string{"core", "dev"}, fake.evaluatedStacks())
 	require.NotEmpty(t, fake.calls)
 	assert.Equal(t, describeCall{stack: ""}, fake.calls[0], "first call must be the lightweight full-repo pass")
+}
+
+// TestResolveScopedClosureEvaluatesOnlyClosureComponents is the regression
+// guard for stack-granularity over-evaluation: a component that merely shares
+// a stack file with closure members must not be evaluated (its templates/YAML
+// functions may require auth to an unrelated account).
+func TestResolveScopedClosureEvaluatesOnlyClosureComponents(t *testing.T) {
+	t.Parallel()
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app":    dependsOn(map[string]any{"component": "db"}),
+			"db":     {},
+			"poison": {},
+		},
+	})
+	fake := &fakeDescribe{full: stacks}
+	result, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Components:       []string{"app"},
+		Direction:        DirectionForward,
+		ProcessTemplates: true,
+	})
+	require.NoError(t, err)
+
+	for _, call := range fake.calls {
+		if !call.processTemplates && !call.processFunctions {
+			continue
+		}
+		assert.Equal(t, []string{"app", "db"}, call.components,
+			"evaluated describe passes must be narrowed to the closure's own components")
+		assert.NotContains(t, call.components, "poison")
+	}
+	_, hasPoison := result.Closure.GetNode(NodeID("poison", "dev"))
+	assert.False(t, hasPoison)
+	// The merged stacks map must not carry the poison component either.
+	devComponents := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
+	assert.NotContains(t, devComponents, "poison")
 }
 
 func TestResolveScopedClosureDepthBoundsEvaluation(t *testing.T) {

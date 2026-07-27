@@ -7,7 +7,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
-	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/tags"
@@ -47,10 +46,12 @@ type Options struct {
 	// Labels optionally filters the top-level entries to components whose
 	// metadata.labels contains every key=value pair (all-match).
 	Labels map[string]string
-	// LeftDelim is the configured left template delimiter ("{{" when empty),
-	// used to detect still-unresolved selector templates under custom
-	// 'templates.settings.delimiters' configurations.
-	LeftDelim string
+	// LeftDelim/RightDelim are the configured template delimiters ("{{"/"}}"
+	// when empty), used to detect — and best-effort resolve — still-unresolved
+	// selector templates under custom 'templates.settings.delimiters'
+	// configurations.
+	LeftDelim  string
+	RightDelim string
 }
 
 // Render produces the dependency output for the given graph and options.
@@ -61,7 +62,7 @@ func Render(graph *dependency.Graph, opts Options) (string, error) {
 		return "", err
 	}
 
-	sel := &Selector{Stack: opts.Stack, Tags: opts.Tags, Labels: opts.Labels, LeftDelim: opts.LeftDelim}
+	sel := &Selector{Stack: opts.Stack, Tags: opts.Tags, Labels: opts.Labels, LeftDelim: opts.LeftDelim, RightDelim: opts.RightDelim}
 	if opts.Component != "" {
 		sel.Components = []string{opts.Component}
 	}
@@ -110,25 +111,32 @@ func selectTopNodes(graph *dependency.Graph, sel *Selector) []*dependency.Node {
 // nodeMatchesTagsLabels reports whether the node's metadata.tags (any-match)
 // and metadata.labels (all-match) satisfy the filters. Node.Metadata holds
 // the entire raw component section (see BuildGraph), so the metadata
-// subsection is unwrapped first. A tags/labels value still containing an
-// unresolved Go template or Atmos YAML-function marker (see
-// tags.SelectorUnresolved) cannot be judged and conservatively counts as a
-// match — the closure-scoping path calls this on a lightweight (unevaluated)
-// graph, and an unresolved selector must never wrongly exclude a component
-// there; the final render pass sees resolved values and filters exactly.
-func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFilter map[string]string, leftDelim string) bool {
+// subsection is unwrapped first. A templated selector value is best-effort
+// resolved against the component's raw section data (the purity contract
+// limits selectors to simple templates, so this usually succeeds even on a
+// lightweight unevaluated graph); a value that still cannot be resolved
+// conservatively counts as a match — an unresolved selector must never
+// wrongly exclude a component. The final render/adapter pass sees fully
+// resolved values and filters exactly.
+func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFilter map[string]string, leftDelim, rightDelim string) bool {
 	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
 		return true
 	}
 
 	metadata, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
-	if tags.SelectorUnresolved(metadata[tagsMetadataKey], leftDelim) || tags.SelectorUnresolved(metadata[labelsMetadataKey], leftDelim) {
-		return true
+	rawTags := metadata[tagsMetadataKey]
+	rawLabels := metadata[labelsMetadataKey]
+	if tags.SelectorUnresolved(rawTags, leftDelim) || tags.SelectorUnresolved(rawLabels, leftDelim) {
+		resolvedTags, okTags := tags.ResolveSelectorValue(rawTags, node.Metadata, leftDelim, rightDelim)
+		resolvedLabels, okLabels := tags.ResolveSelectorValue(rawLabels, node.Metadata, leftDelim, rightDelim)
+		if !okTags || !okLabels {
+			return true
+		}
+		rawTags, rawLabels = resolvedTags, resolvedLabels
 	}
 
-	nodeTags := extract.GetTagsFromMetadata(metadata)
-	nodeLabels := extract.GetLabelsFromMetadata(metadata)
-	return tags.MatchesTags(nodeTags, tagsFilter, tags.TagModeAny) && tags.MatchesLabels(nodeLabels, labelsFilter)
+	return tags.MatchesTags(tags.ToStringSlice(rawTags), tagsFilter, tags.TagModeAny) &&
+		tags.MatchesLabels(tags.ToStringMap(rawLabels), labelsFilter)
 }
 
 // sortNodes orders nodes by stack then component for stable, readable output.

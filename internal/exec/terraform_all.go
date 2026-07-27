@@ -109,11 +109,11 @@ func terraformClosureRequested(info *schema.ConfigAndStacksInfo) bool {
 // re-applies the selection filters as the seed and expands the closure on the
 // resulting graph, so the evaluation scope and execution set always agree.
 func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
-	describe := func(stackName string, processTemplates, processFunctions bool) (map[string]any, error) {
+	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
 		return ExecuteDescribeStacksWithMocks(
 			atmosConfig,
 			stackName,
-			nil, // components: never narrowed here — closure scoping owns selection.
+			closureComponents, // engine-supplied closure members (nil = all); never the caller's own selection.
 			[]string{cfg.TerraformComponentType},
 			nil,
 			false,
@@ -138,11 +138,11 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 	bounded := info.Stack != "" || len(components) > 0 || len(info.Tags) > 0 || len(info.Labels) > 0
 	needsEvaluation := info.ProcessTemplates || info.ProcessFunctions
 	if !bounded || !needsEvaluation || GetEagerEvaluationSetting(atmosConfig) {
-		return describe("", info.ProcessTemplates, info.ProcessFunctions)
+		return describe("", nil, info.ProcessTemplates, info.ProcessFunctions)
 	}
 
 	direction, depths := listdeps.ClosureScope(info.IncludeDependencies, info.IncludeDependents)
-	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
 	result, err := listdeps.ResolveScopedClosure(describe, &listdeps.ScopeRequest{
 		Components:       components,
 		Stack:            info.Stack,
@@ -153,6 +153,7 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 		ProcessTemplates: info.ProcessTemplates,
 		ProcessFunctions: info.ProcessFunctions,
 		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
 	})
 	if err != nil {
 		return nil, err

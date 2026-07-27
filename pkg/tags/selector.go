@@ -3,7 +3,10 @@ package tags
 import (
 	"sort"
 	"strings"
+	"text/template"
 	"text/template/parse"
+
+	"github.com/Masterminds/sprig/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -15,6 +18,11 @@ const (
 	DefaultLeftDelim  = "{{"
 	DefaultRightDelim = "}}"
 )
+
+// yamlFunctionMarker prefixes an unprocessed Atmos YAML function value
+// (custom-tagged scalars are stored as plain strings like "!env TIER" until
+// function processing runs).
+const yamlFunctionMarker = "!"
 
 // forbiddenSelectorFunctions lists Atmos YAML functions that may not appear in
 // metadata.tags/metadata.labels values. Selectors drive scoping decisions
@@ -94,7 +102,7 @@ func SelectorUnresolved(v any, leftDelim string) bool {
 func selectorUnresolved(v any, leftDelim string) bool {
 	switch value := v.(type) {
 	case string:
-		return strings.Contains(value, leftDelim) || strings.HasPrefix(strings.TrimSpace(value), "!")
+		return strings.Contains(value, leftDelim) || strings.HasPrefix(strings.TrimSpace(value), yamlFunctionMarker)
 	case []any:
 		for _, item := range value {
 			if selectorUnresolved(item, leftDelim) {
@@ -175,7 +183,7 @@ func validateSelectorString(field, value, leftDelim, rightDelim string) error {
 // authentication or execution, or "" when the value is allowed.
 func forbiddenSelectorFunction(value string) string {
 	trimmed := strings.TrimSpace(value)
-	if !strings.HasPrefix(trimmed, "!") {
+	if !strings.HasPrefix(trimmed, yamlFunctionMarker) {
 		return ""
 	}
 	fields := strings.Fields(trimmed)
@@ -338,4 +346,82 @@ func buildForbiddenSelectorError(field, construct string) error {
 		WithContext("field", field).
 		WithContext("construct", construct).
 		Err()
+}
+
+// ResolveSelectorValue best-effort renders the simple Go templates a selector
+// value may contain (the only template form the purity contract allows)
+// against the component's raw section data, so scope decisions on a
+// lightweight (unevaluated) graph can be exact instead of conservatively
+// matching every templated selector. It returns the resolved value and true
+// when every string resolved cleanly; any parse/execute failure, missing key,
+// or still-unresolved marker in the output returns false — callers must then
+// fall back to the conservative match, never exclusion.
+func ResolveSelectorValue(v any, data map[string]any, leftDelim, rightDelim string) (any, bool) {
+	defer perf.Track(nil, "tags.ResolveSelectorValue")()
+
+	if leftDelim == "" || rightDelim == "" {
+		leftDelim, rightDelim = DefaultLeftDelim, DefaultRightDelim
+	}
+	return resolveSelectorValue(v, data, leftDelim, rightDelim)
+}
+
+// resolveSelectorValue walks nested slices/maps without re-entering perf tracking.
+func resolveSelectorValue(v any, data map[string]any, leftDelim, rightDelim string) (any, bool) {
+	switch value := v.(type) {
+	case string:
+		return resolveSelectorString(value, data, leftDelim, rightDelim)
+	case []any:
+		resolved := make([]any, len(value))
+		for i, item := range value {
+			r, ok := resolveSelectorValue(item, data, leftDelim, rightDelim)
+			if !ok {
+				return nil, false
+			}
+			resolved[i] = r
+		}
+		return resolved, true
+	case map[string]any:
+		resolved := make(map[string]any, len(value))
+		for key, item := range value {
+			r, ok := resolveSelectorValue(item, data, leftDelim, rightDelim)
+			if !ok {
+				return nil, false
+			}
+			resolved[key] = r
+		}
+		return resolved, true
+	default:
+		return v, true
+	}
+}
+
+// resolveSelectorString renders one scalar selector value. YAML-function
+// values (leading "!") cannot be rendered here and stay unresolved.
+func resolveSelectorString(value string, data map[string]any, leftDelim, rightDelim string) (string, bool) {
+	if strings.HasPrefix(strings.TrimSpace(value), yamlFunctionMarker) {
+		return "", false
+	}
+	if !strings.Contains(value, leftDelim) {
+		return value, true
+	}
+
+	tmpl, err := template.New("selector").
+		Delims(leftDelim, rightDelim).
+		Funcs(sprig.TxtFuncMap()).
+		Option("missingkey=error").
+		Parse(value)
+	if err != nil {
+		return "", false
+	}
+	var rendered strings.Builder
+	if err := tmpl.Execute(&rendered, data); err != nil {
+		return "", false
+	}
+	out := rendered.String()
+	// A rendered value that still carries a marker (e.g. the referenced var was
+	// itself templated or an unprocessed YAML function) is not resolved.
+	if strings.Contains(out, leftDelim) || strings.HasPrefix(strings.TrimSpace(out), yamlFunctionMarker) || strings.Contains(out, "<no value>") {
+		return "", false
+	}
+	return out, true
 }

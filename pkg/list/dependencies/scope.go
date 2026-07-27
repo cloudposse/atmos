@@ -9,12 +9,16 @@ import (
 )
 
 // DescribeFunc runs one describe-stacks pass. An empty stack means every
-// stack; processTemplates/processFunctions control template and YAML-function
-// evaluation for the pass. Callers must NOT narrow the describe by tags,
-// labels, or components — scoping is the closure's job, and a narrowed
-// describe would drop dependency/dependent components from the graph before
-// the closure could see them.
-type DescribeFunc func(stack string, processTemplates, processFunctions bool) (map[string]any, error)
+// stack; a non-nil components list narrows evaluation to those component
+// names within the stack (nil = every component); processTemplates/
+// processFunctions control template and YAML-function evaluation for the
+// pass. Callers must NOT narrow the describe by tags or labels — scoping is
+// the closure's job, and a narrowed describe would drop dependency/dependent
+// components from the graph before the closure could see them. The components
+// list is supplied BY the closure engine (never by the caller's own selection)
+// so that evaluating a closure stack does not evaluate unrelated components
+// that merely share the stack.
+type DescribeFunc func(stack string, components []string, processTemplates, processFunctions bool) (map[string]any, error)
 
 // ScopeRequest bounds a scoped closure resolution: the selection seed
 // (components/stack/tags/labels), the closure direction and depths, and the
@@ -36,10 +40,11 @@ type ScopeRequest struct {
 	// (Phase C) describe passes; the lightweight pass always runs with both off.
 	ProcessTemplates bool
 	ProcessFunctions bool
-	// LeftDelim is the configured left template delimiter ("{{" when empty),
-	// used to conservatively match still-unresolved selectors in the
-	// lightweight graph.
-	LeftDelim string
+	// LeftDelim/RightDelim are the configured template delimiters ("{{"/"}}"
+	// when empty), used to detect — and best-effort resolve — templated
+	// selectors in the lightweight graph.
+	LeftDelim  string
+	RightDelim string
 }
 
 // ScopeResult is the outcome of a scoped closure resolution.
@@ -66,6 +71,7 @@ type Selector struct {
 	Tags       []string
 	Labels     map[string]string
 	LeftDelim  string
+	RightDelim string
 }
 
 // Roots returns the sorted IDs of nodes matching the selector, for use as
@@ -95,7 +101,7 @@ func (s *Selector) matches(node *dependency.Node) bool {
 	if !stackMatches(s.Stack, node.Stack) {
 		return false
 	}
-	return nodeMatchesTagsLabels(node, s.Tags, s.Labels, s.LeftDelim)
+	return nodeMatchesTagsLabels(node, s.Tags, s.Labels, s.LeftDelim, s.RightDelim)
 }
 
 // stackMatches reports whether a stack name satisfies the stack filter: an
@@ -137,7 +143,7 @@ func stackMatches(pattern, stack string) bool {
 func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResult, error) {
 	defer perf.Track(nil, "dependencies.ResolveScopedClosure")()
 
-	lightweightStacks, err := describe("", false, false)
+	lightweightStacks, err := describe("", nil, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -155,13 +161,14 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 		Tags:       req.Tags,
 		Labels:     req.Labels,
 		LeftDelim:  req.LeftDelim,
+		RightDelim: req.RightDelim,
 	})
 	closure := ReachableClosure(graph, roots, req.Direction, req.Depths)
 	if closure.Size() == 0 {
 		return &ScopeResult{Stacks: map[string]any{}, Closure: closure}, nil
 	}
 
-	return resolveClosureStacks(describe, req, roots, StackNames(closure))
+	return resolveClosureStacks(describe, req, roots, closure)
 }
 
 // resolveClosureStacks is Phase C: re-describe (templates/YAML functions/auth
@@ -171,10 +178,11 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 // from the lightweight pass), so a same-stack templated dependency target
 // (e.g. `stack: "{{ .vars.stage }}"` resolving to its own stack) still
 // produces the correct closure.
-func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots, stackNames []string) (*ScopeResult, error) {
+func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []string, closure *dependency.Graph) (*ScopeResult, error) {
 	resolvedStacks := make(map[string]any)
 	described := make(map[string]bool)
 	var resolvedGraph *dependency.Graph
+	stackNames := StackNames(closure)
 
 	for {
 		pending := pendingStackNames(stackNames, described)
@@ -185,8 +193,15 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots, stack
 			}, nil
 		}
 
+		// Evaluate only the closure's own components within each stack:
+		// unrelated components that merely share a stack file with a closure
+		// member must not have their templates/YAML functions (and thus their
+		// auth/backend requirements) evaluated. When a stack has no known
+		// members (should not happen — stackNames derives from the closure),
+		// fall back to the whole stack rather than silently skipping it.
+		componentsByStack := closureComponentsByStack(closure)
 		for _, stackName := range pending {
-			partial, err := describe(stackName, req.ProcessTemplates, req.ProcessFunctions)
+			partial, err := describe(stackName, componentsByStack[stackName], req.ProcessTemplates, req.ProcessFunctions)
 			if err != nil {
 				return nil, err
 			}
@@ -201,8 +216,25 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots, stack
 		if err != nil {
 			return nil, err
 		}
-		stackNames = StackNames(ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths))
+		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
+		stackNames = StackNames(closure)
 	}
+}
+
+// closureComponentsByStack maps each stack in the closure to the sorted
+// component names the closure holds there.
+func closureComponentsByStack(closure *dependency.Graph) map[string][]string {
+	if closure == nil {
+		return map[string][]string{}
+	}
+	byStack := make(map[string][]string, len(closure.Nodes))
+	for _, node := range closure.Nodes {
+		byStack[node.Stack] = append(byStack[node.Stack], node.Component)
+	}
+	for stack := range byStack {
+		sort.Strings(byStack[stack])
+	}
+	return byStack
 }
 
 // pendingStackNames returns the stack names not yet described.

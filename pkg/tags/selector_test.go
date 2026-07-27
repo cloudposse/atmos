@@ -2,6 +2,7 @@ package tags
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -180,5 +181,80 @@ func TestForbiddenSelectorFunctionsMatchConstants(t *testing.T) {
 		if _, ok := forbiddenSelectorFunctions[name]; !ok {
 			t.Fatalf("deny-list is missing %q", name)
 		}
+	}
+}
+
+// TestResolveSelectorValue covers best-effort resolution of simple selector
+// templates against raw component section data: resolvable templates produce
+// exact values, anything else reports unresolved so callers fall back to the
+// conservative match.
+func TestResolveSelectorValue(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]any{
+		"vars":     map[string]any{"stage": "dev", "layer": "app"},
+		"settings": map[string]any{"team": "platform"},
+	}
+
+	tests := []struct {
+		name     string
+		v        any
+		want     any
+		resolved bool
+	}{
+		{name: "plain_string", v: "prod", want: "prod", resolved: true},
+		{name: "simple_template", v: "{{ .vars.stage }}", want: "dev", resolved: true},
+		{name: "template_with_suffix", v: "{{ .vars.layer }}-dev1", want: "app-dev1", resolved: true},
+		{name: "sprig_function", v: "{{ .vars.stage | upper }}", want: "DEV", resolved: true},
+		{name: "missing_key_unresolved", v: "{{ .vars.nonexistent }}", resolved: false},
+		{name: "yaml_function_unresolved", v: "!env TIER", resolved: false},
+		{name: "nested_template_output_unresolved", v: "{{ .vars.templated }}", resolved: false},
+		{
+			name:     "slice_resolves_elementwise",
+			v:        []any{"static", "{{ .vars.stage }}"},
+			want:     []any{"static", "dev"},
+			resolved: true,
+		},
+		{
+			name:     "map_resolves_values",
+			v:        map[string]any{"layer": "{{ .vars.layer }}-dev1"},
+			want:     map[string]any{"layer": "app-dev1"},
+			resolved: true,
+		},
+		{name: "slice_with_unresolvable_element", v: []any{"ok", "{{ .missing }}"}, resolved: false},
+	}
+
+	dataWithTemplated := map[string]any{
+		"vars": map[string]any{"templated": "{{ .something }}", "stage": "dev", "layer": "app"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			input := data
+			if tc.name == "nested_template_output_unresolved" {
+				input = dataWithTemplated
+			}
+			got, resolved := ResolveSelectorValue(tc.v, input, "", "")
+			if resolved != tc.resolved {
+				t.Fatalf("ResolveSelectorValue(%v) resolved = %v, want %v", tc.v, resolved, tc.resolved)
+			}
+			if tc.resolved && !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("ResolveSelectorValue(%v) = %v, want %v", tc.v, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestResolveSelectorValueCustomDelims verifies resolution honors configured
+// delimiters.
+func TestResolveSelectorValueCustomDelims(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]any{"vars": map[string]any{"stage": "dev"}}
+	got, resolved := ResolveSelectorValue("[[ .vars.stage ]]", data, "[[", "]]")
+	if !resolved || got != "dev" {
+		t.Fatalf("ResolveSelectorValue custom delims = (%v, %v), want (dev, true)", got, resolved)
 	}
 }
