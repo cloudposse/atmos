@@ -310,6 +310,7 @@ func repositoryPath(config *schema.AtmosConfiguration, path string) string {
 
 func appendToolchain(graph *Graph, config *schema.AtmosConfiguration) error {
 	if config == nil {
+		graph.Coverage = append(graph.Coverage, Coverage{Adapter: "toolchain", Status: "incomplete", Detail: "no Atmos configuration; toolchain lock cannot be located"})
 		return nil
 	}
 	path := config.Toolchain.LockFile
@@ -324,6 +325,7 @@ func appendToolchain(graph *Graph, config *schema.AtmosConfiguration) error {
 		path = filepath.Join(config.BasePath, path)
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
+		graph.Coverage = append(graph.Coverage, Coverage{Adapter: "toolchain", Status: "incomplete", Detail: "no toolchain lock found"})
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("stat toolchain lock: %w", err)
@@ -337,15 +339,18 @@ func appendToolchain(graph *Graph, config *schema.AtmosConfiguration) error {
 			graph.Components = append(graph.Components, Component{ID: "toolchain:" + name + ":" + platform, Name: name, Version: tool.Version, Type: "application", Source: entry.URL, SHA256: trimSHA256(entry.Checksum), Properties: map[string]string{"atmos:domain": "toolchain", "atmos:lock-file": repositoryPath(config, path), "atmos:platform": platform}})
 		}
 	}
+	graph.Coverage = append(graph.Coverage, Coverage{Adapter: "toolchain", Status: "complete", Detail: "toolchain lock parsed"})
 	return nil
 }
 
 func appendVersions(graph *Graph, config *schema.AtmosConfiguration) error {
 	if config == nil {
+		graph.Coverage = append(graph.Coverage, Coverage{Adapter: "version-track", Status: "incomplete", Detail: "no Atmos configuration; version-track lock cannot be located"})
 		return nil
 	}
 	path := versionmanager.LockFilePath(config)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
+		graph.Coverage = append(graph.Coverage, Coverage{Adapter: "version-track", Status: "incomplete", Detail: "no version-track lock found"})
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("stat versions lock: %w", err)
@@ -359,6 +364,7 @@ func appendVersions(graph *Graph, config *schema.AtmosConfiguration) error {
 			graph.Components = append(graph.Components, Component{ID: "version:" + track + ":" + name, Name: name, Version: entry.Version, Type: "library", Source: entry.Provider, SHA256: trimSHA256(entry.Digest), Properties: map[string]string{"atmos:domain": "version-track", "atmos:lock-file": repositoryPath(config, path), "atmos:track": track, "atmos:ecosystem": entry.Ecosystem, "atmos:datasource": entry.Datasource}})
 		}
 	}
+	graph.Coverage = append(graph.Coverage, Coverage{Adapter: "version-track", Status: "complete", Detail: "version-track lock parsed"})
 	return nil
 }
 

@@ -42,14 +42,14 @@ of the two adapter groups below; `terraform` is the default.
 | OCI sources | (always) | Selected OCI descriptor digest | Complete when represented by a source receipt. |
 | Terraform providers | `terraform` | `.terraform.lock.hcl` version and `zh:` SHA-256 archive hashes | Incomplete when an installed provider lacks a SHA-256 archive hash. |
 | Terraform modules | `terraform` | `terraform modules -json` plus common-source resolution | Requires Terraform 1.10+ and immutable module evidence. |
-| Toolchain | `dependencies` | `.tools/toolchain.lock.yaml` installed tool versions and checksums, one component per platform | Best-effort; omitted entirely when no toolchain lock exists. |
-| Version-track | `dependencies` | `versions.lock.yaml` version-tracked ecosystem dependencies | Best-effort; omitted entirely when no version-track lock exists. |
+| Toolchain | `dependencies` | `.tools/toolchain.lock.yaml` installed tool versions and checksums, one component per platform | Best-effort; emit an explicit incomplete finding when no toolchain lock exists. |
+| Version-track | `dependencies` | `versions.lock.yaml` version-tracked ecosystem dependencies | Best-effort; emit an explicit incomplete finding when no version-track lock exists. |
 
 `atmos sbom generate --scope terraform --mode provenance` emits available
 evidence and coverage diagnostics. `--mode ntia` requires an explicit
-subject name, version, and supplier, and fails if any required adapter is not
-complete; NTIA mode currently requires `--scope terraform`. It therefore makes
-no whole-environment compliance claim.
+subject name, version, and supplier, and fails if any required adapter is
+incomplete; NTIA mode currently requires `--scope terraform`. It therefore
+makes no whole-environment compliance claim.
 
 ## CI Publication
 

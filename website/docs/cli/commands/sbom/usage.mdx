@@ -17,7 +17,7 @@ Generate a provenance/build-input SBOM from Atmos source receipts and Terraform 
 
 # SBOM Generation
 
-`atmos sbom generate` builds one provenance graph and renders it as CycloneDX JSON or SPDX JSON. The default scope is `terraform`: Atmos-managed sources, OCI source artifacts, Terraform providers, and Terraform modules. Pass `--scope dependencies` instead to inventory Atmos's own toolchain and version-track lock evidence (`.tools/toolchain.lock.yaml` and `versions.lock.yaml`) rather than Terraform.
+`atmos sbom generate` builds one provenance graph and renders it as CycloneDX JSON or SPDX JSON. Atmos-managed sources (including OCI source artifacts) are always included, regardless of `--scope`. The default scope, `terraform`, additionally includes Terraform providers and Terraform modules. Pass `--scope dependencies` instead to additionally inventory Atmos's own toolchain and version-track lock evidence (`.tools/toolchain.lock.yaml` and `versions.lock.yaml`) rather than Terraform.
 
 This is not a claim that every deployed workload has been inventoried. Helm, Helmfile, discovered container images, image package contents, and OpenTofu module graphs are reported as outside the initial scope rather than silently omitted.
 

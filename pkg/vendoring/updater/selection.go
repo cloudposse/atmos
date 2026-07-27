@@ -60,13 +60,13 @@ func UpdateSelectedComponents(p *SelectionParams, components []string) (*vendori
 	for _, component := range components {
 		resolved, err := vendoring.ResolveComponentSource(&vendoring.ResolveSourceParams{VendorFile: p.VendorFile, Component: component, ComponentType: p.ComponentType})
 		if err != nil {
-			return nil, err
+			return &vendoring.UpdateReport{Results: results}, err
 		}
 		report, err := p.RunWithProgress(func(onProgress func(component string, index, total int)) (*vendoring.UpdateReport, error) {
 			return vendoring.UpdateResolved(resolved, &vendoring.UpdateParams{Tags: p.Tags, DryRun: p.Check, OnProgress: onProgress})
 		})
 		if err != nil {
-			return nil, err
+			return &vendoring.UpdateReport{Results: results}, err
 		}
 		results = append(results, report.Results...)
 	}
