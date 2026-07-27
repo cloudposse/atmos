@@ -198,13 +198,16 @@ func TestSelectTopNodes_TagsLabelsFilters(t *testing.T) {
 }
 
 func TestSelectTopNodes_TemplatedSelectorConservativelyMatches(t *testing.T) {
-	// A tags/labels value still containing an unresolved template marker
-	// cannot be judged on a lightweight (unevaluated) graph and must count as
-	// a match rather than wrongly excluding the node.
+	// A tags/labels value still containing an unresolved template or Atmos
+	// YAML-function marker cannot be judged on a lightweight (unevaluated)
+	// graph and must count as a match rather than wrongly excluding the node.
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {
 			"templated": withMetadata(map[string]any{
 				"tags": []any{"{{ .settings.tag }}"},
+			}),
+			"yamlfunc": withMetadata(map[string]any{
+				"tags": []any{"!env DEPLOY_TIER"},
 			}),
 		},
 	})
@@ -212,8 +215,9 @@ func TestSelectTopNodes_TemplatedSelectorConservativelyMatches(t *testing.T) {
 	require.NoError(t, err)
 
 	tops := selectTopNodes(graph, "", "", []string{"anything"}, nil)
-	require.Len(t, tops, 1)
-	assert.Equal(t, "templated", tops[0].Component)
+	require.Len(t, tops, 2)
+	assert.ElementsMatch(t, []string{"templated", "yamlfunc"},
+		[]string{tops[0].Component, tops[1].Component})
 }
 
 func TestRender_TagsFilterScopesTopEntries(t *testing.T) {

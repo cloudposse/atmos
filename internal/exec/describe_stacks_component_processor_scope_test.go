@@ -117,6 +117,27 @@ func TestInScopeByTagsAndLabels(t *testing.T) {
 			wantInScope:   true,
 			wantDecidable: true,
 		},
+		{
+			name: "yaml_function_tags_undecidable",
+			// Unprocessed Atmos YAML functions are stored as plain strings like
+			// "!env DEPLOY_TIER" (see getValueWithTag in pkg/utils); the gate must
+			// treat them as unresolved, not as a static non-match.
+			metadata: map[string]any{
+				"tags": []any{"!env DEPLOY_TIER"},
+			},
+			filterTags:    []string{"prod"},
+			wantInScope:   true,
+			wantDecidable: false,
+		},
+		{
+			name: "yaml_function_labels_undecidable",
+			metadata: map[string]any{
+				"labels": map[string]any{"env": "!store ssm env"},
+			},
+			filterLabels:  map[string]string{"env": "prod"},
+			wantInScope:   true,
+			wantDecidable: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -126,35 +147,6 @@ func TestInScopeByTagsAndLabels(t *testing.T) {
 			inScope, decidable := inScopeByTagsAndLabels(tc.metadata, tc.filterTags, tc.filterLabels)
 			assert.Equal(t, tc.wantInScope, inScope, "inScope")
 			assert.Equal(t, tc.wantDecidable, decidable, "decidable")
-		})
-	}
-}
-
-// TestIsMetadataSelectorTemplated covers detection of unresolved Go template
-// markers in metadata.tags/metadata.labels values of various shapes.
-func TestIsMetadataSelectorTemplated(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		v    any
-		want bool
-	}{
-		{name: "nil", v: nil, want: false},
-		{name: "plain_string", v: "prod", want: false},
-		{name: "templated_string", v: "{{ .vars.stage }}", want: true},
-		{name: "plain_slice", v: []any{"prod", "team-a"}, want: false},
-		{name: "templated_slice_element", v: []any{"prod", "{{ .vars.stage }}"}, want: true},
-		{name: "plain_map", v: map[string]any{"env": "prod"}, want: false},
-		{name: "templated_map_value", v: map[string]any{"env": "{{ .vars.stage }}"}, want: true},
-		{name: "non_string_scalar", v: 42, want: false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tc.want, isMetadataSelectorTemplated(tc.v))
 		})
 	}
 }
@@ -319,7 +311,7 @@ func TestProcessComponentEntry_TagsLabelsTemplatedMetadataFallsThroughToAuth(t *
 // describe.settings.eager_evaluation rollback: with it set, a
 // tag-mismatched component is still fully evaluated (auth resolver runs)
 // instead of being skipped by the early gate — an instant escape hatch if a
-// repo's templated metadata isn't safely detectable by isMetadataSelectorTemplated.
+// repo's templated metadata isn't safely detectable by tags.SelectorUnresolved.
 func TestProcessComponentEntry_TagsLabelsEagerEvaluationOverride(t *testing.T) {
 	t.Parallel()
 

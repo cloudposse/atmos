@@ -668,3 +668,65 @@ func TestExecuteListInstancesCmd_FilterAndQueryRejectedInTreeMatrix(t *testing.T
 		})
 	}
 }
+
+// TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix verifies
+// --tags/--labels are rejected wherever row filtering cannot apply: with
+// --upload (the Atmos Pro inventory upload is always unfiltered, so a filtered
+// table alongside a full upload would mislead) and with the tree/matrix
+// formats (which bypass the row-filter pipeline entirely).
+func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	tests := []struct {
+		name      string
+		format    string
+		upload    bool
+		tags      []string
+		labelsRaw string
+		wantMatch string
+	}{
+		{
+			name:      "tags+upload rejected",
+			tags:      []string{"network"},
+			upload:    true,
+			wantMatch: "--tags/--labels is not supported with --upload",
+		},
+		{
+			name:      "labels+upload rejected",
+			labelsRaw: "team=platform",
+			upload:    true,
+			wantMatch: "--tags/--labels is not supported with --upload",
+		},
+		{
+			name:      "tags+tree rejected",
+			format:    "tree",
+			tags:      []string{"network"},
+			wantMatch: "--tags/--labels is not supported with --format=tree",
+		},
+		{
+			name:      "labels+matrix rejected",
+			format:    "matrix",
+			labelsRaw: "team=platform",
+			wantMatch: "--tags/--labels is not supported with --format=matrix",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+				Info:      info,
+				Cmd:       &cobra.Command{},
+				Args:      []string{},
+				Format:    tc.format,
+				Upload:    tc.upload,
+				Tags:      tc.tags,
+				LabelsRaw: tc.labelsRaw,
+			})
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+			assert.Contains(t, err.Error(), tc.wantMatch)
+		})
+	}
+}

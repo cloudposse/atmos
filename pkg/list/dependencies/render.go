@@ -3,7 +3,6 @@ package dependencies
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -110,47 +109,24 @@ func selectTopNodes(graph *dependency.Graph, component, stack string, tagsFilter
 // and metadata.labels (all-match) satisfy the filters. Node.Metadata holds
 // the entire raw component section (see BuildGraph), so the metadata
 // subsection is unwrapped first. A tags/labels value still containing an
-// unresolved Go template marker cannot be judged and conservatively counts as
-// a match — the closure-scoping path calls this on a lightweight
-// (unevaluated) graph, and a templated selector must never wrongly exclude a
-// component there; the final render pass sees resolved values and filters
-// exactly.
+// unresolved Go template or Atmos YAML-function marker (see
+// tags.SelectorUnresolved) cannot be judged and conservatively counts as a
+// match — the closure-scoping path calls this on a lightweight (unevaluated)
+// graph, and an unresolved selector must never wrongly exclude a component
+// there; the final render pass sees resolved values and filters exactly.
 func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFilter map[string]string) bool {
 	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
 		return true
 	}
 
 	metadata, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
-	if selectorTemplated(metadata[tagsMetadataKey]) || selectorTemplated(metadata[labelsMetadataKey]) {
+	if tags.SelectorUnresolved(metadata[tagsMetadataKey]) || tags.SelectorUnresolved(metadata[labelsMetadataKey]) {
 		return true
 	}
 
 	nodeTags := extract.GetTagsFromMetadata(metadata)
 	nodeLabels := extract.GetLabelsFromMetadata(metadata)
 	return tags.MatchesTags(nodeTags, tagsFilter, tags.TagModeAny) && tags.MatchesLabels(nodeLabels, labelsFilter)
-}
-
-// selectorTemplated reports whether a metadata.tags/metadata.labels value
-// contains an unresolved Go template marker ("{{"), meaning its real value is
-// only known after template rendering.
-func selectorTemplated(v any) bool {
-	switch value := v.(type) {
-	case string:
-		return strings.Contains(value, "{{")
-	case []any:
-		for _, item := range value {
-			if selectorTemplated(item) {
-				return true
-			}
-		}
-	case map[string]any:
-		for _, item := range value {
-			if selectorTemplated(item) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // sortNodes orders nodes by stack then component for stable, readable output.

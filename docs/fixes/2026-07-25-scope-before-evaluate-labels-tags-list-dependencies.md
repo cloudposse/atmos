@@ -77,8 +77,10 @@ and `ExecuteTerraformQueryWithContext`. Every other `ExecuteDescribeStacks*` wra
 implicitly passes empty filters, so single-component and non-selector callers see zero behavior change.
 
 **Templated metadata safety net.** `metadata.tags`/`metadata.labels` could in principle be Go
-templates. Grepping this repo's own `examples/`/`tests/` found zero such occurrences, but the code does
-not assume that: `isMetadataSelectorTemplated` detects a `{{` marker in the raw value and returns
+templates or Atmos YAML functions. Grepping this repo's own `examples/`/`tests/` found zero such
+occurrences, but the code does not assume that: `tags.SelectorUnresolved` detects a `{{` template
+marker or an unprocessed YAML-function marker (custom-tagged scalars are stored as plain strings
+like `!env DEPLOY_TIER` until function processing runs) in the raw value and returns
 `decidable=false`, which forces the component through full evaluation instead of being silently
 skipped — correctness is preserved (only the perf optimization is forfeited for that one component). A
 `describe.settings.eager_evaluation` / `ATMOS_...`-style config escape hatch

@@ -739,9 +739,9 @@ func (p *describeStacksProcessor) scopeDecision(metadata map[string]any) (inScop
 // pkg/scheduler/adapters/terraform.go (tags: any-match, labels: all-match) so the
 // early-skip gate here and that later post-filter can never disagree. Returns
 // decidable=false when metadata.tags/metadata.labels contain an unresolved Go
-// template marker, since their real value cannot be determined without the full
-// template/YAML-function evaluation this gate exists to avoid for out-of-scope
-// components.
+// template or Atmos YAML-function marker (see tags.SelectorUnresolved), since
+// their real value cannot be determined without the full template/YAML-function
+// evaluation this gate exists to avoid for out-of-scope components.
 func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filterLabels map[string]string) (inScope bool, decidable bool) {
 	if len(filterTags) == 0 && len(filterLabels) == 0 {
 		return true, true
@@ -750,7 +750,7 @@ func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filter
 	rawTags := metadata["tags"]
 	rawLabels := metadata["labels"]
 
-	if isMetadataSelectorTemplated(rawTags) || isMetadataSelectorTemplated(rawLabels) {
+	if tags.SelectorUnresolved(rawTags) || tags.SelectorUnresolved(rawLabels) {
 		return true, false
 	}
 
@@ -761,31 +761,6 @@ func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filter
 		return false, true
 	}
 	return true, true
-}
-
-// isMetadataSelectorTemplated reports whether a metadata.tags/metadata.labels value
-// contains an unresolved Go template marker ("{{"), meaning its real value can only
-// be known after template rendering. In this repo's own examples/tests, selector
-// metadata is always static, but a templated value must never be silently
-// misjudged as out-of-scope.
-func isMetadataSelectorTemplated(v any) bool {
-	switch value := v.(type) {
-	case string:
-		return strings.Contains(value, "{{")
-	case []any:
-		for _, item := range value {
-			if isMetadataSelectorTemplated(item) {
-				return true
-			}
-		}
-	case map[string]any:
-		for _, item := range value {
-			if isMetadataSelectorTemplated(item) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that

@@ -708,6 +708,14 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	upload := opts.Upload
 	formatFlag := opts.Format
 
+	// The Atmos Pro inventory upload is intentionally whole-repo: row filters
+	// only shape the rendered table, so allowing them alongside --upload would
+	// show a filtered table while silently uploading everything. Reject the
+	// combination outright (matching the matrix/tree guards below).
+	if upload && (len(opts.Tags) > 0 || opts.LabelsRaw != "") {
+		return fmt.Errorf("%w: --tags/--labels is not supported with --upload (the inventory upload is always unfiltered)", errUtils.ErrInvalidFlag)
+	}
+
 	// Handle matrix format specially - it bypasses the normal rendering pipeline.
 	if formatFlag == string(format.FormatMatrix) {
 		if upload {
