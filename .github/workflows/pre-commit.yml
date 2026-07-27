@@ -7,7 +7,7 @@ on:
 env:
   # Released binary used by hooks that invoke Atmos. This must not build source
   # during pre-commit, which runs in a worktree-sensitive lifecycle event.
-  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
+  ATMOS_BOOTSTRAP_VERSION: "1.224.1"
   # Ensure pre-commit uses the right Python version
   PYTHON_VERSION: "3.11"
   # Skip hooks that are already running in other CI jobs to avoid redundant work
