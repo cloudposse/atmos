@@ -46,6 +46,45 @@ type envCaptureHandler struct {
 	captured *map[string]string
 }
 
+type hookEnvState struct {
+	template string
+	process  string
+}
+
+// hookEnvCaptureHandler records the independently maintained template and
+// process environments passed to a later hook step.
+type hookEnvCaptureHandler struct {
+	runnerstep.BaseHandler
+	key      string
+	captured *[]hookEnvState
+}
+
+func (h *hookEnvCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *hookEnvCaptureHandler) Execute(_ context.Context, step *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	templateValue, err := vars.Resolve(step.Content)
+	if err != nil {
+		return nil, err
+	}
+	*h.captured = append(*h.captured, hookEnvState{template: templateValue, process: vars.Env[h.key]})
+	return runnerstep.NewStepResult(templateValue), nil
+}
+
+type templateEnvPresenceHandler struct {
+	runnerstep.BaseHandler
+	key     string
+	present *[]bool
+}
+
+func (h *templateEnvPresenceHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *templateEnvPresenceHandler) Execute(_ context.Context, _ *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	env := vars.TemplateData()["env"].(map[string]string)
+	_, ok := env[h.key]
+	*h.present = append(*h.present, ok)
+	return runnerstep.NewStepResult("ok"), nil
+}
+
 // workingDirectoryCaptureHandler records the working directory supplied to a
 // step so hook defaults can be checked without launching a subprocess.
 type workingDirectoryCaptureHandler struct {
@@ -506,7 +545,7 @@ func TestWithOutcomeTemplateData(t *testing.T) {
 	assert.Equal(t, 0, empty["exit_code"])
 }
 
-func TestResolveHookRendersOutcomeInWith(t *testing.T) {
+func TestResolveStepHookDefersWithRendering(t *testing.T) {
 	hooks := &Hooks{
 		sections: map[string]any{
 			"atmos_component": "vpc",
@@ -529,9 +568,47 @@ func TestResolveHookRendersOutcomeInWith(t *testing.T) {
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, outcome,
 	)
 	require.NoError(t, err)
-	require.NotNil(t, resolved.With)
-	// Component and stack come from the section; status from the outcome.
-	assert.Equal(t, "vpc in foobar: failure", hookWithMap(t, resolved.With)["message"])
+	// Step-backed payloads are deferred until their step runs, so the env
+	// channel can evolve between list items.
+	assert.Equal(t, "{{ .atmos_component }} in {{ .stack }}: {{ .status }}", hookWithMap(t, resolved.With)["message"])
+}
+
+func TestResolveStepHookDefersWithUntilStepExecution(t *testing.T) {
+	captured := []hookEnvState{}
+	runnerstep.Register(&hookEnvCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("resolved-hook-env-capture", runnerstep.CategoryCommand, false),
+		key:         "HOOK_VALUE",
+		captured:    &captured,
+	})
+	hooks := &Hooks{
+		sections: map[string]any{
+			"atmos_component": "vpc",
+			"hooks": map[string]any{
+				"set-and-use": map[string]any{
+					"kind": stepsKindName,
+					"with": []any{
+						map[string]any{"type": "env", "vars": map[string]string{"HOOK_VALUE": "bar"}},
+						map[string]any{"type": "resolved-hook-env-capture", "content": "{{ .env.HOOK_VALUE }}"},
+					},
+				},
+			},
+		},
+	}
+
+	resolved, err := hooks.resolveHookForExecution(
+		"set-and-use", &Hook{Kind: stepsKindName},
+		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess},
+	)
+	require.NoError(t, err)
+	steps, err := StepsFromHook(resolved)
+	require.NoError(t, err)
+	require.Len(t, steps, 2)
+	assert.Equal(t, "{{ .env.HOOK_VALUE }}", steps[1].Content)
+
+	ctx := stepsExecContext(resolved)
+	_, err = stepsEngine{}.Run(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []hookEnvState{{template: "bar", process: "bar"}}, captured)
 }
 
 func TestResolveHookRendersSayApplyOutcome(t *testing.T) {
@@ -561,14 +638,20 @@ Terraform apply for {{ .atmos_component }} in {{ .stack }} was not successful.
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "Terraform apply for hello-world in test was successful.", hookWithMap(t, success.With)["content"])
+	successCtx := stepExecContext(success)
+	successStep, err := stepFromHookWithVariables(successCtx, stepVariables(successCtx))
+	require.NoError(t, err)
+	assert.Equal(t, "Terraform apply for hello-world in test was successful.", successStep.Content)
 
 	failure, err := hooks.resolveHookForExecution(
 		"announce-apply", &Hook{Kind: stepKindName, Type: "say"},
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunFailure, Err: errors.New("apply boom"), ExitCode: 1},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "Terraform apply for hello-world in test was not successful. apply boom", hookWithMap(t, failure.With)["content"])
+	failureCtx := stepExecContext(failure)
+	failureStep, err := stepFromHookWithVariables(failureCtx, stepVariables(failureCtx))
+	require.NoError(t, err)
+	assert.Equal(t, "Terraform apply for hello-world in test was not successful. apply boom", failureStep.Content)
 }
 
 func TestStepEngineSeedsOutcomeEnv(t *testing.T) {
@@ -687,6 +770,104 @@ func TestStepsEngineRunsWithInOrder(t *testing.T) {
 	require.NotNil(t, out.Summary)
 	assert.Equal(t, StatusSuccess, out.Summary.Status)
 	assert.Equal(t, []string{"start emulator", "apply fixture"}, calls)
+}
+
+func TestStepsEngineEnvStepChannelsAndScope(t *testing.T) {
+	const key = "ATMOS_HOOK_STEP_ENV_CHANNEL_TEST"
+	old, wasSet := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv(key, old)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+
+	for _, tt := range []struct {
+		name        string
+		export      *bool
+		wantProcess string
+	}{
+		{name: "default exports", wantProcess: "bar"},
+		{name: "false is template only", export: hookEnvBoolPtr(false), wantProcess: ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			captured := []hookEnvState{}
+			handlerType := "hook-env-capture-" + tt.name
+			runnerstep.Register(&hookEnvCaptureHandler{
+				BaseHandler: runnerstep.NewBaseHandler(handlerType, runnerstep.CategoryCommand, false),
+				key:         key,
+				captured:    &captured,
+			})
+			hook := &Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "env", "vars": map[string]string{key: "bar"}, "export": tt.export},
+				map[string]any{"type": handlerType, "content": "{{ .env." + key + " }}"},
+			}}
+
+			_, err := stepsEngine{}.Run(stepsExecContext(hook))
+			require.NoError(t, err)
+			require.Len(t, captured, 1)
+			assert.Equal(t, "bar", captured[0].template, "later with payload must be rendered after the env step")
+			assert.Equal(t, tt.wantProcess, captured[0].process)
+		})
+	}
+
+	// A fresh hook invocation must not inherit an exported value from the prior
+	// ordered list.
+	captured := []hookEnvState{}
+	runnerstep.Register(&hookEnvCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-env-scope-capture", runnerstep.CategoryCommand, false),
+		key:         key,
+		captured:    &captured,
+	})
+	_, err := stepsEngine{}.Run(stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+		map[string]any{"type": "hook-env-scope-capture", "content": "static"},
+	}}))
+	require.NoError(t, err)
+	require.Len(t, captured, 1)
+	assert.Empty(t, captured[0].process)
+}
+
+func TestStepsEngineEnvStateResetsForRetry(t *testing.T) {
+	const key = "ATMOS_HOOK_STEP_ENV_RETRY_TEST"
+	old, wasSet := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv(key, old)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+
+	present := []bool{}
+	runnerstep.Register(&templateEnvPresenceHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-env-retry-clean", runnerstep.CategoryCommand, false),
+		key:         key,
+		present:     &present,
+	})
+	failed := false
+	runnerstep.Register(&failOnceOnContentHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-env-retry-fail", runnerstep.CategoryCommand, false),
+		calls:       &[]string{},
+		failContent: "retry",
+		failed:      &failed,
+	})
+	maxAttempts := 2
+	hook := &Hook{Kind: stepsKindName, Retry: &schema.RetryConfig{MaxAttempts: &maxAttempts}, With: []any{
+		map[string]any{"type": "hook-env-retry-clean"},
+		map[string]any{"type": "env", "vars": map[string]string{key: "bar"}},
+		map[string]any{"type": "hook-env-retry-fail", "content": "retry"},
+	}}
+
+	_, err := stepsEngine{}.Run(stepsExecContext(hook))
+	require.NoError(t, err)
+	assert.Equal(t, []bool{false, false}, present)
+}
+
+func hookEnvBoolPtr(value bool) *bool {
+	return &value
 }
 
 func TestStepsEngineRetryWrapsWholeList(t *testing.T) {

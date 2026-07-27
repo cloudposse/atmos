@@ -873,7 +873,7 @@ func TestCheckAndGenerateWorkflowStepNames_Coverage(t *testing.T) {
 func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
 	// When no identity is specified, should return base environment with workflow/step env merged.
 	baseEnv := []string{"BASE_VAR=base-value"}
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, nil)
 
 	assert.NoError(t, err)
 	// Should return the base environment.
@@ -883,7 +883,7 @@ func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
 // TestPrepareStepEnvironment_NilAuthManager tests prepareStepEnvironment with nil auth manager.
 func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 	baseEnv := []string{"BASE_VAR=base-value"}
-	env, err := prepareStepEnvironment(baseEnv, "some-identity", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "some-identity", "step1", nil, nil, nil, nil)
 
 	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	assert.Nil(t, env)
@@ -902,6 +902,7 @@ func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
 			DoAndReturn(func(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
 				assert.Equal(t, "parent-id", identityName)
 				assert.Contains(t, currentEnv, "BASE_VAR=base-value")
+				assert.Contains(t, currentEnv, "PERSISTENT_VAR=persistent-value")
 				return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
 			}),
 	)
@@ -924,6 +925,7 @@ func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
 		dryRun:              true,
 		commandLineIdentity: "parent-id",
 		baseEnv:             []string{"BASE_VAR=base-value"},
+		persistentEnv:       map[string]string{"PERSISTENT_VAR": "persistent-value"},
 		authManager:         authManager,
 	}, parent)
 
@@ -1029,7 +1031,7 @@ func TestPrepareStepEnvironment_WithBaseEnv(t *testing.T) {
 	}
 
 	// When no identity is specified, should return base environment.
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
@@ -1043,7 +1045,7 @@ func TestPrepareStepEnvironment_WithBaseEnv(t *testing.T) {
 func TestPrepareStepEnvironment_EmptyBaseEnv(t *testing.T) {
 	baseEnv := []string{}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, nil)
 
 	assert.NoError(t, err)
 	// With empty baseEnv and no workflow/step env, should return empty.
@@ -1057,7 +1059,7 @@ func TestPrepareStepEnvironment_WithWorkflowEnv(t *testing.T) {
 		"WORKFLOW_VAR": "workflow-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
@@ -1078,7 +1080,7 @@ func TestPrepareStepEnvironment_PreservesToolchainPathWithWorkflowPathOverride(t
 		"PATH": strings.Join([]string{"/workspace/.context/bin", systemPath}, separator),
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, nil)
 
 	require.NoError(t, err)
 	assert.Contains(t, env, "PATH="+strings.Join([]string{
@@ -1095,7 +1097,7 @@ func TestPrepareStepEnvironment_WithStepEnv(t *testing.T) {
 		"STEP_VAR": "step-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, stepEnv)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, stepEnv)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
@@ -1115,12 +1117,48 @@ func TestPrepareStepEnvironment_StepOverridesWorkflow(t *testing.T) {
 		"MY_VAR": "step-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, stepEnv)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, stepEnv)
 
 	assert.NoError(t, err)
 
 	// Check that step value is present (not workflow value).
 	assert.Contains(t, env, "MY_VAR=step-value")
+	assert.NotContains(t, env, "MY_VAR=workflow-value")
+}
+
+func TestPrepareStepEnvironment_PersistentEnvPrecedence(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	workflowEnv := map[string]string{
+		"MY_VAR": "workflow-value",
+	}
+	persistentEnv := map[string]string{
+		"MY_VAR": "env-step-value",
+	}
+	stepEnv := map[string]string{
+		"MY_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, persistentEnv, stepEnv)
+
+	require.NoError(t, err)
+	assert.Contains(t, env, "MY_VAR=step-value")
+	assert.NotContains(t, env, "MY_VAR=workflow-value")
+	assert.NotContains(t, env, "MY_VAR=env-step-value")
+}
+
+func TestPrepareStepEnvironment_PersistentEnvOverridesWorkflow(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	workflowEnv := map[string]string{
+		"MY_VAR": "workflow-value",
+	}
+	persistentEnv := map[string]string{
+		"MY_VAR": "env-step-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, persistentEnv, nil)
+
+	require.NoError(t, err)
+	assert.Contains(t, env, "MY_VAR=env-step-value")
 	assert.NotContains(t, env, "MY_VAR=workflow-value")
 }
 
@@ -1134,7 +1172,7 @@ func TestPrepareStepEnvironment_MergesWorkflowAndStep(t *testing.T) {
 		"STEP_VAR": "step-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, stepEnv)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, stepEnv)
 
 	assert.NoError(t, err)
 

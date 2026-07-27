@@ -517,3 +517,15 @@ func TestVariablesResolveWith(t *testing.T) {
 		assert.Equal(t, "myapp", result)
 	})
 }
+
+func TestVariablesResolveWithFallback(t *testing.T) {
+	vars := NewVariables()
+	vars.SetEnv("REGION", "template-region")
+
+	resolved, err := vars.ResolveWithFallback("{{ .env.REGION }} {{ .env.STAGE }}", map[string]string{
+		"REGION": "base-region",
+		"STAGE":  "base-stage",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "template-region base-stage", resolved)
+}
