@@ -485,6 +485,11 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 	dockerfile := filepath.Join(contextDir, "Dockerfile")
 	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
 	cacheRef := "cache-registry:5000/atmos-buildx-cache:latest"
+	buildkitdConfig := filepath.Join(contextDir, "buildkitd.toml")
+	require.NoError(t, os.WriteFile(buildkitdConfig, []byte(`[registry."cache-registry:5000"]
+  http = true
+  insecure = true
+`), 0o600))
 	firstDriver := &DriverConfig{Name: "atmos-cache-export-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
 	secondDriver := &DriverConfig{Name: "atmos-cache-import-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
 	t.Cleanup(func() {
@@ -493,6 +498,14 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 	})
 
 	runtime := NewDockerRuntime()
+	// The disposable registry intentionally runs without TLS. BuildKit runs inside
+	// the docker-container builder, so configure each builder explicitly rather
+	// than relying on the host Docker daemon's registry settings.
+	for _, driver := range []*DriverConfig{firstDriver, secondDriver} {
+		args := append(buildBuilderCreateArgs(driver), "--buildkitd-config", buildkitdConfig)
+		output, err := exec.Command("docker", args...).CombinedOutput()
+		require.NoError(t, err, "create BuildKit builder for HTTP test registry failed:\n%s", output)
+	}
 	require.NoError(t, runtime.Build(ctx, &BuildConfig{
 		Engine:     "buildx",
 		Dockerfile: dockerfile,
