@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -57,7 +58,7 @@ func WithDependenciesFormatFlag(options *[]flags.Option) {
 		*options,
 		flags.WithStringFlag(flagFormat, "f", "", "Output format: tree (default), json, yaml, levels"),
 		flags.WithEnvVars(flagFormat, "ATMOS_LIST_DEPENDENCIES_FORMAT"),
-		flags.WithValidValues(flagFormat, "tree", "json", "yaml", "levels"),
+		flags.WithValidValues(flagFormat, "tree", "json", "yaml", dependencies.FormatLevels),
 	)
 }
 

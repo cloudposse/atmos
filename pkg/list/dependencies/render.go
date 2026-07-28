@@ -17,6 +17,9 @@ const (
 	// Metadata subsection keys read by the --tags/--labels top-node filters.
 	tagsMetadataKey   = "tags"
 	labelsMetadataKey = "labels"
+
+	// FormatLevels renders each node's shortest graph distance from a selected root.
+	FormatLevels = "levels"
 )
 
 // Direction selects which dependency edges to display.
@@ -74,10 +77,10 @@ func Render(graph *dependency.Graph, opts Options) (string, error) {
 		return renderTree(graph, tops, opts.Direction), nil
 	case string(format.FormatJSON), string(format.FormatYAML):
 		return renderStructured(graph, tops, opts)
-	case "levels":
+	case FormatLevels:
 		return renderLevels(graph, tops, opts.Direction), nil
 	default:
-		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml, levels)", errUtils.ErrInvalidFormat, opts.Format)
+		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml, %s)", errUtils.ErrInvalidFormat, opts.Format, FormatLevels)
 	}
 }
 

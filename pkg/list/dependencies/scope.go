@@ -199,9 +199,9 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 		// Evaluate only the closure's own components within each stack:
 		// unrelated components that merely share a stack file with a closure
 		// member must not have their templates/YAML functions (and thus their
-		// auth/backend requirements) evaluated. When a stack has no known
-		// members (should not happen — stackNames derives from the closure),
-		// fall back to the whole stack rather than silently skipping it.
+		// auth/backend requirements) evaluated. Stacks with nothing left to
+		// evaluate this round (all closure components already evaluated) are
+		// skipped.
 		for _, stackName := range stackNames {
 			components, ok := pending[stackName]
 			if !ok {

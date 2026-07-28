@@ -108,8 +108,8 @@ they can be inspected.
 
 ## Levels Output
 
-The `levels` format shows dependency distance and deployment prerequisites. It
-lists every component reachable from the selected root(s), ordered by distance:
+The `levels` format shows each component's shortest dependency-graph distance
+from the selected root(s). It lists every reachable component ordered by distance:
 
 ```text
 Level  Stack         Component       Type
@@ -119,10 +119,10 @@ Level  Stack         Component       Type
 2      plat-ue2-dev  kms-key         terraform
 ```
 
-`--direction forward` follows prerequisites, and `--direction reverse` follows
-dependents. With the default `--direction both`, `Level` is the shortest path in
-either direction. Components selected by `--stack`, `--tags`, or `--labels` start
-at level `0`.
+With `--direction forward`, each level is a deployment prerequisite distance.
+`--direction reverse` follows dependents. With the default `--direction both`,
+`Level` is the shortest path in either direction. Components selected by
+`--stack`, `--tags`, or `--labels` start at level `0`.
 
 ## Arguments
 

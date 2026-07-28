@@ -111,7 +111,7 @@ func TestRender_LevelsShowsShortestForwardDependencyDistance(t *testing.T) {
 	graph, err := BuildGraph(stacks)
 	require.NoError(t, err)
 
-	out, err := Render(graph, Options{Format: "levels", Direction: DirectionForward, Component: "app", Stack: "dev"})
+	out, err := Render(graph, Options{Format: FormatLevels, Direction: DirectionForward, Component: "app", Stack: "dev"})
 	require.NoError(t, err)
 	assert.Contains(t, out, "Level")
 	assert.Less(t, strings.Index(out, "app"), strings.Index(out, "db"))
@@ -136,8 +136,8 @@ func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, opts := range []Options{
-		{Format: "levels", Direction: DirectionForward, Tags: []string{"application", "tier-1"}},
-		{Format: "levels", Direction: DirectionForward, Labels: map[string]string{"team": "platform", "environment": "test"}},
+		{Format: FormatLevels, Direction: DirectionForward, Tags: []string{"application", "tier-1"}},
+		{Format: FormatLevels, Direction: DirectionForward, Labels: map[string]string{"team": "platform", "environment": "test"}},
 	} {
 		out, err := Render(graph, opts)
 		require.NoError(t, err)
