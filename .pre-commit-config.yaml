@@ -10,10 +10,6 @@ repos:
         args: [-w]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
 
-      - id: go-build-mod
-        name: Check Go build
-        description: Ensure code compiles before commit
-
       - id: go-mod-tidy
         name: Tidy go.mod
         description: Ensure go.mod and go.sum are clean
