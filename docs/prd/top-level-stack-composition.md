@@ -16,9 +16,9 @@ deep-merged configuration file.
 1. Allow a logical stack to be split into parent manifests by component.
 2. Keep every concrete component instance owned by one parent manifest.
 3. Permit the same imported component to appear through multiple parents when
-   its resolved configuration is identical.
+    its resolved configuration is identical.
 4. Keep each parent's inheritance graph self-contained: inherited bases must be
-   defined inline or available through that parent's import graph.
+    defined inline or available through that parent's import graph.
 5. Keep resolution deterministic and preserve source and provenance output.
 
 ## Non-Goals
@@ -87,11 +87,11 @@ Single-manifest stacks and normal import behavior are unchanged.
 ## Success Criteria
 
 1. `describe stacks` lists one logical stack containing distinct components
-   from each parent.
+    from each parent.
 2. `describe component` and execution select the owning parent for unique
-   components and the lexical canonical source for equivalent duplicates.
+    components and the lexical canonical source for equivalent duplicates.
 3. `metadata.inherits` resolves bases defined inline or explicitly imported by
-   the owning parent.
+    the owning parent.
 4. Parent-specific scope does not leak between peer-owned components.
 5. Differing duplicate instances and peer-only inheritance fail with actionable
-   diagnostics.
+    diagnostics.
