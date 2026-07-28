@@ -189,6 +189,8 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 			assert.Equal(t, "docker-container", b.Driver.Provider)
 			assert.Equal(t, "mirror.gcr.io/moby/buildkit:buildx-stable-1", b.Driver.Opts["image"])
 			require.NotNil(t, b.Cache)
+			require.Len(t, b.Cache.From, 1)
+			require.Len(t, b.Cache.To, 1)
 			assert.Equal(t, "registry.example.com/app:buildcache", b.Cache.From[0]["ref"])
 			assert.Equal(t, "max", b.Cache.To[0]["mode"])
 			return nil

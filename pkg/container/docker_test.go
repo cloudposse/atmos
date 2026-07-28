@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -490,8 +491,11 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
   http = true
   insecure = true
 `), 0o600))
-	firstDriver := &DriverConfig{Name: "atmos-cache-export-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
-	secondDriver := &DriverConfig{Name: "atmos-cache-import-" + strings.ReplaceAll(t.Name(), "/", "-"), Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
+	// Append a per-invocation timestamp suffix so a stale builder left behind by an
+	// interrupted or overlapping run never collides with this run's builder name.
+	runSuffix := strings.ReplaceAll(t.Name(), "/", "-") + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	firstDriver := &DriverConfig{Name: "atmos-cache-export-" + runSuffix, Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
+	secondDriver := &DriverConfig{Name: "atmos-cache-import-" + runSuffix, Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
 	t.Cleanup(func() {
 		_ = exec.Command("docker", "buildx", "rm", firstDriver.Name).Run()
 		_ = exec.Command("docker", "buildx", "rm", secondDriver.Name).Run()
