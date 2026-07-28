@@ -319,6 +319,18 @@ func TestCheckComponentStackMapClassifiesInvalidConfig(t *testing.T) {
 			expectedErr:   errUtils.ErrComponentNotDefined,
 			contains:      "component",
 		},
+		{
+			// Only "terraform" and "helmfile" get a dedicated sentinel error; every
+			// other component type (e.g. packer) falls through to the generic
+			// ErrInvalidComponentsSection in validationComponentTypeError's default case.
+			name: "missing packer components type falls back to generic error",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.PackerSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsSection,
+			contains:      "components.packer",
+		},
 	}
 
 	for _, tt := range tests {
