@@ -38,6 +38,9 @@
     "locals": {
       "$ref": "#/definitions/locals"
     },
+    "metadata": {
+      "$ref": "#/definitions/global_metadata"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -1811,7 +1814,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "Custom configuration per component, not inherited by derived components",
+                  "description": "Custom configuration per component. Inherited from base components via metadata.inherits when stacks.inherit.metadata is enabled (the default); component-local values override inherited ones.",
                   "additionalProperties": true,
                   "title": "custom"
                 }
@@ -1834,6 +1837,63 @@
                 "type": "string"
               },
               "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "global_metadata": {
+      "title": "metadata",
+      "description": "Stack-wide default metadata, deep-merged into every component's metadata (lowest precedence — component-local metadata: and its metadata.inherits chain both override this). Only fields that make sense stack-wide are allowed.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering components (atmos list components --tags)."
+            },
+            "custom": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "description": "Custom configuration, deep-merged into every component's own metadata.custom as a stack-wide default; a component's metadata.inherits chain and its own local metadata.custom both override this.",
+                  "additionalProperties": true,
+                  "title": "custom"
+                }
+              ]
+            },
+            "enabled": {
+              "type": "boolean",
+              "description": "Flag to enable or disable components stack-wide by default"
+            },
+            "locked": {
+              "type": "boolean",
+              "description": "Flag to lock components stack-wide by default"
+            },
+            "terraform_workspace_pattern": {
+              "type": "string",
+              "description": "Default Terraform workspace pattern applied stack-wide"
             }
           },
           "required": []
