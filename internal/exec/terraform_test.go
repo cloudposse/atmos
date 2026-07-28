@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -514,8 +515,16 @@ func TestExecuteTerraform_Version(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.requireTool(t)
-			binaryPath, err := exec.LookPath(tt.binary)
-			require.NoError(t, err)
+			// CI installs the toolchain binary and appends its directory to PATH in an
+			// earlier job step; on Windows runners that PATH update has occasionally not
+			// been visible yet to the very first LookPath in this step, so poll briefly
+			// instead of failing on a one-off resolution lag.
+			var binaryPath string
+			require.Eventually(t, func() bool {
+				var lookErr error
+				binaryPath, lookErr = exec.LookPath(tt.binary)
+				return lookErr == nil
+			}, 2*time.Second, 100*time.Millisecond, "%q not found in PATH", tt.binary)
 			isolateTerraformTestBinary(t, binaryPath)
 
 			// Set info for ExecuteTerraform.
