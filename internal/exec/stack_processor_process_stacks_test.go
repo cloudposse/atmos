@@ -1318,6 +1318,74 @@ func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
 	}
 }
 
+// TestProcessStackConfig_CustomComponentTypeGlobalMetadata verifies that
+// stack-root global metadata is merged into custom (non-built-in) component
+// types the same way it is for terraform/helmfile/etc., and that a custom
+// component's own local metadata still wins on key conflicts. Custom types
+// go through a separate code path (the builtInTypes passthrough loop) from
+// built-in types, so this needs its own coverage.
+func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.MetadataSectionName: map[string]any{
+			"labels": map[string]any{"org": "acme"},
+			"tags":   []any{"prod"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+				},
+				"local-override": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "otherapp"},
+					cfg.MetadataSectionName: map[string]any{
+						"labels": map[string]any{"org": "platform-team"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	scriptSection, ok := components["script"].(map[string]any)
+	require.True(t, ok, "script components should be present")
+
+	deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+	require.True(t, ok, "deploy-app component should exist")
+	deployMetadata, ok := deployApp[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a metadata section merged in from global, got: %v", deployApp[cfg.MetadataSectionName])
+	assert.Equal(t, map[string]any{"org": "acme"}, deployMetadata["labels"], "custom component with no local metadata must inherit global metadata")
+	assert.Equal(t, []any{"prod"}, deployMetadata["tags"])
+
+	localOverride, ok := scriptSection["local-override"].(map[string]any)
+	require.True(t, ok, "local-override component should exist")
+	overrideMetadata, ok := localOverride[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "local-override must have a metadata section, got: %v", localOverride[cfg.MetadataSectionName])
+	assert.Equal(t, map[string]any{"org": "platform-team"}, overrideMetadata["labels"], "custom component's own metadata must win over global on conflicting keys")
+	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
+}
+
 // componentHooks extracts the merged hooks section for a terraform component
 // from a ProcessStackConfig result. It fails the test if the component or its
 // hooks section is missing, so inheritance assertions read cleanly.
