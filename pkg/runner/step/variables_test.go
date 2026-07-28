@@ -89,6 +89,7 @@ func TestVariablesSetEnvFamilyLazilyInitializesNilMaps(t *testing.T) {
 		vars := &Variables{}
 		require.NotPanics(t, func() { vars.SetProcessEnv("MY_VAR", "process-value") })
 		assert.Equal(t, "process-value", vars.Env["MY_VAR"])
+		assert.Nil(t, vars.templateEnv, "SetProcessEnv must not allocate templateEnv")
 	})
 }
 
@@ -560,8 +561,10 @@ func TestVariablesResolveWithFallback(t *testing.T) {
 	assert.Equal(t, "template-region base-stage", resolved)
 
 	t.Run("empty input short-circuits without touching the fallback map", func(t *testing.T) {
-		empty, err := vars.ResolveWithFallback("", map[string]string{"REGION": "base-region"})
+		fallback := map[string]string{"REGION": "base-region"}
+		empty, err := vars.ResolveWithFallback("", fallback)
 		require.NoError(t, err)
 		assert.Empty(t, empty)
+		assert.Equal(t, map[string]string{"REGION": "base-region"}, fallback)
 	})
 }
