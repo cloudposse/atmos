@@ -369,6 +369,33 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			},
 			expectedError: errUtils.ErrInvalidAnsibleDependencies,
 		},
+		{
+			name: "invalid global metadata section type",
+			config: map[string]any{
+				cfg.MetadataSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidGlobalMetadataSection,
+		},
+		{
+			name: "global metadata with disallowed inherits field",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					cfg.InheritsSectionName: []any{"foo"},
+				},
+			},
+			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
+		},
+		{
+			name: "global metadata with disallowed component/type/name fields",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"component": "vpc/network",
+					"type":      "abstract",
+					"name":      "vpc",
+				},
+			},
+			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
+		},
 	}
 
 	for _, tt := range tests {
@@ -633,6 +660,53 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				require.True(t, ok, "component must inherit the global 'cost' hook, got: %v", hooks)
 				assert.Equal(t, "infracost", cost["kind"])
 				assert.Equal(t, []any{"after-terraform-plan"}, cost["events"])
+			},
+		},
+		{
+			// Global metadata.labels flowing into a component with no local
+			// metadata of its own — this is the original bug report: a
+			// top-level `metadata:` block used to be silently inert.
+			name: "global metadata labels and enabled inherited by component with no own metadata",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"labels":  map[string]any{"org": "acme"},
+					"enabled": false,
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				metadata := resultComponentMetadata(t, result, "vpc")
+				assert.Equal(t, map[string]any{"org": "acme"}, metadata["labels"])
+				assert.Equal(t, false, metadata["enabled"])
+			},
+		},
+		{
+			// Component-local metadata overrides the global default for the same key.
+			name: "component-local metadata overrides global metadata",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"labels": map[string]any{"org": "acme"},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+							cfg.MetadataSectionName: map[string]any{
+								"labels": map[string]any{"org": "platform-team"},
+							},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				metadata := resultComponentMetadata(t, result, "vpc")
+				assert.Equal(t, map[string]any{"org": "platform-team"}, metadata["labels"])
 			},
 		},
 		{
@@ -1244,6 +1318,82 @@ func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
 	}
 }
 
+// TestProcessStackConfig_CustomComponentTypeGlobalMetadata verifies that
+// stack-root global metadata is merged into custom (non-built-in) component
+// types the same way it is for terraform/helmfile/etc., and that a custom
+// component's own local metadata still wins on key conflicts. Custom types
+// go through a separate code path (the builtInTypes passthrough loop) from
+// built-in types, so this needs its own coverage.
+func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.MetadataSectionName: map[string]any{
+			// "region" is non-conflicting and must survive the deep merge into
+			// both components below; "org" is overridden locally by local-override.
+			"labels": map[string]any{"org": "acme", "region": "us-east-1"},
+			"tags":   []any{"prod"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+				},
+				"local-override": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "otherapp"},
+					cfg.MetadataSectionName: map[string]any{
+						// "team" is local-only and must be retained; "org" conflicts
+						// with the global value and the local value must win.
+						"labels": map[string]any{"org": "platform-team", "team": "platform"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	scriptSection, ok := components["script"].(map[string]any)
+	require.True(t, ok, "script components should be present")
+
+	deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+	require.True(t, ok, "deploy-app component should exist")
+	deployMetadata, ok := deployApp[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a metadata section merged in from global, got: %v", deployApp[cfg.MetadataSectionName])
+	assert.Equal(t, map[string]any{"org": "acme", "region": "us-east-1"}, deployMetadata["labels"], "custom component with no local metadata must inherit global metadata")
+	assert.Equal(t, []any{"prod"}, deployMetadata["tags"])
+
+	localOverride, ok := scriptSection["local-override"].(map[string]any)
+	require.True(t, ok, "local-override component should exist")
+	overrideMetadata, ok := localOverride[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "local-override must have a metadata section, got: %v", localOverride[cfg.MetadataSectionName])
+	assert.Equal(t, map[string]any{
+		"org":    "platform-team",
+		"region": "us-east-1",
+		"team":   "platform",
+	}, overrideMetadata["labels"], "custom component's own metadata must deep-merge with global on nested maps: local wins on conflicting keys, non-conflicting keys from both sides are retained")
+	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
+}
+
 // componentHooks extracts the merged hooks section for a terraform component
 // from a ProcessStackConfig result. It fails the test if the component or its
 // hooks section is missing, so inheritance assertions read cleanly.
@@ -1258,6 +1408,19 @@ func componentHooks(t *testing.T, result map[string]any, component string) map[s
 	hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
 	require.True(t, ok, "component %q must have a hooks section, got: %v", component, comp[cfg.HooksSectionName])
 	return hooks
+}
+
+func resultComponentMetadata(t *testing.T, result map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+	comp, ok := terraform[component].(map[string]any)
+	require.True(t, ok, "terraform component %q must exist", component)
+	metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "component %q must have a metadata section, got: %v", component, comp[cfg.MetadataSectionName])
+	return metadata
 }
 
 // TestProcessStackConfig_HooksWrongScopeNotInherited locks in the scope
