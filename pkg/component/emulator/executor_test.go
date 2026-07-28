@@ -727,3 +727,15 @@ func TestIsAbstractSection(t *testing.T) {
 	assert.False(t, isAbstractSection(map[string]any{"driver": "floci/aws"}))
 	assert.False(t, isAbstractSection(map[string]any{}))
 }
+
+func TestNewReadOnlyManagerDefaultConstructsNoRecoveryManager(t *testing.T) {
+	// Exercise the production newReadOnlyManager seam itself (not a test
+	// override): it must build the manager via emu.NewManagerNoRecovery, which
+	// never attempts Podman auto-recovery. Constructing it requires no live
+	// container runtime; only invoking a manager method would.
+	mgr := newReadOnlyManager("definitely-not-a-runtime")
+	require.NotNil(t, mgr)
+
+	_, err := mgr.Ps(context.Background(), "dev")
+	require.Error(t, err)
+}

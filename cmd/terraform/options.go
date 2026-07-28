@@ -21,7 +21,3 @@ type TerraformRunOptions = shared.RunOptions
 func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 	return shared.ParseRunOptions(v)
 }
-
-func terraformPlanHideContains(values []string, target string) bool {
-	return shared.TerraformPlanHideContains(values, target)
-}

@@ -163,6 +163,26 @@ func TestAppendPlanVarFile_ExtendsProcessEnvironment(t *testing.T) {
 	assert.Equal(t, []string{"TF_CLI_ARGS_plan=-lock=false -var-file=vars.tfvars.json"}, env)
 }
 
+func TestEnsureLocalHistoryDir_PropagatesMkdirAllError(t *testing.T) {
+	dir := t.TempDir()
+	// Create a regular file where the history directory needs to go, so
+	// os.MkdirAll fails with "not a directory" instead of succeeding.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "blocked"), []byte("not a directory"), 0o644))
+	writeTfmigrateConfig(t, dir, defaultConfigFile, `
+tfmigrate {
+  history {
+    storage "local" {
+      path = "blocked/history.json"
+    }
+  }
+}
+`)
+
+	err := EnsureLocalHistoryDir(dir, "", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create tfmigrate local history directory")
+}
+
 func TestEnsureResolved_AcceptsResolvedPath(t *testing.T) {
 	require.NoError(t, EnsureResolved(filepath.Join(t.TempDir(), "tools", Command)))
 }

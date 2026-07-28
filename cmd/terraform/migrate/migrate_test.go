@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -130,6 +131,92 @@ func TestParseTerraformMigratePreservesIdentity(t *testing.T) {
 	}
 }
 
+func TestParseTerraformMigrate_InvalidActionReturnsValidateError(t *testing.T) {
+	// parseTerraformMigrate is called directly with an action string here
+	// (production callers always pass tfmigrate.ActionPlan/ActionApply), so
+	// this exercises the tfmigrate.Options.Validate() error branch that a
+	// production caller could never reach through the constrained cobra
+	// commands, but the function must still guard against.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, "bogus-action")
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"vpc", "--stack", "dev"}, "bogus-action")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestParseTerraformMigrate_ParseRunOptionsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+	// An invalid --failure-mode makes shared.ParseRunOptions fail before
+	// parseTerraformMigrate ever reaches ProcessCommandLineArgs.
+	viper.GetViper().Set("failure-mode", "not-a-real-mode")
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"vpc", "--stack", "dev"}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestParseTerraformMigrate_ProcessCommandLineArgsErrorPropagates(t *testing.T) {
+	// A malformed value for a registered bool flag makes cobra's ParseFlags
+	// fail inside e.ProcessCommandLineArgs, before any component/stack
+	// resolution — must surface directly, not get swallowed.
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"vpc", "--stack", "dev", "--dry-run=not-a-bool"}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+}
+
+func TestParseTerraformMigrate_ResolveAndPromptForArgsErrorPropagates(t *testing.T) {
+	// A component argument given as an explicit relative path (e.g.
+	// "./components/terraform/missing") sets NeedsPathResolution, routing
+	// finalizeTerraformMigrateInfo through shared.ResolveComponentPath. When the
+	// path doesn't resolve to a real component in the stack, that failure must
+	// propagate out of parseTerraformMigrate.
+	fixtureDir := createMinimalAtmosFixture(t)
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{
+		"./components/terraform/missing", "--stack", "dev", "--config-path", fixtureDir,
+	}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+}
+
+func TestParseTerraformMigrate_HelpShortCircuitsWithoutError(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"--help"}, tfmigrate.ActionPlan)
+
+	// finalizeTerraformMigrateInfo's NeedHelp branch returns (true, cmd.Usage());
+	// cmd.Usage() itself does not error for a well-formed command, so the
+	// done=true short-circuit at the parseTerraformMigrate call site returns
+	// that nil error rather than a populated ConfigAndStacksInfo.
+	require.NoError(t, err)
+}
+
+func TestParseTerraformMigrate_IdentitySelectWithNoIdentitiesConfiguredErrors(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{
+		"service", "--stack", "dev", "--config-path", fixtureDir, "--identity",
+	}, tfmigrate.ActionPlan)
+
+	// finalizeTerraformMigrateInfo routes info.Identity == "__SELECT__" into
+	// shared.HandleInteractiveIdentitySelection, which errors immediately when
+	// the fixture declares no auth identities at all.
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
 func TestParseTerraformMigrateListArgsPreservesIdentity(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -174,6 +261,97 @@ func TestParseTerraformMigrateListArgsPreservesIdentity(t *testing.T) {
 			assert.Equal(t, tt.expected, info.Identity)
 		})
 	}
+}
+
+func TestParseTerraformMigrateListArgs_ProcessCommandLineArgsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+
+	_, err := parseTerraformMigrateListArgs([]string{"vpc", "--stack", "dev", "--dry-run=not-a-bool"})
+
+	require.Error(t, err)
+}
+
+func TestRunTerraformMigrateList_ParseArgsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+
+	err := runTerraformMigrateList(cmd, []string{"vpc", "--stack", "dev", "--dry-run=not-a-bool"})
+
+	require.Error(t, err)
+}
+
+func TestRunTerraformMigrateList_ParseRunOptionsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+	viper.GetViper().Set("failure-mode", "not-a-real-mode")
+
+	err := runTerraformMigrateList(cmd, []string{"vpc", "--stack", "dev"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestRunTerraformMigrateList_IdentitySelectWithNoIdentitiesConfiguredErrors(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+
+	err := runTerraformMigrateList(cmd, []string{
+		"service", "--stack", "dev", "--config-path", fixtureDir, "--identity",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
+func TestRunTerraformMigrateList_CollectRowsErrorPropagates(t *testing.T) {
+	// A syntactically invalid atmos.yaml makes cfg.InitCliConfig fail inside
+	// collectTfmigrateListRows; the error must propagate out of
+	// runTerraformMigrateList (exercising both call sites' error branches).
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("not: [valid: yaml"), 0o644))
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+
+	err := runTerraformMigrateList(cmd, []string{
+		"service", "--stack", "dev", "--config-path", dir, "--identity=false",
+	})
+
+	require.Error(t, err)
+}
+
+func TestCollectTfmigrateListRows_DescribeStacksErrorPropagates(t *testing.T) {
+	// A stack manifest that fails to parse makes ExecuteDescribeStacksWithAuthDisabled
+	// itself fail (distinct from the InitCliConfig failure exercised above), which
+	// must propagate out of collectTfmigrateListRows.
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "service"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	_, err := collectTfmigrateListRows(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+	})
+
+	require.Error(t, err)
 }
 
 func TestApplyMigrateListComponentArgSurvivesRunOptions(t *testing.T) {
@@ -303,6 +481,92 @@ func TestRunTerraformMigratePlanDryRunFixture(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNewMigrateActionCmd_RunEInvokesRunTerraformMigrate(t *testing.T) {
+	// Exercises the closure newMigrateActionCmd assigns as RunE (only ever
+	// invoked by cobra's dispatch, never called directly by other tests),
+	// confirming it forwards to runTerraformMigrate with the right action.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionCmd(tfmigrate.ActionPlan, "test action")
+	migrateParser.RegisterFlags(cmd)
+	parent.AddCommand(cmd)
+	viper.GetViper().Set("dry-run", true)
+	viper.GetViper().Set("skip-init", true)
+	configPath := filepath.Join("testdata", "dryrun")
+
+	require.NotNil(t, cmd.RunE)
+	err := cmd.RunE(cmd, []string{
+		"service",
+		"--stack", "deploy/test",
+		"--config-path", configPath,
+		"--identity=false",
+	})
+
+	require.NoError(t, err)
+}
+
+func TestRunTerraformMigrate_PropagatesParseError(t *testing.T) {
+	// runTerraformMigrate's own err != nil branch (distinct from
+	// parseTerraformMigrate's internal error branches, which are covered by
+	// calling parseTerraformMigrate directly elsewhere) is only exercised by
+	// going through runTerraformMigrate itself.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("failure-mode", "not-a-real-mode")
+
+	err := runTerraformMigrate(cmd, []string{"vpc", "--stack", "dev"}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestRunTerraformMigrate_RoutesAllFlagToMultiComponentQuery(t *testing.T) {
+	// With --all, runTerraformMigrate must route through executeTfmigrateQuery
+	// (multi-component), not executeTfmigrateSingle: it walks every component in
+	// every stack rather than requiring a positional component argument.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("dry-run", true)
+	viper.GetViper().Set("skip-init", true)
+	viper.GetViper().Set("all", true)
+	configPath := filepath.Join("testdata", "dryrun")
+
+	err := runTerraformMigrate(cmd, []string{
+		"--config-path", configPath,
+		"--identity=false",
+	}, tfmigrate.ActionPlan)
+
+	require.NoError(t, err, "--all must walk the fixture's single enabled component and succeed via dry-run")
+}
+
+func TestRunTerraformMigrate_RoutesAffectedFlagToAffectedExecution(t *testing.T) {
+	// With --affected, runTerraformMigrate must route through
+	// executeAffectedMigrateCommand rather than the single/multi-component
+	// paths. Pointing --repo-path at a directory that doesn't exist forces a
+	// fast, deterministic failure inside the affected-detection call itself
+	// (no real git repo needed), confirming the routing actually reached
+	// executeAffectedMigrateCommand instead of silently falling through to
+	// the single-component path (which would instead fail on "component is
+	// required").
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	registerProcessCommandLineLocalFlags(cmd)
+	cmd.PersistentFlags().String("repo-path", "", "")
+	viper.GetViper().Set("dry-run", true)
+	viper.GetViper().Set("skip-init", true)
+	viper.GetViper().Set("affected", true)
+	configPath := filepath.Join("testdata", "dryrun")
+
+	err := runTerraformMigrate(cmd, []string{
+		"--config-path", configPath,
+		"--identity=false",
+		"--repo-path", filepath.Join(t.TempDir(), "missing-repo"),
+	}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "component is required",
+		"must fail inside the affected path, not fall through to the single-component path")
+}
+
 func TestRunTerraformMigrateListFixtureRenders(t *testing.T) {
 	setupMigrateParseTest(t)
 	cmd := &cobra.Command{Use: "list [component]"}
@@ -404,6 +668,13 @@ func TestTfmigrateSelectionHelpers(t *testing.T) {
 		assert.False(t, shouldSkipTfmigrateComponent(map[string]any{"vars": map[string]any{"enabled": true}}, ".vars.enabled == true"))
 	})
 
+	t.Run("skips on unparsable query expression", func(t *testing.T) {
+		// A syntactically invalid yq expression makes EvaluateYqExpression error;
+		// shouldSkipTfmigrateComponent must fail safe and skip the component
+		// rather than propagate the error or treat it as a match.
+		assert.True(t, shouldSkipTfmigrateComponent(map[string]any{"vars": map[string]any{"enabled": true}}, "[[[not valid yq"))
+	})
+
 	t.Run("walk skips malformed sections and stops on callback error", func(t *testing.T) {
 		stacks := map[string]any{
 			"bad":                "skip",
@@ -455,6 +726,82 @@ func TestExecuteTfmigrateQueryReturnsComponentError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Could not find the component")
 }
 
+func TestExecuteTfmigrateQuery_InitCliConfigErrorPropagates(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+}
+
+func TestExecuteTfmigrateQuery_SetupComponentAuthErrorPropagates(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Identity:               "nonexistent-identity",
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+}
+
+func TestExecuteTfmigrateQuery_DescribeStacksErrorPropagates(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "service"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+}
+
+func TestExecuteTfmigrateQuery_SkipsFilteredComponentWithoutExecuting(t *testing.T) {
+	// With a query that never matches, executeTfmigrateQuery must walk the
+	// component, skip it via shouldSkipTfmigrateComponent, and return nil
+	// without ever invoking executeTfmigrateSingleForSelection.
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	previousExecuteSingle := executeTfmigrateSingleForSelection
+	called := false
+	executeTfmigrateSingleForSelection = func(*schema.ConfigAndStacksInfo, tfmigrate.Options) error {
+		called = true
+		return nil
+	}
+	t.Cleanup(func() { executeTfmigrateSingleForSelection = previousExecuteSingle })
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		Stack:                  "dev",
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Query:                  ".vars.enabled == false", // fixture has enabled: true, so this never matches.
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.NoError(t, err)
+	assert.False(t, called, "a filtered-out component must never reach executeTfmigrateSingleForSelection")
+}
+
 func TestExecuteTfmigrateAffectedRejectsDependents(t *testing.T) {
 	err := executeTfmigrateAffected(&e.DescribeAffectedCmdArgs{
 		IncludeDependents: true,
@@ -475,6 +822,24 @@ func TestExecuteAffectedMigrateCommandRejectsDependents(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid configuration")
+}
+
+func TestExecuteAffectedMigrateCommandPropagatesParseCliArgsError(t *testing.T) {
+	// --repo-path together with --ref is an invalid combination
+	// (e.ParseDescribeAffectedCliArgs rejects it as ErrRepoPathConflict),
+	// exercising executeAffectedMigrateCommand's own error branch distinct
+	// from executeTfmigrateAffected's include-dependents rejection.
+	fixtureDir := createMinimalAtmosFixture(t)
+	cmd := newDescribeAffectedTestCommand()
+
+	err := executeAffectedMigrateCommand(cmd, []string{
+		"--config-path", fixtureDir,
+		"--identity=false",
+		"--repo-path", fixtureDir,
+		"--ref", "refs/heads/main",
+	}, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
 }
 
 func TestExecuteAffectedMigrateCommandRegistersDefaultFlags(t *testing.T) {
@@ -618,6 +983,20 @@ func TestFirstTfmigrateHookDefaultsAndInvalidValues(t *testing.T) {
 	assert.Empty(t, hook[tfmigrateListKeyConfig])
 }
 
+func TestFirstTfmigrateHook_HooksSectionWithNoTfmigrateKindFallsThrough(t *testing.T) {
+	// A component with a real, non-empty hooks section where none of the hooks
+	// is kind: tfmigrate must exhaust the loop and fall through to the same
+	// dynamic-mode default as having no hooks section at all.
+	hook := firstTfmigrateHook(map[string]any{
+		cfg.HooksSectionName: map[string]any{
+			"not-tfmigrate":      map[string]any{"kind": "store"},
+			"also-not-tfmigrate": map[string]any{"kind": "step"},
+		},
+	})
+	assert.Equal(t, map[string]string{tfmigrateListKeyMode: tfmigrate.ModeDynamic}, hook)
+	assert.Empty(t, hook[tfmigrateListKeyName])
+}
+
 func TestTfmigrateListColumnDefaultsAndInvalidRender(t *testing.T) {
 	defaults := tfmigrateListColumns(nil)
 	require.NotEmpty(t, defaults)
@@ -630,6 +1009,27 @@ func TestTfmigrateListColumnDefaultsAndInvalidRender(t *testing.T) {
 	err := renderTfmigrateList(nil, migrateListRenderOptions{Format: "bogus"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported format")
+}
+
+func TestRenderTfmigrateList_InvalidColumnTemplateErrors(t *testing.T) {
+	// A "=" column spec whose value already contains "{{" is used verbatim
+	// (not auto-wrapped); malformed Go template syntax there must surface as
+	// an error from column.NewSelector, before rendering is attempted.
+	err := renderTfmigrateList(nil, migrateListRenderOptions{
+		Format:  "csv",
+		Columns: []string{"Bad={{ .unterminated"},
+	})
+	require.Error(t, err)
+}
+
+func TestRenderTfmigrateList_InvalidSortSpecErrors(t *testing.T) {
+	// A sort spec missing the required "column:order" colon must surface as
+	// an error from listSort.ParseSortSpec, before rendering is attempted.
+	err := renderTfmigrateList(nil, migrateListRenderOptions{
+		Format: "csv",
+		Sort:   "component-with-no-colon",
+	})
+	require.Error(t, err)
 }
 
 func restoreDescribeAffectedStubs(t *testing.T, affected []schema.Affected, stubErr error) {

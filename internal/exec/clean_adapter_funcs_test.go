@@ -3,11 +3,13 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -131,4 +133,61 @@ func TestConstructTerraformComponentPlanfileNameForClean_WithFolderPrefix(t *tes
 
 	// The result should include the folder prefix.
 	assert.Equal(t, "ue1-dev-networking-vpc.planfile", result)
+}
+
+// TestConstructTerraformComponentVarfileName tests the non-Clean-suffixed varfile
+// name export used by other packages (e.g. tfmigrate's buildTfmigrateEnv), which
+// must produce the same name as the terraform execution path itself.
+func TestConstructTerraformComponentVarfileName(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		Component:     "vpc",
+		ContextPrefix: "ue1-dev",
+	}
+
+	result := ConstructTerraformComponentVarfileName(info)
+
+	assert.Equal(t, "ue1-dev-vpc.terraform.tfvars.json", result)
+	assert.Equal(t, ConstructTerraformComponentVarfileNameForClean(info), result,
+		"the tfmigrate-facing export and the clean-facing export must construct identical names")
+}
+
+// TestComputeTerraformSecretVarEnv exercises the exported tfmigrate-facing wrapper
+// end-to-end: it must both flag secret-bearing keys on info (the same side effect
+// computeTerraformSecretVarKeys has directly) and return the matching TF_VAR_ env
+// entries, so callers that only have access to the exported wrapper (outside this
+// package) still get real secret partitioning behavior.
+func TestComputeTerraformSecretVarEnv(t *testing.T) {
+	const secret = "tf-adapter-SECRET-xyz789"
+	atmosio.RegisterSecret(secret)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{
+			"db_password": secret,
+			"region":      "us-east-1-adapter",
+		},
+	}
+
+	env, err := ComputeTerraformSecretVarEnv(info)
+	require.NoError(t, err)
+
+	require.NotNil(t, info.TerraformSecretVarKeys)
+	assert.True(t, info.TerraformSecretVarKeys["db_password"], "secret-bearing key must be flagged as a side effect")
+	assert.False(t, info.TerraformSecretVarKeys["region"], "non-secret key must not be flagged")
+
+	joined := strings.Join(env, "\n")
+	assert.Contains(t, joined, "TF_VAR_db_password="+secret)
+	assert.NotContains(t, joined, "TF_VAR_region=", "non-secret vars must not be injected as env entries")
+}
+
+// TestComputeTerraformSecretVarEnv_NoSecrets confirms the wrapper returns an empty
+// env slice (not an error) when nothing in the component vars is secret.
+func TestComputeTerraformSecretVarEnv_NoSecrets(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"region": "us-west-2-adapter-nosecret"},
+	}
+
+	env, err := ComputeTerraformSecretVarEnv(info)
+	require.NoError(t, err)
+	assert.Empty(t, env)
+	assert.Nil(t, info.TerraformSecretVarKeys)
 }

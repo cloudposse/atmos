@@ -148,6 +148,108 @@ func TestParseAndApplyRunOptions(t *testing.T) {
 	assert.Equal(t, "true", info.DeployRunInit)
 }
 
+func TestParseRunOptions_InvalidLabelsFlagReturnsError(t *testing.T) {
+	v := viper.New()
+	// tags.ParseLabelsFlag expects comma-separated key=value pairs; a bare
+	// key with no "=" is invalid.
+	v.Set("labels", "not-a-valid-label")
+
+	opts, err := ParseRunOptions(v)
+	require.Error(t, err)
+	assert.Nil(t, opts)
+}
+
+func TestParseRunOptions_PropagatesValidationError(t *testing.T) {
+	v := viper.New()
+	v.Set("failure-mode", "bogus-mode")
+
+	opts, err := ParseRunOptions(v)
+	require.Error(t, err)
+	assert.Nil(t, opts)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestValidateRunOptions_NilOptsIsNoop(t *testing.T) {
+	assert.NoError(t, ValidateRunOptions(nil))
+}
+
+func TestValidateRunOptions_FailureModeAndLogOrder(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        *RunOptions
+		wantErr     bool
+		wantFailure string
+		wantLog     string
+	}{
+		{
+			name:        "normalizes valid failure mode casing/whitespace",
+			opts:        &RunOptions{FailureMode: "  Fail-Fast  "},
+			wantFailure: TerraformFailureModeFailFast,
+		},
+		{
+			name:        "accepts keep-going",
+			opts:        &RunOptions{FailureMode: TerraformFailureModeKeepGoing},
+			wantFailure: TerraformFailureModeKeepGoing,
+		},
+		{
+			name:    "rejects invalid failure mode",
+			opts:    &RunOptions{FailureMode: "bogus"},
+			wantErr: true,
+		},
+		{
+			name:    "rejects invalid log order",
+			opts:    &RunOptions{LogOrder: "bogus"},
+			wantErr: true,
+		},
+		{
+			name:    "normalizes valid log order casing/whitespace",
+			opts:    &RunOptions{LogOrder: "  Grouped  "},
+			wantLog: TerraformLogOrderGrouped,
+		},
+		{
+			name:    "accepts stream log order",
+			opts:    &RunOptions{LogOrder: TerraformLogOrderStream},
+			wantLog: TerraformLogOrderStream,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRunOptions(tt.opts)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				return
+			}
+			require.NoError(t, err)
+			if tt.wantFailure != "" {
+				assert.Equal(t, tt.wantFailure, tt.opts.FailureMode)
+			}
+			if tt.wantLog != "" {
+				assert.Equal(t, tt.wantLog, tt.opts.LogOrder)
+			}
+		})
+	}
+}
+
+func TestTerraformPlanHideContains_NoMatchReturnsFalse(t *testing.T) {
+	assert.False(t, TerraformPlanHideContains([]string{"foo", "bar"}, "no-changes"))
+	assert.False(t, TerraformPlanHideContains(nil, "no-changes"))
+	assert.True(t, TerraformPlanHideContains([]string{"foo", " No-Changes "}, "no-changes"))
+}
+
+func TestApplyRunOptions_AppendArgsAppended(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{AdditionalArgsAndFlags: []string{"-existing"}}
+	ApplyRunOptions(info, &RunOptions{AppendArgs: []string{"-json", "-no-color"}})
+	assert.Equal(t, []string{"-existing", "-json", "-no-color"}, info.AdditionalArgsAndFlags)
+}
+
+func TestApplyRunOptions_NoAppendArgsLeavesUnchanged(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{AdditionalArgsAndFlags: []string{"-existing"}}
+	ApplyRunOptions(info, &RunOptions{})
+	assert.Equal(t, []string{"-existing"}, info.AdditionalArgsAndFlags)
+}
+
 func TestBackendAndIdentityFlagRegistration(t *testing.T) {
 	registry := BackendExecutionFlags()
 	require.True(t, registry.Has("auto-generate-backend-file"))
@@ -196,6 +298,46 @@ func TestCompletionsAndPathResolutionErrors(t *testing.T) {
 	wrapped := HandlePathResolutionError(errors.New("boom"))
 	require.Error(t, wrapped)
 	assert.ErrorIs(t, wrapped, errUtils.ErrPathResolutionFailed)
+}
+
+func TestAddIdentityCompletion_LogsAlreadyRegisteredError(t *testing.T) {
+	// Registering the identity completion func twice on the same command/flag
+	// makes cobra's RegisterFlagCompletionFunc return an "already registered"
+	// error; addIdentityCompletion must not panic or propagate it, only log it.
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().String(cfg.IdentityFlagName, "", "")
+
+	addIdentityCompletion(cmd)
+	require.NotPanics(t, func() { addIdentityCompletion(cmd) })
+}
+
+func TestResolveComponentPath_InitCliConfigError(t *testing.T) {
+	previousInit := initCliConfig
+	expectedErr := errors.New("boom: could not init cli config")
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, expectedErr
+	}
+	t.Cleanup(func() { initCliConfig = previousInit })
+
+	err := ResolveComponentPath(&schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"}, cfg.TerraformComponentType)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathResolutionFailed)
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestIdentityFlagCompletion_InitCliConfigErrorReturnsNoFileComp(t *testing.T) {
+	// Point at a config path with a syntactically invalid atmos.yaml so
+	// InitCliConfig itself fails to parse, rather than merely finding no
+	// identities (which is a different, already-covered branch).
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte("not: [valid: yaml"), 0o644))
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	results, directive := identityFlagCompletion(&cobra.Command{}, nil, "")
+
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Nil(t, results)
 }
 
 func TestResolveAndPromptForArgsResolvesComponentPath(t *testing.T) {
@@ -312,6 +454,47 @@ func TestPromptHelpersReturnEmptyWhenNonInteractive(t *testing.T) {
 	assert.Empty(t, info.Stack)
 }
 
+func TestHandleInteractiveIdentitySelectionInitCliConfigError(t *testing.T) {
+	previousInitCliConfig := initCliConfig
+	expectedErr := errors.New("boom: could not init cli config")
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, expectedErr
+	}
+	t.Cleanup(func() { initCliConfig = previousInitCliConfig })
+
+	err := HandleInteractiveIdentitySelection(&schema.ConfigAndStacksInfo{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInitializeCLIConfig)
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestHandleInteractiveIdentitySelectionAuthManagerCreationFails(t *testing.T) {
+	// With identities configured, HandleInteractiveIdentitySelection passes
+	// cfg.IdentityFlagSelectValue as both the identity name and the select
+	// sentinel to auth.CreateAndAuthenticateManager, which forces interactive
+	// identity selection. In this headless test process there is no TTY, so
+	// manager creation itself fails before an AuthManager is ever returned —
+	// exercising the "failed to initialize auth manager" wrap.
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(`
+base_path: ""
+stacks:
+  base_path: "stacks"
+auth:
+  identities:
+    dev:
+      kind: "ambient"
+`), 0o644))
+
+	err := HandleInteractiveIdentitySelection(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{tmpDir},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
+}
+
 func TestHandleInteractiveIdentitySelectionNoConfiguredIdentities(t *testing.T) {
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(`
@@ -360,6 +543,79 @@ func TestHandleInteractiveComponentStackSelectionReturnsStackListError(t *testin
 	err := HandleInteractiveComponentStackSelection(&schema.ConfigAndStacksInfo{Stack: "dev"}, &cobra.Command{Use: "plan"})
 
 	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestPromptMissingComponent_AlreadySetShortCircuits(t *testing.T) {
+	// When ComponentFromArg is already populated, promptMissingComponent must
+	// return immediately without consulting the interactive picker at all.
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}
+	require.NoError(t, promptMissingComponent(info, &cobra.Command{Use: "plan"}))
+	assert.Equal(t, "vpc", info.ComponentFromArg, "must not be overwritten")
+}
+
+func TestHandleInteractiveComponentStackSelectionPropagatesComponentPromptError(t *testing.T) {
+	// Force interactive mode and make the component picker's underlying stack
+	// enumeration fail, so PromptForComponent surfaces ErrLoadSelectionOptions
+	// (not UserAborted/InteractiveModeNotAvailable), which HandlePromptError
+	// must pass through, and HandleInteractiveComponentStackSelection must
+	// propagate from promptMissingComponent without also calling promptMissingStack.
+	previousInteractive := isInteractiveFn
+	previousInit := initCliConfig
+	previousDescribe := executeDescribeStacks
+	isInteractiveFn = func() bool { return true }
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	describeErr := errors.New("boom: describe stacks")
+	executeDescribeStacks = func(
+		_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager,
+	) (map[string]any, error) {
+		return nil, describeErr
+	}
+	t.Cleanup(func() {
+		isInteractiveFn = previousInteractive
+		initCliConfig = previousInit
+		executeDescribeStacks = previousDescribe
+	})
+
+	info := &schema.ConfigAndStacksInfo{}
+	err := HandleInteractiveComponentStackSelection(info, &cobra.Command{Use: "plan"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLoadSelectionOptions)
+	assert.ErrorIs(t, err, describeErr)
+	assert.Empty(t, info.Stack, "must fail before reaching the stack prompt")
+}
+
+func TestHandleInteractiveComponentStackSelectionPropagatesStackPromptError(t *testing.T) {
+	// With the component already resolved, promptMissingComponent short-circuits
+	// and the stack prompt's own load failure must propagate from
+	// HandleInteractiveComponentStackSelection.
+	previousInteractive := isInteractiveFn
+	previousInit := initCliConfig
+	previousDescribe := executeDescribeStacks
+	isInteractiveFn = func() bool { return true }
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	describeErr := errors.New("boom: describe stacks for stack picker")
+	executeDescribeStacks = func(
+		_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager,
+	) (map[string]any, error) {
+		return nil, describeErr
+	}
+	t.Cleanup(func() {
+		isInteractiveFn = previousInteractive
+		initCliConfig = previousInit
+		executeDescribeStacks = previousDescribe
+	})
+
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}
+	err := HandleInteractiveComponentStackSelection(info, &cobra.Command{Use: "plan"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLoadSelectionOptions)
+	assert.ErrorIs(t, err, describeErr)
 }
 
 func restoreStackListingStubs(t *testing.T, stacks map[string]any, stubErr error) {

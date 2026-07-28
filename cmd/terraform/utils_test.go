@@ -1096,3 +1096,26 @@ func TestPromptForStackDelegate(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
 	}
 }
+
+// TestHandleInteractiveIdentitySelectionDelegate verifies handleInteractiveIdentitySelection
+// delegates to shared.HandleInteractiveIdentitySelection: with no auth configured at all,
+// the shared implementation returns ErrNoIdentitiesAvailable.
+func TestHandleInteractiveIdentitySelectionDelegate(t *testing.T) {
+	err := handleInteractiveIdentitySelection(&schema.ConfigAndStacksInfo{})
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
+// TestResolveAndPromptForArgsDelegate verifies resolveAndPromptForArgs delegates to
+// shared.ResolveAndPromptForArgs: multi-component flags must short-circuit without
+// modifying the info struct, matching handleInteractiveComponentStackSelection's
+// documented skip behavior.
+func TestResolveAndPromptForArgsDelegate(t *testing.T) {
+	cmd := &cobra.Command{Use: "plan"}
+	info := &schema.ConfigAndStacksInfo{All: true}
+
+	err := resolveAndPromptForArgs(info, cmd)
+
+	assert.NoError(t, err)
+	assert.Empty(t, info.ComponentFromArg)
+	assert.Empty(t, info.Stack)
+}

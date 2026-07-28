@@ -470,3 +470,18 @@ func TestNewManager_DetectsRuntime(t *testing.T) {
 	_, err := m.Ps(context.Background(), "dev")
 	require.Error(t, err)
 }
+
+func TestNewManagerNoRecovery_SkipsRecoveryDetection(t *testing.T) {
+	// NewManagerNoRecovery sets noRecovery=true, so runtimeFor must call
+	// container.DetectRuntimeWithPreference (no Podman auto-recovery), never
+	// DetectRuntimeWithPreferenceAndRecovery, regardless of autoStart. With an
+	// unsatisfiable preference, detection fails cleanly either way, but the
+	// constructor's noRecovery field is what routes to the recovery-free branch.
+	m := NewManagerNoRecovery("definitely-not-a-runtime")
+	require.NotNil(t, m)
+	assert.True(t, m.noRecovery)
+	assert.False(t, m.autoStart)
+
+	_, err := m.Ps(context.Background(), "dev")
+	require.Error(t, err)
+}

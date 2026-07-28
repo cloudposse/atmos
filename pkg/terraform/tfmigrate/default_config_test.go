@@ -146,3 +146,35 @@ func TestEnsureDefaultConfig_RespectsTfmigrateConfigEnvVar(t *testing.T) {
 	assert.Empty(t, path)
 	assert.Nil(t, cleanup)
 }
+
+func TestEnsureDefaultConfig_PropagatesCreateTempError(t *testing.T) {
+	// os.CreateTemp("", ...) resolves the target directory via os.TempDir(),
+	// which reads TMPDIR (and TMP/TEMP on Windows). Pointing all three at a
+	// nonexistent directory makes CreateTemp fail deterministically, exercising
+	// the error path without any OS-level fault injection.
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	t.Setenv("TMPDIR", missing)
+	t.Setenv("TMP", missing)
+	t.Setenv("TEMP", missing)
+
+	_, _, err := EnsureDefaultConfig(&DefaultConfigInput{ComponentDir: t.TempDir(), History: defaultConfigHistory()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create generated tfmigrate config")
+}
+
+func TestDefaultConfigHCL_GCSBackendNestedBlock(t *testing.T) {
+	// Atmos component backend sections nest provider-specific config under the
+	// backend type key, e.g. `backend: { gcs: { bucket: ... } }`, mirroring how
+	// BackendHistoryValues handles the same nested shape.
+	hcl := normalizeHCL(DefaultConfigHCL(&DefaultConfigInput{
+		ComponentDir: t.TempDir(),
+		BackendType:  "gcs",
+		Backend: map[string]any{
+			"gcs": map[string]any{"bucket": "nested-bucket"},
+		},
+		History: defaultConfigHistory(),
+	}))
+
+	assert.Contains(t, hcl, `storage "gcs"`)
+	assert.Contains(t, hcl, `bucket = "nested-bucket"`)
+}

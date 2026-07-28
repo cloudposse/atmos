@@ -1,10 +1,15 @@
 package tfmigrate
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestBuildArgs(t *testing.T) {
@@ -145,4 +150,75 @@ func TestBackendHistoryEnv_GCS(t *testing.T) {
 
 	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_STORAGE=gcs")
 	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_BUCKET=tfstate-bucket")
+}
+
+func TestOptionsValidate_InvalidAction(t *testing.T) {
+	err := Options{Action: "destroy"}.Validate()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestBuildArgs_SkipsEmptyBackendConfigEntries(t *testing.T) {
+	args, err := BuildArgs(Options{
+		Action:        ActionPlan,
+		BackendConfig: []string{"", "bucket=state", ""},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"plan", "--backend-config=bucket=state"}, args)
+}
+
+func TestEnsureResolved_FindsCommandOnPATH(t *testing.T) {
+	// Point PATH at a temp dir containing an executable literally named
+	// "tfmigrate" so exec.LookPath(Command) succeeds, exercising the
+	// found-on-PATH branch without requiring the real tool to be installed.
+	dir := t.TempDir()
+	name := Command
+	if runtime.GOOS == "windows" {
+		name += ".bat"
+	}
+	fakeBin := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(fakeBin, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	t.Setenv("PATH", dir)
+
+	err := EnsureResolved(Command)
+	assert.NoError(t, err)
+}
+
+func TestActionForMode_RejectsUnsupportedMode(t *testing.T) {
+	_, err := ActionForMode("bogus-mode", "before.terraform.plan")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestAppendExecPath_RespectsProcessEnvVar(t *testing.T) {
+	// hasEnvKey only inspects the env slice being built; when TFMIGRATE_EXEC_PATH
+	// is instead set in the process environment, AppendExecPath must still defer
+	// to it rather than appending a duplicate.
+	t.Setenv(ExecPathEnvVar, "/from/process/env")
+
+	env := AppendExecPath([]string{"A=B"}, "/bin/tofu")
+	assert.Equal(t, []string{"A=B"}, env)
+}
+
+func TestBackendHistoryValues_EmptyBackendReturnsNil(t *testing.T) {
+	assert.Nil(t, BackendHistoryValues("s3", nil))
+	assert.Nil(t, BackendHistoryValues("s3", map[string]any{}))
+}
+
+func TestBackendHistoryValues_UnsupportedBackendTypeReturnsNil(t *testing.T) {
+	assert.Nil(t, BackendHistoryValues("azurerm", map[string]any{"storage_account_name": "acct"}))
+}
+
+func TestBackendHistoryValues_GCSNestedBackendBlock(t *testing.T) {
+	// Mirrors how Atmos component backend sections nest provider-specific config
+	// under the backend type key, e.g. `backend: { gcs: { bucket: ... } }`.
+	values := BackendHistoryValues("gcs", map[string]any{
+		"gcs": map[string]any{"bucket": "nested-bucket"},
+	})
+	assert.Equal(t, "nested-bucket", values[EnvHistoryBucket])
+}
+
+func TestHistoryPath_AllEmptyPartsReturnsEmptyString(t *testing.T) {
+	assert.Equal(t, "", historyPath("", "", ""))
+	assert.Equal(t, "", historyPath())
 }
