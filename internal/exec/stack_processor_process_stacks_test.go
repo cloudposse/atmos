@@ -1329,7 +1329,9 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 
 	config := map[string]any{
 		cfg.MetadataSectionName: map[string]any{
-			"labels": map[string]any{"org": "acme"},
+			// "region" is non-conflicting and must survive the deep merge into
+			// both components below; "org" is overridden locally by local-override.
+			"labels": map[string]any{"org": "acme", "region": "us-east-1"},
 			"tags":   []any{"prod"},
 		},
 		cfg.ComponentsSectionName: map[string]any{
@@ -1340,7 +1342,9 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 				"local-override": map[string]any{
 					cfg.VarsSectionName: map[string]any{"app_name": "otherapp"},
 					cfg.MetadataSectionName: map[string]any{
-						"labels": map[string]any{"org": "platform-team"},
+						// "team" is local-only and must be retained; "org" conflicts
+						// with the global value and the local value must win.
+						"labels": map[string]any{"org": "platform-team", "team": "platform"},
 					},
 				},
 			},
@@ -1375,14 +1379,18 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 	require.True(t, ok, "deploy-app component should exist")
 	deployMetadata, ok := deployApp[cfg.MetadataSectionName].(map[string]any)
 	require.True(t, ok, "deploy-app must have a metadata section merged in from global, got: %v", deployApp[cfg.MetadataSectionName])
-	assert.Equal(t, map[string]any{"org": "acme"}, deployMetadata["labels"], "custom component with no local metadata must inherit global metadata")
+	assert.Equal(t, map[string]any{"org": "acme", "region": "us-east-1"}, deployMetadata["labels"], "custom component with no local metadata must inherit global metadata")
 	assert.Equal(t, []any{"prod"}, deployMetadata["tags"])
 
 	localOverride, ok := scriptSection["local-override"].(map[string]any)
 	require.True(t, ok, "local-override component should exist")
 	overrideMetadata, ok := localOverride[cfg.MetadataSectionName].(map[string]any)
 	require.True(t, ok, "local-override must have a metadata section, got: %v", localOverride[cfg.MetadataSectionName])
-	assert.Equal(t, map[string]any{"org": "platform-team"}, overrideMetadata["labels"], "custom component's own metadata must win over global on conflicting keys")
+	assert.Equal(t, map[string]any{
+		"org":    "platform-team",
+		"region": "us-east-1",
+		"team":   "platform",
+	}, overrideMetadata["labels"], "custom component's own metadata must deep-merge with global on nested maps: local wins on conflicting keys, non-conflicting keys from both sides are retained")
 	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
 }
 

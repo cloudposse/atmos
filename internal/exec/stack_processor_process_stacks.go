@@ -1293,15 +1293,14 @@ func ProcessStackConfig(
 			if len(componentEnv) > 0 {
 				componentMap[cfg.EnvSectionName] = componentEnv
 			}
-			// Merge global metadata into component metadata (component-local wins).
-			componentMetadata := map[string]any{}
-			for k, v := range globalMetadataSection {
-				componentMetadata[k] = v
-			}
-			if metadata, ok := componentMap[cfg.MetadataSectionName].(map[string]any); ok {
-				for k, v := range metadata {
-					componentMetadata[k] = v
-				}
+			// Deep-merge global metadata into component metadata (component-local wins),
+			// consistent with how built-in component types merge metadata in
+			// mergeComponentConfigurations, so nested maps like `labels`/`custom`
+			// retain non-conflicting keys from both sides instead of being replaced wholesale.
+			componentLocalMetadata, _ := componentMap[cfg.MetadataSectionName].(map[string]any)
+			componentMetadata, mergeErr := m.Merge(atmosConfig, []map[string]any{globalMetadataSection, componentLocalMetadata})
+			if mergeErr != nil {
+				return nil, mergeErr
 			}
 			if len(componentMetadata) > 0 {
 				componentMap[cfg.MetadataSectionName] = componentMetadata
