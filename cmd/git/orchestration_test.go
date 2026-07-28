@@ -6,6 +6,7 @@ package git
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -240,6 +241,17 @@ func TestParseCloneFlags_Defaults(t *testing.T) {
 	assert.Equal(t, ciCloneModeDisabled, opts.CIMode)
 }
 
+func TestParseCloneFlags_PropagatesResolveCICloneModeError(t *testing.T) {
+	v := viper.New()
+	cmd := &cobra.Command{}
+	cmd.Flags().String(flagCI, "", "")
+	require.NoError(t, cmd.Flags().Set(flagCI, "notabool"))
+
+	opts, err := parseCloneFlags(cmd, v)
+	require.Error(t, err)
+	assert.Nil(t, opts)
+}
+
 func TestResolveCICloneMode(t *testing.T) {
 	newCommand := func(t *testing.T, value string) *cobra.Command {
 		t.Helper()
@@ -250,6 +262,22 @@ func TestResolveCICloneMode(t *testing.T) {
 		}
 		return cmd
 	}
+
+	t.Run("unset environment and unset flag default to automatic", func(t *testing.T) {
+		original, wasSet := os.LookupEnv("ATMOS_CI")
+		os.Unsetenv("ATMOS_CI")
+		t.Cleanup(func() {
+			if wasSet {
+				_ = os.Setenv("ATMOS_CI", original)
+				return
+			}
+			os.Unsetenv("ATMOS_CI")
+		})
+
+		mode, err := resolveCICloneMode(newCommand(t, ""))
+		require.NoError(t, err)
+		assert.Equal(t, ciCloneModeAuto, mode)
+	})
 
 	t.Run("environment enables CI checkout", func(t *testing.T) {
 		t.Setenv("ATMOS_CI", "true")
@@ -277,6 +305,20 @@ func TestResolveCICloneMode(t *testing.T) {
 		_, err := resolveCICloneMode(newCommand(t, ""))
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig))
+	})
+
+	t.Run("changed flag with unparseable value is rejected", func(t *testing.T) {
+		// The --ci flag is a native bool flag in production, so pflag itself
+		// rejects a non-boolean value before Changed is ever set to true.
+		// Register it as a string flag here to reach resolveCICloneMode's own
+		// defensive strconv.ParseBool error path.
+		cmd := &cobra.Command{}
+		cmd.Flags().String(flagCI, "", "")
+		require.NoError(t, cmd.Flags().Set(flagCI, "notabool"))
+
+		_, err := resolveCICloneMode(cmd)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid --ci value")
 	})
 }
 

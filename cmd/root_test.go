@@ -300,8 +300,10 @@ func TestGitCloneBootstrapCIMode(t *testing.T) {
 		{name: "environment enables", args: []string{"git", "clone"}, env: "true", want: ciCloneBootstrapEnabled},
 		{name: "environment disables", args: []string{"git", "clone"}, env: "false", want: ciCloneBootstrapDisabled},
 		{name: "flag enables", args: []string{"git", "clone", "--ci"}, env: "false", want: ciCloneBootstrapEnabled},
+		{name: "explicit flag enables", args: []string{"git", "clone", "--ci=true"}, env: "false", want: ciCloneBootstrapEnabled},
 		{name: "flag disables", args: []string{"git", "clone", "--ci=false"}, env: "true", want: ciCloneBootstrapDisabled},
 		{name: "non-clone command does not use a flag override", args: []string{"terraform", "plan", "--ci"}, env: "false", want: ciCloneBootstrapDisabled},
+		{name: "invalid environment value defaults to automatic", args: []string{"git", "clone"}, env: "sometimes", want: ciCloneBootstrapAuto},
 	}
 
 	for _, tt := range tests {
