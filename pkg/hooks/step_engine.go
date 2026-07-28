@@ -287,7 +287,7 @@ func hookStepTemplateInfo(ctx *ExecContext, vars *runnerstep.Variables) *schema.
 		info = &schema.ConfigAndStacksInfo{}
 	}
 	clone := *info
-	section := make(map[string]any, len(info.ComponentSection)+2)
+	section := make(map[string]any)
 	for key, value := range info.ComponentSection {
 		section[key] = value
 	}
