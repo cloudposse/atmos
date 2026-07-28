@@ -126,7 +126,16 @@ func newMtimeConfig(mode, source string) *mtimeConfig {
 	if err != nil {
 		return rt
 	}
-	repo, err := git.PlainOpenWithOptions(absSource, &git.PlainOpenOptions{DetectDotGit: true})
+	// EnableDotGitCommonDir follows the gitdir pointer file that linked
+	// worktrees (`git worktree add`) use in place of a .git directory, and
+	// resolves shared object/ref storage through its commondir. Without it,
+	// opening a linked worktree fails and every entry silently gets the
+	// fallback epoch, so worktree-built archives differ byte-for-byte from
+	// checkout-built archives of the same commit.
+	repo, err := git.PlainOpenWithOptions(absSource, &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,
+	})
 	if err != nil {
 		return rt
 	}
