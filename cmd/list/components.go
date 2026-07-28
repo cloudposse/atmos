@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -232,11 +233,33 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	if err != nil {
 		return componentsExtractResult{}, err
 	}
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+
+	result, err := executeAndExtractComponents(&atmosConfig, opts, authManager)
+	if err != nil {
+		return componentsExtractResult{}, err
+	}
+
+	return result, nil
+}
+
+// executeAndExtractComponents runs describe stacks and extracts the unique components.
+// Split out of initAndExtractComponents so the describe/extract behavior can be exercised
+// with an injected AuthManager, mirroring executeAndExtractStacks in stacks.go.
+//
+// The returned Collector (nil unless opts.ErrorMode is "warn"/"silent") is carried on the
+// result so the caller can summarize it via printErrorModeSummary after writing output.
+func executeAndExtractComponents(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *ComponentsOptions,
+	authManager auth.AuthManager,
+) (componentsExtractResult, error) {
+	defer perf.Track(nil, "list.components.executeAndExtractComponents")()
+
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip)
 
 	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
-		&atmosConfig, "", nil, nil, nil,
+		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
@@ -258,7 +281,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		return componentsExtractResult{}, err
 	}
 
-	return componentsExtractResult{atmosConfig: &atmosConfig, components: components, collector: collector}, nil
+	return componentsExtractResult{atmosConfig: atmosConfig, components: components, collector: collector}, nil
 }
 
 // renderComponents builds the render pipeline and renders components.

@@ -250,7 +250,7 @@ func executeAndExtractStacks(
 	errOpts e.DescribeStacksErrorOptions,
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip)
 
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		atmosConfig, "", nil, nil, nil,
@@ -371,7 +371,7 @@ func renderStacksTreeFormat(
 	// Re-process stacks with provenance tracking enabled. Honor the
 	// caller-supplied template/function flags so tree output is consistent with
 	// non-tree runs of the same command invocation.
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip)
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles

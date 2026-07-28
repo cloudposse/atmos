@@ -203,6 +203,6 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		OutputFile:       opts.OutputFile,
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
-		Skip:             skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
+		Skip:             skipCredentialBackedYAMLFunctionsForInventory(opts.Skip),
 	})
 }

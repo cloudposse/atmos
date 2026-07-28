@@ -256,25 +256,53 @@ func createAuthManagerForList(
 	return authManager, nil
 }
 
-func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
-	if authManager != nil {
-		return skip
+// credentialBackedYAMLFunctions returns every Atmos YAML function that can only be
+// evaluated by contacting a cloud/backend API with live credentials. The names are
+// bare (no leading `!`) to match `skipFunc`, which trims the tag prefix before comparing.
+func credentialBackedYAMLFunctions() []string {
+	return []string{
+		strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncStore, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncStoreGet, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncSecret, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncAwsAccountID, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncAwsCallerIdentityArn, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncAwsCallerIdentityUserID, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncAwsRegion, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncAwsOrganizationID, "!"),
 	}
+}
 
+// skipCredentialBackedYAMLFunctionsForInventory returns the caller's `--skip` list plus
+// every credential-backed YAML function.
+//
+// Inventory commands (`list stacks`, `list components`, `list dependencies`,
+// `list instances`) enumerate the whole repository: they walk every stack in every
+// account so they can report which stacks/components exist. Their output is the
+// inventory itself, never a resolved `!terraform.state` / `!store` / `!aws.*` value, so
+// evaluating those functions is pure overhead — and in a multi-account repository it is
+// a hard failure, because no single set of credentials can read every account's state
+// backend. Authenticating does not change that: an identity covers one account while the
+// scan still spans all of them, which is exactly how #2566 reproduced
+// (`atmos list stacks --identity prd-…` aborting on an `AccessDenied` reading the `dev-…`
+// state bucket, and vice versa).
+//
+// The skip used to be conditional on the AuthManager being nil, which meant it stopped
+// applying the moment credentials existed — precisely backwards. Since #2801,
+// createAuthManagerForList also returns a manager whenever templates or YAML functions are
+// processed (both default to true), so that condition made a plain `atmos list stacks` — no
+// `--identity` at all — attempt cross-account state reads.
+//
+// The skip is therefore unconditional. Use `atmos describe stacks`/`describe component`
+// when you need resolved values for a scope you actually hold credentials for.
+//
+// Note this covers YAML functions only. Go templates calling `atmos.Component(...)` can
+// still perform authenticated cross-account reads; #2801 deliberately restored auth for
+// that path, and `--process-templates=false` remains the way to opt out of it.
+func skipCredentialBackedYAMLFunctionsForInventory(skip []string) []string {
 	merged := append([]string{}, skip...)
-	for _, functionName := range []string{
-		u.AtmosYamlFuncTerraformState,
-		u.AtmosYamlFuncTerraformOutput,
-		u.AtmosYamlFuncStore,
-		u.AtmosYamlFuncStoreGet,
-		u.AtmosYamlFuncSecret,
-		u.AtmosYamlFuncAwsAccountID,
-		u.AtmosYamlFuncAwsCallerIdentityArn,
-		u.AtmosYamlFuncAwsCallerIdentityUserID,
-		u.AtmosYamlFuncAwsRegion,
-		u.AtmosYamlFuncAwsOrganizationID,
-	} {
-		name := strings.TrimPrefix(functionName, "!")
+	for _, name := range credentialBackedYAMLFunctions() {
 		if !containsString(merged, name) {
 			merged = append(merged, name)
 		}

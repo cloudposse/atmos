@@ -112,7 +112,7 @@ atmos list stacks --component vpc --format tree --provenance
   <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each stack inherits from.<br/>Environment variable: `ATMOS_PROVENANCE`</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before listing stacks.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list stacks --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
+  <dd>Authenticate with a specific identity before listing stacks.<br/>`atmos list stacks --identity my-aws-identity`<br/><br/>Note that listing stacks never evaluates credential-backed YAML functions (`!terraform.state`, `!terraform.output`, `!store`, `!secret`, `!aws.*`). Listing walks every stack in the repository, so in a multi-account setup no single identity could read them all; those functions are always skipped and their values are left unresolved. Use [`atmos describe stacks`](/cli/commands/describe/stacks) or [`atmos describe component`](/cli/commands/describe/component) when you need resolved values.<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
 
   <dt>`--process-templates`</dt>
   <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>

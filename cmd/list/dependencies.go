@@ -167,7 +167,7 @@ func describeStacksForDependencies(cmd *cobra.Command, args []string, opts *Depe
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
+		skipCredentialBackedYAMLFunctionsForInventory(opts.Skip),
 		authManager,
 		opts.AuthDisabled || authManager == nil,
 	)
