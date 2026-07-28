@@ -1037,6 +1037,132 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 	})
 }
 
+// TestMergeComponentConfigurations_Metadata verifies the 3-tier metadata merge
+// precedence (lowest to highest): global (stack-wide) metadata -> the
+// metadata.inherits base-component chain -> the component's own local metadata.
+// This is the fix for global metadata.labels/tags/custom/enabled/locked/
+// terraform_workspace_pattern silently doing nothing when set at the
+// stack-manifest root.
+func TestMergeComponentConfigurations_Metadata(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("global-only-applies-with-no-local-or-inherited-metadata", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"labels":  map[string]any{"org": "acme"},
+				"enabled": false,
+			},
+		}
+		res := minimalComponentResult()
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, map[string]any{"org": "acme"}, metadata["labels"])
+		assert.Equal(t, false, metadata["enabled"])
+	})
+
+	t.Run("component-local-wins-over-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"labels": map[string]any{"org": "acme"},
+			},
+		}
+		res := minimalComponentResult()
+		res.ComponentMetadata = map[string]any{
+			"labels": map[string]any{"org": "platform-team"},
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, map[string]any{"org": "platform-team"}, metadata["labels"], "component-local metadata must win over global")
+	})
+
+	t.Run("inherits-base-wins-over-global-when-component-is-silent", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"locked": false,
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentMetadata = map[string]any{
+			"locked": true,
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, true, metadata["locked"], "metadata.inherits base chain must win over global when the component sets nothing locally")
+	})
+
+	t.Run("component-local-wins-over-inherits-base-and-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"terraform_workspace_pattern": "global-pattern",
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentMetadata = map[string]any{
+			"terraform_workspace_pattern": "base-pattern",
+		}
+		res.ComponentMetadata = map[string]any{
+			"terraform_workspace_pattern": "component-pattern",
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, "component-pattern", metadata["terraform_workspace_pattern"])
+	})
+
+	t.Run("metadata-inheritance-disabled-skips-base-tier-but-keeps-global", func(t *testing.T) {
+		disabled := false
+		disabledCfg := &schema.AtmosConfiguration{
+			Stacks: schema.Stacks{Inherit: schema.StacksInherit{Metadata: &disabled}},
+		}
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   disabledCfg,
+			GlobalMetadata: map[string]any{
+				"labels": map[string]any{"org": "acme"},
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentMetadata = map[string]any{
+			"labels": map[string]any{"org": "should-not-apply"},
+		}
+
+		comp, err := mergeComponentConfigurations(disabledCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, map[string]any{"org": "acme"}, metadata["labels"], "global metadata must still apply when metadata.inherits is disabled")
+	})
+}
+
 // TestEffectiveAtmosConfig verifies that effectiveAtmosConfig returns the
 // correct *AtmosConfiguration given various combinations of settings layers.
 func TestEffectiveAtmosConfig(t *testing.T) {
