@@ -907,6 +907,97 @@ func TestStepsEngineRejectsMissingWith(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
 }
 
+// TestStepsEngineRawStepsFromHookValidationErrors exercises rawStepsFromHook's
+// remaining validation branches (the runtime counterpart to
+// TestStepsFromHookValidationErrors, which only covers the static decoder).
+func TestStepsEngineRawStepsFromHookValidationErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		hook *Hook
+	}{
+		{
+			name: "with is not a list",
+			hook: &Hook{Kind: stepsKindName, With: map[string]any{"type": "log"}},
+		},
+		{
+			name: "empty list",
+			hook: &Hook{Kind: stepsKindName, With: []any{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := stepsEngine{}.Run(stepsExecContext(tt.hook))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		})
+	}
+}
+
+// TestStepsEngineRunRejectsUndecodableStepPayload verifies that a steps-list
+// item whose payload cannot decode into a schema.WorkflowStep (a type
+// mismatch on a typed field) surfaces as an error from the steps engine,
+// rather than panicking or silently dropping the step.
+func TestStepsEngineRunRejectsUndecodableStepPayload(t *testing.T) {
+	// OnFailure: fail so the decode error propagates instead of being
+	// swallowed by the default warn-and-continue on_failure policy.
+	hook := &Hook{Kind: stepsKindName, OnFailure: OnFailureFail, With: []any{
+		// "vars" must decode into map[string]string; a bare scalar cannot.
+		map[string]any{"type": "log", "vars": "not-a-map"},
+	}}
+
+	_, err := stepsEngine{}.Run(stepsExecContext(hook))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestStepEngineRunRejectsUndecodableWithPayload is the kind: step
+// counterpart: stepFromHookWithVariables must propagate a decode failure from
+// workflowStepFromHookPayload instead of running with a zero-value step.
+func TestStepEngineRunRejectsUndecodableWithPayload(t *testing.T) {
+	hook := &Hook{Kind: stepKindName, Type: "log", With: map[string]any{"vars": "not-a-map"}}
+
+	_, err := stepEngine{}.Run(stepExecContext(hook))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestStepEngineRunRejectsTemplateRenderError verifies that a malformed Go
+// template in a step's `with:` payload is reported as an error (through
+// processHookExecutionValue) instead of reaching the step handler unresolved.
+func TestStepEngineRunRejectsTemplateRenderError(t *testing.T) {
+	hook := &Hook{Kind: stepKindName, Type: "log", With: map[string]any{"content": "{{ .Unclosed"}}
+
+	_, err := stepEngine{}.Run(stepExecContext(hook))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestHookStepTemplateInfoFallsBackWhenInfoIsNil guards against a nil pointer
+// dereference: when neither ctx.Info nor the hook's resolved
+// stepTemplateInfo is set (e.g. a step engine invoked outside the normal
+// resolveHookForExecution path), hookStepTemplateInfo must substitute an
+// empty ConfigAndStacksInfo rather than dereferencing a nil *ConfigAndStacksInfo.
+func TestHookStepTemplateInfoFallsBackWhenInfoIsNil(t *testing.T) {
+	var captured map[string]string
+	runnerstep.Register(&envCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-step-template-info-nil-capture", runnerstep.CategoryCommand, false),
+		captured:    &captured,
+	})
+
+	// Built directly (not via stepExecContext) so Info stays nil and the hook
+	// never passed through resolveHookForExecution, leaving stepTemplateInfo unset.
+	ctx := &ExecContext{
+		Hook:  &Hook{Kind: stepKindName, Type: "hook-step-template-info-nil-capture"},
+		Event: AfterTerraformApply,
+	}
+
+	require.NotPanics(t, func() {
+		_, err := stepEngine{}.Run(ctx)
+		require.NoError(t, err)
+	})
+}
+
 // TestStepEngineRunsArchiveType proves the archive step type needs no
 // hook-side code: `kind: step` + `type: archive` already works through the
 // generic bridge, exactly like any other registered step type. See

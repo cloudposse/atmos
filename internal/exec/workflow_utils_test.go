@@ -1895,6 +1895,72 @@ func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestExecuteWorkflow_EnvStepPersistsToLaterSteps verifies that ExecuteWorkflow's
+// own accumulation of exported `type: env` values (persistentEnv) reaches a
+// later step's subprocess, not just the step that declared the vars.
+func TestExecuteWorkflow_EnvStepPersistsToLaterSteps(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test env step values persist to a later step's process env",
+		Steps: []schema.WorkflowStep{
+			{
+				Name: "set-env",
+				Type: "env",
+				Vars: map[string]string{"ATMOS_TEST_PERSIST_ENV": "persisted-value"},
+			},
+			{
+				Name:    "verify-env",
+				Type:    "shell",
+				Command: `test "$ATMOS_TEST_PERSIST_ENV" = "persisted-value"`,
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-env-persist", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err, "a later step must see the exported env-step value in its process environment")
+}
+
+// TestExecuteWorkflow_EnvStepExportFalseDoesNotPersistToProcess is the negative
+// counterpart: an `export: false` env step must NOT reach a later step's
+// process environment (it stays template-only), so the accumulation gate at
+// ExecuteWorkflow's env-step handling must not fire.
+func TestExecuteWorkflow_EnvStepExportFalseDoesNotPersistToProcess(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test export:false env step does not leak into a later step's process env",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:   "set-env",
+				Type:   "env",
+				Export: boolPtr(false),
+				Vars:   map[string]string{"ATMOS_TEST_PERSIST_ENV_FALSE": "should-not-leak"},
+			},
+			{
+				Name:    "verify-env-absent",
+				Type:    "shell",
+				Command: `test -z "${ATMOS_TEST_PERSIST_ENV_FALSE+set}"`,
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-env-persist-export-false", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err, "export:false must keep the value out of a later step's process environment")
+}
+
 // TestExecuteWorkflow_CommandLineStackOverride tests command-line stack overrides all.
 func TestExecuteWorkflow_CommandLineStackOverride(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
