@@ -409,6 +409,25 @@ For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concep
     </div>
 </ActionCard>
 
+:::warning Concurrency groups aren't a deployment queue
+By default (`concurrency.queue: single`), a GitHub Actions `concurrency` group holds at most two
+runs at a time: one **in progress** and one **pending**. Triggering a third run cancels the
+pending one and takes its place — this eviction happens regardless of `cancel-in-progress`, so
+intermediate triggers can be silently dropped. Setting `cancel-in-progress: true` additionally
+cancels the **in-progress** run itself, which can interrupt a Terraform apply and leave a remote
+state lock that needs manual recovery. Setting `queue: max` instead allows up to 100 pending runs
+before any get canceled, but it is still not a FIFO deployment queue and cannot be combined with
+`cancel-in-progress: true`.
+
+Remote state locking only prevents concurrent writers — it doesn't protect against a partially
+applied change or automatically recover an interrupted run. Inspect the affected resources,
+confirm the previous run has actually stopped, and only then run
+[`atmos terraform force-unlock`](/cli/commands/terraform/force-unlock) before retrying the apply.
+GitHub environments add approval gates and merge queues order merges, but neither guarantees
+deployment *execution* order — reach for an explicit promotion workflow or deployment controller
+when you require that.
+:::
+
 ## Features
 
 ### [Job Summaries](/ci/job-summaries)
