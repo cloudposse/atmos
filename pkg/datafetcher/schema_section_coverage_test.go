@@ -62,7 +62,7 @@ var manifestSections = map[string]sectionScope{
 	"dependencies":              {topLevel: true, component: true},
 	"auth":                      {topLevel: true, component: true},
 	"secrets":                   {topLevel: true, component: true},
-	"metadata":                  {component: true},
+	"metadata":                  {topLevel: true, component: true},
 	"component":                 {component: true},
 	"command":                   {component: true},
 	"providers":                 {component: true},
