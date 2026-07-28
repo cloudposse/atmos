@@ -341,17 +341,32 @@ func RequireNetworkAccess(t *testing.T, url string) {
 func RequireExecutable(t *testing.T, name string, purpose string) {
 	t.Helper()
 
+	requireExecutablePath(t, name, purpose)
+}
+
+// requireExecutablePath resolves and returns the executable's path, skipping
+// the test if it is not found. Callers that need the resolved path (to, e.g.,
+// copy the binary into an isolated per-test directory) should use this instead
+// of a separate, independent exec.LookPath call afterward. Two independent
+// LookPath calls create a TOCTOU race: the Windows acceptance job runs
+// packages concurrently, and another package's test can mutate the shared
+// Atmos toolchain cache directory (see prependCachedTestTool) between the two
+// calls, turning a binary that existed a moment ago into a spurious
+// "not found" error. Resolving the path exactly once here closes that window.
+func requireExecutablePath(t *testing.T, name string, purpose string) string {
+	t.Helper()
+
 	prependCachedTestTool(name)
 
-	if !ShouldCheckPreconditions() {
-		return
-	}
-
-	_, err := exec.LookPath(name)
+	path, err := exec.LookPath(name)
 	if err != nil {
+		if !ShouldCheckPreconditions() {
+			return ""
+		}
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
 	}
+	return path
 }
 
 func prependCachedTestTool(binary string) {
@@ -490,12 +505,30 @@ func RequireTerraform(t *testing.T) {
 	RequireExecutable(t, "terraform", "terraform operations")
 }
 
+// RequireTerraformPath is like RequireTerraform but also returns the resolved
+// terraform binary path. Prefer this over calling RequireTerraform followed by
+// a separate exec.LookPath("terraform") -- see requireExecutablePath's doc
+// comment for why two independent lookups are unsafe.
+func RequireTerraformPath(t *testing.T) string {
+	t.Helper()
+	return requireExecutablePath(t, "terraform", "terraform operations")
+}
+
 // RequireTofu checks if tofu (OpenTofu) is installed and available in PATH.
 // The CLI test suite standardizes on OpenTofu (see ATMOS_COMPONENTS_TERRAFORM_COMMAND
 // in cli_test.go), so terraform-invoking tests gate on this rather than terraform.
 func RequireTofu(t *testing.T) {
 	t.Helper()
 	RequireExecutable(t, "tofu", "OpenTofu operations")
+}
+
+// RequireTofuPath is like RequireTofu but also returns the resolved tofu
+// binary path. Prefer this over calling RequireTofu followed by a separate
+// exec.LookPath("tofu") -- see requireExecutablePath's doc comment for why two
+// independent lookups are unsafe.
+func RequireTofuPath(t *testing.T) string {
+	t.Helper()
+	return requireExecutablePath(t, "tofu", "OpenTofu operations")
 }
 
 // RequireTerraformOrTofu checks if terraform or tofu is installed and available in PATH.
