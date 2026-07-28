@@ -191,18 +191,38 @@ func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFil
 
 	metadata, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
 	rawTags := metadata[tagsMetadataKey]
-	rawLabels := metadata[labelsMetadataKey]
-	if tags.SelectorUnresolved(rawTags, leftDelim) || tags.SelectorUnresolved(rawLabels, leftDelim) {
-		resolvedTags, okTags := tags.ResolveSelectorValue(rawTags, node.Metadata, leftDelim, rightDelim)
-		resolvedLabels, okLabels := tags.ResolveSelectorValue(rawLabels, node.Metadata, leftDelim, rightDelim)
-		if !okTags || !okLabels {
+	if len(tagsFilter) > 0 && tags.SelectorUnresolved(rawTags, leftDelim) {
+		resolvedTags, ok := tags.ResolveSelectorValue(rawTags, node.Metadata, leftDelim, rightDelim)
+		if !ok {
 			return true
 		}
-		rawTags, rawLabels = resolvedTags, resolvedLabels
+		rawTags = resolvedTags
+	}
+
+	rawLabels := any(requestedSelectorLabels(metadata[labelsMetadataKey], labelsFilter))
+	if len(labelsFilter) > 0 && tags.SelectorUnresolved(rawLabels, leftDelim) {
+		resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, node.Metadata, leftDelim, rightDelim)
+		if !ok {
+			return true
+		}
+		rawLabels = resolvedLabels
 	}
 
 	return tags.MatchesTags(tags.ToStringSlice(rawTags), tagsFilter, tags.TagModeAny) &&
 		tags.MatchesLabels(tags.ToStringMap(rawLabels), labelsFilter)
+}
+
+// requestedSelectorLabels keeps only labels used by the current selector so
+// unrelated templates cannot make closure root selection undecidable.
+func requestedSelectorLabels(raw any, filter map[string]string) map[string]any {
+	labels, _ := raw.(map[string]any)
+	requested := make(map[string]any, len(filter))
+	for key := range filter {
+		if value, ok := labels[key]; ok {
+			requested[key] = value
+		}
+	}
+	return requested
 }
 
 // sortNodes orders nodes by stack then component for stable, readable output.

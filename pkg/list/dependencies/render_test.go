@@ -265,6 +265,31 @@ func TestSelectTopNodes_TemplatedSelectorConservativelyMatches(t *testing.T) {
 		[]string{tops[0].Component, tops[1].Component})
 }
 
+func TestSelectTopNodes_RequestedTemplatedLabelIgnoresUnrelatedUnresolvedLabel(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"service": {
+				"vars": map[string]any{"tier": "worker"},
+				"metadata": map[string]any{
+					"tags": []any{"active"},
+					"labels": map[string]any{
+						"tier":   "{{ .vars.tier }}",
+						"broken": "{{ unknownFunction }}",
+					},
+				},
+			},
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	tops := selectTopNodes(graph, &Selector{
+		Tags:   []string{"active"},
+		Labels: map[string]string{"tier": "api"},
+	})
+	assert.Empty(t, tops, "an unrelated unresolved label must not make a requested label undecidable")
+}
+
 func TestRender_TagsFilterScopesTopEntries(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {
