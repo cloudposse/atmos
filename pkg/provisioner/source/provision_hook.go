@@ -201,6 +201,15 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", targetDir)
 
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		// Track whether this attempt creates the target directory so a failed
+		// provisioning can remove it again. A leftover directory is worse than
+		// none: an empty one misleads path resolution (the component "exists"
+		// but has no code), and a partially populated one is treated as fully
+		// provisioned by needsProvisioning on the next run, silently skipping
+		// re-provisioning.
+		_, statErr := os.Stat(targetDir)
+		createdTarget := os.IsNotExist(statErr)
+
 		if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
 			return errUtils.Build(errUtils.ErrSourceProvision).
 				WithCause(err).
@@ -210,6 +219,11 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		}
 
 		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
+			if createdTarget {
+				if rmErr := os.RemoveAll(targetDir); rmErr != nil {
+					ui.Warning(fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
+				}
+			}
 			return errUtils.Build(errUtils.ErrSourceProvision).
 				WithCause(err).
 				WithExplanation("Failed to auto-provision component source").

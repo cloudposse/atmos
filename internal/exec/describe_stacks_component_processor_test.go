@@ -1265,6 +1265,8 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 		false, // processYamlFunctions.
 		false, nil, nil,
 	)
+	var warnings []DegradationWarning
+	p.withDegradation(func(w DegradationWarning) { warnings = append(warnings, w) })
 
 	componentSection := map[string]any{
 		cfg.ComponentSectionName: "vpc",
@@ -1281,6 +1283,7 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 	)
 
 	require.Error(t, err)
+	assert.Empty(t, warnings, "error mode only degrades YAML-function lookup failures, never Go template errors")
 }
 
 // ---------------------------------------------------------------------------
