@@ -79,7 +79,7 @@ generation runs under `auth.ContextWithSkipIntegrations(ctx)` so it has no side 
 | `--host` | `ATMOS_AWS_RDS_HOST` | ✅ | – | DB / cluster / proxy / RDS endpoint hostname. |
 | `--port` | `ATMOS_AWS_RDS_PORT` | ✅ | – | DB port (required, engine-agnostic — matches the AWS CLI). |
 | `--username` (`-u`) | `ATMOS_AWS_RDS_USERNAME` | ✅ | – | DB account name; must match the IAM `dbuser` ARN (case-sensitive). |
-| `--region` | `ATMOS_AWS_RDS_REGION` | ✅ | – | Region of the DB endpoint. **Required**; the command errors if empty and never silently defaults (a wrong-region token fails only at connect time). |
+| `--region` | `ATMOS_AWS_RDS_REGION` | – | identity's credential region | Region of the DB endpoint. **Optional** — when empty, `GetRDSToken` falls back to the authenticated identity's credential region. The command errors only when neither the flag nor the credentials supply a region. |
 | `--identity` (`-i`) | `ATMOS_IDENTITY` | – | – | Atmos identity to authenticate. If omitted, uses `ATMOS_IDENTITY`, or the single configured identity when exactly one exists; otherwise errors. |
 
 Precedence: CLI > env > config > default (Viper via `flags.StandardParser`). All env binding goes through
@@ -89,7 +89,7 @@ a deliberate refinement over `eks token`'s legacy `os.Getenv("ATMOS_IDENTITY")` 
 ### CLI Command
 
 ```shell
-atmos aws rds token --host <endpoint> --port <port> --username <user> --region <region> [--identity <id>]
+atmos aws rds token --host <endpoint> --port <port> --username <user> [--region <region>] [--identity <id>]
 ```
 
 `endpoint = host:port` is assembled before signing (RDS rejects a bare host at connect time). The command
@@ -152,7 +152,7 @@ all failures wrap it with `fmt.Errorf("%w: %w", …)` for `errors.Is`.
 | Context | Behavior |
 |---|---|
 | Missing `--host`/`--port`/`--username` | `ErrRDSTokenGeneration` (validation), usage suppressed |
-| `--region` unresolved | Hard error — never silently default to `us-east-1` |
+| `--region` unresolved (neither flag nor credentials) | Hard error — never silently default to `us-east-1` |
 | Identity auth failure | Wrapped `ErrIdentityAuthFailed` |
 | SDK `BuildAuthToken` error | Wrapped `ErrRDSTokenGeneration` |
 
