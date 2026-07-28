@@ -15,6 +15,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func TestGetString(t *testing.T) {
@@ -458,6 +460,27 @@ func TestDockerRuntime_EnsureBuilder_DefaultName(t *testing.T) {
 	// Unit test - verifies the default name is applied without requiring Docker.
 	cfg := &DriverConfig{Provider: "docker-container"}
 	assert.Equal(t, "atmos", effectiveDriverName(cfg))
+}
+
+// TestDockerRuntime_EnsureBuilder_SucceedsWithFakeBuildx exercises ensureBuilder's
+// success path (a `buildx create` invocation that exits zero) without requiring a
+// real Docker daemon, using a fake `docker` executable on PATH.
+func TestDockerRuntime_EnsureBuilder_SucceedsWithFakeBuildx(t *testing.T) {
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: dockerCmd,
+		Mode: testhelpers.FakeContainerRuntimeStep,
+	})
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	runtime := NewDockerRuntime()
+	cfg := &DriverConfig{Name: "atmos-fake-builder", Provider: "docker-container"}
+
+	require.NoError(t, ensureBuilder(context.Background(), runtime, cfg))
+
+	recorded, err := os.ReadFile(argsPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "buildx\tcreate\t--name\tatmos-fake-builder\t--driver\tdocker-container")
 }
 
 func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
