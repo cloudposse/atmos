@@ -37,7 +37,7 @@ var runTerraformModules = func(ctx context.Context, executable, directory string
 	return command.Output()
 }
 
-func appendTerraform(graph *Graph, config *schema.AtmosConfiguration) error {
+func appendTerraform(ctx context.Context, graph *Graph, config *schema.AtmosConfiguration) error {
 	if config == nil {
 		return errTerraformConfigurationRequired
 	}
@@ -75,7 +75,7 @@ func appendTerraform(graph *Graph, config *schema.AtmosConfiguration) error {
 			graph.Components = append(graph.Components, component)
 			graph.Relationships = append(graph.Relationships, Relationship{From: configurationID, To: component.ID, Type: "depends_on"})
 		}
-		complete, detail := appendModulesForDirectory(graph, config, configurationID, directory)
+		complete, detail := appendModulesForDirectory(ctx, graph, config, configurationID, directory)
 		if !complete {
 			moduleComplete, moduleDetail = false, detail
 		}
@@ -103,14 +103,16 @@ func linkConfigurationSource(graph *Graph, configurationID, componentPath string
 	}
 }
 
-func appendModulesForDirectory(graph *Graph, config *schema.AtmosConfiguration, configurationID, directory string) (bool, string) {
+func appendModulesForDirectory(ctx context.Context, graph *Graph, config *schema.AtmosConfiguration, configurationID, directory string) (bool, string) {
 	executable := config.Components.Terraform.Command
 	if executable == "" {
 		executable = "terraform"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// The 30-second cap applies only to the local `terraform modules -json` subprocess; module
+	// artifact resolution below is network-bound and governed by the caller's ctx instead.
+	subprocessCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	output, err := runTerraformModules(ctx, executable, directory)
+	output, err := runTerraformModules(subprocessCtx, executable, directory)
 	if err != nil {
 		if os.IsNotExist(err) || strings.Contains(err.Error(), "executable file not found") {
 			return false, "Terraform >= 1.10 with modules -json is unavailable"
@@ -159,15 +161,31 @@ func resolveModuleArtifact(ctx context.Context, config *schema.AtmosConfiguratio
 	if strings.HasPrefix(source, "oci://") || strings.Contains(source, "@sha256:") {
 		return downloader.ResolveArtifact(ctx, config, source, "")
 	}
+	if err := ctx.Err(); err != nil {
+		return downloader.ResolvedArtifact{}, err
+	}
 	staging, err := os.MkdirTemp("", "atmos-sbom-module-*")
 	if err != nil {
 		return downloader.ResolvedArtifact{}, err
 	}
 	defer os.RemoveAll(staging)
-	if err := downloader.NewGoGetterDownloader(config).Fetch(source, staging, downloader.ClientModeAny, 10*time.Minute); err != nil {
+	if err := downloader.NewGoGetterDownloader(config).Fetch(source, staging, downloader.ClientModeAny, moduleFetchTimeout(ctx)); err != nil {
 		return downloader.ResolvedArtifact{}, err
 	}
 	return downloader.ResolveArtifact(ctx, config, source, staging)
+}
+
+// moduleFetchTimeout bounds a single module download at 10 minutes, tightened to the caller's
+// remaining ctx deadline when one is set so `sbom generate` never outlives its own context.
+// (Fetch builds its own timeout context internally, so the deadline must be passed as a duration.)
+func moduleFetchTimeout(ctx context.Context) time.Duration {
+	timeout := 10 * time.Minute
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining < timeout {
+			timeout = remaining
+		}
+	}
+	return timeout
 }
 
 func findProviderLocks(base string) ([]string, error) {

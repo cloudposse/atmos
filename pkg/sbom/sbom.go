@@ -5,6 +5,7 @@
 package sbom
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,7 +92,7 @@ type Graph struct {
 	Coverage      []Coverage
 }
 
-func BuildWithOptions(config *schema.AtmosConfiguration, options Options) (*Graph, error) {
+func BuildWithOptions(ctx context.Context, config *schema.AtmosConfiguration, options Options) (*Graph, error) {
 	if err := normalizeOptions(&options); err != nil {
 		return nil, err
 	}
@@ -102,7 +103,7 @@ func BuildWithOptions(config *schema.AtmosConfiguration, options Options) (*Grap
 	if err := appendVendor(graph, config, options.IncludeFiles); err != nil {
 		return nil, err
 	}
-	if err := appendScopeArtifacts(graph, config, options.Scope); err != nil {
+	if err := appendScopeArtifacts(ctx, graph, config, options.Scope); err != nil {
 		return nil, err
 	}
 	graph.Components = dedupe(graph.Components)
@@ -131,14 +132,14 @@ func normalizeOptions(options *Options) error {
 	return nil
 }
 
-func appendScopeArtifacts(graph *Graph, config *schema.AtmosConfiguration, scope string) error {
+func appendScopeArtifacts(ctx context.Context, graph *Graph, config *schema.AtmosConfiguration, scope string) error {
 	if scope == ScopeDependencies {
 		if err := appendToolchain(graph, config); err != nil {
 			return err
 		}
 		return appendVersions(graph, config)
 	}
-	return appendTerraform(graph, config)
+	return appendTerraform(ctx, graph, config)
 }
 
 func subjectComponent(subject Subject) Component {

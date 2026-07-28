@@ -67,7 +67,7 @@ var generateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		graph, err := sbom.BuildWithOptions(atmosConfig, sbom.Options{IncludeFiles: includeFiles, Scope: scope, Mode: mode, Subject: sbom.Subject{Name: subjectName, Version: subjectVersion, Supplier: subjectSupplier}})
+		graph, err := sbom.BuildWithOptions(cmd.Context(), atmosConfig, sbom.Options{IncludeFiles: includeFiles, Scope: scope, Mode: mode, Subject: sbom.Subject{Name: subjectName, Version: subjectVersion, Supplier: subjectSupplier}})
 		if err != nil {
 			return err
 		}

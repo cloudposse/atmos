@@ -181,3 +181,35 @@ func TestDefaultBranchRejectsRemoteWithoutAdvertisedHead(t *testing.T) {
 	_, err := DefaultBranch(context.Background(), workdir, "origin")
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
 }
+
+// TestPrepareBranchProtectsDivergedLocalBranch proves the no-remote-branch path never
+// force-resets a local branch carrying commits absent from the base: PrepareBranch must fail
+// with ErrGitLocalBranchDiverged instead of silently discarding the committed work.
+func TestPrepareBranchProtectsDivergedLocalBranch(t *testing.T) {
+	workdir := newGitRemote(t)
+	ctx := context.Background()
+
+	runGitCommand(t, workdir, "checkout", "-b", "atmos/component-updater/all")
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "unpushed.txt"), []byte("unpushed\n"), 0o644))
+	runGitCommand(t, workdir, "add", "unpushed.txt")
+	runGitCommand(t, workdir, "commit", "-m", "unpushed work")
+	localSHA := strings.TrimSpace(runGitCommand(t, workdir, "rev-parse", "HEAD"))
+	runGitCommand(t, workdir, "checkout", "main")
+
+	err := PrepareBranch(ctx, PrepareBranchOptions{Workdir: workdir, Base: "main", Branch: "atmos/component-updater/all"})
+	require.ErrorIs(t, err, errUtils.ErrGitLocalBranchDiverged)
+	assert.Equal(t, localSHA, strings.TrimSpace(runGitCommand(t, workdir, "rev-parse", "atmos/component-updater/all")),
+		"diverged local branch must be left untouched")
+}
+
+// TestPrepareBranchResetsLocalBranchAtBase is the negative path: a stale local branch with no
+// commits beyond the fetched base holds no unique work, so PrepareBranch still reuses it.
+func TestPrepareBranchResetsLocalBranchAtBase(t *testing.T) {
+	workdir := newGitRemote(t)
+	ctx := context.Background()
+
+	runGitCommand(t, workdir, "branch", "atmos/component-updater/all", "main")
+
+	require.NoError(t, PrepareBranch(ctx, PrepareBranchOptions{Workdir: workdir, Base: "main", Branch: "atmos/component-updater/all"}))
+	assert.Equal(t, "atmos/component-updater/all", strings.TrimSpace(runGitCommand(t, workdir, "branch", "--show-current")))
+}

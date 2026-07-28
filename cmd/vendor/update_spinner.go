@@ -265,7 +265,9 @@ func updateSpinnerResult(finalModel tea.Model) (*vendoring.UpdateReport, error) 
 		return nil, fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
 	}
 	if final.canceled {
-		return nil, fmt.Errorf("vendor update canceled: %w", context.Canceled)
+		// Both sentinels are load-bearing: ErrSpinnerOperationInterrupted is the repo's static
+		// error for user interruption, context.Canceled keeps ctx-aware callers working.
+		return nil, fmt.Errorf("%w: vendor update canceled: %w", errUtils.ErrSpinnerOperationInterrupted, context.Canceled)
 	}
 
 	return final.report, final.err

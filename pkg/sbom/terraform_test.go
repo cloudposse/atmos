@@ -17,7 +17,7 @@ import (
 
 func TestAppendTerraformRequiresConfig(t *testing.T) {
 	t.Parallel()
-	err := appendTerraform(&Graph{}, nil)
+	err := appendTerraform(t.Context(), &Graph{}, nil)
 	require.ErrorIs(t, err, errTerraformConfigurationRequired)
 }
 
@@ -31,7 +31,7 @@ func TestAppendTerraformPropagatesProviderLockParseError(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: base}
 	config.Components.Terraform.BasePath = filepath.Join("components", "terraform")
 
-	err := appendTerraform(&Graph{}, config)
+	err := appendTerraform(t.Context(), &Graph{}, config)
 	require.Error(t, err)
 }
 
@@ -41,7 +41,7 @@ func TestAppendTerraformSkipsWhenBaseDirectoryMissing(t *testing.T) {
 	config.Components.Terraform.BasePath = filepath.Join("components", "does-not-exist")
 
 	graph := &Graph{}
-	require.NoError(t, appendTerraform(graph, config))
+	require.NoError(t, appendTerraform(t.Context(), graph, config))
 	require.Empty(t, graph.Components)
 	for _, coverage := range graph.Coverage {
 		require.Contains(t, []string{"no Terraform lock files discovered", "no initialized Terraform configurations discovered", "OCI artifacts are represented by Atmos source receipts"}, coverage.Detail)
@@ -71,7 +71,7 @@ func TestAppendTerraformMarksModulesIncompleteWhenLocalModuleUnresolvable(t *tes
 	config.Components.Terraform.BasePath = filepath.Join("components", "terraform")
 
 	graph := &Graph{}
-	require.NoError(t, appendTerraform(graph, config))
+	require.NoError(t, appendTerraform(t.Context(), graph, config))
 
 	require.Contains(t, componentIDs(graph), "terraform-module:terraform:vpc:missing")
 	for _, coverage := range graph.Coverage {
@@ -139,7 +139,7 @@ func TestAppendModulesForDirectoryHandlesRunTerraformModulesErrors(t *testing.T)
 			runTerraformModules = tt.run
 			t.Cleanup(func() { runTerraformModules = previous })
 
-			complete, detail := appendModulesForDirectory(&Graph{}, config, "terraform:vpc", dir)
+			complete, detail := appendModulesForDirectory(t.Context(), &Graph{}, config, "terraform:vpc", dir)
 			require.False(t, complete)
 			require.Contains(t, detail, tt.wantDetail)
 		})
@@ -202,7 +202,7 @@ func TestFindProviderLocksPropagatesPermissionErrors(t *testing.T) {
 
 		config := &schema.AtmosConfiguration{BasePath: base}
 		config.Components.Terraform.BasePath = "."
-		err = appendTerraform(&Graph{}, config)
+		err = appendTerraform(t.Context(), &Graph{}, config)
 		require.Error(t, err)
 	})
 }

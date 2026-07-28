@@ -155,14 +155,63 @@ func RedactSource(source string) string {
 	if source == "" {
 		return ""
 	}
-	if parsed, err := url.Parse(source); err == nil && parsed.Scheme != "" {
+	// go-getter forced-protocol sources ("git::https://…") parse as opaque URLs
+	// (User is nil, RawQuery is empty), which would bypass redaction entirely.
+	// Strip the forcing prefix, redact the inner URL, and re-prefix.
+	if forcing, rest, found := strings.Cut(source, "::"); found && isForcingToken(forcing) {
+		return forcing + "::" + RedactSource(rest)
+	}
+	if parsed, err := url.Parse(source); err == nil && parsed.Scheme != "" && parsed.Opaque == "" {
 		parsed.User = nil
 		parsed.RawQuery = ""
 		parsed.ForceQuery = false
 		parsed.Fragment = ""
 		return parsed.String()
 	}
-	return strings.SplitN(source, "?", 2)[0]
+	return redactFallback(source)
+}
+
+// isForcingToken reports whether s looks like a go-getter protocol-forcing
+// token (e.g. "git", "hg", "s3", "https"): scheme grammar, letter first.
+func isForcingToken(s string) bool {
+	if s == "" || !isSchemeLetter(rune(s[0])) {
+		return false
+	}
+	for _, r := range s[1:] {
+		if !isSchemeLetter(r) && (r < '0' || r > '9') && r != '+' && r != '-' && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+func isSchemeLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+// redactFallback handles sources url.Parse cannot decompose: it drops any
+// query suffix and, when the authority carries a "user:password@" userinfo,
+// strips it. Bare usernames (scp-style "git@host:path") are preserved since
+// they identify the source rather than a credential.
+func redactFallback(source string) string {
+	source = strings.SplitN(source, "?", 2)[0]
+	prefix := ""
+	rest := source
+	if schemeSep := strings.Index(source, "://"); schemeSep >= 0 {
+		prefix = source[:schemeSep+3]
+		rest = source[schemeSep+3:]
+	}
+	authority := rest
+	tail := ""
+	if end := strings.IndexAny(rest, "/?#"); end >= 0 {
+		authority = rest[:end]
+		tail = rest[end:]
+	}
+	at := strings.LastIndex(authority, "@")
+	if at >= 0 && strings.Contains(authority[:at], ":") {
+		authority = authority[at+1:]
+	}
+	return prefix + authority + tail
 }
 
 func gitCommit(directory string) (string, error) {

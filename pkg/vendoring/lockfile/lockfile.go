@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -39,6 +40,8 @@ const (
 	errWrapPathFormat = "%w %q: %w"
 	// Wraps a sentinel around a quoted value with no further error to chain.
 	errWrapQuotedFormat = "%w: %q"
+	// The "." path element Clean/Dir return for an empty or fully-consumed relative path.
+	currentDirToken = "."
 )
 
 // LockFile is the versioned vendor.lock.yaml format.
@@ -249,7 +252,56 @@ func VendorInventory(root string) ([]File, error) { //nolint:lintroller // Deleg
 // files, rather than taking a broad snapshot of a component directory that
 // may also contain local configuration or mixin output.
 func VendorInventoryWithPatterns(root string, includedPaths, excludedPaths []string) ([]File, error) { //nolint:lintroller // Delegates entirely to the tracked walkInventory.
-	return walkInventory(root, vendor.CreateSkipFunc(root, includedPaths, excludedPaths))
+	return walkInventory(root, inventorySkipWithDirParity(root, includedPaths, excludedPaths))
+}
+
+// inventorySkipWithDirParity wraps the shared vendor skip policy with glob-copy parity: the
+// vendor.yaml copy path (copyToTargetWithPatterns) copies a *directory* matched by an
+// included_paths pattern recursively, while vendor.CreateSkipFunc matches include patterns
+// per-file. Without this wrapper, `included_paths: ["modules"]` vendors every file under
+// modules/ but records none of them, so Verify would silently trust an unchecked subtree.
+// A file rejected by the per-file matcher is therefore re-admitted when a non-excluded
+// ancestor directory matches an include pattern.
+func inventorySkipWithDirParity(root string, includedPaths, excludedPaths []string) func(os.FileInfo, string, string) (bool, error) {
+	skip := vendor.CreateSkipFunc(root, includedPaths, excludedPaths)
+	if len(includedPaths) == 0 {
+		return skip
+	}
+	return func(info os.FileInfo, src, dest string) (bool, error) {
+		skipped, err := skip(info, src, dest)
+		if err != nil || !skipped || info.IsDir() {
+			return skipped, err
+		}
+		trimmed := strings.TrimPrefix(strings.TrimPrefix(filepath.ToSlash(src), filepath.ToSlash(root)), "/")
+		admitted, err := dirParityAdmits(trimmed, includedPaths, excludedPaths)
+		if err != nil {
+			return true, err
+		}
+		return !admitted, nil
+	}
+}
+
+// dirParityAdmits reports whether a file the per-file matcher rejected should still be
+// inventoried because a non-excluded ancestor directory matches an include pattern. Excludes win:
+// the file may have been skipped by the exclude check, not the include check, and directory
+// parity must never resurrect an excluded file.
+func dirParityAdmits(trimmed string, includedPaths, excludedPaths []string) (bool, error) {
+	if len(excludedPaths) > 0 {
+		excluded, err := vendor.ShouldExcludeFile(excludedPaths, trimmed)
+		if err != nil || excluded {
+			return false, err
+		}
+	}
+	for dir := path.Dir(trimmed); dir != currentDirToken && dir != "/"; dir = path.Dir(dir) {
+		dirSkipped, err := vendor.ShouldIncludeFile(includedPaths, dir)
+		if err != nil {
+			return false, err
+		}
+		if !dirSkipped {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // walkInventory is the single WalkDir+SHA256 tree-inventory implementation, parameterized by a
@@ -624,12 +676,16 @@ func newArtifactPaths(config *schema.AtmosConfiguration, artifact Artifact) (map
 // longer claims, unless another artifact now owns the same path (ownedByAnother) or the file was
 // modified out-of-band since it was last recorded (in which case Replace refuses to touch it).
 func pruneStaleArtifactFiles(config *schema.AtmosConfiguration, lock *LockFile, id string, previous Artifact, newPaths map[string]struct{}) error {
+	otherOwned := pathsOwnedByOthers(config, lock, id)
 	for _, file := range previous.Files {
 		path, pathErr := lockedPath(config, previous.Target, file.Path)
 		if pathErr != nil {
 			return pathErr
 		}
-		if _, retained := newPaths[path]; retained || ownedByAnother(config, lock, id, path) {
+		if _, retained := newPaths[path]; retained {
+			continue
+		}
+		if _, owned := otherOwned[path]; owned {
 			continue
 		}
 		info, statErr := os.Lstat(path)
@@ -844,7 +900,7 @@ func lockedPath(config *schema.AtmosConfiguration, target, relative string) (str
 		return "", err
 	}
 	cleaned := filepath.Clean(filepath.FromSlash(relative))
-	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
+	if cleaned == currentDirToken || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
 		return "", fmt.Errorf(errWrapQuotedFormat, ErrInvalidLockOwnedFilePath, relative)
 	}
 	return filepath.Join(root, cleaned), nil
@@ -864,7 +920,7 @@ func projectRelativeTarget(config *schema.AtmosConfiguration, target string) (st
 			return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrMakeTargetRelative, err)
 		}
 	}
-	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
+	if cleaned == currentDirToken || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
 		return "", fmt.Errorf(errWrapQuotedFormat, ErrInvalidVendorLockTarget, target)
 	}
 	return filepath.ToSlash(cleaned), nil
@@ -930,7 +986,7 @@ func matches(file File, path string, info os.FileInfo) bool {
 
 func removeEmptyParents(path, root string) {
 	root = filepath.Clean(root)
-	for path != root && path != "." {
+	for path != root && path != currentDirToken {
 		if err := os.Remove(path); err != nil {
 			return
 		}
@@ -948,19 +1004,23 @@ func nextOrder(lock *LockFile) int {
 	return order + 1
 }
 
-func ownedByAnother(config *schema.AtmosConfiguration, lock *LockFile, excludedID, path string) bool {
+// pathsOwnedByOthers precomputes every on-disk path owned by artifacts other than excludedID,
+// so pruning checks set membership instead of rescanning the whole lock for each candidate file
+// (previously an O(previousFiles × artifacts × files) scan on every Replace). Unresolvable
+// paths are skipped, matching the previous per-path leniency.
+func pathsOwnedByOthers(config *schema.AtmosConfiguration, lock *LockFile, excludedID string) map[string]struct{} {
+	owned := map[string]struct{}{}
 	for id, artifact := range lock.Artifacts {
 		if id == excludedID {
 			continue
 		}
 		for _, file := range artifact.Files {
-			artifactPath, err := lockedPath(config, artifact.Target, file.Path)
-			if err == nil && artifactPath == path {
-				return true
+			if artifactPath, err := lockedPath(config, artifact.Target, file.Path); err == nil {
+				owned[artifactPath] = struct{}{}
 			}
 		}
 	}
-	return false
+	return owned
 }
 
 func hashFile(path string) (string, error) {

@@ -54,7 +54,8 @@ var providerSchema = &hcl.BodySchema{
 	},
 }
 
-// versionSchema matches the version attribute inside a provider block.
+// providerAttributesSchema matches the version, constraints, and hashes attributes inside a
+// provider block.
 var providerAttributesSchema = &hcl.BodySchema{
 	Attributes: []hcl.AttributeSchema{
 		{Name: "version", Required: true},

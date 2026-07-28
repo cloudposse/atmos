@@ -36,6 +36,10 @@ func TestRedactSourceRemovesCredentialsAndQuery(t *testing.T) {
 		{name: "userinfo and query are stripped from a real URL", source: "https://token@example@github.example.com/org/module.git?signature=secret", want: "https://github.example.com/org/module.git"},
 		{name: "non-URL text with a query-like suffix falls back to prefix split", source: "not a url?query=1", want: "not a url"},
 		{name: "malformed percent-encoding falls back to prefix split", source: "%zz?foo=bar", want: "%zz"},
+		{name: "forced-protocol git over https strips embedded token", source: "git::https://x-access-token:ghp_secret@github.com/org/repo.git//modules/vpc?ref=v1.2.3", want: "git::https://github.com/org/repo.git//modules/vpc"},
+		{name: "forced-protocol git over ssh strips userinfo", source: "git::ssh://git@github.com/org/repo.git?ref=main", want: "git::ssh://github.com/org/repo.git"},
+		{name: "scp-style bare username is preserved", source: "git@github.com:org/repo.git", want: "git@github.com:org/repo.git"},
+		{name: "user-password userinfo stripped without url.Parse", source: "user:secret@host.example.com/path", want: "host.example.com/path"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

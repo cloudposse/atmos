@@ -224,7 +224,7 @@ func removeWorktree(repoDir, worktreePath string, run worktreeCommandRunner, con
 	if pruneErr == nil {
 		if _, statErr := os.Stat(worktreePath); statErr == nil {
 			return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr,
-				fmt.Errorf("git worktree prune completed but worktree path %q still exists", worktreePath))
+				fmt.Errorf("%w: %q", errUtils.ErrGitWorktreePruneIncomplete, worktreePath))
 		} else if !os.IsNotExist(statErr) {
 			return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr,
 				fmt.Errorf("checking whether worktree path %q was removed: %w", worktreePath, statErr))

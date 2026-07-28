@@ -71,16 +71,31 @@ func UpdateScope(group string, components []string) string {
 	defer perf.Track(nil, "updater.UpdateScope")()
 
 	if group != "" {
-		return "group-" + group
+		return "group-" + sanitizeScopeSegment(group)
 	}
 	if len(components) == 0 {
 		return "all"
 	}
 	if len(components) == 1 {
-		return "components-" + components[0]
+		return "components-" + sanitizeScopeSegment(components[0])
 	}
 	copied := append([]string(nil), components...)
 	sort.Strings(copied)
 	hash := sha256.Sum256([]byte(strings.Join(copied, "\x00")))
 	return "components-" + hex.EncodeToString(hash[:])[:componentSelectionHashLength]
+}
+
+// sanitizeScopeSegment flattens a group or component name into a single branch path segment.
+// Nested component names contain slashes (e.g. "eks/cluster"), and a branch "…/components-eks"
+// (a ref file) cannot coexist with "…/components-eks/cluster" (which needs "components-eks" to
+// be a ref directory) — so every non-[A-Za-z0-9._] rune collapses to "-".
+func sanitizeScopeSegment(name string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, name)
 }

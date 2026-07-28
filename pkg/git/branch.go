@@ -58,6 +58,15 @@ func PrepareBranch(ctx context.Context, opts PrepareBranchOptions) error {
 		}
 		return nil
 	}
+	// No remote feature branch exists. A local branch of the same name may still carry
+	// committed work from an interrupted run that never pushed; `checkout -B` would silently
+	// reset it to base (the clean-worktree check above cannot catch committed work). Only
+	// force-reset a local branch that holds no commits beyond the fetched base.
+	if gitRun(ctx, opts.Workdir, "rev-parse", "--verify", "--quiet", "refs/heads/"+opts.Branch) == nil &&
+		gitRun(ctx, opts.Workdir, "merge-base", "--is-ancestor", "refs/heads/"+opts.Branch, opts.Remote+"/"+opts.Base) != nil {
+		return fmt.Errorf("%w: local branch %q is not on %s/%s and has no remote counterpart; push or delete it first",
+			errUtils.ErrGitLocalBranchDiverged, opts.Branch, opts.Remote, opts.Base)
+	}
 	if err := gitRun(ctx, opts.Workdir, "checkout", "-B", opts.Branch, opts.Remote+"/"+opts.Base); err != nil {
 		return fmt.Errorf("%w: creating feature branch from %s: %w", errUtils.ErrGitCheckoutFailed, opts.Base, err)
 	}

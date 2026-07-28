@@ -39,7 +39,7 @@ func TestBuildAndRenderVendorLockDomain(t *testing.T) {
 
 	// An empty Scope normalizes to ScopeTerraform (see TestNormalizeOptionsDefaultsScopeWhenEmpty),
 	// so this also exercises BuildWithOptions' default entry point.
-	graph, err := BuildWithOptions(config, Options{IncludeFiles: true})
+	graph, err := BuildWithOptions(t.Context(), config, Options{IncludeFiles: true})
 	require.NoError(t, err)
 	require.Len(t, graph.Components, 2)
 	require.Len(t, graph.Relationships, 1)
@@ -93,7 +93,7 @@ func TestBuildDependenciesScopeIncludesToolchainAndVersionTrackEvidence(t *testi
 	}}
 	require.NoError(t, versionmanager.SaveLock(config, versions))
 
-	graph, err := BuildWithOptions(config, Options{Scope: ScopeDependencies})
+	graph, err := BuildWithOptions(t.Context(), config, Options{Scope: ScopeDependencies})
 	require.NoError(t, err)
 	ids := componentIDs(graph)
 	require.Contains(t, ids, "vendor:vpc")
@@ -122,7 +122,7 @@ func TestBuildTerraformScopeWithImmutableModuleEvidence(t *testing.T) {
 	vendor := vendorlock.New()
 	vendor.Artifacts["vpc"] = vendorlock.Artifact{Name: "vpc", Kind: "git", Target: componentDir, Source: vendorlock.Source{Declared: "https://token@example.com/org/vpc.git?signature=secret", Resolved: "https://example.com/org/vpc.git", Digest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}
 	require.NoError(t, vendorlock.Save(config, vendor))
-	graph, err := BuildWithOptions(config, Options{Scope: ScopeTerraform, Mode: ModeNTIA, Subject: Subject{Name: "infra-live", Version: "2026.07.17", Supplier: "Example"}})
+	graph, err := BuildWithOptions(t.Context(), config, Options{Scope: ScopeTerraform, Mode: ModeNTIA, Subject: Subject{Name: "infra-live", Version: "2026.07.17", Supplier: "Example"}})
 	require.NoError(t, err)
 	require.Contains(t, componentIDs(graph), "terraform-provider:registry.terraform.io/hashicorp/aws@5.95.0")
 	require.Contains(t, componentIDs(graph), "terraform-module:terraform:vpc:child")
@@ -151,7 +151,7 @@ func TestTerraformProviderWithoutArchiveSHAIsIncompleteButRetainsLockHash(t *tes
 	t.Cleanup(func() { runTerraformModules = previous })
 	config := &schema.AtmosConfiguration{BasePath: base}
 	config.Components.Terraform.BasePath = filepath.Join("components", "terraform")
-	graph, err := BuildWithOptions(config, Options{Scope: ScopeTerraform, Mode: ModeProvenance})
+	graph, err := BuildWithOptions(t.Context(), config, Options{Scope: ScopeTerraform, Mode: ModeProvenance})
 	require.NoError(t, err)
 	content, renderErr := Render(graph, FormatCycloneDXJSON)
 	require.NoError(t, renderErr)
@@ -164,7 +164,7 @@ func TestTerraformProviderWithoutArchiveSHAIsIncompleteButRetainsLockHash(t *tes
 }
 
 func TestNTIARequiresSubjectAndCompleteCoverage(t *testing.T) {
-	_, err := BuildWithOptions(&schema.AtmosConfiguration{BasePath: t.TempDir()}, Options{Scope: ScopeTerraform, Mode: ModeNTIA})
+	_, err := BuildWithOptions(t.Context(), &schema.AtmosConfiguration{BasePath: t.TempDir()}, Options{Scope: ScopeTerraform, Mode: ModeNTIA})
 	require.ErrorContains(t, err, "subject name, version, and supplier")
 }
 
@@ -246,7 +246,7 @@ func TestNormalizeOptionsAcceptsDependenciesScope(t *testing.T) {
 
 func TestBuildWithOptionsPropagatesNormalizeOptionsError(t *testing.T) {
 	t.Parallel()
-	_, err := BuildWithOptions(&schema.AtmosConfiguration{BasePath: t.TempDir()}, Options{Mode: "bogus"})
+	_, err := BuildWithOptions(t.Context(), &schema.AtmosConfiguration{BasePath: t.TempDir()}, Options{Mode: "bogus"})
 	require.ErrorIs(t, err, errUnsupportedMode)
 }
 
@@ -256,7 +256,7 @@ func TestBuildWithOptionsPropagatesVendorLockParseError(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: base}
 	require.NoError(t, os.WriteFile(vendorlock.Path(config), []byte("not: [valid yaml"), 0o644))
 
-	_, err := BuildWithOptions(config, Options{Scope: ScopeTerraform})
+	_, err := BuildWithOptions(t.Context(), config, Options{Scope: ScopeTerraform})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "parse vendor lock")
 }
@@ -268,7 +268,7 @@ func TestBuildWithOptionsPropagatesScopeArtifactsError(t *testing.T) {
 	config.Toolchain.LockFile = "toolchain.lock.yaml"
 	require.NoError(t, os.WriteFile(filepath.Join(base, config.Toolchain.LockFile), []byte("not: [valid yaml"), 0o644))
 
-	_, err := BuildWithOptions(config, Options{Scope: ScopeDependencies})
+	_, err := BuildWithOptions(t.Context(), config, Options{Scope: ScopeDependencies})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "failed to parse lock file")
 }
@@ -280,7 +280,7 @@ func TestAppendVersionsErrorPropagatesThroughScopeArtifacts(t *testing.T) {
 	config.Version.LockFile = "versions.lock.yaml"
 	require.NoError(t, os.WriteFile(filepath.Join(base, config.Version.LockFile), []byte("not: [valid yaml"), 0o644))
 
-	_, err := BuildWithOptions(config, Options{Scope: ScopeDependencies})
+	_, err := BuildWithOptions(t.Context(), config, Options{Scope: ScopeDependencies})
 	require.Error(t, err)
 }
 

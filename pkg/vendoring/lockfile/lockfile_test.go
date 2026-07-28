@@ -487,6 +487,43 @@ func TestVendorInventoryWithPatternsRecordsOnlyCopiedFiles(t *testing.T) {
 	require.Equal(t, "main.tf", files[0].Path)
 }
 
+// TestVendorInventoryWithPatternsIncludesMatchedDirectorySubtree proves glob-copy parity: the
+// vendor.yaml copy path copies a directory matched by an included_paths pattern recursively, so
+// the inventory must record that subtree's files too. Before inventorySkipWithDirParity, a bare
+// directory pattern like "modules" vendored files but recorded none, silently disabling
+// Verify/IsMaterialized drift detection for the artifact.
+func TestVendorInventoryWithPatternsIncludesMatchedDirectorySubtree(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "vpc"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "main.tf"), []byte("main"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "vpc", "vpc.tf"), []byte("vpc"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "vpc", "notes.md"), []byte("notes"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("readme"), 0o644))
+
+	files, err := VendorInventoryWithPatterns(root, []string{"modules"}, nil)
+	require.NoError(t, err)
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.Path)
+	}
+	require.Equal(t, []string{"modules/main.tf", "modules/vpc/notes.md", "modules/vpc/vpc.tf"}, paths)
+}
+
+// TestVendorInventoryWithPatternsDirectoryParityHonorsExcludes proves excludes still win over
+// directory-subtree inclusion: a file under a matched directory that also matches
+// excluded_paths must never be resurrected by the parity check.
+func TestVendorInventoryWithPatternsDirectoryParityHonorsExcludes(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "main.tf"), []byte("main"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "secret.md"), []byte("no"), 0o644))
+
+	files, err := VendorInventoryWithPatterns(root, []string{"modules"}, []string{"**/*.md"})
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	require.Equal(t, "modules/main.tf", files[0].Path)
+}
+
 // trySymlink creates a symlink and reports whether the platform supports it,
 // skipping the calling (sub)test rather than failing it. Windows requires
 // elevated privileges to create symlinks, so this keeps the suite portable.

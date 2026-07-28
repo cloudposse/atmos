@@ -219,3 +219,56 @@ func TestParseVendorFlags_TypeChanged(t *testing.T) {
 		assert.False(t, vendorFlags.TypeChanged)
 	})
 }
+
+// TestParseVendorFlags_ComponentSliceFlag proves parseVendorFlags tolerates the flag shape
+// `vendor update --pull` delegates with: vendorUpdateCmd registers --component as a repeatable
+// string slice (cmd/vendor/update.go), while vendorPullCmd registers a plain string. A
+// stringSlice-typed --component must parse (not hard-error via pflag's GetString type check),
+// yield the single element when one is set, and reject multi-element selections explicitly.
+func TestParseVendorFlags_ComponentSliceFlag(t *testing.T) {
+	newSliceFlagSet := func() *pflag.FlagSet {
+		flags := pflag.NewFlagSet("vendor update", pflag.ContinueOnError)
+		flags.Bool("dry-run", false, "")
+		flags.StringSlice("component", []string{}, "")
+		flags.String("tags", "", "")
+		flags.Bool("everything", false, "")
+		return flags
+	}
+
+	t.Run("unset slice flag parses as empty component", func(t *testing.T) {
+		vendorFlags, err := parseVendorFlags(newSliceFlagSet(), nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, vendorFlags.Component)
+	})
+
+	t.Run("single-element slice yields that component", func(t *testing.T) {
+		flags := newSliceFlagSet()
+		require.NoError(t, flags.Set("component", "vpc"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "vpc", vendorFlags.Component)
+	})
+
+	t.Run("multi-element slice is rejected with the sentinel", func(t *testing.T) {
+		flags := newSliceFlagSet()
+		require.NoError(t, flags.Set("component", "vpc"))
+		require.NoError(t, flags.Set("component", "eks"))
+
+		_, err := parseVendorFlags(flags, nil)
+
+		require.ErrorIs(t, err, ErrSingleComponentRequired)
+	})
+
+	t.Run("string-typed component flag still parses", func(t *testing.T) {
+		flags := newVendorPullFlagSet(false)
+		require.NoError(t, flags.Set("component", "vpc"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "vpc", vendorFlags.Component)
+	})
+}

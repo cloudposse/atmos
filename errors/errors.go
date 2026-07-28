@@ -280,6 +280,7 @@ var (
 	ErrGitRefNotFound              = errors.New("git reference not found on local filesystem")
 	ErrGitFileNotFound             = errors.New("file not found in git reference")
 	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
+	ErrGitWorktreePruneIncomplete  = errors.New("git worktree prune completed but worktree path still exists")
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
 	ErrGitRepositoryNotFound       = errors.New("git repository not configured")
@@ -1538,6 +1539,9 @@ var (
 	ErrGitFetchFailed = errors.New("git fetch failed")
 	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.
 	ErrGitCheckoutFailed = errors.New("git checkout failed")
+	// ErrGitLocalBranchDiverged prevents force-resetting a local feature branch that carries
+	// commits absent from both the remote feature branch and the base branch.
+	ErrGitLocalBranchDiverged = errors.New("local branch has unpushed commits")
 	// ErrGitDefaultBranchResolution indicates the remote's default branch could not be resolved.
 	ErrGitDefaultBranchResolution = errors.New("resolving remote default branch failed")
 

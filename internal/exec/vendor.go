@@ -21,6 +21,9 @@ var (
 	ErrMissingComponent       = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
 		"Example: atmos vendor pull -c <component>")
 	ErrInvalidLockEnforcement = errors.New("'--lock-enforcement' must be one of: strict, warn, silent")
+	// ErrSingleComponentRequired guards the 'vendor update --pull' delegation path, where
+	// --component is a repeatable slice but a pull can only target one component at a time.
+	ErrSingleComponentRequired = errors.New("vendor pull accepts a single '--component' value")
 )
 
 // validLockEnforcementValues are the only values parseVendorFlags/validateVendorFlags accept for
@@ -103,7 +106,7 @@ func parseVendorFlags(flags *pflag.FlagSet, atmosConfig *schema.AtmosConfigurati
 	if vendorFlags.DryRun, err = flags.GetBool("dry-run"); err != nil {
 		return vendorFlags, err
 	}
-	if vendorFlags.Component, err = flags.GetString("component"); err != nil {
+	if vendorFlags.Component, err = parseVendorComponentFlag(flags); err != nil {
 		return vendorFlags, err
 	}
 	if vendorFlags.Tags, err = parseVendorTagsFlag(flags); err != nil {
@@ -127,6 +130,33 @@ func parseVendorFlags(flags *pflag.FlagSet, atmosConfig *schema.AtmosConfigurati
 	}
 
 	return vendorFlags, nil
+}
+
+// parseVendorComponentFlag reads --component regardless of how the calling command registered it.
+// 'vendor pull' registers it as a plain string, but 'vendor update --pull' delegates here with
+// vendorUpdateCmd's FlagSet, where --component is a repeatable string slice; pflag's GetString
+// hard-errors on that type mismatch. Pull operates on a single component, so a multi-element
+// slice is rejected explicitly rather than silently pulling only the first entry.
+func parseVendorComponentFlag(flags *pflag.FlagSet) (string, error) {
+	flag := flags.Lookup("component")
+	if flag == nil {
+		return "", nil
+	}
+	if flag.Value.Type() != "stringSlice" {
+		return flags.GetString("component")
+	}
+	components, err := flags.GetStringSlice("component")
+	if err != nil {
+		return "", err
+	}
+	switch len(components) {
+	case 0:
+		return "", nil
+	case 1:
+		return components[0], nil
+	default:
+		return "", fmt.Errorf("%w: got %d components", ErrSingleComponentRequired, len(components))
+	}
 }
 
 // parseVendorTagsFlag splits --tags' comma-separated value, returning nil for an empty/unset flag.

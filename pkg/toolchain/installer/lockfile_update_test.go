@@ -103,6 +103,19 @@ func TestInstallerLockFileErrors(t *testing.T) {
 	require.ErrorIs(t, err, ErrLockfileIO)
 }
 
+// TestInstallerLockFileToleratesMissingVersion preserves the pre-shared-loader behavior: a
+// version-less lockfile loads with its entries intact (the next save stamps version 1) instead
+// of failing the whole install with a parse error.
+func TestInstallerLockFileToleratesMissingVersion(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "toolchain.lock.yaml")
+	require.NoError(t, os.WriteFile(lockPath, []byte("tools:\n  owner/tool:\n    version: 1.2.3\n"), 0o644))
+
+	lf, err := loadInstallerLockFile(lockPath)
+	require.NoError(t, err)
+	require.Contains(t, lf.Tools, "owner/tool")
+	assert.Equal(t, "1.2.3", lf.Tools["owner/tool"].Version)
+}
+
 func TestInstallerLockFileGetOrCreateTool(t *testing.T) {
 	lf := &installerLockFile{}
 	entry := getOrCreateInstallerTool(lf, "owner/tool")

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 
@@ -179,10 +180,18 @@ func handleVendorPullSweep(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 		componentsByType[rs.ComponentType] = append(componentsByType[rs.ComponentType], rs.Source.Component)
 	}
 
+	// Sort the type keys so pull order, progress output, and any joined error text are stable
+	// across runs (map iteration order is nondeterministic).
+	componentTypes := make([]string, 0, len(componentsByType))
+	for componentType := range componentsByType {
+		componentTypes = append(componentTypes, componentType)
+	}
+	sort.Strings(componentTypes)
+
 	opts := install.InstallOptions{DryRun: flg.DryRun, RefreshLock: flg.RefreshLock, LockEnforcement: flg.LockEnforcement}
 	var errs []error
-	for componentType, components := range componentsByType {
-		if err := ExecuteComponentVendorPullBatch(atmosConfig, components, componentType, opts); err != nil {
+	for _, componentType := range componentTypes {
+		if err := ExecuteComponentVendorPullBatch(atmosConfig, componentsByType[componentType], componentType, opts); err != nil {
 			errs = append(errs, err)
 		}
 	}

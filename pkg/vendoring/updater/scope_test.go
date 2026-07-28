@@ -12,7 +12,17 @@ import (
 func TestUpdateScopeIsStable(t *testing.T) {
 	assert.Equal(t, "all", UpdateScope("", nil))
 	assert.Equal(t, "group-platform", UpdateScope("platform", nil))
+	assert.Equal(t, "components-vpc", UpdateScope("", []string{"vpc"}))
 	assert.Equal(t, UpdateScope("", []string{"vpc", "eks"}), UpdateScope("", []string{"eks", "vpc"}))
+}
+
+// TestUpdateScopeFlattensPathSegments proves scope names stay single branch path segments:
+// nested component names like "eks/cluster" must not produce a branch that turns another run's
+// branch ("…/components-eks") into a git ref-directory conflict.
+func TestUpdateScopeFlattensPathSegments(t *testing.T) {
+	assert.Equal(t, "components-eks-cluster", UpdateScope("", []string{"eks/cluster"}))
+	assert.Equal(t, "group-team-networking", UpdateScope("team/networking", nil))
+	assert.NotEqual(t, UpdateScope("", []string{"eks/cluster"}), UpdateScope("", []string{"eks"}))
 }
 
 func TestFilterGroupComponentsAndReport(t *testing.T) {

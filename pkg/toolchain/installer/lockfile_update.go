@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/schema"
 	toolchainlock "github.com/cloudposse/atmos/pkg/toolchain/lockfile"
@@ -77,8 +79,16 @@ func newInstallerLockFile() *installerLockFile {
 
 func loadInstallerLockFile(filePath string) (*installerLockFile, error) {
 	lf, err := toolchainlock.Load(filePath)
+	if errors.Is(err, toolchainlock.ErrInvalidLockFile) {
+		// A version-less (version: 0) lockfile predates the shared loader and was historically
+		// tolerated here: load it leniently so its entries survive, and let the next Save
+		// stamp version 1 rather than failing the whole install.
+		lf, err = lenientInstallerLockFile(filePath)
+	}
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		var pathErr *fs.PathError
+		// Filesystem failures (missing file, permission denied) classify as IO, not parse.
+		if errors.Is(err, fs.ErrNotExist) || errors.As(err, &pathErr) {
 			return nil, fmt.Errorf("%w: read %s: %w", ErrLockfileIO, filePath, err)
 		}
 		return nil, fmt.Errorf("%w: %s: %w", ErrLockfileParse, filePath, err)
@@ -89,6 +99,18 @@ func loadInstallerLockFile(filePath string) (*installerLockFile, error) {
 	return lf, nil
 }
 
+func lenientInstallerLockFile(filePath string) (*installerLockFile, error) {
+	data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is the resolved toolchain lockfile path from installer configuration.
+	if err != nil {
+		return nil, err
+	}
+	var lf installerLockFile
+	if err := yaml.Unmarshal(data, &lf); err != nil {
+		return nil, err
+	}
+	return &lf, nil
+}
+
 func saveInstallerLockFile(filePath string, lf *installerLockFile) error {
 	if err := toolchainlock.Save(filePath, lf); err != nil {
 		return fmt.Errorf("%w: write %s: %w", ErrLockfileIO, filePath, err)
@@ -97,12 +119,11 @@ func saveInstallerLockFile(filePath string, lf *installerLockFile) error {
 }
 
 func getOrCreateInstallerTool(lf *installerLockFile, name string) *installerLockTool {
+	// GetOrCreateTool never returns nil; only the Platforms map needs backfilling for
+	// entries loaded from lockfiles written before platforms were recorded.
 	tool := lf.GetOrCreateTool(name)
-	if tool != nil {
-		if tool.Platforms == nil {
-			tool.Platforms = make(map[string]*toolchainlock.PlatformEntry)
-		}
-		return tool
+	if tool.Platforms == nil {
+		tool.Platforms = make(map[string]*toolchainlock.PlatformEntry)
 	}
-	return nil
+	return tool
 }

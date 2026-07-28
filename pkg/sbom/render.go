@@ -3,6 +3,7 @@ package sbom
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -111,8 +112,21 @@ func spdx(graph *Graph) map[string]any {
 		relationships = append(relationships, map[string]string{"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": spdxID("atmos:subject")})
 	}
 	return map[string]any{
-		"spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT", "name": documentName(graph), "documentNamespace": "https://atmos.tools/sbom/locks", "creationInfo": map[string]any{"created": time.Now().UTC().Format(time.RFC3339), "creators": []string{"Tool: atmos-" + atmosversion.Version}, "comment": coverageComment(graph) + "; generator repository: " + atmosRepositoryURL}, "packages": packages, "relationships": relationships,
+		"spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT", "name": documentName(graph), "documentNamespace": spdxDocumentNamespace(graph), "creationInfo": map[string]any{"created": time.Now().UTC().Format(time.RFC3339), "creators": []string{"Tool: atmos-" + atmosversion.Version}, "comment": coverageComment(graph) + "; generator repository: " + atmosRepositoryURL}, "packages": packages, "relationships": relationships,
 	}
+}
+
+// spdxDocumentNamespace derives a per-document namespace as SPDX 2.3 requires (a fixed constant
+// would collide across every generated document). The suffix hashes the document's identifying
+// content — subject and component identities — so distinct documents get distinct namespaces
+// while regenerating the same content stays reproducible.
+func spdxDocumentNamespace(graph *Graph) string {
+	hash := sha256.New()
+	hash.Write([]byte(graph.Subject.Name + "\x00" + graph.Subject.Version + "\x00"))
+	for _, component := range graph.Components {
+		hash.Write([]byte(component.ID + "\x00" + component.Version + "\x00" + component.SHA256 + "\x00"))
+	}
+	return "https://atmos.tools/spdxdocs/" + documentName(graph) + "-" + hex.EncodeToString(hash.Sum(nil))[:16]
 }
 
 // atmosToolComponent uses CycloneDX 1.6's non-deprecated tooling component
@@ -217,5 +231,8 @@ func spdxID(id string) string {
 		}
 		value.WriteByte('-')
 	}
-	return "SPDXRef-" + value.String()
+	// Distinct raw IDs can collapse to the same sanitized form ("a/b" and "a:b" both become
+	// "a-b"); a short digest of the raw ID keeps every SPDXID unique as SPDX requires.
+	digest := sha256.Sum256([]byte(id))
+	return "SPDXRef-" + value.String() + "-" + hex.EncodeToString(digest[:])[:8]
 }

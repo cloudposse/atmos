@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -462,7 +463,14 @@ func pullBatchedComponentManifests(p *batchedComponentManifestsParams) error {
 // flag (shared with the pull path) continues to thread through correctly, e.g.
 // "vendor update --type packer --pull" pulls with "--type packer" too.
 func pullUpdatedComponent(cmd *cobra.Command, args []string, component string) error {
-	if err := cmd.Flags().Set("component", component); err != nil {
+	// "component" is a repeatable string slice on vendorUpdateCmd, and pflag's Set *appends* to a
+	// slice flag once it has been changed — a plain Set here would accumulate one component per
+	// loop iteration. Replace the slice wholesale so each pull targets exactly one component.
+	if sliceValue, ok := cmd.Flags().Lookup("component").Value.(pflag.SliceValue); ok {
+		if err := sliceValue.Replace([]string{component}); err != nil {
+			return err
+		}
+	} else if err := cmd.Flags().Set("component", component); err != nil {
 		return err
 	}
 	if err := cmd.Flags().Set("everything", "false"); err != nil {
