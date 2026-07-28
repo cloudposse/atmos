@@ -45,7 +45,7 @@ func WithFormatFlag(options *[]flags.Option) {
 }
 
 // WithDependenciesFormatFlag adds the output format flag for the dependencies
-// command, which supports only tree (default), json, and yaml.
+// command, which supports tree (default), json, yaml, and levels.
 // Uses ATMOS_LIST_DEPENDENCIES_FORMAT (not ATMOS_LIST_FORMAT) so that users
 // who export ATMOS_LIST_FORMAT=table/csv/matrix for other list verbs are not
 // affected; the dependencies subcommand rejects those values.
@@ -55,9 +55,9 @@ func WithDependenciesFormatFlag(options *[]flags.Option) {
 
 	*options = append(
 		*options,
-		flags.WithStringFlag(flagFormat, "f", "", "Output format: tree (default), json, yaml"),
+		flags.WithStringFlag(flagFormat, "f", "", "Output format: tree (default), json, yaml, levels"),
 		flags.WithEnvVars(flagFormat, "ATMOS_LIST_DEPENDENCIES_FORMAT"),
-		flags.WithValidValues(flagFormat, "tree", "json", "yaml"),
+		flags.WithValidValues(flagFormat, "tree", "json", "yaml", "levels"),
 	)
 }
 

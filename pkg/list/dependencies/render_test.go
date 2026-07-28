@@ -100,6 +100,51 @@ func TestRender_TreeMarksCircular(t *testing.T) {
 	assert.Contains(t, out, "circular reference")
 }
 
+func TestRender_LevelsShowsShortestForwardDependencyDistance(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"db":  dependsOn(map[string]any{"component": "vpc"}),
+			"app": dependsOn(map[string]any{"component": "db"}),
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	out, err := Render(graph, Options{Format: "levels", Direction: DirectionForward, Component: "app", Stack: "dev"})
+	require.NoError(t, err)
+	assert.Contains(t, out, "Level")
+	assert.Less(t, strings.Index(out, "app"), strings.Index(out, "db"))
+	assert.Less(t, strings.Index(out, "db"), strings.Index(out, "vpc"))
+}
+
+func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": withMetadata(map[string]any{
+				"labels": map[string]any{"team": "platform"},
+			}),
+			"app": dependsOn(map[string]any{"component": "vpc"}),
+		},
+	})
+	app := stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
+	app["metadata"] = map[string]any{
+		"tags":   []any{"application"},
+		"labels": map[string]any{"team": "platform", "environment": "test"},
+	}
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	for _, opts := range []Options{
+		{Format: "levels", Direction: DirectionForward, Tags: []string{"application", "tier-1"}},
+		{Format: "levels", Direction: DirectionForward, Labels: map[string]string{"team": "platform", "environment": "test"}},
+	} {
+		out, err := Render(graph, opts)
+		require.NoError(t, err)
+		assert.Less(t, strings.Index(out, "app"), strings.Index(out, "vpc"))
+	}
+}
+
 func TestRender_JSONStructure(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {

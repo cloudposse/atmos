@@ -37,6 +37,8 @@ func TestTerraformFlags(t *testing.T) {
 	assert.True(t, registry.Has("skip"))
 	assert.True(t, registry.Has("query"))
 	assert.True(t, registry.Has("components"))
+	assert.True(t, registry.Has("tags"))
+	assert.True(t, registry.Has("labels"))
 
 	// Check upload-status flag.
 	uploadFlag := registry.Get("upload-status")

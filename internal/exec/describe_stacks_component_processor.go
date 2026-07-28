@@ -4,6 +4,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -442,7 +443,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	// already-inherited metadata (no auth/template/YAML-function evaluation triggered).
 	// Generalizes the -s early-skip above to --tags/--labels. See
 	// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
-	if inScope, decidable := p.scopeDecision(secs.metadata); decidable && !inScope {
+	if inScope, decidable := p.scopeDecision(secs.metadata, componentSection); decidable && !inScope {
 		return nil
 	}
 
@@ -736,20 +737,22 @@ func shouldFilterByStack(filterByStack, stackFileName, stackName string) bool {
 
 // scopeDecision reports whether a component is in scope for this processor's
 // tags/labels filter, using only cheaply-available metadata (no auth/template/
-// YAML-function evaluation). Decidable is false when the metadata itself is
-// templated and cannot be safely evaluated yet, or when eager evaluation is
-// forced via describe.settings.eager_evaluation: in both cases the
+// YAML-function evaluation). Decidable is false when selector metadata cannot
+// be safely resolved, or when eager evaluation is forced via
+// describe.settings.eager_evaluation: in both cases the
 // caller must fall through to full evaluation, leaving
 // pkg/scheduler/adapters/terraform.go's post-filter as the authoritative answer.
-func (p *describeStacksProcessor) scopeDecision(metadata map[string]any) (inScope bool, decidable bool) {
+func (p *describeStacksProcessor) scopeDecision(metadata, componentSection map[string]any) (inScope bool, decidable bool) {
 	if len(p.tagsFilter) == 0 && len(p.labelsFilter) == 0 {
 		return true, true
 	}
 	if GetEagerEvaluationSetting(p.atmosConfig) {
 		return true, false
 	}
-	leftDelim, _ := p.templateDelims()
-	return inScopeByTagsAndLabels(metadata, p.tagsFilter, p.labelsFilter, leftDelim)
+	leftDelim, rightDelim := p.templateDelims()
+	selectorData := maps.Clone(componentSection)
+	selectorData[cfg.MetadataSectionName] = metadata
+	return inScopeByTagsAndLabelsWithContext(metadata, selectorData, p.tagsFilter, p.labelsFilter, leftDelim, rightDelim)
 }
 
 // templateDelims returns the effective template delimiters for this processor's
@@ -799,6 +802,26 @@ func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filter
 		return false, true
 	}
 	return true, true
+}
+
+// inScopeByTagsAndLabelsWithContext resolves simple selector templates against
+// the merged component configuration before applying the normal scope gate.
+// Templates that cannot be resolved stay undecidable so the caller preserves
+// the full evaluation path rather than incorrectly excluding a component.
+func inScopeByTagsAndLabelsWithContext(metadata, data map[string]any, filterTags []string, filterLabels map[string]string, leftDelim, rightDelim string) (inScope bool, decidable bool) {
+	if !tags.SelectorUnresolved(metadata[metadataTagsKey], leftDelim) && !tags.SelectorUnresolved(metadata[metadataLabelsKey], leftDelim) {
+		return inScopeByTagsAndLabels(metadata, filterTags, filterLabels, leftDelim)
+	}
+
+	resolvedTags, tagsResolved := tags.ResolveSelectorValue(metadata[metadataTagsKey], data, leftDelim, rightDelim)
+	resolvedLabels, labelsResolved := tags.ResolveSelectorValue(metadata[metadataLabelsKey], data, leftDelim, rightDelim)
+	if !tagsResolved || !labelsResolved {
+		return true, false
+	}
+	return inScopeByTagsAndLabels(map[string]any{
+		metadataTagsKey:   resolvedTags,
+		metadataLabelsKey: resolvedLabels,
+	}, filterTags, filterLabels, leftDelim)
 }
 
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that

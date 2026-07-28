@@ -3,6 +3,7 @@ package dependencies
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -32,7 +33,7 @@ const (
 
 // Options configures dependency rendering.
 type Options struct {
-	// Format is the output format: tree (default), json, or yaml.
+	// Format is the output format: tree (default), json, yaml, or levels.
 	Format string
 	// Direction selects forward, reverse, or both edge directions.
 	Direction Direction
@@ -73,8 +74,73 @@ func Render(graph *dependency.Graph, opts Options) (string, error) {
 		return renderTree(graph, tops, opts.Direction), nil
 	case string(format.FormatJSON), string(format.FormatYAML):
 		return renderStructured(graph, tops, opts)
+	case "levels":
+		return renderLevels(graph, tops, opts.Direction), nil
 	default:
-		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml)", errUtils.ErrInvalidFormat, opts.Format)
+		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml, levels)", errUtils.ErrInvalidFormat, opts.Format)
+	}
+}
+
+// renderLevels lists selected components and their shortest graph distance from
+// a selected root in the requested direction.
+func renderLevels(graph *dependency.Graph, tops []*dependency.Node, direction Direction) string {
+	levels := make(map[string]int, len(tops))
+	queue := make([]string, 0, len(tops))
+	for _, node := range tops {
+		if _, seen := levels[node.ID]; seen {
+			continue
+		}
+		levels[node.ID] = 0
+		queue = append(queue, node.ID)
+	}
+
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		node, exists := graph.GetNode(id)
+		if !exists {
+			continue
+		}
+		for _, nextID := range levelNeighbors(node, direction) {
+			if _, seen := levels[nextID]; seen {
+				continue
+			}
+			levels[nextID] = levels[id] + 1
+			queue = append(queue, nextID)
+		}
+	}
+
+	nodes := make([]*dependency.Node, 0, len(levels))
+	for id := range levels {
+		if node, exists := graph.GetNode(id); exists {
+			nodes = append(nodes, node)
+		}
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		if levels[nodes[i].ID] != levels[nodes[j].ID] {
+			return levels[nodes[i].ID] < levels[nodes[j].ID]
+		}
+		if nodes[i].Stack != nodes[j].Stack {
+			return nodes[i].Stack < nodes[j].Stack
+		}
+		return nodes[i].Component < nodes[j].Component
+	})
+
+	rows := make([][]string, 0, len(nodes))
+	for _, node := range nodes {
+		rows = append(rows, []string{strconv.Itoa(levels[node.ID]), node.Stack, node.Component, node.Type})
+	}
+	return format.CreateStyledTable([]string{"Level", "Stack", "Component", "Type"}, rows)
+}
+
+func levelNeighbors(node *dependency.Node, direction Direction) []string {
+	switch direction {
+	case DirectionForward:
+		return node.Dependencies
+	case DirectionReverse:
+		return node.Dependents
+	default:
+		return append(append([]string{}, node.Dependencies...), node.Dependents...)
 	}
 }
 
