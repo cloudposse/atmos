@@ -2,6 +2,7 @@ package dependencies
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -113,9 +114,9 @@ func TestRender_LevelsShowsShortestForwardDependencyDistance(t *testing.T) {
 
 	out, err := Render(graph, Options{Format: FormatLevels, Direction: DirectionForward, Component: "app", Stack: "dev"})
 	require.NoError(t, err)
-	assert.Contains(t, out, "Level")
-	assert.Less(t, strings.Index(out, "app"), strings.Index(out, "db"))
-	assert.Less(t, strings.Index(out, "db"), strings.Index(out, "vpc"))
+	assertLevel(t, out, "app", 0)
+	assertLevel(t, out, "db", 1)
+	assertLevel(t, out, "vpc", 2)
 }
 
 func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
@@ -125,6 +126,10 @@ func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
 				"labels": map[string]any{"team": "platform"},
 			}),
 			"app": dependsOn(map[string]any{"component": "vpc"}),
+			"ignored": withMetadata(map[string]any{
+				"tags":   []any{"other"},
+				"labels": map[string]any{"team": "platform", "environment": "other"},
+			}),
 		},
 	})
 	app := stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
@@ -141,8 +146,22 @@ func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
 	} {
 		out, err := Render(graph, opts)
 		require.NoError(t, err)
-		assert.Less(t, strings.Index(out, "app"), strings.Index(out, "vpc"))
+		assertLevel(t, out, "app", 0)
+		assertLevel(t, out, "vpc", 1)
+		assert.NotContains(t, out, "ignored")
 	}
+}
+
+func assertLevel(t *testing.T, output, component string, want int) {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 3 && fields[2] == component {
+			assert.Equal(t, strconv.Itoa(want), fields[0])
+			return
+		}
+	}
+	assert.Failf(t, "component missing from levels output", "%q not found in:\n%s", component, output)
 }
 
 func TestRender_JSONStructure(t *testing.T) {
