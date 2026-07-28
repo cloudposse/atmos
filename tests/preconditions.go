@@ -366,18 +366,32 @@ func prependCachedTestTool(binary string) {
 		if err != nil {
 			return
 		}
-		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
-		if _, ok := cachedTestToolBinaryPath(binDir, tool.Binary); !ok {
-			return
-		}
 
-		path := os.Getenv("PATH")
-		if path == "" {
-			os.Setenv("PATH", binDir)
+		// Unit tests provision tools into test-toolchain, while CI uses the normal
+		// Atmos toolchain cache. Check both so package-local integration tests can
+		// use the tools installed by the acceptance workflow on every platform.
+		for _, binDir := range cachedTestToolBinDirs(cacheDir, tool) {
+			if _, ok := cachedTestToolBinaryPath(binDir, tool.Binary); !ok {
+				continue
+			}
+
+			path := os.Getenv("PATH")
+			if path == "" {
+				os.Setenv("PATH", binDir)
+				return
+			}
+			os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
 			return
 		}
-		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
 	})
+}
+
+func cachedTestToolBinDirs(cacheDir string, tool cachedTestTool) []string {
+	toolPath := filepath.Join(filepath.FromSlash(tool.Repo), tool.Version)
+	return []string{
+		filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", toolPath),
+		filepath.Join(cacheDir, "atmos", "toolchain", "bin", toolPath),
+	}
 }
 
 // cachedTestToolBinaryPath returns the installed test-tool binary path, including
