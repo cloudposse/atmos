@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -492,30 +491,29 @@ func TestExecuteTerraform_Version(t *testing.T) {
 		name           string
 		workDir        string
 		expectedOutput string
-		requireTool    func(*testing.T)
-		binary         string
+		// requireTool resolves the required binary's path (skipping the test if
+		// missing) and returns it. Returning the path here -- instead of a
+		// separate exec.LookPath call in the test body -- avoids a TOCTOU race:
+		// see requireExecutablePath's doc comment in tests/preconditions.go.
+		requireTool func(*testing.T) string
 	}{
 		{
 			name:           "terraform version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-terraform-version",
 			expectedOutput: "Terraform v",
-			requireTool:    tests.RequireTerraform,
-			binary:         "terraform",
+			requireTool:    tests.RequireTerraformPath,
 		},
 		{
 			name:           "tofu version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-tofu-version",
 			expectedOutput: "OpenTofu v",
-			requireTool:    tests.RequireTofu,
-			binary:         "tofu",
+			requireTool:    tests.RequireTofuPath,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.requireTool(t)
-			binaryPath, err := exec.LookPath(tt.binary)
-			require.NoError(t, err)
+			binaryPath := tt.requireTool(t)
 			isolateTerraformTestBinary(t, binaryPath)
 
 			// Set info for ExecuteTerraform.
