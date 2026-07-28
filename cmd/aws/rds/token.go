@@ -137,8 +137,12 @@ func runRDSTokenGeneration(opts tokenOptions) error {
 	return nil
 }
 
-// validateTokenOptions ensures all required inputs are present. --region is required and never
-// silently defaults, since a wrong-region token fails only at database connect time.
+// validateTokenOptions ensures the required inputs are present and in range.
+//
+// --region is intentionally NOT required: GetRDSToken falls back to the authenticated identity's
+// credential region when the flag is empty, so rejecting an empty region here would run before that
+// fallback and break the documented contract. GetRDSToken errors clearly only when neither the flag
+// nor the credentials supply a region.
 func validateTokenOptions(opts tokenOptions) error {
 	switch {
 	case opts.Host == "":
@@ -149,8 +153,6 @@ func validateTokenOptions(opts tokenOptions) error {
 		return fmt.Errorf("%w: --port must be between 1 and %d, got %d", errUtils.ErrRDSTokenGeneration, maxValidPort, opts.Port)
 	case opts.Username == "":
 		return fmt.Errorf("%w: --username is required", errUtils.ErrRDSTokenGeneration)
-	case opts.Region == "":
-		return fmt.Errorf("%w: --region is required", errUtils.ErrRDSTokenGeneration)
 	}
 	return nil
 }
@@ -215,7 +217,7 @@ func init() {
 		flags.WithStringFlag("host", "", "", "RDS/Aurora endpoint hostname (required)"),
 		flags.WithIntFlag("port", "", 0, "Database port (required)"),
 		flags.WithStringFlag("username", "u", "", "Database user name (required)"),
-		flags.WithStringFlag("region", "", "", "AWS region of the database endpoint (required)"),
+		flags.WithStringFlag("region", "", "", "AWS region of the database endpoint (optional; defaults to the identity's credential region)"),
 		flags.WithStringFlag("identity", "i", "", "Atmos identity to authenticate with"),
 		flags.WithEnvVars("host", "ATMOS_AWS_RDS_HOST"),
 		flags.WithEnvVars("port", "ATMOS_AWS_RDS_PORT"),

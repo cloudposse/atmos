@@ -174,7 +174,6 @@ func TestRunRDSTokenGeneration_MissingFlags(t *testing.T) {
 		{"missing host", tokenOptions{Port: 5432, Username: "app", Region: "us-east-2"}, "--host"},
 		{"missing port", tokenOptions{Host: "db", Username: "app", Region: "us-east-2"}, "--port"},
 		{"missing username", tokenOptions{Host: "db", Port: 5432, Region: "us-east-2"}, "--username"},
-		{"missing region", tokenOptions{Host: "db", Port: 5432, Username: "app"}, "--region"},
 		{"port too high", tokenOptions{Host: "db", Port: 70000, Username: "app", Region: "us-east-2"}, "between 1 and 65535"},
 		{"port negative", tokenOptions{Host: "db", Port: -1, Username: "app", Region: "us-east-2"}, "between 1 and 65535"},
 	}
@@ -186,6 +185,30 @@ func TestRunRDSTokenGeneration_MissingFlags(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.want)
 		})
 	}
+}
+
+func TestRunRDSTokenGeneration_RegionOptional(t *testing.T) {
+	initTestIO(t)
+	// --region is optional: an empty region must pass validation and be handed to GetRDSToken, which
+	// resolves it from the authenticated identity's credential region (or errors if neither supplies
+	// one). This guards the flag-or-identity region contract.
+	const wantToken = "db:5432/?Action=connect&DBUser=app&X-Amz-Signature=abc"
+	stubTokenDeps(
+		t,
+		func() (schema.AtmosConfiguration, error) { return mockAuthConfig(), nil },
+		nil,
+		func(_, region, _ string) (string, time.Time, error) {
+			assert.Empty(t, region, "an empty --region must be passed through for GetRDSToken to resolve from credentials")
+			return wantToken, time.Now().Add(15 * time.Minute), nil
+		},
+	)
+
+	var err error
+	out := captureStdout(t, func() {
+		err = runRDSTokenGeneration(tokenOptions{Host: "db", Port: 5432, Username: "app"})
+	})
+	require.NoError(t, err)
+	assert.Equal(t, wantToken, out)
 }
 
 func TestRunRDSTokenGeneration_Success(t *testing.T) {

@@ -15,7 +15,7 @@ Generate a short-lived RDS IAM database authentication token using an Atmos iden
 ## Usage
 
 ```shell
-atmos aws rds token --host <endpoint> --port <port> --username <user> --region <region> [flags]
+atmos aws rds token --host <endpoint> --port <port> --username <user> [--region <region>] [flags]
 ```
 
 The token is written to `stdout` so it can be captured directly as a database password. Status
@@ -66,10 +66,11 @@ atmos aws rds token \
     `dbuser` name in the IAM `rds-db:connect` resource ARN.
   </dd>
 
-  <dt>`--region` <em>(required)</em></dt>
+  <dt>`--region` <em>(optional)</em></dt>
   <dd>
-    The AWS region of the database endpoint. It is required and never defaults silently — a token
-    signed for the wrong region fails only at database connect time.
+    The AWS region of the database endpoint. Optional — when omitted, the signing region is resolved
+    from the authenticated identity's AWS credentials. An error occurs only when neither `--region`
+    nor the identity's credentials provide a region.
   </dd>
 
   <dt>`--identity` <em>(alias `-i`)</em></dt>
@@ -105,7 +106,7 @@ RDS IAM authentication must already be enabled for the target database, independ
 
 ## Notes
 
-- Tokens expire after approximately 15 minutes (AWS-enforced) and are single-use per connection.
+- Tokens expire after approximately 15 minutes (AWS-enforced). Within that window the token authenticates each new connection (it is not single-use); once a connection is established, the session stays open independent of the token's expiry.
 - The token is a live credential. Do not record this command with `--cast`/`ATMOS_CAST`: the token is written to `stdout` unmasked and would be captured verbatim into the recording.
 - IAM database authentication is supported for RDS for PostgreSQL, MySQL, and MariaDB, and the
   Aurora PostgreSQL- and MySQL-compatible editions.
