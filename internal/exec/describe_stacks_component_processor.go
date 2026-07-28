@@ -809,19 +809,45 @@ func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filter
 // Templates that cannot be resolved stay undecidable so the caller preserves
 // the full evaluation path rather than incorrectly excluding a component.
 func inScopeByTagsAndLabelsWithContext(metadata, data map[string]any, filterTags []string, filterLabels map[string]string, leftDelim, rightDelim string) (inScope bool, decidable bool) {
-	if !tags.SelectorUnresolved(metadata[metadataTagsKey], leftDelim) && !tags.SelectorUnresolved(metadata[metadataLabelsKey], leftDelim) {
-		return inScopeByTagsAndLabels(metadata, filterTags, filterLabels, leftDelim)
+	selectors := make(map[string]any, 2)
+	if len(filterTags) > 0 {
+		rawTags := metadata[metadataTagsKey]
+		if tags.SelectorUnresolved(rawTags, leftDelim) {
+			resolvedTags, ok := tags.ResolveSelectorValue(rawTags, data, leftDelim, rightDelim)
+			if !ok {
+				return true, false
+			}
+			rawTags = resolvedTags
+		}
+		selectors[metadataTagsKey] = rawTags
 	}
 
-	resolvedTags, tagsResolved := tags.ResolveSelectorValue(metadata[metadataTagsKey], data, leftDelim, rightDelim)
-	resolvedLabels, labelsResolved := tags.ResolveSelectorValue(metadata[metadataLabelsKey], data, leftDelim, rightDelim)
-	if !tagsResolved || !labelsResolved {
-		return true, false
+	if len(filterLabels) > 0 {
+		rawLabels := any(requestedSelectorLabels(metadata[metadataLabelsKey], filterLabels))
+		if tags.SelectorUnresolved(rawLabels, leftDelim) {
+			resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, data, leftDelim, rightDelim)
+			if !ok {
+				return true, false
+			}
+			rawLabels = resolvedLabels
+		}
+		selectors[metadataLabelsKey] = rawLabels
 	}
-	return inScopeByTagsAndLabels(map[string]any{
-		metadataTagsKey:   resolvedTags,
-		metadataLabelsKey: resolvedLabels,
-	}, filterTags, filterLabels, leftDelim)
+
+	return inScopeByTagsAndLabels(selectors, filterTags, filterLabels, leftDelim)
+}
+
+// requestedSelectorLabels keeps only labels used by the current selector so
+// unrelated templates cannot force full component evaluation.
+func requestedSelectorLabels(raw any, filter map[string]string) map[string]any {
+	labels, _ := raw.(map[string]any)
+	requested := make(map[string]any, len(filter))
+	for key := range filter {
+		if value, ok := labels[key]; ok {
+			requested[key] = value
+		}
+	}
+	return requested
 }
 
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that

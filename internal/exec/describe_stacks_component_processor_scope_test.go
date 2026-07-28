@@ -346,6 +346,46 @@ func TestProcessComponentEntry_TagsLabelsResolvableTemplateSkipsAuth(t *testing.
 	assert.Empty(t, p.finalStacksMap, "no entry should be created for a resolved out-of-scope label")
 }
 
+func TestProcessComponentEntry_RequestedTemplatedLabelSkipsAuthDespiteUnrelatedUnresolvedLabel(t *testing.T) {
+	t.Parallel()
+
+	spy := &componentAuthResolverSpy{
+		returnMgr: nil,
+		returnErr: assert.AnError,
+	}
+	componentSection := componentSectionWithTags(nil, map[string]any{
+		"tier":  "service-{{ .vars.stage }}",
+		"group": "{{ .vars.nested_template }}",
+	})
+	componentSection["vars"] = map[string]any{
+		"stage":           "production",
+		"nested_template": "{{ .vars.unavailable }}",
+	}
+	allTypeComponents := map[string]any{"test-component": componentSection}
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		labelsFilter:          map[string]string{"tier": "service-development"},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+
+	err := p.processComponentEntry(
+		"test-stack",
+		"",
+		"helmfile",
+		"test-component",
+		componentSection,
+		allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err, "an unrelated unresolved label must not force full evaluation")
+	require.EqualValues(t, 0, spy.calls.Load(), "the requested label resolves outside the selection before auth")
+	assert.Empty(t, p.finalStacksMap, "no entry should be created for an out-of-scope component")
+}
+
 // TestProcessComponentEntry_TagsLabelsEagerEvaluationOverride verifies the
 // describe.settings.eager_evaluation rollback: with it set, a
 // tag-mismatched component is still fully evaluated (auth resolver runs)
