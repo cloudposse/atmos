@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -200,11 +201,21 @@ func diagnoseUnresponsiveRuntime(ctx context.Context, runtimeType Type) RuntimeS
 	return RuntimeNeedsStart
 }
 
+// podmanRecoveryTimeout bounds how long TryRecoverPodmanRuntime waits for
+// `podman machine init`/`start` to finish. A hung or slow VM boot (e.g. no
+// hypervisor available, or a corrupted machine) must fail loudly with a clear
+// error instead of blocking the caller indefinitely.
+const podmanRecoveryTimeout = 60 * time.Second
+
 // TryRecoverPodmanRuntime attempts to recover Podman by initializing/starting the machine.
 // This is an opt-in operation that should only be called when the user explicitly requests it.
+// The recovery attempt is bounded by podmanRecoveryTimeout so a stuck machine start fails fast.
 // Returns the new status after recovery attempt.
 func TryRecoverPodmanRuntime(ctx context.Context) RuntimeStatus {
 	defer perf.Track(nil, "container.TryRecoverPodmanRuntime")()
+
+	ctx, cancel := context.WithTimeout(ctx, podmanRecoveryTimeout)
+	defer cancel()
 
 	status := checkRuntimeStatus(ctx, TypePodman)
 

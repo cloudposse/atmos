@@ -36,6 +36,13 @@ var (
 	newManager = func(runtimePref string, autoStart bool) emulatorManager {
 		return emu.NewManager(runtimePref, autoStart)
 	}
+	// The newReadOnlyManager seam constructs the manager used for read-only
+	// emulator lookups (identity/profile resolution, `emulator ps`/`list`). It
+	// never attempts Podman auto-recovery — see emu.NewManagerNoRecovery —
+	// since those callers only look for an emulator that is already running.
+	newReadOnlyManager = func(runtimePref string) emulatorManager {
+		return emu.NewManagerNoRecovery(runtimePref)
+	}
 )
 
 // emulatorManager is the subset of *emu.Manager the executor, resolver, and
@@ -290,7 +297,9 @@ func emulatorStatuses(ctx context.Context, info *schema.ConfigAndStacksInfo, run
 		return nil, err
 	}
 
-	manager := newManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider), false)
+	// Listing status is read-only; never attempt Podman auto-recovery just to
+	// check whether emulators are running (see NewManagerNoRecovery).
+	manager := newReadOnlyManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider))
 	if runtimeOnly {
 		return manager.Ps(ctx, info.Stack)
 	}

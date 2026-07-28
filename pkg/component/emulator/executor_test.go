@@ -106,12 +106,13 @@ func validSection() map[string]any { return map[string]any{"driver": "floci/aws"
 func stubPrepare(t *testing.T, section map[string]any, authErr error, mgr *fakeManager) {
 	t.Helper()
 
-	origInit, origAuth, origProc, origNew := initCliConfig, setupComponentAuthForCLI, processStacks, newManager
+	origInit, origAuth, origProc, origNew, origReadOnly := initCliConfig, setupComponentAuthForCLI, processStacks, newManager, newReadOnlyManager
 	t.Cleanup(func() {
 		initCliConfig = origInit
 		setupComponentAuthForCLI = origAuth
 		processStacks = origProc
 		newManager = origNew
+		newReadOnlyManager = origReadOnly
 	})
 
 	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
@@ -128,6 +129,7 @@ func stubPrepare(t *testing.T, section map[string]any, authErr error, mgr *fakeM
 		return info, nil
 	}
 	newManager = func(_ string, _ bool) emulatorManager { return mgr }
+	newReadOnlyManager = func(_ string) emulatorManager { return mgr }
 }
 
 func baseInfo() *schema.ConfigAndStacksInfo {
@@ -359,10 +361,11 @@ func TestExecutePs_Error(t *testing.T) {
 func stubListSeams(t *testing.T, mgr *fakeManager) {
 	t.Helper()
 
-	origInit, origNew := initCliConfig, newManager
+	origInit, origNew, origReadOnly := initCliConfig, newManager, newReadOnlyManager
 	t.Cleanup(func() {
 		initCliConfig = origInit
 		newManager = origNew
+		newReadOnlyManager = origReadOnly
 	})
 
 	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
@@ -371,6 +374,7 @@ func stubListSeams(t *testing.T, mgr *fakeManager) {
 		return cfg, nil
 	}
 	newManager = func(_ string, _ bool) emulatorManager { return mgr }
+	newReadOnlyManager = func(_ string) emulatorManager { return mgr }
 }
 
 func stubConfiguredListSeams(t *testing.T, mgr *fakeManager, stacks map[string]any) {
