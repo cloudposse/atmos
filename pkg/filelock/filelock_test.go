@@ -142,17 +142,19 @@ func TestExclusiveLockContendsAcrossProcesses(t *testing.T) {
 		}
 	})
 
+	// os.Stat succeeding only proves the helper's os.WriteFile call has created the
+	// directory entry, not that its content is fully written yet -- poll the content
+	// itself rather than treating existence as a proxy for "write complete".
+	var ready []byte
 	require.Eventually(t, func() bool {
-		_, statErr := os.Stat(readyPath)
-		return statErr == nil
+		var readErr error
+		ready, readErr = os.ReadFile(readyPath)
+		return readErr == nil && bytes.Equal(ready, []byte("locked"))
 	}, crossProcessLockTimeout, 10*time.Millisecond, "helper process did not acquire the lock: %s", stderr.String())
-	ready, err := os.ReadFile(readyPath)
-	require.NoError(t, err)
-	require.Equal(t, []byte("locked"), ready)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	err = New(path).WithExclusive(ctx, func() error { return errors.New("must not run") })
+	err := New(path).WithExclusive(ctx, func() error { return errors.New("must not run") })
 	require.ErrorIs(t, err, ErrAcquire)
 	require.NoError(t, os.WriteFile(releasePath, []byte("release"), 0o600))
 
