@@ -160,6 +160,33 @@ func SetLevel(level logging.Level) {
 	goLoggingBackend.SetLevel(level, logModule)
 }
 
+// evalMu serializes "set level, then evaluate" as one unit across every
+// caller. The atomic level on backend prevents a data race on the value
+// itself, but does not keep that value stable for the duration of one
+// evaluation: without this lock, a Trace-configured stack-processing
+// evaluation and a concurrent Silent-configured YAML-editor call (the
+// editor always wants silent, regardless of Atmos's configured log level)
+// could each set their own level and then run under whichever level the
+// other caller set last, instead of their own.
+var evalMu sync.Mutex
+
+// WithEvaluationLevel sets yq's logger level and runs fn with that level
+// held fixed for the whole call, serialized against every other caller of
+// WithEvaluationLevel. Every caller that evaluates a yq expression -- both
+// pkg/utils, whose level depends on Atmos's configured log level, and
+// pkg/yaml's editor, which always wants SilentLevel -- must run its
+// evaluation through this function rather than calling SetLevel and
+// evaluating separately.
+func WithEvaluationLevel(level logging.Level, fn func()) {
+	defer perf.Track(nil, "yq.WithEvaluationLevel")()
+
+	evalMu.Lock()
+	defer evalMu.Unlock()
+
+	SetLevel(level)
+	fn()
+}
+
 // InitExpressionParser initializes yq's process-global expression parser
 // exactly once. Yqlib's InitExpressionParser guards yqlib.ExpressionParser
 // with a plain nil check, and every Evaluate call runs it, so concurrent

@@ -2,7 +2,10 @@ package yq
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -129,4 +132,46 @@ func TestBackend_Log_ReachesConfiguredAtmosDestination(t *testing.T) {
 func TestInitExpressionParser_Idempotent(t *testing.T) {
 	InitExpressionParser()
 	InitExpressionParser()
+}
+
+// TestWithEvaluationLevel_ScopesLevelToCall is the regression test for a gap
+// the atomic level alone left open: it prevents a data race on the level's
+// value, but not a Trace-configured caller and a concurrent Silent-configured
+// one (e.g. pkg/yaml's editor, which always wants silent regardless of
+// Atmos's configured log level) from each running under whichever level the
+// other last set. Without WithEvaluationLevel's shared lock, two goroutines
+// calling SetLevel and evaluating separately could interleave that way; with
+// it, every caller must observe its own requested level for its entire call.
+func TestWithEvaluationLevel_ScopesLevelToCall(t *testing.T) {
+	prevLevel := goLoggingBackend.GetLevel(logModule)
+	t.Cleanup(func() { SetLevel(prevLevel) })
+
+	const iterations = 50
+
+	var wg sync.WaitGroup
+	violations := make(chan string, iterations*2)
+
+	observe := func(level logging.Level) {
+		defer wg.Done()
+		WithEvaluationLevel(level, func() {
+			start := goLoggingBackend.GetLevel(logModule)
+			runtime.Gosched()
+			end := goLoggingBackend.GetLevel(logModule)
+			if start != level || end != level {
+				violations <- fmt.Sprintf("wanted %v, observed start=%v end=%v", level, start, end)
+			}
+		})
+	}
+
+	for range iterations {
+		wg.Add(2)
+		go observe(logging.DEBUG) // stands in for a Trace-configured stack-processing evaluation.
+		go observe(SilentLevel)   // stands in for the YAML editor's always-silent evaluation.
+	}
+	wg.Wait()
+	close(violations)
+
+	for v := range violations {
+		t.Error(v)
+	}
 }

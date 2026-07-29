@@ -63,16 +63,21 @@ func evaluateWithOptions(content []byte, expr string, opts editOptions) (string,
 		return "", err
 	}
 
-	// The YAML editor always wants yq's internal diagnostics silenced,
-	// regardless of Atmos's configured log level.
-	atmosyq.SetLevel(atmosyq.SilentLevel)
 	atmosyq.InitExpressionParser()
 
 	pref := editPreferences(opts.indent)
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
-	result, err := yqlib.NewStringEvaluator().Evaluate(expr, string(content), encoder, decoder)
+	// The YAML editor always wants yq's internal diagnostics silenced,
+	// regardless of Atmos's configured log level. WithEvaluationLevel keeps
+	// that level fixed for this whole call, so a concurrent Trace-configured
+	// evaluation elsewhere can't flip verbosity on mid-evaluation.
+	var result string
+	var err error
+	atmosyq.WithEvaluationLevel(atmosyq.SilentLevel, func() {
+		result, err = yqlib.NewStringEvaluator().Evaluate(expr, string(content), encoder, decoder)
+	})
 	if err != nil {
 		return "", fmt.Errorf("%w: %q: %w", ErrInvalidYAMLExpression, expr, err)
 	}

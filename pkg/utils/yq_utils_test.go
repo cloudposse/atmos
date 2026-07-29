@@ -670,64 +670,35 @@ func TestEvaluateYqExpression_ErrorPaths(t *testing.T) {
 	})
 }
 
-// TestConfigureYqLogger tests the configureYqLogger function with different configurations.
-func TestConfigureYqLogger(t *testing.T) {
-	t.Run("nil config uses no-op backend", func(t *testing.T) {
-		// Should not panic.
-		configureYqLogger(nil)
-	})
+// TestYqLoggerLevel tests yqLoggerLevel's level mapping for different
+// configurations. It is a pure function -- it no longer sets the global
+// level itself, so that setting the level and running the evaluation it
+// governs can be scoped together under atmosyq.WithEvaluationLevel instead
+// of racing a concurrent caller's own SetLevel.
+func TestYqLoggerLevel(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *schema.AtmosConfiguration
+		want   logging.Level
+	}{
+		{name: "nil config is silent", config: nil, want: atmosyq.SilentLevel},
+		{name: "non-trace log level is silent", config: &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}, want: atmosyq.SilentLevel},
+		{name: "trace log level enables debug", config: &schema.AtmosConfiguration{Logs: schema.Logs{Level: LogLevelTrace}}, want: logging.DEBUG},
+	}
 
-	t.Run("non-trace log level uses no-op backend", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: "Info",
-			},
-		}
-		// Should not panic.
-		configureYqLogger(atmosConfig)
-	})
-
-	t.Run("trace log level uses default backend", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: LogLevelTrace,
-			},
-		}
-		// Should not panic - this path uses the default yq logger.
-		configureYqLogger(atmosConfig)
-	})
-}
-
-// TestConfigureYqLogger_LevelIsReversible pins the contract introduced
-// by switching from SetSlogger(io.Discard) to SetLevel(): silencing yq
-// in one call and then calling again with Trace must actually restore
-// verbosity. The previous SetSlogger approach was one-way (no getter
-// to recover the original slogger), so this test guards against a
-// regression that reintroduces it.
-func TestConfigureYqLogger_LevelIsReversible(t *testing.T) {
-	// Restore the default level at the end so unrelated tests see the
-	// yq package's own initial state.
-	defer logging.SetLevel(logging.WARNING, "yq-lib")
-
-	nonTrace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
-	trace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: LogLevelTrace}}
-
-	configureYqLogger(nonTrace)
-	assert.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"), "non-Trace must silence yq")
-
-	configureYqLogger(trace)
-	assert.Equal(t, logging.DEBUG, logging.GetLevel("yq-lib"), "Trace must restore verbosity after a previous silencing")
-
-	// And back again to confirm the toggle is not accidentally sticky.
-	configureYqLogger(nil)
-	assert.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"), "nil config must re-silence")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, yqLoggerLevel(tt.config))
+		})
+	}
 }
 
 // TestEvaluateYqExpression_ConcurrentCallsAreRaceFree covers #2821 and
 // pins both of the process-global writes that used to happen on every
 // call:
 //
-//   - configureYqLogger called logging.SetLevel each time, so concurrent
+//   - configureYqLogger (now yqLoggerLevel + atmosyq.WithEvaluationLevel)
+//     used to call logging.SetLevel directly on every call, so concurrent
 //     stack file processing wrote go-logging's unsynchronized module level
 //     map and died with "fatal error: concurrent map writes", or with the
 //     read/write variant, because yq reads that same map from every
@@ -743,11 +714,7 @@ func TestEvaluateYqExpression_ConcurrentCallsAreRaceFree(t *testing.T) {
 	defer atmosyq.SetLevel(atmosyq.SilentLevel)
 
 	atmosConfig := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
-
-	// Install the level a non-Trace run installs, so the goroutines below
-	// exercise the steady state rather than a first-time transition.
-	configureYqLogger(atmosConfig)
-	require.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"))
+	require.Equal(t, atmosyq.SilentLevel, yqLoggerLevel(atmosConfig))
 
 	const goroutines = 32
 	data := map[string]any{"a": map[string]any{"b": "value"}}
