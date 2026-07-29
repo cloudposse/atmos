@@ -325,6 +325,14 @@ func buildBakeArgs(config *BuildConfig) []string {
 	if config.Driver != nil {
 		args = append(args, "--builder", effectiveDriverName(config.Driver))
 	}
+	if config.Cache != nil {
+		for _, entry := range config.Cache.From {
+			args = append(args, "--set", "*.cache-from="+joinAttrs(entry))
+		}
+		for _, entry := range config.Cache.To {
+			args = append(args, "--set", "*.cache-to="+joinAttrs(entry))
+		}
+	}
 
 	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
 		args = append(args, "--file", file)

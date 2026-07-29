@@ -5,6 +5,11 @@ on:
     paths-ignore:
       - "README.md"
 
+  # Required checks must also run against the synthetic commit created for a
+  # GitHub merge queue entry.
+  merge_group:
+    types: [checks_requested]
+
   push:
     branches:
       - main
@@ -1011,6 +1016,16 @@ jobs:
         uses: ./.github/actions/setup-atmos-install
         with:
           target: linux
+
+      - name: Set up Go for the Buildx cache integration test
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Verify remote Buildx registry cache
+        env:
+          ATMOS_TEST_REGISTRY_CACHE: "1"
+        run: go test ./pkg/container -run '^TestDockerRuntime_RemoteRegistryCache_Integration$' -count=1
 
       - name: Run container steps (run, build, bake, push, workspace, env)
         working-directory: examples/container-step
