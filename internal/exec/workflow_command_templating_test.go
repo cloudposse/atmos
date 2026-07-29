@@ -126,4 +126,14 @@ func TestResolveWorkflowStepEnvs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "base-x", resolvedStep["DERIVED"])
 	})
+
+	t.Run("env-step template value overrides the base fallback", func(t *testing.T) {
+		initStepExecutorWithStages(&schema.WorkflowDefinition{})
+		stepExecutorState.Variables().SetTemplateEnv("ATMOS_TEST_BASE", "env-step")
+		stepEnv := map[string]string{"DERIVED": "{{ .env.ATMOS_TEST_BASE }}-x"}
+
+		_, resolvedStep, err := resolveWorkflowStepEnvs(nil, stepEnv, []string{"ATMOS_TEST_BASE=base"})
+		require.NoError(t, err)
+		assert.Equal(t, "env-step-x", resolvedStep["DERIVED"])
+	})
 }
