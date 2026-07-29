@@ -24,7 +24,7 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
 	}
 
-	// Keyring entries for ambient chains (gcp/adc, gcp/workload-identity-federation) hold
+	// Keyring entries for ambient chains (gcp/adc, azure/cli, the OIDC providers) hold
 	// nothing durable — the credentials are re-derived from the environment on every login —
 	// so there is nothing to preserve and a leftover entry can only be stale data written by
 	// an older Atmos version. Delete it unconditionally rather than making users discover

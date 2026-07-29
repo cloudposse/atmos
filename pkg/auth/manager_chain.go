@@ -101,7 +101,7 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 
 // chainRootIsAmbient reports whether the provider at the root of the current chain
 // resolves credentials from ambient environment state on every authentication
-// (e.g. gcp/adc, gcp/workload-identity-federation).
+// (e.g. gcp/adc, azure/cli, and the OIDC providers).
 //
 // Chains rooted at such a provider are never served from — nor written to — the
 // persistent keyring: the provider's token is only a snapshot of whatever principal the
@@ -467,7 +467,7 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 
 	// Cache provider credentials, but skip session tokens and ambient providers.
 	// Session tokens are temporary and should not overwrite long-lived credentials.
-	// Ambient providers (gcp/adc, gcp/workload-identity-federation) resolve the active
+	// Ambient providers (gcp/adc, azure/cli, the OIDC providers) resolve the active
 	// principal from the environment on every call; persisting their token would make the
 	// next login replay that principal even after the ambient credentials change.
 	switch {
