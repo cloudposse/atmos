@@ -31,6 +31,7 @@ type ComponentProcessorOptions struct {
 	GlobalAuth         map[string]any
 	GlobalSecrets      map[string]any
 	GlobalDependencies map[string]any
+	GlobalMetadata     map[string]any
 	GlobalCommand      string
 	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
 

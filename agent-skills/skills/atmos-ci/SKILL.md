@@ -288,10 +288,16 @@ details.
 
 ## Concurrency Warning
 
-Do not present GitHub Actions `concurrency` groups as a FIFO deployment queue. Default concurrency
-allows at most one running and one pending run per group, and a newer pending run replaces an older
-pending run. Even queueing modes have ordering caveats. For strict deployment ordering, use GitHub
-merge queues, GitHub environments, an explicit promotion workflow, or an external queue/orchestrator.
+By default (`queue: single`), a GitHub Actions `concurrency` group holds one in-progress and one
+pending run; a third trigger evicts the pending run regardless of `cancel-in-progress`.
+`cancel-in-progress: true` also cancels a running Terraform command, which can leave a state lock
+that needs recovery. `queue: max` allows up to 100 pending runs instead, but it is still not a
+FIFO deployment queue and cannot be combined with `cancel-in-progress: true`. Remote state
+locking only prevents concurrent writers — it doesn't recover an interrupted run automatically;
+inspect affected resources, confirm the previous run stopped, then use `atmos terraform
+force-unlock` before retrying. GitHub environments and merge queues add approval/merge-order
+controls, but only an explicit promotion workflow or deployment controller guarantees deployment
+execution order.
 
 ## Component Dependencies
 
