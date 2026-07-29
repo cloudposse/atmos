@@ -28,6 +28,8 @@ func TestValidateBuildAction(t *testing.T) {
 	}{
 		{"bad runtime", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "containerd"}}},
 		{"bad engine", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Engine: "kaniko"}}},
+		{"driver requires buildx", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "docker", Driver: &schema.ContainerDriverConfig{Provider: "docker-container"}}}},
+		{"cache requires buildx", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "docker", Cache: &schema.ContainerCacheConfig{From: []map[string]string{{"type": "registry"}}}}}},
 		{"buildx requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Engine: "buildx", Provider: "podman"}}},
 		{"bake requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "podman", Bake: &schema.ContainerBuildBakeStep{File: "x"}}}},
 	}
@@ -106,6 +108,26 @@ func TestBuildConfigResolutionErrors(t *testing.T) {
 				Name:  "build",
 				Build: &schema.ContainerBuildStep{BuildArgs: map[string]string{"A": "{{"}},
 			},
+		},
+		{
+			name: "driver name",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Driver: &schema.ContainerDriverConfig{Name: "{{"}}},
+		},
+		{
+			name: "driver provider",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Driver: &schema.ContainerDriverConfig{Provider: "{{"}}},
+		},
+		{
+			name: "driver options",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Driver: &schema.ContainerDriverConfig{Opts: map[string]string{"image": "{{"}}}},
+		},
+		{
+			name: "cache from",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Cache: &schema.ContainerCacheConfig{From: []map[string]string{{"ref": "{{"}}}}},
+		},
+		{
+			name: "cache to",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Cache: &schema.ContainerCacheConfig{To: []map[string]string{{"ref": "{{"}}}}},
 		},
 		{
 			name: "bake file",
