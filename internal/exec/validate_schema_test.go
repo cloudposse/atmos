@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -324,7 +325,7 @@ func TestPrintValidationIncludesFileForParserErrors(t *testing.T) {
 	_, err := av.printValidation("schema.json", []string{file})
 
 	require.ErrorIs(t, err, assert.AnError)
-	assert.Contains(t, err.Error(), file)
+	assert.Contains(t, err.Error(), fmt.Sprintf("%q", displayPath(file)))
 }
 
 func TestValidateAtmosSchemaReport(t *testing.T) {
