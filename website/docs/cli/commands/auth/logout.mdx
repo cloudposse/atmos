@@ -269,11 +269,24 @@ Without `--keychain`, logout preserves your stored credentials (IAM user keys, s
 :::
 
 :::note Ambient Providers
-Providers that resolve credentials from the ambient environment on every login — `gcp/adc` and
-`gcp/workload-identity-federation` — have nothing to preserve in the keychain, so logout always
-clears their entries whether or not you pass `--keychain`. Nothing is lost: the next
-`atmos auth login` re-resolves from `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`,
-the metadata server, or the OIDC token source.
+Some providers re-resolve the active principal from ambient state on every login rather than
+holding credentials of their own:
+
+<dl>
+  <dt>`gcp/adc`</dt>
+  <dd>Application Default Credentials — `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or the metadata server.</dd>
+
+  <dt>`azure/cli`</dt>
+  <dd>Your Azure CLI session, from `az login`.</dd>
+
+  <dt>`gcp/workload-identity-federation`, `azure/oidc`, `github/oidc`</dt>
+  <dd>The configured OIDC token source.</dd>
+</dl>
+
+These have nothing to preserve in the keychain, so logout always clears their entries whether
+or not you pass `--keychain`. Nothing is lost — the next `atmos auth login` re-resolves from
+the source above. Logout also does not fail when there is no entry to remove, which is the
+normal state for these providers.
 :::
 
 :::danger Permanent Deletion

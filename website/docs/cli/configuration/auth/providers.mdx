@@ -271,9 +271,10 @@ auth:
 </dl>
 
 :::info Credentials are never cached
-`azure/oidc` re-reads its federated token from ambient state on every authentication, and
-Atmos never writes the resulting tokens (or credentials derived from them) to the keyring.
-A rotated OIDC token is always picked up on the next run.
+`azure/oidc` re-reads its federated token on every authentication — from `spec.token_file_path`,
+the `AZURE_FEDERATED_TOKEN_FILE` environment variable, or the GitHub Actions OIDC endpoint,
+whichever applies — and Atmos never writes the resulting tokens (or credentials derived from
+them) to the keyring. Rotate the token at its source and the next run picks it up.
 :::
 
 ### GitHub Actions Setup
@@ -540,9 +541,10 @@ auth:
 </dl>
 
 :::info Credentials are never cached
-Like `gcp/adc`, `gcp/workload-identity-federation` re-reads its OIDC token from the environment
-on every authentication, and Atmos never writes the resulting tokens (or credentials derived
-from them) to the keyring. A rotated OIDC token is always picked up on the next run.
+Like `gcp/adc`, `gcp/workload-identity-federation` re-reads its OIDC token from whichever
+`token_source` you configured — `url`, `file`, or `environment` — on every authentication, and
+Atmos never writes the resulting tokens (or credentials derived from them) to the keyring.
+Rotate the token at its source and the next run picks it up, with no `atmos auth logout` needed.
 :::
 
 ### GitHub Actions Setup
