@@ -268,6 +268,14 @@ Understanding what gets removed:
 Without `--keychain`, logout preserves your stored credentials (IAM user keys, service account creds) for instant re-authentication. It only clears session data (AWS SSO tokens, temporary credentials).
 :::
 
+:::note Ambient Providers
+Providers that resolve credentials from the ambient environment on every login — `gcp/adc` and
+`gcp/workload-identity-federation` — have nothing to preserve in the keychain, so logout always
+clears their entries whether or not you pass `--keychain`. Nothing is lost: the next
+`atmos auth login` re-resolves from `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`,
+the metadata server, or the OIDC token source.
+:::
+
 :::danger Permanent Deletion
 Using `--keychain` permanently deletes credentials from your system keychain. You'll need to re-enter IAM user access keys or re-authenticate service accounts when logging in again.
 :::

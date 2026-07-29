@@ -51,7 +51,15 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	// Long-lived credentials (access key + secret key) are needed for future authentication.
 	// Caching session tokens would overwrite the long-lived credentials in keyring,
 	// causing "keyring contains session credentials" errors on subsequent runs.
-	if !isSessionToken(creds) {
+	// Ambient chains (gcp/adc, gcp/workload-identity-federation) are equally exempt: their
+	// credentials are a snapshot of ambient environment state, and persisting them here
+	// would re-poison the entry the chain authentication just purged.
+	switch {
+	case m.identityChainRootIsAmbient(identityName):
+		log.Debug("Skipping keyring cache for ambient chain in WhoamiInfo", logKeyIdentity, identityName)
+		// Still set the reference so callers can look up the in-memory credentials.
+		info.CredentialsRef = identityName
+	case !isSessionToken(creds):
 		if err := m.credentialStore.Store(identityName, creds, m.realm.Value); err == nil {
 			info.CredentialsRef = identityName
 			// Note: We keep info.Credentials populated for validation purposes.
@@ -60,7 +68,7 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 			// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
 			m.deleteLegacyKeyringEntry(identityName)
 		}
-	} else {
+	default:
 		log.Debug("Skipping keyring cache for session tokens in WhoamiInfo", logKeyIdentity, identityName)
 		// Still set the reference for credential lookups - credentials can be loaded from identity storage.
 		info.CredentialsRef = identityName

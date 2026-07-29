@@ -24,6 +24,13 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
 	}
 
+	// Keyring entries for ambient chains (gcp/adc, gcp/workload-identity-federation) hold
+	// nothing durable — the credentials are re-derived from the environment on every login —
+	// so there is nothing to preserve and a leftover entry can only be stale data written by
+	// an older Atmos version. Delete it unconditionally rather than making users discover
+	// `--keychain`.
+	deleteKeychain = deleteKeychain || m.identityChainRootIsAmbient(identityName)
+
 	log.Debug("Logout identity", logKeyIdentity, identityName, "deleteKeychain", deleteKeychain)
 
 	var errs []error
@@ -114,6 +121,13 @@ func (m *manager) cleanupIntegrations(ctx context.Context, identityName string) 
 // resolveProviderForIdentity follows the Via chain to find the root provider for an identity.
 // Returns empty string if no provider is found or if a cycle is detected.
 func (m *manager) resolveProviderForIdentity(identityName string) string {
+	// The manager may be constructed without config in narrow code paths (and in unit
+	// tests that exercise a single method), so treat a missing config as "unresolvable"
+	// rather than dereferencing it.
+	if m.config == nil {
+		return ""
+	}
+
 	visited := make(map[string]bool)
 	current := identityName
 
@@ -153,6 +167,28 @@ func (m *manager) resolveProviderForIdentity(identityName string) string {
 	}
 }
 
+// providerIsAmbient reports whether the named provider resolves credentials from ambient
+// environment state on every authentication (e.g. gcp/adc). Such providers never own
+// durable credentials, so their keyring entries are always safe to delete.
+func (m *manager) providerIsAmbient(providerName string) bool {
+	provider, exists := m.providers[providerName]
+	if !exists {
+		return false
+	}
+	return types.ProviderIsAmbient(provider)
+}
+
+// identityChainRootIsAmbient reports whether the identity's chain is rooted at an ambient
+// provider. Credentials derived from an ambient provider inherit its snapshot of the
+// environment's principal, so they are as non-durable as the provider's own token.
+func (m *manager) identityChainRootIsAmbient(identityName string) bool {
+	providerName := m.resolveProviderForIdentity(identityName)
+	if providerName == "" {
+		return false
+	}
+	return m.providerIsAmbient(providerName)
+}
+
 // LogoutProvider removes all credentials for the specified provider and all identities that use it.
 // If deleteKeychain is true, also removes credentials from system keychain.
 func (m *manager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error { //nolint:revive
@@ -163,6 +199,9 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string, delet
 	if !exists {
 		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
 	}
+
+	// Ambient providers hold nothing durable in the keyring — see Logout for the rationale.
+	deleteKeychain = deleteKeychain || m.providerIsAmbient(providerName)
 
 	log.Debug("Logout provider", logKeyProvider, providerName, "deleteKeychain", deleteKeychain)
 
@@ -254,8 +293,11 @@ func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 
 	// Logout each provider.
 	for providerName, provider := range m.providers {
-		// Delete provider credentials from keyring ONLY if deleteKeychain flag is set.
-		if deleteKeychain {
+		// Delete provider credentials from keyring if the deleteKeychain flag is set, or
+		// unconditionally for ambient providers — see Logout for the rationale.
+		deleteProviderKeychain := deleteKeychain || types.ProviderIsAmbient(provider)
+
+		if deleteProviderKeychain {
 			// Delete realm-scoped entry (current format).
 			if err := m.credentialStore.Delete(providerName, m.realm.Value); err != nil {
 				log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "realm", m.realm.Value, "error", err)

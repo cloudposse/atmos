@@ -99,9 +99,61 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	return creds, nil
 }
 
+// chainRootIsAmbient reports whether the provider at the root of the current chain
+// resolves credentials from ambient environment state on every authentication
+// (e.g. gcp/adc, gcp/workload-identity-federation).
+//
+// Chains rooted at such a provider are never served from — nor written to — the
+// persistent keyring: the provider's token is only a snapshot of whatever principal the
+// environment resolved to at that moment, and every credential derived from it inherits
+// that snapshot. Reusing a persisted entry would replay a stale principal after the
+// ambient identity changes.
+func (m *manager) chainRootIsAmbient() bool {
+	if len(m.chain) == 0 {
+		return false
+	}
+	provider, exists := m.providers[m.chain[0]]
+	if !exists {
+		return false
+	}
+	return types.ProviderIsAmbient(provider)
+}
+
+// purgeCachedCredentials removes any persisted keyring entry for the given chain step.
+// Used for ambient chains, where a persisted entry can only be stale data written by an
+// older Atmos version — deleting it makes existing installations self-healing instead of
+// requiring `atmos auth logout --keychain --force`. Best-effort: a missing entry is the
+// expected case and is logged at debug level.
+func (m *manager) purgeCachedCredentials(name string) {
+	if m.credentialStore == nil {
+		return
+	}
+	if err := m.credentialStore.Delete(name, m.realm.Value); err != nil {
+		log.Debug("No ambient keyring entry to purge", "name", name, "realm", m.realm.Value)
+	} else {
+		log.Debug("Purged stale ambient keyring entry", "name", name, "realm", m.realm.Value)
+	}
+	// Also purge the legacy (pre-realm) entry so upgrades from older layouts self-heal.
+	if m.realm.Value != "" {
+		if err := m.credentialStore.Delete(name, ""); err != nil {
+			log.Debug("No legacy ambient keyring entry to purge", "name", name)
+		} else {
+			log.Debug("Purged stale legacy ambient keyring entry", "name", name)
+		}
+	}
+}
+
 // findFirstValidCachedCredentials checks cached credentials from bottom to top of chain.
 // Returns the index of the first valid cached credentials, or -1 if none found.
 func (m *manager) findFirstValidCachedCredentials() int {
+	// Ambient chains must always re-resolve from the environment. Returning -1 forces
+	// authentication to start at the provider so a changed ambient principal (e.g. a new
+	// `gcloud auth application-default login`) is picked up on the very next login.
+	if m.chainRootIsAmbient() {
+		log.Debug("Skipping cached credentials for ambient chain", "chain", m.chain, logKeyProvider, m.chain[0])
+		return -1
+	}
+
 	// Check from target identity (bottom) up to provider (top).
 	for i := len(m.chain) - 1; i >= 0; i-- {
 		identityName := m.chain[i]
@@ -413,11 +465,18 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 		return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
 	}
 
-	// Cache provider credentials, but skip session tokens.
+	// Cache provider credentials, but skip session tokens and ambient providers.
 	// Session tokens are temporary and should not overwrite long-lived credentials.
-	if isSessionToken(credentials) {
+	// Ambient providers (gcp/adc, gcp/workload-identity-federation) resolve the active
+	// principal from the environment on every call; persisting their token would make the
+	// next login replay that principal even after the ambient credentials change.
+	switch {
+	case types.ProviderIsAmbient(provider):
+		log.Debug("Skipping keyring cache for ambient provider credentials", logKeyProvider, providerName)
+		m.purgeCachedCredentials(providerName)
+	case isSessionToken(credentials):
 		log.Debug("Skipping keyring cache for session token provider credentials", logKeyProvider, providerName)
-	} else {
+	default:
 		if err := m.credentialStore.Store(providerName, credentials, m.realm.Value); err != nil {
 			log.Debug("Failed to cache provider credentials", "error", err)
 		} else {
@@ -564,6 +623,10 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 
 	currentCreds := initialCreds
 
+	// Resolved once: every step of an ambient chain is non-cacheable, so this cannot
+	// change mid-loop.
+	ambientChain := m.chainRootIsAmbient()
+
 	// Step 2: Authenticate through identity chain starting from startIndex.
 	for i := startIndex; i < len(m.chain); i++ {
 		identityStep := m.chain[i]
@@ -586,14 +649,21 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 
 		currentCreds = nextCreds
 
-		// Cache credentials for this level, but skip session tokens.
+		// Cache credentials for this level, but skip session tokens and ambient chains.
 		// Session tokens are already persisted to provider-specific storage (e.g., AWS files)
 		// and can be loaded via identity.LoadCredentials().
 		// Caching session tokens in keyring would overwrite long-lived credentials
 		// that are needed for subsequent authentication attempts.
-		if isSessionToken(currentCreds) {
+		// Credentials derived from an ambient provider inherit its snapshot of the
+		// environment's principal, so persisting them would replay a stale identity for the
+		// intermediate steps of a chain just as caching the provider's own token would.
+		switch {
+		case ambientChain:
+			log.Debug("Skipping keyring cache for ambient chain", "identityStep", identityStep)
+			m.purgeCachedCredentials(identityStep)
+		case isSessionToken(currentCreds):
 			log.Debug("Skipping keyring cache for session tokens", "identityStep", identityStep)
-		} else {
+		default:
 			if err := m.credentialStore.Store(identityStep, currentCreds, m.realm.Value); err != nil {
 				log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
 			} else {
