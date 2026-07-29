@@ -3090,6 +3090,10 @@
           },
           "description": "Variables to set for the env step type."
         },
+        "export": {
+          "type": "boolean",
+          "description": "Whether env-step values reach later child processes (default true)."
+        },
         "code": {
           "type": "integer",
           "description": "Exit code for the exit step type."

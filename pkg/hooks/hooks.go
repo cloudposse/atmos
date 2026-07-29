@@ -282,7 +282,21 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	// in a step's `with:` message). Component/stack are already in the section
 	// (`{{ .atmos_component }}`, `{{ .stack }}`).
 	stackInfo.ComponentSection = withOutcomeTemplateData(stackInfo.ComponentSection, outcome)
-	processed, err := processHookExecutionValue(atmosConfig, rawHook, stackInfo)
+	// Step-backed hooks render their payload immediately before each step, not
+	// when the hook starts. This allows an earlier type: env item to provide
+	// values to {{ .env.* }} in a later item while leaving the envelope's
+	// lifecycle fields eagerly resolved.
+	rawForEnvelope := make(map[string]any, len(rawHook))
+	for key, value := range rawHook {
+		rawForEnvelope[key] = value
+	}
+	rawWith, hasWith := rawForEnvelope["with"]
+	deferWith := hook.Kind == stepKindName || hook.Kind == stepsKindName
+	if deferWith {
+		delete(rawForEnvelope, "with")
+	}
+
+	processed, err := processHookExecutionValue(atmosConfig, rawForEnvelope, stackInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render hook %q: %w", name, err)
 	}
@@ -290,6 +304,9 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	processedHook, ok := processed.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%w: hook %q expected map, got %T", errRenderedHookNotMap, name, processed)
+	}
+	if deferWith && hasWith {
+		processedHook["with"] = rawWith
 	}
 
 	yamlData, err := yaml.Marshal(processedHook)
@@ -301,6 +318,7 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	if err := yaml.Unmarshal(yamlData, &rendered); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal rendered hook %q: %w", name, err)
 	}
+	rendered.stepTemplateInfo = stackInfo
 	return &rendered, nil
 }
 

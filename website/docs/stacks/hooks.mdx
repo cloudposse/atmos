@@ -665,6 +665,12 @@ Steps run in list order. A failing step stops the list and the hook's
 `on_failure` policy decides whether the Terraform operation fails, warns, or
 continues. A hook-level `retry` retries the whole ordered list.
 
+An `env` step in the list applies the same two channels as a workflow: values
+always become available to later step payload templates as `{{ .env.NAME }}`;
+they also reach later child processes unless the env step sets `export: false`.
+This state is limited to that one hook invocation (and is reset for every
+retry), so it never changes another hook or the wrapped component operation.
+
 ### Reacting to success or failure
 
 By default an `after-*` hook runs **only when the operation succeeds** — a
