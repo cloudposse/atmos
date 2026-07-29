@@ -5,6 +5,11 @@ on:
     paths-ignore:
       - "README.md"
 
+  # Required checks must also run against the synthetic commit created for a
+  # GitHub merge queue entry.
+  merge_group:
+    types: [checks_requested]
+
   push:
     branches:
       - main
