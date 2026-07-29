@@ -166,7 +166,17 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
 	section := map[string]any{
-		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
+		"build": map[string]any{
+			"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}, "engine": "buildx",
+			"driver": map[string]any{
+				"name": "component-builder", "provider": "docker-container",
+				"opts": map[string]any{"image": "mirror.gcr.io/moby/buildkit:buildx-stable-1"},
+			},
+			"cache": map[string]any{
+				"from": []any{map[string]any{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+				"to":   []any{map[string]any{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}},
+			},
+		},
 	}
 	withStubs(t, section, nil, rt)
 
@@ -174,6 +184,15 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 		DoAndReturn(func(_ context.Context, b *ctr.BuildConfig) error {
 			assert.Equal(t, "app", b.Context)
 			assert.Equal(t, []string{"img:1"}, b.Tags)
+			require.NotNil(t, b.Driver)
+			assert.Equal(t, "component-builder", b.Driver.Name)
+			assert.Equal(t, "docker-container", b.Driver.Provider)
+			assert.Equal(t, "mirror.gcr.io/moby/buildkit:buildx-stable-1", b.Driver.Opts["image"])
+			require.NotNil(t, b.Cache)
+			require.Len(t, b.Cache.From, 1)
+			require.Len(t, b.Cache.To, 1)
+			assert.Equal(t, "registry.example.com/app:buildcache", b.Cache.From[0]["ref"])
+			assert.Equal(t, "max", b.Cache.To[0]["mode"])
 			return nil
 		})
 

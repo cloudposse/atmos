@@ -87,20 +87,29 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 func ensureBuilder(ctx context.Context, d *DockerRuntime, cfg *DriverConfig) error {
 	defer perf.Track(nil, "container.ensureBuilder")()
 
-	args := []string{"buildx", "create", "--name", effectiveDriverName(cfg)}
-	if cfg.Provider != "" {
-		args = append(args, "--driver", cfg.Provider)
-	}
-	for key, value := range cfg.Opts {
-		args = append(args, "--driver-opt", fmt.Sprintf(keyValueFormat, key, value))
-	}
-
-	cmd := d.command(ctx, args...)
+	cmd := d.command(ctx, buildBuilderCreateArgs(cfg)...)
 	output, err := cmd.CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "existing instance") {
 		return fmt.Errorf("%w: docker buildx create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 	return nil
+}
+
+func buildBuilderCreateArgs(cfg *DriverConfig) []string {
+	args := []string{"buildx", "create", "--name", effectiveDriverName(cfg)}
+	if cfg.Provider != "" {
+		args = append(args, "--driver", cfg.Provider)
+	}
+	keys := make([]string, 0, len(cfg.Opts))
+	for key := range cfg.Opts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := cfg.Opts[key]
+		args = append(args, "--driver-opt", fmt.Sprintf(keyValueFormat, key, value))
+	}
+	return args
 }
 
 // Create creates a new container.
