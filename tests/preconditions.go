@@ -365,12 +365,39 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 // Atmos toolchain cache directory (see prependCachedTestTool) between the two
 // calls, turning a binary that existed a moment ago into a spurious
 // "not found" error. Resolving the path exactly once here closes that window.
+// These constants bound how long requireExecutablePath polls exec.LookPath
+// before giving up. CI installs each toolchain binary and updates PATH in an
+// earlier job step; on some runners (observed on Windows) that update has
+// occasionally not been visible yet to the very first lookup here, so a poll
+// avoids failing on a one-off resolution lag rather than the tool actually
+// being absent. 15s (rather than a token couple of seconds) is deliberate:
+// the Windows acceptance job runs many Go packages' test binaries
+// concurrently on constrained runners, and this exact race recurred in CI
+// even after closing one confirmed root cause (a test writing real installs
+// into the shared toolchain cache dir, see the pkg/toolchain fix referenced
+// in this repo's git history) -- so a short window risks masking further,
+// not-yet-identified contention rather than tolerating genuine scheduling
+// delay under load.
+const (
+	executablePathRetryTimeout  = 15 * time.Second
+	executablePathRetryInterval = 100 * time.Millisecond
+)
+
 func requireExecutablePath(t *testing.T, name string, purpose string) string {
 	t.Helper()
 
 	prependCachedTestTool(name)
 
-	path, err := exec.LookPath(name)
+	deadline := time.Now().Add(executablePathRetryTimeout)
+	var path string
+	var err error
+	for {
+		path, err = exec.LookPath(name)
+		if err == nil || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(executablePathRetryInterval)
+	}
 	if err != nil {
 		if !ShouldCheckPreconditions() {
 			// ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true (set for every CI
