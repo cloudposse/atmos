@@ -64,7 +64,22 @@ jobs:
           # Temporary allowlist: oras-go v2.6.1 is pulled in by Helm v4.2.1 and is
           # currently the latest tagged v2 release. Remove after Helm/ORAS ships a
           # fixed version for GHSA-fxhp-mv3v-67qp.
-          allow-ghsas: GHSA-fxhp-mv3v-67qp
+          #
+          # GHSA-mh99-v99m-4gvg (brace-expansion DoS): the only patched line is
+          # brace-expansion@5.0.8, which replaced the CJS `module.exports = expand`
+          # function with a named ESM/CJS dual-package export. Our transitive
+          # consumers (serve-handler@6.1.7 -> minimatch@3.1.5, and
+          # docusaurus-plugin-llms@0.4.0 -> minimatch@9.0.9) still `require()` the
+          # old callable-function shape directly, so forcing brace-expansion to
+          # 5.0.8 breaks them (`expand is not a function`) rather than fixing
+          # anything. A real fix needs those packages to first upgrade to
+          # minimatch@10+, which itself requires brace-expansion@5.0.8. Exposure is
+          # low: serve-handler only runs for local `docusaurus serve` preview
+          # (never the deployed static build), and docusaurus-plugin-llms only
+          # expands glob patterns over our own trusted docs tree at build time, so
+          # no attacker-controlled input ever reaches `expand()`. Remove once
+          # serve-handler and docusaurus-plugin-llms ship minimatch@10+.
+          allow-ghsas: GHSA-fxhp-mv3v-67qp, GHSA-mh99-v99m-4gvg
 
           # Comment on PR with details
           comment-summary-in-pr: always
