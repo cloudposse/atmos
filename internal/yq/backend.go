@@ -160,26 +160,51 @@ func SetLevel(level logging.Level) {
 	goLoggingBackend.SetLevel(level, logModule)
 }
 
-// evalMu serializes "set level, then evaluate" as one unit across every
-// caller. The atomic level on backend prevents a data race on the value
-// itself, but does not keep that value stable for the duration of one
-// evaluation: without this lock, a Trace-configured stack-processing
-// evaluation and a concurrent Silent-configured YAML-editor call (the
-// editor always wants silent, regardless of Atmos's configured log level)
-// could each set their own level and then run under whichever level the
-// other caller set last, instead of their own.
-var evalMu sync.Mutex
+// evalMu scopes yq's logger level to each evaluation without serializing
+// evaluations that already agree on the level. The atomic level on backend
+// prevents a data race on the value itself, but does not keep that value
+// stable for the duration of one evaluation: without some lock, a
+// Trace-configured stack-processing evaluation and a concurrent
+// Silent-configured YAML-editor call (the editor always wants silent,
+// regardless of Atmos's configured log level) could each set their own
+// level and then run under whichever level the other caller set last,
+// instead of their own.
+//
+// A plain Mutex would fix that by fully serializing every yq evaluation
+// process-wide, but Atmos evaluates yq expressions from many per-stack-file
+// goroutines in parallel, and in the overwhelmingly common case every
+// concurrent caller wants the same level -- Atmos's configured log level
+// does not change mid-run, so it's only the rarer Trace-config-vs-editor
+// mix that ever disagrees. An RWMutex lets same-level evaluations run
+// concurrently under a read lock; only an evaluation that must actually
+// change the level takes the write lock, which blocks out every other
+// evaluation (both read- and write-locked) until it completes.
+var evalMu sync.RWMutex
 
 // WithEvaluationLevel sets yq's logger level and runs fn with that level
-// held fixed for the whole call, serialized against every other caller of
-// WithEvaluationLevel. Every caller that evaluates a yq expression -- both
-// pkg/utils, whose level depends on Atmos's configured log level, and
-// pkg/yaml's editor, which always wants SilentLevel -- must run its
-// evaluation through this function rather than calling SetLevel and
+// held fixed for the whole call. Every caller that evaluates a yq
+// expression -- both pkg/utils, whose level depends on Atmos's configured
+// log level, and pkg/yaml's editor, which always wants SilentLevel -- must
+// run its evaluation through this function rather than calling SetLevel and
 // evaluating separately.
 func WithEvaluationLevel(level logging.Level, fn func()) {
 	defer perf.Track(nil, "yq.WithEvaluationLevel")()
 
+	// Fast path: the level already matches, so a read lock is enough. It
+	// still excludes any concurrent writer (a caller changing the level),
+	// so the level can't move out from under fn for as long as we hold it.
+	evalMu.RLock()
+	if goLoggingBackend.GetLevel(logModule) == level {
+		defer evalMu.RUnlock()
+		fn()
+		return
+	}
+	evalMu.RUnlock()
+
+	// Slow path: the level must change. The write lock excludes every
+	// other evaluation, reader or writer, until this one finishes, so a
+	// concurrent caller can't observe or install a different level
+	// mid-call.
 	evalMu.Lock()
 	defer evalMu.Unlock()
 

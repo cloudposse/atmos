@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	logging "gopkg.in/op/go-logging.v1"
@@ -174,4 +175,54 @@ func TestWithEvaluationLevel_ScopesLevelToCall(t *testing.T) {
 	for v := range violations {
 		t.Error(v)
 	}
+}
+
+// TestWithEvaluationLevel_SameLevelRunsConcurrently proves same-level
+// evaluations aren't serialized against each other. Atmos evaluates yq
+// expressions from many per-stack-file goroutines in parallel, and the
+// overwhelmingly common case is that every concurrent caller wants the same
+// level (Atmos's configured log level doesn't change mid-run), so a plain
+// mutex around the whole call would collapse that parallelism into a serial
+// bottleneck for no correctness benefit. If WithEvaluationLevel regresses to
+// full serialization, every goroutine below blocks on <-release one at a
+// time and entered.Wait() never returns, so this test times out instead of
+// failing an assertion.
+func TestWithEvaluationLevel_SameLevelRunsConcurrently(t *testing.T) {
+	prevLevel := goLoggingBackend.GetLevel(logModule)
+	t.Cleanup(func() { SetLevel(prevLevel) })
+
+	const n = 8
+	SetLevel(logging.DEBUG) // Every call below requests this same level.
+
+	var entered sync.WaitGroup
+	entered.Add(n)
+	release := make(chan struct{})
+
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			WithEvaluationLevel(logging.DEBUG, func() {
+				entered.Done()
+				<-release
+			})
+		}()
+	}
+
+	allEntered := make(chan struct{})
+	go func() {
+		entered.Wait()
+		close(allEntered)
+	}()
+
+	select {
+	case <-allEntered:
+		// All n goroutines entered fn() concurrently.
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for same-level evaluations to run concurrently; WithEvaluationLevel may be over-serializing")
+	}
+
+	close(release)
+	wg.Wait()
 }
