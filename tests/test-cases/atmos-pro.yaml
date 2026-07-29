@@ -18,10 +18,11 @@ tests:
       ATMOS_TELEMETRY_ENABLED: "false"
     expect:
       exit_code: 0
-      # The default format is tree (import hierarchy, stacks as branches);
-      # journaled in pkg/edition. Row-shaped assertions live in the CSV tests below.
+      # The default format is table (Component/Stack columns). Row-shaped
+      # assertions also live in the CSV tests below.
       tty:
-        - "Component Instances"
+        - "Component"
+        - "Stack"
         - "nonprod"
         - "mock/disabled"
         - "mock/drift"

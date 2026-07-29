@@ -16,7 +16,6 @@ diagnostics.file: ""
 diagnostics.include_output: false
 docs.generate.readme.output: ./README.md
 list.error_mode: warn
-list.instances.format: tree
 logs.file: /dev/stderr
 logs.level: Warning
 settings.experimental: warn
@@ -31,4 +30,3 @@ settings.terminal.no_color: false
 settings.terminal.pager: "false"
 settings.terminal.speed: 0
 stacks.inherit.metadata: true
-stacks.list.format: tree

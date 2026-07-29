@@ -672,10 +672,6 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("describe.component.filter", "schema")
 	// Focused bare `--help` output (no GLOBAL FLAGS section), on by default (journaled in pkg/edition).
 	v.SetDefault("settings.terminal.help.filter", true)
-	// Tree is the default output format for the list commands that showcase import
-	// hierarchies (journaled in pkg/edition; previously the renderer fell back to a table).
-	v.SetDefault("stacks.list.format", "tree")
-	v.SetDefault("list.instances.format", "tree")
 	// Graceful degradation for unresolved YAML functions in list/describe commands
 	// (journaled in pkg/edition; previously any unresolved value aborted the command).
 	v.SetDefault("list.error_mode", "warn")

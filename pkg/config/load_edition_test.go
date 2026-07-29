@@ -133,7 +133,7 @@ func TestLoadConfigEditionPin(t *testing.T) {
 }
 
 // TestLoadConfigEditionRollsBackJulyDefaults covers the July 2026 default flips
-// (tree list formats, graceful error modes, help filter, provenance) and the
+// (graceful error modes, help filter, provenance, component filter) and the
 // December 2025 metadata-inheritance flip with one pre-July pin.
 func TestLoadConfigEditionRollsBackJulyDefaults(t *testing.T) {
 	_ = schema.StacksInherit{Metadata: nil}
@@ -145,8 +145,10 @@ func TestLoadConfigEditionRollsBackJulyDefaults(t *testing.T) {
 		atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
 		require.NoError(t, err)
 
-		assert.Equal(t, "tree", atmosConfig.Stacks.List.Format)
-		assert.Equal(t, "tree", atmosConfig.List.Instances.Format)
+		// Unset ("" — renderer.formatTable treats empty as table); these two keys have
+		// no Viper default, matching pre-edition behavior. Not journaled: nothing to roll back.
+		assert.Empty(t, atmosConfig.Stacks.List.Format)
+		assert.Empty(t, atmosConfig.List.Instances.Format)
 		assert.Equal(t, "warn", atmosConfig.List.ErrorMode)
 		assert.Equal(t, "warn", atmosConfig.Describe.ErrorMode)
 		assert.True(t, atmosConfig.Settings.Terminal.Help.Filter)
@@ -160,8 +162,6 @@ func TestLoadConfigEditionRollsBackJulyDefaults(t *testing.T) {
 		atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
 		require.NoError(t, err)
 
-		assert.Equal(t, "table", atmosConfig.Stacks.List.Format, "tree default (2026-07-16) must roll back to the explicit table format")
-		assert.Equal(t, "table", atmosConfig.List.Instances.Format)
 		assert.Equal(t, "strict", atmosConfig.List.ErrorMode, "graceful degradation (2026-07-13) must roll back to strict")
 		assert.Equal(t, "strict", atmosConfig.Describe.ErrorMode)
 		assert.False(t, atmosConfig.Settings.Terminal.Help.Filter, "help filter (2026-07-06) must roll back")

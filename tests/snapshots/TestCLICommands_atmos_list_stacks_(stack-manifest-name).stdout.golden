@@ -1,6 +1,2 @@
- Stacks
-│
-├──my-legacy-prod-stack
-│
-└──no-name-prod
-
+my-legacy-prod-stack
+no-name-prod

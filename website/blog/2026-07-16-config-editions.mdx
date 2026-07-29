@@ -45,7 +45,6 @@ Editions ship alongside a batch of default changes, and projects without a pin p
 
 - **The default log level is now Warning.** This change was announced back in September 2025 ([PR #1430](https://github.com/cloudposse/atmos/pull/1430)), but a lower configuration layer kept the effective default at Info the whole time. This release removes that shadow, so for unpinned projects informational messages stop printing by default. To keep the old verbosity, pin `edition: "2025-08"` or set `logs.level: Info` explicitly.
 - **Component descriptions show provenance by default.** Running `atmos describe component` now annotates each value with the stack file that set it. Disable per-invocation with `--provenance=false`, per-environment with `ATMOS_DESCRIBE_PROVENANCE=false`, or per-project with `describe.provenance: false` in `atmos.yaml`.
-- **Stack and instance listings default to a tree.** Both `atmos list stacks` and `atmos list instances` now render the hierarchy as a tree instead of a flat table. An explicit `--format` always wins, so scripts that parsed the piped table output should pass `--format=csv` or `--format=json`.
 - **Component descriptions show only what stack manifests define.** The output of `atmos describe component` is now scoped to the sections a stack manifest can declare — vars, settings, env, backend, metadata, and friends — instead of every internal field Atmos computes along the way. Set `describe.component.filter: full` (or `ATMOS_DESCRIBE_COMPONENT_FILTER=full`) to see everything again; queries with `--query` always run against the full data.
 
 Every one of these changes is journaled, so a single pin — any date before the change you want to avoid — rolls it back.
@@ -84,10 +83,10 @@ edition: "2025-09"
 atmos describe edition
 ```
 
-The output shows whether a pin is active, where it came from (flag, env, or config), the resolved anchor date and its granularity, and every default the pin rolls back — with the pinned value alongside the latest default you'd get by unpinning. With the example pin above, the project predates ten of the twelve journaled changes, so it keeps the pager on, the Helmfile EKS integration enabled, and the pre-2026 describe and list behavior — everything as it stood at the end of September 2025.
+The output shows whether a pin is active, where it came from (flag, env, or config), the resolved anchor date and its granularity, and every default the pin rolls back — with the pinned value alongside the latest default you'd get by unpinning. With the example pin above, the project predates eight of the ten journaled changes, so it keeps the pager on, the Helmfile EKS integration enabled, and the pre-2026 describe and list behavior — everything as it stood at the end of September 2025.
 
 Editions are **experimental**: with the default `settings.experimental: warn`, a pinned project prints an experimental notice, and `settings.experimental: disable` blocks the feature entirely. See the [edition configuration reference](/cli/configuration/edition) for details.
 
 ## Get Involved
 
-The journal already reaches back to February 2025 — twelve entries covering everything from the log destination to listing formats and output scope — and it grows only when a shipped default actually changes. If a past default change bit you that isn't journaled yet, or you have opinions on how edition boundaries should be versioned going forward, [open an issue](https://github.com/cloudposse/atmos/issues) and tell us about it.
+The journal already reaches back to February 2025 — ten entries covering everything from the log destination to listing filters and output scope — and it grows only when a shipped default actually changes. If a past default change bit you that isn't journaled yet, or you have opinions on how edition boundaries should be versioned going forward, [open an issue](https://github.com/cloudposse/atmos/issues) and tell us about it.

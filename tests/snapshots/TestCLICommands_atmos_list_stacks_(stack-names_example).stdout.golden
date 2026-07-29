@@ -1,6 +1,2 @@
- Stacks
-│
-├──dev
-│
-└──production
-
+dev
+production

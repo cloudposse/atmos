@@ -97,8 +97,6 @@ atmos list editions --format=csv
  Date        Key                            Old          New          Description
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  2026-07-17  describe.component.filter      full         schema       Component descriptions show only stack-manifest sections; set the filter to full for computed internals.
- 2026-07-16  stacks.list.format             table        tree         Stack listings render the import hierarchy as a tree by default instead of a flat table.
- 2026-07-16  list.instances.format          table        tree         Instance listings render as a tree by default instead of a flat table.
  2026-07-16  describe.provenance            false        true         Component descriptions include provenance annotations (which stack file set each value) by default.
  2026-07-13  list.error_mode                strict       warn         List commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
  2026-07-13  describe.error_mode            strict       warn         Describe commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
@@ -109,7 +107,7 @@ atmos list editions --format=csv
  2025-09-23  logs.level                     Info         Warning      The default log level is Warning; informational log messages are hidden unless requested.
  2025-02-11  logs.file                      /dev/stdout  /dev/stderr  Logs are written to stderr so they never contaminate pipeable command output on stdout.
 
-12 default changes journaled. Pin with `edition:` in atmos.yaml.
+10 default changes journaled. Pin with `edition:` in atmos.yaml.
 ```
 
 :::tip

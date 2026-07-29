@@ -68,7 +68,7 @@ Partial dates round to the **end** of the period they name — "the 2026 edition
 
 ## Example
 
-The journal currently records twelve default changes, reaching back to February 2025:
+The journal currently records ten default changes, reaching back to February 2025:
 
 | Date         | Key                             | Old           | New           | Description |
 | ------------ | ------------------------------- | ------------- | ------------- | ----------- |
@@ -82,10 +82,8 @@ The journal currently records twelve default changes, reaching back to February 
 | `2026-07-13` | `list.error_mode`               | `strict`      | `warn`        | List commands substitute `(computed)` for unresolved YAML function values and continue |
 | `2026-07-17` | `describe.component.filter`     | `full`        | `schema`      | Component descriptions show only the sections a stack manifest can define |
 | `2026-07-16` | `describe.provenance`           | `false`       | `true`        | Component descriptions include provenance annotations (which stack file set each value) |
-| `2026-07-16` | `list.instances.format`         | `table`       | `tree`        | Instance listings render as a tree by default instead of a flat table |
-| `2026-07-16` | `stacks.list.format`            | `table`       | `tree`        | Stack listings render the import hierarchy as a tree by default instead of a flat table |
 
-A project pinned to September 2025 predates ten of these changes (everything from the pager change onward), so it keeps the pager enabled, the Helmfile EKS integration on, metadata inheritance off, unfiltered help, strict error modes, the full component-description filter, table-formatted listings, and provenance off:
+A project pinned to September 2025 predates eight of these changes (everything from the pager change onward), so it keeps the pager enabled, the Helmfile EKS integration on, metadata inheritance off, unfiltered help, strict error modes, the full component-description filter, and provenance off:
 
 <File title="atmos.yaml">
 ```yaml
