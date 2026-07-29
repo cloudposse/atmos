@@ -16,7 +16,8 @@ it follows the same aws-command + on-demand-token pattern as `atmos aws eks toke
 ECR Public (PR #2231) — exposes an AWS auth capability through a first-class Atmos command.
 
 **Key design decision:** token generation is a standalone command, **not** an `auth.integrations` kind. An
-RDS auth token is a single-use, per-connection credential valid ~15 minutes, so (like `eks token`) it is
+RDS auth token is a short-lived credential valid ~15 minutes (it authenticates each new connection within
+that window, not single-use), so (like `eks token`) it is
 minted on demand and never provisioned at `atmos auth login`.
 
 ## Problem Statement
@@ -46,6 +47,8 @@ export PGPASSWORD="$(atmos aws rds token \
   --username app --region us-east-2 --identity dev-admin)"
 psql "host=mydb.abc123.us-east-2.rds.amazonaws.com sslmode=require dbname=app user=app"
 ```
+
+> **Reducing the arguments further** is under active discussion (see [cloudposse/discussions#121](https://github.com/orgs/cloudposse/discussions/121)): referencing an `aws/rds` integration by name — as `atmos aws rds connect <name>` already does — or a no-argument instance picker. The flags above are the Phase-1 explicit form.
 
 ## Design Goals
 
@@ -194,7 +197,7 @@ tests are sufficient; **no integration tests** — Phase 1 is fully offline.
 
 ## Security Considerations
 
-- Token lifetime is AWS-fixed at ~15 minutes; single-use, per-connection.
+- Token lifetime is AWS-fixed at ~15 minutes; it authenticates each new connection within that window (not single-use).
 - The token is a credential: never logged (only `token_length` at debug), emitted only on the data channel
   via `data.WriteUnmasked` with a `#nosec G104` + CodeQL `clear-text-logging` justification.
 - Credentials always come from the Atmos identity chain, never the ambient default chain.
