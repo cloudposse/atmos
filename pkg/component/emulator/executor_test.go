@@ -731,11 +731,16 @@ func TestIsAbstractSection(t *testing.T) {
 func TestNewReadOnlyManagerDefaultConstructsNoRecoveryManager(t *testing.T) {
 	// Exercise the production newReadOnlyManager seam itself (not a test
 	// override): it must build the manager via emu.NewManagerNoRecovery, which
-	// never attempts Podman auto-recovery. Constructing it requires no live
-	// container runtime; only invoking a manager method would.
+	// never attempts Podman auto-recovery. A generic Ps() error is not
+	// branch-specific: an invalid runtime preference fails identically whether
+	// or not recovery is enabled (container.DetectRuntimeWithPreference and
+	// DetectRuntimeWithPreferenceAndRecovery both reject an unknown preference
+	// before recovery would ever run), so assert directly on the constructed
+	// manager's no-recovery routing instead.
 	mgr := newReadOnlyManager("definitely-not-a-runtime")
 	require.NotNil(t, mgr)
 
-	_, err := mgr.Ps(context.Background(), "dev")
-	require.Error(t, err)
+	realMgr, ok := mgr.(*emu.Manager)
+	require.True(t, ok, "newReadOnlyManager must construct a *emu.Manager")
+	assert.True(t, realMgr.NoRecoveryEnabled(), "newReadOnlyManager must disable Podman auto-recovery")
 }

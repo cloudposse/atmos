@@ -473,15 +473,43 @@ func TestNewManager_DetectsRuntime(t *testing.T) {
 
 func TestNewManagerNoRecovery_SkipsRecoveryDetection(t *testing.T) {
 	// NewManagerNoRecovery sets noRecovery=true, so runtimeFor must call
-	// container.DetectRuntimeWithPreference (no Podman auto-recovery), never
-	// DetectRuntimeWithPreferenceAndRecovery, regardless of autoStart. With an
-	// unsatisfiable preference, detection fails cleanly either way, but the
-	// constructor's noRecovery field is what routes to the recovery-free branch.
-	m := NewManagerNoRecovery("definitely-not-a-runtime")
+	// detectRuntimeWithPreference (no Podman auto-recovery), never
+	// detectRuntimeWithPreferenceAndRecovery, regardless of autoStart. An
+	// invalid runtime preference is not enough to prove this on its own: both
+	// container.DetectRuntimeWithPreference and
+	// container.DetectRuntimeWithPreferenceAndRecovery fail identically for an
+	// unsatisfiable preference without ever reaching Podman recovery, so
+	// detection erroring doesn't distinguish the two branches. Stub the
+	// package-level detection seams instead so the recovery-aware function can
+	// be asserted as never invoked.
+	origNoRecovery, origRecovery := detectRuntimeWithPreference, detectRuntimeWithPreferenceAndRecovery
+	t.Cleanup(func() {
+		detectRuntimeWithPreference = origNoRecovery
+		detectRuntimeWithPreferenceAndRecovery = origRecovery
+	})
+
+	var recoveryCalled, noRecoveryCalled bool
+	detectRuntimeWithPreferenceAndRecovery = func(_ context.Context, _ string, _ bool) (container.Runtime, error) {
+		recoveryCalled = true
+		return nil, errRuntimeBoom
+	}
+	detectRuntimeWithPreference = func(_ context.Context, preferred string) (container.Runtime, error) {
+		noRecoveryCalled = true
+		assert.Equal(t, "podman", preferred)
+		return nil, errRuntimeBoom
+	}
+
+	// Use a "podman" preference (rather than an invalid one) so that, were the
+	// recovery-aware branch mistakenly taken, it would be observable: Podman is
+	// exactly the preference that triggers auto-recovery in
+	// container.DetectRuntimeWithPreferenceAndRecovery.
+	m := NewManagerNoRecovery("podman")
 	require.NotNil(t, m)
 	assert.True(t, m.noRecovery)
 	assert.False(t, m.autoStart)
 
 	_, err := m.Ps(context.Background(), "dev")
-	require.Error(t, err)
+	require.ErrorIs(t, err, errRuntimeBoom)
+	assert.True(t, noRecoveryCalled, "expected detectRuntimeWithPreference to be invoked")
+	assert.False(t, recoveryCalled, "Podman auto-recovery must never be invoked when noRecovery is set")
 }

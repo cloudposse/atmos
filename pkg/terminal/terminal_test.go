@@ -1213,6 +1213,105 @@ func TestBuildConfig_ForceColorEnvVars(t *testing.T) {
 	}
 }
 
+// TestBuildConfig_ForceColorPrecedence covers conflicting force-color sources
+// to guard against a boolean-OR regression: a higher-priority source that is
+// explicitly set - even to false - must never be overridden by a
+// lower-priority source, following flags > ATMOS_FORCE_COLOR > FORCE_COLOR >
+// atmos.yaml's settings.terminal.force_color.
+func TestBuildConfig_ForceColorPrecedence(t *testing.T) {
+	tests := []struct {
+		name             string
+		setFlag          bool // simulates an explicit --force-color flag via viper.Set
+		flagValue        bool
+		atmosForceColor  string // ATMOS_FORCE_COLOR env value; "" means unset
+		forceColor       string // FORCE_COLOR env value; "" means unset
+		configForceColor bool   // settings.terminal.force_color in atmos.yaml
+		setConfig        bool
+		expected         bool
+	}{
+		{
+			name:            "explicit --force-color=false wins over ATMOS_FORCE_COLOR=true",
+			setFlag:         true,
+			flagValue:       false,
+			atmosForceColor: "true",
+			expected:        false,
+		},
+		{
+			name:       "explicit --force-color=false wins over FORCE_COLOR=1",
+			setFlag:    true,
+			flagValue:  false,
+			forceColor: "1",
+			expected:   false,
+		},
+		{
+			name:       "explicit --force-color=true wins over FORCE_COLOR=0",
+			setFlag:    true,
+			flagValue:  true,
+			forceColor: "0",
+			expected:   true,
+		},
+		{
+			name:            "ATMOS_FORCE_COLOR=false wins over FORCE_COLOR=1",
+			atmosForceColor: "false",
+			forceColor:      "1",
+			expected:        false,
+		},
+		{
+			name:            "ATMOS_FORCE_COLOR=true wins over FORCE_COLOR=0",
+			atmosForceColor: "true",
+			forceColor:      "0",
+			expected:        true,
+		},
+		{
+			name:             "FORCE_COLOR=0 wins over configured settings.terminal.force_color=true",
+			forceColor:       "0",
+			setConfig:        true,
+			configForceColor: true,
+			expected:         false,
+		},
+		{
+			name:             "FORCE_COLOR=1 wins over configured settings.terminal.force_color=false",
+			forceColor:       "1",
+			setConfig:        true,
+			configForceColor: false,
+			expected:         true,
+		},
+		{
+			name:             "no flag or env falls back to configured settings.terminal.force_color=true",
+			setConfig:        true,
+			configForceColor: true,
+			expected:         true,
+		},
+		{
+			name:     "nothing set defaults to false",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := setupTest(t)
+			defer cleanup()
+
+			if tt.setFlag {
+				viper.Set("force-color", tt.flagValue)
+			}
+			if tt.atmosForceColor != "" {
+				t.Setenv("ATMOS_FORCE_COLOR", tt.atmosForceColor)
+			}
+			if tt.forceColor != "" {
+				t.Setenv("FORCE_COLOR", tt.forceColor)
+			}
+			if tt.setConfig {
+				viper.Set("settings.terminal.force_color", tt.configForceColor)
+			}
+
+			cfg := buildConfig()
+			assert.Equal(t, tt.expected, cfg.ForceColor, "cfg.ForceColor mismatch for %s", tt.name)
+		})
+	}
+}
+
 func TestWidth_EdgeCases(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()

@@ -858,6 +858,7 @@ var (
 	ErrCreateFile          = errors.New("failed to create file")
 	ErrOpenFile            = errors.New("failed to open file")
 	ErrWriteFile           = errors.New("failed to write to file")
+	ErrCloseFile           = errors.New("failed to close file")
 	ErrStatFile            = errors.New("failed to stat file")
 	ErrRemoveDirectory     = errors.New("failed to remove directory")
 	ErrSetPermissions      = errors.New("failed to set permissions")

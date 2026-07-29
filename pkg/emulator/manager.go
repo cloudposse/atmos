@@ -62,19 +62,41 @@ func NewManagerNoRecovery(runtimePref string) *Manager {
 	return &Manager{runtimePref: runtimePref, noRecovery: true}
 }
 
+// NoRecoveryEnabled reports whether this Manager was constructed via
+// NewManagerNoRecovery and therefore routes runtimeFor to
+// container.DetectRuntimeWithPreference, never attempting Podman
+// auto-recovery. Exposed so callers wiring construction (and tests
+// exercising that wiring, e.g. from other packages) can confirm which
+// detection path a Manager uses without requiring a live container runtime.
+func (m *Manager) NoRecoveryEnabled() bool {
+	defer perf.Track(nil, "emulator.Manager.NoRecoveryEnabled")()
+
+	return m.noRecovery
+}
+
 // newManagerWithRuntime injects an explicit runtime (used in tests).
 func newManagerWithRuntime(runtime container.Runtime) *Manager {
 	return &Manager{runtime: runtime}
 }
+
+// detectRuntimeWithPreference and detectRuntimeWithPreferenceAndRecovery are
+// var-wrapped indirections over the container package's detection functions.
+// Tests override these to observe which detection path runtimeFor takes
+// (e.g. to prove noRecovery managers never reach the Podman-recovery branch)
+// without requiring a live container runtime.
+var (
+	detectRuntimeWithPreference            = container.DetectRuntimeWithPreference
+	detectRuntimeWithPreferenceAndRecovery = container.DetectRuntimeWithPreferenceAndRecovery
+)
 
 func (m *Manager) runtimeFor(ctx context.Context) (container.Runtime, error) {
 	if m.runtime != nil {
 		return m.runtime, nil
 	}
 	if m.noRecovery {
-		return container.DetectRuntimeWithPreference(ctx, m.runtimePref)
+		return detectRuntimeWithPreference(ctx, m.runtimePref)
 	}
-	return container.DetectRuntimeWithPreferenceAndRecovery(ctx, m.runtimePref, m.autoStart)
+	return detectRuntimeWithPreferenceAndRecovery(ctx, m.runtimePref, m.autoStart)
 }
 
 // Up reconciles the emulator's long-lived container and returns its live endpoint.

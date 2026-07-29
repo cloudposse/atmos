@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func defaultConfigHistory() HistoryValues {
@@ -159,7 +161,7 @@ func TestEnsureDefaultConfig_PropagatesCreateTempError(t *testing.T) {
 
 	_, _, err := EnsureDefaultConfig(&DefaultConfigInput{ComponentDir: t.TempDir(), History: defaultConfigHistory()})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create generated tfmigrate config")
+	assert.ErrorIs(t, err, errUtils.ErrCreateFile)
 }
 
 func TestDefaultConfigHCL_GCSBackendNestedBlock(t *testing.T) {

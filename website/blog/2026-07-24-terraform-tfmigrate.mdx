@@ -98,17 +98,21 @@ For idempotent migrations in automation, use `tfmigrate` history mode:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
-You don't have to configure it. When a component has no `.tfmigrate.hcl`,
-Atmos generates one on the fly that stores migration history in the
-component's own Terraform backend — the same S3 or GCS bucket as the state,
-under a stack/component/workspace-namespaced key, inheriting the region,
-role ARN, and endpoint; local backends get a history file beside the state.
-Applied migrations are recorded and never rerun, with nothing to set up.
+You don't have to configure it. As long as no custom `tfmigrate` config is
+supplied or discovered — no hook `config` field, no `--tfmigrate-config` /
+`ATMOS_TFMIGRATE_CONFIG`, no `TFMIGRATE_CONFIG`, and no `.tfmigrate.hcl` in the
+component — Atmos generates one on the fly that stores migration history in
+the component's own Terraform backend — the same S3 or GCS bucket as the
+state, under a stack/component/workspace-namespaced key, inheriting the
+region, role ARN, and endpoint; local backends get a history file beside the
+state. Applied migrations are recorded and never rerun, with nothing to set
+up.
 
-To take control, drop a `.tfmigrate.hcl` in the component. Atmos exports
-stack/component/workspace-scoped history variables and copies supported
-Terraform backend settings so a custom config can still reuse the same bucket
-and identity setup:
+To take control, drop a `.tfmigrate.hcl` in the component (or set the hook's
+`config` field, or pass `--tfmigrate-config`/`ATMOS_TFMIGRATE_CONFIG`). Atmos
+exports stack/component/workspace-scoped history variables and copies
+supported Terraform backend settings so a custom config can still reuse the
+same bucket and identity setup:
 
 ```hcl
 tfmigrate {

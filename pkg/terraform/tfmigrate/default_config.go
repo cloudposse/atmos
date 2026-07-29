@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -53,7 +54,7 @@ func EnsureDefaultConfig(input *DefaultConfigInput) (string, func(), error) {
 
 	file, err := os.CreateTemp("", "atmos-tfmigrate-*.hcl")
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create generated tfmigrate config: %w", err)
+		return "", nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCreateFile, err)
 	}
 	cleanup := func() { _ = os.Remove(file.Name()) } //nolint:gosec // G703: path is from os.CreateTemp, not user input.
 
@@ -61,11 +62,11 @@ func EnsureDefaultConfig(input *DefaultConfigInput) (string, func(), error) {
 	if _, err := file.Write([]byte(content)); err != nil {
 		_ = file.Close()
 		cleanup()
-		return "", nil, fmt.Errorf("failed to write generated tfmigrate config: %w", err)
+		return "", nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrWriteFile, err)
 	}
 	if err := file.Close(); err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("failed to close generated tfmigrate config: %w", err)
+		return "", nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCloseFile, err)
 	}
 	return file.Name(), cleanup, nil
 }
