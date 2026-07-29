@@ -149,12 +149,14 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			name:    "built-in config entry validates generated workdir YAML",
 			schemas: nil,
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
+				stacksFile := filepath.Join("profiles", "developer", "stacks.yaml")
+				versionFile := filepath.Join("profiles", "developer", ".workdir", "version.yaml")
 				fmi.EXPECT().MatchFiles(builtinConfigSchemaMatches()).Return([]string{
-					"profiles/developer/stacks.yaml",
-					"profiles/developer/.workdir/version.yaml",
+					stacksFile,
+					versionFile,
 				}, nil)
-				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, "profiles/developer/stacks.yaml").Return([]gojsonschema.ResultError{}, nil)
-				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, "profiles/developer/.workdir/version.yaml").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, stacksFile).Return([]gojsonschema.ResultError{}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, versionFile).Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
 			},
 			expectedError: ErrInvalidYAML,
 		},
