@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -719,6 +720,66 @@ func TestConfigureYqLogger_LevelIsReversible(t *testing.T) {
 	// And back again to confirm the toggle is not accidentally sticky.
 	configureYqLogger(nil)
 	assert.Equal(t, yqSilentLevel, logging.GetLevel("yq-lib"), "nil config must re-silence")
+}
+
+// TestEvaluateYqExpression_ConcurrentCallsAreRaceFree covers #2821 and
+// pins both of the process-global writes that used to happen on every
+// call:
+//
+//   - configureYqLogger called logging.SetLevel each time, so concurrent
+//     stack file processing wrote go-logging's unsynchronized module level
+//     map and died with "fatal error: concurrent map writes", or with the
+//     read/write variant, because yq reads that same map from every
+//     decoder.
+//   - yqlib.InitExpressionParser lazily assigns yqlib.ExpressionParser
+//     behind a plain nil check, so first evaluations wrote and read that
+//     global at the same time. That one is a pointer write rather than a
+//     map write, so the runtime does not catch it.
+//
+// Run under -race (make test-race) to see this fail without the fix.
+func TestEvaluateYqExpression_ConcurrentCallsAreRaceFree(t *testing.T) {
+	// Leave the level the rest of the package expects to find.
+	defer setYqLogLevel(yqSilentLevel)
+
+	atmosConfig := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
+
+	// Install the level a non-Trace run installs, so the goroutines below
+	// exercise the steady state rather than a first-time transition.
+	configureYqLogger(atmosConfig)
+	require.Equal(t, yqSilentLevel, logging.GetLevel(yqLogModule))
+
+	const goroutines = 32
+	data := map[string]any{"a": map[string]any{"b": "value"}}
+
+	var wg sync.WaitGroup
+	results := make(chan any, goroutines)
+	errs := make(chan error, goroutines)
+
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := EvaluateYqExpression(atmosConfig, data, ".a.b")
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- result
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	close(results)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	require.Len(t, results, goroutines, "every goroutine must produce a result")
+	for result := range results {
+		assert.Equal(t, "value", result)
+	}
+	assert.Equal(t, yqSilentLevel, logging.GetLevel(yqLogModule),
+		"concurrent evaluation must leave the configured level in place")
 }
 
 // TestEvaluateYqExpression_EdgeCases tests additional edge cases.
