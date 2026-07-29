@@ -31,7 +31,7 @@ By default, `atmos describe stacks` executes YAML template functions (e.g., `!te
 
 Without `--stack`, the command evaluates these functions for **every** component in **every** stack. In a multi-account repository where each stage keeps its Terraform state in its own account, no single identity can read them all, and one `AccessDenied` fails the whole command. Scope the run with `--stack <stack>`, skip the credential-backed functions with `--skip=terraform.state --skip=terraform.output`, or turn processing off with `--process-functions=false`.
 
-To simply enumerate what exists without resolving any values, use [`atmos list stacks`](/cli/commands/list/stacks) or [`atmos list components`](/cli/commands/list/components) — those commands never read remote state.
+To enumerate what exists without paying for values, use [`atmos list stacks`](/cli/commands/list/stacks) or [`atmos list components`](/cli/commands/list/components) with their **default** columns: that output renders only identity fields, so those commands skip the credential-backed functions entirely. Customizing the output (`--columns`, or a `columns` block in `atmos.yaml`) asks for values that may come from remote state, so they are resolved again.
 :::
 
 :::tip

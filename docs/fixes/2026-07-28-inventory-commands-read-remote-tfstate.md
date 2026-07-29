@@ -47,9 +47,10 @@ credentials for exactly one.
 
 ## Root Cause
 
-`skipCredentialBackedYAMLFunctionsForInventory` (`cmd/list/utils.go`) already knew that
-inventory commands must not perform credentialed reads — but it applied the skip **only
-when no AuthManager existed**:
+`skipCredentialBackedYAMLFunctionsForInventory` (`cmd/list/utils.go`) already existed to
+keep inventory listing off credentialed reads — an intent this fix keeps, but narrows to
+output that cannot render such a value (see Fix 1; customized output still resolves them).
+Its problem was the condition: it applied the skip **only when no AuthManager existed**:
 
 ```go
 func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
