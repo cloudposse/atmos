@@ -654,6 +654,24 @@ func TestHandleConfigInitError(t *testing.T) {
 			expectNil: true,
 		},
 		{
+			name:      "config validate command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "config", "validate"},
+			expectNil: true,
+		},
+		{
+			name:      "validate config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "config"},
+			expectNil: true,
+		},
+		{
+			name:      "validate schema config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "schema", "config"},
+			expectNil: true,
+		},
+		{
 			name:        "custom command version flag preserves error",
 			initErr:     errors.New("config error"),
 			args:        []string{"atmos", "install", "--version", "1.2.3"},

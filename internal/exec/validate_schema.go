@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -39,12 +41,13 @@ const (
 	diagnosticSourceSchema = "schema"
 )
 
-// builtinConfigSchemaMatches returns the project-local files the config loader
-// reads: atmos.yaml (including hidden variants), atmos.d fragments, and
-// project-local profile directories. Profile files and atmos.d fragments are
-// partial configs; the schema has no required fields, so they validate
-// standalone. Fragment directories are optional and the glob matcher fails hard
-// on missing directories, so only existing ones are included.
+// builtinConfigSchemaMatches returns the project-local configuration locations:
+// atmos.yaml (including hidden variants), atmos.d fragments, and project-local
+// profile directories. Profile files and atmos.d fragments are partial configs;
+// the schema has no required fields, so they validate standalone. Fragment
+// directories are optional and the glob matcher fails hard on missing directories,
+// so only existing ones are included. Files in generated workdirs are filtered
+// after matching with config.IsConfigDiscoveryPath, just like config loading.
 func builtinConfigSchemaMatches() []string {
 	matches := []string{
 		"atmos.yaml",
@@ -291,6 +294,11 @@ func (av *atmosValidatorExecutor) buildValidationSchema(sourceKey, customSchema 
 		if err != nil {
 			return nil, err
 		}
+		if k == builtinConfigSchemaKey {
+			files = slices.DeleteFunc(files, func(path string) bool {
+				return !cfg.IsConfigDiscoveryPath(path)
+			})
+		}
 		log.Debug("Files matched", diagnosticSourceSchema, schemaValue.Schema, "matcher", schemaValue.Matches, "filesMatched", files)
 		validationSchemaWithFiles[schemaValue.Schema] = files
 	}
@@ -357,7 +365,7 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 		log.Debug("validating", diagnosticSourceSchema, schema, "file", file)
 		validationErrors, err := av.validator.ValidateYAMLSchema(schema, file)
 		if err != nil {
-			return count, err
+			return count, fmt.Errorf("validate YAML file %q: %w", displayPath(file), err)
 		}
 		positions := schemaFilePositions(file)
 		for _, warning := range av.deprecationDiagnostics(schema, file, positions) {

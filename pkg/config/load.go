@@ -1404,6 +1404,9 @@ func loadAtmosConfigsFromDirectoryWithMerge(searchPattern string, dst *viper.Vip
 	if err != nil {
 		return fmt.Errorf("%w: failed to search for configuration files in %s: %w", errUtils.ErrParseFile, source, err)
 	}
+	foundPaths = slices.DeleteFunc(foundPaths, func(path string) bool {
+		return !IsConfigDiscoveryPath(path)
+	})
 
 	// No files found is not an error - just means directory is empty.
 	if len(foundPaths) == 0 {
@@ -1426,6 +1429,19 @@ func loadAtmosConfigsFromDirectoryWithMerge(searchPattern string, dst *viper.Vip
 		"pattern", searchPattern)
 
 	return nil
+}
+
+// IsConfigDiscoveryPath reports whether a file is eligible to be treated as an
+// Atmos configuration fragment during recursive directory discovery. Generated
+// component workdirs contain arbitrary YAML and are never configuration input.
+func IsConfigDiscoveryPath(path string) bool {
+	for _, part := range strings.Split(filepath.Clean(path), string(filepath.Separator)) {
+		if part == ".workdir" {
+			return false
+		}
+	}
+
+	return true
 }
 
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)

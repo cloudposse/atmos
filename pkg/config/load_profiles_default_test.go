@@ -45,6 +45,41 @@ func TestLoadConfig_ProfilesDefault_LoadsWhenNoFlagOrEnv(t *testing.T) {
 		"profiles.default should populate ProfilesFromArg with 'developer'")
 }
 
+// TestLoadConfig_ProfileStackOverrideIgnoresWorkdirFiles verifies that generated
+// YAML under a profile's .workdir directory is not merged as Atmos configuration.
+func TestLoadConfig_ProfileStackOverrideIgnoresWorkdirFiles(t *testing.T) {
+	fixturePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "config-profiles-stack-override")
+	absFixture, err := filepath.Abs(fixturePath)
+	require.NoError(t, err)
+	require.DirExists(t, absFixture, "required scenario fixture is missing")
+
+	t.Chdir(absFixture)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TEST_GIT_ROOT", absFixture)
+	t.Setenv("ATMOS_PROFILE", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_CONFIG", "")
+	t.Setenv("ATMOS_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
+	cleanupXDG := withTestXDGConfigHome(t, t.TempDir())
+	t.Cleanup(cleanupXDG)
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ProfilesFromArg: []string{"developer"},
+	}
+	atmosConfig, err := LoadConfig(&configAndStacksInfo)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"developer"}, configAndStacksInfo.ProfilesFromArg)
+	assert.Equal(t, "stacks", atmosConfig.Stacks.BasePath)
+	assert.Equal(t, []string{"deploy/**/*"}, atmosConfig.Stacks.IncludedPaths)
+	assert.Equal(t, "Info", atmosConfig.Logs.Level,
+		"unrelated base configuration must remain intact")
+}
+
 func TestLoadConfig_ProfileDefaultCanImportAuthConfig(t *testing.T) {
 	setupTestAdapters()
 

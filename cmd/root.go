@@ -480,6 +480,10 @@ var RootCmd = &cobra.Command{
 			} else if isCIGitCloneBootstrapRequested() {
 				tmpConfig.CI.Enabled = true
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
+			} else if isBuiltinConfigValidationCommand(cmd, args) {
+				// The built-in config validation commands must run when config decoding
+				// fails; reporting that invalid configuration is their purpose.
+				log.Debug("CLI configuration error (continuing for config validation)", "error", err)
 			} else if isVersionCommand() {
 				// Version command should always work, even with invalid config.
 				// Log config error but allow version command to proceed.
@@ -1611,6 +1615,12 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
 		return nil
 	}
+	if isBuiltinConfigValidationArgs(args) {
+		// The built-in config validation commands must run when config decoding
+		// fails; reporting that invalid configuration is their purpose.
+		log.Debug("Warning: CLI configuration error (continuing for config validation)", "error", initErr)
+		return nil
+	}
 
 	if isHelpRequestedInArgs() {
 		// Help screens should always render, even with invalid config.
@@ -1651,6 +1661,39 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 
 	// Return other errors as-is.
 	return initErr
+}
+
+// isBuiltinConfigValidationArgs reports whether arguments invoke a built-in
+// command that validates the Atmos configuration itself.
+func isBuiltinConfigValidationArgs(args []string) bool {
+	for i, arg := range args {
+		switch arg {
+		case "config":
+			if i+1 < len(args) && args[i+1] == "validate" {
+				return true
+			}
+		case "validate":
+			if i+1 < len(args) && args[i+1] == "config" {
+				return true
+			}
+			if i+2 < len(args) && args[i+1] == "schema" && args[i+2] == "config" {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
+	switch cmd.CommandPath() {
+	case "atmos config validate", "atmos validate config":
+		return true
+	case "atmos validate schema":
+		return len(args) > 0 && args[0] == "config"
+	default:
+		return false
+	}
 }
 
 func isCIGitCloneBootstrapRequested() bool {
@@ -1839,7 +1882,16 @@ func Execute() error {
 	debugPromote := maybePromoteLogLevelForDebugMode(&atmosConfig, initErr == nil)
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
-	SetupLogger(&atmosConfig)
+	// If decoding failed, use a minimal safe logger instead: config validation (and
+	// version) must be able to report the original configuration problem without
+	// a malformed logging section causing a second early exit.
+	loggerConfig := &atmosConfig
+	if initErr != nil {
+		loggerConfig = &schema.AtmosConfiguration{
+			Logs: schema.Logs{File: "/dev/stderr", Level: "Warning"},
+		}
+	}
+	SetupLogger(loggerConfig)
 
 	if debugPromote.Promoted {
 		log.Info(
