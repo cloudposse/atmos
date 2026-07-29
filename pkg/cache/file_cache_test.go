@@ -89,6 +89,19 @@ func TestFileCache_Get_NotFound(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestFileCache_Delete(t *testing.T) {
+	cache := newTestCache(t)
+	require.NoError(t, cache.Set("test-key", []byte("cached content")))
+
+	require.NoError(t, cache.Delete("test-key"))
+	_, exists, err := cache.Get("test-key")
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	// Deleting an absent entry is idempotent.
+	require.NoError(t, cache.Delete("test-key"))
+}
+
 func TestFileCache_GetPath(t *testing.T) {
 	cache := newTestCache(t)
 

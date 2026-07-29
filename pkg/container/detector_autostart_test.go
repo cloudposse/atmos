@@ -38,9 +38,9 @@ func TestDetectRuntimeWithPreferenceAndRecovery_AutoProviderRecoversPodman(t *te
 	m.EXPECT().LookPath("podman").Return("/usr/bin/podman", nil).AnyTimes()
 
 	// `podman info`: fails first (machine stopped), then succeeds after recovery.
+	// The successful recovery result is reused; detection does not probe it again.
 	gomock.InOrder(
 		m.EXPECT().CommandContext(gomock.Any(), "podman", "info").Return(failCmd()),
-		m.EXPECT().CommandContext(gomock.Any(), "podman", "info").Return(successCmd()),
 		m.EXPECT().CommandContext(gomock.Any(), "podman", "info").Return(successCmd()),
 	)
 	// A machine exists → NeedsStart → recovery runs `podman machine start` (asserted).
