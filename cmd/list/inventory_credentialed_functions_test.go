@@ -6,13 +6,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -130,7 +133,7 @@ func loadCrossAccountConfig(t *testing.T) *schema.AtmosConfiguration {
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, []string{}, nil)
 	require.NoError(t, err)
 
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err)
 
 	return &atmosConfig
@@ -253,6 +256,8 @@ func TestExecuteAndExtractStacks_ResolvesWhenColumnsAreCustomized(t *testing.T) 
 
 	require.Error(t, err,
 		"custom columns must keep credential-backed functions resolvable, not silently skipped")
+	require.ErrorIs(t, err, errUtils.ErrDescribeComponent,
+		"the failure must come from resolving !terraform.state against the unreachable stack")
 }
 
 // TestStacksOutputCanSurfaceValues pins how `list stacks` classifies its own output.
@@ -383,4 +388,104 @@ func countOccurrences(values []string, target string) int {
 		}
 	}
 	return count
+}
+
+// stubListAuthManagerFactory replaces the package-level AuthManagerFactory for the test's
+// duration so createAuthManagerForList produces an authenticated-looking manager without
+// performing real authentication. This is the seam #2801 added for exactly this purpose —
+// it lets the instances tests below drive the real executeListInstancesCmd (including its
+// instancesOutputCanSurfaceValues wiring) instead of re-deriving the skip in the test,
+// which would only restate the production code rather than exercise it.
+func stubListAuthManagerFactory(t *testing.T) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	manager := newAuthenticatedManager(t)
+
+	factory := NewMockAuthManagerFactory(ctrl)
+	factory.EXPECT().
+		CreateWithStackScan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(auth.AuthManager(manager), nil).
+		AnyTimes()
+
+	original := listAuthManagerFactory
+	t.Cleanup(func() { listAuthManagerFactory = original })
+	listAuthManagerFactory = factory
+}
+
+// newInstancesCmd builds the instances command against the cross-account fixture with an
+// explicit identity. The identity is set explicitly (rather than left to default) to
+// isolate the test from Viper state established by unrelated command tests in the same
+// package — the same precaution TestCreateAuthManagerForList_EvaluationPolicy takes.
+func newInstancesCmd(t *testing.T, identity string) *cobra.Command {
+	t.Helper()
+
+	cmd := newCmdWithListParser("instances", instancesParser.RegisterFlags)
+	// The global builder may register --identity on either flag set depending on how the
+	// command was assembled; add it only if absent so this never double-registers.
+	if cmd.Flags().Lookup(cfg.IdentityFlagName) == nil &&
+		cmd.PersistentFlags().Lookup(cfg.IdentityFlagName) == nil {
+		cmd.PersistentFlags().String(cfg.IdentityFlagName, "", "identity")
+	}
+	require.NoError(t, cmd.Flags().Set(cfg.IdentityFlagName, identity),
+		"setting --identity explicitly isolates this test from Viper state left by other tests")
+	return cmd
+}
+
+// TestExecuteListInstancesCmd_SkipsCredentialBackedFunctionsByDefault extends the #2566
+// regression coverage to `list instances`, driving the real command entry point against the
+// cross-account fixture. With the default columns and no --query/--filter/--upload, the
+// unreachable `!terraform.state` must never be evaluated even though an identity resolved.
+func TestExecuteListInstancesCmd_SkipsCredentialBackedFunctionsByDefault(t *testing.T) {
+	initExecutorTestIO(t)
+	t.Chdir(writeCrossAccountFixture(t))
+	stubListAuthManagerFactory(t)
+
+	opts := &InstancesOptions{
+		Format:           "json",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	require.NoError(t, executeListInstancesCmd(newInstancesCmd(t, "prd-access"), []string{}, opts),
+		"default instances output must not read Terraform state, even with an identity")
+}
+
+// TestExecuteListInstancesCmd_ResolvesWhenValuesRequested is the negative path. `list
+// instances` has the largest value-surfacing surface of the inventory commands, so each of
+// --query, --filter and --columns must switch resolution back on: the fixture's unreachable
+// `!terraform.state` then fails the command rather than being silently skipped.
+//
+// Without these, a regression to an unconditional skip would leave the test above passing.
+func TestExecuteListInstancesCmd_ResolvesWhenValuesRequested(t *testing.T) {
+	tests := []struct {
+		name string
+		opts InstancesOptions
+	}{
+		{name: "query", opts: InstancesOptions{Query: ".vars.data_bucket_name"}},
+		{name: "filter", opts: InstancesOptions{Filter: `.vars.data_bucket_name == "x"`}},
+		{name: "columns", opts: InstancesOptions{Columns: []string{"Bucket={{ .vars.data_bucket_name }}"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initExecutorTestIO(t)
+			t.Chdir(writeCrossAccountFixture(t))
+			stubListAuthManagerFactory(t)
+
+			opts := tt.opts
+			opts.Format = "json"
+			opts.ProcessTemplates = true
+			opts.ProcessFunctions = true
+
+			err := executeListInstancesCmd(newInstancesCmd(t, "prd-access"), []string{}, &opts)
+
+			require.Error(t, err,
+				"requesting a value must keep credential-backed functions resolvable, not silently skipped")
+			// Pin the cause: without this the test would also pass if the query/filter
+			// itself were malformed, which would prove nothing about resolution.
+			require.ErrorIs(t, err, errUtils.ErrDescribeComponent,
+				"the failure must come from resolving !terraform.state against the unreachable stack")
+		})
+	}
 }

@@ -189,6 +189,16 @@ sentinels propagated from the inner describe (e.g. `ErrCircularDependency` from 
   - `TestStacksOutputCanSurfaceValues`, `TestComponentsOutputCanSurfaceValues`,
     `TestInstancesOutputCanSurfaceValues` and `TestListOutputCanSurfaceValues` pin each
     command's classification of its own output (flag, atmos.yaml block, query/filter/upload).
+  - `TestExecuteListInstancesCmd_SkipsCredentialBackedFunctionsByDefault` and
+    `TestExecuteListInstancesCmd_ResolvesWhenValuesRequested` extend the same fixture
+    pattern to `list instances`, which has the largest value-surfacing surface. These drive
+    the real `executeListInstancesCmd` — swapping the `listAuthManagerFactory` seam #2801
+    added, rather than re-deriving the skip in the test, so the assertion exercises the
+    production wiring instead of restating it. The negative path covers `--query`,
+    `--filter` and `--columns` in a table.
+  - Both negative paths assert `errors.Is(err, ErrDescribeComponent)`, not merely "an error
+    occurred": without that, a malformed query or column template would satisfy the test
+    while proving nothing about whether resolution actually ran.
   - `TestSkipCredentialBackedYAMLFunctionsForInventory` pins the skip set, asserts the
     tokens are bare (the `!` is trimmed, matching `skipFunc`), and checks the caller's
     slice is neither mutated nor duplicated into.
