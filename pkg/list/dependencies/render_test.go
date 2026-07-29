@@ -2,6 +2,7 @@ package dependencies
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -98,6 +99,69 @@ func TestRender_TreeMarksCircular(t *testing.T) {
 	out, err := Render(graph, Options{Format: "tree", Direction: DirectionForward, Component: "a", Stack: "dev"})
 	require.NoError(t, err)
 	assert.Contains(t, out, "circular reference")
+}
+
+func TestRender_LevelsShowsShortestForwardDependencyDistance(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"db":  dependsOn(map[string]any{"component": "vpc"}),
+			"app": dependsOn(map[string]any{"component": "db"}),
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	out, err := Render(graph, Options{Format: FormatLevels, Direction: DirectionForward, Component: "app", Stack: "dev"})
+	require.NoError(t, err)
+	assertLevel(t, out, "app", 0)
+	assertLevel(t, out, "db", 1)
+	assertLevel(t, out, "vpc", 2)
+}
+
+func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": withMetadata(map[string]any{
+				"labels": map[string]any{"team": "platform"},
+			}),
+			"app": dependsOn(map[string]any{"component": "vpc"}),
+			"ignored": withMetadata(map[string]any{
+				"tags":   []any{"other"},
+				"labels": map[string]any{"team": "platform", "environment": "other"},
+			}),
+		},
+	})
+	app := stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
+	app["metadata"] = map[string]any{
+		"tags":   []any{"application"},
+		"labels": map[string]any{"team": "platform", "environment": "test"},
+	}
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	for _, opts := range []Options{
+		{Format: FormatLevels, Direction: DirectionForward, Tags: []string{"application", "tier-1"}},
+		{Format: FormatLevels, Direction: DirectionForward, Labels: map[string]string{"team": "platform", "environment": "test"}},
+	} {
+		out, err := Render(graph, opts)
+		require.NoError(t, err)
+		assertLevel(t, out, "app", 0)
+		assertLevel(t, out, "vpc", 1)
+		assert.NotContains(t, out, "ignored")
+	}
+}
+
+func assertLevel(t *testing.T, output, component string, want int) {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 3 && fields[2] == component {
+			assert.Equal(t, strconv.Itoa(want), fields[0])
+			return
+		}
+	}
+	assert.Failf(t, "component missing from levels output", "%q not found in:\n%s", component, output)
 }
 
 func TestRender_JSONStructure(t *testing.T) {
@@ -218,6 +282,31 @@ func TestSelectTopNodes_TemplatedSelectorConservativelyMatches(t *testing.T) {
 	require.Len(t, tops, 2)
 	assert.ElementsMatch(t, []string{"templated", "yamlfunc"},
 		[]string{tops[0].Component, tops[1].Component})
+}
+
+func TestSelectTopNodes_RequestedTemplatedLabelIgnoresUnrelatedUnresolvedLabel(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"service": {
+				"vars": map[string]any{"tier": "worker"},
+				"metadata": map[string]any{
+					"tags": []any{"active"},
+					"labels": map[string]any{
+						"tier":   "{{ .vars.tier }}",
+						"broken": "{{ unknownFunction }}",
+					},
+				},
+			},
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	tops := selectTopNodes(graph, &Selector{
+		Tags:   []string{"active"},
+		Labels: map[string]string{"tier": "api"},
+	})
+	assert.Empty(t, tops, "an unrelated unresolved label must not make a requested label undecidable")
 }
 
 func TestRender_TagsFilterScopesTopEntries(t *testing.T) {

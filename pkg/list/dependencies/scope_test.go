@@ -19,9 +19,10 @@ type describeCall struct {
 // fakeDescribe serves per-stack views of a full stacks map and records calls,
 // standing in for ExecuteDescribeStacks in scoped-evaluation tests.
 type fakeDescribe struct {
-	full  map[string]any
-	calls []describeCall
-	err   error
+	full     map[string]any
+	resolved map[string]any
+	calls    []describeCall
+	err      error
 }
 
 func (f *fakeDescribe) describe(stack string, components []string, processTemplates, processFunctions bool) (map[string]any, error) {
@@ -32,7 +33,11 @@ func (f *fakeDescribe) describe(stack string, components []string, processTempla
 	if stack == "" {
 		return f.full, nil
 	}
-	section, ok := f.full[stack]
+	source := f.full
+	if (processTemplates || processFunctions) && f.resolved != nil {
+		source = f.resolved
+	}
+	section, ok := source[stack]
 	if !ok {
 		return map[string]any{}, nil
 	}
@@ -169,6 +174,74 @@ func TestResolveScopedClosureDepthBoundsEvaluation(t *testing.T) {
 	assert.ElementsMatch(t, []string{"dev"}, fake.evaluatedStacks())
 	_, hasVpc := result.Closure.GetNode(NodeID("vpc", "core"))
 	assert.False(t, hasVpc)
+}
+
+func TestResolveScopedClosureExpandsResolvedCrossStackDependency(t *testing.T) {
+	t.Parallel()
+
+	lightweight := terraformStacks(map[string]map[string]map[string]any{
+		"application": {
+			"root": dependsOn(map[string]any{"component": "network", "stack": "{{ .vars.network_stack }}"}),
+		},
+		"network": {
+			"network": {},
+		},
+	})
+	resolved := terraformStacks(map[string]map[string]map[string]any{
+		"application": {
+			"root": dependsOn(map[string]any{"component": "network", "stack": "network"}),
+		},
+		"network": {
+			"network": {},
+		},
+	})
+	describe := &fakeDescribe{full: lightweight, resolved: resolved}
+
+	result, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+		Components:       []string{"root"},
+		Stack:            "application",
+		Direction:        DirectionForward,
+		Depths:           Depths{Dependencies: 1},
+		ProcessTemplates: true,
+	})
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"application", "network"}, StackNames(result.Closure))
+	assert.ElementsMatch(t, []string{"application", "network"}, mapKeys(result.Stacks))
+	assert.ElementsMatch(t, []string{"application", "network"}, describe.evaluatedStacks())
+}
+
+func TestResolveScopedClosureEvaluatesResolvedSameStackDependency(t *testing.T) {
+	t.Parallel()
+
+	lightweight := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app":      dependsOn(map[string]any{"component": "{{ .vars.database_component }}"}),
+			"database": {},
+		},
+	})
+	resolved := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app":      dependsOn(map[string]any{"component": "database"}),
+			"database": {},
+		},
+	})
+	describe := &fakeDescribe{full: lightweight, resolved: resolved}
+
+	result, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+		Components:       []string{"app"},
+		Stack:            "dev",
+		Direction:        DirectionForward,
+		Depths:           Depths{Dependencies: 1},
+		ProcessTemplates: true,
+	})
+
+	require.NoError(t, err)
+	_, ok := result.Closure.GetNode(NodeID("database", "dev"))
+	require.True(t, ok, "resolved closure should include the same-stack dependency")
+	dev := result.Stacks["dev"].(map[string]any)
+	components := dev["components"].(map[string]any)["terraform"].(map[string]any)
+	assert.Contains(t, components, "database", "resolved stacks must include every closure component")
 }
 
 func TestResolveScopedClosureReverseDirection(t *testing.T) {

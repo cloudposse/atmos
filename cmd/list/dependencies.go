@@ -45,16 +45,15 @@ type DependenciesOptions struct {
 	Labels map[string]string
 }
 
-// dependenciesCmd lists Atmos component dependencies as a tree.
+// dependenciesCmd lists Atmos component dependencies.
 var dependenciesCmd = &cobra.Command{
 	Use:   "dependencies [component]",
-	Short: "List Atmos component dependencies as a tree",
+	Short: "List Atmos component dependencies",
 	Long: `List the dependency relationships between Atmos components across stacks.
 
-By default the output is a tree showing both directions for every component:
-what each component depends on, and what depends on it. Use --direction to show
-only one side, --stack and the optional [component] argument to focus on a single
-component, and --format to emit json or yaml instead of a tree.`,
+By default the output is a tree showing both dependency directions. Use
+--direction to show one side. Use --format=levels to list dependency distance
+from selected roots.`,
 	Aliases:            []string{"deps"},
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),

@@ -75,7 +75,7 @@ func TestRootNodeIDs_TagsLabels(t *testing.T) {
 	t.Run("labels_filter", func(t *testing.T) {
 		t.Parallel()
 		ids := Roots(graph, &Selector{Labels: map[string]string{"team": "platform"}})
-		assert.ElementsMatch(t, []string{NodeID("vpc", "dev"), NodeID("templated", "dev")}, ids)
+		assert.ElementsMatch(t, []string{NodeID("vpc", "dev")}, ids)
 	})
 }
 

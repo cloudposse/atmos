@@ -2,6 +2,9 @@ package step
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,6 +21,21 @@ func installStepFakeDocker(t *testing.T) {
 		Name: string(container.TypeDocker),
 		Mode: testhelpers.FakeContainerRuntimeStep,
 	})
+}
+
+func installFullFakeDocker(t *testing.T) {
+	t.Helper()
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: string(container.TypeDocker),
+		Mode: testhelpers.FakeContainerRuntimeFull,
+	})
+}
+
+func fakeRuntimeArgs(t *testing.T, path string) []string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return strings.Split(strings.TrimSpace(string(content)), "\n")
 }
 
 func TestContainerHandlerExecuteRunWithFakeDocker(t *testing.T) {
@@ -58,6 +76,66 @@ func TestContainerHandlerExecuteBuildWithFakeDocker(t *testing.T) {
 	assert.Equal(t, "app:local", res.Metadata["image"])
 	assert.Equal(t, "sha256:built", res.Metadata["image_id"])
 	assert.Equal(t, []string{"app:local"}, res.Metadata["repo_tags"])
+}
+
+func TestContainerHandlerExecuteBuildPassesBuildxDriverAndCacheToDocker(t *testing.T) {
+	installStepFakeDocker(t)
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	vars := NewVariables()
+	vars.Set("builder", NewStepResult("atmos-test-builder"))
+	vars.Set("cache", NewStepResult("registry.example.com/app:buildcache"))
+	h := &ContainerHandler{}
+
+	_, err := h.executeBuild(context.Background(), &schema.WorkflowStep{
+		Name: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: string(container.TypeDocker),
+			Engine:   "buildx",
+			Context:  ".",
+			Tags:     []string{"app:local"},
+			Driver: &schema.ContainerDriverConfig{
+				Name:     "{{ .steps.builder.value }}",
+				Provider: "docker-container",
+				Opts:     map[string]string{"image": "mirror.gcr.io/moby/buildkit:buildx-stable-1"},
+			},
+			Cache: &schema.ContainerCacheConfig{
+				From: []map[string]string{{"type": "registry", "ref": "{{ .steps.cache.value }}"}},
+				To:   []map[string]string{{"type": "registry", "ref": "{{ .steps.cache.value }}", "mode": "max"}},
+			},
+		},
+	}, vars)
+	require.NoError(t, err)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	assert.Contains(t, args, "buildx\tcreate\t--name\tatmos-test-builder\t--driver\tdocker-container\t--driver-opt\timage=mirror.gcr.io/moby/buildkit:buildx-stable-1")
+	assert.Contains(t, args, "buildx\tbuild\t--builder\tatmos-test-builder\t--cache-from\tref=registry.example.com/app:buildcache,type=registry\t--cache-to\tmode=max,ref=registry.example.com/app:buildcache,type=registry\t-t\tapp:local\t-f\tDockerfile\t.")
+}
+
+func TestContainerHandlerExecutePushPassesResolvedTagsAndRuntimeEnvToDocker(t *testing.T) {
+	installFullFakeDocker(t)
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	vars := NewVariables()
+	vars.Env["ATMOS_FAKE_AUTH"] = "present"
+	vars.Set("image", NewStepResult("app:local"))
+	h := &ContainerHandler{}
+
+	_, err := h.executePush(context.Background(), &schema.WorkflowStep{
+		Name: "push",
+		Push: &schema.ContainerPushStep{
+			Provider: string(container.TypeDocker),
+			Image:    "{{ .steps.image.value }}",
+			Tags:     []string{"registry.example.com/{{ .steps.image.value }}"},
+		},
+	}, vars)
+	require.NoError(t, err)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	assert.Contains(t, args, "tag\tapp:local\tregistry.example.com/app:local")
+	assert.Contains(t, args, "push\tregistry.example.com/app:local")
 }
 
 func TestContainerHandlerExecuteBuildWritesCISummaryWhenEnabled(t *testing.T) {

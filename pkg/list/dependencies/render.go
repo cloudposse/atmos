@@ -3,6 +3,7 @@ package dependencies
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -16,6 +17,9 @@ const (
 	// Metadata subsection keys read by the --tags/--labels top-node filters.
 	tagsMetadataKey   = "tags"
 	labelsMetadataKey = "labels"
+
+	// FormatLevels renders each node's shortest graph distance from a selected root.
+	FormatLevels = "levels"
 )
 
 // Direction selects which dependency edges to display.
@@ -32,7 +36,7 @@ const (
 
 // Options configures dependency rendering.
 type Options struct {
-	// Format is the output format: tree (default), json, or yaml.
+	// Format is the output format: tree (default), json, yaml, or levels.
 	Format string
 	// Direction selects forward, reverse, or both edge directions.
 	Direction Direction
@@ -73,8 +77,73 @@ func Render(graph *dependency.Graph, opts Options) (string, error) {
 		return renderTree(graph, tops, opts.Direction), nil
 	case string(format.FormatJSON), string(format.FormatYAML):
 		return renderStructured(graph, tops, opts)
+	case FormatLevels:
+		return renderLevels(graph, tops, opts.Direction), nil
 	default:
-		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml)", errUtils.ErrInvalidFormat, opts.Format)
+		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml, %s)", errUtils.ErrInvalidFormat, opts.Format, FormatLevels)
+	}
+}
+
+// renderLevels lists selected components and their shortest graph distance from
+// a selected root in the requested direction.
+func renderLevels(graph *dependency.Graph, tops []*dependency.Node, direction Direction) string {
+	levels := make(map[string]int, len(tops))
+	queue := make([]string, 0, len(tops))
+	for _, node := range tops {
+		if _, seen := levels[node.ID]; seen {
+			continue
+		}
+		levels[node.ID] = 0
+		queue = append(queue, node.ID)
+	}
+
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		node, exists := graph.GetNode(id)
+		if !exists {
+			continue
+		}
+		for _, nextID := range levelNeighbors(node, direction) {
+			if _, seen := levels[nextID]; seen {
+				continue
+			}
+			levels[nextID] = levels[id] + 1
+			queue = append(queue, nextID)
+		}
+	}
+
+	nodes := make([]*dependency.Node, 0, len(levels))
+	for id := range levels {
+		if node, exists := graph.GetNode(id); exists {
+			nodes = append(nodes, node)
+		}
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		if levels[nodes[i].ID] != levels[nodes[j].ID] {
+			return levels[nodes[i].ID] < levels[nodes[j].ID]
+		}
+		if nodes[i].Stack != nodes[j].Stack {
+			return nodes[i].Stack < nodes[j].Stack
+		}
+		return nodes[i].Component < nodes[j].Component
+	})
+
+	rows := make([][]string, 0, len(nodes))
+	for _, node := range nodes {
+		rows = append(rows, []string{strconv.Itoa(levels[node.ID]), node.Stack, node.Component, node.Type})
+	}
+	return format.CreateStyledTable([]string{"Level", "Stack", "Component", "Type"}, rows)
+}
+
+func levelNeighbors(node *dependency.Node, direction Direction) []string {
+	switch direction {
+	case DirectionForward:
+		return node.Dependencies
+	case DirectionReverse:
+		return node.Dependents
+	default:
+		return append(append([]string{}, node.Dependencies...), node.Dependents...)
 	}
 }
 
@@ -125,18 +194,38 @@ func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFil
 
 	metadata, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
 	rawTags := metadata[tagsMetadataKey]
-	rawLabels := metadata[labelsMetadataKey]
-	if tags.SelectorUnresolved(rawTags, leftDelim) || tags.SelectorUnresolved(rawLabels, leftDelim) {
-		resolvedTags, okTags := tags.ResolveSelectorValue(rawTags, node.Metadata, leftDelim, rightDelim)
-		resolvedLabels, okLabels := tags.ResolveSelectorValue(rawLabels, node.Metadata, leftDelim, rightDelim)
-		if !okTags || !okLabels {
+	if len(tagsFilter) > 0 && tags.SelectorUnresolved(rawTags, leftDelim) {
+		resolvedTags, ok := tags.ResolveSelectorValue(rawTags, node.Metadata, leftDelim, rightDelim)
+		if !ok {
 			return true
 		}
-		rawTags, rawLabels = resolvedTags, resolvedLabels
+		rawTags = resolvedTags
+	}
+
+	rawLabels := any(requestedSelectorLabels(metadata[labelsMetadataKey], labelsFilter))
+	if len(labelsFilter) > 0 && tags.SelectorUnresolved(rawLabels, leftDelim) {
+		resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, node.Metadata, leftDelim, rightDelim)
+		if !ok {
+			return true
+		}
+		rawLabels = resolvedLabels
 	}
 
 	return tags.MatchesTags(tags.ToStringSlice(rawTags), tagsFilter, tags.TagModeAny) &&
 		tags.MatchesLabels(tags.ToStringMap(rawLabels), labelsFilter)
+}
+
+// requestedSelectorLabels keeps only labels used by the current selector so
+// unrelated templates cannot make closure root selection undecidable.
+func requestedSelectorLabels(raw any, filter map[string]string) map[string]any {
+	labels, _ := raw.(map[string]any)
+	requested := make(map[string]any, len(filter))
+	for key := range filter {
+		if value, ok := labels[key]; ok {
+			requested[key] = value
+		}
+	}
+	return requested
 }
 
 // sortNodes orders nodes by stack then component for stable, readable output.
