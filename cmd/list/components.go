@@ -255,7 +255,7 @@ func executeAndExtractComponents(
 ) (componentsExtractResult, error) {
 	defer perf.Track(nil, "list.components.executeAndExtractComponents")()
 
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip)
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, componentsOutputCanSurfaceValues(atmosConfig, opts))
 
 	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
@@ -282,6 +282,16 @@ func executeAndExtractComponents(
 	}
 
 	return componentsExtractResult{atmosConfig: atmosConfig, components: components, collector: collector}, nil
+}
+
+// componentsOutputCanSurfaceValues reports whether `atmos list components` was asked for
+// output that could render a credential-backed value. The built-in default columns
+// (`{{ .component }}`, `{{ .type }}`, `{{ .stack_count }}`) are derived by Atmos itself and
+// are provably value-free; any `--columns` flag or `list.components.columns` block in
+// atmos.yaml can reference arbitrary component configuration.
+func componentsOutputCanSurfaceValues(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOptions) bool {
+	customColumns := len(opts.Columns) > 0 || len(atmosConfig.List.Components.Columns) > 0
+	return listOutputCanSurfaceValues(customColumns)
 }
 
 // renderComponents builds the render pipeline and renders components.

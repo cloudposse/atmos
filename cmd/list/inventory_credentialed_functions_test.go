@@ -106,11 +106,13 @@ func writeCrossAccountFixture(t *testing.T) string {
 	return root
 }
 
+// mustMkdirAll creates path and all missing parents, failing the test on error.
 func mustMkdirAll(t *testing.T, path string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(path, 0o755))
 }
 
+// mustWriteFile writes content to path, failing the test on error.
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
@@ -154,13 +156,13 @@ func TestCrossAccountFixture_FailsWhenCredentialBackedFunctionsAreEvaluated(t *t
 
 	_, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig, "", nil, nil, nil,
-		false, // ignoreMissingFiles
-		true,  // processTemplates
-		true,  // processYamlFunctions
-		false, // includeEmptyStacks
-		nil,   // skip — nothing skipped, so !terraform.state is evaluated
+		false, // ignoreMissingFiles.
+		true,  // processTemplates.
+		true,  // processYamlFunctions.
+		false, // includeEmptyStacks.
+		nil,   // skip — nothing skipped, so !terraform.state is evaluated.
 		newAuthenticatedManager(t),
-		false, // authDisabled
+		false, // authDisabled.
 	)
 
 	require.Error(t, err, "the fixture must fail when !terraform.state is evaluated, otherwise the regression tests prove nothing")
@@ -226,34 +228,153 @@ func TestInitAndExtractComponents_SkipsCredentialBackedFunctionsWithIdentity(t *
 	assert.Contains(t, names, "customer")
 }
 
-// TestSkipCredentialBackedYAMLFunctionsForInventory pins the skip set itself: every
-// credential-backed function must be present, the caller's own `--skip` entries must be
-// preserved, and the tokens must be bare (no leading `!`) to match `skipFunc`, which
-// trims the tag prefix before comparing.
-func TestSkipCredentialBackedYAMLFunctionsForInventory(t *testing.T) {
-	t.Run("adds every credential-backed function", func(t *testing.T) {
-		skip := skipCredentialBackedYAMLFunctionsForInventory(nil)
+// TestExecuteAndExtractStacks_ResolvesWhenColumnsAreCustomized is the negative path for the
+// demand-driven skip, and the guard for the review constraint that list output is
+// customizable and must not have resolution disabled outright: once the user asks for a
+// custom column, the credential-backed functions are evaluated again and the fixture's
+// unreachable `!terraform.state` fails the command rather than being silently skipped.
+//
+// Without this, the skip could regress into an unconditional disable and every assertion
+// above would still pass.
+func TestExecuteAndExtractStacks_ResolvesWhenColumnsAreCustomized(t *testing.T) {
+	atmosConfig := loadCrossAccountConfig(t)
 
-		require.NotEmpty(t, skip)
-		for _, name := range credentialBackedYAMLFunctions() {
-			assert.Contains(t, skip, name)
+	opts := &StacksOptions{
+		Format:           "json",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		// A custom column can reference `.vars`, so values must still be resolved.
+		Columns: []string{"Bucket={{ .vars.data_bucket_name }}"},
+	}
+
+	_, _, err := executeAndExtractStacks(
+		atmosConfig, opts, newAuthenticatedManager(t), e.DescribeStacksErrorOptions{},
+	)
+
+	require.Error(t, err,
+		"custom columns must keep credential-backed functions resolvable, not silently skipped")
+}
+
+// TestStacksOutputCanSurfaceValues pins how `list stacks` classifies its own output.
+func TestStacksOutputCanSurfaceValues(t *testing.T) {
+	defaultConfig := &schema.AtmosConfiguration{}
+
+	assert.False(t, stacksOutputCanSurfaceValues(defaultConfig, &StacksOptions{}),
+		"default columns render `.stack` only")
+	assert.True(t, stacksOutputCanSurfaceValues(defaultConfig, &StacksOptions{Columns: []string{"B={{ .vars.b }}"}}),
+		"--columns can reference .vars")
+
+	configured := &schema.AtmosConfiguration{}
+	configured.Stacks.List.Columns = []schema.ListColumnConfig{{Name: "B", Value: "{{ .vars.b }}"}}
+	assert.True(t, stacksOutputCanSurfaceValues(configured, &StacksOptions{}),
+		"stacks.list.columns in atmos.yaml can reference .vars")
+}
+
+// TestComponentsOutputCanSurfaceValues pins how `list components` classifies its own output.
+func TestComponentsOutputCanSurfaceValues(t *testing.T) {
+	defaultConfig := &schema.AtmosConfiguration{}
+
+	assert.False(t, componentsOutputCanSurfaceValues(defaultConfig, &ComponentsOptions{}),
+		"default columns render component/type/stack_count only")
+	assert.True(t, componentsOutputCanSurfaceValues(defaultConfig, &ComponentsOptions{Columns: []string{"B={{ .vars.b }}"}}),
+		"--columns can reference .vars")
+
+	configured := &schema.AtmosConfiguration{}
+	configured.List.Components.Columns = []schema.ListColumnConfig{{Name: "B", Value: "{{ .vars.b }}"}}
+	assert.True(t, componentsOutputCanSurfaceValues(configured, &ComponentsOptions{}),
+		"list.components.columns in atmos.yaml can reference .vars")
+}
+
+// TestInstancesOutputCanSurfaceValues pins how `list instances` classifies its own output:
+// beyond columns it has --query, --filter and the --upload payload.
+func TestInstancesOutputCanSurfaceValues(t *testing.T) {
+	assert.False(t, instancesOutputCanSurfaceValues(&InstancesOptions{}))
+	assert.True(t, instancesOutputCanSurfaceValues(&InstancesOptions{Columns: []string{"B={{ .vars.b }}"}}))
+	assert.True(t, instancesOutputCanSurfaceValues(&InstancesOptions{Query: ".vars.b"}))
+	assert.True(t, instancesOutputCanSurfaceValues(&InstancesOptions{Filter: ".vars.b == \"x\""}))
+	assert.True(t, instancesOutputCanSurfaceValues(&InstancesOptions{Upload: true}),
+		"--upload ships the full instance payload to Atmos Pro")
+}
+
+// TestSkipCredentialBackedYAMLFunctionsForInventory pins the skip set itself.
+//
+// The expected tokens are written out literally rather than derived from
+// credentialBackedYAMLFunctions(): deriving them would only prove the merge preserves
+// whatever the helper happens to return today, so dropping `secret`, `store.get` or an
+// `aws.*` function from the helper would still pass. The tokens are bare (no leading `!`)
+// because skipFunc trims the tag prefix before comparing.
+func TestSkipCredentialBackedYAMLFunctionsForInventory(t *testing.T) {
+	expected := []string{
+		"terraform.state",
+		"terraform.output",
+		"store",
+		"store.get",
+		"secret",
+		"aws.account_id",
+		"aws.caller_identity_arn",
+		"aws.caller_identity_user_id",
+		"aws.region",
+		"aws.organization_id",
+	}
+
+	t.Run("helper returns exactly the credential-backed set", func(t *testing.T) {
+		assert.ElementsMatch(t, expected, credentialBackedYAMLFunctions(),
+			"a function added to or removed from the helper must be reflected here deliberately")
+	})
+
+	t.Run("adds every credential-backed function when output cannot surface values", func(t *testing.T) {
+		skip := skipCredentialBackedYAMLFunctionsForInventory(nil, false)
+
+		assert.ElementsMatch(t, expected, skip)
+		for _, name := range skip {
 			assert.NotContains(t, name, "!", "skip tokens must be bare so skipFunc can match them")
 		}
 	})
 
-	t.Run("preserves caller-supplied skip entries without duplicating", func(t *testing.T) {
-		caller := []string{"exec", strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!")}
+	t.Run("returns the caller's skip untouched when output can surface values", func(t *testing.T) {
+		caller := []string{"exec"}
 
-		skip := skipCredentialBackedYAMLFunctionsForInventory(caller)
+		skip := skipCredentialBackedYAMLFunctionsForInventory(caller, true)
+
+		assert.Equal(t, caller, skip,
+			"custom columns/query must keep credential-backed functions resolvable")
+		for _, name := range expected {
+			if name == "exec" {
+				continue
+			}
+			assert.NotContains(t, skip, name)
+		}
+	})
+
+	t.Run("preserves caller-supplied skip entries without duplicating", func(t *testing.T) {
+		caller := []string{"exec", "terraform.state"}
+
+		skip := skipCredentialBackedYAMLFunctionsForInventory(caller, false)
 
 		assert.Contains(t, skip, "exec")
-		assert.Equal(t, 1, countOccurrences(skip, strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!")),
+		assert.Equal(t, 1, countOccurrences(skip, "terraform.state"),
 			"an entry already supplied by the caller must not be added twice")
-		assert.Equal(t, []string{"exec", strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!")}, caller,
+		assert.Equal(t, []string{"exec", "terraform.state"}, caller,
 			"the caller's slice must not be mutated")
+		assert.Subset(t, skip, expected)
 	})
 }
 
+// TestListOutputCanSurfaceValues covers the predicate that decides whether resolution is
+// skipped: default output is provably value-free, any customization is not.
+func TestListOutputCanSurfaceValues(t *testing.T) {
+	assert.False(t, listOutputCanSurfaceValues(false),
+		"default columns with no extra consumers render identity fields only")
+	assert.True(t, listOutputCanSurfaceValues(true),
+		"custom columns can reference .vars and must resolve")
+	assert.False(t, listOutputCanSurfaceValues(false, false, false),
+		"explicitly false extra consumers must not enable resolution")
+	assert.True(t, listOutputCanSurfaceValues(false, false, true),
+		"any true extra consumer (query/filter/upload) must enable resolution")
+}
+
+// countOccurrences returns how many times target appears in values, used to prove the skip
+// merge does not duplicate an entry the caller already supplied.
 func countOccurrences(values []string, target string) int {
 	count := 0
 	for _, value := range values {

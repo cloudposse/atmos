@@ -8,18 +8,23 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// resolvesTerraformStateFunctions reports whether this pass will actually evaluate
-// `!terraform.state` / `!terraform.output`, i.e. whether the caller opted into credentialed
-// backend reads. The inventory `list` commands always skip both (see
-// skipCredentialBackedYAMLFunctionsForInventory in cmd/list/utils.go), so this is what
-// distinguishes a `describe stacks` run from a `list` run sharing the same processor.
+// resolvesTerraformStateFunctions reports whether this pass will still evaluate at least one
+// of `!terraform.state` / `!terraform.output`, i.e. whether it can still perform a credentialed
+// backend read. It is false only when **both** are skipped, which is what a credential-free
+// inventory `list` run looks like (see skipCredentialBackedYAMLFunctionsForInventory in
+// cmd/list/utils.go).
+//
+// Skipping just one of the pair — e.g. `atmos describe stacks --skip terraform.state` — leaves
+// the other resolving against a remote backend, so the hints below still apply and this must
+// return true. Treating a partial skip as credential-free would drop the guidance from exactly
+// the case where a user is already mid-way through applying it.
 func (p *describeStacksProcessor) resolvesTerraformStateFunctions() bool {
 	for _, functionName := range []string{u.AtmosYamlFuncTerraformState, u.AtmosYamlFuncTerraformOutput} {
-		if slices.Contains(p.skip, strings.TrimPrefix(functionName, "!")) {
-			return false
+		if !slices.Contains(p.skip, strings.TrimPrefix(functionName, "!")) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // explainRepositoryWideYAMLFunctionFailure enriches a YAML-function failure with the flags that

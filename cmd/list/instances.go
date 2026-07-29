@@ -203,6 +203,20 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		OutputFile:       opts.OutputFile,
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
-		Skip:             skipCredentialBackedYAMLFunctionsForInventory(opts.Skip),
+		Skip:             skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, instancesOutputCanSurfaceValues(opts)),
 	})
+}
+
+// instancesOutputCanSurfaceValues reports whether `atmos list instances` was asked for
+// output that could render a credential-backed value. Beyond custom columns, instances
+// accepts `--query` and `--filter` (arbitrary expressions over the instance data) and
+// `--upload`, which ships the full instance payload to Atmos Pro rather than a rendered
+// table — all of which must resolve values.
+func instancesOutputCanSurfaceValues(opts *InstancesOptions) bool {
+	return listOutputCanSurfaceValues(
+		len(opts.Columns) > 0,
+		opts.Query != "",
+		opts.Filter != "",
+		opts.Upload,
+	)
 }

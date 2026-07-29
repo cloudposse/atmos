@@ -1,8 +1,8 @@
 # `atmos list` / `atmos describe stacks` Try (and Fail) to Read Remote Terraform State
 
 **Date:** 2026-07-28 **Severity:** High — in a multi-account repository, `atmos list
-stacks --identity <one-stage>` aborts with an S3 `AccessDenied` reading *another*
-stage's state bucket, making inventory commands unusable
+stacks` aborts with an S3 `AccessDenied` reading another stage's state bucket, making
+inventory commands unusable
 **Issue:** https://github.com/cloudposse/atmos/issues/2566 (reported as a 1.217
 regression against 1.216) **Reproducer:**
 `cmd/list/inventory_credentialed_functions_test.go`
@@ -12,8 +12,8 @@ ______________________________________________________________________
 ## Why this is a fix doc (and not a blog post / changelog entry)
 
 This is a `patch` bug fix. There is no new command, flag, or feature — inventory
-listing simply stops performing remote-state reads it never needed, and an existing
-`describe stacks` failure gains actionable hints. Per the repo's label decision tree
+listing stops eagerly performing remote-state reads whose values its output will not
+render, and an existing `describe stacks` failure gains actionable hints. Per the repo's label decision tree
 that makes it a `patch`, which does not require a `website/blog/` post or a roadmap
 milestone.
 
@@ -91,31 +91,46 @@ discovery fail when one unrelated … provider is offline"* — applies just as 
 credentials are present. Authenticating one account does not make the other accounts'
 state readable; it only ensures the reads are attempted.
 
-The value was never used regardless: `extract.Stacks` / `extract.UniqueComponents`
-project the describe result down to stack and component **names**, so the resolved
-`!terraform.state` result is computed, and then discarded.
+For the **default** output the value was never used regardless: `extract.Stacks` /
+`extract.UniqueComponents` project the describe result down to stack and component
+**names**, so the resolved `!terraform.state` result is computed, and then discarded.
+Custom columns are the exception, and are what the fix below keys on.
 
 ## Fix
 
-### 1. Inventory listing never evaluates credential-backed YAML functions
+### 1. Inventory listing resolves credential-backed functions on demand
 
-`skipCredentialBackedYAMLFunctionsForInventory` no longer takes an `authManager` and
-always merges the credentialed function list (`!terraform.state`, `!terraform.output`,
-`!store`, `!store.get`, `!secret`, `!aws.*`) into the caller's `--skip`. The names are
-extracted into `credentialBackedYAMLFunctions()` and derived from the `u.AtmosYamlFunc*`
-constants, so a rename is a compile error rather than a silent gap.
+The first revision of this fix skipped the credentialed functions unconditionally for all
+four inventory commands. Review (osterman, #2820) rejected that:
 
-All four call sites (`list stacks`, `list components`, `list dependencies`,
-`list instances`) are updated. A skipped function leaves its raw string in place, which
-the name-projecting extractors ignore, so the inventory itself is unchanged.
+> Because list output is customizable and can include these values we cannot disable it
+> entirely. Instead we should continue investing to ensure values are not eagerly resolved.
 
-This also removes a surprise: inventory output no longer depends on whether `--identity`
-happened to be supplied.
+That is correct — a custom column (`--columns 'Bucket={{ .vars.data_bucket_name }}'`), a
+`list.*.columns` block in `atmos.yaml`, `list instances --query/--filter`, or the
+`--upload` payload can all legitimately render a value that came from `!terraform.state`.
 
-Scope note: this covers YAML functions only. Go templates calling `atmos.Component(...)`
-can still perform authenticated cross-account reads during a list — #2801 deliberately
-restored auth for that path, and `--process-templates=false` remains the opt-out. Closing
-that gap needs per-stack identity resolution and is out of scope here.
+So resolution is now **demand-driven** rather than disabled.
+`skipCredentialBackedYAMLFunctionsForInventory` takes an `outputCanSurfaceValues` flag and
+returns the caller's `--skip` untouched when it is true. Each command answers that question
+from what it was actually asked to render, via `listOutputCanSurfaceValues`:
+
+| Command | Skips when |
+| --- | --- |
+| `list stacks` | no `--columns` and no `stacks.list.columns` |
+| `list components` | no `--columns` and no `list.components.columns` |
+| `list dependencies` | always — it renders a fixed graph of component/stack names |
+| `list instances` | no `--columns`, `--query`, `--filter`, or `--upload` |
+
+The test is deliberately conservative: *any* customization counts as "could surface
+values", because Atmos cannot know whether `{{ .vars.x }}` came from a YAML function
+without resolving it first. Only the built-in default columns — which render identity
+fields Atmos derives itself (`.stack`, `.component`, `.type`, `.stack_count`) — are
+provably value-free. Ask for a value and you still get it; ask only for the inventory and
+Atmos no longer pays, or fails, for values nothing will render.
+
+That fixes the reported command (plain `atmos list stacks`, default columns) while leaving
+customized output working exactly as before.
 
 `initAndExtractComponents` gained a small split — `executeAndExtractComponents` — so the
 describe/extract half can be driven with an injected AuthManager, mirroring
@@ -141,9 +156,12 @@ this processor:
 
 - `filterByStack` must be empty. A caller who already scoped the run asked for that stack
   specifically, so the underlying error is the whole answer.
-- The terraform state/output functions must not already be in `skip`. That is exactly
-  what distinguishes a `describe stacks` run from a `list` run after fix (1), so a
-  `list stacks` failure never suggests `atmos describe stacks --stack …`.
+- **Both** `terraform.state` and `terraform.output` must not already be in `skip`. Both
+  being skipped is what a credential-free `list` run looks like after fix (1), so a
+  `list stacks` failure never suggests `atmos describe stacks --stack …`. A *partial* skip
+  (`--skip terraform.state` alone) still resolves the other function against a remote
+  backend, so the guidance must survive it — dropping it there would remove the advice from
+  exactly the case where a user is part-way through applying it.
 
 Enrichment is transparent to `errors.Is`, which matters because callers branch on
 sentinels propagated from the inner describe (e.g. `ErrCircularDependency` from a
@@ -160,16 +178,25 @@ sentinels propagated from the inner describe (e.g. `ErrCircularDependency` from 
     so the regression assertions cannot become vacuous.
   - `TestExecuteAndExtractStacks_SkipsCredentialBackedFunctionsWithIdentity` and
     `TestInitAndExtractComponents_SkipsCredentialBackedFunctionsWithIdentity` drive the
-    real code paths with a mock AuthManager (the `--identity` case) and assert both
+    real code paths with a mock AuthManager (the authenticated case) and assert both
     stacks/components come back. Both **fail** on the pre-fix code with the reported
     error and pass after.
+  - `TestExecuteAndExtractStacks_ResolvesWhenColumnsAreCustomized` is the negative path
+    that keeps the fix honest: with `--columns '{{ .vars.… }}'` the same fixture must
+    still fail, proving resolution was made demand-driven rather than disabled. Without
+    it, a regression back to an unconditional skip would leave every other assertion
+    passing.
+  - `TestStacksOutputCanSurfaceValues`, `TestComponentsOutputCanSurfaceValues`,
+    `TestInstancesOutputCanSurfaceValues` and `TestListOutputCanSurfaceValues` pin each
+    command's classification of its own output (flag, atmos.yaml block, query/filter/upload).
   - `TestSkipCredentialBackedYAMLFunctionsForInventory` pins the skip set, asserts the
     tokens are bare (the `!` is trimmed, matching `skipFunc`), and checks the caller's
     slice is neither mutated nor duplicated into.
 - `internal/exec/describe_stacks_yaml_function_hints_test.go` covers the hint helper in
   both directions: hints present on an unfiltered scan, absent on a `--stack`-scoped run,
-  absent when the state functions are already skipped (the `list` caller), nil passed
-  through, and wrapped sentinels still matched by `errors.Is`.
+  nil passed through, and wrapped sentinels still matched by `errors.Is`. A table-driven
+  `SkipCombinations` case covers every state/output skip permutation, pinning that only a
+  full skip of both suppresses the guidance.
 - `go test ./cmd/list/... ./internal/exec/... ./pkg/list/...` — the only failures are
   three pre-existing ones unrelated to this change (`TestCopyFile_FailCreate`,
   `TestProcessChdirFlag`, `TestWriteEnvToFile_ErrorCases`), which fail identically on a

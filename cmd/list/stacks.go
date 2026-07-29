@@ -250,7 +250,7 @@ func executeAndExtractStacks(
 	errOpts e.DescribeStacksErrorOptions,
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip)
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, stacksOutputCanSurfaceValues(atmosConfig, opts))
 
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		atmosConfig, "", nil, nil, nil,
@@ -349,6 +349,15 @@ func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []strin
 	}
 }
 
+// stacksOutputCanSurfaceValues reports whether `atmos list stacks` was asked for output
+// that could render a credential-backed value. Only the built-in default columns
+// (`{{ .stack }}`, plus `{{ .component }}` when filtering) are provably value-free; any
+// `--columns` flag or `stacks.list.columns` block in atmos.yaml can reference `.vars`.
+func stacksOutputCanSurfaceValues(atmosConfig *schema.AtmosConfiguration, opts *StacksOptions) bool {
+	customColumns := len(opts.Columns) > 0 || len(atmosConfig.Stacks.List.Columns) > 0
+	return listOutputCanSurfaceValues(customColumns)
+}
+
 // renderStacksTreeFormat handles the tree format output for stacks.
 // It enables provenance tracking, re-processes stacks, and renders the import hierarchy.
 func renderStacksTreeFormat(
@@ -371,7 +380,7 @@ func renderStacksTreeFormat(
 	// Re-process stacks with provenance tracking enabled. Honor the
 	// caller-supplied template/function flags so tree output is consistent with
 	// non-tree runs of the same command invocation.
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip)
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, stacksOutputCanSurfaceValues(atmosConfig, opts))
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles

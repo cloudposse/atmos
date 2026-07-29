@@ -55,23 +55,46 @@ func TestExplainRepositoryWideYAMLFunctionFailure_NoHintsWhenScoped(t *testing.T
 	assert.Empty(t, cockroachErrors.GetAllHints(err), "no hints should be attached to a scoped run")
 }
 
-// TestExplainRepositoryWideYAMLFunctionFailure_NoHintsWhenStateReadsAlreadySkipped is the second
-// negative path: the inventory `list` commands share this processor but always skip the terraform
-// state/output functions, so they must never receive `atmos describe stacks …` advice.
-func TestExplainRepositoryWideYAMLFunctionFailure_NoHintsWhenStateReadsAlreadySkipped(t *testing.T) {
-	p := &describeStacksProcessor{
-		filterByStack: "",
-		skip: []string{
-			strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!"),
-			strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!"),
-		},
+// TestExplainRepositoryWideYAMLFunctionFailure_SkipCombinations covers how the skip list
+// gates the hints. Only skipping BOTH terraform functions makes a pass credential-free —
+// that is what an inventory `list` run looks like, and the only case that should suppress
+// the `describe stacks` guidance. A partial skip still resolves the other function against
+// a remote backend, so the guidance must survive; suppressing it there would drop the
+// advice from exactly the case where a user is part-way through applying it.
+func TestExplainRepositoryWideYAMLFunctionFailure_SkipCombinations(t *testing.T) {
+	state := strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!")
+	output := strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!")
+
+	tests := []struct {
+		name      string
+		skip      []string
+		wantHints bool
+	}{
+		{name: "nothing skipped", skip: nil, wantHints: true},
+		{name: "only terraform.state skipped", skip: []string{state}, wantHints: true},
+		{name: "only terraform.output skipped", skip: []string{output}, wantHints: true},
+		{name: "unrelated function skipped", skip: []string{"exec"}, wantHints: true},
+		{name: "both skipped (inventory list run)", skip: []string{state, output}, wantHints: false},
+		{name: "both skipped among others", skip: []string{"exec", state, "store", output}, wantHints: false},
 	}
 
-	err := p.explainRepositoryWideYAMLFunctionFailure(errStateRead, "global", "dev-pen")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &describeStacksProcessor{filterByStack: "", skip: tt.skip}
 
-	require.Error(t, err)
-	assert.Equal(t, errStateRead, err, "a caller that already skips state reads must get the error unchanged")
-	assert.Empty(t, cockroachErrors.GetAllHints(err))
+			err := p.explainRepositoryWideYAMLFunctionFailure(errStateRead, "global", "dev-pen")
+
+			require.Error(t, err)
+			hints := cockroachErrors.GetAllHints(err)
+			if tt.wantHints {
+				assert.NotEmpty(t, hints, "a pass that still resolves a terraform function must keep the guidance")
+				assert.Contains(t, strings.Join(hints, "\n"), "--skip terraform.state")
+			} else {
+				assert.Empty(t, hints, "a credential-free pass must get the error unchanged")
+				assert.Equal(t, errStateRead, err)
+			}
+		})
+	}
 }
 
 // TestExplainRepositoryWideYAMLFunctionFailure_PassesThroughNil pins the success path: the
