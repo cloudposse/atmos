@@ -749,6 +749,16 @@ func TestPodmanRuntime_Pull_Integration(t *testing.T) {
 	require.NoError(t, err, "Pull should succeed for alpine:latest")
 }
 
+// isKnownPodmanRuntimeMismatch reports whether err is the specific crun/OCI
+// runtime version mismatch some environments hit (a working podman paired
+// with an incompatible crun) rather than some other Start failure.
+// PodmanRuntime.Start wraps every failure in ErrContainerRuntimeOperation, so
+// callers can't distinguish this known, environment-specific case from a real
+// regression without inspecting the message.
+func isKnownPodmanRuntimeMismatch(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "crun: unknown version specified")
+}
+
 // TestPodmanRuntime_ContainerLifecycle_Integration validates the container lifecycle
 // (Create, Start, Stop, Remove) for Podman runtime. Tests are intentionally duplicated
 // to verify both Docker and Podman implementations independently, ensuring consistency
@@ -790,12 +800,16 @@ func TestPodmanRuntime_ContainerLifecycle_Integration(t *testing.T) {
 	// Start container. A working Pull doesn't guarantee a working container
 	// runtime: environments with a broken/mismatched OCI runtime (e.g. a
 	// crun version incompatible with the installed podman) can pull images
-	// fine but fail here, matching TestPodmanRuntime_Exec_Integration's
-	// existing skip for the same step.
+	// fine but fail here. Only skip for that specific, known mismatch --
+	// Start wraps every failure in ErrContainerRuntimeOperation, so skipping
+	// unconditionally would also hide a real regression in Start itself.
 	err = runtime.Start(ctx, containerID)
 	if err != nil {
-		t.Skipf("Failed to start container: %v", err)
-		return
+		if isKnownPodmanRuntimeMismatch(err) {
+			t.Skipf("Failed to start container: %v", err)
+			return
+		}
+		require.NoError(t, err, "Start should succeed")
 	}
 
 	// Stop container.

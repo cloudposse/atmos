@@ -39,6 +39,5 @@ the same class of flakiness, just surfacing as `404` instead of `50x` this time.
 
 ## Follow-ups
 
-None. If either link goes genuinely stale in the future, `atmos lint link-check` will only surface it again
-if it starts failing for a *different* reason than the flakiness this exclude documents (the regex is scoped
-to the exact URL, not the whole repo).
+These URLs are excluded from automated checking, so future staleness will require periodic manual
+revalidation. Remove the exclusions once GitHub's gateway behavior stabilizes.
