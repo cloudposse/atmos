@@ -370,6 +370,9 @@ func tfmigrateComponentName(info *schema.ConfigAndStacksInfo) string {
 }
 
 func init() {
+	// Mark this subcommand as experimental.
+	migrateCmd.Annotations = map[string]string{"experimental": "true"}
+
 	migrateParser = flags.NewStandardParser(
 		shared.WithBackendExecutionFlags(),
 		flags.WithStringFlag("migration", "", "", "Path to a single tfmigrate migration file. Omit to let tfmigrate run history mode"),

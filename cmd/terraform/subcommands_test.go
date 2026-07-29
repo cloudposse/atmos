@@ -98,6 +98,7 @@ func TestMigrateCommandTreeRegistered(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, migrateCmd)
 	assert.Equal(t, "migrate", migrateCmd.Use)
+	assert.Equal(t, "true", migrateCmd.Annotations["experimental"], "migrate must be marked experimental")
 
 	for _, args := range [][]string{
 		{"migrate", "plan"},
