@@ -4,6 +4,7 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -399,19 +400,83 @@ func requireExecutablePath(t *testing.T, name string, purpose string) string {
 		time.Sleep(executablePathRetryInterval)
 	}
 	if err != nil {
+		forensics := executableLookupForensics(name)
 		if !ShouldCheckPreconditions() {
 			// ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true (set for every CI
 			// acceptance job) means the caller wants a hard failure instead of
 			// a skip when a tool that CI is expected to provision is missing --
 			// never silently hand back an empty path, which turns into a far
 			// more confusing "open : file not found" error downstream.
-			t.Fatalf("'%s' not found in PATH: required for %s. Precondition checks are disabled (ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true), so this is a hard failure rather than a skip: %v",
-				name, purpose, err)
+			t.Fatalf("'%s' not found in PATH: required for %s. Precondition checks are disabled (ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true), so this is a hard failure rather than a skip: %v\n%s",
+				name, purpose, err, forensics)
 		}
-		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
-			name, purpose)
+		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true\n%s",
+			name, purpose, forensics)
 	}
 	return path
+}
+
+// executableLookupForensics reports the on-disk state of every toolchain-like
+// PATH entry at the moment a binary lookup failed. The Windows acceptance job
+// has a recurring "installed tool vanished mid-suite" failure whose root cause
+// is still being pinned down (writer-side install/uninstall windows in the
+// shared toolchain cache are the leading theory); this dump turns the next CI
+// failure into direct evidence of WHICH mechanism fired: directory deleted
+// (uninstall/reinstall), tree renamed aside (onedir .bak present), writer
+// mid-flight (.lock sibling present), or PATH itself corrupted (no toolchain
+// entries at all).
+func executableLookupForensics(name string) string {
+	var b strings.Builder
+	entries := filepath.SplitList(os.Getenv("PATH"))
+	fmt.Fprintf(&b, "-- lookup forensics for %q (%d PATH entries) --\n", name, len(entries))
+
+	candidates := []string{name}
+	if withExt := cachedTestToolBinaryNameForOS(name, runtime.GOOS); withExt != name {
+		candidates = append(candidates, withExt)
+	}
+
+	toolchainEntries := 0
+	for _, dir := range entries {
+		if !strings.Contains(strings.ToLower(dir), "toolchain") {
+			continue
+		}
+		toolchainEntries++
+		describeToolchainPathEntry(&b, dir, candidates)
+	}
+	if toolchainEntries == 0 {
+		b.WriteString("NO toolchain-like PATH entries found -- PATH itself lost the toolchain dirs\n")
+	}
+	return b.String()
+}
+
+// describeToolchainPathEntry appends one PATH entry's on-disk state (target
+// presence, directory contents, writer-lock sibling) to the forensics report.
+func describeToolchainPathEntry(b *strings.Builder, dir string, candidates []string) {
+	present := false
+	for _, cand := range candidates {
+		// #nosec G703 -- dir comes from this process's own PATH and cand from a fixed test-tool list; read-only stat for diagnostics.
+		if st, statErr := os.Stat(filepath.Join(dir, cand)); statErr == nil && !st.IsDir() {
+			present = true
+			break
+		}
+	}
+	fmt.Fprintf(b, "%s -> target present=%v", dir, present)
+	if dirEntries, readErr := os.ReadDir(dir); readErr == nil {
+		names := make([]string, 0, len(dirEntries))
+		for _, e := range dirEntries {
+			names = append(names, e.Name())
+		}
+		fmt.Fprintf(b, "; contents(%d): %s", len(names), strings.Join(names, ", "))
+	} else {
+		fmt.Fprintf(b, "; dir unreadable: %v", readErr)
+	}
+	// The installer's writer lock is a ".lock" sibling of the version dir
+	// (see pkg/toolchain/installer); its presence means a writer was active.
+	// #nosec G703 -- dir comes from this process's own PATH; read-only stat for diagnostics.
+	if _, lockErr := os.Stat(dir + ".lock"); lockErr == nil {
+		b.WriteString("; WRITER LOCK PRESENT")
+	}
+	b.WriteString("\n")
 }
 
 func prependCachedTestTool(binary string) {
