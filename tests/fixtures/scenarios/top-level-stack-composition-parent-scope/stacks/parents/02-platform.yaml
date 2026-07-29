@@ -1,0 +1,12 @@
+vars:
+  environment: dev
+  stage: scoped
+  owner: platform
+
+components:
+  terraform:
+    chatops:
+      metadata:
+        component: mock
+      vars:
+        name: chatops

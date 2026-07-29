@@ -1,0 +1,17 @@
+import:
+  - catalog/shared
+
+components:
+  terraform:
+    chatops:
+      metadata:
+        component: mock
+        inherits:
+          - shared
+      vars:
+        name: chatops
+    platform:
+      metadata:
+        component: mock
+      vars:
+        name: platform
