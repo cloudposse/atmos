@@ -324,6 +324,22 @@ func TestRunTerraformMigrateList_CollectRowsErrorPropagates(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCollectTfmigrateListRows_SetupComponentAuthErrorPropagates(t *testing.T) {
+	// A nonexistent --identity must fail component auth setup inside
+	// collectTfmigrateListRows before ExecuteDescribeStacksWithAuthDisabled
+	// ever runs (distinct from the InitCliConfig and DescribeStacks failures
+	// exercised elsewhere in this file).
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	rows, err := collectTfmigrateListRows(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Identity:               "nonexistent-identity",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, rows)
+}
+
 func TestCollectTfmigrateListRows_DescribeStacksErrorPropagates(t *testing.T) {
 	// A stack manifest that fails to parse makes ExecuteDescribeStacksWithAuthDisabled
 	// itself fail (distinct from the InitCliConfig failure exercised above), which
@@ -352,6 +368,53 @@ stacks:
 	})
 
 	require.Error(t, err)
+}
+
+func TestCollectTfmigrateListRows_SkipsQueryMismatchedComponent(t *testing.T) {
+	// collectTfmigrateListRows must apply info.Query the same way the query
+	// execution path does: a component that fails the query predicate must be
+	// walked (via walkTfmigrateComponents) but excluded from the returned rows,
+	// not included with a mismatched hook/backend row.
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "service"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "other"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(`
+vars:
+  stage: dev
+components:
+  terraform:
+    service:
+      vars:
+        enabled: true
+    other:
+      vars:
+        enabled: false
+`), 0o644))
+
+	rows, err := collectTfmigrateListRows(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+		Query:                  ".vars.enabled == true",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the query must filter out the disabled component")
+	assert.Equal(t, "service", rows[0][tfmigrateListKeyComponent])
+	assert.Equal(t, "dev", rows[0][tfmigrateListKeyStack])
 }
 
 func TestApplyMigrateListComponentArgSurvivesRunOptions(t *testing.T) {
@@ -479,6 +542,33 @@ func TestRunTerraformMigratePlanDryRunFixture(t *testing.T) {
 	}, tfmigrate.ActionPlan)
 
 	require.NoError(t, err)
+}
+
+func TestRunTerraformMigrate_SelectWorkspaceErrorPropagates(t *testing.T) {
+	// With dry-run disabled (and skip-init true, so initTfmigrateComponent
+	// stays a no-op and never spawns a real terraform/tofu init),
+	// executeTfmigrateSingle's own selectTfmigrateWorkspace error branch is
+	// exercised: the fixture stack resolves a non-empty TerraformWorkspace, so
+	// selectTfmigrateWorkspace actually invokes `tofu workspace select` via
+	// ExecuteShellCommand rather than short-circuiting. An empty PATH makes
+	// that invocation fail deterministically, confirming the error propagates
+	// out of executeTfmigrateSingle instead of being swallowed.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("dry-run", false)
+	viper.GetViper().Set("skip-init", true)
+	t.Setenv("PATH", t.TempDir())
+	configPath := filepath.Join("testdata", "dryrun")
+
+	err := runTerraformMigrate(cmd, []string{
+		"service",
+		"--stack", "deploy/test",
+		"--config-path", configPath,
+		"--identity=false",
+	}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProcessStartFailed)
 }
 
 func TestNewMigrateActionCmd_RunEInvokesRunTerraformMigrate(t *testing.T) {
@@ -724,6 +814,36 @@ func TestExecuteTfmigrateQueryReturnsComponentError(t *testing.T) {
 	err := executeTfmigrateQuery(&info, tfmigrate.Options{Action: tfmigrate.ActionPlan})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Could not find the component")
+}
+
+func TestPrepareTfmigrateExecution_InitCliConfigErrorPropagates(t *testing.T) {
+	// prepareTfmigrateExecution (used by the single-component execution path,
+	// distinct from executeTfmigrateQuery's own InitCliConfig call site below)
+	// must propagate a syntactically invalid atmos.yaml as an error rather than
+	// panicking or returning a zero-value execution context.
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	execCtx, err := prepareTfmigrateExecution(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, execCtx)
+}
+
+func TestPrepareTfmigrateExecution_SetupComponentAuthErrorPropagates(t *testing.T) {
+	// A nonexistent --identity must fail component auth setup inside
+	// prepareTfmigrateExecution before ProcessStacks/TerraformPreHook ever run.
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	execCtx, err := prepareTfmigrateExecution(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Identity:               "nonexistent-identity",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, execCtx)
 }
 
 func TestExecuteTfmigrateQuery_InitCliConfigErrorPropagates(t *testing.T) {
