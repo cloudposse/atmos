@@ -389,6 +389,22 @@ func ResolveSelectorValue(v any, data map[string]any, leftDelim, rightDelim stri
 	return resolveSelectorValue(v, data, leftDelim, rightDelim)
 }
 
+// RequestedLabels keeps only the label values named by the current selector so
+// unrelated (possibly templated) labels cannot affect the scope decision or
+// force full component evaluation.
+func RequestedLabels(raw any, filter map[string]string) map[string]any {
+	defer perf.Track(nil, "tags.RequestedLabels")()
+
+	labels, _ := raw.(map[string]any)
+	requested := make(map[string]any, len(filter))
+	for key := range filter {
+		if value, ok := labels[key]; ok {
+			requested[key] = value
+		}
+	}
+	return requested
+}
+
 // resolveSelectorValue walks nested slices/maps without re-entering perf tracking.
 func resolveSelectorValue(v any, data map[string]any, leftDelim, rightDelim string) (any, bool) {
 	switch value := v.(type) {

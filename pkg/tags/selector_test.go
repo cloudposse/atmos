@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -185,6 +187,125 @@ func TestForbiddenSelectorFunctionsMatchConstants(t *testing.T) {
 		if _, ok := forbiddenSelectorFunctions[name]; !ok {
 			t.Fatalf("deny-list is missing %q", name)
 		}
+	}
+}
+
+// TestForbiddenSelectorFunctionsCompleteness guards the selector purity
+// contract against drift: every YAML function registered in utils.AtmosYamlTags
+// must be explicitly classified as either forbidden in selectors (requires
+// authentication, process execution, or nondeterminism) or selector-safe.
+// Adding a new YAML function without classifying it here fails this test,
+// forcing a deliberate purity decision instead of a silent default-allow.
+func TestForbiddenSelectorFunctionsCompleteness(t *testing.T) {
+	t.Parallel()
+
+	// Functions allowed to appear in metadata.tags/metadata.labels values:
+	// resolvable without authentication, subprocesses, or nondeterminism.
+	// They still resolve only during full evaluation (SelectorUnresolved
+	// reports them as undecidable, deferring the scope decision), but their
+	// presence is not a purity violation.
+	selectorSafe := map[string]struct{}{
+		u.AtmosYamlFuncTemplate:      {},
+		u.AtmosYamlFuncEnv:           {},
+		u.AtmosYamlFuncCEL:           {},
+		u.AtmosYamlFuncGitRoot:       {},
+		u.AtmosYamlFuncGitRootAlias:  {},
+		u.AtmosYamlFuncGitSha:        {},
+		u.AtmosYamlFuncGitBranch:     {},
+		u.AtmosYamlFuncGitRef:        {},
+		u.AtmosYamlFuncGitRepository: {},
+		u.AtmosYamlFuncGitOwner:      {},
+		u.AtmosYamlFuncGitName:       {},
+		u.AtmosYamlFuncGitHost:       {},
+		u.AtmosYamlFuncGitUrl:        {},
+		u.AtmosYamlFuncAppend:        {},
+		u.AtmosYamlFuncCwd:           {},
+		u.AtmosYamlFuncUnset:         {},
+		u.AtmosYamlFuncLiteral:       {},
+		u.AtmosYamlFuncVersion:       {},
+		u.AtmosYamlFuncTags:          {},
+		u.AtmosYamlFuncLabels:        {},
+		u.AtmosYamlFuncLabelsKeys:    {},
+		u.AtmosYamlFuncLabelsValues:  {},
+	}
+
+	require.NotEmpty(t, u.AtmosYamlTags, "utils.AtmosYamlTags must list the registered YAML functions")
+	for _, name := range u.AtmosYamlTags {
+		_, forbidden := forbiddenSelectorFunctions[name]
+		_, safe := selectorSafe[name]
+		switch {
+		case forbidden && safe:
+			t.Errorf("%q is classified as both forbidden and selector-safe", name)
+		case !forbidden && !safe:
+			t.Errorf("%q is unclassified: add it to forbiddenSelectorFunctions if it requires auth/exec/nondeterminism, or to this test's selector-safe list otherwise", name)
+		}
+	}
+
+	// Every deny-list entry must correspond to a registered YAML function;
+	// a stale entry means the function was renamed or removed upstream.
+	registered := make(map[string]struct{}, len(u.AtmosYamlTags))
+	for _, name := range u.AtmosYamlTags {
+		registered[name] = struct{}{}
+	}
+	for name := range forbiddenSelectorFunctions {
+		if _, ok := registered[name]; !ok {
+			t.Errorf("deny-list entry %q is not registered in utils.AtmosYamlTags", name)
+		}
+	}
+}
+
+// TestRequestedLabels covers narrowing raw label metadata to only the keys the
+// current selector asks about, so unrelated (possibly templated) labels cannot
+// affect scope decisions.
+func TestRequestedLabels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		raw    any
+		filter map[string]string
+		want   map[string]any
+	}{
+		{
+			name:   "keeps_only_requested_keys",
+			raw:    map[string]any{"env": "prod", "team": "{{ .vars.team }}"},
+			filter: map[string]string{"env": "prod"},
+			want:   map[string]any{"env": "prod"},
+		},
+		{
+			name:   "missing_requested_key_is_omitted",
+			raw:    map[string]any{"env": "prod"},
+			filter: map[string]string{"tier": "gold"},
+			want:   map[string]any{},
+		},
+		{
+			name:   "nil_raw_yields_empty",
+			raw:    nil,
+			filter: map[string]string{"env": "prod"},
+			want:   map[string]any{},
+		},
+		{
+			name:   "non_map_raw_yields_empty",
+			raw:    []any{"env"},
+			filter: map[string]string{"env": "prod"},
+			want:   map[string]any{},
+		},
+		{
+			name:   "empty_filter_yields_empty",
+			raw:    map[string]any{"env": "prod"},
+			filter: map[string]string{},
+			want:   map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := RequestedLabels(tt.raw, tt.filter)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("RequestedLabels(%v, %v) = %v, want %v", tt.raw, tt.filter, got, tt.want)
+			}
+		})
 	}
 }
 

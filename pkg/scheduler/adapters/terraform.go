@@ -332,13 +332,10 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 // terraformSeedNodeIDs computes the seed node set for FilterTerraformGraph.
 // Tags/labels compose with whichever primary selection produced the seed
 // (--all/--components/--query or a precomputed --affected selection), rather
-// than being an alternative selection mechanism. When closure expansion is
-// requested, the query filter is also applied here for precomputed selections
-// so the per-node dispatch skip can be suppressed (closure-added prerequisites
-// must not be silently dropped by a query they were never selected by).
+// than being an alternative selection mechanism.
 func terraformSeedNodeIDs(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) ([]string, error) {
 	if selection != nil {
-		return terraformSelectionSeedNodeIDs(atmosConfig, graph, info, selection), nil
+		return terraformSelectionSeedNodeIDs(graph, info, selection), nil
 	}
 
 	nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
@@ -355,10 +352,10 @@ func terraformSeedNodeIDs(atmosConfig *schema.AtmosConfiguration, graph *depende
 }
 
 // terraformSelectionSeedNodeIDs narrows a precomputed selection to the nodes
-// present in the graph that pass the tags/labels (and, with closure, query)
-// seed filters.
-func terraformSelectionSeedNodeIDs(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) []string {
-	applyQuery := terraformClosureRequested(info, selection) && info != nil && info.Query != ""
+// present in the graph that pass the tags/labels seed filters. The query filter
+// never applies here: the only producer of TerraformSelection is the --affected
+// path, and checkTerraformFlags rejects --affected combined with --query.
+func terraformSelectionSeedNodeIDs(graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) []string {
 	var seedIDs []string
 	for _, id := range sortedUniqueStrings(selection.NodeIDs) {
 		node, ok := graph.GetNode(id)
@@ -368,23 +365,9 @@ func terraformSelectionSeedNodeIDs(atmosConfig *schema.AtmosConfiguration, graph
 		if !matchesTerraformTagsAndLabels(node, info) {
 			continue
 		}
-		if applyQuery && !terraformSeedQueryPasses(atmosConfig, node, info.Query) {
-			continue
-		}
 		seedIDs = append(seedIDs, id)
 	}
 	return seedIDs
-}
-
-// terraformSeedQueryPasses evaluates the query filter for one seed candidate;
-// evaluation errors exclude the node (matching matchesTerraformSelection).
-func terraformSeedQueryPasses(atmosConfig *schema.AtmosConfiguration, node *dependency.Node, query string) bool {
-	passed, err := evaluateTerraformQuery(atmosConfig, node.Metadata, query)
-	if err != nil {
-		log.Debug("Error evaluating query", "error", err, "component", node.Component, "stack", node.Stack)
-		return false
-	}
-	return passed
 }
 
 // terraformClosure describes the requested closure expansion around the seed.

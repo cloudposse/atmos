@@ -3,6 +3,7 @@ package dependencies
 import (
 	"maps"
 	"path"
+	"path/filepath"
 	"sort"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -109,12 +110,14 @@ func (s *Selector) matches(node *dependency.Node) bool {
 // stackMatches reports whether a stack name satisfies the stack filter: an
 // empty filter matches everything, an exact name matches itself, and a glob
 // pattern is matched via path.Match (a malformed pattern simply falls back to
-// the exact comparison above).
+// the exact comparison above). Both sides are slash-normalized so the seed
+// glob behaves the same as the non-closure instances path on Windows (see
+// matchStackPattern in pkg/list/list_instances.go).
 func stackMatches(pattern, stack string) bool {
 	if pattern == "" || pattern == stack {
 		return true
 	}
-	matched, err := path.Match(pattern, stack)
+	matched, err := path.Match(filepath.ToSlash(pattern), filepath.ToSlash(stack))
 	return err == nil && matched
 }
 

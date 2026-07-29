@@ -823,7 +823,7 @@ func inScopeByTagsAndLabelsWithContext(metadata, data map[string]any, filterTags
 	}
 
 	if len(filterLabels) > 0 {
-		rawLabels := any(requestedSelectorLabels(metadata[metadataLabelsKey], filterLabels))
+		rawLabels := any(tags.RequestedLabels(metadata[metadataLabelsKey], filterLabels))
 		if tags.SelectorUnresolved(rawLabels, leftDelim) {
 			resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, data, leftDelim, rightDelim)
 			if !ok {
@@ -835,19 +835,6 @@ func inScopeByTagsAndLabelsWithContext(metadata, data map[string]any, filterTags
 	}
 
 	return inScopeByTagsAndLabels(selectors, filterTags, filterLabels, leftDelim)
-}
-
-// requestedSelectorLabels keeps only labels used by the current selector so
-// unrelated templates cannot force full component evaluation.
-func requestedSelectorLabels(raw any, filter map[string]string) map[string]any {
-	labels, _ := raw.(map[string]any)
-	requested := make(map[string]any, len(filter))
-	for key := range filter {
-		if value, ok := labels[key]; ok {
-			requested[key] = value
-		}
-	}
-	return requested
 }
 
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that

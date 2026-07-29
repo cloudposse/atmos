@@ -87,6 +87,18 @@ func Render(graph *dependency.Graph, opts Options) (string, error) {
 // renderLevels lists selected components and their shortest graph distance from
 // a selected root in the requested direction.
 func renderLevels(graph *dependency.Graph, tops []*dependency.Node, direction Direction) string {
+	levels := levelDistances(graph, tops, direction)
+	nodes := sortedLevelNodes(graph, levels)
+	rows := make([][]string, 0, len(nodes))
+	for _, node := range nodes {
+		rows = append(rows, []string{strconv.Itoa(levels[node.ID]), node.Stack, node.Component, node.Type})
+	}
+	return format.CreateStyledTable([]string{"Level", "Stack", "Component", "Type"}, rows)
+}
+
+// levelDistances BFS-computes each reachable node's shortest distance from any
+// of the selected roots (which sit at level 0) in the requested direction.
+func levelDistances(graph *dependency.Graph, tops []*dependency.Node, direction Direction) map[string]int {
 	levels := make(map[string]int, len(tops))
 	queue := make([]string, 0, len(tops))
 	for _, node := range tops {
@@ -112,7 +124,12 @@ func renderLevels(graph *dependency.Graph, tops []*dependency.Node, direction Di
 			queue = append(queue, nextID)
 		}
 	}
+	return levels
+}
 
+// sortedLevelNodes resolves the levelled node IDs and orders them by level,
+// then stack, then component for stable, readable output.
+func sortedLevelNodes(graph *dependency.Graph, levels map[string]int) []*dependency.Node {
 	nodes := make([]*dependency.Node, 0, len(levels))
 	for id := range levels {
 		if node, exists := graph.GetNode(id); exists {
@@ -128,12 +145,7 @@ func renderLevels(graph *dependency.Graph, tops []*dependency.Node, direction Di
 		}
 		return nodes[i].Component < nodes[j].Component
 	})
-
-	rows := make([][]string, 0, len(nodes))
-	for _, node := range nodes {
-		rows = append(rows, []string{strconv.Itoa(levels[node.ID]), node.Stack, node.Component, node.Type})
-	}
-	return format.CreateStyledTable([]string{"Level", "Stack", "Component", "Type"}, rows)
+	return nodes
 }
 
 func levelNeighbors(node *dependency.Node, direction Direction) []string {
@@ -202,7 +214,7 @@ func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFil
 		rawTags = resolvedTags
 	}
 
-	rawLabels := any(requestedSelectorLabels(metadata[labelsMetadataKey], labelsFilter))
+	rawLabels := any(tags.RequestedLabels(metadata[labelsMetadataKey], labelsFilter))
 	if len(labelsFilter) > 0 && tags.SelectorUnresolved(rawLabels, leftDelim) {
 		resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, node.Metadata, leftDelim, rightDelim)
 		if !ok {
@@ -213,19 +225,6 @@ func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFil
 
 	return tags.MatchesTags(tags.ToStringSlice(rawTags), tagsFilter, tags.TagModeAny) &&
 		tags.MatchesLabels(tags.ToStringMap(rawLabels), labelsFilter)
-}
-
-// requestedSelectorLabels keeps only labels used by the current selector so
-// unrelated templates cannot make closure root selection undecidable.
-func requestedSelectorLabels(raw any, filter map[string]string) map[string]any {
-	labels, _ := raw.(map[string]any)
-	requested := make(map[string]any, len(filter))
-	for key := range filter {
-		if value, ok := labels[key]; ok {
-			requested[key] = value
-		}
-	}
-	return requested
 }
 
 // sortNodes orders nodes by stack then component for stable, readable output.

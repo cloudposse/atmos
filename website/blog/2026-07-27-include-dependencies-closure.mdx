@@ -58,7 +58,7 @@ atmos list stacks --labels=env=dev --include-dependencies
 Two things to know:
 
 - Using `--include-dependencies` with `destroy` also destroys *shared* prerequisites of your selection — components other stacks may still rely on. Atmos warns when you combine them.
-- Because `metadata.tags` and `metadata.labels` now drive scoping decisions *before* evaluation, they are selectors by design: plain strings, simple templates, and local functions like `!env`, `!git.*`, and `!include` are allowed, but values that require authentication or execution (`!terraform.state`, `!store`, `!exec`, `atmos.Component`, ...) are rejected with an error. Move those values into `vars` or `settings` instead.
+- Because `metadata.tags` and `metadata.labels` now drive scoping decisions *before* evaluation, they are selectors by design: plain strings, simple templates, and local functions like `!env`, `!git.*`, and `!include` are allowed, but values that require authentication or execution (`!terraform.state`, `!store`, `!exec`, `atmos.Component`, ...) are rejected with an error. This contract is enforced for every component whenever stacks are enumerated — by `describe`, `list`, and bulk terraform commands — even when no selector flag is used and the component is outside the current stack filter, so an existing impure value fails fast rather than surfacing later as a confusing scoping bug. Move those values into `vars` or `settings` instead.
 
 ## Get Involved
 

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -50,10 +51,29 @@ func closureTestStacksMap() map[string]any {
 	}
 }
 
-// TestBuildInstanceClosureFilter verifies the closure membership filter keeps
+// instanceClosureMembership derives closure membership from a described-stacks
+// map the same way processInstancesScopedClosure does inside
+// dependencies.ResolveScopedClosure (Phase A graph + Phase B seed/closure), so
+// the filter test exercises the exact membership semantics all closure
+// previews now share.
+func instanceClosureMembership(t *testing.T, opts *InstancesCommandOptions, labels map[string]string, stacksMap map[string]any) map[string]struct{} {
+	t.Helper()
+
+	graph, err := dependencies.BuildGraph(stacksMap)
+	require.NoError(t, err)
+	roots := dependencies.Roots(graph, &dependencies.Selector{
+		Stack:  opts.Stack,
+		Tags:   opts.Tags,
+		Labels: labels,
+	})
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	return dependencies.Membership(dependencies.ReachableClosure(graph, roots, direction, depths))
+}
+
+// TestClosureMembershipFilter verifies the closure membership filter keeps
 // prerequisites that do not match the seeding selectors, and drops everything
 // outside the closure.
-func TestBuildInstanceClosureFilter(t *testing.T) {
+func TestClosureMembershipFilter(t *testing.T) {
 	t.Parallel()
 
 	rows := []map[string]any{
@@ -106,10 +126,8 @@ func TestBuildInstanceClosureFilter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			closureFilter, err := buildInstanceClosureFilter(
-				&schema.AtmosConfiguration{}, tc.opts, nil, closureTestStacksMap(),
-			)
-			require.NoError(t, err)
+			members := instanceClosureMembership(t, tc.opts, nil, closureTestStacksMap())
+			closureFilter := newClosureMembershipFilter(members)
 
 			filtered, err := closureFilter.Apply(rows)
 			require.NoError(t, err)
@@ -123,6 +141,47 @@ func TestBuildInstanceClosureFilter(t *testing.T) {
 			assert.ElementsMatch(t, tc.wantComponents, components)
 		})
 	}
+}
+
+// TestClosureMembershipAgreesWithComponentNames verifies the instances preview
+// and the components preview derive membership from the same closure graph,
+// including the conservative treatment of templated selector values: a seed
+// whose tag is an unresolvable template still counts as a root everywhere.
+func TestClosureMembershipAgreesWithComponentNames(t *testing.T) {
+	t.Parallel()
+
+	stacksMap := closureTestStacksMap()
+	// Make the app seed's tag a template that cannot be resolved from the
+	// lightweight data: root selection must conservatively include it.
+	devComponents := stacksMap["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
+	devComponents["app"].(map[string]any)["metadata"].(map[string]any)["tags"] = []any{"{{ .vars.team }}"}
+
+	opts := &InstancesCommandOptions{
+		Tags:                []string{"app"},
+		IncludeDependencies: -1,
+	}
+	graph, err := dependencies.BuildGraph(stacksMap)
+	require.NoError(t, err)
+	roots := dependencies.Roots(graph, &dependencies.Selector{Tags: opts.Tags})
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	closure := dependencies.ReachableClosure(graph, roots, direction, depths)
+
+	// The templated seed and its full prerequisite chain are in the closure.
+	members := dependencies.Membership(closure)
+	for _, id := range []string{
+		dependencies.NodeID("app", "dev"),
+		dependencies.NodeID("db", "dev"),
+		dependencies.NodeID("vpc", "core"),
+	} {
+		_, ok := members[id]
+		assert.True(t, ok, "closure membership must include %s", id)
+	}
+	_, ok := members[dependencies.NodeID("poison", "unrelated")]
+	assert.False(t, ok, "components outside the closure must be excluded")
+
+	// The membership set the instances filter consumes names exactly the
+	// components the components preview lists from the same closure.
+	assert.ElementsMatch(t, []string{"app", "db", "vpc"}, dependencies.ComponentNames(closure))
 }
 
 // TestExecuteDescribeStacksForInstances_ScopedDispatch verifies that a

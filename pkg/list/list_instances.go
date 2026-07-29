@@ -893,11 +893,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// engine instead: only the closure's stacks and components are evaluated,
 	// and the membership filter below owns row selection.
 	var instances []schema.Instance
-	var stacksMap map[string]any
+	var closureMembers map[string]struct{}
 	if opts.closureRequested() {
-		instances, stacksMap, err = processInstancesScopedClosure(&atmosConfig, opts, labels)
+		instances, closureMembers, err = processInstancesScopedClosure(&atmosConfig, opts, labels)
 	} else {
-		instances, stacksMap, err = processInstances(
+		instances, _, err = processInstances(
 			&atmosConfig,
 			opts.AuthManager,
 			opts.ProcessTemplates,
@@ -942,11 +942,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return fmt.Errorf("failed to build filters: %w", err)
 	}
 	if opts.closureRequested() {
-		closureFilter, closureErr := buildInstanceClosureFilter(&atmosConfig, opts, labels, stacksMap)
-		if closureErr != nil {
-			return closureErr
-		}
-		filters = append(filters, closureFilter)
+		filters = append(filters, newClosureMembershipFilter(closureMembers))
 	}
 
 	// Append the --query projector after filters so it rewrites only the
@@ -1130,8 +1126,10 @@ func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw stri
 // through the shared three-phase scoped evaluation: a lightweight structural
 // pass seeds the closure (stack glob + tags/labels selectors), and only the
 // closure's own components are then fully evaluated — nothing outside the
-// closure runs templates, YAML functions, or auth.
-func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions, labels map[string]string) ([]schema.Instance, map[string]any, error) {
+// closure runs templates, YAML functions, or auth. The returned membership set
+// comes from the same closure graph `list components`/`list dependencies`
+// consume, so all closure previews agree on membership by construction.
+func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions, labels map[string]string) ([]schema.Instance, map[string]struct{}, error) {
 	defer perf.Track(nil, "list.processInstancesScopedClosure")()
 
 	processor := &e.DefaultStacksProcessor{}
@@ -1173,36 +1171,22 @@ func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts 
 	if err != nil {
 		return nil, nil, err
 	}
-	return sortInstances(instances), result.Stacks, nil
+	return sortInstances(instances), dependencies.Membership(result.Closure), nil
 }
 
-// buildInstanceClosureFilter builds the dependency-closure membership filter
-// for the --include-dependencies/--include-dependents preview: the seed
-// (stack glob + tags + labels) selects the roots on the described graph, the
-// closure expands them, and only rows inside the closure are kept. The graph
+// newClosureMembershipFilter builds the dependency-closure row filter for the
+// --include-dependencies/--include-dependents preview from the membership set
+// of the scoped closure (the same closure graph `list components` and
+// `list dependencies` consume, so every closure preview agrees). The closure
 // covers terraform components (the same set the bulk scheduler executes), so
 // the preview intentionally excludes other component types.
-func buildInstanceClosureFilter(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions, labels map[string]string, stacksMap map[string]any) (filter.Filter, error) {
-	graph, err := dependencies.BuildGraph(stacksMap)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
-	}
-	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
-	roots := dependencies.Roots(graph, &dependencies.Selector{
-		Stack:      opts.Stack,
-		Tags:       opts.Tags,
-		Labels:     labels,
-		LeftDelim:  leftDelim,
-		RightDelim: rightDelim,
-	})
-	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
-	members := dependencies.Membership(dependencies.ReachableClosure(graph, roots, direction, depths))
+func newClosureMembershipFilter(members map[string]struct{}) filter.Filter {
 	return filter.NewPredicateFilter("dependency-closure", func(row map[string]any) bool {
 		component, _ := row["component"].(string)
 		stack, _ := row["stack"].(string)
 		_, ok := members[dependencies.NodeID(component, stack)]
 		return ok
-	}), nil
+	})
 }
 
 // buildInstanceSorters creates sorters from sort specification.
