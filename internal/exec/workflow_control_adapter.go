@@ -18,6 +18,7 @@ type workflowControlContext struct {
 	commandLineStack    string
 	commandLineIdentity string
 	baseEnv             []string
+	persistentEnv       map[string]string
 	authManager         auth.AuthManager
 }
 
@@ -29,7 +30,7 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 		CommandLineStack:    control.commandLineStack,
 		CommandLineIdentity: control.commandLineIdentity,
 		PrepareEnv: func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error) {
-			return prepareStepEnvironment(baseEnv, identity, stepName, control.authManager, workflowEnv, stepEnv)
+			return prepareStepEnvironment(baseEnv, identity, stepName, control.authManager, workflowEnv, control.persistentEnv, stepEnv)
 		},
 		RunCommand: func(request *workflow.ControlCommandRequest) error {
 			return ExecuteShellCommand(
