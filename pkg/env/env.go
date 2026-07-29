@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -55,8 +56,35 @@ func EnvironToMap() map[string]string {
 	return SliceToMap(os.Environ())
 }
 
+// CanonicalEnvKey returns the map key to use for an environment variable name when
+// building a map[string]string from an env-var slice that may later be converted
+// back to a slice for subprocess execution. On Windows, environment variable names
+// are case-insensitive at the OS level (e.g. the OS supplies "Path" while Atmos code
+// writes "PATH"); returning a canonical uppercase form ensures case-variant spellings
+// of the same variable collapse into a single map entry instead of coexisting as two,
+// whose relative order — and therefore which one downstream subprocess creation treats
+// as authoritative — would otherwise depend on Go's randomized map iteration order.
+// On other platforms, environment variable names are case-sensitive, so the key is
+// returned unchanged.
+func CanonicalEnvKey(key string) string {
+	defer perf.Track(nil, "env.CanonicalEnvKey")()
+
+	return canonicalEnvKeyForGOOS(key, runtime.GOOS)
+}
+
+// canonicalEnvKeyForGOOS is CanonicalEnvKey parameterized by GOOS so the Windows
+// case-insensitive behavior can be unit-tested from any host platform.
+func canonicalEnvKeyForGOOS(key, goos string) string {
+	if goos == "windows" {
+		return strings.ToUpper(key)
+	}
+	return key
+}
+
 // SliceToMap converts environment variables from KEY=value slice form to a map.
 // Malformed entries without "=" are ignored. Later duplicate keys overwrite earlier ones.
+// Keys are canonicalized via CanonicalEnvKey so case-variant spellings of the same
+// variable (e.g. Windows' "Path" vs. Atmos's "PATH") collapse into one entry.
 func SliceToMap(env []string) map[string]string {
 	defer perf.Track(nil, "env.SliceToMap")()
 
@@ -69,7 +97,7 @@ func SliceToMap(env []string) map[string]string {
 		if !ok {
 			continue
 		}
-		envMap[key] = value
+		envMap[CanonicalEnvKey(key)] = value
 	}
 	return envMap
 }
@@ -244,7 +272,7 @@ func EnvironToMapFiltered(excludeKeys []string, excludePrefixes []string) map[st
 		}
 
 		if !excluded {
-			envMap[k] = v
+			envMap[CanonicalEnvKey(k)] = v
 		}
 	}
 	return envMap

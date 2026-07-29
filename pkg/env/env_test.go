@@ -3,6 +3,7 @@ package env
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -696,4 +697,55 @@ func TestChdirNonexistentDirectory(t *testing.T) {
 
 	// A failed chdir must not touch PWD.
 	assert.Equal(t, origPWD, os.Getenv("PWD"))
+}
+
+// TestCanonicalEnvKeyForGOOS covers the Windows-only case-insensitivity that
+// CanonicalEnvKey needs (env var names are case-insensitive at the Windows OS level,
+// e.g. the OS supplies "Path" while Atmos code writes "PATH"), parameterized by GOOS
+// so the Windows behavior is verifiable from any host platform.
+func TestCanonicalEnvKeyForGOOS(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		goos string
+		want string
+	}{
+		{name: "windows uppercases native casing", key: "Path", goos: "windows", want: "PATH"},
+		{name: "windows leaves already-uppercase unchanged", key: "PATH", goos: "windows", want: "PATH"},
+		{name: "windows collapses to the same key regardless of input casing", key: "path", goos: "windows", want: "PATH"},
+		{name: "linux preserves case", key: "Path", goos: "linux", want: "Path"},
+		{name: "darwin preserves case", key: "PATH", goos: "darwin", want: "PATH"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, canonicalEnvKeyForGOOS(tt.key, tt.goos))
+		})
+	}
+}
+
+// TestSliceToMapCollapsesWindowsPathCasing is a regression test for a bug where
+// SliceToMap built a map keyed by the exact env var string, so on Windows a native
+// "Path" entry and an Atmos-written "PATH" entry (e.g. after toolchain PATH
+// augmentation) would survive as two separate map keys. Converting that map back to
+// a slice (as auth's PrepareShellEnvironment and pkg/env's system-env mergers do)
+// then left the two duplicate PATH entries in Go's randomized map iteration order,
+// making which one downstream subprocess creation treated as authoritative
+// non-deterministic — the terraform/tofu binary was sometimes not found in %PATH%
+// even though the augmented entry logically should have won.
+func TestSliceToMapCollapsesWindowsPathCasing(t *testing.T) {
+	if canonicalEnvKeyForGOOS("Path", "windows") != canonicalEnvKeyForGOOS("PATH", "windows") {
+		t.Fatal("canonicalEnvKeyForGOOS must collapse case-variant keys on windows")
+	}
+
+	// SliceToMap itself only exercises the host's real GOOS, so on non-Windows this
+	// simply confirms case-sensitive keys stay distinct — the Windows collapse is
+	// covered directly by TestCanonicalEnvKeyForGOOS above.
+	got := SliceToMap([]string{"Path=C:\\Windows", "PATH=D:\\toolchain\\bin;C:\\Windows"})
+	if runtime.GOOS == "windows" {
+		require.Len(t, got, 1)
+		assert.Equal(t, "D:\\toolchain\\bin;C:\\Windows", got["PATH"])
+	} else {
+		require.Len(t, got, 2)
+	}
 }
