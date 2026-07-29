@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -610,4 +611,59 @@ func (i *passthroughIdentity) Authenticate(_ context.Context, baseCreds types.IC
 		return i.creds, nil
 	}
 	return baseCreds, nil
+}
+
+// TestLogout_AmbientChainWithNoKeyringEntry covers the steady state, which every other
+// logout test here misses by pre-populating the store first.
+//
+// Because ambient chains never write to the keyring, the normal case at logout time is
+// that there is nothing to delete. Forcing the delete must not turn that expected miss
+// into ErrPartialLogout — otherwise `atmos auth logout <gcp-adc-identity>` reports a
+// failure on a perfectly clean system. The realm-aware double is used deliberately:
+// testStore.Delete always returns nil and so cannot reproduce this.
+func TestLogout_AmbientChainWithNoKeyringEntry(t *testing.T) {
+	provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true}
+	store := newRealmStore() // Deliberately empty.
+	m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}}, store)
+
+	err := m.Logout(context.Background(), "deployer", false)
+
+	require.NoError(t, err, "a missing keyring entry is the expected state for an ambient chain, not a partial-logout failure")
+}
+
+// TestLogoutProvider_AmbientWithNoKeyringEntry is the provider-scoped counterpart.
+func TestLogoutProvider_AmbientWithNoKeyringEntry(t *testing.T) {
+	provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true}
+	store := newRealmStore()
+	m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}}, store)
+
+	require.NoError(t, m.LogoutProvider(context.Background(), "gcp-adc", false))
+}
+
+// TestLogoutAll_AmbientWithNoKeyringEntry is the --all counterpart.
+func TestLogoutAll_AmbientWithNoKeyringEntry(t *testing.T) {
+	store := newRealmStore()
+	m := &manager{
+		config:          &schema.AuthConfig{Identities: map[string]schema.Identity{}},
+		providers:       map[string]types.Provider{"gcp-adc": &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true}},
+		identities:      map[string]types.Identity{},
+		credentialStore: store,
+		realm:           realm.RealmInfo{Value: "test-realm"},
+	}
+
+	require.NoError(t, m.LogoutAll(context.Background(), false))
+}
+
+// TestLogout_ExplicitKeychainStillReportsDeletionFailure is the negative path: when the
+// user explicitly asks for --keychain, a failed delete must still surface, so the
+// ambient tolerance above cannot silently swallow real keyring errors.
+func TestLogout_ExplicitKeychainStillReportsDeletionFailure(t *testing.T) {
+	provider := &ambientTestProvider{testProvider: testProvider{name: "aws-sso", kind: "aws/iam-identity-center"}, ambient: false}
+	store := newRealmStore() // Empty, so the delete fails.
+	m := newAmbientChainManager("aws-sso", "role", provider, &passthroughIdentity{countingIdentity: countingIdentity{provider: "aws-sso"}}, store)
+
+	err := m.Logout(context.Background(), "role", true /*deleteKeychain*/)
+
+	require.Error(t, err, "an explicit --keychain delete that fails must still be reported")
+	assert.ErrorIs(t, err, errUtils.ErrPartialLogout)
 }

@@ -29,12 +29,19 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 	// so there is nothing to preserve and a leftover entry can only be stale data written by
 	// an older Atmos version. Delete it unconditionally rather than making users discover
 	// `--keychain`.
-	deleteKeychain = deleteKeychain || m.identityChainRootIsAmbient(identityName)
+	//
+	// The two reasons are tracked separately: because ambient chains never write to the
+	// keyring, the normal state at logout is that no entry exists. A forced delete that
+	// misses is therefore expected, and must not be reported as a partial logout the way
+	// an explicitly requested `--keychain` delete would be.
+	ambientForced := m.identityChainRootIsAmbient(identityName)
+	bestEffort := ambientForced && !deleteKeychain
+	deleteKeychain = deleteKeychain || ambientForced
 
-	log.Debug("Logout identity", logKeyIdentity, identityName, "deleteKeychain", deleteKeychain)
+	log.Debug("Logout identity", logKeyIdentity, identityName, "deleteKeychain", deleteKeychain, "bestEffort", bestEffort)
 
 	// Step 1: Delete keyring entry ONLY if deleteKeychain flag is set.
-	errs := m.deleteIdentityKeyringEntries(identityName, deleteKeychain)
+	errs := m.deleteIdentityKeyringEntries(identityName, deleteKeychain, bestEffort)
 
 	// Step 2: Clean up linked integrations (non-fatal).
 	m.cleanupIntegrations(ctx, identityName)
@@ -65,7 +72,11 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 // realm-scoped setups, the legacy pre-realm entry left by older Atmos versions.
 // Returns any deletion errors for the caller to accumulate; a missing legacy entry is the
 // expected case and is not an error.
-func (m *manager) deleteIdentityKeyringEntries(identityName string, deleteKeychain bool) []error {
+//
+// When bestEffort is set the realm-scoped miss is also expected — the caller forced the
+// deletion for an ambient chain that never writes to the keyring — so it is logged rather
+// than returned. An explicitly requested `--keychain` deletion still reports failures.
+func (m *manager) deleteIdentityKeyringEntries(identityName string, deleteKeychain, bestEffort bool) []error {
 	if !deleteKeychain {
 		log.Debug("Skipping keyring deletion (preserving credentials)", logKeyIdentity, identityName)
 		return nil
@@ -75,8 +86,12 @@ func (m *manager) deleteIdentityKeyringEntries(identityName string, deleteKeycha
 
 	// Delete realm-scoped entry (current format).
 	if err := m.credentialStore.Delete(identityName, m.realm.Value); err != nil {
-		log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, logKeyRealm, m.realm.Value, "error", err)
-		errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
+		if bestEffort {
+			log.Debug("No ambient keyring entry to delete", logKeyIdentity, identityName, logKeyRealm, m.realm.Value)
+		} else {
+			log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, logKeyRealm, m.realm.Value, "error", err)
+			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
+		}
 	} else {
 		log.Debug("Deleted keyring entry", logKeyIdentity, identityName, logKeyRealm, m.realm.Value)
 	}
@@ -214,6 +229,42 @@ func (m *manager) identityChainRootIsAmbient(identityName string) bool {
 	return m.providerIsAmbient(providerName)
 }
 
+// deleteProviderKeyringEntries removes a provider's realm-scoped keyring entry and the
+// legacy pre-realm one, shared by LogoutProvider and LogoutAll.
+//
+// bestEffort has the same meaning as in deleteIdentityKeyringEntries: the deletion was
+// forced for an ambient provider that never writes to the keyring, so a miss is the
+// expected steady state and is logged rather than returned as a failure.
+func (m *manager) deleteProviderKeyringEntries(providerName string, deleteKeychain, bestEffort bool) []error {
+	if !deleteKeychain {
+		log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)
+		return nil
+	}
+
+	var errs []error
+
+	// Delete realm-scoped entry (current format).
+	if err := m.credentialStore.Delete(providerName, m.realm.Value); err != nil {
+		if bestEffort {
+			log.Debug("No ambient provider keyring entry to delete", logKeyProvider, providerName, logKeyRealm, m.realm.Value)
+		} else {
+			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, logKeyRealm, m.realm.Value, "error", err)
+			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
+		}
+	}
+
+	// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
+	if m.realm.Value != "" {
+		if err := m.credentialStore.Delete(providerName, ""); err != nil {
+			log.Debug("No legacy provider keyring entry to delete", logKeyProvider, providerName)
+		} else {
+			log.Debug("Deleted legacy provider keyring entry (pre-realm)", logKeyProvider, providerName)
+		}
+	}
+
+	return errs
+}
+
 // LogoutProvider removes all credentials for the specified provider and all identities that use it.
 // If deleteKeychain is true, also removes credentials from system keychain.
 func (m *manager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error { //nolint:revive
@@ -225,10 +276,17 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string, delet
 		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
 	}
 
-	// Ambient providers hold nothing durable in the keyring — see Logout for the rationale.
-	deleteKeychain = deleteKeychain || m.providerIsAmbient(providerName)
+	// Ambient providers hold nothing durable in the keyring — see Logout for the rationale,
+	// including why a forced deletion that finds nothing is not a failure.
+	ambientForced := m.providerIsAmbient(providerName)
+	// Preserved because the per-identity Logout below must see what the *user* asked for.
+	// Passing the already-forced value would make Logout treat an ambient-forced delete as
+	// explicitly requested, and report an expected keyring miss as a partial logout.
+	userRequestedKeychain := deleteKeychain
+	bestEffort := ambientForced && !deleteKeychain
+	deleteKeychain = deleteKeychain || ambientForced
 
-	log.Debug("Logout provider", logKeyProvider, providerName, "deleteKeychain", deleteKeychain)
+	log.Debug("Logout provider", logKeyProvider, providerName, "deleteKeychain", deleteKeychain, "bestEffort", bestEffort)
 
 	// Find all identities that use this provider (directly or transitively).
 	var identityNames []string
@@ -244,32 +302,18 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string, delet
 
 	var errs []error
 
-	// Logout each identity (pass deleteKeychain flag).
+	// Logout each identity, passing the user's original request so each one re-derives its
+	// own ambient forcing (an identity's chain root is this provider, so it reaches the
+	// same conclusion — but with the correct best-effort semantics).
 	for _, identityName := range identityNames {
-		if err := m.Logout(ctx, identityName, deleteKeychain); err != nil {
+		if err := m.Logout(ctx, identityName, userRequestedKeychain); err != nil {
 			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
 			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrIdentityLogout, identityName, err))
 		}
 	}
 
 	// Delete provider credentials from keyring ONLY if deleteKeychain flag is set.
-	if deleteKeychain {
-		// Delete realm-scoped entry (current format).
-		if err := m.credentialStore.Delete(providerName, m.realm.Value); err != nil {
-			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "realm", m.realm.Value, "error", err)
-			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
-		}
-		// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
-		if m.realm.Value != "" {
-			if err := m.credentialStore.Delete(providerName, ""); err != nil {
-				log.Debug("No legacy provider keyring entry to delete", logKeyProvider, providerName)
-			} else {
-				log.Debug("Deleted legacy provider keyring entry (pre-realm)", logKeyProvider, providerName)
-			}
-		}
-	} else {
-		log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)
-	}
+	errs = append(errs, m.deleteProviderKeyringEntries(providerName, deleteKeychain, bestEffort)...)
 
 	// Call provider-specific cleanup (deletes all provider files).
 	if err := provider.Logout(ctx); err != nil {
@@ -320,25 +364,9 @@ func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	for providerName, provider := range m.providers {
 		// Delete provider credentials from keyring if the deleteKeychain flag is set, or
 		// unconditionally for ambient providers — see Logout for the rationale.
-		deleteProviderKeychain := deleteKeychain || types.ProviderIsAmbient(provider)
-
-		if deleteProviderKeychain {
-			// Delete realm-scoped entry (current format).
-			if err := m.credentialStore.Delete(providerName, m.realm.Value); err != nil {
-				log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "realm", m.realm.Value, "error", err)
-				errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
-			}
-			// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
-			if m.realm.Value != "" {
-				if err := m.credentialStore.Delete(providerName, ""); err != nil {
-					log.Debug("No legacy provider keyring entry to delete", logKeyProvider, providerName)
-				} else {
-					log.Debug("Deleted legacy provider keyring entry (pre-realm)", logKeyProvider, providerName)
-				}
-			}
-		} else {
-			log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)
-		}
+		ambientForced := types.ProviderIsAmbient(provider)
+		errs = append(errs, m.deleteProviderKeyringEntries(
+			providerName, deleteKeychain || ambientForced, ambientForced && !deleteKeychain)...)
 
 		// Call provider-specific cleanup (deletes all provider files).
 		if err := provider.Logout(ctx); err != nil {
