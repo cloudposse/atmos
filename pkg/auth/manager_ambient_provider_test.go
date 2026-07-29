@@ -34,35 +34,28 @@ var (
 	_ = schema.Identity{Kind: "gcp/service-account"}
 )
 
-// ambientTestProvider is a minimal provider whose ambient-ness and resolved credentials
-// are both controlled by the test, and which counts Authenticate calls so tests can
-// assert that the ambient environment was actually re-consulted.
+// ambientTestProvider is the shared testProvider double extended with the two things
+// these tests need: a controllable ambient answer, and an Authenticate that counts calls
+// and returns an arbitrary ICredentials so a test can watch the "ambient environment"
+// resolve to a different principal. Everything else — Kind, Name, Paths, SetRealm and the
+// rest of the Provider surface — is inherited rather than restated.
 type ambientTestProvider struct {
-	name      string
+	testProvider
 	ambient   bool
 	resolved  types.ICredentials
 	callCount atomic.Int32
 }
 
+// IsAmbient satisfies types.AmbientProvider with the test-controlled answer, so both
+// directions of the opt-in can be exercised against the same double.
 func (p *ambientTestProvider) IsAmbient() bool { return p.ambient }
 
-func (p *ambientTestProvider) Kind() string                              { return "gcp/adc" }
-func (p *ambientTestProvider) Name() string                              { return p.name }
-func (p *ambientTestProvider) PreAuthenticate(_ types.AuthManager) error { return nil }
+// Authenticate records the call and returns the currently configured credentials,
+// standing in for a live re-resolution of ambient environment state.
 func (p *ambientTestProvider) Authenticate(_ context.Context) (types.ICredentials, error) {
 	p.callCount.Add(1)
 	return p.resolved, nil
 }
-func (p *ambientTestProvider) Validate() error                         { return nil }
-func (p *ambientTestProvider) Environment() (map[string]string, error) { return nil, nil }
-func (p *ambientTestProvider) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
-
-func (p *ambientTestProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
-	return environ, nil
-}
-func (p *ambientTestProvider) Logout(_ context.Context) error { return nil }
-func (p *ambientTestProvider) GetFilesDisplayPath() string    { return "" }
-func (p *ambientTestProvider) SetRealm(_ string)              {}
 
 // Compile-time assertions that the doubles satisfy the interfaces under test.
 var (
@@ -114,8 +107,8 @@ func TestAmbientProvider_StaleKeyringEntryIsNotReplayed(t *testing.T) {
 		TokenExpiry:         time.Now().UTC().Add(1 * time.Hour),
 		ServiceAccountEmail: "account-b@example.com",
 	}
-	provider := &ambientTestProvider{name: "gcp-adc", ambient: true, resolved: freshCreds}
-	identity := &passthroughIdentity{provider: "gcp-adc"}
+	provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true, resolved: freshCreds}
+	identity := &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}}
 
 	m := newAmbientChainManager("gcp-adc", "deployer", provider, identity, store)
 
@@ -145,8 +138,8 @@ func TestAmbientProvider_CredentialsNotWrittenToKeyring(t *testing.T) {
 		AccessToken: "token",
 		TokenExpiry: time.Now().UTC().Add(1 * time.Hour),
 	}
-	provider := &ambientTestProvider{name: "gcp-adc", ambient: true, resolved: creds}
-	identity := &passthroughIdentity{provider: "gcp-adc"}
+	provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true, resolved: creds}
+	identity := &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}}
 
 	store := &testStore{data: map[string]any{}}
 	m := newAmbientChainManager("gcp-adc", "deployer", provider, identity, store)
@@ -164,11 +157,11 @@ func TestNonAmbientProvider_CredentialsStillCached(t *testing.T) {
 	t.Cleanup(resetProcessCredentialCache)
 
 	providerCreds := &testCreds{}
-	provider := &ambientTestProvider{name: "prov", ambient: false, resolved: providerCreds}
+	provider := &ambientTestProvider{testProvider: testProvider{name: "prov", kind: "gcp/adc"}, ambient: false, resolved: providerCreds}
 
 	identityExp := time.Now().UTC().Add(1 * time.Hour)
 	identityCreds := &testCreds{exp: &identityExp}
-	identity := &passthroughIdentity{provider: "prov", creds: identityCreds}
+	identity := &passthroughIdentity{countingIdentity: countingIdentity{provider: "prov"}, creds: identityCreds}
 
 	store := &testStore{data: map[string]any{}}
 	m := newAmbientChainManager("prov", "role", provider, identity, store)
@@ -202,8 +195,8 @@ func TestBuildWhoamiInfo_AmbientChainNotCached(t *testing.T) {
 			// path buildWhoamiInfo also prunes the legacy (pre-realm) entry, and the
 			// realm-blind testStore cannot tell that delete apart from the write.
 			store := &recordingStore{testStore: testStore{data: map[string]any{}}, stored: map[string]types.ICredentials{}}
-			provider := &ambientTestProvider{name: "gcp-adc", ambient: tc.ambient}
-			m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{provider: "gcp-adc"}, store)
+			provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: tc.ambient}
+			m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}}, store)
 
 			info := m.buildWhoamiInfo("deployer", creds)
 
@@ -229,7 +222,7 @@ func TestFindFirstValidCachedCredentials_AmbientChain(t *testing.T) {
 	newManager := func(ambient bool) *manager {
 		return &manager{
 			config:          &schema.AuthConfig{Identities: map[string]schema.Identity{}},
-			providers:       map[string]types.Provider{"prov": &ambientTestProvider{name: "prov", ambient: ambient}},
+			providers:       map[string]types.Provider{"prov": &ambientTestProvider{testProvider: testProvider{name: "prov", kind: "gcp/adc"}, ambient: ambient}},
 			identities:      map[string]types.Identity{},
 			credentialStore: &testStore{data: map[string]any{"mid": cached}},
 			// Three steps so the "mid" entry is not the target, which is skipped for
@@ -258,12 +251,12 @@ func TestLogout_AmbientChainDeletesKeyringWithoutFlag(t *testing.T) {
 		{name: "non-ambient chain preserves without --keychain", ambient: false, expectDeleted: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			provider := &ambientTestProvider{name: "gcp-adc", ambient: tc.ambient}
+			provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: tc.ambient}
 			store := &testStore{data: map[string]any{
 				"gcp-adc":  &testCreds{},
 				"deployer": &testCreds{},
 			}}
-			m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{provider: "gcp-adc"}, store)
+			m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}}, store)
 
 			// deleteKeychain=false: the flag the user did NOT pass.
 			require.NoError(t, m.Logout(context.Background(), "deployer", false))
@@ -290,12 +283,12 @@ func TestLogoutProvider_AmbientDeletesKeyringWithoutFlag(t *testing.T) {
 		{name: "non-ambient provider preserves without --keychain", ambient: false, expectDeleted: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			provider := &ambientTestProvider{name: "gcp-adc", ambient: tc.ambient}
+			provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: tc.ambient}
 			store := &testStore{data: map[string]any{
 				"gcp-adc":  &testCreds{},
 				"deployer": &testCreds{},
 			}}
-			m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{provider: "gcp-adc"}, store)
+			m := newAmbientChainManager("gcp-adc", "deployer", provider, &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}}, store)
 
 			require.NoError(t, m.LogoutProvider(context.Background(), "gcp-adc", false))
 
@@ -321,8 +314,8 @@ func TestLogoutAll_AmbientProviderPurgedWithoutFlag(t *testing.T) {
 	m := &manager{
 		config: &schema.AuthConfig{Identities: map[string]schema.Identity{}},
 		providers: map[string]types.Provider{
-			"gcp-adc": &ambientTestProvider{name: "gcp-adc", ambient: true},
-			"aws-sso": &ambientTestProvider{name: "aws-sso", ambient: false},
+			"gcp-adc": &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true},
+			"aws-sso": &ambientTestProvider{testProvider: testProvider{name: "aws-sso", kind: "gcp/adc"}, ambient: false},
 		},
 		identities:      map[string]types.Identity{},
 		credentialStore: store,
@@ -416,8 +409,8 @@ func TestIdentityChainRootIsAmbient_MultiHopChain(t *testing.T) {
 			"aws-role":  {Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}},
 		}},
 		providers: map[string]types.Provider{
-			"gcp-adc": &ambientTestProvider{name: "gcp-adc", ambient: true},
-			"aws-sso": &ambientTestProvider{name: "aws-sso", ambient: false},
+			"gcp-adc": &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true},
+			"aws-sso": &ambientTestProvider{testProvider: testProvider{name: "aws-sso", kind: "gcp/adc"}, ambient: false},
 		},
 	}
 
@@ -437,8 +430,8 @@ func TestIsAmbientProvider_SatisfiesReporter(t *testing.T) {
 	var m types.AmbientProviderReporter = &manager{
 		config: &schema.AuthConfig{Identities: map[string]schema.Identity{}},
 		providers: map[string]types.Provider{
-			"gcp-adc": &ambientTestProvider{name: "gcp-adc", ambient: true},
-			"aws-sso": &ambientTestProvider{name: "aws-sso", ambient: false},
+			"gcp-adc": &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true},
+			"aws-sso": &ambientTestProvider{testProvider: testProvider{name: "aws-sso", kind: "gcp/adc"}, ambient: false},
 		},
 	}
 
@@ -472,7 +465,7 @@ func TestAmbientChain_MidChainCredentialsPurged(t *testing.T) {
 	store.put("base-sa", "test-realm", &testCreds{exp: &exp})
 	store.put("target-sa", "test-realm", &testCreds{exp: &exp})
 
-	provider := &ambientTestProvider{name: "gcp-adc", ambient: true, resolved: &testCreds{exp: &exp}}
+	provider := &ambientTestProvider{testProvider: testProvider{name: "gcp-adc", kind: "gcp/adc"}, ambient: true, resolved: &testCreds{exp: &exp}}
 	m := &manager{
 		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
 			"base-sa":   {Kind: "gcp/service-account", Via: &schema.IdentityVia{Provider: "gcp-adc"}},
@@ -480,8 +473,8 @@ func TestAmbientChain_MidChainCredentialsPurged(t *testing.T) {
 		}},
 		providers: map[string]types.Provider{"gcp-adc": provider},
 		identities: map[string]types.Identity{
-			"base-sa":   &passthroughIdentity{provider: "gcp-adc"},
-			"target-sa": &passthroughIdentity{provider: "gcp-adc"},
+			"base-sa":   &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}},
+			"target-sa": &passthroughIdentity{countingIdentity: countingIdentity{provider: "gcp-adc"}},
 		},
 		credentialStore: store,
 		chain:           []string{"gcp-adc", "base-sa", "target-sa"},
@@ -517,26 +510,34 @@ type realmStore struct {
 	deleteCalls int
 }
 
+// newRealmStore returns an empty realm-aware store.
 func newRealmStore() *realmStore {
 	return &realmStore{data: map[string]types.ICredentials{}}
 }
 
+// realmKey composes the (alias, realm) pair into a single map key. The NUL separator
+// cannot appear in either component, so distinct pairs can never collide.
 func realmKey(alias, realm string) string { return realm + "\x00" + alias }
 
+// put seeds an entry directly, bypassing Store, so a test can stage pre-existing
+// keyring state without counting it as a write.
 func (s *realmStore) put(alias, realm string, creds types.ICredentials) {
 	s.data[realmKey(alias, realm)] = creds
 }
 
+// has reports whether an entry exists for the exact (alias, realm) pair.
 func (s *realmStore) has(alias, realm string) bool {
 	_, ok := s.data[realmKey(alias, realm)]
 	return ok
 }
 
+// Store writes the credentials under the realm-scoped key.
 func (s *realmStore) Store(alias string, creds types.ICredentials, realm string) error {
 	s.put(alias, realm, creds)
 	return nil
 }
 
+// Retrieve returns the entry for the exact (alias, realm) pair, or ErrCredentialsNotFound.
 func (s *realmStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	creds, ok := s.data[realmKey(alias, realm)]
 	if !ok {
@@ -545,6 +546,8 @@ func (s *realmStore) Retrieve(alias string, realm string) (types.ICredentials, e
 	return creds, nil
 }
 
+// Delete removes the realm-scoped entry and counts the call, so tests can assert how
+// many deletes the purge path issued — the realm and legacy keys are separate deletes.
 func (s *realmStore) Delete(alias string, realm string) error {
 	s.deleteCalls++
 	key := realmKey(alias, realm)
@@ -555,8 +558,10 @@ func (s *realmStore) Delete(alias string, realm string) error {
 	return nil
 }
 
+// List is unused by these tests and returns nothing.
 func (s *realmStore) List(_ string) ([]string, error) { return nil, nil }
 
+// IsExpired reports expiry for the realm-scoped entry.
 func (s *realmStore) IsExpired(alias string, realm string) (bool, error) {
 	creds, ok := s.data[realmKey(alias, realm)]
 	if !ok {
@@ -564,6 +569,8 @@ func (s *realmStore) IsExpired(alias string, realm string) (bool, error) {
 	}
 	return creds.IsExpired(), nil
 }
+
+// Type identifies this double in diagnostics.
 func (s *realmStore) Type() string { return "test-realm-aware" }
 
 var _ types.CredentialStore = (*realmStore)(nil)
@@ -575,40 +582,32 @@ type recordingStore struct {
 	stored map[string]types.ICredentials
 }
 
+// Store records the write before delegating, so a test can assert on what was persisted
+// independently of any later delete.
 func (s *recordingStore) Store(alias string, creds types.ICredentials, realm string) error {
 	s.stored[alias] = creds
 	return s.testStore.Store(alias, creds, realm)
 }
 
-// passthroughIdentity returns fixed credentials, or echoes the base credentials when
-// none are configured. It stands in for a gcp/service-account impersonation step.
+// passthroughIdentity is the shared countingIdentity double reshaped for GCP chains: it
+// reports the gcp/service-account kind and, when no credentials are configured, echoes
+// whatever the previous chain step produced. The rest of the Identity surface is
+// inherited rather than restated.
 type passthroughIdentity struct {
-	provider string
-	creds    types.ICredentials
+	countingIdentity
+	creds types.ICredentials
 }
 
-func (i *passthroughIdentity) Kind() string                     { return "gcp/service-account" }
-func (i *passthroughIdentity) GetProviderName() (string, error) { return i.provider, nil }
+// Kind reports gcp/service-account so chains built from this double look like the
+// ADC -> impersonation shape the ambient tests exercise.
+func (i *passthroughIdentity) Kind() string { return "gcp/service-account" }
+
+// Authenticate returns the configured credentials, or passes the upstream step's
+// credentials straight through when none are set — the behavior that lets a test observe
+// exactly what the provider resolved.
 func (i *passthroughIdentity) Authenticate(_ context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	if i.creds != nil {
 		return i.creds, nil
 	}
 	return baseCreds, nil
 }
-func (i *passthroughIdentity) Validate() error                         { return nil }
-func (i *passthroughIdentity) Environment() (map[string]string, error) { return nil, nil }
-func (i *passthroughIdentity) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
-
-func (i *passthroughIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
-	return environ, nil
-}
-
-func (i *passthroughIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
-	return nil
-}
-func (i *passthroughIdentity) Logout(_ context.Context) error  { return nil }
-func (i *passthroughIdentity) CredentialsExist() (bool, error) { return false, nil }
-func (i *passthroughIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
-	return nil, nil
-}
-func (i *passthroughIdentity) SetRealm(_ string) {}

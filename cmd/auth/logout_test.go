@@ -691,6 +691,8 @@ type ambientReportingManager struct {
 	ambient map[string]bool
 }
 
+// IsAmbientProvider answers from the test-controlled map, supplying the optional
+// interface the generated mock cannot carry.
 func (m *ambientReportingManager) IsAmbientProvider(providerName string) bool {
 	return m.ambient[providerName]
 }
