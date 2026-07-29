@@ -667,3 +667,51 @@ func TestLogout_ExplicitKeychainStillReportsDeletionFailure(t *testing.T) {
 	require.Error(t, err, "an explicit --keychain delete that fails must still be reported")
 	assert.ErrorIs(t, err, errUtils.ErrPartialLogout)
 }
+
+// TestPurgeCachedCredentials_ToleratesMissingEntry covers the branch taken when the
+// realm-scoped delete finds nothing. That is the ordinary case once the ambient fix is in
+// place — nothing was ever written — so the purge must stay silent rather than surface an
+// error the way an explicitly requested deletion would. The realm-aware double is required
+// here: testStore.Delete always returns nil and so never reaches this branch.
+func TestPurgeCachedCredentials_ToleratesMissingEntry(t *testing.T) {
+	store := newRealmStore() // Empty: every delete misses.
+	m := &manager{credentialStore: store, realm: realm.RealmInfo{Value: "test-realm"}}
+
+	assert.NotPanics(t, func() { m.purgeCachedCredentials("gcp-adc") })
+
+	// Both the realm-scoped and legacy keys are attempted even though neither exists.
+	assert.Equal(t, 2, store.deleteCalls, "purge must still attempt both keys when the entry is absent")
+	assert.False(t, store.has("gcp-adc", "test-realm"))
+}
+
+// TestAuthenticateWithProvider_SessionTokenStillSkipsKeyring guards the pre-existing
+// session-token branch, which now sits alongside the ambient branch in the same switch.
+// A non-ambient provider that mints session tokens must still bypass the keyring, so the
+// restructuring cannot have silently folded that case into the caching default.
+func TestAuthenticateWithProvider_SessionTokenStillSkipsKeyring(t *testing.T) {
+	sessionCreds := &types.AWSCredentials{
+		AccessKeyID:     "ASIA_SESSION",
+		SecretAccessKey: "secret",
+		SessionToken:    "session-token", // What makes isSessionToken true.
+	}
+	provider := &ambientTestProvider{
+		testProvider: testProvider{name: "aws-sso", kind: "aws/iam-identity-center"},
+		ambient:      false, // Non-ambient: the session-token branch must be the one taken.
+		resolved:     sessionCreds,
+	}
+	store := &testStore{data: map[string]any{}}
+	m := &manager{
+		config:          &schema.AuthConfig{Identities: map[string]schema.Identity{}},
+		providers:       map[string]types.Provider{"aws-sso": provider},
+		identities:      map[string]types.Identity{},
+		credentialStore: store,
+		chain:           []string{"aws-sso"},
+		realm:           realm.RealmInfo{Value: "test-realm"},
+	}
+
+	got, err := m.authenticateWithProvider(context.Background(), "aws-sso")
+	require.NoError(t, err)
+	assert.Equal(t, sessionCreds, got)
+
+	assert.Empty(t, store.data, "session tokens must not be written to the keyring, ambient or not")
+}
