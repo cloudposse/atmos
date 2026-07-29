@@ -1,9 +1,11 @@
 package dependencies
 
 import (
+	"maps"
 	"path"
 	"sort"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -168,7 +170,7 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 		return &ScopeResult{Stacks: map[string]any{}, Closure: closure}, nil
 	}
 
-	return resolveClosureStacks(describe, req, roots, closure)
+	return resolveClosureStacks(describe, req, roots, closure, lightweightStacks)
 }
 
 // resolveClosureStacks is Phase C: re-describe (templates/YAML functions/auth
@@ -178,14 +180,15 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 // from the lightweight pass), so a same-stack templated dependency target
 // (e.g. `stack: "{{ .vars.stage }}"` resolving to its own stack) still
 // produces the correct closure.
-func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []string, closure *dependency.Graph) (*ScopeResult, error) {
+func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []string, closure *dependency.Graph, lightweightStacks map[string]any) (*ScopeResult, error) {
 	resolvedStacks := make(map[string]any)
-	described := make(map[string]bool)
+	evaluatedComponents := make(map[string]map[string]bool)
 	var resolvedGraph *dependency.Graph
 	stackNames := StackNames(closure)
 
 	for {
-		pending := pendingStackNames(stackNames, described)
+		componentsByStack := closureComponentsByStack(closure)
+		pending := pendingComponentsByStack(stackNames, componentsByStack, evaluatedComponents)
 		if len(pending) == 0 {
 			return &ScopeResult{
 				Stacks:  resolvedStacks,
@@ -196,29 +199,74 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 		// Evaluate only the closure's own components within each stack:
 		// unrelated components that merely share a stack file with a closure
 		// member must not have their templates/YAML functions (and thus their
-		// auth/backend requirements) evaluated. When a stack has no known
-		// members (should not happen — stackNames derives from the closure),
-		// fall back to the whole stack rather than silently skipping it.
-		componentsByStack := closureComponentsByStack(closure)
-		for _, stackName := range pending {
-			partial, err := describe(stackName, componentsByStack[stackName], req.ProcessTemplates, req.ProcessFunctions)
+		// auth/backend requirements) evaluated. Stacks with nothing left to
+		// evaluate this round (all closure components already evaluated) are
+		// skipped.
+		for _, stackName := range stackNames {
+			components, ok := pending[stackName]
+			if !ok {
+				continue
+			}
+			partial, err := describe(stackName, components, req.ProcessTemplates, req.ProcessFunctions)
 			if err != nil {
 				return nil, err
 			}
-			for k, v := range partial {
-				resolvedStacks[k] = v
+			resolvedStacks = mergeResolvedClosureStacks(resolvedStacks, partial)
+			if evaluatedComponents[stackName] == nil {
+				evaluatedComponents[stackName] = make(map[string]bool, len(components))
 			}
-			described[stackName] = true
+			for _, component := range components {
+				evaluatedComponents[stackName][component] = true
+			}
 		}
 
 		var err error
-		resolvedGraph, err = BuildGraph(resolvedStacks)
+		resolvedGraph, err = BuildGraph(mergeResolvedClosureStacks(lightweightStacks, resolvedStacks))
 		if err != nil {
 			return nil, err
 		}
 		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
 		stackNames = StackNames(closure)
 	}
+}
+
+// mergeResolvedClosureStacks overlays evaluated closure components onto the
+// lightweight graph. The latter retains nodes that have not yet been evaluated,
+// allowing a newly-resolved cross-stack edge to discover its target stack.
+func mergeResolvedClosureStacks(lightweightStacks, resolvedStacks map[string]any) map[string]any {
+	mergedStacks := maps.Clone(lightweightStacks)
+	for stackName, resolvedValue := range resolvedStacks {
+		lightweightStack, lightweightOK := lightweightStacks[stackName].(map[string]any)
+		resolvedStack, resolvedOK := resolvedValue.(map[string]any)
+		if !lightweightOK || !resolvedOK {
+			mergedStacks[stackName] = resolvedValue
+			continue
+		}
+
+		lightweightComponents, lightweightOK := lightweightStack[cfg.ComponentsSectionName].(map[string]any)
+		resolvedComponents, resolvedOK := resolvedStack[cfg.ComponentsSectionName].(map[string]any)
+		if !lightweightOK || !resolvedOK {
+			mergedStacks[stackName] = resolvedValue
+			continue
+		}
+
+		mergedStack := maps.Clone(lightweightStack)
+		mergedComponents := maps.Clone(lightweightComponents)
+		for componentType, resolvedTypeValue := range resolvedComponents {
+			lightweightType, lightweightOK := lightweightComponents[componentType].(map[string]any)
+			resolvedType, resolvedOK := resolvedTypeValue.(map[string]any)
+			if !lightweightOK || !resolvedOK {
+				mergedComponents[componentType] = resolvedTypeValue
+				continue
+			}
+			mergedType := maps.Clone(lightweightType)
+			maps.Copy(mergedType, resolvedType)
+			mergedComponents[componentType] = mergedType
+		}
+		mergedStack[cfg.ComponentsSectionName] = mergedComponents
+		mergedStacks[stackName] = mergedStack
+	}
+	return mergedStacks
 }
 
 // closureComponentsByStack maps each stack in the closure to the sorted
@@ -237,12 +285,14 @@ func closureComponentsByStack(closure *dependency.Graph) map[string][]string {
 	return byStack
 }
 
-// pendingStackNames returns the stack names not yet described.
-func pendingStackNames(stackNames []string, described map[string]bool) []string {
-	pending := make([]string, 0, len(stackNames))
+// pendingComponentsByStack returns closure components not yet evaluated per stack.
+func pendingComponentsByStack(stackNames []string, componentsByStack map[string][]string, evaluated map[string]map[string]bool) map[string][]string {
+	pending := make(map[string][]string)
 	for _, stackName := range stackNames {
-		if !described[stackName] {
-			pending = append(pending, stackName)
+		for _, component := range componentsByStack[stackName] {
+			if !evaluated[stackName][component] {
+				pending[stackName] = append(pending[stackName], component)
+			}
 		}
 	}
 	return pending

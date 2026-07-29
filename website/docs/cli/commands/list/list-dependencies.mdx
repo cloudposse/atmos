@@ -3,7 +3,7 @@ title: atmos list dependencies
 sidebar_label: dependencies
 sidebar_class_name: command
 id: dependencies
-description: Use this command to visualize the dependency relationships between Atmos components as a tree.
+description: Use this command to visualize dependency relationships between Atmos components.
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
@@ -106,6 +106,24 @@ tree always terminates instead of recursing forever &mdash; unlike the execution
 dependency graph used by `terraform --affected`, this command tolerates cycles so
 they can be inspected.
 
+## Levels Output
+
+The `levels` format shows each component's shortest dependency-graph distance
+from the selected root(s). It lists every reachable component ordered by distance:
+
+```text
+Level  Stack         Component       Type
+0      plat-ue2-dev  app             terraform
+1      plat-ue2-dev  database        terraform
+1      plat-ue2-dev  vpc             terraform
+2      plat-ue2-dev  kms-key         terraform
+```
+
+With `--direction forward`, each level is a deployment prerequisite distance.
+`--direction reverse` follows dependents. With the default `--direction both`,
+`Level` is the shortest path in either direction. Components selected by
+`--stack`, `--tags`, or `--labels` start at level `0`.
+
 ## Arguments
 
 <dl>
@@ -129,7 +147,7 @@ they can be inspected.
   <dd>Filter by component labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Like `--stack`, this scopes which components appear as top-level entries; dependency subtrees still traverse the full graph.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
 
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `tree` (default), `json`, or `yaml`.<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
+  <dd>Output format: `tree` (default), `json`, `yaml`, or `levels`.<br/>Environment variable: `ATMOS_LIST_DEPENDENCIES_FORMAT`</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
   <dd>Authenticate with a specific identity before listing dependencies.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>Environment variable: `ATMOS_IDENTITY`</dd>
