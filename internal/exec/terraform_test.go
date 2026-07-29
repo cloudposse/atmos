@@ -17,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -720,49 +721,24 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status=false")
 			}
 
-			// Create a pipe to capture stdout and stderr.
-			oldStdout := os.Stdout
-			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-			os.Stderr = w
-
-			// Ensure stdout/stderr are restored even if test fails.
-			defer func() {
-				os.Stdout = oldStdout
-				os.Stderr = oldStderr
-			}()
+			// Capture subprocess output through the supported process streams.
+			// Reassigning os.Stdout/os.Stderr does not reliably redirect child
+			// process handles on Windows.
+			var buf bytes.Buffer
+			outputWriter := &synchronizedWriter{w: &buf}
 
 			// Save original logger and set up test logger.
 			originalLogger := log.Default()
 			logger := log.New()
-			logger.SetOutput(w)
+			logger.SetOutput(outputWriter)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 
-			// Create a channel to signal when the pipe is closed.
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				defer w.Close()
-				_ = ExecuteTerraform(info)
-			}()
-
-			// Read the output.
-			var buf bytes.Buffer
-			_, err := buf.ReadFrom(r)
-			if err != nil {
-				t.Fatalf("Failed to read from pipe: %v", err)
-			}
+			_ = ExecuteTerraform(info, WithProcessStreams(process.Streams{
+				Stdout: outputWriter,
+				Stderr: outputWriter,
+			}))
 			output := buf.String()
-
-			// Restore stdout, stderr, and logger.
-			os.Stdout = oldStdout
-			os.Stderr = oldStderr
-			log.SetDefault(log.Default())
-
-			// Wait for the command to finish
-			<-done
 
 			// Check the output for drift/no drift and pro warning
 			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")
