@@ -88,6 +88,7 @@ func main() {
 	if len(args) == 0 {
 		return
 	}
+	recordArgs(args)
 
 	if requiresForwardedEnv(args[0]) && os.Getenv("ATMOS_FAKE_AUTH") != "present" {
 		fmt.Fprintln(os.Stderr, "missing forwarded env")
@@ -109,6 +110,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown fake runtime mode: %%s\n", mode)
 		os.Exit(4)
 	}
+}
+
+func recordArgs(args []string) {
+	path := os.Getenv("ATMOS_FAKE_RUNTIME_ARGS_FILE")
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = fmt.Fprintln(f, strings.Join(args, "\t"))
 }
 
 func requiresForwardedEnv(command string) bool {
