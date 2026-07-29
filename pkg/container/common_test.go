@@ -1073,6 +1073,23 @@ func TestBuildBuildArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "buildx bake with cache from and to",
+			config: &BuildConfig{
+				Bake: &BakeConfig{File: "docker-bake.hcl", Target: "app"},
+				Cache: &CacheConfig{
+					From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+					To:   []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}},
+				},
+			},
+			expected: []string{
+				"buildx", "bake",
+				"--set", "*.cache-from=ref=registry.example.com/app:buildcache,type=registry",
+				"--set", "*.cache-to=mode=max,ref=registry.example.com/app:buildcache,type=registry",
+				"--file", "docker-bake.hcl",
+				"app",
+			},
+		},
+		{
 			name: "buildx build with driver shorthand",
 			config: &BuildConfig{
 				Engine:     "buildx",
