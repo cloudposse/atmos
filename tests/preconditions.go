@@ -338,10 +338,22 @@ func RequireNetworkAccess(t *testing.T, url string) {
 }
 
 // RequireExecutable checks if an executable is available in PATH.
+// Unlike requireExecutablePath, a bypass (ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true)
+// is a full no-op here: callers that only need a boolean gate, not the resolved
+// path, don't need the tool to actually be resolvable when checks are disabled.
 func RequireExecutable(t *testing.T, name string, purpose string) {
 	t.Helper()
 
-	requireExecutablePath(t, name, purpose)
+	prependCachedTestTool(name)
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	if _, err := exec.LookPath(name); err != nil {
+		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
+			name, purpose)
+	}
 }
 
 // requireExecutablePath resolves and returns the executable's path, skipping
@@ -361,7 +373,13 @@ func requireExecutablePath(t *testing.T, name string, purpose string) string {
 	path, err := exec.LookPath(name)
 	if err != nil {
 		if !ShouldCheckPreconditions() {
-			return ""
+			// ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true (set for every CI
+			// acceptance job) means the caller wants a hard failure instead of
+			// a skip when a tool that CI is expected to provision is missing --
+			// never silently hand back an empty path, which turns into a far
+			// more confusing "open : file not found" error downstream.
+			t.Fatalf("'%s' not found in PATH: required for %s. Precondition checks are disabled (ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true), so this is a hard failure rather than a skip: %v",
+				name, purpose, err)
 		}
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
