@@ -15,8 +15,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// logKeyExpirationChain is the log key for expiration values in chain operations.
-const logKeyExpirationChain = "expiration"
+// Log keys used by chain and logout operations. Defined here rather than in the shared
+// block in manager.go to keep that file untouched by this change.
+const (
+	// The logKeyExpirationChain key carries expiration values in chain operations.
+	logKeyExpirationChain = "expiration"
+	logKeyChain           = "chain"
+	logKeyIdentityStep    = "identityStep"
+	logKeyRealm           = "realm"
+	logKeyName            = "name"
+)
 
 // processCredentialCache is a process-level in-memory cache for authenticated credentials.
 // Unlike keyring/file caches which persist across processes and may contain stale data,
@@ -54,12 +62,12 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	if entry, ok := processCredentialCache.Load(cacheKey); ok {
 		cached := entry.(*processCachedCreds)
 		if valid, _ := m.isCredentialValid("process-cache", cached.credentials); valid {
-			log.Debug("Using process-cached credentials for chain", "chain", m.chain)
+			log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
 			return cached.credentials, nil
 		}
 		// Expired — remove stale entry.
 		processCredentialCache.Delete(cacheKey)
-		log.Debug("Process-cached credentials expired, re-authenticating", "chain", m.chain)
+		log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
 	}
 
 	// Step 1: Bottom-up validation - check cached credentials from target to root.
@@ -129,16 +137,16 @@ func (m *manager) purgeCachedCredentials(name string) {
 		return
 	}
 	if err := m.credentialStore.Delete(name, m.realm.Value); err != nil {
-		log.Debug("No ambient keyring entry to purge", "name", name, "realm", m.realm.Value)
+		log.Debug("No ambient keyring entry to purge", logKeyName, name, logKeyRealm, m.realm.Value)
 	} else {
-		log.Debug("Purged stale ambient keyring entry", "name", name, "realm", m.realm.Value)
+		log.Debug("Purged stale ambient keyring entry", logKeyName, name, logKeyRealm, m.realm.Value)
 	}
 	// Also purge the legacy (pre-realm) entry so upgrades from older layouts self-heal.
 	if m.realm.Value != "" {
 		if err := m.credentialStore.Delete(name, ""); err != nil {
-			log.Debug("No legacy ambient keyring entry to purge", "name", name)
+			log.Debug("No legacy ambient keyring entry to purge", logKeyName, name)
 		} else {
-			log.Debug("Purged stale legacy ambient keyring entry", "name", name)
+			log.Debug("Purged stale legacy ambient keyring entry", logKeyName, name)
 		}
 	}
 }
@@ -150,7 +158,7 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	// authentication to start at the provider so a changed ambient principal (e.g. a new
 	// `gcloud auth application-default login`) is picked up on the very next login.
 	if m.chainRootIsAmbient() {
-		log.Debug("Skipping cached credentials for ambient chain", "chain", m.chain, logKeyProvider, m.chain[0])
+		log.Debug("Skipping cached credentials for ambient chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
 		return -1
 	}
 
@@ -619,7 +627,7 @@ func isSessionToken(creds types.ICredentials) bool {
 
 // authenticateIdentityChain performs sequential authentication through an identity chain.
 func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds types.ICredentials) (types.ICredentials, error) {
-	log.Debug("Authenticating identity chain", "chainLength", len(m.chain), "startIndex", startIndex, "chain", m.chain)
+	log.Debug("Authenticating identity chain", "chainLength", len(m.chain), "startIndex", startIndex, logKeyChain, m.chain)
 
 	currentCreds := initialCreds
 
@@ -659,15 +667,15 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// intermediate steps of a chain just as caching the provider's own token would.
 		switch {
 		case ambientChain:
-			log.Debug("Skipping keyring cache for ambient chain", "identityStep", identityStep)
+			log.Debug("Skipping keyring cache for ambient chain", logKeyIdentityStep, identityStep)
 			m.purgeCachedCredentials(identityStep)
 		case isSessionToken(currentCreds):
-			log.Debug("Skipping keyring cache for session tokens", "identityStep", identityStep)
+			log.Debug("Skipping keyring cache for session tokens", logKeyIdentityStep, identityStep)
 		default:
 			if err := m.credentialStore.Store(identityStep, currentCreds, m.realm.Value); err != nil {
-				log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
+				log.Debug("Failed to cache credentials", logKeyIdentityStep, identityStep, "error", err)
 			} else {
-				log.Debug("Cached credentials", "identityStep", identityStep)
+				log.Debug("Cached credentials", logKeyIdentityStep, identityStep)
 			}
 		}
 

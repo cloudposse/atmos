@@ -181,9 +181,9 @@ func TestNonAmbientProvider_CredentialsStillCached(t *testing.T) {
 }
 
 // TestBuildWhoamiInfo_AmbientChainNotCached covers the write path that runs *after*
-// chain authentication. buildWhoamiInfo persists the final credentials so later commands
-// can reuse them; for an ambient chain that would immediately re-poison the entry the
-// chain authentication had just purged.
+// chain authentication. The buildWhoamiInfo helper persists the final credentials so
+// later commands can reuse them; for an ambient chain that would immediately re-poison
+// the entry the chain authentication had just purged.
 func TestBuildWhoamiInfo_AmbientChainNotCached(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
@@ -451,9 +451,9 @@ func TestIsAmbientProvider_SatisfiesReporter(t *testing.T) {
 	assert.False(t, types.ManagerReportsAmbient(m, "aws-sso"))
 }
 
-// TestResolveProviderForIdentity_NilConfig covers the nil-config guard. buildWhoamiInfo
-// now calls into this helper, and it runs on managers built without config in several
-// narrow paths.
+// TestResolveProviderForIdentity_NilConfig covers the nil-config guard. The
+// buildWhoamiInfo helper now calls into this one, and it runs on managers built without
+// config in several narrow paths.
 func TestResolveProviderForIdentity_NilConfig(t *testing.T) {
 	m := &manager{}
 	assert.Empty(t, m.resolveProviderForIdentity("anything"))

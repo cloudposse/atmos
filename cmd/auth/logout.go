@@ -193,6 +193,46 @@ func ambientProviderNames(authManager auth.AuthManager, providers map[string]sch
 	return names
 }
 
+// printLogoutAllDryRun renders the `--all --dry-run` preview of everything logout would
+// remove. Kept separate from performLogoutAll so the branching for the keyring section
+// does not add complexity to the orchestrating function.
+func printLogoutAllDryRun(authManager auth.AuthManager, deleteKeychain bool) {
+	// Fetched once and shared by the keyring and file sections below.
+	providers := authManager.GetProviders()
+
+	ui.MarkdownMessagef(msgDryRunMode)
+	ui.MarkdownMessagef("**Would remove:**\n")
+	printLogoutAllKeyringPreview(authManager, providers, deleteKeychain)
+
+	// Show file paths for each provider.
+	if len(providers) > 0 {
+		ui.Writef("  • Files:\n")
+		for providerName := range providers {
+			basePath := authManager.GetFilesDisplayPath(providerName)
+			ui.Writef("    - %s/%s/\n", basePath, providerName)
+		}
+	}
+	ui.Writeln("")
+}
+
+// printLogoutAllKeyringPreview reports which keyring entries `--all` would remove.
+// Without --keychain only ambient providers are cleared, so they are named explicitly
+// rather than implied — see the note in performIdentityLogout for why they are always
+// cleared.
+func printLogoutAllKeyringPreview(authManager auth.AuthManager, providers map[string]schema.Provider, deleteKeychain bool) {
+	if deleteKeychain {
+		ui.Writef("  • All identity keyring entries\n")
+		ui.Writef("  • All provider keyring entries\n")
+		return
+	}
+
+	names := ambientProviderNames(authManager, providers)
+	if len(names) == 0 {
+		return
+	}
+	ui.Writef("  • Keyring entries for ambient providers: %s\n", strings.Join(names, ", "))
+}
+
 // buildKeychainDeletionMessage creates the confirmation message for keychain deletion.
 // This is a pure function that can be easily tested.
 func buildKeychainDeletionMessage(identityOrProvider string) string {
@@ -571,29 +611,7 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	defer perf.Track(nil, "auth.performLogoutAll")()
 
 	if dryRun {
-		// Fetched once and shared by the keyring and file sections below.
-		providers := authManager.GetProviders()
-
-		ui.MarkdownMessagef(msgDryRunMode)
-		ui.MarkdownMessagef("**Would remove:**\n")
-		if deleteKeychain {
-			ui.Writef("  • All identity keyring entries\n")
-			ui.Writef("  • All provider keyring entries\n")
-		} else if names := ambientProviderNames(authManager, providers); len(names) > 0 {
-			// Ambient providers are cleared regardless of --keychain — see the note in
-			// performIdentityLogout.
-			ui.Writef("  • Keyring entries for ambient providers: %s\n", strings.Join(names, ", "))
-		}
-
-		// Show file paths for each provider.
-		if len(providers) > 0 {
-			ui.Writef("  • Files:\n")
-			for providerName := range providers {
-				basePath := authManager.GetFilesDisplayPath(providerName)
-				ui.Writef("    - %s/%s/\n", basePath, providerName)
-			}
-		}
-		ui.Writeln("")
+		printLogoutAllDryRun(authManager, deleteKeychain)
 		return nil
 	}
 

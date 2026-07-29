@@ -33,28 +33,8 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 
 	log.Debug("Logout identity", logKeyIdentity, identityName, "deleteKeychain", deleteKeychain)
 
-	var errs []error
-
 	// Step 1: Delete keyring entry ONLY if deleteKeychain flag is set.
-	if deleteKeychain {
-		// Delete realm-scoped entry (current format).
-		if err := m.credentialStore.Delete(identityName, m.realm.Value); err != nil {
-			log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, "realm", m.realm.Value, "error", err)
-			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
-		} else {
-			log.Debug("Deleted keyring entry", logKeyIdentity, identityName, "realm", m.realm.Value)
-		}
-		// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
-		if m.realm.Value != "" {
-			if err := m.credentialStore.Delete(identityName, ""); err != nil {
-				log.Debug("No legacy keyring entry to delete", logKeyIdentity, identityName)
-			} else {
-				log.Debug("Deleted legacy keyring entry (pre-realm)", logKeyIdentity, identityName)
-			}
-		}
-	} else {
-		log.Debug("Skipping keyring deletion (preserving credentials)", logKeyIdentity, identityName)
-	}
+	errs := m.deleteIdentityKeyringEntries(identityName, deleteKeychain)
 
 	// Step 2: Clean up linked integrations (non-fatal).
 	m.cleanupIntegrations(ctx, identityName)
@@ -79,6 +59,38 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 	}
 
 	return nil
+}
+
+// deleteIdentityKeyringEntries removes the identity's realm-scoped keyring entry and, for
+// realm-scoped setups, the legacy pre-realm entry left by older Atmos versions.
+// Returns any deletion errors for the caller to accumulate; a missing legacy entry is the
+// expected case and is not an error.
+func (m *manager) deleteIdentityKeyringEntries(identityName string, deleteKeychain bool) []error {
+	if !deleteKeychain {
+		log.Debug("Skipping keyring deletion (preserving credentials)", logKeyIdentity, identityName)
+		return nil
+	}
+
+	var errs []error
+
+	// Delete realm-scoped entry (current format).
+	if err := m.credentialStore.Delete(identityName, m.realm.Value); err != nil {
+		log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, logKeyRealm, m.realm.Value, "error", err)
+		errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
+	} else {
+		log.Debug("Deleted keyring entry", logKeyIdentity, identityName, logKeyRealm, m.realm.Value)
+	}
+
+	// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
+	if m.realm.Value != "" {
+		if err := m.credentialStore.Delete(identityName, ""); err != nil {
+			log.Debug("No legacy keyring entry to delete", logKeyIdentity, identityName)
+		} else {
+			log.Debug("Deleted legacy keyring entry (pre-realm)", logKeyIdentity, identityName)
+		}
+	}
+
+	return errs
 }
 
 // cleanupIntegrations runs Cleanup() on all integrations linked to the identity.
