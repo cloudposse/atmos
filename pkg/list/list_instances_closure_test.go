@@ -145,6 +145,20 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 		assert.Equal(t, []string{"app"}, fake.capturedTags)
 	})
 
+	t.Run("labels filter routes to scoped variant", func(t *testing.T) {
+		t.Parallel()
+		fake := &scopedFakeProcessor{}
+		labels := map[string]string{"env": "dev"}
+		_, err := executeDescribeStacksForInstances(
+			&schema.AtmosConfiguration{}, fake, nil, true, true, nil, false,
+			nil, labels,
+		)
+		require.NoError(t, err)
+		assert.True(t, fake.scopedCalled, "a labels filter must dispatch to ExecuteDescribeStacksScoped")
+		assert.False(t, fake.regularCalled)
+		assert.Equal(t, labels, fake.capturedLabels)
+	})
+
 	t.Run("no filter keeps the regular path", func(t *testing.T) {
 		t.Parallel()
 		fake := &scopedFakeProcessor{}
@@ -161,9 +175,10 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 // scopedFakeProcessor implements StacksProcessor plus the optional
 // scopedStacksProcessor interface, recording which path was taken.
 type scopedFakeProcessor struct {
-	scopedCalled  bool
-	regularCalled bool
-	capturedTags  []string
+	scopedCalled   bool
+	regularCalled  bool
+	capturedTags   []string
+	capturedLabels map[string]string
 }
 
 func (f *scopedFakeProcessor) ExecuteDescribeStacks(
@@ -201,5 +216,6 @@ func (f *scopedFakeProcessor) ExecuteDescribeStacksScoped(
 ) (map[string]any, error) {
 	f.scopedCalled = true
 	f.capturedTags = tagsFilter
+	f.capturedLabels = labelsFilter
 	return map[string]any{}, nil
 }

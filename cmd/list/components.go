@@ -307,21 +307,7 @@ func extractComponentsViaScopedClosure(
 ) ([]map[string]any, error) {
 	defer perf.Track(nil, "list.components.extractComponentsViaScopedClosure")()
 
-	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
-		return e.ExecuteDescribeStacksScoped(
-			atmosConfig, stackName, closureComponents, nil, nil,
-			false, // ignoreMissingFiles
-			processTemplates,
-			processFunctions,
-			false, // includeEmptyStacks
-			describeDeps.skip,
-			describeDeps.authManager,
-			describeDeps.authManager == nil,
-			nil, // tagsFilter: closure scoping owns selection.
-			nil, // labelsFilter: closure scoping owns selection.
-			describeDeps.errOpts,
-		)
-	}
+	describe := newScopedDescribeFunc(atmosConfig, describeDeps)
 
 	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
 	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)

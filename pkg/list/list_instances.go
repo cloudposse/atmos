@@ -1185,7 +1185,7 @@ func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts 
 func buildInstanceClosureFilter(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions, labels map[string]string, stacksMap map[string]any) (filter.Filter, error) {
 	graph, err := dependencies.BuildGraph(stacksMap)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
 	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
 	roots := dependencies.Roots(graph, &dependencies.Selector{

@@ -12,7 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
-	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -325,6 +324,28 @@ type scopedDescribeDeps struct {
 	errOpts     e.DescribeStacksErrorOptions
 }
 
+// newScopedDescribeFunc builds the dependencies.DescribeFunc the list
+// commands hand to ResolveScopedClosure: one ExecuteDescribeStacksScoped pass
+// per closure stack, narrowed to the closure's own components, never to the
+// caller's tags/labels (closure scoping owns selection).
+func newScopedDescribeFunc(atmosConfig *schema.AtmosConfiguration, describeDeps *scopedDescribeDeps) dependencies.DescribeFunc {
+	return func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
+		return e.ExecuteDescribeStacksScoped(
+			atmosConfig, stackName, closureComponents, nil, nil,
+			false, // ignoreMissingFiles
+			processTemplates,
+			processFunctions,
+			false, // includeEmptyStacks
+			describeDeps.skip,
+			describeDeps.authManager,
+			describeDeps.authManager == nil,
+			nil, // tagsFilter: closure scoping owns selection.
+			nil, // labelsFilter: closure scoping owns selection.
+			describeDeps.errOpts,
+		)
+	}
+}
+
 // extractStacksViaScopedClosure lists the stacks the dependency closure
 // touches, using the shared three-phase scoped evaluation: a lightweight
 // structural pass seeds the closure (optional component + tags/labels
@@ -340,21 +361,7 @@ func extractStacksViaScopedClosure(
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.extractStacksViaScopedClosure")()
 
-	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
-		return e.ExecuteDescribeStacksScoped(
-			atmosConfig, stackName, closureComponents, nil, nil,
-			false, // ignoreMissingFiles
-			processTemplates,
-			processFunctions,
-			false, // includeEmptyStacks
-			describeDeps.skip,
-			describeDeps.authManager,
-			describeDeps.authManager == nil,
-			nil, // tagsFilter: closure scoping owns selection.
-			nil, // labelsFilter: closure scoping owns selection.
-			describeDeps.errOpts,
-		)
-	}
+	describe := newScopedDescribeFunc(atmosConfig, describeDeps)
 
 	var components []string
 	if opts.Component != "" {
@@ -377,17 +384,14 @@ func extractStacksViaScopedClosure(
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	return stackRowsFromClosure(result.Closure), result.Stacks, nil
-}
-
-// stackRowsFromClosure shapes the closure's stack names into list rows.
-func stackRowsFromClosure(closure *dependency.Graph) []map[string]any {
-	names := dependencies.StackNames(closure)
-	stacks := make([]map[string]any, 0, len(names))
-	for _, stackName := range names {
-		stacks = append(stacks, map[string]any{"stack": stackName})
+	// Shape rows with the same extraction the non-closure path uses so
+	// var-derived columns stay populated; result.Stacks already holds exactly
+	// the closure's stacks, so no further filtering is needed.
+	stacks, err := extract.Stacks(result.Stacks, nil, nil)
+	if err != nil {
+		return nil, nil, err
 	}
-	return stacks
+	return stacks, result.Stacks, nil
 }
 
 // renderStacksTable renders stacks in table format with filters, columns, and sorters.

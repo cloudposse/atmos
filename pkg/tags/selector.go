@@ -254,8 +254,15 @@ func forbiddenCallInNode(node parse.Node) string {
 	}
 }
 
-// forbiddenCallInLeafOrControl checks leaf nodes (identifiers, chains) and
-// control structures (if/range/with/template) for forbidden calls.
+// forbiddenCallInLeafOrControl checks leaf nodes (identifiers, chains,
+// fields, variables) and control structures (if/range/with/template) for
+// forbidden calls. Field and variable accesses whose chain names a forbidden
+// atmos method (e.g. `{{ with atmos }}{{ .Component ... }}{{ end }}` or
+// `{{ $x := atmos }}{{ $x.Component ... }}`) are rejected regardless of what
+// the dot or variable is bound to: proving the binding statically is not
+// possible in general, and a selector legitimately reading a data field named
+// Component/Store/GomplateDatasource is not a real pattern — rejecting is the
+// safe direction for a purity gate.
 func forbiddenCallInLeafOrControl(node parse.Node) string {
 	switch n := node.(type) {
 	case *parse.ChainNode:
@@ -267,6 +274,19 @@ func forbiddenCallInLeafOrControl(node parse.Node) string {
 		if _, forbidden := forbiddenTemplateIdentifiers[n.Ident]; forbidden {
 			return n.Ident
 		}
+	case *parse.FieldNode:
+		return forbiddenAtmosMethodInIdents(n.Ident)
+	case *parse.VariableNode:
+		return forbiddenAtmosMethodInIdents(n.Ident)
+	default:
+		return forbiddenCallInControl(node)
+	}
+	return ""
+}
+
+// forbiddenCallInControl checks the control structures (if/range/with/template).
+func forbiddenCallInControl(node parse.Node) string {
+	switch n := node.(type) {
 	case *parse.IfNode:
 		return forbiddenCallInBranch(&n.BranchNode)
 	case *parse.RangeNode:
@@ -275,6 +295,17 @@ func forbiddenCallInLeafOrControl(node parse.Node) string {
 		return forbiddenCallInBranch(&n.BranchNode)
 	case *parse.TemplateNode:
 		return forbiddenCallInNode(n.Pipe)
+	}
+	return ""
+}
+
+// forbiddenAtmosMethodInIdents reports the first forbidden atmos-namespace
+// method named in an identifier chain, or "".
+func forbiddenAtmosMethodInIdents(idents []string) string {
+	for _, ident := range idents {
+		if _, forbidden := forbiddenAtmosMethods[ident]; forbidden {
+			return "atmos." + ident
+		}
 	}
 	return ""
 }
@@ -315,18 +346,11 @@ func forbiddenCallInBranch(branch *parse.BranchNode) string {
 
 // forbiddenAtmosChain reports a forbidden atmos-namespace method call
 // (e.g. atmos.Component) expressed as a chain node, or "" when the chain is
-// allowed.
+// allowed. The base is intentionally not required to be the "atmos"
+// identifier: an aliased or parenthesized base (e.g. `($x).Component`) must
+// not evade the gate — see forbiddenCallInLeafOrControl for the rationale.
 func forbiddenAtmosChain(chain *parse.ChainNode) string {
-	base, ok := chain.Node.(*parse.IdentifierNode)
-	if !ok || base.Ident != "atmos" {
-		return ""
-	}
-	for _, field := range chain.Field {
-		if _, forbidden := forbiddenAtmosMethods[field]; forbidden {
-			return "atmos." + field
-		}
-	}
-	return ""
+	return forbiddenAtmosMethodInIdents(chain.Field)
 }
 
 // buildForbiddenSelectorError constructs the by-design selector purity error.

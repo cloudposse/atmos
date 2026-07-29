@@ -48,8 +48,10 @@ func closurePreviewStacksMap() map[string]any {
 	}
 }
 
-// TestStackRowsFromClosure verifies the closure's stacks shape into sorted rows.
-func TestStackRowsFromClosure(t *testing.T) {
+// TestClosurePreviewGraphSpansPrerequisiteStacks pins the seed/closure
+// behavior the stacks preview builds on: a component seed reaches
+// prerequisite stacks, and the unrelated stack stays out.
+func TestClosurePreviewGraphSpansPrerequisiteStacks(t *testing.T) {
 	t.Parallel()
 
 	graph, err := dependencies.BuildGraph(closurePreviewStacksMap())
@@ -57,12 +59,7 @@ func TestStackRowsFromClosure(t *testing.T) {
 	roots := dependencies.Roots(graph, &dependencies.Selector{Components: []string{"app"}})
 	closure := dependencies.ReachableClosure(graph, roots, dependencies.DirectionForward, dependencies.Depths{})
 
-	rows := stackRowsFromClosure(closure)
-	var names []string
-	for _, row := range rows {
-		names = append(names, row["stack"].(string))
-	}
-	assert.Equal(t, []string{"core", "dev"}, names)
+	assert.Equal(t, []string{"core", "dev"}, dependencies.StackNames(closure))
 }
 
 // TestFilterRowsByComponentNames verifies the membership row gate.
