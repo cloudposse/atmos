@@ -9,6 +9,7 @@ import (
 	logging "gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
+	atmosyq "github.com/cloudposse/atmos/internal/yq"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -712,14 +713,14 @@ func TestConfigureYqLogger_LevelIsReversible(t *testing.T) {
 	trace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: LogLevelTrace}}
 
 	configureYqLogger(nonTrace)
-	assert.Equal(t, yqSilentLevel, logging.GetLevel("yq-lib"), "non-Trace must silence yq")
+	assert.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"), "non-Trace must silence yq")
 
 	configureYqLogger(trace)
 	assert.Equal(t, logging.DEBUG, logging.GetLevel("yq-lib"), "Trace must restore verbosity after a previous silencing")
 
 	// And back again to confirm the toggle is not accidentally sticky.
 	configureYqLogger(nil)
-	assert.Equal(t, yqSilentLevel, logging.GetLevel("yq-lib"), "nil config must re-silence")
+	assert.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"), "nil config must re-silence")
 }
 
 // TestEvaluateYqExpression_ConcurrentCallsAreRaceFree covers #2821 and
@@ -739,14 +740,14 @@ func TestConfigureYqLogger_LevelIsReversible(t *testing.T) {
 // Run under -race (make test-race) to see this fail without the fix.
 func TestEvaluateYqExpression_ConcurrentCallsAreRaceFree(t *testing.T) {
 	// Leave the level the rest of the package expects to find.
-	defer setYqLogLevel(yqSilentLevel)
+	defer atmosyq.SetLevel(atmosyq.SilentLevel)
 
 	atmosConfig := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
 
 	// Install the level a non-Trace run installs, so the goroutines below
 	// exercise the steady state rather than a first-time transition.
 	configureYqLogger(atmosConfig)
-	require.Equal(t, yqSilentLevel, logging.GetLevel(yqLogModule))
+	require.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"))
 
 	const goroutines = 32
 	data := map[string]any{"a": map[string]any{"b": "value"}}
@@ -778,7 +779,7 @@ func TestEvaluateYqExpression_ConcurrentCallsAreRaceFree(t *testing.T) {
 	for result := range results {
 		assert.Equal(t, "value", result)
 	}
-	assert.Equal(t, yqSilentLevel, logging.GetLevel(yqLogModule),
+	assert.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"),
 		"concurrent evaluation must leave the configured level in place")
 }
 

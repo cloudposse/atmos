@@ -9,16 +9,12 @@ import (
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
-	logging "gopkg.in/op/go-logging.v1"
 
+	atmosyq "github.com/cloudposse/atmos/internal/yq"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-// yqEditSilentLevel is lower than yq's critical level so its internal logger
-// rejects every message during editing.
-const yqEditSilentLevel logging.Level = -1
 
 // errWrapFmt is the format string for wrapping a sentinel error with an
 // underlying error.
@@ -67,8 +63,10 @@ func evaluateWithOptions(content []byte, expr string, opts editOptions) (string,
 		return "", err
 	}
 
-	// Silence yq's internal diagnostics for the duration of the evaluation.
-	logging.SetLevel(yqEditSilentLevel, "yq-lib")
+	// The YAML editor always wants yq's internal diagnostics silenced,
+	// regardless of Atmos's configured log level.
+	atmosyq.SetLevel(atmosyq.SilentLevel)
+	atmosyq.InitExpressionParser()
 
 	pref := editPreferences(opts.indent)
 	encoder := yqlib.NewYamlEncoder(pref)
