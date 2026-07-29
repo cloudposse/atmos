@@ -9,13 +9,60 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: script
+        name: start-weather-server
+        working_directory: &demo_stacks_fixture "../../.context/cast-fixtures/demo-stacks"
+        output: none
+        interpreter: python3
+        script: |
+          import os
+          import subprocess
+          import textwrap
+          import time
+          import urllib.request
+          from pathlib import Path
+
+          Path(".cast-weather-server.py").write_text(textwrap.dedent("""
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+
+              class Handler(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      self.send_response(200)
+                      self.send_header("Content-Type", "text/plain; charset=utf-8")
+                      self.end_headers()
+                      self.wfile.write(b"Weather report: clear skies\\n")
+
+                  def log_message(self, *args):
+                      pass
+
+              HTTPServer(("127.0.0.1", 18766), Handler).serve_forever()
+          """))
+          old = Path(".cast-weather-server.pid")
+          if old.exists():
+              try:
+                  os.kill(int(old.read_text()), 15)
+              except Exception:
+                  pass
+              old.unlink(missing_ok=True)
+          proc = subprocess.Popen(["python3", ".cast-weather-server.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          Path(".cast-weather-server.pid").write_text(str(proc.pid))
+          for _ in range(50):
+              try:
+                  urllib.request.urlopen("http://127.0.0.1:18766/weather", timeout=0.1)
+                  break
+              except OSError:
+                  time.sleep(0.1)
+          else:
+              raise RuntimeError("weather fixture did not start")
       # Warm the fixture off-camera so provider installation and workspace
       # creation noise never enters the recording (replaces the legacy sed
       # noise filters).
       - type: shell
         name: warm
         output: none
-        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        working_directory: *demo_stacks_fixture
+        env:
+          TF_VAR_weather_endpoint: http://127.0.0.1:18766/weather
         command: |
           atmos terraform init myapp --stack dev
           atmos terraform workspace myapp --stack dev
@@ -23,7 +70,7 @@ commands:
           atmos terraform workspace myapp --stack prod
       - type: cast
         name: deploy
-        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        working_directory: *demo_stacks_fixture
         title: Atmos Stacks
         mode: steps
         defaults:
@@ -31,7 +78,9 @@ commands:
           simulate: !include cast-defaults.yaml .simulate
         output:
           cast: "../../website/static/casts/screengrabs/demo-stacks/deploy.cast"
-        env: !include cast-defaults.yaml .env.recording
+        env:
+          TF_VAR_weather_endpoint: http://127.0.0.1:18766/weather
+          <<: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
             text: "# Now, let's see what it looks like to deploy this everywhere! 🚀"
@@ -59,6 +108,12 @@ commands:
             name: deploy-prod
             output: raw
             command: atmos terraform deploy myapp --stack prod
+      - type: shell
+        name: stop-weather-server
+        when: always
+        working_directory: *demo_stacks_fixture
+        output: none
+        command: test ! -f .cast-weather-server.pid || kill "$(cat .cast-weather-server.pid)" || true; rm -f .cast-weather-server.pid .cast-weather-server.py
       - type: shell
         name: validate
         command: atmos casts validate screengrabs demo-stacks deploy
