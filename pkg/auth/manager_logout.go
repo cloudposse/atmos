@@ -167,6 +167,19 @@ func (m *manager) resolveProviderForIdentity(identityName string) string {
 	}
 }
 
+// IsAmbientProvider satisfies the optional AmbientProviderReporter interface so callers
+// that preview logout (`atmos auth logout --dry-run`) can report the keyring entries that
+// will actually be removed. Without it the preview would omit them, because the forcing
+// decision lives inside Logout and the caller only sees the user's --keychain flag.
+//
+// This is deliberately NOT part of types.AuthManager. That interface is already wide and
+// has a generated mock plus half a dozen hand-written doubles across the repo; growing it
+// for a display concern would churn all of them. Optional interfaces are the established
+// pattern here — see types.AmbientProvider, types.StandaloneIdentity, types.Provisioner.
+func (m *manager) IsAmbientProvider(providerName string) bool {
+	return m.providerIsAmbient(providerName)
+}
+
 // providerIsAmbient reports whether the named provider resolves credentials from ambient
 // environment state on every authentication (e.g. gcp/adc). Such providers never own
 // durable credentials, so their keyring entries are always safe to delete.

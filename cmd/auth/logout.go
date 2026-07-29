@@ -19,6 +19,7 @@ import (
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -176,6 +177,22 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	return performInteractiveLogout(ctx, authManager, dryRun, deleteKeychain, force)
 }
 
+// ambientProviderNames returns the sorted names of configured providers whose keyring
+// entries logout clears regardless of --keychain (gcp/adc, azure/cli, the OIDC providers).
+// Sorted so the dry-run preview is deterministic across runs — Go map iteration is not.
+// Takes the providers map rather than fetching it so callers that already have it do not
+// query the manager twice.
+func ambientProviderNames(authManager auth.AuthManager, providers map[string]schema.Provider) []string {
+	var names []string
+	for providerName := range providers {
+		if authTypes.ManagerReportsAmbient(authManager, providerName) {
+			names = append(names, providerName)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 // buildKeychainDeletionMessage creates the confirmation message for keychain deletion.
 // This is a pure function that can be easily tested.
 func buildKeychainDeletionMessage(identityOrProvider string) string {
@@ -307,11 +324,14 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if dryRun {
 		ui.MarkdownMessagef(msgDryRunMode)
 		ui.MarkdownMessagef("**Would remove:**\n")
-		if deleteKeychain {
+		// Logout clears the keyring for ambient providers (gcp/adc, azure/cli, the OIDC
+		// providers) whether or not --keychain was passed, because their entries hold
+		// nothing durable. The preview must account for that or it under-reports.
+		if deleteKeychain || (providerName != "" && authTypes.ManagerReportsAmbient(authManager, providerName)) {
 			ui.Writef("  • Keyring entry: %s\n", identityName)
-			if providerName != "" {
-				ui.Writef("  • Keyring entry: %s (provider)\n", providerName)
-			}
+		}
+		if deleteKeychain && providerName != "" {
+			ui.Writef("  • Keyring entry: %s (provider)\n", providerName)
 		}
 		if providerName != "" {
 			// Get actual configured path for this provider.
@@ -395,7 +415,9 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		ui.MarkdownMessagef(msgDryRunMode)
 		ui.MarkdownMessagef("**Would remove:**\n")
 		ui.Writef("  • All identities using provider %s\n", providerName)
-		if deleteKeychain {
+		// Ambient providers always have their keyring entries cleared — see the note in
+		// performIdentityLogout.
+		if deleteKeychain || authTypes.ManagerReportsAmbient(authManager, providerName) {
 			ui.Writef("  • Provider keyring entry\n")
 		}
 		// Get actual configured path for this provider.
@@ -549,15 +571,21 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	defer perf.Track(nil, "auth.performLogoutAll")()
 
 	if dryRun {
+		// Fetched once and shared by the keyring and file sections below.
+		providers := authManager.GetProviders()
+
 		ui.MarkdownMessagef(msgDryRunMode)
 		ui.MarkdownMessagef("**Would remove:**\n")
 		if deleteKeychain {
 			ui.Writef("  • All identity keyring entries\n")
 			ui.Writef("  • All provider keyring entries\n")
+		} else if names := ambientProviderNames(authManager, providers); len(names) > 0 {
+			// Ambient providers are cleared regardless of --keychain — see the note in
+			// performIdentityLogout.
+			ui.Writef("  • Keyring entries for ambient providers: %s\n", strings.Join(names, ", "))
 		}
 
 		// Show file paths for each provider.
-		providers := authManager.GetProviders()
 		if len(providers) > 0 {
 			ui.Writef("  • Files:\n")
 			for providerName := range providers {

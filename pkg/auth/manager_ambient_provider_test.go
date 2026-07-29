@@ -427,6 +427,30 @@ func TestIdentityChainRootIsAmbient_MultiHopChain(t *testing.T) {
 	assert.False(t, m.identityChainRootIsAmbient("unknown"), "an unresolvable identity is not ambient")
 }
 
+// TestIsAmbientProvider_SatisfiesReporter covers the optional-interface wrapper the
+// logout dry-run preview depends on. Without it the preview cannot know that ambient
+// keyring entries are removed even when --keychain was not passed, and under-reports.
+//
+// The manager is bound to types.AmbientProviderReporter (not types.AuthManager) because
+// the reporter is deliberately kept off the wide manager interface.
+func TestIsAmbientProvider_SatisfiesReporter(t *testing.T) {
+	var m types.AmbientProviderReporter = &manager{
+		config: &schema.AuthConfig{Identities: map[string]schema.Identity{}},
+		providers: map[string]types.Provider{
+			"gcp-adc": &ambientTestProvider{name: "gcp-adc", ambient: true},
+			"aws-sso": &ambientTestProvider{name: "aws-sso", ambient: false},
+		},
+	}
+
+	assert.True(t, m.IsAmbientProvider("gcp-adc"))
+	assert.False(t, m.IsAmbientProvider("aws-sso"))
+	assert.False(t, m.IsAmbientProvider("does-not-exist"), "an unknown provider name is not ambient")
+
+	// The helper the cmd layer actually calls must agree when handed the real manager.
+	assert.True(t, types.ManagerReportsAmbient(m, "gcp-adc"))
+	assert.False(t, types.ManagerReportsAmbient(m, "aws-sso"))
+}
+
 // TestResolveProviderForIdentity_NilConfig covers the nil-config guard. buildWhoamiInfo
 // now calls into this helper, and it runs on managers built without config in several
 // narrow paths.

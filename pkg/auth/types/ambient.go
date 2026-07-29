@@ -34,3 +34,26 @@ func ProviderIsAmbient(provider Provider) bool {
 	ambient, ok := provider.(AmbientProvider)
 	return ok && ambient.IsAmbient()
 }
+
+// AmbientProviderReporter is the optional interface an AuthManager implementation can
+// satisfy to report whether a named provider is ambient. Callers that describe or preview
+// logout need this: Logout clears the keyring for ambient providers with or without
+// --keychain, and that decision lives inside the manager, so a preview that only sees the
+// user's flag would under-report what is actually removed.
+//
+// Kept out of AuthManager on purpose. That interface is already wide and is backed by a
+// generated mock plus several hand-written doubles; adding a method for a display concern
+// would churn all of them for no behavioral gain. Use ManagerReportsAmbient to query it.
+type AmbientProviderReporter interface {
+	// IsAmbientProvider reports whether the named provider resolves credentials from
+	// ambient environment state. Returns false for an unknown provider name.
+	IsAmbientProvider(providerName string) bool
+}
+
+// ManagerReportsAmbient reports whether the given auth manager considers providerName
+// ambient. Returns false when the manager does not implement AmbientProviderReporter,
+// which keeps callers working against doubles and older implementations.
+func ManagerReportsAmbient(manager any, providerName string) bool {
+	reporter, ok := manager.(AmbientProviderReporter)
+	return ok && reporter.IsAmbientProvider(providerName)
+}

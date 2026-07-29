@@ -674,3 +674,134 @@ func TestDiscoverRealms(t *testing.T) {
 			"realms are directories containing an aws/ or azure/ provider subdir")
 	})
 }
+
+// --- Ambient provider dry-run accuracy (issue #2695 follow-up) ---
+//
+// Logout clears the keyring for ambient providers whether or not --keychain was passed,
+// because their entries hold nothing durable. That decision lives inside the manager, so
+// the dry-run preview — which never calls the manager — must query ambient-ness or it
+// silently under-reports what the real run removes.
+
+// ambientReportingManager decorates the generated AuthManager mock with the optional
+// types.AmbientProviderReporter interface. The mock is generated from types.AuthManager,
+// which deliberately excludes IsAmbientProvider (see the note on the interface), so tests
+// that need ambient-aware behavior layer it on here rather than hand-rolling a mock.
+type ambientReportingManager struct {
+	*authTypes.MockAuthManager
+	ambient map[string]bool
+}
+
+func (m *ambientReportingManager) IsAmbientProvider(providerName string) bool {
+	return m.ambient[providerName]
+}
+
+// Compile-time proof the decorator actually satisfies the optional interface. Without
+// this, a rename would silently turn every assertion below into a no-op, because
+// ManagerReportsAmbient falls back to false for types that do not implement it.
+var _ authTypes.AmbientProviderReporter = (*ambientReportingManager)(nil)
+
+// TestManagerReportsAmbient_FallsBackForPlainManager pins the fallback that makes the
+// optional interface safe: a manager that does not implement the reporter is treated as
+// non-ambient rather than panicking.
+func TestManagerReportsAmbient_FallsBackForPlainManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	plain := authTypes.NewMockAuthManager(ctrl)
+
+	assert.False(t, authTypes.ManagerReportsAmbient(plain, "gcp-adc"),
+		"a manager without the optional interface must report non-ambient, not panic")
+}
+
+// TestAmbientProviderNames covers the pure helper behind the `--all` preview: it must
+// filter to ambient providers only and sort them, because Go map iteration order is
+// random and an unsorted preview would differ between otherwise identical runs.
+func TestAmbientProviderNames(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := &ambientReportingManager{
+		MockAuthManager: authTypes.NewMockAuthManager(ctrl),
+		ambient:         map[string]bool{"zz-adc": true, "aa-cli": true},
+	}
+
+	got := ambientProviderNames(m, map[string]schema.Provider{
+		"zz-adc":  {Kind: "gcp/adc"},
+		"aa-cli":  {Kind: "azure/cli"},
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+		"pro":     {Kind: "atmos/pro"},
+	})
+
+	// Assert full contents and order, not just length.
+	assert.Equal(t, []string{"aa-cli", "zz-adc"}, got,
+		"only ambient providers, sorted for a deterministic preview")
+}
+
+// TestAmbientProviderNames_NoneConfigured verifies the empty case, which is what
+// suppresses the extra preview line entirely for AWS-only configurations.
+func TestAmbientProviderNames_NoneConfigured(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := &ambientReportingManager{
+		MockAuthManager: authTypes.NewMockAuthManager(ctrl),
+		ambient:         map[string]bool{},
+	}
+
+	assert.Empty(t, ambientProviderNames(m, map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	}))
+}
+
+// TestPerformIdentityLogout_DryRun_AmbientRuns exercises the identity preview end to end
+// for an ambient chain with no --keychain: it must complete without calling Logout, and
+// the manager must be consulted for ambient-ness rather than assuming the flag decides.
+func TestPerformIdentityLogout_DryRun_AmbientRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	base := authTypes.NewMockAuthManager(ctrl)
+	m := &ambientReportingManager{MockAuthManager: base, ambient: map[string]bool{"gcp-adc": true}}
+
+	base.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"deployer": {Kind: "gcp/service-account"},
+	})
+	base.EXPECT().GetProviderForIdentity("deployer").Return("gcp-adc")
+	base.EXPECT().GetFilesDisplayPath("gcp-adc").Return("/atmos/realm/creds")
+	base.EXPECT().Logout(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performIdentityLogout(context.Background(), m, "deployer", true /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// TestPerformProviderLogout_DryRun_AmbientRuns is the provider-scoped counterpart.
+func TestPerformProviderLogout_DryRun_AmbientRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	base := authTypes.NewMockAuthManager(ctrl)
+	m := &ambientReportingManager{MockAuthManager: base, ambient: map[string]bool{"gcp-adc": true}}
+
+	base.EXPECT().GetProviders().Return(map[string]schema.Provider{"gcp-adc": {Kind: "gcp/adc"}})
+	base.EXPECT().GetIdentities().Return(map[string]schema.Identity{})
+	base.EXPECT().GetFilesDisplayPath("gcp-adc").Return("/atmos/realm/creds")
+	base.EXPECT().LogoutProvider(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performProviderLogout(context.Background(), m, "gcp-adc", true /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// TestPerformLogoutAll_DryRun_AmbientRuns covers the `--all` preview, which reports
+// ambient providers as a group rather than per identity.
+func TestPerformLogoutAll_DryRun_AmbientRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	base := authTypes.NewMockAuthManager(ctrl)
+	m := &ambientReportingManager{MockAuthManager: base, ambient: map[string]bool{"gcp-adc": true}}
+
+	// Fetched exactly once and shared by the keyring and file sections of the preview.
+	base.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"gcp-adc": {Kind: "gcp/adc"},
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	}).Times(1)
+	base.EXPECT().GetFilesDisplayPath(gomock.Any()).Return("/atmos/realm/creds").AnyTimes()
+	base.EXPECT().LogoutAll(gomock.Any(), gomock.Any()).Times(0)
+
+	err := performLogoutAll(context.Background(), m, true /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
