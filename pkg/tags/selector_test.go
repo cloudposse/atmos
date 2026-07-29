@@ -241,8 +241,9 @@ func TestForbiddenSelectorFunctionsCompleteness(t *testing.T) {
 		}
 	}
 
-	// Every deny-list entry must correspond to a registered YAML function;
-	// a stale entry means the function was renamed or removed upstream.
+	// Every deny-list and selector-safe entry must correspond to a registered
+	// YAML function; a stale entry means the function was renamed or removed
+	// upstream.
 	registered := make(map[string]struct{}, len(u.AtmosYamlTags))
 	for _, name := range u.AtmosYamlTags {
 		registered[name] = struct{}{}
@@ -250,6 +251,11 @@ func TestForbiddenSelectorFunctionsCompleteness(t *testing.T) {
 	for name := range forbiddenSelectorFunctions {
 		if _, ok := registered[name]; !ok {
 			t.Errorf("deny-list entry %q is not registered in utils.AtmosYamlTags", name)
+		}
+	}
+	for name := range selectorSafe {
+		if _, ok := registered[name]; !ok {
+			t.Errorf("selector-safe entry %q is not registered in utils.AtmosYamlTags", name)
 		}
 	}
 }
