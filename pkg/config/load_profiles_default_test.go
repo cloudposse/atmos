@@ -45,9 +45,9 @@ func TestLoadConfig_ProfilesDefault_LoadsWhenNoFlagOrEnv(t *testing.T) {
 		"profiles.default should populate ProfilesFromArg with 'developer'")
 }
 
-// TestLoadConfig_ProfileStackOverrideIgnoresWorkdirFiles verifies that generated
-// YAML under a profile's .workdir directory is not merged as Atmos configuration.
-func TestLoadConfig_ProfileStackOverrideIgnoresWorkdirFiles(t *testing.T) {
+// TestLoadConfig_ProfileStackOverrideReportsWorkdirConfig verifies that profile
+// discovery reports invalid YAML under nested directories instead of ignoring it.
+func TestLoadConfig_ProfileStackOverrideReportsWorkdirConfig(t *testing.T) {
 	fixturePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "config-profiles-stack-override")
 	absFixture, err := filepath.Abs(fixturePath)
 	require.NoError(t, err)
@@ -70,16 +70,9 @@ func TestLoadConfig_ProfileStackOverrideIgnoresWorkdirFiles(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{
 		ProfilesFromArg: []string{"developer"},
 	}
-	atmosConfig, err := LoadConfig(&configAndStacksInfo)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"developer"}, configAndStacksInfo.ProfilesFromArg)
-	assert.Equal(t, "stacks", atmosConfig.Stacks.BasePath)
-	assert.Equal(t, []string{"deploy/**/*"}, atmosConfig.Stacks.IncludedPaths)
-	assert.Equal(t, "Info", atmosConfig.Logs.Level,
-		"unrelated base configuration must remain intact")
-	assert.Empty(t, atmosConfig.Version.Use,
-		"generated .workdir version metadata must not be merged as Atmos configuration")
+	_, err = LoadConfig(&configAndStacksInfo)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "'version' expected a map or struct")
 }
 
 func TestLoadConfig_ProfileDefaultCanImportAuthConfig(t *testing.T) {

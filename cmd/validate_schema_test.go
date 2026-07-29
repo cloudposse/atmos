@@ -31,9 +31,21 @@ func TestValidateSchemaCmd_UnknownFlags(t *testing.T) {
 }
 
 func TestIsBuiltinConfigSchemaValidation(t *testing.T) {
-	assert.True(t, isBuiltinConfigSchemaValidation([]string{"config"}))
-	assert.False(t, isBuiltinConfigSchemaValidation(nil))
-	assert.False(t, isBuiltinConfigSchemaValidation([]string{"custom"}))
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "config", args: []string{"config"}, want: true},
+		{name: "nil", args: nil, want: false},
+		{name: "custom", args: []string{"custom"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isBuiltinConfigSchemaValidation(tt.args))
+		})
+	}
 }
 
 func TestRunValidateSchemaForFiles_ConfigSkipsConfigCheck(t *testing.T) {

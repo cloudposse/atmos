@@ -146,7 +146,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:    "built-in config entry ignores generated workdir YAML",
+			name:    "built-in config entry validates generated workdir YAML",
 			schemas: nil,
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
 				fmi.EXPECT().MatchFiles(builtinConfigSchemaMatches()).Return([]string{
@@ -154,8 +154,9 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 					"profiles/developer/.workdir/version.yaml",
 				}, nil)
 				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, "profiles/developer/stacks.yaml").Return([]gojsonschema.ResultError{}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, "profiles/developer/.workdir/version.yaml").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
 			},
-			expectedError: nil,
+			expectedError: ErrInvalidYAML,
 		},
 		{
 			name:      "source key config targets only the built-in entry",
