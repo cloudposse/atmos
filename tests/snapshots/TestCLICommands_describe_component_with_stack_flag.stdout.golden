@@ -51,9 +51,6 @@ atmos_cli_config:
       - '**/_defaults.yaml'
     name_pattern: ""
     name_template: '{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.region }}'
-    list:
-      format: tree
-      columns: []
     inherit:
       metadata: true
   workflows:
@@ -447,4 +444,3 @@ vars:
     tenant: acme
   tenant: acme
 workspace: acme-dev-us-east-1
-

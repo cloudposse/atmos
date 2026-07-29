@@ -81,7 +81,7 @@
     "name_pattern": "{stage}",
     "name_template": "",
     "list": {
-      "format": "tree",
+      "format": "",
       "columns": null
     },
     "inherit": {
@@ -313,7 +313,7 @@
       "columns": null
     },
     "instances": {
-      "format": "tree",
+      "format": "",
       "columns": null
     },
     "stacks": {

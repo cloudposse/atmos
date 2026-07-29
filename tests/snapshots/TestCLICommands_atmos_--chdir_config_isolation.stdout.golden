@@ -53,9 +53,6 @@ stacks:
   excluded_paths: []
   name_pattern: ""
   name_template: '{{.vars.stage}}'
-  list:
-    format: tree
-    columns: []
   inherit:
     metadata: true
 logs:
@@ -129,7 +126,4 @@ container:
   runtime:
     auto_start: true
 list:
-  instances:
-    format: tree
-    columns: []
   error_mode: warn

@@ -74,7 +74,7 @@
       "name_pattern": "",
       "name_template": "",
       "list": {
-        "format": "tree",
+        "format": "",
         "columns": null
       },
       "inherit": {
