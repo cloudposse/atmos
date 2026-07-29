@@ -5,13 +5,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -99,7 +99,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	errorList, err := checkComponentStackMap(terraformComponentStackMap)
+	errorList, err := checkComponentStackMap(stacksMap, cfg.TerraformSectionName, terraformComponentStackMap)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	errorList, err = checkComponentStackMap(helmfileComponentStackMap)
+	errorList, err = checkComponentStackMap(stacksMap, cfg.HelmfileSectionName, helmfileComponentStackMap)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,8 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
-	// Second pass: only process top-level files (not imported by others)
+	// Second pass: process every top-level file for schema validation. The
+	// earlier FindStacksMap call resolves component inheritance as logical groups.
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		relativeFilePath := u.TrimBasePathFromPath(atmosConfig.StacksBaseAbsolutePath+"/", filePath)
 
@@ -232,11 +233,10 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			log.Debug("Skipping imported file (will be processed via parent)", "file", relativeFilePath)
 			continue
 		}
-
 		// Create a new merge context to track import chain for better error messages
 		mergeContext := m.NewMergeContext()
 
-		processingResult, _, err := ProcessYAMLConfigFileWithContext(
+		_, _, err := ProcessYAMLConfigFileWithContext(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -256,28 +256,6 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		if err != nil {
 			// Collect the error from ProcessYAMLConfigFile
 			validationErrorMessages = append(validationErrorMessages, err.Error())
-		} else {
-			// Only process stack config if YAML processing succeeded
-			// This avoids duplicate error reporting for the same issue
-			_, err = ProcessStackConfig(
-				atmosConfig,
-				atmosConfig.StacksBaseAbsolutePath,
-				atmosConfig.TerraformDirAbsolutePath,
-				atmosConfig.HelmfileDirAbsolutePath,
-				atmosConfig.PackerDirAbsolutePath,
-				atmosConfig.AnsibleDirAbsolutePath,
-				filePath,
-				processingResult.DeepMergedConfig,
-				false,
-				true,
-				"",
-				map[string]map[string][]string{},
-				processingResult.ImportsConfig,
-				false,
-			)
-			if err != nil {
-				validationErrorMessages = append(validationErrorMessages, err.Error())
-			}
 		}
 	}
 
@@ -451,86 +429,118 @@ func createComponentStackMap(
 	return terraformComponentStackMap, nil
 }
 
-func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([]string, error) {
+func checkComponentStackMap(stacksMap map[string]any, componentType string, componentStackMap map[string]map[string][]string) ([]string, error) {
 	defer perf.Track(nil, "exec.checkComponentStackMap")()
 
 	var res []string
 
 	for componentName, componentSection := range componentStackMap {
 		for stackName, stackManifests := range componentSection {
-			if len(stackManifests) > 1 {
-				// We have the same Atmos component in the same stack configured (or imported) in more than one stack manifest files
-				// Check if the component configs are the same (deep-equal) in those stack manifests.
-				// If the configs are different, add it to the errors
-				var componentConfigs []map[string]any
-				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-						Component:            componentName,
-						Stack:                stackManifestName,
-						ProcessTemplates:     false,
-						ProcessYamlFunctions: false,
-						Skip:                 nil,
-						AuthManager:          nil,
-					})
-					if err != nil {
-						return nil, err
-					}
-
-					// Hide the sections that should not be compared
-					componentConfig["atmos_cli_config"] = nil
-					componentConfig["atmos_stack"] = nil
-					componentConfig["stack"] = nil
-					componentConfig["atmos_stack_file"] = nil
-					componentConfig["atmos_manifest"] = nil
-					componentConfig["sources"] = nil
-					componentConfig["imports"] = nil
-					componentConfig["deps_all"] = nil
-					componentConfig["deps"] = nil
-
-					componentConfigs = append(componentConfigs, componentConfig)
-				}
-
-				componentConfigsEqual := true
-
-				for i := 0; i < len(componentConfigs)-1; i++ {
-					if !reflect.DeepEqual(componentConfigs[i], componentConfigs[i+1]) {
-						componentConfigsEqual = false
-						break
-					}
-				}
-
-				if !componentConfigsEqual {
-					var m1 string
-					for _, stackManifestName := range stackManifests {
-						m1 = m1 + "\n" + fmt.Sprintf("- atmos describe component %s -s %s", componentName, stackManifestName)
-					}
-
-					m := fmt.Sprintf(
-						"The Atmos component '%[1]s' in the stack '%[2]s' is defined in more than one top-level stack manifest file: %[3]s.\n\n"+
-							"The component configurations in the stack manifests are different.\n\n"+
-							"To check and compare the component configurations in the stack manifests, run the following commands: %[4]s\n\n"+
-							"You can use the '--file' flag to write the results of the above commands to files (refer to https://atmos.tools/cli/commands/describe/component).\n"+
-							"You can then use the Linux 'diff' command to compare the files line by line and show the differences (refer to https://man7.org/linux/man-pages/man1/diff.1.html)\n\n"+
-							"When searching for the component '%[1]s' in the stack '%[2]s', Atmos can't decide which stack "+
-							"manifest file to use to get configuration for the component.\n"+
-							"This is a stack misconfiguration.\n\n"+
-							"Consider the following solutions to fix the issue:\n"+
-							"- Ensure that the same instance of the Atmos '%[1]s' component in the stack '%[2]s' is only defined once (in one YAML stack manifest file)\n"+
-							"- When defining multiple instances of the same component in the stack, ensure each has a unique name\n"+
-							"- Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/stacks/inheritance)\n\n",
-						componentName,
-						stackName,
-						strings.Join(stackManifests, ", "),
-						m1,
-					)
-
-					res = append(res, m)
-				}
+			message, err := checkDuplicateComponentConfig(stacksMap, componentType, componentName, stackName, stackManifests)
+			if err != nil {
+				return nil, err
+			}
+			if message != "" {
+				res = append(res, message)
 			}
 		}
 	}
 
 	return res, nil
+}
+
+func checkDuplicateComponentConfig(
+	stacksMap map[string]any,
+	componentType string,
+	componentName string,
+	stackName string,
+	stackManifests []string,
+) (string, error) {
+	if len(stackManifests) < 2 {
+		return "", nil
+	}
+
+	componentConfigs := make([]map[string]any, 0, len(stackManifests))
+	for _, stackManifestName := range stackManifests {
+		componentConfig, err := getValidationComponentConfig(stacksMap, componentType, componentName, stackManifestName)
+		if err != nil {
+			return "", err
+		}
+		componentConfigs = append(componentConfigs, componentConfig)
+	}
+
+	if componentConfigsEqual(componentConfigs) {
+		return "", nil
+	}
+
+	var describeCommands string
+	for _, stackManifestName := range stackManifests {
+		describeCommands += fmt.Sprintf("\n- atmos describe component %s -s %s", componentName, stackManifestName)
+	}
+
+	return fmt.Sprintf(
+		"The Atmos component '%[1]s' in the stack '%[2]s' is defined in more than one top-level stack manifest file: %[3]s.\n\n"+
+			"The component configurations in the stack manifests are different.\n\n"+
+			"To check and compare the component configurations in the stack manifests, run the following commands: %[4]s\n\n"+
+			"You can use the '--file' flag to write the results of the above commands to files (refer to https://atmos.tools/cli/commands/describe/component).\n"+
+			"You can then use the Linux 'diff' command to compare the files line by line and show the differences (refer to https://man7.org/linux/man-pages/man1/diff.1.html)\n\n"+
+			"When searching for the component '%[1]s' in the stack '%[2]s', Atmos can't decide which stack "+
+			"manifest file to use to get configuration for the component.\n"+
+			"This is a stack misconfiguration.\n\n"+
+			"Consider the following solutions to fix the issue:\n"+
+			"- Ensure that the same instance of the Atmos '%[1]s' component in the stack '%[2]s' is only defined once (in one YAML stack manifest file)\n"+
+			"- When defining multiple instances of the same component in the stack, ensure each has a unique name\n"+
+			"- Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/stacks/inheritance)\n\n",
+		componentName,
+		stackName,
+		strings.Join(stackManifests, ", "),
+		describeCommands,
+	), nil
+}
+
+func getValidationComponentConfig(
+	stacksMap map[string]any,
+	componentType string,
+	componentName string,
+	stackManifestName string,
+) (map[string]any, error) {
+	stackConfig, ok := stacksMap[stackManifestName].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: could not find stack manifest %q", errUtils.ErrInvalidStackManifest, stackManifestName)
+	}
+
+	components, ok := stackConfig[cfg.ComponentsSectionName].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: components section is missing in stack manifest %q", errUtils.ErrComponentsSectionNotFound, stackManifestName)
+	}
+
+	componentTypeConfig, ok := components[componentType].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf(
+			"%w: components.%s section is missing in stack manifest %q",
+			validationComponentTypeError(componentType),
+			componentType,
+			stackManifestName,
+		)
+	}
+
+	componentConfig, ok := componentTypeConfig[componentName].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: component %q is missing in stack manifest %q", errUtils.ErrComponentNotDefined, componentName, stackManifestName)
+	}
+
+	return componentConfig, nil
+}
+
+func validationComponentTypeError(componentType string) error {
+	switch componentType {
+	case cfg.TerraformSectionName:
+		return errUtils.ErrInvalidComponentsTerraform
+	case cfg.HelmfileSectionName:
+		return errUtils.ErrInvalidComponentsHelmfile
+	default:
+		return errUtils.ErrInvalidComponentsSection
+	}
 }
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL.
