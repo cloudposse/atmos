@@ -1,0 +1,11 @@
+base_path: .
+
+components:
+  terraform:
+    base_path: components/terraform
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - parents/**/*
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
