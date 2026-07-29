@@ -140,7 +140,8 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 
 // prepareStepEnvironment prepares environment variables for a workflow step.
 // baseEnv should already contain system env + global env + toolchain PATH.
-// This function merges workflow and step env on top, then handles auth if needed.
+// This function merges workflow env, persistent env-step values, and step env on
+// top, then handles auth if needed.
 // Returns the environment variables to use for the step.
 func prepareStepEnvironment(
 	baseEnv []string,
@@ -148,16 +149,22 @@ func prepareStepEnvironment(
 	stepName string,
 	authManager auth.AuthManager,
 	workflowEnvMap map[string]string,
+	persistentEnvMap map[string]string,
 	stepEnvMap map[string]string,
 ) ([]string, error) {
 	// Make a copy of baseEnv to avoid modifying the caller's slice.
 	stepEnv := make([]string, len(baseEnv))
 	copy(stepEnv, baseEnv)
 
-	// Merge workflow and step env vars into a single map (step overrides workflow for same key).
+	// Merge workflow, persistent env-step, and step env vars into a single map.
+	// Later layers take precedence, so a current step's env can override a value
+	// established by an earlier env step.
 	// This ensures duplicate keys are resolved before adding to the environment.
-	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(stepEnvMap))
+	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(persistentEnvMap)+len(stepEnvMap))
 	for k, v := range workflowEnvMap {
+		mergedEnv[k] = v
+	}
+	for k, v := range persistentEnvMap {
 		mergedEnv[k] = v
 	}
 	for k, v := range stepEnvMap {
@@ -174,7 +181,7 @@ func prepareStepEnvironment(
 		stepEnv = append(stepEnv, envpkg.ConvertMapToSlice(mergedEnv)...)
 	}
 
-	// No identity specified, use base environment (system + global + toolchain + workflow + step env).
+	// No identity specified, use base environment (system + global + toolchain + workflow + persistent + step env).
 	if stepIdentity == "" {
 		return stepEnv, nil
 	}
@@ -487,6 +494,7 @@ func ExecuteWorkflow(
 	// This is reused for all steps, with workflow/step env vars merged on top per step.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	baseEnv = append(baseEnv, tenv.EnvVars()...)
+	persistentEnv := make(map[string]string)
 
 	// Initialize show renderer for header/flags display.
 	showRenderer := workflowPkg.NewShowRenderer()
@@ -573,9 +581,9 @@ func ExecuteWorkflow(
 		}
 
 		// Prepare environment variables: start with baseEnv (system + global + toolchain).
-		// Then merge workflow-level and step-level env vars.
+		// Then merge workflow-level, persistent env-step, and step-level env vars.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, resolvedWorkflowEnv, resolvedStepEnv)
+		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, resolvedWorkflowEnv, persistentEnv, resolvedStepEnv)
 		if err != nil {
 			if workflowErr == nil {
 				workflowErr = err
@@ -701,6 +709,7 @@ func ExecuteWorkflow(
 					commandLineStack:    commandLineStack,
 					commandLineIdentity: stepIdentity,
 					baseEnv:             baseEnv,
+					persistentEnv:       persistentEnv,
 					authManager:         authManager,
 				}, &steps[stepIdx])
 			case commandType == "shell":
@@ -946,6 +955,15 @@ func ExecuteWorkflow(
 				workflowErr = errors.Join(workflowErr, stepErr)
 			}
 			conditionStatus = schema.ConditionPredicateFailure
+			continue
+		}
+
+		if commandType == "env" && (step.Export == nil || *step.Export) {
+			for key := range step.Vars {
+				if value, ok := workflowVars.Env[key]; ok {
+					persistentEnv[key] = value
+				}
+			}
 		}
 	}
 
