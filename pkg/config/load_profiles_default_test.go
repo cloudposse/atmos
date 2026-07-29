@@ -78,6 +78,8 @@ func TestLoadConfig_ProfileStackOverrideIgnoresWorkdirFiles(t *testing.T) {
 	assert.Equal(t, []string{"deploy/**/*"}, atmosConfig.Stacks.IncludedPaths)
 	assert.Equal(t, "Info", atmosConfig.Logs.Level,
 		"unrelated base configuration must remain intact")
+	assert.Empty(t, atmosConfig.Version.Use,
+		"generated .workdir version metadata must not be merged as Atmos configuration")
 }
 
 func TestLoadConfig_ProfileDefaultCanImportAuthConfig(t *testing.T) {

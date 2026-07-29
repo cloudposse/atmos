@@ -1666,23 +1666,41 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 // isBuiltinConfigValidationArgs reports whether arguments invoke a built-in
 // command that validates the Atmos configuration itself.
 func isBuiltinConfigValidationArgs(args []string) bool {
-	for i, arg := range args {
-		switch arg {
-		case "config":
-			if i+1 < len(args) && args[i+1] == "validate" {
-				return true
-			}
-		case "validate":
-			if i+1 < len(args) && args[i+1] == "config" {
-				return true
-			}
-			if i+2 < len(args) && args[i+1] == "schema" && args[i+2] == "config" {
-				return true
-			}
-		}
+	if len(args) < 2 {
+		return false
 	}
 
-	return false
+	// Skip only leading root flags. Once a command token is found, remaining
+	// arguments belong to that command and must not be interpreted as commands.
+	args = args[1:]
+	for len(args) > 0 {
+		if args[0] == "--" {
+			return false
+		}
+		skip, consumesValue := isSkippableRootFlag(args[0])
+		if !skip {
+			break
+		}
+		if consumesValue {
+			if len(args) < 2 {
+				return false
+			}
+			args = args[2:]
+			continue
+		}
+		args = args[1:]
+	}
+
+	switch {
+	case len(args) >= 2 && args[0] == "config" && args[1] == "validate":
+		return true
+	case len(args) >= 2 && args[0] == "validate" && args[1] == "config":
+		return true
+	case len(args) >= 3 && args[0] == "validate" && args[1] == "schema" && args[2] == "config":
+		return true
+	default:
+		return false
+	}
 }
 
 func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
@@ -1693,6 +1711,17 @@ func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
 		return len(args) > 0 && args[0] == "config"
 	default:
 		return false
+	}
+}
+
+// configForStartupLogger returns a safe logger configuration when the main
+// configuration failed to decode, so validation can report the original error.
+func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr error) *schema.AtmosConfiguration {
+	if initErr == nil {
+		return atmosConfig
+	}
+	return &schema.AtmosConfiguration{
+		Logs: schema.Logs{File: "/dev/stderr", Level: "Warning"},
 	}
 }
 
@@ -1882,16 +1911,7 @@ func Execute() error {
 	debugPromote := maybePromoteLogLevelForDebugMode(&atmosConfig, initErr == nil)
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
-	// If decoding failed, use a minimal safe logger instead: config validation (and
-	// version) must be able to report the original configuration problem without
-	// a malformed logging section causing a second early exit.
-	loggerConfig := &atmosConfig
-	if initErr != nil {
-		loggerConfig = &schema.AtmosConfiguration{
-			Logs: schema.Logs{File: "/dev/stderr", Level: "Warning"},
-		}
-	}
-	SetupLogger(loggerConfig)
+	SetupLogger(configForStartupLogger(&atmosConfig, initErr))
 
 	if debugPromote.Promoted {
 		log.Info(
