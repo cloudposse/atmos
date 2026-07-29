@@ -118,3 +118,30 @@ func TestInvalidatingRuntimeInvalidatesOnOperationError(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, invalidated)
 }
+
+func TestResolveRuntimeForContainerCommand_CachedRuntimeOperationErrorInvalidatesCache(t *testing.T) {
+	isolateRuntimeSelectionCache(t)
+	original := detectRuntime
+	t.Cleanup(func() { detectRuntime = original })
+	detectRuntime = func(_ context.Context, _ string, _ bool) (ctr.Runtime, error) {
+		return ctr.NewPodmanRuntime(), nil
+	}
+
+	_, err := resolveRuntimeForContainerCommand(context.Background(), "", true)
+	require.NoError(t, err)
+	resolution, err := resolveRuntimeForContainerCommand(context.Background(), "", true)
+	require.NoError(t, err)
+	require.True(t, resolution.cached)
+
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("runtime unavailable"))
+	wrapped := resolution.runtime.(invalidatingRuntime)
+	wrapped.Runtime = runtime
+	_, err = wrapped.List(context.Background(), nil)
+	require.Error(t, err)
+
+	_, exists, err := resolution.cache.Get(resolution.cacheKey)
+	require.NoError(t, err)
+	assert.False(t, exists)
+}

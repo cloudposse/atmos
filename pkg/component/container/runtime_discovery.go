@@ -75,8 +75,8 @@ func resolveRuntime(ctx context.Context, preference string, autoStart, skipCache
 		resolution.cacheKey = cacheKey
 		if !skipCache {
 			if runtime, ok := loadCachedRuntime(cache, cacheKey); ok {
-				resolution.runtime = invalidatingRuntime{Runtime: runtime, invalidateCache: resolution.invalidate}
 				resolution.cached = true
+				resolution.runtime = invalidatingRuntime{Runtime: runtime, invalidateCache: resolution.invalidate}
 				return resolution, nil
 			}
 		}
