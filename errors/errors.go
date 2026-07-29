@@ -144,8 +144,10 @@ var (
 	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
 
 	// Authentication and TTY errors.
-	ErrAuthConsole            = errors.New("auth console operation failed")
-	ErrProviderNotSupported   = errors.New("provider does not support this operation")
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	// ErrWebflowRequiresAWSUser indicates --webflow was used without a direct aws/user identity.
+	ErrWebflowRequiresAWSUser = errors.New("--webflow requires an aws/user identity")
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
 	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
@@ -203,6 +205,12 @@ var (
 	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
+
+	// Terraform lint errors.
+	ErrTerraformLint             = errors.New("terraform lint failed")
+	ErrTerraformLintAuth         = errors.New("failed to initialize authentication for terraform lint")
+	ErrTerraformLintAffected     = errors.New("failed to determine affected terraform lint targets")
+	ErrBuildTerraformLintTargets = errors.New("failed to build terraform lint targets")
 
 	// --use-mocks errors.
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
@@ -396,17 +404,18 @@ var (
 	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
 	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 
-	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrMissingComponent        = errors.New("component is required")
-	ErrNoStacksToSelect        = errors.New("no stacks are configured to choose from")
-	ErrNoComponentsToSelect    = errors.New("no components are configured to choose from")
-	ErrLoadSelectionOptions    = errors.New("failed to load options for interactive selection")
-	ErrMissingComponentType    = errors.New("component type is required")
-	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
-	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
-	ErrInvalidArguments        = errors.New("invalid arguments")
-	ErrUnknownSubcommand       = errors.New("unknown subcommand")
-	ErrInvalidComponent        = errors.New("invalid component")
+	ErrMissingStack             = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent         = errors.New("component is required")
+	ErrNoStacksToSelect         = errors.New("no stacks are configured to choose from")
+	ErrNoComponentsToSelect     = errors.New("no components are configured to choose from")
+	ErrLoadSelectionOptions     = errors.New("failed to load options for interactive selection")
+	ErrMissingComponentType     = errors.New("component type is required")
+	ErrRequiredFlagNotProvided  = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty        = errors.New("required flag cannot be empty")
+	ErrInvalidArguments         = errors.New("invalid arguments")
+	ErrUnknownSubcommand        = errors.New("unknown subcommand")
+	ErrInvalidComponent         = errors.New("invalid component")
+	ErrDuplicateComponentConfig = errors.New("duplicate component configuration")
 	// ErrInvalidStack indicates the user provided an identifier that doesn't match
 	// the stack's canonical name (e.g., using filename when explicit name is set).
 	// This differs from ErrStackNotFound which indicates the stack doesn't exist at all.
@@ -612,6 +621,8 @@ var (
 	ErrInvalidPackerSection             = errors.New("invalid packer section")
 	ErrInvalidComponentsSection         = errors.New("invalid components section")
 	ErrInvalidAuthSection               = errors.New("invalid auth section")
+	ErrInvalidGlobalMetadataSection     = errors.New("invalid metadata section")
+	ErrGlobalMetadataFieldNotAllowed    = errors.New("metadata field is not allowed at global (stack-wide) scope")
 	ErrInvalidImportSection             = errors.New("invalid import section")
 	ErrInvalidImport                    = errors.New("invalid import")
 	ErrInvalidRemoteImport              = errors.New("invalid remote import")
@@ -641,6 +652,7 @@ var (
 	ErrInvalidTerraformDependencies       = errors.New("invalid terraform dependencies section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
+	ErrUnresolvedComputedTerraformVar     = errors.New("terraform variable contains an unresolved computed value")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand      = errors.New("invalid helmfile command")
@@ -843,6 +855,7 @@ var (
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrCreateFile          = errors.New("failed to create file")
 	ErrOpenFile            = errors.New("failed to open file")
 	ErrWriteFile           = errors.New("failed to write to file")
 	ErrStatFile            = errors.New("failed to stat file")

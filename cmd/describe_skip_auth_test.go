@@ -49,6 +49,48 @@ func newTestCmdWithFunctionsDisabled(t *testing.T) *cobra.Command {
 	return cmd
 }
 
+// newTestCmdWithFunctionsDisabledTemplatesDefault creates a minimal cobra.Command with
+// --process-functions=false and a registered --process-templates flag that is left
+// unset (so its default of true applies), mirroring describeStacksCmd's real flag
+// registration (see cmd/describe_stacks.go's init()).
+//
+// Note on how getRunnableDescribeStacksCmd actually populates describe.ProcessTemplates
+// in these tests: the dispatch closure calls the package-level setCliArgsForDescribeStackCli
+// function directly against the real cmd.Flags() — NOT the injectable
+// getRunnableDescribeStacksCmdProps.setCliArgsForDescribeStackCli field (see the identical
+// finding documented on TestDescribeStacksRunnable_InvalidErrorMode in
+// describe_stacks_test.go). So the `func(_ *pflag.FlagSet, _ *exec.DescribeStacksArgs) error
+// { return nil }` stub passed as that prop below is never invoked; it is only present to
+// satisfy the getRunnableDescribeStacksCmdProps struct literal.
+// The describe.ProcessTemplates and describe.ProcessYamlFunctions fields are genuinely
+// derived from this cmd's real Flags() state via the production setCliArgsForDescribeStackCli,
+// which is what makes the assertions below a real (not coincidental) proof of the auth guard's
+// behavior.
+func newTestCmdWithFunctionsDisabledTemplatesDefault(t *testing.T) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("process-templates", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+	cmd.Flags().StringP("identity", "i", "", "")
+	require.NoError(t, cmd.Flags().Set("process-functions", "false"))
+	return cmd
+}
+
+// newTestCmdWithTemplatesAndFunctionsDisabled creates a minimal cobra.Command with both
+// --process-templates=false and --process-functions=false. Describe stacks creates an
+// AuthManager when either evaluation path is enabled (see shouldCreateDescribeStacksAuthManager),
+// so both must be disabled to exercise the fully credential-free path.
+func newTestCmdWithTemplatesAndFunctionsDisabled(t *testing.T) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("process-templates", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+	cmd.Flags().StringP("identity", "i", "", "")
+	require.NoError(t, cmd.Flags().Set("process-templates", "false"))
+	require.NoError(t, cmd.Flags().Set("process-functions", "false"))
+	return cmd
+}
+
 // newTestCmdWithFunctionsDisabledAndExplicitIdentity creates a command with
 // --process-functions=false AND --identity explicitly set (simulates CLI flag).
 func newTestCmdWithFunctionsDisabledAndExplicitIdentity(t *testing.T, identityValue string) *cobra.Command {
@@ -69,13 +111,16 @@ func clearIdentityEnvVars(t *testing.T) {
 	t.Setenv("IDENTITY", "")
 }
 
-// TestDescribeStacks_SkipsAuthWhenFunctionsDisabled verifies that describe stacks
-// does not attempt identity resolution when --process-functions=false.
+// TestDescribeStacks_SkipsAuthWhenTemplatesAndFunctionsDisabled verifies that describe
+// stacks does not attempt identity resolution when both --process-templates=false and
+// --process-functions=false. Describe stacks creates an AuthManager whenever either
+// evaluation path is enabled (see shouldCreateDescribeStacksAuthManager), so disabling
+// only one is not sufficient — see TestDescribeStacks_CreatesAuthWhenTemplatesEnabledEvenIfFunctionsDisabled.
 //
 // Regression protection: the returned AtmosConfiguration has a default identity with
 // a broken provider reference. If the guard were removed, auth would be attempted,
 // fail, and the test would catch the error.
-func TestDescribeStacks_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
+func TestDescribeStacks_SkipsAuthWhenTemplatesAndFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	clearIdentityEnvVars(t)
 
@@ -85,13 +130,14 @@ func TestDescribeStacks_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when --process-functions=false")
+			assert.Nil(t, args.AuthManager, "AuthManager must be nil when both templates and functions are disabled")
+			assert.False(t, args.ProcessTemplates, "ProcessTemplates must be false")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
 	).Times(1)
 
-	testCmd := newTestCmdWithFunctionsDisabled(t)
+	testCmd := newTestCmdWithTemplatesAndFunctionsDisabled(t)
 
 	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		func(opts ...AtmosValidateOption) {},
@@ -107,18 +153,60 @@ func TestDescribeStacks_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	})
 
 	err := run(testCmd, []string{})
-	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
+	assert.NoError(t, err, "should succeed when templates and functions are both disabled — auth must be skipped entirely")
 }
 
-// TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that an
-// ATMOS_IDENTITY environment variable does NOT bypass the process-functions guard.
-// Only an explicit --identity CLI flag should force auth when functions are disabled.
-func TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+// TestDescribeStacks_CreatesAuthWhenTemplatesEnabledEvenIfFunctionsDisabled verifies the
+// fix for nested auth inheritance: Go templates (notably atmos.Component()) can require
+// credentials just like YAML functions, so describe stacks must still resolve the default
+// identity when --process-templates remains enabled (the default), even if
+// --process-functions=false. Without this, a nested atmos.Component() target with no
+// auth: section of its own would inherit an empty AuthContext and fall through to
+// ambient/IMDS credentials. See docs/fixes/2026-07-24-nested-auth-inheritance.md.
+func TestDescribeStacks_CreatesAuthWhenTemplatesEnabledEvenIfFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Mock should NOT be called — auth resolution fails (broken identity) before execution.
+	// No .EXPECT() is registered on mockExec, so gomock fails the test immediately if
+	// Execute is ever invoked, which is what proves the auth error happens first.
+	mockExec := exec.NewMockDescribeStacksExec(ctrl)
+
+	// --process-templates is registered with its real default (true) and left unset;
+	// only --process-functions is disabled. See newTestCmdWithFunctionsDisabledTemplatesDefault
+	// for why describe.ProcessTemplates is genuinely true here (derived from this cmd's
+	// real Flags() by the production setCliArgsForDescribeStackCli), not merely assumed.
+	testCmd := newTestCmdWithFunctionsDisabledTemplatesDefault(t)
+
+	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return atmosConfigWithBrokenDefaultIdentity(), nil
+		},
+		func(_ *schema.AtmosConfiguration) error { return nil },
+		func(_ *pflag.FlagSet, _ *exec.DescribeStacksArgs) error { return nil },
+		mockExec,
+	})
+
+	err := run(testCmd, []string{})
+	assert.Error(t, err, "templates remain enabled by default, so auth must still be attempted even though functions are disabled")
+}
+
+// TestDescribeStacks_SkipsAuthWhenEnvVarSetButTemplatesAndFunctionsDisabled verifies that
+// an ATMOS_IDENTITY environment variable does NOT bypass the templates/functions guard.
+// Only an explicit --identity CLI flag should force auth when both are disabled.
+func TestDescribeStacks_SkipsAuthWhenEnvVarSetButTemplatesAndFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
 	// Re-bind after reset so viper can see the env var via GetIdentityFromFlags.
 	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
-	// Set the env var — this should NOT trigger auth when functions are disabled.
+	// Set the env var — this should NOT trigger auth when templates and functions are disabled.
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 
@@ -128,13 +216,18 @@ func TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T)
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var is set but --process-functions=false and no explicit --identity flag")
+			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var is set but templates/functions are disabled and no explicit --identity flag")
+			assert.False(t, args.ProcessTemplates, "ProcessTemplates must be false")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
 	).Times(1)
 
-	testCmd := newTestCmdWithFunctionsDisabled(t)
+	// testCmd carries the real, explicitly-disabled --process-templates=false and
+	// --process-functions=false flag values (see newTestCmdWithTemplatesAndFunctionsDisabled),
+	// so the env-var guard below is exercised against genuine disabled state rather than
+	// zero-value defaults.
+	testCmd := newTestCmdWithTemplatesAndFunctionsDisabled(t)
 
 	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		func(opts ...AtmosValidateOption) {},
@@ -150,7 +243,7 @@ func TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T)
 	})
 
 	err := run(testCmd, []string{})
-	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when templates and functions are both disabled")
 }
 
 // TestDescribeStacks_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that

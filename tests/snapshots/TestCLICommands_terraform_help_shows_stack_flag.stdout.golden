@@ -40,6 +40,7 @@ BUILT-IN COMMANDS
       help                              Show help for terraform command
       import                            Import existing infrastructure into Terraform state
       init                              Prepare your working directory for other commands
+      lint                              Lint Terraform components with TFLint
       login                             Obtain and save credentials for a remote host
       logout                            Remove locally-stored credentials for a remote host
       metadata                          Metadata related commands

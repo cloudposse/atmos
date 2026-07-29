@@ -120,6 +120,10 @@ jobs:
 
       - name: Mirror Terraform providers
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        env:
+          # TFLint release-attestation verification invokes `gh`, which reads
+          # GH_TOKEN (not GITHUB_TOKEN) while installing tool dependencies.
+          GH_TOKEN: ${{ github.token }}
         run: atmos terraform cache mirror bucket -s test --platform=linux_amd64 --format=json
 
       - name: Terraform plan
@@ -166,6 +170,10 @@ jobs:
 
       - name: Mirror Terraform providers
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        env:
+          # TFLint release-attestation verification invokes `gh`, which reads
+          # GH_TOKEN (not GITHUB_TOKEN) while installing tool dependencies.
+          GH_TOKEN: ${{ github.token }}
         run: atmos terraform cache mirror bucket -s test --platform=linux_amd64 --format=json
 
       - name: Terraform apply

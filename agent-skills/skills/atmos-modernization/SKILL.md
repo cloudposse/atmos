@@ -19,6 +19,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | `settings.depends_on` | `dependencies.components` |
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |
+| GitHub Actions `concurrency` around jobs or workflows that invoke `atmos` | An explicit promotion workflow or deployment controller — environments and merge queues are approval/merge-order controls, not deployment-order guarantees; a concurrency group evicts its pending run regardless of `cancel-in-progress` |
 | `hashicorp/setup-terraform` / `opentofu/setup-opentofu` in Atmos jobs | Atmos `dependencies.tools` and toolchain |
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |
@@ -33,7 +34,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 ## Process
 
 1. Inspect current project behavior with `atmos describe stacks`, `atmos list components`, and
-   `atmos validate stacks`.
+  `atmos validate stacks`.
 2. Replace one class of legacy pattern at a time.
 3. Preserve resolved stack output unless the modernization intentionally changes behavior.
 4. Validate with `atmos describe component <component> -s <stack>` before changing CI.

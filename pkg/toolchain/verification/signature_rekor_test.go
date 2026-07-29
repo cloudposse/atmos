@@ -13,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
-func TestClassifyCosignError(t *testing.T) {
+func TestClassifySignatureVerificationError(t *testing.T) {
 	t.Parallel()
 
 	// Realistic cosign stderr captured from a Sigstore Rekor flake in CI.
@@ -105,7 +105,7 @@ func TestClassifyCosignError(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			classified := classifyCosignError(tc.err)
+			classified := classifySignatureVerificationError(tc.err)
 			if tc.err == nil {
 				assert.NoError(t, classified)
 				return
@@ -153,7 +153,7 @@ func TestRunCosignWithRetry_RecoversFromRekorFlake(t *testing.T) {
 	t.Parallel()
 
 	// Build an error that simulates the runner's wrapping. Need
-	// classifyCosignError to detect the Rekor marker in the message.
+	// classifySignatureVerificationError to detect the Rekor marker in the message.
 	rekorErr := fmt.Errorf("%w: cosign [verify-blob ...]: exit status 1\n"+
 		"Error: searching log query: [POST /api/v1/log/entries/retrieve][400] searchLogQueryBadRequest",
 		ErrSignatureFailed)
@@ -218,6 +218,24 @@ func TestRunCosignWithRetry_RecoversFromTransportFlake(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, runner.calls, "expected 2 retried failures + 1 success")
 	assert.Equal(t, []string{"verify-blob", "asset.tar.gz"}, runner.finalCallArgs)
+}
+
+// TestRunGitHubAttestationWithRetry_RecoversFromAPITimeout reproduces the
+// GitHub Actions timeout seen while TFLint's release attestation was fetched.
+// A transport failure occurs before any attestation verdict, so retrying is
+// safe and must not weaken signature verification.
+func TestRunGitHubAttestationWithRetry_RecoversFromAPITimeout(t *testing.T) {
+	t.Parallel()
+
+	timeoutErr := fmt.Errorf("%w: gh [attestation verify asset --repo terraform-linters/tflint]: exit status 1\n"+
+		"Error: Get \"https://api.github.com/repos/terraform-linters/tflint/attestations/sha256:abc\": dial tcp 140.82.112.6:443: i/o timeout", ErrSignatureFailed)
+	runner := &flakyRunner{retryableErr: timeoutErr, failAttempts: 1}
+	req := &Request{Runner: runner}
+
+	err := runGitHubAttestationWithRetry(context.Background(), req, []string{"attestation", "verify", "asset", "--repo", "terraform-linters/tflint"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, runner.calls, "expected one retried timeout followed by success")
+	assert.Equal(t, []string{"attestation", "verify", "asset", "--repo", "terraform-linters/tflint"}, runner.finalCallArgs)
 }
 
 func TestRunCosignWithRetry_DoesNotRetryRealFailures(t *testing.T) {

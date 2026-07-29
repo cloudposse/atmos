@@ -601,9 +601,9 @@ var RootCmd = &cobra.Command{
 					"", "",
 				)
 			case "warn":
-				ui.Experimental(experimentalCmd)
+				showExperimentalCommandNotice(cmd, experimentalCmd)
 			case "error":
-				ui.Experimental(experimentalCmd)
+				showExperimentalCommandNotice(cmd, experimentalCmd)
 				errUtils.CheckErrorPrintAndExit(
 					errUtils.Build(errUtils.ErrExperimentalRequiresIn).
 						WithContext("command", experimentalCmd).
@@ -1039,6 +1039,40 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+const (
+	experimentalNoticeAnnotation = "atmos.io/experimental-notice-emitted"
+	experimentalNoticeEmitted    = "true"
+)
+
+var writeExperimentalNotice = ui.Experimental
+
+// showExperimentalCommandNotice emits an experimental warning at most once for a command execution.
+// Cobra integrations can invoke a persistent pre-run more than once while setting up a command.
+func showExperimentalCommandNotice(cmd *cobra.Command, feature string) {
+	if cmd == nil {
+		return
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	if cmd.Annotations[experimentalNoticeAnnotation] == experimentalNoticeEmitted {
+		return
+	}
+
+	cmd.Annotations[experimentalNoticeAnnotation] = experimentalNoticeEmitted
+	writeExperimentalNotice(feature)
+}
+
+func resetExperimentalCommandNotices(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	delete(cmd.Annotations, experimentalNoticeAnnotation)
+	for _, child := range cmd.Commands() {
+		resetExperimentalCommandNotices(child)
+	}
 }
 
 // checkExperimentalSettings checks if any experimental settings are enabled in the config
@@ -1727,6 +1761,7 @@ func shortChdirHasInlineValue(arg string) bool {
 func Execute() error {
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
 	defer castcmd.FinalizeRecording()
+	resetExperimentalCommandNotices(RootCmd)
 
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.

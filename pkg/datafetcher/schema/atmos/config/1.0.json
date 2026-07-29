@@ -1779,7 +1779,9 @@
         "docs": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Docs"
+              "$ref": "#/$defs/Docs",
+              "deprecated": true,
+              "x-atmos-replacement": "docs"
             },
             {
               "type": "null"
@@ -4331,7 +4333,9 @@
         "max-width": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.max-width"
             },
             {
               "type": "null"
@@ -4345,7 +4349,9 @@
         "pagination": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.pagination"
             },
             {
               "type": "null"
@@ -5590,7 +5596,9 @@
         "helm_aws_profile_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "--identity"
             },
             {
               "type": "null"
@@ -5601,7 +5609,9 @@
         "cluster_name_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "components.helmfile.cluster_name_template"
             },
             {
               "type": "null"
@@ -7884,7 +7894,9 @@
         "provider_type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "driver"
             },
             {
               "type": "null"
@@ -8866,7 +8878,9 @@
         "name_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "stacks.name_template"
             },
             {
               "type": "null"
@@ -9882,6 +9896,33 @@
             }
           ],
           "description": "Environment variables (supports templates)."
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Command/scanner step arguments (supports templates)."
         },
         "vars": {
           "anyOf": [
@@ -10976,7 +11017,9 @@
         "no_color": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.color (invert the value)"
             },
             {
               "type": "null"
@@ -11227,6 +11270,20 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "lint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformLint"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lint configures the built-in `atmos terraform lint` command.\nA configured config path is used when a component does not provide its own\n.tflint.hcl file."
         },
         "planfiles": {
           "anyOf": [
@@ -11678,6 +11735,33 @@
         }
       },
       "type": "object"
+    },
+    "TerraformLint": {
+      "properties": {
+        "config": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ErrorMode is the project-wide default for `atmos terraform lint`'s `--error-mode` flag:\nhow to handle a recoverable per-value YAML function error (e.g. a Terraform backend that\nhas not been provisioned yet) or a component-specific auth failure encountered while\ndiscovering lint targets. Values: \"strict\", \"warn\" (default), \"silent\". An explicit\n--error-mode flag or ATMOS_TERRAFORM_LINT_ERROR_MODE env var overrides this."
+        }
+      },
+      "type": "object",
+      "description": "TerraformLint configures TFLint for Terraform components. Config may be an\nabsolute path or a path relative to the Atmos base path."
     },
     "TerraformPlan": {
       "properties": {
@@ -13079,7 +13163,9 @@
         "type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "kind"
             },
             {
               "type": "null"
@@ -14254,6 +14340,33 @@
             }
           ],
           "description": "Environment variables (supports templates)."
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Command/scanner step arguments (supports templates)."
         },
         "vars": {
           "anyOf": [

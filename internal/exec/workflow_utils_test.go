@@ -19,6 +19,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
@@ -617,8 +618,10 @@ func TestBuildWorkflowStepError(t *testing.T) {
 			assert.Error(t, result)
 			assert.ErrorIs(t, result, tt.expectSentinel)
 
-			// Use Format to get the full formatted error including hints.
-			formattedErr := errUtils.Format(result, errUtils.DefaultFormatterConfig())
+			// Use Format to get the full formatted error including hints. Strip ANSI
+			// since CI-enabled color rendering can split an expected substring (e.g. a
+			// syntax-highlighted code fence) across separate escape-coded spans.
+			formattedErr := atmosansi.Strip(errUtils.Format(result, errUtils.DefaultFormatterConfig()))
 			for _, expected := range tt.expectContains {
 				assert.Contains(t, formattedErr, expected)
 			}
@@ -1347,6 +1350,9 @@ func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T
 	err = ExecuteWorkflow(atmosConfig, "test-failure-continuation", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
+	assert.Equal(t, 7, errUtils.GetExitCode(err))
+	_, stored := stepExecutorState.GetResult("fail-step")
+	assert.False(t, stored)
 	formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 	assert.Contains(t, strings.ReplaceAll(formattedErr, "\n", ""), "fail-step")
 
@@ -1468,7 +1474,13 @@ func TestExecuteWorkflow_DryRunShell(t *testing.T) {
 
 	// Dry run should not execute the command.
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	result, stored := stepExecutorState.GetResult("step1")
+	require.True(t, stored)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, "", result.Metadata["stdout"])
+	assert.Equal(t, "", result.Metadata["stderr"])
+	assert.Equal(t, 0, result.Metadata["exit_code"])
 }
 
 func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {

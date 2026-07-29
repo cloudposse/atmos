@@ -173,9 +173,11 @@ func initSourcesCommand(cmd *cobra.Command, args []string) (*SourcesOptions, err
 	}
 	opts.AtmosConfig = &atmosConfig
 
-	authManager, err := createAuthManagerForSources(cmd, opts.AtmosConfig)
+	authManager, err := createAuthManagerForList(cmd, opts.AtmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
+			Err()
 	}
 	opts.AuthManager = authManager
 
@@ -455,26 +457,6 @@ func extractSourceComponentFolder(componentMap map[string]any, componentName str
 		}
 	}
 	return folder
-}
-
-// createAuthManagerForSources creates an auth manager for the sources command.
-func createAuthManagerForSources(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
-	defer perf.Track(atmosConfig, "list.sources.createAuthManagerForSources")()
-
-	identity, _ := cmd.Flags().GetString("identity")
-	if identity == "" {
-		return nil, nil
-	}
-
-	authManager, err := auth.CreateAndAuthenticateManager(identity, &atmosConfig.Auth, config.IdentityFlagSelectValue)
-	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithCause(err).
-			WithContext("identity", identity).
-			Err()
-	}
-
-	return authManager, nil
 }
 
 // wrapSourcesConfigError wraps configuration errors with user-friendly messages.
