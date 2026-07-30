@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	logKeyRuntime = "runtime"
+	logKeyRuntime          = "runtime"
+	logAutoDetectedRuntime = "Auto-detected container runtime"
 
 	// Env var that selects the container runtime (auto|docker|podman).
 	envContainerRuntime = "ATMOS_CONTAINER_RUNTIME"
@@ -76,13 +77,13 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 
 	// Try Docker first
 	if isAvailable(ctx, TypeDocker) {
-		log.Debug("Auto-detected container runtime", logKeyRuntime, "docker")
+		log.Debug(logAutoDetectedRuntime, logKeyRuntime, "docker")
 		return NewDockerRuntime(), nil
 	}
 
 	// Try Podman
 	if isAvailable(ctx, TypePodman) {
-		log.Debug("Auto-detected container runtime", logKeyRuntime, "podman")
+		log.Debug(logAutoDetectedRuntime, logKeyRuntime, "podman")
 		return NewPodmanRuntime(), nil
 	}
 
@@ -134,10 +135,30 @@ func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred strin
 		selected = ""
 	}
 
-	// Recover Podman when it is the selected runtime, or when nothing is selected
-	// and Docker is unavailable (so detection falls through to Podman).
-	if autoStart && (selected == string(TypePodman) || (selected == "" && !isAvailable(ctx, TypeDocker))) {
-		_ = TryRecoverPodmanRuntime(ctx)
+	if autoStart {
+		switch selected {
+		case string(TypePodman):
+			// TryRecoverPodmanRuntime performs the availability check and, when
+			// needed, verifies the runtime after recovery. Reusing that result
+			// avoids a second `podman info` in DetectRuntimeWithPreference.
+			if TryRecoverPodmanRuntime(ctx) == RuntimeAvailable {
+				return NewPodmanRuntime(), nil
+			}
+			return nil, fmt.Errorf("%w: podman is not available or not running", errUtils.ErrRuntimeNotAvailable)
+		case "":
+			// Docker remains the preferred auto runtime. If it is unavailable,
+			// recover/check Podman directly rather than probing Docker again in
+			// the generic detection path.
+			if isAvailable(ctx, TypeDocker) {
+				log.Debug(logAutoDetectedRuntime, logKeyRuntime, "docker")
+				return NewDockerRuntime(), nil
+			}
+			if TryRecoverPodmanRuntime(ctx) == RuntimeAvailable {
+				log.Debug(logAutoDetectedRuntime, logKeyRuntime, "podman")
+				return NewPodmanRuntime(), nil
+			}
+			return nil, fmt.Errorf("%w: neither docker nor podman is available", errUtils.ErrRuntimeNotAvailable)
+		}
 	}
 
 	return DetectRuntimeWithPreference(ctx, preferred)
