@@ -64,7 +64,21 @@ jobs:
           # Temporary allowlist: oras-go v2.6.1 is pulled in by Helm v4.2.1 and is
           # currently the latest tagged v2 release. Remove after Helm/ORAS ships a
           # fixed version for GHSA-fxhp-mv3v-67qp.
-          allow-ghsas: GHSA-fxhp-mv3v-67qp
+          #
+          # GHSA-mh99-v99m-4gvg (brace-expansion, CVE-2026-14257): the advisory's
+          # recorded vulnerable range ("<=5.0.7") doesn't distinguish between
+          # brace-expansion's parallel 1.x/2.x/5.x release lines, so it still flags
+          # our pinned 1.1.18/2.1.4 even though both contain the same
+          # EXPANSION_MAX_LENGTH bound backported from the 5.0.8 fix (verified by
+          # diffing the published tarballs). The only version the advisory
+          # recognizes as patched, 5.0.8+, is not a safe upgrade here: brace-expansion
+          # 5.x's CommonJS build changed from a callable default export
+          # (`module.exports = expand`) to a named export (`exports.expand`), which
+          # breaks minimatch@3.1.5's `require('brace-expansion')(...)` call
+          # convention (transitive via serve-handler/@docusaurus/core). Remove this
+          # entry once GitHub's advisory data accounts for the 1.x/2.x backports, or
+          # once minimatch drops its 1.x brace-expansion dependency.
+          allow-ghsas: GHSA-fxhp-mv3v-67qp, GHSA-mh99-v99m-4gvg
 
           # Comment on PR with details
           comment-summary-in-pr: always
