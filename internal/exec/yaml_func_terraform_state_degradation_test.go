@@ -1,0 +1,140 @@
+package exec
+
+import (
+	"errors"
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/degradation"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// errCrossAccountAccessDenied is the failure a `!terraform.state` read produces when the
+// component's backend lives in an account the current identity cannot reach — the exact
+// shape reported in https://github.com/cloudposse/atmos/issues/2566.
+var errCrossAccountAccessDenied = fmt.Errorf(
+	"%w for component `global` in stack `dev-pen`: operation error S3: GetObject, "+
+		"https response error StatusCode: 403, api error AccessDenied: Access Denied",
+	errUtils.ErrReadTerraformState,
+)
+
+// failingStateGetter is a TerraformStateGetter that always fails with the supplied error,
+// standing in for an unreachable cross-account backend without any network or credentials.
+type failingStateGetter struct {
+	err   error
+	calls int
+}
+
+//nolint:revive // argument-limit: matches the TerraformStateGetter interface signature.
+func (f *failingStateGetter) GetState(
+	_ *schema.AtmosConfiguration,
+	_ string,
+	_ string,
+	_ string,
+	_ string,
+	_ bool,
+	_ *schema.AuthContext,
+	_ any,
+) (any, error) {
+	f.calls++
+	return nil, f.err
+}
+
+// installFailingStateGetter swaps the package-level stateGetter for the test's duration.
+func installFailingStateGetter(t *testing.T, err error) *failingStateGetter {
+	t.Helper()
+
+	getter := &failingStateGetter{err: err}
+	original := stateGetter
+	t.Cleanup(func() { stateGetter = original })
+	stateGetter = getter
+	return getter
+}
+
+// TestProcessNodesWithContext_DegradesCrossAccountAccessDenied is the #2566 regression guard
+// at the level the maintainers asked for: rather than skipping the read, a backend failure
+// the current identity cannot avoid must degrade to the `(computed)` placeholder and let the
+// walk finish, so an inventory listing still renders.
+func TestProcessNodesWithContext_DegradesCrossAccountAccessDenied(t *testing.T) {
+	getter := installFailingStateGetter(t, errCrossAccountAccessDenied)
+
+	var warnings []DegradationWarning
+	data := map[string]any{
+		"vars": map[string]any{
+			"data_bucket_name": "!terraform.state global dev-pen data_bucket_name",
+			"plain_value":      "untouched",
+		},
+	}
+
+	result, err := processNodesWithContext(
+		&schema.AtmosConfiguration{}, data, "dev-pen", nil, nil,
+		&schema.ConfigAndStacksInfo{Component: "customer"},
+		func(w DegradationWarning) { warnings = append(warnings, w) },
+	)
+
+	require.NoError(t, err, "a cross-account AccessDenied must not abort the whole walk in warn mode")
+	require.Positive(t, getter.calls, "the state read must actually have been attempted, not skipped")
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars section must survive the degradation")
+	assert.Equal(t, degradation.AtmosComputedValue{}, vars["data_bucket_name"],
+		"the unresolvable value must become the computed placeholder")
+	assert.Equal(t, "(computed)", fmt.Sprintf("%v", vars["data_bucket_name"]),
+		"the placeholder must render as `(computed)` in output")
+	assert.Equal(t, "untouched", vars["plain_value"],
+		"unrelated values must be unaffected")
+
+	require.Len(t, warnings, 1, "the degradation must be reported exactly once")
+	assert.Equal(t, "dev-pen", warnings[0].Stack)
+	assert.Equal(t, "customer", warnings[0].Component)
+	assert.Contains(t, warnings[0].Reason, "AccessDenied",
+		"the warning must carry the real cause so --logs-level=Debug can explain it")
+}
+
+// TestProcessNodesWithContext_StrictModeStillFailsOnAccessDenied is the negative path:
+// widening warn mode must not weaken `--error-mode=strict`, which is what a user selects
+// precisely to see these failures.
+func TestProcessNodesWithContext_StrictModeStillFailsOnAccessDenied(t *testing.T) {
+	installFailingStateGetter(t, errCrossAccountAccessDenied)
+
+	data := map[string]any{
+		"vars": map[string]any{"data_bucket_name": "!terraform.state global dev-pen data_bucket_name"},
+	}
+
+	// A nil onWarning is what strict mode passes.
+	_, err := processNodesWithContext(
+		&schema.AtmosConfiguration{}, data, "dev-pen", nil, nil,
+		&schema.ConfigAndStacksInfo{Component: "customer"}, nil,
+	)
+
+	require.Error(t, err, "strict mode must still surface a backend failure")
+	assert.True(t, errors.Is(err, errUtils.ErrReadTerraformState),
+		"the original cause must remain matchable by errors.Is")
+}
+
+// TestProcessNodesWithContext_FatalErrorsStillAbortInWarnMode proves the widening is scoped:
+// a manifest defect (bad YQ expression against state Atmos did retrieve) must still fail the
+// command even with a warn-mode callback installed, rather than silently becoming
+// `(computed)` and hiding the mistake.
+func TestProcessNodesWithContext_FatalErrorsStillAbortInWarnMode(t *testing.T) {
+	installFailingStateGetter(t, fmt.Errorf("%w: .bad[", errUtils.ErrEvaluateTerraformBackendVariable))
+
+	var warnings []DegradationWarning
+	data := map[string]any{
+		"vars": map[string]any{"data_bucket_name": "!terraform.state global dev-pen data_bucket_name"},
+	}
+
+	_, err := processNodesWithContext(
+		&schema.AtmosConfiguration{}, data, "dev-pen", nil, nil,
+		&schema.ConfigAndStacksInfo{Component: "customer"},
+		func(w DegradationWarning) { warnings = append(warnings, w) },
+	)
+
+	require.Error(t, err, "a manifest defect must not be degraded away even in warn mode")
+	assert.True(t, errors.Is(err, errUtils.ErrEvaluateTerraformBackendVariable))
+	assert.Empty(t, warnings, "no degradation should be reported for a fatal error")
+}

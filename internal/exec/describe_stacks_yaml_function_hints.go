@@ -10,9 +10,8 @@ import (
 
 // resolvesTerraformStateFunctions reports whether this pass will still evaluate at least one
 // of `!terraform.state` / `!terraform.output`, i.e. whether it can still perform a credentialed
-// backend read. It is false only when **both** are skipped, which is what a credential-free
-// inventory `list` run looks like (see skipCredentialBackedYAMLFunctionsForInventory in
-// cmd/list/utils.go).
+// backend read. It is false only when **both** are skipped, which is what a caller that opted
+// out of credentialed reads entirely looks like (`--skip terraform.state --skip terraform.output`).
 //
 // Skipping just one of the pair — e.g. `atmos describe stacks --skip terraform.state` — leaves
 // the other resolving against a remote backend, so the hints below still apply and this must
@@ -30,6 +29,9 @@ func (p *describeStacksProcessor) resolvesTerraformStateFunctions() bool {
 // explainRepositoryWideYAMLFunctionFailure enriches a YAML-function failure with the flags that
 // resolve it, but only when the describe is scanning the whole repository (no `--stack` filter)
 // with credentialed backend reads enabled.
+//
+// In practice this now fires only under `--error-mode=strict`: warn/silent mode degrades an
+// unreadable backend to `(computed)` and never reaches here (see isRecoverableInWarnMode).
 //
 // An unfiltered `atmos describe stacks` evaluates every component in every stack. In a
 // multi-account repository each stage keeps its Terraform state in its own account, so a single
@@ -55,7 +57,8 @@ func (p *describeStacksProcessor) explainRepositoryWideYAMLFunctionFailure(err e
 
 	return errUtils.Build(err).
 		WithHintf("Atmos evaluated the YAML functions of every component in every stack; this one failed for component `%s` in stack `%s`.", componentName, stackName).
-		WithHintf("Scope the command to a stack you hold credentials for: `atmos describe stacks --stack %s`.", stackName).
+		WithHint("Drop `--error-mode=strict` to degrade values Atmos cannot read to `(computed)` and keep going — the default `warn` mode does this and reports a summary.").
+		WithHintf("Or scope the command to a stack you hold credentials for: `atmos describe stacks --stack %s`.", stackName).
 		WithHint("Or skip the credential-backed functions: `atmos describe stacks --skip terraform.state --skip terraform.output`.").
 		WithHint("Or disable YAML function processing entirely: `atmos describe stacks --process-functions=false`.").
 		WithContext("component", componentName).

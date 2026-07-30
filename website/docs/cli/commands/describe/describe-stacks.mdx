@@ -29,9 +29,10 @@ This command shows configuration for stacks and components in the stacks.
 :::info YAML Functions and Authentication
 By default, `atmos describe stacks` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
 
-Without `--stack`, the command evaluates these functions for **every** component in **every** stack. In a multi-account repository where each stage keeps its Terraform state in its own account, no single identity can read them all, and one `AccessDenied` fails the whole command. Scope the run with `--stack <stack>`, skip the credential-backed functions with `--skip=terraform.state --skip=terraform.output`, or turn processing off with `--process-functions=false`.
+Without `--stack`, the command evaluates these functions for **every** component in **every** stack. In a multi-account repository where each stage keeps its Terraform state in its own account, no single identity can read them all. Values Atmos cannot read are degraded to the `(computed)` placeholder and the command continues, reporting a summary of what was degraded — run with `--logs-level=Debug` for the underlying cause of each.
 
-To enumerate what exists without paying for values, use [`atmos list stacks`](/cli/commands/list/stacks) or [`atmos list components`](/cli/commands/list/components) with their **default** columns: that output renders only identity fields, so those commands skip the credential-backed functions entirely. Customizing the output (`--columns`, or a `columns` block in `atmos.yaml`) asks for values that may come from remote state, so they are resolved again.
+Use `--error-mode=strict` if you would rather a failed read abort the command. To avoid the reads altogether, scope the run with `--stack <stack>`, skip the credential-backed functions with `--skip=terraform.state --skip=terraform.output`, or turn processing off with `--process-functions=false`.
+
 :::
 
 :::tip

@@ -167,10 +167,7 @@ func describeStacksForDependencies(cmd *cobra.Command, args []string, opts *Depe
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		// `list dependencies` renders a fixed dependency graph (component/stack names and
-		// edges) with no --columns or --query, so its output can never surface a
-		// credential-backed value.
-		skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, false),
+		skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
 		authManager,
 		opts.AuthDisabled || authManager == nil,
 	)

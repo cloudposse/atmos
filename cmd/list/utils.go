@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -257,89 +256,30 @@ func createAuthManagerForList(
 	return authManager, nil
 }
 
-// credentialBackedYAMLFunctions returns every Atmos YAML function that can only be
-// evaluated by contacting a cloud/backend API with live credentials. The names are
-// bare (no leading `!`) to match `skipFunc`, which trims the tag prefix before comparing.
-func credentialBackedYAMLFunctions() []string {
-	return []string{
-		strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncStore, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncStoreGet, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncSecret, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncAwsAccountID, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncAwsCallerIdentityArn, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncAwsCallerIdentityUserID, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncAwsRegion, "!"),
-		strings.TrimPrefix(u.AtmosYamlFuncAwsOrganizationID, "!"),
-	}
-}
-
-// skipCredentialBackedYAMLFunctionsForInventory returns the caller's `--skip` list plus
-// every credential-backed YAML function — but only when the command's requested output
-// cannot surface one of their values. When outputCanSurfaceValues is true the caller's
-// `--skip` is returned untouched and the functions are resolved as before.
-//
-// Inventory commands enumerate the whole repository: they walk every stack in every
-// account so they can report which stacks/components exist. In a multi-account repository
-// no single set of credentials can read every account's state backend, so eagerly
-// resolving `!terraform.state` / `!store` / `!aws.*` for every component turns a listing
-// into a hard failure — that is #2566 (`atmos list stacks` aborting on an `AccessDenied`
-// reading another stage's state bucket). Authenticating does not help: an identity covers
-// one account while the scan still spans all of them.
-//
-// Resolution is therefore demand-driven rather than disabled. List output is customizable
-// and *can* include these values (custom `--columns`, `list.*.columns` in atmos.yaml,
-// `--query`, the `--upload` payload), so the skip applies only to the built-in default
-// output, whose columns render identity fields (`.stack`, `.component`, `.type`,
-// `.stack_count`) that no YAML function can produce. Ask for a value and Atmos still
-// resolves it; ask only for the inventory and it no longer pays — or fails — for values
-// nothing will render. Callers determine this via the listOutputCanSurfaceValues helpers
-// below.
-//
-// The previous condition was the AuthManager being nil, which meant the skip stopped
-// applying the moment credentials existed — precisely backwards. Since #2801,
-// createAuthManagerForList also returns a manager whenever templates or YAML functions are
-// processed (both default to true), so that condition made a plain `atmos list stacks` — no
-// `--identity` at all — attempt cross-account state reads.
-//
-// Note this covers YAML functions only. Go templates calling `atmos.Component(...)` can
-// still perform authenticated cross-account reads; #2801 deliberately restored auth for
-// that path, and `--process-templates=false` remains the way to opt out of it.
-func skipCredentialBackedYAMLFunctionsForInventory(skip []string, outputCanSurfaceValues bool) []string {
-	if outputCanSurfaceValues {
+func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
+	if authManager != nil {
 		return skip
 	}
 
 	merged := append([]string{}, skip...)
-	for _, name := range credentialBackedYAMLFunctions() {
+	for _, functionName := range []string{
+		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncSecret,
+		u.AtmosYamlFuncAwsAccountID,
+		u.AtmosYamlFuncAwsCallerIdentityArn,
+		u.AtmosYamlFuncAwsCallerIdentityUserID,
+		u.AtmosYamlFuncAwsRegion,
+		u.AtmosYamlFuncAwsOrganizationID,
+	} {
+		name := strings.TrimPrefix(functionName, "!")
 		if !containsString(merged, name) {
 			merged = append(merged, name)
 		}
 	}
 	return merged
-}
-
-// listOutputCanSurfaceValues reports whether a list command's requested output could render
-// a value produced by a credential-backed YAML function, which decides whether
-// skipCredentialBackedYAMLFunctionsForInventory resolves them.
-//
-// The test is deliberately conservative: any customization of what gets rendered counts as
-// "could surface values", because a custom column or query can reference any part of a
-// component's configuration (`{{ .vars.bucket }}`, `.settings…`) and Atmos cannot know
-// whether that value came from a YAML function without resolving it first. Only the
-// built-in default output — whose columns render identity fields Atmos derives itself — is
-// provably value-free.
-//
-// customColumns is the per-command "did anything override the default columns" answer
-// (`--columns` or a `list.*.columns` block in atmos.yaml). extraConsumers covers the other
-// ways a command can request values: `--query`, `--filter`, or a payload such as
-// `list instances --upload`. Any true argument disables the skip.
-func listOutputCanSurfaceValues(customColumns bool, extraConsumers ...bool) bool {
-	if customColumns {
-		return true
-	}
-	return slices.Contains(extraConsumers, true)
 }
 
 func containsString(values []string, target string) bool {

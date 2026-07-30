@@ -36,6 +36,7 @@ func TestExplainRepositoryWideYAMLFunctionFailure_AddsHintsOnUnfilteredScan(t *t
 	assert.Contains(t, err.Error(), "AccessDenied", "the underlying cause must still be visible")
 
 	hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "--error-mode=strict", "must point at warn mode, which degrades rather than fails")
 	assert.Contains(t, hints, "--stack dev-pen", "must suggest scoping to the failing stack")
 	assert.Contains(t, hints, "--skip terraform.state", "must suggest skipping the credential-backed function")
 	assert.Contains(t, hints, "--process-functions=false", "must suggest disabling YAML function processing")
