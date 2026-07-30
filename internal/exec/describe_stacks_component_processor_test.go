@@ -1286,6 +1286,33 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 	assert.Empty(t, warnings, "error mode only degrades YAML-function lookup failures, never Go template errors")
 }
 
+func TestProcessComponentEntry_DoesNotEvaluateConfigSources(t *testing.T) {
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"", nil, nil, nil,
+		false, // processTemplates.
+		true,  // processYamlFunctions.
+		false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		"vars": map[string]any{},
+		"sources": map[string]any{
+			"stale_parent_value": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+		},
+	}
+	allTypeComponents := map[string]any{"vpc": componentSection}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, componentSection["sources"], p.finalStacksMap["test.yaml"].(map[string]any)["components"].(map[string]any)[cfg.TerraformSectionName].(map[string]any)["vpc"].(map[string]any)["sources"])
+}
+
 // ---------------------------------------------------------------------------
 // processComponentSectionYAMLFunctions – error path
 // ---------------------------------------------------------------------------

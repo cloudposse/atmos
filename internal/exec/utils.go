@@ -32,6 +32,8 @@ import (
 const (
 	// TerraformConfigKey is the key used in componentInfo maps to store terraform configuration.
 	terraformConfigKey = "terraform_config"
+	// SourcesSectionName is the generated component provenance section.
+	sourcesSectionName = "sources"
 )
 
 // extractRequiredProviders extracts required_providers from a component section.
@@ -79,7 +81,7 @@ func normalizedComponentConfig(componentConfig map[string]any) map[string]any {
 		"stack":            {},
 		"atmos_stack_file": {},
 		"atmos_manifest":   {},
-		"sources":          {},
+		sourcesSectionName: {},
 		"imports":          {},
 		"deps_all":         {},
 		"deps":             {},
@@ -833,7 +835,7 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	configAndStacksInfo.ComponentSection["sources"] = sources
+	configAndStacksInfo.ComponentSection[sourcesSectionName] = sources
 
 	// Component dependencies.
 	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
@@ -858,6 +860,13 @@ func ProcessStacks(
 	literalMocks, hasLiteralMocks := configAndStacksInfo.ComponentSection[cfg.MocksSectionName]
 	if hasLiteralMocks {
 		delete(configAndStacksInfo.ComponentSection, cfg.MocksSectionName)
+	}
+
+	// `sources` is generated provenance. It can retain overridden parent values,
+	// so it must not be treated as executable component configuration.
+	sourcesSection, hasSources := configAndStacksInfo.ComponentSection[sourcesSectionName]
+	if hasSources {
+		delete(configAndStacksInfo.ComponentSection, sourcesSectionName)
 	}
 
 	// Process `Go` templates in Atmos manifest sections.
@@ -943,6 +952,9 @@ func ProcessStacks(
 	}
 	if hasLiteralMocks {
 		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
+	}
+	if hasSources {
+		configAndStacksInfo.ComponentSection[sourcesSectionName] = sourcesSection
 	}
 
 	// Spacelift stack.

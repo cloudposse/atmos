@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,55 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestProcessStacks_DoesNotEvaluateConfigSources(t *testing.T) {
+	fixtureDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(fixtureDir, "stacks", "catalog"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "atmos.yaml"), []byte(`
+base_path: "."
+stacks:
+  base_path: stacks
+  included_paths: ["**/*"]
+  excluded_paths: ["**/catalog/**"]
+components:
+  terraform:
+    base_path: components/terraform
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "stacks", "catalog", "base.yaml"), []byte(`
+components:
+  terraform:
+    vpc:
+      vars:
+        value: "!exec __atmos_nonexistent_cmd_abc123_xyz"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "stacks", "dev.yaml"), []byte(`
+import:
+  - catalog/base
+components:
+  terraform:
+    vpc:
+      vars:
+        value: safe
+`), 0o644))
+
+	t.Chdir(fixtureDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	result, err := ProcessStacks(&atmosConfig, schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev",
+		StackFromArg:     "dev",
+		ComponentType:    cfg.TerraformComponentType,
+	}, true, true, true, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "safe", result.ComponentVarsSection["value"])
+	sources, ok := result.ComponentSection["sources"].(schema.ConfigSources)
+	require.True(t, ok)
+	assert.Equal(t, "!exec __atmos_nonexistent_cmd_abc123_xyz", sources["vars"]["value"].StackDependencies[1].VariableValue)
+}
 
 func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 	tests := []struct {
