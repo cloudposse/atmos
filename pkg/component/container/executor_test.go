@@ -568,6 +568,47 @@ func TestEnvListToMap(t *testing.T) {
 	assert.Equal(t, "3", env["C"])
 }
 
+// TestResolvedRuntime_PropagatesDetectionError verifies (*resolved).runtime
+// returns the detection error unchanged instead of forwarding a partially
+// resolved runtime.
+func TestResolvedRuntime_PropagatesDetectionError(t *testing.T) {
+	orig := detectRuntime
+	t.Cleanup(func() { detectRuntime = orig })
+	detectRuntime = func(_ context.Context, _ string, _ bool) (ctr.Runtime, error) {
+		return nil, assert.AnError
+	}
+
+	// An explicit runtime preference bypasses the durable-cache path entirely,
+	// so detectRuntime is called directly and deterministically.
+	r := &resolved{runtimePref: "docker"}
+	rt, err := r.runtime(context.Background())
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Nil(t, rt)
+}
+
+// TestResolvedRuntime_ForwardsEnvToEnvSetterRuntime verifies (*resolved).runtime
+// forwards the resolved component env to the detected runtime when it
+// implements ctr.EnvSetter (e.g. so registry auth reaches the docker/podman
+// CLI subprocess), and returns the runtime unchanged otherwise.
+func TestResolvedRuntime_ForwardsEnvToEnvSetterRuntime(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	underlying := &envSetterMockRuntime{MockRuntime: NewMockRuntime(ctrl)}
+
+	orig := detectRuntime
+	t.Cleanup(func() { detectRuntime = orig })
+	detectRuntime = func(_ context.Context, _ string, _ bool) (ctr.Runtime, error) {
+		return underlying, nil
+	}
+
+	r := &resolved{runtimePref: "docker", envList: []string{"FOO=bar"}}
+	rt, err := r.runtime(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, underlying, rt)
+	require.Len(t, underlying.setEnvCalls, 1)
+	assert.Equal(t, []string{"FOO=bar"}, underlying.setEnvCalls[0])
+}
+
 func TestDefaultStopTimeoutValue(t *testing.T) {
 	assert.Equal(t, 10*time.Second, defaultStopTimeout)
 }
