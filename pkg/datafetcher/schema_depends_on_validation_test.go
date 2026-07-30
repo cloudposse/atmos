@@ -1,7 +1,12 @@
 package datafetcher
 
 import (
+	"encoding/json"
+	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -98,6 +103,101 @@ func TestManifestSchema_DependsOnRejectsInvalidEntries(t *testing.T) {
 			})
 		}
 	}
+}
+
+// dependsOnDeprecationReplacement is the modern section that supersedes `settings.depends_on`.
+const dependsOnDeprecationReplacement = "dependencies.components"
+
+// TestManifestSchema_DependsOnIsMarkedDeprecated pins the deprecation annotations on the
+// `depends_on` definitions themselves, not just on individual call sites. `settings.depends_on` is
+// deprecated in favor of `dependencies.components` but still supported, so the schema must keep
+// saying so — editors surface `deprecated` as a strikethrough, which is the only in-IDE signal
+// practitioners get. Annotating the definition means every `$ref` to it inherits the marker.
+func TestManifestSchema_DependsOnIsMarkedDeprecated(t *testing.T) {
+	for schemaName, schemaData := range dependsOnSchemas(t) {
+		for _, defName := range []string{"depends_on", "depends_on_manifest"} {
+			t.Run(schemaName+"/"+defName, func(t *testing.T) {
+				def := schemaDefinition(t, schemaData, defName)
+
+				deprecated, ok := def["deprecated"].(bool)
+				require.Truef(t, ok, "%s.%s must declare a boolean `deprecated`", schemaName, defName)
+				assert.Truef(t, deprecated, "%s.%s must be marked deprecated", schemaName, defName)
+
+				assert.Equalf(t, dependsOnDeprecationReplacement, def["x-atmos-replacement"],
+					"%s.%s must point at the replacement section", schemaName, defName)
+
+				description, _ := def["description"].(string)
+				assert.Containsf(t, description, dependsOnDeprecationReplacement,
+					"%s.%s description must name the replacement for editors without `deprecated` support", schemaName, defName)
+			})
+		}
+	}
+}
+
+// TestManifestSchema_DependsOnCallSitesAreMarkedDeprecated checks every `depends_on` property that
+// `$ref`s the deprecated definition, since editors differ in whether they follow a `$ref` for
+// annotations. Both the definition and each call site must carry the marker.
+func TestManifestSchema_DependsOnCallSitesAreMarkedDeprecated(t *testing.T) {
+	for schemaName, schemaData := range dependsOnSchemas(t) {
+		t.Run(schemaName, func(t *testing.T) {
+			var doc any
+			require.NoError(t, json.Unmarshal(schemaData, &doc))
+
+			sites := findDependsOnCallSites(doc, "")
+			require.NotEmptyf(t, sites, "%s must reference #/definitions/depends_on somewhere", schemaName)
+
+			for path, site := range sites {
+				assert.Equalf(t, true, site["deprecated"], "%s: call site %s must be marked deprecated", schemaName, path)
+				assert.Equalf(t, dependsOnDeprecationReplacement, site["x-atmos-replacement"],
+					"%s: call site %s must point at the replacement section", schemaName, path)
+			}
+		})
+	}
+}
+
+// findDependsOnCallSites walks a decoded schema and returns every `depends_on` property object that
+// `$ref`s the `depends_on` definition, keyed by its JSON path for readable failure messages.
+func findDependsOnCallSites(node any, path string) map[string]map[string]any {
+	sites := map[string]map[string]any{}
+
+	switch typed := node.(type) {
+	case map[string]any:
+		for key, value := range typed {
+			childPath := path + "/" + key
+			if key == "depends_on" {
+				if obj, ok := value.(map[string]any); ok {
+					if ref, _ := obj["$ref"].(string); ref == "#/definitions/depends_on" {
+						sites[childPath] = obj
+					}
+				}
+			}
+			for k, v := range findDependsOnCallSites(value, childPath) {
+				sites[k] = v
+			}
+		}
+	case []any:
+		for i, value := range typed {
+			for k, v := range findDependsOnCallSites(value, path+"["+strconv.Itoa(i)+"]") {
+				sites[k] = v
+			}
+		}
+	}
+
+	return sites
+}
+
+// schemaDefinition returns a named entry from the schema's `definitions` map.
+func schemaDefinition(t *testing.T, schemaData []byte, name string) map[string]any {
+	t.Helper()
+
+	var doc struct {
+		Definitions map[string]map[string]any `json:"definitions"`
+	}
+	require.NoError(t, json.Unmarshal(schemaData, &doc))
+
+	def, ok := doc.Definitions[name]
+	require.Truef(t, ok, "schema must define %q", name)
+	return def
 }
 
 func topLevelDependsOnManifest(entry map[string]any) map[string]any {

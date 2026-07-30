@@ -2256,7 +2256,9 @@
     },
     "depends_on": {
       "title": "depends_on",
-      "description": "Depends_on section",
+      "description": "Depends_on section. Deprecated: use `dependencies.components` instead, which uses a simpler list syntax with append merge behavior. Still supported for backward compatibility.",
+      "deprecated": true,
+      "x-atmos-replacement": "dependencies.components",
       "oneOf": [
         {
           "type": "string",
@@ -2275,7 +2277,9 @@
     },
     "depends_on_manifest": {
       "title": "depends_on_manifest",
-      "description": "Depends_on manifest",
+      "description": "Depends_on manifest. Deprecated: use an entry under `dependencies.components` instead. Still supported for backward compatibility.",
+      "deprecated": true,
+      "x-atmos-replacement": "dependencies.components",
       "oneOf": [
         {
           "type": "string",
