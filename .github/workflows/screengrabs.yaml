@@ -12,7 +12,9 @@ on:
       - "pkg/provisioner/workdir/**"
       - "pkg/terraform/cache/**"
       - "examples/quick-start-advanced/**"
+      - "examples/demo-stacks/**"
       - "demo/casts/atmos.d/examples/quick-start-advanced/**"
+      - "demo/casts/atmos.d/screengrabs/demo-stacks/**"
       - "demo/casts/cast_checks.py"
 
 permissions:
