@@ -65,20 +65,26 @@ jobs:
           # currently the latest tagged v2 release. Remove after Helm/ORAS ships a
           # fixed version for GHSA-fxhp-mv3v-67qp.
           #
-          # GHSA-mh99-v99m-4gvg (brace-expansion DoS): the only patched line is
-          # brace-expansion@5.0.8, which replaced the CJS `module.exports = expand`
-          # function with a named ESM/CJS dual-package export. Our transitive
-          # consumers (serve-handler@6.1.7 -> minimatch@3.1.5, and
-          # docusaurus-plugin-llms@0.4.0 -> minimatch@9.0.9) still `require()` the
-          # old callable-function shape directly, so forcing brace-expansion to
-          # 5.0.8 breaks them (`expand is not a function`) rather than fixing
-          # anything. A real fix needs those packages to first upgrade to
-          # minimatch@10+, which itself requires brace-expansion@5.0.8. Exposure is
-          # low: serve-handler only runs for local `docusaurus serve` preview
-          # (never the deployed static build), and docusaurus-plugin-llms only
-          # expands glob patterns over our own trusted docs tree at build time, so
-          # no attacker-controlled input ever reaches `expand()`. Remove once
-          # serve-handler and docusaurus-plugin-llms ship minimatch@10+.
+          # Temporary allowlist: brace-expansion's advisory (GHSA-mh99-v99m-4gvg /
+          # CVE-2026-14257) lists "<=5.0.7" as vulnerable and "5.0.8" as the first
+          # patched version, but that range predates the maintainer's later
+          # backport of the same EXPANSION_MAX_LENGTH fix into the 1.x/2.x lines
+          # (verified by unpacking the exact 1.1.18/2.1.4 tarballs pinned -- no
+          # `^` range -- in website/package.json's pnpm overrides: the fix is
+          # present, and the `module.exports = expandTop` callable export is
+          # unchanged). Jumping to 5.0.8+ is not an option: its CommonJS build
+          # switched to a named `exports.expand` export, which breaks the
+          # `require('brace-expansion')` usage in minimatch@3.1.5/9.0.9.
+          #
+          # NOTE: allow-ghsas suppresses this GHSA for every resolved
+          # brace-expansion version, not just 1.1.18/2.1.4 -- the action has no
+          # package/version-scoped vulnerability exception (only
+          # allow-dependencies-licenses is purl-scoped, and that's license-only).
+          # The exact (non-`^`) pnpm override pins are what keep this exception
+          # scoped in practice: revisit this entry if those pins ever change.
+          # Remove once GitHub's advisory data reflects the backport, or once
+          # minimatch ships a version compatible with brace-expansion 5.x's
+          # export shape.
           allow-ghsas: GHSA-fxhp-mv3v-67qp, GHSA-mh99-v99m-4gvg
 
           # Comment on PR with details
