@@ -871,11 +871,16 @@ func ProcessStacks(
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
+		// Sections computed from Terraform source code (`component_info`) are not Atmos
+		// configuration and must not be rendered as `Go` templates. They stay in the template
+		// context below, only the rendered input excludes them. See #2145.
+		templateInput, nonTemplatedSections := splitNonTemplatedSections(configAndStacksInfo.ComponentSection)
+
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
 		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
 		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-			configAndStacksInfo.ComponentSection,
+			templateInput,
 			atmosConfig.Templates.Settings.Delimiters,
 		)
 		if err != nil {
@@ -933,6 +938,8 @@ func ProcessStacks(
 			}
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
+
+		restoreNonTemplatedSections(componentSectionConverted, nonTemplatedSections)
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted
 	}
