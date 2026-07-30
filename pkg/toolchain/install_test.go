@@ -3,13 +3,16 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +26,71 @@ func newTestSpinner() *bspinner.Model {
 func newTestProgressBar() *progress.Model {
 	m := progress.New()
 	return &m
+}
+
+func TestRightAlignInstallProgress(t *testing.T) {
+	left := "⣾ Installing owner/tool@v1.0.0"
+	tests := []struct {
+		name       string
+		downloaded int64
+		total      int64
+		width      int
+		assertLine func(t *testing.T, line string)
+	}{
+		{
+			name:       "shows downloaded and total bytes at the terminal edge",
+			downloaded: 85 * 1024 * 1024,
+			total:      100 * 1024 * 1024,
+			width:      80,
+			assertLine: func(t *testing.T, line string) {
+				assert.True(t, strings.HasSuffix(line, "85.0 MB/100.0 MB"))
+				assert.Equal(t, 80, lipgloss.Width(line))
+			},
+		},
+		{
+			name:       "does not wrap a narrow terminal",
+			downloaded: 85 * 1024 * 1024,
+			total:      100 * 1024 * 1024,
+			width:      len(left),
+			assertLine: func(t *testing.T, line string) {
+				assert.Equal(t, left, line)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertLine(t, rightAlignInstallProgress(left, tt.downloaded, tt.total, tt.width))
+		})
+	}
+}
+
+func TestBatchRendererMarksCompletedDownloadAsVerifying(t *testing.T) {
+	tool := toolInfo{owner: "owner", repo: "tool", version: "v1.0.0"}
+	renderer := &batchRenderer{active: []activeInstall{{toolInfo: tool, phase: "Downloading"}}}
+
+	renderer.updateProgress(tool, downloadProgress{downloaded: 100, total: 100})
+
+	assert.Equal(t, "Verifying", renderer.active[0].phase)
+}
+
+func TestCollectBatchInstallEventsFailsForMissingTerminalResults(t *testing.T) {
+	setupTestIO(t)
+	events := make(chan batchEvent, 1)
+	events <- batchEvent{
+		tool:   toolInfo{owner: "owner", repo: "installed", version: "v1.0.0"},
+		result: resultInstalled,
+	}
+	close(events)
+
+	counts := collectBatchInstallEvents(events, &batchDisplay{renderer: &batchRenderer{total: 2}}, 2)
+	err := counts.finish(2, false)
+
+	assert.Equal(t, 1, counts.installed)
+	assert.Equal(t, 1, counts.failed)
+	assert.Equal(t, 2, counts.completed)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+	assert.Contains(t, err.Error(), "1 tool installation(s) failed")
 }
 
 func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
@@ -641,6 +709,12 @@ func TestInstallMultipleTools_InvalidSpecs(t *testing.T) {
 	// Test with all invalid specs - should return nil (no valid tools to install).
 	err := installMultipleTools([]string{"invalid-spec-no-version", "another-bad-spec"}, false)
 	assert.NoError(t, err)
+}
+
+func TestRunInstallBatchWithOptionsRejectsInvalidConcurrency(t *testing.T) {
+	err := RunInstallBatchWithOptions([]string{"terraform@1.0.0", "helm@3.0.0"}, BatchInstallOptions{MaxConcurrency: -1})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max concurrency")
 }
 
 // TestSpinnerModel tests the spinnerModel Bubble Tea model.

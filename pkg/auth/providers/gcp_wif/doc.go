@@ -32,4 +32,12 @@
 //	permissions:
 //	  id-token: write
 //	  contents: read
+//
+// # Credential caching
+//
+// This provider is ambient: the OIDC token is read from the environment, a file, or a
+// URL on every authentication and exchanged for a short-lived access token. It therefore
+// implements types.AmbientProvider, which tells the auth manager never to persist
+// credentials for chains rooted here to the keyring — a persisted token would be
+// replayed after the ambient OIDC token has already been rotated.
 package gcp_wif

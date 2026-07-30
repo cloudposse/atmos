@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -128,15 +129,15 @@ func TestDescribeAffected(t *testing.T) {
 		return false
 	}
 
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -145,7 +146,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -280,6 +281,35 @@ func shouldSkipRepoCopyPath(src string) bool {
 	return false
 }
 
+// copyRepoWithRetry copies the live repository at src into dest, retrying a few times
+// if the copy fails because a source file vanished mid-copy. The source is the actual
+// checked-out repository, which can have transient files appear and disappear under
+// .git/objects/pack while git performs routine background housekeeping (e.g. an
+// automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes
+// them within milliseconds). The otiai10/copy directory walk stats every entry it
+// lists, so it can observe one of these files mid-flight and fail the whole copy with
+// "no such file or directory". Retrying a moment later almost always succeeds, since
+// the transient file is long gone by the next attempt.
+func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
+	t.Helper()
+
+	const maxAttempts = 5
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = cp.Copy(src, dest, *opts)
+		if err == nil || !os.IsNotExist(err) {
+			return err
+		}
+		if attempt == maxAttempts {
+			return err
+		}
+		// Remove any partial copy before retrying so the next attempt starts clean.
+		require.NoError(t, os.RemoveAll(dest))
+		time.Sleep(50 * time.Millisecond)
+	}
+	return err
+}
+
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
 func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfiguration, repoPath, componentPath string) {
 	t.Helper()
@@ -323,7 +353,7 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	}
 
 	// Copy the local repository into a temp dir.
-	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	err = copyRepoWithRetry(t, pathPrefix, tempDir, &copyOptions)
 	require.NoError(t, err)
 
 	// Copy the affected stacks into the `stacks` folder in the temp dir.
@@ -638,6 +668,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		"",
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -781,6 +812,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		"",
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -976,6 +1008,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.,
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1089,6 +1122,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.,
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1140,6 +1174,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		onlyInStack,
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 
@@ -1241,7 +1276,7 @@ func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStac
 	}
 
 	// Copy the local repository into a temp dir.
-	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	err = copyRepoWithRetry(t, pathPrefix, tempDir, &copyOptions)
 	require.NoError(t, err)
 
 	// Copy the affected stacks into the `stacks` folder in the temp dir.
@@ -1897,6 +1932,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 		skip []string, excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
@@ -1907,7 +1943,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 			},
 		}, nil, nil, "", nil
 	}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -2069,6 +2105,7 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		"",
 		nil,
 		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err, "addDependentsToAffected should not crash on deleted components")
 

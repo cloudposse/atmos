@@ -44,6 +44,9 @@ atmos helm delete <component> --stack <stack>
 atmos helm template --all --stack <stack>
 atmos helm apply --affected --base origin/main
 atmos helm deploy <component> --stack <stack> --ci
+
+atmos helm apply --affected --tags production
+atmos helm apply --all --labels cost-center=platform
 ```
 
 The native Helm component renders charts in-process with the Helm Go SDK

@@ -13,9 +13,7 @@ import (
 	"testing"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/google/uuid"
 	"github.com/posthog/posthog-go"
@@ -654,10 +652,6 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 	os.RemoveAll(cacheDir)
 	defer os.RemoveAll(cacheDir)
 
-	// Initialize markdown renderer for testing
-	atmosConfig := schema.AtmosConfiguration{}
-	utils.InitializeMarkdown(&atmosConfig)
-
 	// Call PrintTelemetryDisclosure
 	PrintTelemetryDisclosure()
 
@@ -690,10 +684,6 @@ func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
 	cacheDir := filepath.Dir(cacheFilePath)
 	os.RemoveAll(cacheDir)
 	defer os.RemoveAll(cacheDir)
-
-	// Initialize markdown renderer for testing
-	atmosConfig := schema.AtmosConfiguration{}
-	utils.InitializeMarkdown(&atmosConfig)
 
 	// First call should show the message
 	oldStderr := os.Stderr
@@ -742,10 +732,6 @@ func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
 	os.RemoveAll(cacheDir)
 	defer os.RemoveAll(cacheDir)
 
-	// Initialize markdown renderer for testing
-	atmosConfig := schema.AtmosConfiguration{}
-	utils.InitializeMarkdown(&atmosConfig)
-
 	// Capture stderr
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
@@ -778,10 +764,6 @@ func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
 	cacheDir := "./.atmos"
 	os.RemoveAll(cacheDir)
 	defer os.RemoveAll(cacheDir)
-
-	// Initialize markdown renderer for testing
-	atmosConfig := schema.AtmosConfiguration{}
-	utils.InitializeMarkdown(&atmosConfig)
 
 	// Capture stderr
 	oldStderr := os.Stderr

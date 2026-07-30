@@ -118,6 +118,13 @@ func registerProcessingFlags(registry *flags.FlagRegistry) {
 		Description: "Enable/disable YAML functions processing in Atmos stack manifests",
 		EnvVars:     []string{"ATMOS_PROCESS_FUNCTIONS"},
 	})
+	registry.Register(&flags.BoolFlag{
+		Name:        "use-mocks",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands",
+		EnvVars:     []string{"ATMOS_USE_MOCKS"},
+	})
 	registry.Register(&flags.StringSliceFlag{
 		Name:        "skip",
 		Shorthand:   "",
@@ -142,6 +149,20 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Default:     nil,
 		Description: "Filter by specific components",
 		EnvVars:     []string{"ATMOS_COMPONENTS"},
+	})
+	registry.Register(&flags.StringSliceFlag{
+		Name:        "tags",
+		Shorthand:   "",
+		Default:     nil,
+		Description: "Filter by tags (comma-separated, matches any): --tags=production,tier-1",
+		EnvVars:     []string{"ATMOS_TAGS"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "labels",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		EnvVars:     []string{"ATMOS_LABELS"},
 	})
 }
 

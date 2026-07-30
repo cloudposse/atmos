@@ -24,12 +24,24 @@ This includes backend settings, variables, and metadata from the stack manifest.
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
+		v := viper.GetViper()
+		if err := describeParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 		result, err := describeParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
 
-		return executeDescribeCommandWithValues(result.Component, result.Stack, result.Identity.Value(), result.Format)
+		stack := result.Stack
+		if stack == "" {
+			stack = getCommandFlagStack(cmd)
+		}
+		if stack == "" {
+			stack = v.GetString("stack")
+		}
+		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
+		return executeDescribeCommandWithValues(result.Component, stack, identity, result.Format)
 	},
 }
 

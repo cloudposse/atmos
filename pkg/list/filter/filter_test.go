@@ -320,6 +320,117 @@ func TestBoolFilter_Apply(t *testing.T) {
 	}
 }
 
+func TestNewTagFilter(t *testing.T) {
+	filter := NewTagFilter("tags", []string{"production", "admin"})
+	require.NotNil(t, filter)
+	assert.Equal(t, "tags", filter.Field)
+	assert.Equal(t, []string{"production", "admin"}, filter.Tags)
+}
+
+func TestTagFilter_Apply(t *testing.T) {
+	data := []map[string]any{
+		{"component": "vpc", "tags": []string{"production", "networking"}},
+		{"component": "eks", "tags": []string{"development"}},
+		{"component": "rds", "tags": []string{}},
+	}
+
+	t.Run("empty filter tags returns all rows unchanged", func(t *testing.T) {
+		filter := NewTagFilter("tags", nil)
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+		assert.Equal(t, data, result)
+	})
+
+	t.Run("matches any filter tag", func(t *testing.T) {
+		filter := NewTagFilter("tags", []string{"production"})
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+
+		filtered, ok := result.([]map[string]any)
+		require.True(t, ok)
+		require.Len(t, filtered, 1)
+		assert.Equal(t, "vpc", filtered[0]["component"])
+	})
+
+	t.Run("no matches returns empty slice", func(t *testing.T) {
+		filter := NewTagFilter("tags", []string{"nonexistent"})
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("missing field is treated as no tags", func(t *testing.T) {
+		filter := NewTagFilter("tags", []string{"production"})
+		result, err := filter.Apply([]map[string]any{{"component": "no-tags-field"}})
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("invalid data type errors", func(t *testing.T) {
+		filter := NewTagFilter("tags", []string{"production"})
+		_, err := filter.Apply("not a slice")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	})
+}
+
+func TestNewLabelFilter(t *testing.T) {
+	filter := NewLabelFilter("labels", map[string]string{"cost-center": "platform"})
+	require.NotNil(t, filter)
+	assert.Equal(t, "labels", filter.Field)
+	assert.Equal(t, map[string]string{"cost-center": "platform"}, filter.Labels)
+}
+
+func TestLabelFilter_Apply(t *testing.T) {
+	data := []map[string]any{
+		{"component": "vpc", "labels": map[string]string{"cost-center": "platform", "compliance": "sox"}},
+		{"component": "eks", "labels": map[string]string{"cost-center": "platform"}},
+		{"component": "rds", "labels": map[string]string{}},
+	}
+
+	t.Run("empty filter labels returns all rows unchanged", func(t *testing.T) {
+		filter := NewLabelFilter("labels", nil)
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+		assert.Equal(t, data, result)
+	})
+
+	t.Run("requires all filter pairs to match (AND)", func(t *testing.T) {
+		filter := NewLabelFilter("labels", map[string]string{"cost-center": "platform", "compliance": "sox"})
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+
+		filtered, ok := result.([]map[string]any)
+		require.True(t, ok)
+		require.Len(t, filtered, 1)
+		assert.Equal(t, "vpc", filtered[0]["component"])
+	})
+
+	t.Run("single pair matches multiple rows", func(t *testing.T) {
+		filter := NewLabelFilter("labels", map[string]string{"cost-center": "platform"})
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+
+		filtered, ok := result.([]map[string]any)
+		require.True(t, ok)
+		require.Len(t, filtered, 2)
+	})
+
+	t.Run("wrong value fails even with matching key", func(t *testing.T) {
+		filter := NewLabelFilter("labels", map[string]string{"cost-center": "engineering"})
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("invalid data type errors", func(t *testing.T) {
+		filter := NewLabelFilter("labels", map[string]string{"cost-center": "platform"})
+		_, err := filter.Apply("not a slice")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	})
+}
+
 func TestNewChain(t *testing.T) {
 	filter1 := NewColumnFilter("col1", "val1")
 	filter2 := NewColumnFilter("col2", "val2")

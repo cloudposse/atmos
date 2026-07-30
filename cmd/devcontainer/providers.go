@@ -166,13 +166,3 @@ func (d *DefaultUIProvider) Confirm(message string) (bool, error) {
 
 	return confirmed, nil
 }
-
-// Output returns the writer for normal output (typically stderr for UI).
-func (d *DefaultUIProvider) Output() io.Writer {
-	return os.Stderr
-}
-
-// Error returns the writer for error output.
-func (d *DefaultUIProvider) Error() io.Writer {
-	return os.Stderr
-}

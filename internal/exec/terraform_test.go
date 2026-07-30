@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +18,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -369,7 +372,7 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	require.Error(t, err)
 	// The `invalid-stacks` fixture contains several invalid files with
 	// different error shapes (invalid template syntax in import paths, missing
-	// imports, malformed schemas, etc.). Filesystem walk order is not
+	// imports, malformed schemas, required properties, etc.). Filesystem walk order is not
 	// deterministic across OSes, so this assertion accepts any of the
 	// documented error messages those files can surface — previously the test
 	// was brittle and only passed when Linux/Windows happened to hit a file
@@ -381,7 +384,8 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 			strings.Contains(errMsg, "unclosed") ||
 			strings.Contains(errMsg, "no matches found") ||
 			strings.Contains(errMsg, "function") ||
-			strings.Contains(errMsg, "template"),
+			strings.Contains(errMsg, "template") ||
+			strings.Contains(errMsg, "missing properties"),
 		"expected an invalid-stacks error mentioning invalid/unclosed/template/function/no matches, got: %s",
 		err.Error(),
 	)
@@ -491,24 +495,38 @@ func TestExecuteTerraform_Version(t *testing.T) {
 		workDir        string
 		expectedOutput string
 		requireTool    func(*testing.T)
+		binary         string
 	}{
 		{
 			name:           "terraform version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-terraform-version",
 			expectedOutput: "Terraform v",
 			requireTool:    tests.RequireTerraform,
+			binary:         "terraform",
 		},
 		{
 			name:           "tofu version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-tofu-version",
 			expectedOutput: "OpenTofu v",
 			requireTool:    tests.RequireTofu,
+			binary:         "tofu",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.requireTool(t)
+			// CI installs the toolchain binary and appends its directory to PATH in an
+			// earlier job step; on Windows runners that PATH update has occasionally not
+			// been visible yet to the very first LookPath in this step, so poll briefly
+			// instead of failing on a one-off resolution lag.
+			var binaryPath string
+			require.Eventually(t, func() bool {
+				var lookErr error
+				binaryPath, lookErr = exec.LookPath(tt.binary)
+				return lookErr == nil
+			}, 2*time.Second, 100*time.Millisecond, "%q not found in PATH", tt.binary)
+			isolateTerraformTestBinary(t, binaryPath)
 
 			// Set info for ExecuteTerraform.
 			info := schema.ConfigAndStacksInfo{
@@ -712,49 +730,24 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status=false")
 			}
 
-			// Create a pipe to capture stdout and stderr.
-			oldStdout := os.Stdout
-			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-			os.Stderr = w
-
-			// Ensure stdout/stderr are restored even if test fails.
-			defer func() {
-				os.Stdout = oldStdout
-				os.Stderr = oldStderr
-			}()
+			// Capture subprocess output through the supported process streams.
+			// Reassigning os.Stdout/os.Stderr does not reliably redirect child
+			// process handles on Windows.
+			var buf bytes.Buffer
+			outputWriter := &synchronizedWriter{w: &buf}
 
 			// Save original logger and set up test logger.
 			originalLogger := log.Default()
 			logger := log.New()
-			logger.SetOutput(w)
+			logger.SetOutput(outputWriter)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 
-			// Create a channel to signal when the pipe is closed.
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				defer w.Close()
-				_ = ExecuteTerraform(info)
-			}()
-
-			// Read the output.
-			var buf bytes.Buffer
-			_, err := buf.ReadFrom(r)
-			if err != nil {
-				t.Fatalf("Failed to read from pipe: %v", err)
-			}
+			_ = ExecuteTerraform(info, WithProcessStreams(process.Streams{
+				Stdout: outputWriter,
+				Stderr: outputWriter,
+			}))
 			output := buf.String()
-
-			// Restore stdout, stderr, and logger.
-			os.Stdout = oldStdout
-			os.Stderr = oldStderr
-			log.SetDefault(log.Default())
-
-			// Wait for the command to finish
-			<-done
 
 			// Check the output for drift/no drift and pro warning
 			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")

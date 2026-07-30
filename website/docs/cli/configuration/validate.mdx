@@ -19,6 +19,9 @@ The `validate` section of the `atmos.yaml` configures EditorConfig validation se
 <File title="atmos.yaml">
 ```yaml
 validate:
+  # Shared human-readable output for validate schema/stacks/component/ci
+  format: rich
+
   editorconfig:
     # Skip default EditorConfig rules
     ignore_defaults: false
@@ -52,6 +55,9 @@ validate:
 
 ## Fields
 
+  <dt>`format`</dt>
+  <dd>Shared validation output mode for schema, stacks, component, and GitHub Actions validation: `text` or `rich`. Default: current text behavior. Command flags and `ATMOS_VALIDATE_FORMAT` override it. EditorConfig can override this default with `editorconfig.format`.</dd>
+
 <dl>
   <dt>`editorconfig.ignore_defaults`</dt>
   <dd>Skip the default EditorConfig rules. Default: `false`.</dd>
@@ -60,7 +66,7 @@ validate:
   <dd>Preview mode - show what would be checked without failing. Default: `false`.</dd>
 
   <dt>`editorconfig.format`</dt>
-  <dd>Output format for validation results. Default: `default`.</dd>
+  <dd>Output format for validation results: `default`, `gcc`, `codeclimate`, `github-actions`, or Atmos-owned `sarif` and `rich`. Default: `default`.</dd>
 
   <dt>`editorconfig.config_file_paths`</dt>
   <dd>List of custom EditorConfig file paths to use for validation.</dd>

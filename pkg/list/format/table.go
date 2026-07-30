@@ -151,6 +151,14 @@ func formatTableCellValue(val interface{}) string {
 		return ""
 	}
 
+	// Handle any value that renders itself (e.g. degradation.AtmosComputedValue, shown as
+	// "(computed)") before the generic type-based formatting below, which would otherwise
+	// either fall through to a JSON dump (adding stray quotes for a plain string Stringer)
+	// or, for a Kind()-less/complex Stringer, miss its custom representation entirely.
+	if s, ok := val.(fmt.Stringer); ok {
+		return truncateString(s.String())
+	}
+
 	// Handle string values directly
 	if str, ok := val.(string); ok {
 		return truncateString(str)

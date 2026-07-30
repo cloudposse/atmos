@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -37,7 +39,7 @@ func TestDescribeStacksExec(t *testing.T) {
 					printOrWriteToFile: func(_ *schema.AtmosConfiguration, _, _ string, _ any) error {
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -56,7 +58,7 @@ func TestDescribeStacksExec(t *testing.T) {
 						assert.Equal(t, "test", data)
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -74,7 +76,7 @@ func TestDescribeStacksExec(t *testing.T) {
 					printOrWriteToFile: func(_ *schema.AtmosConfiguration, _, _ string, _ any) error {
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, filterByStack string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, filterByStack string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						assert.Equal(t, "test-stack", filterByStack)
 						return map[string]any{"filtered": true}, nil
 					},
@@ -95,7 +97,7 @@ func TestDescribeStacksExec(t *testing.T) {
 						assert.Equal(t, "output.json", file)
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"output": "to file"}, nil
 					},
 				}
@@ -108,7 +110,7 @@ func TestDescribeStacksExec(t *testing.T) {
 				return &describeStacksExec{
 					pageCreator:           pager.NewMockPageCreator(ctrl),
 					isTTYSupportForStdout: func() bool { return false },
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return nil, errors.New("execution error")
 					},
 				}
@@ -124,7 +126,7 @@ func TestDescribeStacksExec(t *testing.T) {
 				return &describeStacksExec{
 					pageCreator:           pager.NewMockPageCreator(ctrl),
 					isTTYSupportForStdout: func() bool { return false },
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -269,6 +271,122 @@ func TestExecuteDescribeStacks_Ansible(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.settings.ansible.playbook")
 	assert.Nil(t, err)
 	assert.Equal(t, "site.yml", val)
+}
+
+// ---------------------------------------------------------------------------
+// ErrorOptionsFromMode / PrintErrorModeSummary
+// ---------------------------------------------------------------------------
+
+func TestResolveErrorMode(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagValue    string
+		settingValue string
+		expected     string
+	}{
+		{name: "flag wins over setting", flagValue: "strict", settingValue: "silent", expected: "strict"},
+		{name: "setting used when flag unset", flagValue: "", settingValue: "silent", expected: "silent"},
+		{name: "defaults to warn when both unset", flagValue: "", settingValue: "", expected: "warn"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, ResolveErrorMode(tt.flagValue, tt.settingValue))
+		})
+	}
+}
+
+// TestResolveErrorMode_ListAndDescribeAreIndependent guards against list.error_mode and
+// describe.error_mode being read from a shared config field: setting one must have zero
+// effect on the other's resolution.
+func TestResolveErrorMode_ListAndDescribeAreIndependent(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.List.ErrorMode = "strict"
+
+	assert.Equal(t, "strict", ResolveErrorMode("", atmosConfig.List.ErrorMode))
+	assert.Equal(t, "warn", ResolveErrorMode("", atmosConfig.Describe.ErrorMode), "describe.error_mode must not inherit list.error_mode")
+
+	atmosConfig = schema.AtmosConfiguration{}
+	atmosConfig.Describe.ErrorMode = "silent"
+
+	assert.Equal(t, "silent", ResolveErrorMode("", atmosConfig.Describe.ErrorMode))
+	assert.Equal(t, "warn", ResolveErrorMode("", atmosConfig.List.ErrorMode), "list.error_mode must not inherit describe.error_mode")
+}
+
+func TestErrorOptionsFromMode(t *testing.T) {
+	tests := []struct {
+		name          string
+		errorMode     string
+		expectWarn    bool
+		expectNilColl bool
+	}{
+		{name: "strict returns strict with nil collector", errorMode: "strict", expectWarn: false, expectNilColl: true},
+		{name: "empty value is strict", errorMode: "", expectWarn: false, expectNilColl: true},
+		{name: "warn enables OnErrorWarn with a non-nil collector", errorMode: "warn", expectWarn: true, expectNilColl: false},
+		{name: "silent also enables OnErrorWarn with a non-nil collector", errorMode: "silent", expectWarn: true, expectNilColl: false},
+		{name: "unrecognized value is strict", errorMode: "bogus", expectWarn: false, expectNilColl: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, collector := ErrorOptionsFromMode(tt.errorMode)
+
+			if tt.expectWarn {
+				assert.Equal(t, OnErrorWarn, opts.OnError)
+				require.NotNil(t, opts.OnWarning)
+			} else {
+				assert.Equal(t, OnErrorMode(""), opts.OnError)
+				assert.Nil(t, opts.OnWarning)
+			}
+
+			if tt.expectNilColl {
+				assert.Nil(t, collector)
+			} else {
+				require.NotNil(t, collector)
+				assert.Equal(t, 0, collector.Count())
+				opts.OnWarning(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+				assert.Equal(t, 1, collector.Count())
+			}
+		})
+	}
+}
+
+func TestPrintErrorModeSummary(t *testing.T) {
+	t.Run("warn mode with nil collector does not panic", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("warn", nil)
+		})
+	})
+
+	t.Run("strict mode is a no-op even with a populated collector", func(t *testing.T) {
+		_, collector := ErrorOptionsFromMode("warn")
+		require.NotNil(t, collector)
+		collector.Add(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("strict", collector)
+		})
+	})
+
+	t.Run("silent mode is a no-op even with a populated collector", func(t *testing.T) {
+		_, collector := ErrorOptionsFromMode("silent")
+		require.NotNil(t, collector)
+		collector.Add(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("silent", collector)
+		})
+	})
+
+	t.Run("warn mode with a populated collector prints the summary", func(t *testing.T) {
+		_, collector := ErrorOptionsFromMode("warn")
+		require.NotNil(t, collector)
+		collector.Add(DegradationWarning{Stack: "s", Component: "c", Function: "f", Reason: "r"})
+
+		assert.NotPanics(t, func() {
+			PrintErrorModeSummary("warn", collector)
+		})
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -554,6 +672,120 @@ func TestExecuteDescribeStacks_ProcessStackFileError(t *testing.T) {
 
 	_, err = ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	require.Error(t, err)
+}
+
+// buildDescribeStacksDegradationFixture creates a temp atmos project with one terraform
+// component (vpc) in stack file "dev.yaml" whose "bucket" var uses a `!terraform.state`
+// YAML function, changes the process working directory to the fixture root, and returns the
+// initialized AtmosConfiguration. Used by
+// TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError and its _Strict companion
+// to exercise the OnErrorWarn dispatch in executeDescribeStacks (describe_stacks.go).
+func buildDescribeStacksDegradationFixture(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	vpcDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	// Minimal main.tf so the component directory exists.
+	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte(""), 0o644))
+
+	stackContent := "components:\n  terraform:\n    vpc:\n      vars:\n        bucket: \"!terraform.state vpc dev bucket_name\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(stackContent), 0o644))
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	return atmosConfig
+}
+
+// TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError exercises the
+// `errOptions.OnError == OnErrorWarn` dispatch in executeDescribeStacks (describe_stacks.go)
+// end-to-end through the exported ExecuteDescribeStacksWithOptions: a recoverable
+// `!terraform.state` error is degraded to degradation.AtmosComputedValue{} instead of
+// failing the whole describe-stacks call, and reported exactly once via OnWarning.
+func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := buildDescribeStacksDegradationFixture(t)
+
+	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, recoverableErr).
+		Times(1)
+
+	var warnings []DegradationWarning
+	result, err := ExecuteDescribeStacksWithOptions(
+		&atmosConfig, "", nil, nil, nil, false,
+		false, // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil, nil, false,
+		DescribeStacksErrorOptions{
+			OnError: OnErrorWarn,
+			OnWarning: func(w DegradationWarning) {
+				warnings = append(warnings, w)
+			},
+		},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "dev", warnings[0].Stack)
+	// The describe-stacks fixture resolves this function outside a component section,
+	// so the component field is intentionally empty while the function still identifies vpc.
+	assert.Empty(t, warnings[0].Component)
+	assert.Contains(t, warnings[0].Function, "!terraform.state")
+	assert.Contains(t, warnings[0].Reason, "terraform state not provisioned")
+	assert.NotEmpty(t, result)
+}
+
+// TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError_Strict is the contrasting
+// strict-mode companion to TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError:
+// with a zero-value DescribeStacksErrorOptions{} (OnErrorStrict), the same recoverable error
+// now fails the whole call instead of being degraded.
+func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError_Strict(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := buildDescribeStacksDegradationFixture(t)
+
+	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, recoverableErr).
+		Times(1)
+
+	_, err := ExecuteDescribeStacksWithOptions(
+		&atmosConfig, "", nil, nil, nil, false,
+		false, // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil, nil, false,
+		DescribeStacksErrorOptions{},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 }
 
 // TestExecuteDescribeStacks_NonMapStackEntry exercises the type-guard at lines 150-153 in

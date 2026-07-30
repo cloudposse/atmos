@@ -30,7 +30,7 @@ const (
 	dateFormatYYYYMMDDLen = 10  // Length of "YYYY-MM-DD".
 	fallbackTerminalWidth = 120 // Default terminal width when detection fails.
 	emptyValuePlaceholder = " " // Placeholder for empty values in output.
-	indicatorColumnWidth  = 3   // 1-char indicator + 1 char padding each side; keeps the dot column from being stretched by lipgloss/table's auto-expand.
+	indicatorColumnWidth  = 3   // 1-char indicator plus horizontal padding.
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
@@ -234,12 +234,8 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 		rows = append(rows, []string{indicator, v.version, date, title})
 	}
 
-	// Get terminal width - use exactly what's detected.
-	detectedWidth := templates.GetTerminalWidth()
-	tableWidth := detectedWidth - tableBorderPadding
-
-	// Create table with lipgloss/table to match version list exactly.
-	// Use lipgloss/table for auto column width calculation.
+	// Keep the table within the terminal width.
+	tableWidth := templates.GetTerminalWidth() - tableBorderPadding
 	t, err := createVersionsTable(rows, tableWidth)
 	if err != nil {
 		ui.Writeln(err.Error())
@@ -257,7 +253,6 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 	// Styling to match atmos version list exactly.
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for date.
-
 	// Create table with lipgloss/table - only border under header.
 	t := lipglosstable.New().
 		Headers("", "VERSION", "DATE", "TITLE").
@@ -272,7 +267,14 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
-			case col == 0: // Indicator column: pin the width so lipgloss/table's expand step doesn't stretch this 1-char column.
+			case col == 0:
+				// The indicator column only ever holds a single glyph (a colored
+				// dot) or a blank placeholder, in every row including the header.
+				// Without a pinned width, lipgloss/table's auto-expand distributes
+				// spare width round-robin across every under-sized column,
+				// inflating this one well past what its content needs and
+				// throwing off the VERSION/DATE/TITLE alignment relative to the
+				// golden fixtures.
 				return lipgloss.NewStyle().Padding(0, 1).Width(indicatorColumnWidth)
 			case row == lipglosstable.HeaderRow:
 				return headerStyle.Padding(0, 1)

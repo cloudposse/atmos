@@ -3,10 +3,12 @@ package exec
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -21,9 +23,11 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		tfoutput.ResetOutputsCache()
 	})
 
-	if _, err := exec.LookPath("tofu"); err != nil {
+	tofuPath, err := exec.LookPath("tofu")
+	if err != nil {
 		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
 	}
+	isolateTerraformTestBinary(t, tofuPath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")
 
@@ -49,7 +53,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err := ExecuteTerraform(info)
+	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -174,4 +178,45 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		assert.Contains(t, y, "client_id_arn_bare: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 		assert.Contains(t, y, "client_id_arn_with_stack: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 	})
+}
+
+// isolateTerraformTestBinary copies a Terraform-compatible executable into a
+// per-test directory and prepends it to PATH. The Windows acceptance job runs
+// packages concurrently and other package tests can uninstall the shared
+// Atmos toolchain cache after LookPath succeeds. Keeping a private copy
+// prevents that race from turning later Terraform calls into a spurious
+// missing-executable failure.
+func isolateTerraformTestBinary(t *testing.T, source string) {
+	t.Helper()
+
+	contents, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("read Terraform-compatible executable %q: %v", source, err)
+	}
+
+	info, err := os.Stat(source)
+	if err != nil {
+		t.Fatalf("stat Terraform-compatible executable %q: %v", source, err)
+	}
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, filepath.Base(source))
+	if err := os.WriteFile(destination, contents, info.Mode()); err != nil {
+		t.Fatalf("copy Terraform-compatible executable to test directory: %v", err)
+	}
+
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestIsolateTerraformTestBinary(t *testing.T) {
+	source, err := os.Executable()
+	require.NoError(t, err)
+
+	isolateTerraformTestBinary(t, source)
+
+	resolved, err := exec.LookPath(filepath.Base(source))
+	require.NoError(t, err)
+	assert.FileExists(t, resolved)
+	assert.NotEqual(t, filepath.Dir(source), filepath.Dir(resolved))
+	assert.Equal(t, filepath.Base(source), filepath.Base(resolved))
 }

@@ -16,6 +16,14 @@ import (
 
 var terraformStateCache = sync.Map{}
 
+// invalidateTerraformStateCache removes the cached outputs for one component.
+// Terraform can create an empty state file while selecting a workspace, then later
+// populate that same file during apply or deploy. Keeping the empty map cached would
+// make downstream !terraform.state expressions continue to use their fallback values.
+func invalidateTerraformStateCache(stack, component string) {
+	terraformStateCache.Delete(fmt.Sprintf("%s-%s", stack, component))
+}
+
 // ResetStateCache clears the terraform state cache and the nested-component AuthManager cache.
 // This is exported for use in tests to ensure cache isolation between test functions. The two caches
 // are cleared together because the managers in nestedAuthManagerCache are what read the state held in

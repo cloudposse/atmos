@@ -102,6 +102,12 @@ func runPreExecutionSteps(
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
 ) error {
+	// `(computed)` is an inspection-only degradation marker. Never permit it to
+	// reach Terraform via a generated tfvars file or TF_VAR_ environment value.
+	if err := rejectComputedTerraformVars(info.ComponentVarsSection); err != nil {
+		return err
+	}
+
 	// Partition variables into disk-safe vs. secret-bearing BEFORE writing the varfile or
 	// assembling env vars (and before the auth pre-hook registers credentials with the
 	// masker), so secrets are kept off disk and injected as TF_VAR_* env vars instead.
@@ -209,6 +215,10 @@ func executeCommandPipeline(
 	cleanupTerraformFiles(atmosConfig, info)
 	return nil
 }
+
+// dispatchAfterInitFn is a seam for testing the explicit-init path. Implicit
+// init dispatches the same provisioners in executeTerraformInitCommand.
+var dispatchAfterInitFn = dispatchAfterInit
 
 // runWorkspaceSetupPhase selects or creates the Terraform workspace under its own
 // phase-level CI log group. The group is emitted only when workspace setup will
@@ -431,6 +441,14 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		},
 		opts...,
 	)
+
+	// An explicit `atmos terraform init` reaches this main-command path rather
+	// than executeTerraformInitCommand. Keep its lifecycle equivalent to an
+	// implicit init so post-init provisioners can complete and persist provider
+	// locks for workdir and vendored components.
+	if err == nil && info.SubCommand == subcommandInit {
+		dispatchAfterInitFn(atmosConfig, info, componentPath)
+	}
 
 	exitCode := resolveExitCode(err)
 

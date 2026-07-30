@@ -7,7 +7,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/google/uuid"
 	"github.com/posthog/posthog-go"
@@ -35,7 +35,7 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 // formatting if a message is returned.
 func PrintTelemetryDisclosure() {
 	if message := disclosureMessage(); message != "" {
-		utils.PrintfMarkdownToTUIWithoutWordWrap("%s", message)
+		ui.MarkdownMessageNoWrapf("%s", message)
 	}
 }
 

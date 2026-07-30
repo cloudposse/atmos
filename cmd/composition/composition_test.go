@@ -3,6 +3,7 @@ package composition
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,6 +74,24 @@ func TestLifecycleCommandsAcceptOptionalCompositionArg(t *testing.T) {
 	}
 }
 
+func TestLifecycleCommandsRequireStackWhenNonInteractive(t *testing.T) {
+	resetCompositionViper(t)
+	viper.GetViper().Set("interactive", false)
+	require.NoError(t, compositionCmd.PersistentFlags().Set("stack", ""))
+	t.Cleanup(func() { _ = compositionCmd.PersistentFlags().Set("stack", "") })
+
+	for _, name := range append(lifecycleVerbs, "logs") {
+		t.Run(name, func(t *testing.T) {
+			cmd, _, err := compositionCmd.Find([]string{name})
+			require.NoError(t, err)
+
+			err = cmd.RunE(cmd, nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "--stack")
+		})
+	}
+}
+
 func TestCompositionVerbFlags(t *testing.T) {
 	cmd := logsCmd
 	require.NoError(t, cmd.Flags().Set("follow", "true"))
@@ -112,6 +131,27 @@ func TestBuildConfigAndStacksInfo_ResolvesStackAfterBindingFlags(t *testing.T) {
 
 	info := buildConfigAndStacksInfo(cmd)
 	assert.Equal(t, "local", info.Stack)
+}
+
+func TestBuildConfigAndStacksInfo_PrefersStackFlag(t *testing.T) {
+	resetCompositionViper(t)
+	viper.GetViper().Set("stack", "from-viper")
+
+	cmd := &cobra.Command{Use: "up"}
+	cmd.Flags().String("stack", "", "")
+	require.NoError(t, cmd.Flags().Set("stack", "selected"))
+
+	info := buildConfigAndStacksInfo(cmd)
+	assert.Equal(t, "selected", info.Stack)
+}
+
+func TestLifecycleRequiredFlagsAcceptExplicitStack(t *testing.T) {
+	resetCompositionViper(t)
+	require.NoError(t, lifecycleRequiredFlags.Validate(map[string]interface{}{"stack": "explicit"}))
+}
+
+func TestLifecycleRequiredFlagsRejectMissingStack(t *testing.T) {
+	require.Error(t, lifecycleRequiredFlags.Validate(map[string]interface{}{"stack": ""}))
 }
 
 func resetCompositionViper(t *testing.T) {
