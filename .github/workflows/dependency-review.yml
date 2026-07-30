@@ -28,6 +28,33 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Verify brace-expansion is pinned to the verified patched versions
+        # GHSA-mh99-v99m-4gvg is allowlisted below by ID only, which would otherwise
+        # let any future brace-expansion resolution (e.g. an unpatched 3.x/4.x, or a
+        # 1.x/2.x release without the backported fix) through silently. Scope the
+        # exception to the exact versions verified to contain the fix so a lockfile
+        # drift fails loudly instead of bypassing the vulnerability check.
+        run: |
+          set -euo pipefail
+          allowed="1.1.18
+          2.1.4"
+          found=$(grep -oE '^  brace-expansion@[0-9]+\.[0-9]+\.[0-9]+:' website/pnpm-lock.yaml | sed -E 's/^  brace-expansion@//; s/:$//' | sort -u)
+          if [ -z "$found" ]; then
+            echo "::error::No brace-expansion entries found in website/pnpm-lock.yaml. If the dependency was removed, delete the GHSA-mh99-v99m-4gvg allowlist entry and this check."
+            exit 1
+          fi
+          bad=""
+          while IFS= read -r v; do
+            if ! grep -qxF "$v" <<< "$allowed"; then
+              bad="$bad $v"
+            fi
+          done <<< "$found"
+          if [ -n "$bad" ]; then
+            echo "::error::Unexpected brace-expansion version(s) resolved:$bad. The GHSA-mh99-v99m-4gvg allowlist in this workflow is scoped only to the verified patched versions ($(echo "$allowed" | tr '\n' ' ')). Verify the new version actually contains the EXPANSION_MAX_LENGTH fix, then update both the pnpm override and this check's \`allowed\` list."
+            exit 1
+          fi
+          echo "brace-expansion resolved version(s) ($found) match the verified GHSA-mh99-v99m-4gvg patched set."
+
       - name: Dependency Review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
