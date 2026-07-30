@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
@@ -23,10 +24,11 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		tfoutput.ResetOutputsCache()
 	})
 
-	tofuPath, err := exec.LookPath("tofu")
-	if err != nil {
-		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
-	}
+	// Resolve and isolate the tofu binary in one step (via RequireTofuPath)
+	// rather than a separate exec.LookPath call -- see requireExecutablePath's
+	// doc comment in tests/preconditions.go for why two independent lookups
+	// against the shared toolchain cache are unsafe on the Windows acceptance job.
+	tofuPath := tests.RequireTofuPath(t)
 	isolateTerraformTestBinary(t, tofuPath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")
@@ -53,7 +55,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
