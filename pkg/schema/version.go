@@ -40,7 +40,7 @@ type VersionConstraint struct {
 // VersionProvider configures a concrete backend used to discover versions.
 type VersionProvider struct {
 	Kind       string `yaml:"kind,omitempty" mapstructure:"kind" json:"kind,omitempty"`
-	Type       string `yaml:"type,omitempty" mapstructure:"type" json:"type,omitempty"` // Deprecated: use kind.
+	Type       string `yaml:"type,omitempty" mapstructure:"type" json:"type,omitempty" jsonschema_extras:"deprecated=true,x-atmos-replacement=kind"` // Deprecated: use kind.
 	URL        string `yaml:"url,omitempty" mapstructure:"url" json:"url,omitempty"`
 	Region     string `yaml:"region,omitempty" mapstructure:"region" json:"region,omitempty"`
 	RegistryID string `yaml:"registry_id,omitempty" mapstructure:"registry_id" json:"registry_id,omitempty"`

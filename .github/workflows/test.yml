@@ -5,6 +5,11 @@ on:
     paths-ignore:
       - "README.md"
 
+  # Required checks must also run against the synthetic commit created for a
+  # GitHub merge queue entry.
+  merge_group:
+    types: [checks_requested]
+
   push:
     branches:
       - main
@@ -193,9 +198,8 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
+        uses: ./.github/actions/setup-packer-retry
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           version: ${{ env.PACKER_VERSION }}
@@ -525,8 +529,12 @@ jobs:
 
       - name: Install Linux build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          # The Azure mirror used by GitHub's Ubuntu runners can stall long
+          # enough to exhaust this job's timeout. Use Ubuntu's primary archive
+          # for this small, deterministic dependency install instead.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Run Floci Go E2E tests
         env:
@@ -1008,6 +1016,16 @@ jobs:
         uses: ./.github/actions/setup-atmos-install
         with:
           target: linux
+
+      - name: Set up Go for the Buildx cache integration test
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Verify remote Buildx registry cache
+        env:
+          ATMOS_TEST_REGISTRY_CACHE: "1"
+        run: go test ./pkg/container -run '^TestDockerRuntime_RemoteRegistryCache_Integration$' -count=1
 
       - name: Run container steps (run, build, bake, push, workspace, env)
         working-directory: examples/container-step
