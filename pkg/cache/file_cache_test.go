@@ -89,6 +89,19 @@ func TestFileCache_Get_NotFound(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestFileCache_Delete(t *testing.T) {
+	cache := newTestCache(t)
+	require.NoError(t, cache.Set("test-key", []byte("cached content")))
+
+	require.NoError(t, cache.Delete("test-key"))
+	_, exists, err := cache.Get("test-key")
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	// Deleting an absent entry is idempotent.
+	require.NoError(t, cache.Delete("test-key"))
+}
+
 func TestFileCache_GetPath(t *testing.T) {
 	cache := newTestCache(t)
 
@@ -481,6 +494,32 @@ func TestFileCache_Set_WriteError(t *testing.T) {
 	}
 
 	err := cache.Set(key, content)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheWrite)
+}
+
+func TestFileCache_Delete_RemoveError(t *testing.T) {
+	// Test that Delete returns a wrapped error when Remove fails with something
+	// other than "not exist" (e.g. a permissions problem or I/O error).
+	tempDir := t.TempDir()
+	key := "test-key"
+	expectedPath := filepath.Join(tempDir, keyToFilename(key))
+	removeErr := fmt.Errorf("remove failed")
+
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().
+		Remove(expectedPath).
+		Return(removeErr)
+
+	cache := &FileCache{
+		baseDir:      tempDir,
+		lockFilePath: filepath.Join(tempDir, "cache.lock"),
+		lock:         &mockFileLock{},
+		fs:           mockFS,
+	}
+
+	err := cache.Delete(key)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCacheWrite)
 }
