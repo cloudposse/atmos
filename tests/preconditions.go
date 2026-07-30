@@ -379,7 +379,12 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 // in this repo's git history) -- so a short window risks masking further,
 // not-yet-identified contention rather than tolerating genuine scheduling
 // delay under load.
-const (
+// These are package-level vars, not consts, solely so tests can shrink them
+// temporarily (see withShortExecutablePathRetry in
+// precondition_require_executable_path_test.go) to exercise the retry loop's
+// sleep/exhaustion branches without waiting out the real 15s production
+// window. Production code paths never mutate them.
+var (
 	executablePathRetryTimeout  = 15 * time.Second
 	executablePathRetryInterval = 100 * time.Millisecond
 )
