@@ -1165,6 +1165,7 @@ var (
 	ErrPlanfileDeleteFailed       = errors.New("failed to delete planfile")
 	ErrPlanfileListFailed         = errors.New("failed to list planfiles")
 	ErrPlanfileStoreNotFound      = errors.New("planfile store not found")
+	ErrPlanfileStoreUnavailable   = errors.New("no configured planfile store could be initialized")
 	ErrPlanfileKeyInvalid         = errors.New("planfile key generation failed: stack, component, and SHA are required")
 	ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
 	ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")

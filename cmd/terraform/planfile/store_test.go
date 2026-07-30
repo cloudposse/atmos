@@ -6,80 +6,115 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestGetStoreOptions(t *testing.T) {
-	t.Run("explicit S3 store", func(t *testing.T) {
-		// Clear environment.
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
-		t.Setenv("GITHUB_ACTIONS", "")
+// Compile-time guard so a rename of the planfile store configuration fields fails
+// the build instead of silently skipping the behavior under test.
+var _ = schema.PlanfilesConfig{Default: "", Priority: nil, Stores: nil}
 
-		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "aws/s3")
-		require.NoError(t, err)
-		assert.Equal(t, "aws/s3", opts.Type)
-	})
+// clearStoreEnv removes the environment variables that drive store detection.
+func clearStoreEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+	t.Setenv("ATMOS_PLANFILE_PREFIX", "")
+	t.Setenv("GITHUB_ACTIONS", "")
+}
 
-	t.Run("explicit local store", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
-		t.Setenv("GITHUB_ACTIONS", "")
+// planfileConfig builds an Atmos configuration with planfile storage settings.
+func planfileConfig(defaultStore string, priority []string, stores map[string]schema.PlanfileStoreSpec) *schema.AtmosConfiguration {
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Planfiles = schema.PlanfilesConfig{
+		Default:  defaultStore,
+		Priority: priority,
+		Stores:   stores,
+	}
+	return atmosConfig
+}
 
-		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local/dir")
-		require.NoError(t, err)
-		assert.Equal(t, "local/dir", opts.Type)
-	})
-
-	t.Run("S3 from environment", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
-		t.Setenv("ATMOS_PLANFILE_PREFIX", "planfiles")
-		t.Setenv("AWS_REGION", "us-east-1")
-		t.Setenv("GITHUB_ACTIONS", "")
-
-		opts, err := getStoreOptions(nil, "")
-		require.NoError(t, err)
-		assert.Equal(t, "aws/s3", opts.Type)
-		assert.Equal(t, "my-bucket", opts.Options["bucket"])
-		assert.Equal(t, "planfiles", opts.Options["prefix"])
-		assert.Equal(t, "us-east-1", opts.Options["region"])
-	})
-
-	t.Run("GitHub Actions environment", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+func TestResolveStore(t *testing.T) {
+	t.Run("explicit store name is used", func(t *testing.T) {
+		clearStoreEnv(t)
 		t.Setenv("GITHUB_ACTIONS", "true")
 
-		opts, err := getStoreOptions(nil, "")
+		store, selected, err := resolveStore(planfileConfig("", nil, map[string]schema.PlanfileStoreSpec{
+			"plans": {Type: planfile.LocalStoreType, Options: map[string]any{"path": t.TempDir()}},
+		}), "plans")
 		require.NoError(t, err)
-		assert.Equal(t, "github/artifacts", opts.Type)
+		require.NotNil(t, store)
+		assert.Equal(t, planfile.LocalStoreType, store.Name())
+		assert.Equal(t, "plans", selected.Name)
+		assert.Equal(t, planfile.StoreSourceExplicit, selected.Source)
 	})
 
-	t.Run("default to local", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
-		t.Setenv("GITHUB_ACTIONS", "")
+	t.Run("explicit store type is used", func(t *testing.T) {
+		clearStoreEnv(t)
 
-		opts, err := getStoreOptions(nil, "")
+		store, selected, err := resolveStore(&schema.AtmosConfiguration{}, planfile.LocalStoreType)
 		require.NoError(t, err)
-		assert.Equal(t, "local/dir", opts.Type)
-		assert.Equal(t, ".atmos/planfiles", opts.Options["path"])
+		require.NotNil(t, store)
+		assert.Equal(t, planfile.LocalStoreType, store.Name())
+		assert.Equal(t, planfile.LocalStoreType, selected.Options.Type)
 	})
 
-	t.Run("S3 env takes precedence over GitHub Actions", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
+	t.Run("unknown explicit store errors", func(t *testing.T) {
+		clearStoreEnv(t)
+
+		store, _, err := resolveStore(&schema.AtmosConfiguration{}, "does-not-exist")
+		require.ErrorIs(t, err, errUtils.ErrPlanfileStoreNotFound)
+		assert.Nil(t, store)
+	})
+
+	t.Run("configured priority is honored without --store", func(t *testing.T) {
+		// The CLI used to consult only --store and the environment, so a
+		// configured priority list was ignored here too.
+		clearStoreEnv(t)
 		t.Setenv("GITHUB_ACTIONS", "true")
 
-		opts, err := getStoreOptions(nil, "")
+		store, selected, err := resolveStore(planfileConfig("", []string{"plans"}, map[string]schema.PlanfileStoreSpec{
+			"plans": {Type: planfile.LocalStoreType, Options: map[string]any{"path": t.TempDir()}},
+		}), "")
 		require.NoError(t, err)
-		assert.Equal(t, "aws/s3", opts.Type)
+		require.NotNil(t, store)
+		assert.Equal(t, planfile.LocalStoreType, store.Name())
+		assert.Equal(t, "plans", selected.Name)
+		assert.Equal(t, planfile.StoreSourcePriority, selected.Source)
 	})
 
-	t.Run("explicit store overrides environment", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
-		t.Setenv("GITHUB_ACTIONS", "true")
+	t.Run("configured default is honored without --store", func(t *testing.T) {
+		clearStoreEnv(t)
 
-		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local/dir")
+		store, selected, err := resolveStore(planfileConfig("plans", nil, map[string]schema.PlanfileStoreSpec{
+			"plans": {Type: planfile.LocalStoreType, Options: map[string]any{"path": t.TempDir()}},
+		}), "")
 		require.NoError(t, err)
-		assert.Equal(t, "local/dir", opts.Type)
+		require.NotNil(t, store)
+		assert.Equal(t, planfile.StoreSourceDefault, selected.Source)
 	})
+
+	t.Run("falls back to local storage", func(t *testing.T) {
+		clearStoreEnv(t)
+
+		store, selected, err := resolveStore(&schema.AtmosConfiguration{}, "")
+		require.NoError(t, err)
+		require.NotNil(t, store)
+		assert.Equal(t, planfile.LocalStoreType, store.Name())
+		assert.Equal(t, planfile.StoreSourceFallback, selected.Source)
+		assert.Equal(t, planfile.DefaultLocalPath, selected.Options.Options["path"])
+	})
+}
+
+func TestCreateStore(t *testing.T) {
+	clearStoreEnv(t)
+
+	store, err := createStore(planfileConfig("", []string{"plans"}, map[string]schema.PlanfileStoreSpec{
+		"plans": {Type: planfile.LocalStoreType, Options: map[string]any{"path": t.TempDir()}},
+	}), "")
+	require.NoError(t, err)
+	require.NotNil(t, store)
+	assert.Equal(t, planfile.LocalStoreType, store.Name())
 }
 
 func TestDefaultKeyPattern(t *testing.T) {

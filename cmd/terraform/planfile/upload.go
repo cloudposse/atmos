@@ -7,18 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ci/artifact"
-	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
-	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local"  // Register local artifact store.
-	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3"     // Register s3 artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
-	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/adapter"
 	"github.com/cloudposse/atmos/pkg/ci/providers/generic"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -190,19 +184,6 @@ func initAtmosConfig(opts *UploadOptions) (schema.AtmosConfiguration, error) {
 	return cfg.InitCliConfig(configAndStacksInfo, true)
 }
 
-// createStore creates a planfile store from configuration.
-func createStore(atmosConfig *schema.AtmosConfiguration, storeName string) (planfile.Store, error) {
-	artOpts, err := getStoreOptions(atmosConfig, storeName)
-	if err != nil {
-		return nil, err
-	}
-	backend, err := artifact.NewStore(artOpts)
-	if err != nil {
-		return nil, err
-	}
-	return adapter.NewStore(backend), nil
-}
-
 // buildUploadMetadata creates metadata for the planfile upload.
 // Populates CI context fields (Branch, RunID, Repository, etc.) from
 // environment variables via the generic CI provider.
@@ -275,84 +256,4 @@ func resolveLockfilePath(explicit, planfilePath string) string {
 		return candidate
 	}
 	return ""
-}
-
-// getStoreOptions builds StoreOptions from atmos configuration.
-// Precedence: explicit --store flag > S3 env vars > GitHub Actions env > local default.
-func getStoreOptions(atmosConfig *schema.AtmosConfiguration, storeName string) (planfile.StoreOptions, error) {
-	defer perf.Track(atmosConfig, "planfile.getStoreOptions")()
-
-	// Explicit store name takes precedence.
-	if storeName != "" {
-		// Look up the named store in atmos configuration first.
-		if spec, ok := atmosConfig.Components.Terraform.Planfiles.Stores[storeName]; ok {
-			return planfile.StoreOptions{
-				Type:        spec.Type,
-				Options:     spec.Options,
-				AtmosConfig: atmosConfig,
-			}, nil
-		}
-		// Fall back to treating storeName as a store type directly.
-		return planfile.StoreOptions{
-			Type:        storeName,
-			Options:     map[string]any{},
-			AtmosConfig: atmosConfig,
-		}, nil
-	}
-
-	// Try environment-based detection in order of precedence.
-	if opts := detectS3FromEnv(); opts != nil {
-		log.Debug("Storage provider: S3 from environment")
-		opts.AtmosConfig = atmosConfig
-		return *opts, nil
-	}
-	if opts := detectGitHubFromEnv(); opts != nil {
-		log.Debug("Storage provider: GitHub from environment")
-		opts.AtmosConfig = atmosConfig
-		return *opts, nil
-	}
-
-	// Default to local storage.
-	log.Debug("Storage provider: Local from environment")
-	return defaultLocalStore(atmosConfig), nil
-}
-
-// detectS3FromEnv checks for S3 configuration in environment variables.
-func detectS3FromEnv() *planfile.StoreOptions {
-	bucket := os.Getenv("ATMOS_PLANFILE_BUCKET")
-	if bucket == "" {
-		return nil
-	}
-	return &planfile.StoreOptions{
-		Type: "aws/s3",
-		Options: map[string]any{
-			"bucket": bucket,
-			"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
-			"region": os.Getenv("AWS_REGION"),
-		},
-	}
-}
-
-// detectGitHubFromEnv checks if running in GitHub Actions.
-func detectGitHubFromEnv() *planfile.StoreOptions {
-	if os.Getenv("GITHUB_ACTIONS") != "true" {
-		return nil
-	}
-	return &planfile.StoreOptions{
-		Type: "github/artifacts",
-		Options: map[string]any{
-			"prefix": "planfile",
-		},
-	}
-}
-
-// defaultLocalStore returns the default local storage configuration.
-func defaultLocalStore(atmosConfig *schema.AtmosConfiguration) planfile.StoreOptions {
-	return planfile.StoreOptions{
-		Type: "local/dir",
-		Options: map[string]any{
-			"path": ".atmos/planfiles",
-		},
-		AtmosConfig: atmosConfig,
-	}
 }

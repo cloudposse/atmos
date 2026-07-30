@@ -55,6 +55,44 @@ components:
 ```
 </File>
 
+## Store Selection
+
+Configuration decides where planfiles go. Atmos resolves the store in this order, and the first
+match wins:
+
+<dl>
+  <dt>1. `--store` on the command line</dt>
+  <dd>Overrides configuration for that one `atmos terraform planfile` invocation. Accepts a store name or a store type (e.g. `aws/s3`).</dd>
+
+  <dt>2. `planfiles.default`</dt>
+  <dd>Names a single store, so it takes precedence over `priority` when both are set.</dd>
+
+  <dt>3. `planfiles.priority`</dt>
+  <dd>Tried in the listed order. Atmos uses the first store that can be initialized in the current environment and skips ones that cannot — GitHub Artifacts without a token, S3 without credentials — so a single configuration works on a runner and on a laptop.</dd>
+
+  <dt>4. A single entry in `planfiles.stores`</dt>
+  <dd>When exactly one store is defined and neither `default` nor `priority` selects one, that store is used.</dd>
+
+  <dt>5. Environment detection</dt>
+  <dd>Only when nothing above selects a store: `ATMOS_PLANFILE_BUCKET` (plus `ATMOS_PLANFILE_PREFIX` and `AWS_REGION`) selects S3, then GitHub Actions selects `github/artifacts`.</dd>
+
+  <dt>6. Local storage</dt>
+  <dd>The built-in `local/dir` store at `.atmos/planfiles`.</dd>
+</dl>
+
+Two consequences worth knowing:
+
+- **Configuration is never silently overridden.** Once `default`, `priority`, or a lone named store
+  selects a backend, Atmos does not fall back to environment detection. If none of the configured
+  stores can be initialized, the command fails and reports what each attempt rejected — it will not
+  quietly upload to GitHub Artifacts instead of the S3 bucket you configured.
+- **Unresolvable names fail loudly.** An entry in `priority` (or in `default`) that is neither a key
+  of `planfiles.stores` nor a store type is a configuration error listing the stores you did define,
+  so `priority: [s3]` without a matching `stores.s3` is caught instead of ignored.
+
+The selected store handles both upload and download, so `plan` and `deploy` agree on where the
+planfile lives. A failure *while* uploading or downloading does not switch stores.
+
 ## Storage Backends
 
 | Backend | Type | Best For |
