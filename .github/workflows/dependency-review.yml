@@ -38,7 +38,11 @@ jobs:
           set -euo pipefail
           allowed="1.1.18
           2.1.4"
-          found=$(grep -oE '^  brace-expansion@[0-9]+\.[0-9]+\.[0-9]+:' website/pnpm-lock.yaml | sed -E 's/^  brace-expansion@//; s/:$//' | sort -u)
+          found=$(
+            {
+              grep -oE '^  brace-expansion@[0-9]+\.[0-9]+\.[0-9]+:' website/pnpm-lock.yaml || test $? -eq 1
+            } | sed -E 's/^  brace-expansion@//; s/:$//' | sort -u
+          )
           if [ -z "$found" ]; then
             echo "::error::No brace-expansion entries found in website/pnpm-lock.yaml. If the dependency was removed, delete the GHSA-mh99-v99m-4gvg allowlist entry and this check."
             exit 1
