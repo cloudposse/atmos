@@ -9883,6 +9883,20 @@
           ],
           "description": "Env step type fields."
         },
+        "export": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Whether env-step values reach later child processes (default true)."
+        },
         "code": {
           "anyOf": [
             {
@@ -14732,6 +14746,20 @@
             }
           ],
           "description": "Env step type fields."
+        },
+        "export": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Whether env-step values reach later child processes (default true)."
         },
         "code": {
           "anyOf": [
