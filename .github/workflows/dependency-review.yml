@@ -109,6 +109,16 @@ jobs:
           # convention (transitive via serve-handler/@docusaurus/core). Remove this
           # entry once GitHub's advisory data accounts for the 1.x/2.x backports, or
           # once minimatch drops its 1.x brace-expansion dependency.
+          #
+          # NOTE: allow-ghsas suppresses this GHSA for every resolved
+          # brace-expansion version, not just 1.1.18/2.1.4 -- the action has no
+          # package/version-scoped vulnerability exception (only
+          # allow-dependencies-licenses is purl-scoped, and that's license-only).
+          # Two layers keep this exception actually scoped: the exact (non-`^`)
+          # pnpm override pins in website/package.json, and the "Verify
+          # brace-expansion is pinned" step above, which fails the job if
+          # website/pnpm-lock.yaml ever resolves brace-expansion to anything
+          # outside {1.1.18, 2.1.4}.
           allow-ghsas: GHSA-fxhp-mv3v-67qp, GHSA-mh99-v99m-4gvg
 
           # Comment on PR with details

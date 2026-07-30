@@ -109,14 +109,14 @@ func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
 // runtime detects the container runtime and forwards the resolved environment
 // (so registry auth and app credentials reach the docker/podman subprocess).
 func (r *resolved) runtime(ctx context.Context) (ctr.Runtime, error) {
-	runtime, err := detectRuntime(ctx, r.runtimePref, r.autoStart)
+	resolution, err := resolveRuntimeForContainerCommand(ctx, r.runtimePref, r.autoStart)
 	if err != nil {
 		return nil, err
 	}
-	if setter, ok := runtime.(ctr.EnvSetter); ok {
+	if setter, ok := resolution.runtime.(ctr.EnvSetter); ok {
 		setter.SetEnv(r.envList)
 	}
-	return runtime, nil
+	return resolution.runtime, nil
 }
 
 // mounts returns runtime mounts with bind sources made absolute against the
