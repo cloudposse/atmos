@@ -3,6 +3,7 @@ package exec
 import (
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -204,6 +205,27 @@ func TestGetTerraformState_CacheHit(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "vpc-12345", result)
+}
+
+func TestGetTerraformState_NotProvisionedCacheHit(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackSlug := "test-stack-missing-component"
+	terraformStateCache.Store(stackSlug, terraformStateNotProvisionedCacheEntry{})
+	t.Cleanup(func() { terraformStateCache.Delete(stackSlug) })
+
+	result, err := GetTerraformState(
+		atmosConfig,
+		"!terraform.state",
+		"test-stack",
+		"missing-component",
+		"vpc_id",
+		false,
+		nil,
+		nil,
+	)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 }
 
 // TestGetTerraformState_SkipCache tests cache skip behavior.
