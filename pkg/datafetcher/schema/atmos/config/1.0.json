@@ -8960,7 +8960,8 @@
       "type": "object"
     },
     "StoreRegistry": {
-      "type": "object"
+      "type": "object",
+      "description": "StoreRegistry is a map of store name to a live store implementation."
     },
     "SyntaxHighlighting": {
       "properties": {
