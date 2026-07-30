@@ -58,14 +58,16 @@ func EnvironToMap() map[string]string {
 
 // CanonicalEnvKey returns the map key to use for an environment variable name when
 // building a map[string]string from an env-var slice that may later be converted
-// back to a slice for subprocess execution. On Windows, environment variable names
-// are case-insensitive at the OS level (e.g. the OS supplies "Path" while Atmos code
-// writes "PATH"); returning a canonical uppercase form ensures case-variant spellings
-// of the same variable collapse into a single map entry instead of coexisting as two,
-// whose relative order — and therefore which one downstream subprocess creation treats
-// as authoritative — would otherwise depend on Go's randomized map iteration order.
-// On other platforms, environment variable names are case-sensitive, so the key is
-// returned unchanged.
+// back to a slice for subprocess execution. On Windows, PATH is case-insensitive at
+// the OS level and the OS supplies it under its own native casing ("Path") while
+// Atmos code writes "PATH"; without normalization the two would survive as separate
+// map entries whose relative order in the resulting slice — and therefore which one
+// downstream subprocess creation treats as authoritative — would depend on Go's
+// randomized map iteration order. Only PATH is normalized: every other environment
+// variable name is left exactly as given, on every platform, because names are
+// otherwise case-sensitive by convention (e.g. Terraform's TF_CLI_ARGS_<command>
+// variables intentionally use a lowercase command-name suffix) and rewriting them
+// would silently break exact-case lookups.
 func CanonicalEnvKey(key string) string {
 	defer perf.Track(nil, "env.CanonicalEnvKey")()
 
@@ -75,8 +77,8 @@ func CanonicalEnvKey(key string) string {
 // canonicalEnvKeyForGOOS is CanonicalEnvKey parameterized by GOOS so the Windows
 // case-insensitive behavior can be unit-tested from any host platform.
 func canonicalEnvKeyForGOOS(key, goos string) string {
-	if goos == "windows" {
-		return strings.ToUpper(key)
+	if goos == "windows" && strings.EqualFold(key, "PATH") {
+		return "PATH"
 	}
 	return key
 }

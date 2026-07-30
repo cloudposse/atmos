@@ -715,6 +715,12 @@ func TestCanonicalEnvKeyForGOOS(t *testing.T) {
 		{name: "windows collapses to the same key regardless of input casing", key: "path", goos: "windows", want: "PATH"},
 		{name: "linux preserves case", key: "Path", goos: "linux", want: "Path"},
 		{name: "darwin preserves case", key: "PATH", goos: "darwin", want: "PATH"},
+		// Regression: only PATH is normalized. Blanket-uppercasing every key broke
+		// Terraform's TF_CLI_ARGS_<command> convention, which intentionally uses a
+		// lowercase command-name suffix (e.g. TF_CLI_ARGS_plan) — see
+		// TestMergeSystemEnvWithGlobal_TFCliArgsHandling in global_test.go.
+		{name: "windows leaves non-PATH mixed case untouched", key: "TF_CLI_ARGS_plan", goos: "windows", want: "TF_CLI_ARGS_plan"},
+		{name: "windows leaves arbitrary lowercase untouched", key: "my_custom_var", goos: "windows", want: "my_custom_var"},
 	}
 
 	for _, tt := range tests {
