@@ -8,91 +8,35 @@ package utils
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	logging "gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
+	atmosyq "github.com/cloudposse/atmos/internal/yq"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// yqLogModule is the go-logging module name that yq registers its internal
-// logger under.
-const yqLogModule = "yq-lib"
-
-// yqSilentLevel is lower than yq's critical level, so its IsEnabledFor()
-// gate rejects every message. Using a level keeps logger configuration
-// reversible across repeated configureYqLogger calls.
-const yqSilentLevel logging.Level = -1
-
-// yqLogLevelMu serializes Atmos reads and writes of go-logging's module
-// level registry. That registry is a plain map with no synchronization of
-// its own, and yq reads it from every decoder it runs, so an unguarded
-// write from one goroutine while another goroutine is decoding ends the
-// process with a runtime fatal error that recover cannot intercept.
-var yqLogLevelMu sync.Mutex
-
-// yqParserOnce guards yq's process-global expression parser.
-var yqParserOnce sync.Once
-
-// init installs the default yq log level before main runs, and therefore
-// before any goroutine exists. A non-Trace run then finds the level it
-// wants already installed and never writes the registry while stack
-// processing goroutines are live.
-func init() {
-	logging.SetLevel(yqSilentLevel, yqLogModule)
-}
-
-// initYqExpressionParser initializes yq's process-global expression parser
-// exactly once. yqlib.InitExpressionParser guards yqlib.ExpressionParser
-// with a plain nil check and every Evaluate call runs it, so concurrent
-// first evaluations otherwise write and read that global at the same time.
-// Doing it under a Once gives the later readers a happens-before edge, and
-// keeps the one-time cost (~0.4ms here) off commands that never evaluate a
-// yq expression.
-func initYqExpressionParser() {
-	yqParserOnce.Do(yqlib.InitExpressionParser)
-}
-
-// configureYqLogger configures the yq logger based on Atmos configuration.
-// Non-Trace log levels suppress yq's internal diagnostics; Trace
-// restores yq's default verbosity (Debug) so users asking for
-// everything see everything.
-func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
-	defer perf.Track(atmosConfig, "utils.configureYqLogger")()
-
-	desired := yqSilentLevel
+// yqLoggerLevel computes the yq logger level for the given Atmos
+// configuration, without applying it. Non-Trace log levels silence yq's
+// internal diagnostics; Trace restores yq's default verbosity (Debug) so
+// users asking for everything see everything, forwarded through the Atmos
+// logger. Callers apply the result via atmosyq.WithEvaluationLevel so the
+// level stays fixed for the whole evaluation it governs, rather than
+// setting it as a standalone side effect a concurrent caller could change
+// mid-evaluation.
+func yqLoggerLevel(atmosConfig *schema.AtmosConfiguration) logging.Level {
 	if atmosConfig != nil && atmosConfig.Logs.Level == LogLevelTrace {
-		desired = logging.DEBUG
+		return logging.DEBUG
 	}
-	setYqLogLevel(desired)
-}
-
-// setYqLogLevel installs level for yq's logger, writing only when some
-// other level is currently installed. Callers may run concurrently.
-//
-// Skipping the redundant write is what makes this safe rather than merely
-// tidy: yq's own reads of the level registry are outside our control, so
-// the only way to keep them from racing a write is to not write at all
-// once the wanted level is in place.
-func setYqLogLevel(level logging.Level) {
-	yqLogLevelMu.Lock()
-	defer yqLogLevelMu.Unlock()
-
-	if logging.GetLevel(yqLogModule) == level {
-		return
-	}
-	logging.SetLevel(level, yqLogModule)
+	return atmosyq.SilentLevel
 }
 
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
 	defer perf.Track(atmosConfig, "utils.EvaluateYqExpression")()
 
-	// Configure the yq logger based on Atmos configuration
-	configureYqLogger(atmosConfig)
-	initYqExpressionParser()
+	atmosyq.InitExpressionParser()
 
 	evaluator := yqlib.NewStringEvaluator()
 
@@ -113,7 +57,10 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
-	result, err := evaluator.Evaluate(yq, yamlData, encoder, decoder)
+	var result string
+	atmosyq.WithEvaluationLevel(yqLoggerLevel(atmosConfig), func() {
+		result, err = evaluator.Evaluate(yq, yamlData, encoder, decoder)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to evaluate YQ expression '%s': %w", yq, err)
 	}
@@ -257,9 +204,7 @@ func processYAMLNodeInner(node *yaml.Node) {
 func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration, data T, yq string) (*T, error) {
 	defer perf.Track(atmosConfig, "utils.EvaluateYqExpressionWithType")()
 
-	// Configure the yq logger based on Atmos configuration
-	configureYqLogger(atmosConfig)
-	initYqExpressionParser()
+	atmosyq.InitExpressionParser()
 
 	evaluator := yqlib.NewStringEvaluator()
 
@@ -280,7 +225,10 @@ func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration,
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
-	result, err := evaluator.Evaluate(yq, yaml, encoder, decoder)
+	var result string
+	atmosyq.WithEvaluationLevel(yqLoggerLevel(atmosConfig), func() {
+		result, err = evaluator.Evaluate(yq, yaml, encoder, decoder)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to evaluate YQ expression '%s': %w", yq, err)
 	}
