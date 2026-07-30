@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -143,6 +144,21 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, ".atmos.d/extra.yaml").Return([]gojsonschema.ResultError{}, nil)
 			},
 			expectedError: nil,
+		},
+		{
+			name:    "built-in config entry validates generated workdir YAML",
+			schemas: nil,
+			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcher) {
+				stacksFile := filepath.Join("profiles", "developer", "stacks.yaml")
+				versionFile := filepath.Join("profiles", "developer", ".workdir", "version.yaml")
+				fmi.EXPECT().MatchFiles(builtinConfigSchemaMatches()).Return([]string{
+					stacksFile,
+					versionFile,
+				}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, stacksFile).Return([]gojsonschema.ResultError{}, nil)
+				mv.EXPECT().ValidateYAMLSchema(configSchemaSource, versionFile).Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
+			},
+			expectedError: ErrInvalidYAML,
 		},
 		{
 			name:      "source key config targets only the built-in entry",
@@ -300,6 +316,19 @@ func TestSchemaFilePositionsHandlesInvalidInput(t *testing.T) {
 	invalid := filepath.Join(t.TempDir(), "invalid.yaml")
 	require.NoError(t, os.WriteFile(invalid, []byte("not: [valid"), 0o600))
 	assert.Nil(t, schemaFilePositions(invalid))
+}
+
+func TestPrintValidationIncludesFileForParserErrors(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "invalid.yaml")
+	ctrl := gomock.NewController(t)
+	validatorMock := validator.NewMockValidator(ctrl)
+	validatorMock.EXPECT().ValidateYAMLSchema("schema.json", file).Return(nil, assert.AnError)
+
+	av := &atmosValidatorExecutor{validator: validatorMock}
+	_, err := av.printValidation("schema.json", []string{file})
+
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Contains(t, err.Error(), fmt.Sprintf("%q", displayPath(file)))
 }
 
 func TestValidateAtmosSchemaReport(t *testing.T) {
