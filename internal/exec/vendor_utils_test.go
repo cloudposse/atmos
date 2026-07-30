@@ -929,6 +929,8 @@ var (
 	_ = schema.Vendor{BasePath: ""}
 )
 
+// TestResolveVendorTargetBasePath covers which root relative `targets` are anchored to, depending on
+// whether atmos.yaml declares the vendor manifest location via `vendor.base_path`.
 func TestResolveVendorTargetBasePath(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -999,8 +1001,13 @@ func TestResolveVendorTargetBasePath(t *testing.T) {
 	}
 }
 
+// TestResolveVendorTargetPath covers how a single target path is anchored to the target base path.
 func TestResolveVendorTargetPath(t *testing.T) {
-	absTarget := filepath.Join(string(filepath.Separator), "opt", "vendored", "vpc")
+	// Derive the absolute target from t.TempDir(): a separator-rooted path like `\opt\vendored\vpc`
+	// is NOT absolute on Windows (filepath.IsAbs requires a volume name), which would silently turn
+	// this into a relative-path test there.
+	absTarget := filepath.Join(t.TempDir(), "vendored", "vpc")
+	require.True(t, filepath.IsAbs(absTarget), "the test needs a platform-absolute target path")
 
 	tests := []struct {
 		name           string
@@ -1037,9 +1044,10 @@ func TestResolveVendorTargetPath(t *testing.T) {
 	}
 }
 
+// TestProcessTargets_TargetBasePathOverridesVendorConfigDir verifies that relative targets resolve
+// against TargetBasePath (the Atmos `base_path`), while the vendor config directory keeps serving as
+// the anchor for resolving local sources.
 func TestProcessTargets_TargetBasePathOverridesVendorConfigDir(t *testing.T) {
-	// Relative targets must resolve against TargetBasePath (the Atmos `base_path`), while the
-	// vendor config directory keeps serving as the anchor for resolving local sources.
 	atmosConfig := &schema.AtmosConfiguration{}
 	source := schema.AtmosVendorSource{
 		Component: "vpc",
@@ -1077,10 +1085,15 @@ func TestProcessTargets_TargetBasePathOverridesVendorConfigDir(t *testing.T) {
 	}
 }
 
+// TestProcessTargets_AbsoluteTargetPath verifies that absolute targets, which are documented as
+// supported, are not nested under the target base path.
 func TestProcessTargets_AbsoluteTargetPath(t *testing.T) {
-	// Absolute targets are documented as supported and must not be nested under the target base path.
 	atmosConfig := &schema.AtmosConfiguration{}
-	absTarget := filepath.Join(string(filepath.Separator), "opt", "vendored", "vpc")
+	// t.TempDir() gives a platform-absolute path; a separator-rooted path like `\opt\vendored\vpc`
+	// fails filepath.IsAbs on Windows, so this test would assert nothing there.
+	absTarget := filepath.Join(t.TempDir(), "vendored", "vpc")
+	require.True(t, filepath.IsAbs(absTarget), "the test needs a platform-absolute target path")
+
 	source := schema.AtmosVendorSource{
 		Component: "vpc",
 		Source:    "github.com/org/repo.git//modules/vpc?ref=1.0.0",
