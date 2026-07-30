@@ -498,6 +498,32 @@ func TestFileCache_Set_WriteError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrCacheWrite)
 }
 
+func TestFileCache_Delete_RemoveError(t *testing.T) {
+	// Test that Delete returns a wrapped error when Remove fails with something
+	// other than "not exist" (e.g. a permissions problem or I/O error).
+	tempDir := t.TempDir()
+	key := "test-key"
+	expectedPath := filepath.Join(tempDir, keyToFilename(key))
+	removeErr := fmt.Errorf("remove failed")
+
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().
+		Remove(expectedPath).
+		Return(removeErr)
+
+	cache := &FileCache{
+		baseDir:      tempDir,
+		lockFilePath: filepath.Join(tempDir, "cache.lock"),
+		lock:         &mockFileLock{},
+		fs:           mockFS,
+	}
+
+	err := cache.Delete(key)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheWrite)
+}
+
 func TestFileCache_Clear_RemoveError(t *testing.T) {
 	// Test Clear when a cached file cannot be removed.
 	tempDir := t.TempDir()
