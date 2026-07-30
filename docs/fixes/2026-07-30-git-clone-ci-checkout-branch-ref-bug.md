@@ -6,8 +6,8 @@
 
 Writing a real end-to-end CI job to exercise the no-arg `atmos git clone` CI-checkout path (the
 `actions/checkout` replacement documented in `docs/prd/git-ops.md`) surfaced a genuine bug:
-`runCICheckout` (`cmd/git/clone.go`) passed `ciCtx.Ref` — the raw ref a CI provider reports (e.g.
-`refs/heads/main`, or `refs/pull/123/merge` for a PR) — as the `git clone --branch` argument.
+`runCICheckout` (`cmd/git/clone.go`) passed `ciCtx.Ref` — the raw ref a CI provider reports, e.g.
+`refs/heads/main`, or `refs/pull/123/merge` for a PR — as the `git clone --branch` argument.
 `git clone --branch` requires a short branch/tag name, not a full ref path, so every real
 push/PR-triggered no-arg checkout would fail with `fatal: Remote branch refs/heads/main not found
 in upstream origin`. Fixed by using `ciCtx.Branch` (the already-parsed short name the same provider
@@ -28,8 +28,8 @@ not a fixable scripting bug — the redirection approach cannot work in real Act
 was reverted rather than reworked; see Follow-ups.
 
 The underlying bug this was chasing is real and unrelated to that job's failure: `runCICheckout`
-(`cmd/git/clone.go`) passed `ciCtx.Ref` — the raw ref a CI provider reports (e.g.
-`refs/heads/main`, or `refs/pull/123/merge` for a PR) — as the `git clone --branch` argument.
+(`cmd/git/clone.go`) passed `ciCtx.Ref` — the raw ref a CI provider reports, e.g.
+`refs/heads/main`, or `refs/pull/123/merge` for a PR — as the `git clone --branch` argument.
 `git clone --branch` requires a short branch/tag name, not a full ref path, so every real
 push/PR-triggered no-arg checkout would fail with `fatal: Remote branch refs/heads/main not found
 in upstream origin`. Fixed by using `ciCtx.Branch` (the already-parsed short name the same provider
