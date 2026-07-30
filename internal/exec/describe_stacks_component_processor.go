@@ -736,8 +736,13 @@ func processComponentSectionTemplates(
 	componentSection map[string]any,
 	settingsSection map[string]any,
 ) (map[string]any, error) {
+	// Sections computed from Terraform source code (`component_info`) are not Atmos
+	// configuration and must not be rendered as `Go` templates. They stay in the template
+	// context below, only the rendered input excludes them. See #2145.
+	templateInput, nonTemplatedSections := splitNonTemplatedSections(componentSection)
+
 	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-		componentSection,
+		templateInput,
 		atmosConfig.Templates.Settings.Delimiters,
 	)
 	if err != nil {
@@ -794,6 +799,9 @@ func processComponentSectionTemplates(
 		}
 		return nil, err
 	}
+
+	restoreNonTemplatedSections(converted, nonTemplatedSections)
+
 	return converted, nil
 }
 
