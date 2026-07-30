@@ -114,11 +114,12 @@ jobs:
           # brace-expansion version, not just 1.1.18/2.1.4 -- the action has no
           # package/version-scoped vulnerability exception (only
           # allow-dependencies-licenses is purl-scoped, and that's license-only).
-          # Two layers keep this exception actually scoped: the exact (non-`^`)
-          # pnpm override pins in website/package.json, and the "Verify
-          # brace-expansion is pinned" step above, which fails the job if
-          # website/pnpm-lock.yaml ever resolves brace-expansion to anything
-          # outside {1.1.18, 2.1.4}.
+          # Two layers keep this exception actually scoped: the exact override
+          # values in website/package.json's pnpm.overrides (the selectors are
+          # `brace-expansion@^1`/`@^2`, but their pinned targets are the exact
+          # "1.1.18"/"2.1.4", not a range), and the "Verify brace-expansion is
+          # pinned" step above, which fails the job if website/pnpm-lock.yaml
+          # ever resolves brace-expansion to anything outside {1.1.18, 2.1.4}.
           allow-ghsas: GHSA-fxhp-mv3v-67qp, GHSA-mh99-v99m-4gvg
 
           # Comment on PR with details
