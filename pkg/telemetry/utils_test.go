@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
@@ -635,9 +634,31 @@ func TestCaptureCmdWithLoggingDisabled(t *testing.T) {
 	captureCmdString("test-cmd-no-logging", nil, mockClientProvider.NewMockClient)
 }
 
+// isolateTelemetryCache redirects the Atmos XDG cache root to a per-test temp
+// directory so PrintTelemetryDisclosure reads and writes a private cache.yaml.
+//
+// CRITICAL: never "clean up" by deleting filepath.Dir(cfg.GetCacheFilePath())
+// -- that is the REAL shared <cache>/atmos root. Since the toolchain install
+// root moved underneath it (<cache>/atmos/toolchain, #2579), an os.RemoveAll
+// there deletes every CI-provisioned tool (terraform/tofu/helm/helmfile) out
+// from under the other concurrently-running package test binaries. That is
+// exactly what the Windows acceptance job's recurring "installed tool
+// vanished from PATH mid-suite" failure turned out to be (confirmed by the
+// lookup forensics in tests/preconditions.go). Isolate; don't delete.
+func isolateTelemetryCache(t *testing.T) {
+	t.Helper()
+	tempCache := t.TempDir()
+	// ATMOS_XDG_CACHE_HOME takes precedence over XDG_CACHE_HOME; set both so
+	// the redirect holds regardless of the ambient environment.
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tempCache)
+	t.Setenv("XDG_CACHE_HOME", tempCache)
+}
+
 // TestPrintTelemetryDisclosure tests that the telemetry disclosure message
 // is properly printed to stderr with markdown formatting.
 func TestPrintTelemetryDisclosure(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Save original stderr
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
@@ -646,11 +667,6 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 	// Save original CI env vars
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
-
-	// Clean up test cache
-	cacheDir := "./.atmos"
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
 
 	// Call PrintTelemetryDisclosure
 	PrintTelemetryDisclosure()
@@ -675,15 +691,11 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 // TestPrintTelemetryDisclosureOnlyOnce tests that the telemetry disclosure
 // message is only shown once and not on subsequent calls.
 func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Save original CI env vars
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
-
-	// Clean up test cache - get the actual cache file path
-	cacheFilePath, _ := cfg.GetCacheFilePath()
-	cacheDir := filepath.Dir(cacheFilePath)
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
 
 	// First call should show the message
 	oldStderr := os.Stderr
@@ -727,10 +739,7 @@ func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
 	// Set CI environment variable
 	t.Setenv("CI", "true")
 
-	// Clean up test cache
-	cacheDir := "./.atmos"
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
+	isolateTelemetryCache(t)
 
 	// Capture stderr
 	oldStderr := os.Stderr
@@ -760,10 +769,7 @@ func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
 	// Disable telemetry
 	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 
-	// Clean up test cache
-	cacheDir := "./.atmos"
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
+	isolateTelemetryCache(t)
 
 	// Capture stderr
 	oldStderr := os.Stderr
