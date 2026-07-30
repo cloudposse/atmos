@@ -743,6 +743,14 @@ func TestMain(m *testing.M) {
 	// download planfiles from GitHub Artifacts during tests.
 	os.Unsetenv("GITHUB_ACTIONS")
 
+	// Ensure this test-only variable used by the "env-step-template-only"
+	// workflow fixture starts unset. That test asserts the variable is absent
+	// from a subprocess's environment when an env step sets export: false; a
+	// stray pre-existing value (e.g. left over from a developer's shell)
+	// would make the assertion fail even though export: false behaves
+	// correctly. See tests/fixtures/scenarios/workflows/stacks/workflows/test.yaml.
+	os.Unsetenv("ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":

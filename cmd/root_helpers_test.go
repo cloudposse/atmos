@@ -654,6 +654,36 @@ func TestHandleConfigInitError(t *testing.T) {
 			expectNil: true,
 		},
 		{
+			name:      "config validate command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "config", "validate"},
+			expectNil: true,
+		},
+		{
+			name:      "validate config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "config"},
+			expectNil: true,
+		},
+		{
+			name:      "validate schema config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "schema", "config"},
+			expectNil: true,
+		},
+		{
+			name:        "terraform passthrough arguments do not bypass config errors",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "terraform", "plan", "config", "validate"},
+			expectError: true,
+		},
+		{
+			name:        "root flag values do not bypass config errors",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "--config", "config", "validate"},
+			expectError: true,
+		},
+		{
 			name:        "custom command version flag preserves error",
 			initErr:     errors.New("config error"),
 			args:        []string{"atmos", "install", "--version", "1.2.3"},
@@ -694,6 +724,66 @@ func TestHandleConfigInitError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsBuiltinConfigValidationCommand(t *testing.T) {
+	newCommand := func(uses ...string) *cobra.Command {
+		root := &cobra.Command{Use: "atmos"}
+		current := root
+		for _, use := range uses {
+			child := &cobra.Command{Use: use}
+			current.AddCommand(child)
+			current = child
+		}
+		return current
+	}
+
+	tests := []struct {
+		name string
+		uses []string
+		args []string
+		want bool
+	}{
+		{name: "config validate", uses: []string{"config", "validate"}, want: true},
+		{name: "validate config", uses: []string{"validate", "config"}, want: true},
+		{name: "validate schema config", uses: []string{"validate", "schema"}, args: []string{"config"}, want: true},
+		{name: "validate schema other key", uses: []string{"validate", "schema"}, args: []string{"custom"}, want: false},
+		{name: "terraform passthrough", uses: []string{"terraform"}, args: []string{"plan", "config", "validate"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isBuiltinConfigValidationCommand(newCommand(tt.uses...), tt.args))
+		})
+	}
+}
+
+func TestIsBuiltinConfigValidationArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "too few arguments", args: []string{"atmos"}, want: false},
+		{name: "end of flags", args: []string{"atmos", "--", "config", "validate"}, want: false},
+		{name: "root boolean flag", args: []string{"atmos", "--verbose", "config", "validate"}, want: true},
+		{name: "missing root flag value", args: []string{"atmos", "--config"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isBuiltinConfigValidationArgs(tt.args))
+		})
+	}
+}
+
+func TestConfigForStartupLogger(t *testing.T) {
+	config := &schema.AtmosConfiguration{Logs: schema.Logs{File: "custom.log", Level: "Info"}}
+	assert.Same(t, config, configForStartupLogger(config, nil))
+
+	fallback := configForStartupLogger(config, errors.New("invalid config"))
+	assert.Equal(t, "/dev/stderr", fallback.Logs.File)
+	assert.Equal(t, "Warning", fallback.Logs.Level)
 }
 
 // TestSetupLogger_InvalidLogLevel tests error handling for invalid log levels.

@@ -157,7 +157,8 @@ type Task struct {
 	With map[string]any `yaml:"-" json:"with,omitempty" mapstructure:"with"`
 
 	// Env step type fields.
-	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
+	Vars   map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`       // Variables to set for env step type.
+	Export *bool             `yaml:"export,omitempty" json:"export,omitempty" mapstructure:"export"` // Whether env-step values reach later child processes (default true).
 
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
@@ -431,7 +432,8 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		With: task.With,
 
 		// Env step type fields.
-		Vars: task.Vars,
+		Vars:   task.Vars,
+		Export: task.Export,
 
 		// Exit step type fields.
 		Code: task.Code,
@@ -590,7 +592,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Env: step.Env,
 
 		// Env step type fields.
-		Vars: step.Vars,
+		Vars:   step.Vars,
+		Export: step.Export,
 
 		// Exit step type fields.
 		Code: step.Code,

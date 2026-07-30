@@ -169,4 +169,9 @@ exclude = [
   # Otelic (intermittent "Connection reset by peer" from CI runners; the page
   # returns 200 and loads fine outside CI, verified via curl).
   "otelic\\.com",
+  # These two blob-file deep links intermittently return 404 from GitHub's
+  # gateway in CI even though the files exist on their repo's default branch;
+  # both verified to return 200 outside CI via curl.
+  "github\\.com/github/github-mcp-server/blob/main/docs/installation-guides/install-gemini-cli\\.md",
+  "github\\.com/99designs/aws-vault/blob/master/USAGE\\.md",
 ]

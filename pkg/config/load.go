@@ -1409,7 +1409,6 @@ func loadAtmosConfigsFromDirectoryWithMerge(searchPattern string, dst *viper.Vip
 	if err != nil {
 		return fmt.Errorf("%w: failed to search for configuration files in %s: %w", errUtils.ErrParseFile, source, err)
 	}
-
 	// No files found is not an error - just means directory is empty.
 	if len(foundPaths) == 0 {
 		log.Trace("No configuration files found", "source", source, "pattern", searchPattern)

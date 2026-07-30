@@ -461,6 +461,10 @@ var RootCmd = &cobra.Command{
 			} else if isCIGitCloneBootstrapRequested() {
 				tmpConfig.CI.Enabled = true
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
+			} else if isBuiltinConfigValidationCommand(cmd, args) {
+				// The built-in config validation commands must run when config decoding
+				// fails; reporting that invalid configuration is their purpose.
+				log.Debug("CLI configuration error (continuing for config validation)", "error", err)
 			} else if isVersionCommand() {
 				// Version command should always work, even with invalid config.
 				// Log config error but allow version command to proceed.
@@ -1598,6 +1602,12 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
 		return nil
 	}
+	if isBuiltinConfigValidationArgs(args) {
+		// The built-in config validation commands must run when config decoding
+		// fails; reporting that invalid configuration is their purpose.
+		log.Debug("Warning: CLI configuration error (continuing for config validation)", "error", initErr)
+		return nil
+	}
 
 	if isHelpRequestedInArgs() {
 		// Help screens should always render, even with invalid config.
@@ -1638,6 +1648,103 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 
 	// Return other errors as-is.
 	return initErr
+}
+
+// configCommandToken is the "config" argument/subcommand token shared by all
+// built-in config-validation command spellings.
+const configCommandToken = "config"
+
+// isBuiltinConfigValidationArgs reports whether arguments invoke a built-in
+// command that validates the Atmos configuration itself.
+func isBuiltinConfigValidationArgs(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+
+	// Skip only leading root flags. Once a command token is found, remaining
+	// arguments belong to that command and must not be interpreted as commands.
+	args, ok := skipLeadingRootFlags(args[1:])
+	if !ok {
+		return false
+	}
+
+	return matchesConfigValidationCommand(args)
+}
+
+// skipLeadingRootFlags advances past leading root-level flags in args,
+// returning the remaining arguments. It returns ok=false when a "--" flag
+// terminator or an incomplete value-consuming flag is encountered, since
+// neither case can resolve to a config-validation command.
+func skipLeadingRootFlags(args []string) ([]string, bool) {
+	for len(args) > 0 {
+		if args[0] == "--" {
+			return nil, false
+		}
+		skip, consumesValue := isSkippableRootFlag(args[0])
+		if !skip {
+			break
+		}
+		if consumesValue {
+			if len(args) < 2 {
+				return nil, false
+			}
+			args = args[2:]
+			continue
+		}
+		args = args[1:]
+	}
+	return args, true
+}
+
+// matchesConfigValidationCommand reports whether the already flag-stripped
+// command arguments invoke one of the built-in config-validation commands.
+func matchesConfigValidationCommand(args []string) bool {
+	switch {
+	case matchesLeadingTokens(args, configCommandToken, "validate"):
+		return true
+	case matchesLeadingTokens(args, "validate", configCommandToken):
+		return true
+	case matchesLeadingTokens(args, "validate", "schema", configCommandToken):
+		return true
+	default:
+		return false
+	}
+}
+
+// matchesLeadingTokens reports whether args starts with exactly the given
+// tokens, in order.
+func matchesLeadingTokens(args []string, tokens ...string) bool {
+	if len(args) < len(tokens) {
+		return false
+	}
+	for i, token := range tokens {
+		if args[i] != token {
+			return false
+		}
+	}
+	return true
+}
+
+func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
+	switch cmd.CommandPath() {
+	case "atmos config validate", "atmos validate config":
+		return true
+	case "atmos validate schema":
+		return len(args) > 0 && args[0] == configCommandToken
+	default:
+		return false
+	}
+}
+
+// configForStartupLogger returns a safe logger configuration when the main
+// configuration failed to decode, so validation can report the original error.
+func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr error) *schema.AtmosConfiguration {
+	if initErr == nil {
+		return atmosConfig
+	}
+	return &schema.AtmosConfiguration{
+		Logs: schema.Logs{File: "/dev/stderr", Level: "Warning"},
+	}
 }
 
 func isCIGitCloneBootstrapRequested() bool {
@@ -1826,7 +1933,7 @@ func Execute() error {
 	debugPromote := maybePromoteLogLevelForDebugMode(&atmosConfig, initErr == nil)
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
-	SetupLogger(&atmosConfig)
+	SetupLogger(configForStartupLogger(&atmosConfig, initErr))
 
 	if debugPromote.Promoted {
 		log.Info(
