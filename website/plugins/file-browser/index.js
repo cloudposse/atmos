@@ -128,6 +128,16 @@ const TAGS_MAP = {
   mcp: ['DX'],
   'mcp-for-ai-coding-assistants': ['DX'],
   'mcp-with-aws': ['DX', 'Automation'],
+  scaffolding: ['Scaffold', 'Init'],
+};
+
+// Cast recordings for examples whose README.md doubles as copied scaffold
+// template output (`atmos scaffold generate` copies the whole source
+// directory verbatim) — Docusaurus front matter in that README would leak
+// into every generated project, so the cast is registered here instead. A
+// README front matter `cast:` block still wins when present.
+const CAST_MAP = {
+  scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
 };
 
 // Documentation pages mapping for examples.
@@ -209,6 +219,10 @@ const DOCS_MAP = {
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
   ],
+  scaffolding: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+  ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
   ],
@@ -224,6 +238,14 @@ const DOCS_MAP = {
     { label: 'Packer Components', url: '/components/packer' },
     { label: 'Packer Build', url: '/cli/commands/packer/build' },
     { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
+  ],
+  init: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+  ],
+  scaffolds: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
   ],
 };
 
@@ -534,8 +556,9 @@ function scanExamples(sourceDir, options) {
       frontmatterDescription || (tree.readme ? extractDescription(tree.readme.content) : '')
     );
     // Guard against a scalar `cast:` value so a malformed README can't break the build.
+    // Front matter wins; otherwise fall back to CAST_MAP (see its comment for why).
     const castMeta = readmeMetadata.data.cast;
-    const cast = castMeta && typeof castMeta === 'object' ? castMeta : {};
+    const cast = castMeta && typeof castMeta === 'object' ? castMeta : CAST_MAP[entry.name] || {};
 
     // Tags: README front matter wins so examples can self-categorize; fall back
     // to the hand-maintained map. The first tag is the example's index section.

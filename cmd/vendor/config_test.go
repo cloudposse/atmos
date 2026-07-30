@@ -70,6 +70,20 @@ func TestVendorConfigSetCmd_RunE(t *testing.T) {
 	assert.Equal(t, "v0.9.0", got)
 }
 
+func TestVendorConfigSetCmd_CreatesNewPath(t *testing.T) {
+	resetCommandFlags(t, vendorConfigSetCmd)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", file))
+
+	// spec.sources[0].description does not exist yet -- exercises the "created" branch.
+	require.NoError(t, vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].description", "VPC module"}))
+
+	got, err := atmosyaml.GetFile(file, "spec.sources[0].description")
+	require.NoError(t, err)
+	assert.Equal(t, "VPC module", got)
+}
+
 func TestVendorConfigSetCmd_MissingFile(t *testing.T) {
 	resetCommandFlags(t, vendorConfigSetCmd)
 
@@ -106,6 +120,22 @@ func TestVendorConfigDeleteCmd_RunE(t *testing.T) {
 	_, err := atmosyaml.GetFile(file, "spec.sources[0].targets")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+func TestVendorConfigDeleteCmd_NothingToDelete(t *testing.T) {
+	resetCommandFlags(t, vendorConfigDeleteCmd)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigDeleteCmd.Flags().Set("file", file))
+
+	before, err := os.ReadFile(file)
+	require.NoError(t, err)
+
+	require.NoError(t, vendorConfigDeleteCmd.RunE(vendorConfigDeleteCmd, []string{"spec.sources[0].does_not_exist"}))
+
+	after, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "an absent-path delete must not touch the file")
 }
 
 func TestVendorConfigDeleteCmd_MissingFile(t *testing.T) {

@@ -3,11 +3,10 @@ package env
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	iolib "github.com/cloudposse/atmos/pkg/io"
+	pkgdata "github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -116,10 +115,9 @@ func Output(data map[string]string, formatStr string, outputFile string, opts ..
 
 	// lgtm[go/clear-text-logging] - Intentional stdout output for shell evaluation.
 	if cfg.maskStdout {
-		formatted = iolib.MaskString(formatted)
+		return pkgdata.Write(formatted)
 	}
-	fmt.Print(formatted)
-	return nil
+	return pkgdata.WriteUnmasked(formatted)
 }
 
 // outputJSON handles JSON format output to file or stdout.
@@ -136,8 +134,7 @@ func outputJSON(data map[string]string, outputFile string, cfg *outputConfig) er
 			if err != nil {
 				return err
 			}
-			fmt.Print(iolib.MaskString(content))
-			return nil
+			return pkgdata.Write(content)
 		}
 		return u.PrintAsJSON(cfg.atmosConfig, data)
 	}
@@ -147,8 +144,7 @@ func outputJSON(data map[string]string, outputFile string, cfg *outputConfig) er
 		if err != nil {
 			return err
 		}
-		fmt.Print(iolib.MaskString(content))
-		return nil
+		return pkgdata.Write(content)
 	}
 
 	// Fallback: encode JSON directly to stdout.

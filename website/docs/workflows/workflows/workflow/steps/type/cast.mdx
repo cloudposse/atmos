@@ -54,7 +54,7 @@ steps:
   <dd>Path for the generated `.cast` file.</dd>
 
   <dt>`output.gif`, `output.mp4`</dt>
-  <dd>Optional animated outputs rendered after the cast recording succeeds (require external tools: `agg`, and `ffmpeg` for MP4).</dd>
+  <dd>Optional animated outputs rendered after the cast recording succeeds. Atmos automatically installs the managed `agg` renderer for GIF and `agg` plus FFmpeg for MP4 on first use. MP4 is produced from a GIF and can retain GIF palette constraints.</dd>
 
   <dt>`output.html`, `output.ascii`, `output.png`, `output.jpg`</dt>
   <dd>Optional static outputs rendered natively from the recording's final terminal content — an inline-styled HTML fragment, plain text with no ANSI codes, or a terminal screenshot image. No external tools required. `.ascii` artifacts are cheap to commit and diff, and can be consumed by other tooling without an asciicast player.</dd>

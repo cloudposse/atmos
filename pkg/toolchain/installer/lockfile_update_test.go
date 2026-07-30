@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +16,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
 )
+
+func TestInstallerLockFileConcurrentUpdatesPreserveAllTools(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "toolchain.lock.yaml")
+	var wg sync.WaitGroup
+	for _, name := range []string{"one", "two"} {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			installer := &Installer{useLockFile: true, lockFilePath: lockPath}
+			assert.NoError(t, installer.updateLockFile(&registry.Tool{RepoOwner: "owner", RepoName: name}, "1.0.0", "https://example.com/"+name, &verification.Result{Checksum: name}))
+		}(name)
+	}
+	wg.Wait()
+
+	lf, err := loadInstallerLockFile(lockPath)
+	require.NoError(t, err)
+	assert.Contains(t, lf.Tools, "owner/one")
+	assert.Contains(t, lf.Tools, "owner/two")
+}
 
 func TestResolveLockFilePath(t *testing.T) {
 	assert.Empty(t, resolveLockFilePath(nil))

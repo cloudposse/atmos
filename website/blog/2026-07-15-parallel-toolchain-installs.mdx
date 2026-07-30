@@ -1,0 +1,40 @@
+---
+slug: parallel-toolchain-installs
+title: "Faster, Safer Parallel Toolchain Installs"
+authors: [osterman]
+tags: [feature, experimental]
+date: 2026-07-15
+---
+
+Atmos toolchain installs can now run independent packages in parallel. Batch installs use four workers by default, while preserving the compact terminal UI: every active package keeps its own spinner, download size, verification state, and final result line.
+
+<!--truncate-->
+
+## Faster installs without shared-state races
+
+Tool downloads, extraction, version markers, `toolchain.lock.yaml`, and `.tool-versions` are all coordinated with granular advisory locks. Independent tools continue in parallel, but operations that mutate the same cache asset, installation directory, or configuration file wait safely instead of corrupting one another. The locks work across separate Atmos processes as well as parallel workers in one process.
+
+The progress display now keeps download totals visible on the right edge of the terminal and changes the active state to **Verifying** once the asset is available. Non-interactive output and the existing completed-result summary remain unchanged.
+
+## Configure concurrency
+
+Set the maximum number of simultaneous installs in `atmos.yaml`:
+
+```yaml
+toolchain:
+  max_concurrency: 4
+```
+
+Or override it for a single command:
+
+```shell
+atmos toolchain install --max-concurrency 8
+```
+
+Atmos rejects values lower than one. The command-line flag takes precedence over configuration.
+
+## Reliable signature verification
+
+Atmos also isolates its bootstrap verifier from concurrent use and retries only transient, pre-verdict verifier failures. Legacy releases that publish detached Cosign certificates and signatures are verified with the compatible Cosign v2 path; newer bundle-based verification continues to use the current verifier. Verification remains required—retries never treat an invalid signature or identity mismatch as success.
+
+See the [toolchain documentation](/cli/commands/toolchain/usage) for installation and configuration details.

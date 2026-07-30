@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -38,6 +39,8 @@ type instanceRow struct {
 	status    string // running | stopped | unknown
 	health    string // healthy | unhealthy | starting | "" (no healthcheck)
 	running   bool
+	tags      []string
+	labels    map[string]string
 }
 
 // ExecuteList lists all container components across stacks (optionally filtered
@@ -69,11 +72,21 @@ func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	}
 
 	// Detect the runtime once (non-fatal) and annotate each row's running state.
-	runtime, rtErr := detectRuntime(ctx, atmosConfig.Container.Runtime.Provider, atmosConfig.Container.Runtime.AutoStart)
-	if rtErr != nil {
-		runtime = nil
+	// A cached runtime that no longer responds is invalidated, re-discovered, and
+	// retried once because listing is read-only.
+	resolution, rtErr := resolveRuntimeForContainerCommand(ctx, atmosConfig.Container.Runtime.Provider, atmosConfig.Container.Runtime.AutoStart)
+	if rtErr == nil {
+		listErr := annotateRunningState(ctx, resolution.runtime, rows)
+		if listErr != nil && resolution.cached {
+			resolution, rtErr = rediscoverRuntime(ctx, resolution)
+			if rtErr == nil {
+				_ = annotateRunningState(ctx, resolution.runtime, rows)
+			}
+		}
 	}
-	annotateRunningState(ctx, runtime, rows)
+	if rtErr != nil {
+		annotateUnknown(rows)
+	}
 
 	return renderInstanceTable(rows)
 }
@@ -109,10 +122,13 @@ func collectContainerInstances(stacksMap map[string]any) []instanceRow {
 			if isAbstractComponent(compData) {
 				continue // abstract components are blueprints, not deployable instances
 			}
+			componentTags, componentLabels := tagsAndLabelsFromComponent(compData)
 			rows = append(rows, instanceRow{
 				stack:     stackName,
 				component: component,
 				image:     imageFromComponent(compData),
+				tags:      componentTags,
+				labels:    componentLabels,
 			})
 		}
 	}
@@ -140,6 +156,20 @@ func isAbstractComponent(compData any) bool {
 	return t == "abstract"
 }
 
+// tagsAndLabelsFromComponent extracts metadata.tags/metadata.labels from a
+// component section, if present.
+func tagsAndLabelsFromComponent(compData any) ([]string, map[string]string) {
+	compMap, ok := compData.(map[string]any)
+	if !ok {
+		return tags.ToStringSlice(nil), tags.ToStringMap(nil)
+	}
+	metadata, ok := compMap["metadata"].(map[string]any)
+	if !ok {
+		return tags.ToStringSlice(nil), tags.ToStringMap(nil)
+	}
+	return tags.ToStringSlice(metadata["tags"]), tags.ToStringMap(metadata["labels"])
+}
+
 // imageFromComponent extracts the first-class top-level `image` from a component
 // section, if present.
 func imageFromComponent(compData any) string {
@@ -153,16 +183,27 @@ func imageFromComponent(compData any) string {
 
 // annotateRunningState fills each row's running state via label discovery. When
 // no runtime is available, rows are marked "unknown".
-func annotateRunningState(ctx context.Context, runtime ctr.Runtime, rows []instanceRow) {
-	for i := range rows {
-		if runtime == nil {
-			rows[i].status = statusUnknown
-			continue
+func annotateRunningState(ctx context.Context, runtime ctr.Runtime, rows []instanceRow) error {
+	if runtime == nil {
+		annotateUnknown(rows)
+		return nil
+	}
+
+	containers, err := runtime.List(ctx, ctr.ComponentTypeFilter(cfg.ContainerComponentType))
+	if err != nil {
+		annotateUnknown(rows)
+		return err
+	}
+	instances := make(map[string]ctr.Info, len(containers))
+	for i := range containers {
+		in := &containers[i]
+		if instance := in.Labels[ctr.LabelInstance]; instance != "" {
+			instances[instance] = *in
 		}
-		in, found, err := ctr.FindInstance(ctx, runtime, rows[i].stack, cfg.ContainerComponentType, rows[i].component)
+	}
+	for i := range rows {
+		in, found := instances[ctr.InstanceAddress(rows[i].stack, cfg.ContainerComponentType, rows[i].component)]
 		switch {
-		case err != nil:
-			rows[i].status = statusUnknown
 		case found && ctr.IsContainerRunning(in.Status):
 			rows[i].status = statusRunning
 			rows[i].running = true
@@ -173,6 +214,15 @@ func annotateRunningState(ctx context.Context, runtime ctr.Runtime, rows []insta
 		default:
 			rows[i].status = statusStopped
 		}
+	}
+	return nil
+}
+
+func annotateUnknown(rows []instanceRow) {
+	for i := range rows {
+		rows[i].status = statusUnknown
+		rows[i].running = false
+		rows[i].health = ""
 	}
 }
 

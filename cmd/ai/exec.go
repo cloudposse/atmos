@@ -54,23 +54,27 @@ var execCmd = &cobra.Command{
 		noAutoContext := v.GetBool("no-auto-context")
 		mcpServers := v.GetStringSlice("mcp")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// exec can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return exitWithError(1, "config_error", err)
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return exitWithError(1, "config_error",
-				fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
+			return exitWithError(1, "config_error", errAINotEnabled())
 		}
 
 		// Override provider if specified.
 		if providerName != "" {
 			atmosConfig.AI.DefaultProvider = providerName
 		}
+
+		// Resolve provider (explicit config/flag, auto-detected CLI tool, or anthropic)
+		// once so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		// Apply context discovery overrides.
 		if noAutoContext {

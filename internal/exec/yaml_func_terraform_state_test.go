@@ -3,10 +3,12 @@ package exec
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -226,15 +228,24 @@ func TestYamlFuncTerraformState_RefreshesAfterDependencyDeploys(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	// Read component-1's state BEFORE it has ever been deployed. component-1 has no local
-	// state file yet, so this must fail with a "not provisioned" error - and, before the
-	// fix, this is exactly what poisoned the cache with a typed-nil entry.
-	_, err = processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
-	assert.Error(t, err, "component-1 has not been deployed yet, so this read must fail")
+	// Terraform can create an empty workspace state while running a cold plan. Cache
+	// that empty state exactly as graph preflight does; the expression still errors
+	// because foo is absent, but the empty map remains cached until component-1 deploys.
+	emptyStatePath := filepath.Join(
+		os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH"),
+		"component-1",
+		"terraform.tfstate.d",
+		stack,
+		"terraform.tfstate",
+	)
+	require.NoError(t, os.MkdirAll(filepath.Dir(emptyStatePath), 0o755))
+	require.NoError(t, os.WriteFile(emptyStatePath, []byte(`{"version":4,"terraform_version":"1.10.0","serial":0,"lineage":"empty-state","outputs":{},"resources":[]}`), 0o600))
 
-	// Now actually deploy component-1, same process, cache untouched in between (mirrors a
-	// `deploy --all` DAG run where a dependency deploys after downstream components' configs
-	// were first described).
+	_, err = processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
+	assert.Error(t, err, "the empty pre-deploy state has no foo output")
+
+	// Now actually deploy component-1 in the same process. ExecuteTerraform must evict
+	// the preflight snapshot so a downstream node does not keep its fallback value.
 	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)

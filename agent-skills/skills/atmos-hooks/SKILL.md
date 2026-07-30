@@ -8,7 +8,8 @@ metadata:
 
 # Atmos Hooks
 
-Use this skill for lifecycle hooks that run before or after component operations.
+Use this skill for lifecycle hooks that run before or after component operations,
+or for generation hooks declared in a scaffold template.
 
 Hooks can run scanners, policy checks, store writes, Git actions, custom commands, or other
 toolchain-aware automation around Terraform, Helm, Kubernetes, and other component commands.
@@ -50,7 +51,7 @@ components:
 Modern dotted event names such as `after.terraform.plan` are preferred. Legacy hyphenated event
 names may appear in older stacks; modernize them when editing nearby config.
 
-## Common Events
+## Lifecycle Events
 
 Use before/after events for component operations, for example:
 
@@ -60,8 +61,15 @@ Use before/after events for component operations, for example:
 - `before.terraform.deploy`, `after.terraform.deploy`
 - `before.terraform.test`, `after.terraform.test`
 
-Check local docs when using Helm, Kubernetes, or newly added component families because event names
-follow the component command surface.
+Kubernetes provides `before`/`after` events for `render`, `diff`/`plan`, `apply`/`deploy`,
+`delete`, and `validate`. Native Helm provides `template`, `diff`, `apply`/`deploy`, and
+`delete`; Helmfile provides `template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`.
+Use the canonical dotted events and remember that command aliases normalize to their execution
+event (`deploy` to `apply`, Kubernetes `plan` to `diff`, and Helmfile `sync` to `apply`).
+
+Scaffold templates use the separate `before.scaffold.generate` and
+`after.scaffold.generate` events. They reuse the condition vocabulary but can run only
+`kind: step` and `kind: steps`; do not configure stack-only kinds in `spec.hooks`.
 
 Multi-component DAG runs (e.g. `--affected`, `--query`, or workflows that fan out across several
 components) also fire aggregate events once for the whole run, in addition to the per-component
@@ -90,8 +98,11 @@ See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-whe
 
 ## Hook Kinds
 
-Common hook kinds include `command`, `store`, `git`, `infracost`, `trivy`, `checkov`, and `kics`.
-Use the specific kind when Atmos has one; use `command` for project-specific scripts.
+Stack lifecycle hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`,
+`kics`, and the step bridge. The legacy `ci.*` hook kinds still parse but are deprecated no-ops;
+use the current CI provider bindings instead. Use a named kind when Atmos has one; use `command`
+for a project-specific binary. The legacy `command:` discriminator and hyphenated events remain
+compatibility input only; author new configuration with `kind:` and dotted events.
 
 Hooks can use `dependencies.tools` so required scanners or CLIs are installed and placed on `PATH`
 for the hook execution context.
@@ -109,6 +120,11 @@ recordings use, instead of one of the named kinds above:
 - `kind: steps` runs an ordered list of registered step types, provided as a YAML list under `with:`.
 
 Both run strictly in order -- there is no concurrent execution within a step-backed hook.
+
+The hook envelope owns `events`, `when`, `env`, `retry`, and `on_failure`; `with:` is
+decoded and validated as the step's own configuration. `kind: step` supplies the one
+step type through the hook's `type:`; `kind: steps` supplies type-bearing objects in its
+ordered `with:` list.
 
 ```yaml
 hooks:

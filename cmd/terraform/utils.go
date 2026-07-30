@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,13 +23,16 @@ import (
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // errWrapFormat is the format string for wrapping errors with a cause.
@@ -43,6 +47,10 @@ const logKeyComponent = "component"
 // verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
 // --verify-plan=false).
 const verifyPlanFlagName = "verify-plan"
+
+// multiComponentPlaceholder satisfies the legacy compound-subcommand parser while
+// fleet options are applied immediately afterward. It never reaches Terraform.
+const multiComponentPlaceholder = "__atmos_multi_component__"
 
 // ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
 const ciHookConfigInitFailedMsg = "CI hook config init failed"
@@ -61,17 +69,39 @@ var preResolvedComponent string
 
 // multiComponentFlagNames are the flags that put terraform into multi-component
 // mode, where interactive single-component/stack selection does not apply.
-var multiComponentFlagNames = []string{"all", "affected", "components", "query"}
+var multiComponentFlagNames = []string{"all", "affected", "components", "query", "tags", "labels"}
 
 // runBeforeHooks resolves interactive component/stack selection BEFORE firing the
 // before-hooks, so lifecycle hooks (e.g. a `kind: step` emulator hook on
 // before.terraform.test) operate on the chosen target instead of an empty one. With
 // explicit args or in non-interactive contexts it is a no-op beyond the normal hook run.
 func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
+	if err := validateTerraformMockFlags(cmd_); err != nil {
+		return err
+	}
 	if err := preResolveInteractiveSelection(cmd_, args); err != nil {
 		return err
 	}
 	return runHooks(event, cmd_, args)
+}
+
+// validateTerraformMockFlags rejects an invalid mock invocation before hook or
+// stack resolution. RunE repeats this validation for commands without hooks and
+// for values supplied through environment variables.
+func validateTerraformMockFlags(cmd_ *cobra.Command) error {
+	if cmd_ == nil || cmd_.Flags().Lookup("use-mocks") == nil {
+		return nil
+	}
+
+	useMocks, err := cmd_.Flags().GetBool("use-mocks")
+	if err != nil || !useMocks {
+		return err
+	}
+	processFunctions, err := cmd_.Flags().GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+	return validateTerraformMockOptions(cmd_.Name(), useMocks, processFunctions)
 }
 
 // preResolveInteractiveSelection prompts for a missing component/stack up front (when
@@ -116,7 +146,9 @@ func isMultiComponentInvocation(cmd_ *cobra.Command) bool {
 	return v.GetBool("all") ||
 		v.GetBool("affected") ||
 		len(v.GetStringSlice("components")) > 0 ||
-		v.GetString("query") != ""
+		v.GetString("query") != "" ||
+		len(v.GetStringSlice("tags")) > 0 ||
+		v.GetString("labels") != ""
 }
 
 // applyPreResolvedComponent injects the interactively-selected component into info
@@ -219,8 +251,6 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	if err != nil {
 		return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
-	injectHookStoreAuthResolver(&atmosConfig, &info)
-
 	// Resolve path-based component arguments before getting hooks. GetHooks calls
 	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
@@ -229,7 +259,71 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 		}
 	}
 
+	// InitCliConfig processes stack configuration on its private copy of info.
+	// Hooks need that resolved information too: in particular, FinalComponent
+	// and ComponentFolderPrefix must reflect metadata.component before engines
+	// derive a component working directory. Keep template and YAML-function
+	// processing disabled here because hook discovery runs before auth.
+	//
+	// Multi-component invocations (--all/--affected/--components/--query/--tags/
+	// --labels) fire the global before/after hook with no single component
+	// resolved yet — ProcessStacks requires ComponentFromArg and would reject
+	// that with "component is required". Per-component hooks inside the
+	// component walker call GetHooks/RunAll directly with an already-resolved
+	// component, so they are unaffected by skipping this step here.
+	//
+	// Best-effort: a resolution failure here (missing/invalid stack, unknown
+	// component — cases prepareHookContext never used to validate before this
+	// resolution step existed) must not become the command's user-facing error.
+	// GetHooks (called next, in runUserHooks) already tolerates an empty Stack
+	// or an unresolved component by returning no hooks, so PreRunE proceeds
+	// with the original, unresolved info and RunE's own validation — not this
+	// hook-prep step — produces the correct, authoritative error and message.
+	if info.ComponentFromArg != "" {
+		authManager, _ := info.AuthManager.(auth.AuthManager)
+		if resolved, procErr := e.ProcessStacks(&atmosConfig, info, true, false, false, nil, authManager); procErr != nil {
+			log.Debug("hook context: failed to resolve component metadata; hooks will use the unresolved component/stack", "error", procErr)
+		} else {
+			info = resolved
+		}
+	}
+	injectHookStoreAuthResolver(&atmosConfig, &info)
+
 	return hookContext{info: info, atmosConfig: atmosConfig}, nil
+}
+
+// componentSourceProvisionTimeout bounds JIT source provisioning triggered from
+// hook context preparation, matching ExecuteTerraform's own provisioning timeout.
+const componentSourceProvisionTimeout = 5 * time.Minute
+
+// ensureComponentSourceProvisioned JIT-provisions the component's `source:`
+// (if configured) so lifecycle hooks observe the same resolved, populated
+// directory Terraform itself will use. No-op for components with no `source:`
+// (component.ProvisionAndResolveComponentPath short-circuits on that) and for
+// components that are already provisioned and not TTL-expired. Errors are
+// logged, not returned: hooks should still attempt to run (and the actual
+// Terraform command will surface the same provisioning error authoritatively)
+// rather than aborting hook discovery over a problem unrelated to any hook.
+//
+// Only called when the component actually has hooks configured (see
+// runUserHooks): every terraform subcommand already provisions its own
+// component independently in RunE (ExecuteTerraform), so calling this
+// unconditionally for every invocation would race a second, independent
+// provisioning attempt against that one — observed to intermittently wipe
+// or fail to (re)populate the directory for components with no hooks at all,
+// which have nothing to gain from provisioning this early.
+func ensureComponentSourceProvisioned(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	fallbackPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		log.Debug("hook source provisioning: failed to resolve fallback component path", "error", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), componentSourceProvisionTimeout)
+	defer cancel()
+	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
+		log.Debug("hook source provisioning failed; the Terraform command will report this authoritatively", "component", info.ComponentFromArg, "error", err)
+	}
 }
 
 // runUserHooks runs user-defined hooks from stack configuration for the given
@@ -242,6 +336,22 @@ func runUserHooks(hctx *hookContext, event h.HookEvent, cmd_ *cobra.Command, arg
 	}
 	if hooks == nil || !hooks.HasHooks() {
 		return nil
+	}
+	// A `before.terraform.*` hook (other than before.terraform.init, which is
+	// the provisioner's own hook) is a "run before Terraform" event, not a
+	// "run before the component's source is provisioned" event. Ensure a
+	// configured JIT `source:` is provisioned before firing hooks for this
+	// component, so ComponentPath (env var and hook subprocess cwd) points at
+	// a real, populated directory instead of one that would not exist until
+	// Terraform's own execution provisions it moments later.
+	//
+	// `init` is excluded: before.terraform.init IS the provisioner's own
+	// lifecycle event (see pkg/provisioner/source's HookEventBeforeTerraformInit
+	// registration) — pre-provisioning here would fire it after provisioning
+	// already happened, inverting the one event whose whole point is to run
+	// before the source exists.
+	if hctx.info.ComponentFromArg != "" && cmd_.Name() != "init" {
+		ensureComponentSourceProvisioned(&hctx.atmosConfig, &hctx.info)
 	}
 	hooks.SetOutcome(outcome)
 	log.Info("Running hooks", "event", event, "status", outcome.Status)
@@ -375,23 +485,110 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 	}
 }
 
-// runCIHooksForDeployComponent fires CI hooks for a single component after it completes
-// in multi-component deploy mode. Mirrors runCIHooksForPlanComponent using AfterTerraformDeploy.
-func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
+// terraformNodeHooks implements schema.ComponentNodeHooks for one
+// multi-component Terraform run. It fires user-defined hooks.RunAll (the
+// actual bug fix — user hooks previously had no wiring at all in bulk
+// dispatch) and, unless an aggregate TerraformPlanCIResultHandler already
+// owns CI output for this run, also fires CI hooks.RunCIHooks per node —
+// superseding the former runCIHooksForPlanComponent/DeployComponent/
+// ApplyComponent wrappers.
+type terraformNodeHooks struct {
+	cmd           *cobra.Command
+	args          []string
+	beforeEvent   h.HookEvent
+	afterEvent    h.HookEvent
+	skipPerNodeCI bool
+}
+
+// Before implements schema.ComponentNodeHooks.
+func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "terraform.terraformNodeHooks.Before")()
+
+	injectLastAuthContext(info)
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
+		return nil // Config errors surface on the real execution path, not here.
+	}
+	// Each graph node initializes its own configuration. Reinstall the store auth
+	// resolver from the node's authenticated context before running hooks so
+	// identity-aware store hooks (for example, after-apply output publishing)
+	// do not fall back to ambient credentials.
+	injectHookStoreAuthResolver(&atmosConfig, info)
+	return n.runUserHooksForNode(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess})
+}
+
+// After implements schema.ComponentNodeHooks.
+func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	defer perf.Track(nil, "terraform.terraformNodeHooks.After")()
+
+	injectLastAuthContext(info)
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
+		return nil
+	}
+	// See Before: cfg.InitCliConfig creates a fresh store registry for every
+	// scheduler node, so its resolver must be restored before after-hooks use it.
+	injectHookStoreAuthResolver(&atmosConfig, info)
+
+	outcome := h.Outcome{Status: h.RunSuccess}
+	if execErr != nil {
+		outcome = h.Outcome{Status: h.RunFailure, Err: execErr, ExitCode: errUtils.GetExitCode(execErr)}
+	}
+	hookErr := n.runUserHooksForNode(&atmosConfig, info, n.afterEvent, outcome)
+
+	if !n.skipPerNodeCI {
+		n.runCIHooksForNode(&atmosConfig, info, output, execErr)
+	}
+	return hookErr
+}
+
+// injectLastAuthContext makes the credentials and endpoint selected for the
+// aggregate command available to its per-component hooks. The executor has
+// already authenticated before it creates the node info; without this bridge,
+// after hooks that read Terraform state start a fresh unauthenticated output
+// process (notably losing an emulator's S3 endpoint).
+func injectLastAuthContext(info *schema.ConfigAndStacksInfo) {
+	if info == nil || info.AuthContext != nil {
 		return
 	}
+	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
+		info.AuthContext = authCtx
+		info.AuthManager = authMgr
+	}
+}
 
-	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
+// runUserHooksForNode resolves and runs this node's user-defined hooks for a
+// single lifecycle event, propagating hooks.RunPerComponentHooks' error
+// verbatim: RunAll already resolves each hook's on_failure mode internally
+// (applyOnFailure) — a non-nil return specifically means on_failure: fail.
+func (n *terraformNodeHooks) runUserHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome) error {
+	if event == "" {
+		return nil
+	}
+	return h.RunPerComponentHooks(&h.RunPerComponentHooksOptions{
+		Event:       event,
+		AtmosConfig: atmosConfig,
+		Info:        info,
+		Cmd:         n.cmd,
+		Args:        n.args,
+		Outcome:     outcome,
+	})
+}
+
+// runCIHooksForNode fires the CI hook for this node's after-event. CI-hook
+// errors are advisory only (unrelated to a hook's on_failure setting) and are
+// only logged, matching existing CI-hook behavior.
+func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
+	forceCIMode, _ := n.cmd.Flags().GetBool("ci")
 	if !forceCIMode {
 		forceCIMode = viper.GetBool("ci")
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:        h.AfterTerraformDeploy,
-		AtmosConfig:  &atmosConfig,
+		Event:        n.afterEvent,
+		AtmosConfig:  atmosConfig,
 		Info:         info,
 		Output:       ansi.Strip(rawOutput),
 		ForceCIMode:  forceCIMode,
@@ -402,42 +599,21 @@ func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigA
 	}
 }
 
-// runCIHooksForPlanComponent fires CI hooks for a single component after it completes.
-// It runs in multi-component mode. Uses already-resolved info to avoid a second
-// ProcessCommandLineArgs call (same pattern as runCIHooksForDeploy).
-// rawOutput is the combined stdout+stderr from that component; ANSI codes are stripped here.
-func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
-	runCIHooksForTerraformComponent(actualCmd, h.AfterTerraformPlan, info, rawOutput, execErr)
-}
-
-// runCIHooksForApplyComponent fires CI hooks for a single apply component after it completes.
-// It runs in multi-component mode.
-func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
-	runCIHooksForTerraformComponent(actualCmd, h.AfterTerraformApply, info, rawOutput, execErr)
-}
-
-func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
-	if err != nil {
-		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
-		return
-	}
-
-	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
-	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
-	}
-
-	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:        event,
-		AtmosConfig:  &atmosConfig,
-		Info:         info,
-		Output:       ansi.Strip(rawOutput),
-		ForceCIMode:  forceCIMode,
-		CommandError: execErr,
-		ExitCode:     errUtils.GetExitCode(execErr),
-	}); err != nil {
-		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
+// terraformHookEvents returns the user-hook before/after event pair for a
+// Terraform subcommand, and whether user hooks are supported for it. Destroy
+// is intentionally excluded — no before/after per-component user-hook events
+// exist for it yet (a separate, pre-existing gap: single-component destroy
+// doesn't wire user hooks either).
+func terraformHookEvents(subCommand string) (before, after h.HookEvent, ok bool) {
+	switch subCommand {
+	case "plan":
+		return h.BeforeTerraformPlan, h.AfterTerraformPlan, true
+	case "apply":
+		return h.BeforeTerraformApply, h.AfterTerraformApply, true
+	case "deploy":
+		return h.BeforeTerraformDeploy, h.AfterTerraformDeploy, true
+	default:
+		return "", "", false
 	}
 }
 
@@ -507,13 +683,15 @@ func terraformCIModeEnabled(cmd *cobra.Command) bool {
 	return ci.IsCI()
 }
 
-// wirePerComponentHook installs the per-component CI hook on info so each
-// component in a multi-component run (`--all`, `--components`, `--query`) gets
-// its own summary entry instead of a single misattributed global call from
-// PostRunE. The wiring is identical for both ExecuteTerraformAll and
-// ExecuteTerraformQuery dispatch paths; keep it in one place so a new
-// subcommand only needs to be added once.
-func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, actualCmd *cobra.Command) {
+// wirePerComponentHook installs per-component lifecycle hooks on info for a
+// multi-component Terraform run (`--all`, `--affected`, `--components`,
+// `--query`): user-defined hooks.RunAll (the actual bug fix — this previously
+// had no wiring at all in bulk dispatch) and, unless an aggregate
+// TerraformPlanCIResultHandler already owns CI output for this run, CI hooks
+// too. The wiring is identical for --affected/--all/--query dispatch paths;
+// keep it in one place so a new subcommand only needs to be added once.
+func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, actualCmd *cobra.Command, args []string) {
+	ciAggregate := false
 	if terraformCIModeEnabled(actualCmd) {
 		switch subCommand {
 		case "plan", "apply", "destroy":
@@ -522,23 +700,24 @@ func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, a
 				info:    info,
 				command: subCommand,
 			}
-			return
+			ciAggregate = true
 		}
 	}
 
-	switch subCommand {
-	case "plan":
-		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-			runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
-		}
-	case "deploy":
-		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-			runCIHooksForDeployComponent(actualCmd, compInfo, output, execErr)
-		}
-	case "apply":
-		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-			runCIHooksForApplyComponent(actualCmd, compInfo, output, execErr)
-		}
+	before, after, ok := terraformHookEvents(subCommand)
+	if !ok {
+		return
+	}
+
+	info.NodeHooks = &terraformNodeHooks{
+		cmd:         actualCmd,
+		args:        args,
+		beforeEvent: before,
+		afterEvent:  after,
+		// deploy never uses the aggregate CI handler above (it isn't in that
+		// switch), so it always gets a per-node CI hook regardless of CI mode —
+		// matching the CI-hook behavior this wiring replaces.
+		skipPerNodeCI: ciAggregate && subCommand != "deploy",
 	}
 }
 
@@ -623,7 +802,8 @@ func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
 // isMultiComponentExecution reports whether the parsed command targets more than one component.
 func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "")
+	return info.All || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0 ||
+		(info.Stack != "" && info.ComponentFromArg == "")
 }
 
 // executeSingleComponent executes terraform for a single component.
@@ -647,13 +827,28 @@ func executeSingleComponent(info *schema.ConfigAndStacksInfo, shellOpts ...e.She
 // to terraformRun with the parent command, which then follows the standard terraform
 // execution pipeline (ProcessCommandLineArgs → ExecuteTerraform).
 func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string) *cobra.Command {
+	return newTerraformPassthroughSubcommandWithParsers(parent, name, short)
+}
+
+// newTerraformPassthroughSubcommandWithParsers creates a passthrough command
+// with any parent-specific Atmos flag parsers required by the leaf command.
+func newTerraformPassthroughSubcommandWithParsers(parent *cobra.Command, name, short string, parsers ...*flags.StandardParser) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                name + " [component] -s [stack]",
 		Short:              short,
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(leaf *cobra.Command, args []string) error {
 			argsForParent := append([]string{name}, args...)
-			return terraformRun(terraformCmd, parent, argsForParent)
+
+			// Cobra consumes inherited Atmos flags (such as --all and --affected)
+			// on this leaf command. Bind those flags from the leaf before delegating
+			// to the parent command's Terraform execution path, otherwise the
+			// multi-component options are silently lost.
+			opts, err := parseTerraformRunOptions(leaf, parsers...)
+			if err != nil {
+				return err
+			}
+			return terraformRunWithOptions(terraformCmd, parent, argsForParent, opts)
 		},
 	}
 	RegisterTerraformCompletions(cmd)
@@ -663,24 +858,46 @@ func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string
 // terraformRun is for simple subcommands without their own parsers.
 // It binds terraformParser and delegates to terraformRunWithOptions.
 func terraformRun(parentCmd, actualCmd *cobra.Command, args []string) error {
-	v := viper.GetViper()
-	if err := terraformParser.BindFlagsToViper(actualCmd, v); err != nil {
-		return err
-	}
-
-	opts, err := ParseTerraformRunOptions(v)
+	opts, err := parseTerraformRunOptions(actualCmd)
 	if err != nil {
 		return err
 	}
 	return terraformRunWithOptions(parentCmd, actualCmd, args, opts)
 }
 
+// parseTerraformRunOptions binds the flags from the command Cobra executed and
+// returns the shared Terraform run options. Compound Terraform commands must
+// use their leaf command here because Cobra parses inherited flags on that leaf.
+func parseTerraformRunOptions(cmd *cobra.Command, parsers ...*flags.StandardParser) (*TerraformRunOptions, error) {
+	v := viper.GetViper()
+	if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+		return nil, err
+	}
+	for _, parser := range parsers {
+		if parser == nil {
+			continue
+		}
+		if err := parser.BindFlagsToViper(cmd, v); err != nil {
+			return nil, err
+		}
+	}
+
+	opts, err := ParseTerraformRunOptions(v)
+	if err != nil {
+		return nil, err
+	}
+	return opts, nil
+}
+
 // applyOptionsToInfo transfers parsed options to the info struct.
 func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
 	info.ProcessTemplates = opts.ProcessTemplates
 	info.ProcessFunctions = opts.ProcessFunctions
+	info.UseMocks = opts.UseMocks
 	info.Skip = opts.Skip
 	info.Components = opts.Components
+	info.Tags = opts.Tags
+	info.Labels = opts.Labels
 	info.DryRun = opts.DryRun
 	info.SkipInit = opts.SkipInit
 	info.UploadStatus = opts.UploadStatus
@@ -734,6 +951,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
 
+	if err := validateTerraformMockOptions(subCommand, opts.UseMocks, opts.ProcessFunctions); err != nil {
+		return err
+	}
+
 	// Validate Atmos config first to provide specific error messages.
 	if err := internal.ValidateAtmosConfig(); err != nil {
 		return err
@@ -742,9 +963,22 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Build info from args. SeparatedArgs are terraform pass-through flags.
 	separatedArgs := compat.GetSeparated()
 	argsWithSubCommand := append([]string{subCommand}, args...)
-	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, separatedArgs)
+	argsForProcessing := argsWithSubCommand
+	insertedMultiComponentPlaceholder := false
+	if (opts.All || opts.Affected || opts.Query != "" || len(opts.Components) > 0 || len(opts.Tags) > 0 || len(opts.Labels) > 0) &&
+		isCompoundTerraformCommandWithoutComponent(argsWithSubCommand) {
+		// ProcessCommandLineArgs predates fleet execution and requires a component
+		// for compound commands (for example, `providers lock`). Supply a private
+		// placeholder only for parsing, then clear it before validation and routing.
+		argsForProcessing = append(append([]string{}, argsWithSubCommand...), multiComponentPlaceholder)
+		insertedMultiComponentPlaceholder = true
+	}
+	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsForProcessing, separatedArgs)
 	if err != nil {
 		return err
+	}
+	if insertedMultiComponentPlaceholder {
+		info.ComponentFromArg = ""
 	}
 
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
@@ -793,7 +1027,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Route to appropriate execution path.
 	if info.Affected {
 		wasMultiComponentExecution = true
-		wirePerComponentHook(&info, subCommand, actualCmd)
+		wirePerComponentHook(&info, subCommand, actualCmd, args)
 		ctx, stop := terraformSignalContext(actualCmd)
 		defer stop()
 		return executeAffectedCommand(ctx, parentCmd, args, &info)
@@ -803,7 +1037,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if info.All {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformAll (dependency-ordered)")
-		wirePerComponentHook(&info, subCommand, actualCmd)
+		wirePerComponentHook(&info, subCommand, actualCmd, args)
 		ctx, stop := terraformSignalContext(actualCmd)
 		defer stop()
 		return e.ExecuteTerraformAllWithContext(ctx, &info)
@@ -811,7 +1045,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
-		wirePerComponentHook(&info, subCommand, actualCmd)
+		wirePerComponentHook(&info, subCommand, actualCmd, args)
 		ctx, stop := terraformSignalContext(actualCmd)
 		defer stop()
 		return e.ExecuteTerraformQueryWithContext(ctx, &info)
@@ -824,6 +1058,31 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+func isCompoundTerraformCommandWithoutComponent(args []string) bool {
+	if len(args) != 2 {
+		return false
+	}
+	switch args[0] {
+	case "providers", "state", "workspace":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateTerraformMockOptions(subCommand string, useMocks, processFunctions bool) error {
+	if !useMocks {
+		return nil
+	}
+	if !processFunctions {
+		return fmt.Errorf("%w: --use-mocks requires --process-functions=true", errUtils.ErrInvalidFlagValue)
+	}
+	if subCommand != "plan" {
+		return fmt.Errorf("%w: --use-mocks is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue)
+	}
+	return nil
 }
 
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy
@@ -924,10 +1183,13 @@ func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.
 
 // hasMultiComponentFlags checks if any multi-component flags are set.
 func hasMultiComponentFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || info.Affected || len(info.Components) > 0 || info.Query != ""
+	return info.All || info.Affected || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0
 }
 
 // hasNonAffectedMultiFlags checks if multi-component flags (excluding --affected) are set.
+// --tags/--labels are deliberately excluded here: they compose with --affected to further
+// narrow the affected set (`--affected --tags production`), rather than being an alternative
+// selection mechanism that conflicts with it.
 func hasNonAffectedMultiFlags(info *schema.ConfigAndStacksInfo) bool {
 	return info.All || len(info.Components) > 0 || info.Query != ""
 }
@@ -1072,7 +1334,13 @@ var promptForStack = shared.PromptForStack
 // This is needed because --heatmap must be detected before flag parsing occurs.
 // We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
 func enableHeatmapIfRequested() {
-	for _, arg := range os.Args {
+	enableHeatmapIfRequestedWithArgs(os.Args)
+}
+
+// enableHeatmapIfRequestedWithArgs checks the given args for --heatmap flag and enables performance tracking.
+// This is a testable version of enableHeatmapIfRequested that accepts args as a parameter.
+func enableHeatmapIfRequestedWithArgs(args []string) {
+	for _, arg := range args {
 		if arg == "--heatmap" {
 			perf.EnableTracking(true)
 			return

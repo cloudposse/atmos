@@ -89,10 +89,14 @@ func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
 			Err()
 	}
 
-	// Check that a provider is configured.
-	provider := atmosConfig.AI.DefaultProvider
-	if provider == "" {
-		provider = "anthropic"
+	// Resolve provider: explicit config, auto-detected CLI tool, or anthropic.
+	provider := ai.GetProvider(atmosConfig)
+
+	// CLI providers (claude-code, codex-cli, copilot-cli, gemini-cli) invoke an
+	// already-authenticated local binary and need neither a `providers:` entry nor an
+	// api_key — they're validated by their own client's binary lookup instead.
+	if ai.IsCLIProvider(provider) {
+		return nil
 	}
 
 	providerConfig, err := ai.GetProviderConfig(atmosConfig, provider)
