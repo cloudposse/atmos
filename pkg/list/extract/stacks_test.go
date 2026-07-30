@@ -355,6 +355,38 @@ func TestStacks_InvalidStackDataExcludedByFilter(t *testing.T) {
 	assert.Empty(t, stacks)
 }
 
+// TestStacks_StackMapWithoutComponentsSectionExcludedByFilter covers the
+// defensive guard in stackMatchesAnyComponent: a stack that IS a map but has
+// no (or a malformed) "components" section can never satisfy an active
+// tags/labels filter.
+func TestStacks_StackMapWithoutComponentsSectionExcludedByFilter(t *testing.T) {
+	stacksMap := map[string]any{
+		"no-components": map[string]any{"vars": map[string]any{"namespace": "acme"}},
+	}
+
+	// Without filters the stack is still listed.
+	stacks, err := Stacks(stacksMap, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, stacks, 1)
+
+	// An active filter can never match a stack whose "components" section is
+	// missing.
+	stacks, err = Stacks(stacksMap, []string{"network"}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, stacks)
+}
+
+// TestComponentMatchesTagsLabels_NonMapComponentDataNeverMatches covers the
+// defensive guard in componentMatchesTagsLabels: a component entry whose
+// value is not itself a map (malformed input) cannot satisfy an active
+// filter.
+func TestComponentMatchesTagsLabels_NonMapComponentDataNeverMatches(t *testing.T) {
+	assert.False(t, componentMatchesTagsLabels("not-a-map", []string{"network"}, nil))
+	assert.False(t, componentMatchesTagsLabels("not-a-map", nil, map[string]string{"team": "platform"}))
+	// Empty filters always match regardless of shape.
+	assert.True(t, componentMatchesTagsLabels("not-a-map", nil, nil))
+}
+
 func TestStacksForComponent_TagsLabelsFilter(t *testing.T) {
 	stacksMap := tagsLabelsStacksMap()
 

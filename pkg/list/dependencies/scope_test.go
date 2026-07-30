@@ -8,6 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errFakeDescribeStack is returned by fakeDescribe when errOnStack matches.
+var errFakeDescribeStack = errors.New("fake describe: per-stack pass blew up")
+
 // describeCall records one DescribeFunc invocation.
 type describeCall struct {
 	stack            string
@@ -23,12 +26,20 @@ type fakeDescribe struct {
 	resolved map[string]any
 	calls    []describeCall
 	err      error
+	// errOnStack, when non-empty, fails only the per-stack (Phase C) describe
+	// call for that stack name, leaving the initial lightweight full-repo pass
+	// (stack == "") to succeed — used to test error propagation from inside
+	// resolveClosureStacks' evaluation loop rather than from the first call.
+	errOnStack string
 }
 
 func (f *fakeDescribe) describe(stack string, components []string, processTemplates, processFunctions bool) (map[string]any, error) {
 	f.calls = append(f.calls, describeCall{stack: stack, components: components, processTemplates: processTemplates, processFunctions: processFunctions})
 	if f.err != nil {
 		return nil, f.err
+	}
+	if f.errOnStack != "" && stack == f.errOnStack {
+		return nil, errFakeDescribeStack
 	}
 	if stack == "" {
 		return f.full, nil
@@ -287,6 +298,90 @@ func TestResolveScopedClosurePropagatesDescribeErrors(t *testing.T) {
 	fake := &fakeDescribe{full: scopedTestStacks(), err: wantErr}
 	_, err := ResolveScopedClosure(fake.describe, &ScopeRequest{Stack: "dev", Direction: DirectionForward, ProcessTemplates: true})
 	require.ErrorIs(t, err, wantErr)
+}
+
+// TestResolveScopedClosureEmptyLightweightGraphShortCircuits verifies that
+// when the lightweight structural pass produces a graph with zero nodes (no
+// concrete terraform components anywhere), ResolveScopedClosure returns
+// immediately with the raw lightweight stacks and an empty closure, without
+// attempting seed selection or a Phase C evaluation pass.
+func TestResolveScopedClosureEmptyLightweightGraphShortCircuits(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDescribe{full: map[string]any{}}
+	result, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Stack:     "dev",
+		Direction: DirectionForward,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, result.Closure.Size())
+	assert.Equal(t, fake.full, result.Stacks)
+	// Only the lightweight pass ran; no Phase C evaluation was attempted.
+	require.Len(t, fake.calls, 1)
+	assert.Equal(t, describeCall{stack: ""}, fake.calls[0])
+}
+
+// TestResolveScopedClosurePropagatesPerStackDescribeErrors verifies an error
+// from a Phase C (per-stack, inside resolveClosureStacks' evaluation loop)
+// describe call propagates too, not just an error from the initial
+// lightweight pass (already covered by
+// TestResolveScopedClosurePropagatesDescribeErrors).
+func TestResolveScopedClosurePropagatesPerStackDescribeErrors(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDescribe{full: scopedTestStacks(), errOnStack: "dev"}
+	_, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Stack:            "dev",
+		Direction:        DirectionForward,
+		ProcessTemplates: true,
+	})
+	require.ErrorIs(t, err, errFakeDescribeStack)
+}
+
+// TestMergeResolvedClosureStacks covers the overlay merge directly, including
+// the fallback branches taken when a resolved stack's shape does not match
+// the lightweight pass's shape closely enough to merge component-by-component
+// (malformed/unexpected data must not panic — the resolved value simply wins).
+func TestMergeResolvedClosureStacks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("resolved_stack_not_a_map_falls_back_to_resolved_value", func(t *testing.T) {
+		t.Parallel()
+		lightweight := map[string]any{"dev": map[string]any{"components": map[string]any{}}}
+		resolved := map[string]any{"dev": "not-a-map"}
+		merged := mergeResolvedClosureStacks(lightweight, resolved)
+		assert.Equal(t, "not-a-map", merged["dev"])
+	})
+
+	t.Run("resolved_stack_missing_components_section_falls_back_to_resolved_value", func(t *testing.T) {
+		t.Parallel()
+		lightweight := map[string]any{"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{}}}}
+		resolved := map[string]any{"dev": map[string]any{"vars": map[string]any{}}} // no "components" key.
+		merged := mergeResolvedClosureStacks(lightweight, resolved)
+		assert.Equal(t, resolved["dev"], merged["dev"])
+	})
+
+	t.Run("resolved_component_type_not_a_map_falls_back_to_resolved_value_for_that_type", func(t *testing.T) {
+		t.Parallel()
+		lightweight := map[string]any{
+			"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{"app": map[string]any{}}}},
+		}
+		resolved := map[string]any{
+			"dev": map[string]any{"components": map[string]any{"terraform": "not-a-map"}},
+		}
+		merged := mergeResolvedClosureStacks(lightweight, resolved)
+		mergedDev := merged["dev"].(map[string]any)
+		mergedComponents := mergedDev["components"].(map[string]any)
+		assert.Equal(t, "not-a-map", mergedComponents["terraform"])
+	})
+}
+
+// TestClosureComponentsByStackNilGraph covers the defensive nil-graph guard:
+// a nil closure must yield an empty map, never a nil-pointer dereference.
+func TestClosureComponentsByStackNilGraph(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, map[string][]string{}, closureComponentsByStack(nil))
 }
 
 func TestRootsMultiComponent(t *testing.T) {

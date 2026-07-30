@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/dependency"
 )
 
 func TestNormalizeDirection(t *testing.T) {
@@ -47,6 +48,21 @@ func TestRender_InvalidFormat(t *testing.T) {
 	_, err = Render(graph, Options{Format: "xml"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFormat)
+}
+
+// TestRender_InvalidDirectionPropagatesError verifies Render surfaces the
+// normalizeDirection error for an unrecognized direction instead of silently
+// falling back to a default.
+func TestRender_InvalidDirectionPropagatesError(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {"vpc": {}},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	_, err = Render(graph, Options{Format: "tree", Direction: "sideways"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 }
 
 func TestRender_TreeForwardChain(t *testing.T) {
@@ -150,6 +166,181 @@ func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
 		assertLevel(t, out, "vpc", 1)
 		assert.NotContains(t, out, "ignored")
 	}
+}
+
+// TestRender_LevelsReverseAndBothDirections covers levelNeighbors' reverse
+// (dependents only) and both (union) branches; TestRender_LevelsShowsShortestForwardDependencyDistance
+// already covers the forward branch.
+func TestRender_LevelsReverseAndBothDirections(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"db":  dependsOn(map[string]any{"component": "vpc"}),
+			"app": dependsOn(map[string]any{"component": "db"}),
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	t.Run("reverse_shows_dependent_distance", func(t *testing.T) {
+		out, err := Render(graph, Options{Format: FormatLevels, Direction: DirectionReverse, Component: "vpc", Stack: "dev"})
+		require.NoError(t, err)
+		assertLevel(t, out, "vpc", 0)
+		assertLevel(t, out, "db", 1)
+		assertLevel(t, out, "app", 2)
+	})
+
+	t.Run("both_unions_forward_and_reverse", func(t *testing.T) {
+		out, err := Render(graph, Options{Format: FormatLevels, Direction: DirectionBoth, Component: "db", Stack: "dev"})
+		require.NoError(t, err)
+		assertLevel(t, out, "db", 0)
+		assertLevel(t, out, "vpc", 1)
+		assertLevel(t, out, "app", 1)
+	})
+}
+
+// TestRender_LevelsDiamondConvergesToShortestDistance verifies levelDistances
+// visits a node reachable via two paths only once, at its shortest distance —
+// the BFS-dedup branch (a node already leveled by a shorter path is skipped
+// when reached again by a longer one).
+func TestRender_LevelsDiamondConvergesToShortestDistance(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"top":    dependsOn(map[string]any{"component": "left"}, map[string]any{"component": "bottom"}),
+			"left":   dependsOn(map[string]any{"component": "bottom"}),
+			"bottom": {},
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	out, err := Render(graph, Options{Format: FormatLevels, Direction: DirectionForward, Component: "top", Stack: "dev"})
+	require.NoError(t, err)
+	assertLevel(t, out, "top", 0)
+	assertLevel(t, out, "left", 1)
+	// bottom is reachable at depth 1 (top->bottom) and depth 2 (top->left->bottom);
+	// the shorter path must win.
+	assertLevel(t, out, "bottom", 1)
+}
+
+// TestSortedLevelNodes_TieBreaksByStackThenComponent covers the sort
+// comparator's tie-break branches directly: same level with different
+// stacks, and same level+stack with different components.
+func TestSortedLevelNodes_TieBreaksByStackThenComponent(t *testing.T) {
+	graph := dependency.NewGraph()
+	nodes := []*dependency.Node{
+		{ID: "z-dev", Component: "z", Stack: "dev"},
+		{ID: "a-dev", Component: "a", Stack: "dev"},
+		{ID: "m-prod", Component: "m", Stack: "prod"},
+	}
+	for _, n := range nodes {
+		require.NoError(t, graph.AddNode(n))
+	}
+
+	// All at the same level (0): must sort by stack, then by component.
+	levels := map[string]int{"z-dev": 0, "a-dev": 0, "m-prod": 0}
+	sorted := sortedLevelNodes(graph, levels)
+	require.Len(t, sorted, 3)
+	assert.Equal(t, "dev", sorted[0].Stack)
+	assert.Equal(t, "a", sorted[0].Component, "within the same stack, component breaks the tie")
+	assert.Equal(t, "dev", sorted[1].Stack)
+	assert.Equal(t, "z", sorted[1].Component)
+	assert.Equal(t, "prod", sorted[2].Stack, "a different stack sorts after 'dev' alphabetically")
+}
+
+// TestLevelDistances_SkipsUnresolvableNodeID covers the defensive guard in
+// levelDistances' BFS loop: an ID present in the frontier but absent from the
+// graph (e.g. a node manually referenced but never added) is skipped rather
+// than dereferenced.
+func TestLevelDistances_SkipsUnresolvableNodeID(t *testing.T) {
+	graph := dependency.NewGraph()
+	require.NoError(t, graph.AddNode(&dependency.Node{ID: "real", Component: "real", Stack: "dev"}))
+
+	ghost := &dependency.Node{ID: "ghost", Component: "ghost", Stack: "dev"} // never added to graph.
+	levels := levelDistances(graph, []*dependency.Node{ghost}, DirectionForward)
+
+	// The ghost seed itself is still recorded at level 0 (levels seeding happens
+	// before the graph lookup), but BFS expansion from it must not panic and
+	// must not resolve any node reachable through it.
+	assert.Equal(t, map[string]int{"ghost": 0}, levels)
+}
+
+// TestLevelDistances_DedupesDuplicateTopNodes covers the "already seeded"
+// branch when the same node appears twice in tops (defensive de-duplication;
+// selectTopNodes itself never produces duplicates since it iterates a map,
+// but levelDistances must still tolerate a caller passing one).
+func TestLevelDistances_DedupesDuplicateTopNodes(t *testing.T) {
+	graph := dependency.NewGraph()
+	node := &dependency.Node{ID: "dup", Component: "dup", Stack: "dev"}
+	require.NoError(t, graph.AddNode(node))
+
+	levels := levelDistances(graph, []*dependency.Node{node, node}, DirectionForward)
+	assert.Equal(t, map[string]int{"dup": 0}, levels)
+}
+
+// TestNodeMatchesTagsLabels_ResolvesTemplatedTag verifies a templated tag
+// value that resolves cleanly is matched against the filter using its
+// resolved value, not conservatively counted as a match by default.
+func TestNodeMatchesTagsLabels_ResolvesTemplatedTag(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"vars": map[string]any{"tier": "database"},
+				"metadata": map[string]any{
+					"tags": []any{"{{ .vars.tier }}"},
+				},
+			},
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	// The template resolves to "database", which is in the filter: matches.
+	tops := selectTopNodes(graph, &Selector{Tags: []string{"database"}})
+	require.Len(t, tops, 1)
+	assert.Equal(t, "app", tops[0].Component)
+
+	// The template still resolves to "database", which is NOT in this filter:
+	// a resolved (not conservative) match correctly excludes it.
+	tops = selectTopNodes(graph, &Selector{Tags: []string{"network"}})
+	assert.Empty(t, tops, "a cleanly resolved tag must be matched exactly, not conservatively")
+}
+
+// TestNodeMatchesTagsLabels_UnresolvableLabelConservativelyMatches verifies a
+// templated label that fails to resolve (missing key) falls back to a
+// conservative match rather than being excluded.
+func TestNodeMatchesTagsLabels_UnresolvableLabelConservativelyMatches(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"metadata": map[string]any{
+					"tags":   []any{"active"},
+					"labels": map[string]any{"tier": "{{ .vars.missing }}"},
+				},
+			},
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	tops := selectTopNodes(graph, &Selector{Tags: []string{"active"}, Labels: map[string]string{"tier": "anything"}})
+	require.Len(t, tops, 1, "an unresolvable requested label must conservatively match rather than exclude")
+	assert.Equal(t, "app", tops[0].Component)
+}
+
+// TestBuildSubtree_SkipsGhostNeighborID covers the defensive guard in
+// buildSubtree: a Dependencies/Dependents entry pointing at an ID no longer
+// present in the graph is skipped rather than dereferenced.
+func TestBuildSubtree_SkipsGhostNeighborID(t *testing.T) {
+	graph := dependency.NewGraph()
+	require.NoError(t, graph.AddNode(&dependency.Node{ID: "root", Component: "root", Stack: "dev"}))
+	root, _ := graph.GetNode("root")
+	// Inject a dangling dependency reference the graph never validated (real
+	// edges always point at existing nodes; this simulates a stale reference).
+	root.Dependencies = append(root.Dependencies, "ghost")
+
+	children := buildSubtree(graph, root, forward, map[string]bool{"root": true})
+	assert.Empty(t, children, "a dangling neighbor ID must be skipped, not surfaced as a child")
 }
 
 func assertLevel(t *testing.T, output, component string, want int) {

@@ -713,6 +713,52 @@ func TestEnrichUniqueComponentMetadata_InvalidData(t *testing.T) {
 	assert.Equal(t, "real", comp["component_type"])
 }
 
+// TestGetTagsFromMetadata covers the exported metadata.tags accessor used by
+// callers outside package extract (cmd/list sources, pkg/list/dependencies).
+func TestGetTagsFromMetadata(t *testing.T) {
+	t.Run("extracts_tags", func(t *testing.T) {
+		tags := GetTagsFromMetadata(map[string]any{
+			"tags": []any{"network", "database"},
+		})
+		assert.Equal(t, []string{"network", "database"}, tags)
+	})
+
+	t.Run("absent_returns_empty_non_nil_slice", func(t *testing.T) {
+		tags := GetTagsFromMetadata(map[string]any{})
+		assert.NotNil(t, tags)
+		assert.Empty(t, tags)
+	})
+
+	t.Run("wrong_type_returns_empty_non_nil_slice", func(t *testing.T) {
+		tags := GetTagsFromMetadata(map[string]any{"tags": "not-a-list"})
+		assert.NotNil(t, tags)
+		assert.Empty(t, tags)
+	})
+}
+
+// TestGetLabelsFromMetadata covers the exported metadata.labels accessor used
+// by callers outside package extract.
+func TestGetLabelsFromMetadata(t *testing.T) {
+	t.Run("extracts_labels", func(t *testing.T) {
+		labels := GetLabelsFromMetadata(map[string]any{
+			"labels": map[string]any{"team": "platform", "tier": "gold"},
+		})
+		assert.Equal(t, map[string]string{"team": "platform", "tier": "gold"}, labels)
+	})
+
+	t.Run("absent_returns_empty_non_nil_map", func(t *testing.T) {
+		labels := GetLabelsFromMetadata(map[string]any{})
+		assert.NotNil(t, labels)
+		assert.Empty(t, labels)
+	})
+
+	t.Run("wrong_type_returns_empty_non_nil_map", func(t *testing.T) {
+		labels := GetLabelsFromMetadata(map[string]any{"labels": "not-a-map"})
+		assert.NotNil(t, labels)
+		assert.Empty(t, labels)
+	})
+}
+
 // Tests for buildBaseComponent function.
 func TestBuildBaseComponent(t *testing.T) {
 	comp := buildBaseComponent("vpc", "test-stack", "terraform")

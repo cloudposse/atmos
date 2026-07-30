@@ -571,6 +571,49 @@ func TestFilterTerraformGraphSelectionDoesNotTreatDuplicatesAsAllNodes(t *testin
 	require.True(t, ok)
 }
 
+// TestFilterTerraformGraphSelectionTagsFilterExcludesNonMatchingSeed verifies
+// terraformSelectionSeedNodeIDs (the --affected/precomputed-selection path)
+// narrows the seed by tags/labels the same way the flag-driven selection path
+// does: a selected node whose metadata does not satisfy info.Tags is dropped
+// from the seed rather than executed.
+func TestFilterTerraformGraphSelectionTagsFilterExcludesNonMatchingSeed(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{
+						cfg.MetadataSectionName: map[string]any{
+							"component": "mock",
+							"tags":      []any{"network"},
+						},
+						"vars": map[string]any{"group": "selected"},
+					},
+					"database": map[string]any{
+						cfg.MetadataSectionName: map[string]any{
+							"component": "mock",
+							"tags":      []any{"database"},
+						},
+						"vars": map[string]any{"group": "selected"},
+					},
+				},
+			},
+		},
+	}
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+
+	filtered, err := FilterTerraformGraph(nil, graph, &schema.ConfigAndStacksInfo{Tags: []string{"network"}}, &TerraformSelection{
+		NodeIDs: []string{"app-dev", "database-dev"},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, filtered.Size())
+	_, ok := filtered.GetNode("app-dev")
+	require.True(t, ok, "the tag-matching node must remain in the seed")
+	_, ok = filtered.GetNode("database-dev")
+	require.False(t, ok, "a selected node failing the tags filter must be excluded from the seed")
+}
+
 func TestFilterTerraformGraphSelectionEdgeCases(t *testing.T) {
 	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
 	require.NoError(t, err)

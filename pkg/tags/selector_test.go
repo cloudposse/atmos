@@ -12,6 +12,36 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// TestTemplateDelims covers the effective-delimiter fallback: a well-formed
+// two-element, non-empty pair is honored; anything else (wrong length, or an
+// empty component) falls back to the standard Go delimiters.
+func TestTemplateDelims(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		delims    []string
+		wantLeft  string
+		wantRight string
+	}{
+		{name: "nil_falls_back_to_default", delims: nil, wantLeft: DefaultLeftDelim, wantRight: DefaultRightDelim},
+		{name: "custom_pair_honored", delims: []string{"[[", "]]"}, wantLeft: "[[", wantRight: "]]"},
+		{name: "wrong_length_falls_back_to_default", delims: []string{"[["}, wantLeft: DefaultLeftDelim, wantRight: DefaultRightDelim},
+		{name: "empty_left_falls_back_to_default", delims: []string{"", "]]"}, wantLeft: DefaultLeftDelim, wantRight: DefaultRightDelim},
+		{name: "empty_right_falls_back_to_default", delims: []string{"[[", ""}, wantLeft: DefaultLeftDelim, wantRight: DefaultRightDelim},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			left, right := TemplateDelims(tc.delims)
+			if left != tc.wantLeft || right != tc.wantRight {
+				t.Fatalf("TemplateDelims(%v) = (%q, %q), want (%q, %q)", tc.delims, left, right, tc.wantLeft, tc.wantRight)
+			}
+		})
+	}
+}
+
 // TestSelectorUnresolved covers detection of unresolved Go template markers
 // and unprocessed Atmos YAML-function markers in metadata.tags/metadata.labels
 // values of various shapes.
@@ -101,6 +131,9 @@ func TestValidateSelectorValue(t *testing.T) {
 		{name: "forbidden_in_slice", v: []any{"prod", "!store ssm env"}, wantErr: true},
 		{name: "forbidden_in_map", v: map[string]any{"env": "!exec ./x.sh"}, wantErr: true},
 		{name: "allowed_map", v: map[string]any{"env": "prod", "tier": "{{ .vars.tier }}"}, wantErr: false},
+		{name: "template_reference_without_pipeline_allowed", v: `{{ template "x" }}`, wantErr: false},
+		{name: "forbidden_call_in_else_branch_rejected", v: `{{ if .ok }}fine{{ else }}{{ ds "config" }}{{ end }}`, wantErr: true},
+		{name: "if_without_else_allowed", v: `{{ if .cond }}fine{{ end }}`, wantErr: false},
 		{
 			name:       "custom_delims_forbidden_call_rejected",
 			v:          `[[ ds "config" ]]`,
@@ -353,6 +386,9 @@ func TestResolveSelectorValue(t *testing.T) {
 			resolved: true,
 		},
 		{name: "slice_with_unresolvable_element", v: []any{"ok", "{{ .missing }}"}, resolved: false},
+		{name: "map_with_unresolvable_value", v: map[string]any{"layer": "{{ .missing }}"}, resolved: false},
+		{name: "non_string_scalar", v: 42, want: 42, resolved: true},
+		{name: "malformed_template_syntax_unresolved", v: "{{ .vars.stage", resolved: false},
 	}
 
 	dataWithTemplated := map[string]any{

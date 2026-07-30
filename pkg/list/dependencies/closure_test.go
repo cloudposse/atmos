@@ -246,6 +246,99 @@ func TestStackNames(t *testing.T) {
 	assert.Nil(t, StackNames(nil))
 }
 
+// TestClosureScope covers the flag-encoded-depth-to-Direction/Depths mapping:
+// 0 = off, -1 = unlimited, N>0 = N levels (per flags.ParseClosureDepth), and
+// the direction selection when one or both of dependencies/dependents is set.
+func TestClosureScope(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                  string
+		includeDependencies   int
+		includeDependents     int
+		wantDirection         Direction
+		wantDependenciesDepth int
+		wantDependentsDepth   int
+	}{
+		{
+			name:                "dependencies_only_bounded",
+			includeDependencies: 2, includeDependents: 0,
+			wantDirection: DirectionForward, wantDependenciesDepth: 2, wantDependentsDepth: 0,
+		},
+		{
+			name:                "dependencies_only_unlimited",
+			includeDependencies: -1, includeDependents: 0,
+			wantDirection: DirectionForward, wantDependenciesDepth: 0, wantDependentsDepth: 0,
+		},
+		{
+			name:                "dependents_only_bounded",
+			includeDependencies: 0, includeDependents: 3,
+			wantDirection: DirectionReverse, wantDependenciesDepth: 0, wantDependentsDepth: 3,
+		},
+		{
+			name:                "both_bounded_independently",
+			includeDependencies: 1, includeDependents: 2,
+			wantDirection: DirectionBoth, wantDependenciesDepth: 1, wantDependentsDepth: 2,
+		},
+		{
+			name:                "both_unlimited",
+			includeDependencies: -1, includeDependents: -1,
+			wantDirection: DirectionBoth, wantDependenciesDepth: 0, wantDependentsDepth: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			direction, depths := ClosureScope(tt.includeDependencies, tt.includeDependents)
+			assert.Equal(t, tt.wantDirection, direction)
+			assert.Equal(t, tt.wantDependenciesDepth, depths.Dependencies)
+			assert.Equal(t, tt.wantDependentsDepth, depths.Dependents)
+		})
+	}
+}
+
+// TestMembership covers the graph-node-ID-set projection used to filter
+// row-shaped output (e.g. `list instances`) to exactly a closure's members.
+func TestMembership(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, map[string]struct{}{}, Membership(nil))
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {"app": {}, "vpc": {}},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	members := Membership(graph)
+	assert.Len(t, members, 2)
+	_, ok := members[NodeID("app", "dev")]
+	assert.True(t, ok)
+	_, ok = members[NodeID("vpc", "dev")]
+	assert.True(t, ok)
+}
+
+// TestComponentNames covers the sorted, deduplicated component-name
+// projection used by `list components` to keep exactly a closure's components.
+func TestComponentNames(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, ComponentNames(nil))
+
+	// Same component name appears in two stacks; it must be deduplicated.
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev":  {"app": {}, "vpc": {}},
+		"prod": {"app": {}},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	// Assert exact order (not just ElementsMatch), since graph.Nodes is a map;
+	// ComponentNames must sort so results are deterministic across runs.
+	assert.Equal(t, []string{"app", "vpc"}, ComponentNames(graph))
+}
+
 // closureNodeIDs returns the node IDs present in a (typically closure-filtered)
 // graph, for order-independent assertions via assert.ElementsMatch.
 func closureNodeIDs(graph *dependency.Graph) []string {

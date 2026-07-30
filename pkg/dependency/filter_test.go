@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/config"
 )
@@ -569,6 +570,36 @@ func TestRemoveNode_StaleReferences(t *testing.T) {
 
 	_, exists := g.GetNode("b")
 	assert.False(t, exists)
+}
+
+// TestGraph_Filter_ToleratesGhostDependencyReferences verifies markReachable
+// (via Filter) does not panic and simply skips a dependency/dependent edge
+// that points at a node ID no longer present in the graph (e.g. a stale
+// reference left behind by a partial mutation), mirroring the ghost-reference
+// tolerance already covered for RemoveNode in TestRemoveNode_StaleReferences.
+func TestGraph_Filter_ToleratesGhostDependencyReferences(t *testing.T) {
+	graph := NewGraph()
+	_ = graph.AddNode(&Node{ID: "a", Component: "a", Stack: "dev", Type: config.TerraformComponentType})
+	_ = graph.AddNode(&Node{ID: "b", Component: "b", Stack: "dev", Type: config.TerraformComponentType})
+	_ = graph.AddDependency("a", "b")
+
+	// Manually inject a stale dependency reference to a node that was never
+	// added (or was removed out-of-band), which AddDependency alone cannot
+	// produce.
+	graph.Nodes["b"].Dependencies = append(graph.Nodes["b"].Dependencies, "ghost")
+
+	require.NotPanics(t, func() {
+		filtered := graph.Filter(Filter{
+			NodeIDs:             []string{"a"},
+			IncludeDependencies: true,
+		})
+		// The ghost ID must never be materialized as a node in the filtered graph.
+		_, exists := filtered.GetNode("ghost")
+		assert.False(t, exists, "a dangling dependency reference must not be resolved into a node")
+		// The real chain (a -> b) must still be included.
+		_, exists = filtered.GetNode("b")
+		assert.True(t, exists)
+	})
 }
 
 func TestFilterHelperFunctions(t *testing.T) {
