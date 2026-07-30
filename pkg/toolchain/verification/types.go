@@ -16,6 +16,9 @@ const (
 
 	VerifierInstallAuto     = "auto"
 	VerifierInstallPathOnly = "path_only"
+
+	VerifierTrustAuto     = "auto"
+	VerifierTrustDisabled = "disabled"
 )
 
 var (
@@ -56,6 +59,7 @@ type Policy struct {
 	Checksums       string
 	Signatures      string
 	VerifierInstall string
+	VerifierTrust   string
 }
 
 // Result describes verification that was performed or skipped.
@@ -82,6 +86,7 @@ func PolicyFromConfig(config *schema.ToolchainVerification) Policy {
 			Checksums:       PolicyWhenAvailable,
 			Signatures:      PolicyWhenAvailable,
 			VerifierInstall: VerifierInstallAuto,
+			VerifierTrust:   VerifierTrustAuto,
 		}
 	}
 
@@ -89,6 +94,7 @@ func PolicyFromConfig(config *schema.ToolchainVerification) Policy {
 		Checksums:       defaultPolicy(config.Checksums),
 		Signatures:      defaultPolicy(config.Signatures),
 		VerifierInstall: defaultVerifierInstall(config.VerifierInstall),
+		VerifierTrust:   defaultVerifierTrust(config.VerifierTrust),
 	}
 }
 
@@ -107,5 +113,14 @@ func defaultVerifierInstall(value string) string {
 		return value
 	default:
 		return VerifierInstallAuto
+	}
+}
+
+func defaultVerifierTrust(value string) string {
+	switch value {
+	case VerifierTrustDisabled, VerifierTrustAuto:
+		return value
+	default:
+		return VerifierTrustAuto
 	}
 }

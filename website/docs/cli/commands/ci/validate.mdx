@@ -1,0 +1,88 @@
+---
+title: atmos ci validate
+sidebar_label: validate
+sidebar_class_name: command
+sidebar_position: 2
+id: validate
+description: Validate GitHub Actions workflow files with the built-in actionlint integration.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Validate GitHub Actions workflow files with Atmos's built-in actionlint integration. Use it locally before pushing a workflow or as a CI gate in GitHub Actions.
+</Intro>
+
+<Experimental/>
+
+`atmos validate ci` is an equivalent, validation-oriented alias.
+
+## Usage
+
+```shell
+atmos ci validate [workflow-file ...]
+
+# Alias
+atmos validate ci [workflow-file ...]
+```
+
+With no arguments, the command checks every `.yml` and `.yaml` file in `.github/workflows` below the current working directory. Pass one or more workflow files to check only those files, or use `--workflow-path` to recursively check a different directory.
+
+Use `--affected` to check only workflows changed since the Git merge-base. On GitHub Actions, Atmos automatically uses the pull request base SHA; locally, use `--base <ref-or-sha>` to select a comparison point. A change to `.github/actionlint.yaml` or `.github/actionlint.yml` validates all workflows because it can affect every result.
+
+On a clean text-mode run, Atmos prints the number of workflow files checked. It never walks to an ancestor repository to select workflows: a command run with `--chdir` uses that directory's `.github/workflows` by default.
+
+## Examples
+
+```shell
+# Check all GitHub Actions workflows in this repository
+atmos ci validate
+
+# Check one workflow while editing it
+atmos ci validate .github/workflows/test.yml
+
+# Check workflow fixtures or any other workflow directory recursively
+atmos ci validate --workflow-path tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows
+
+# The fixture above is intentionally invalid and exits with status 1
+atmos --chdir tests/fixtures/scenarios/invalid-github-actions-workflows ci validate
+
+# Produce a SARIF file for a separate code-scanning upload step
+atmos ci validate --format=sarif > actionlint.sarif
+
+# Print rich, actionlint-compatible multi-line diagnostics
+atmos ci validate --format=rich
+
+# Exclude intentionally invalid workflow fixtures from a full or affected run
+atmos ci validate --exclude 'tests/fixtures/**'
+```
+
+## GitHub Actions annotations
+
+When this command runs in GitHub Actions and `ci.enabled: true` is configured in `atmos.yaml`, findings are emitted as inline workflow annotations by default. Set `ci.annotations.enabled: false` to suppress them.
+
+`--format=sarif` writes SARIF to standard output and deliberately does not publish annotations or upload it to Code Scanning. This keeps SARIF upload explicit and avoids duplicate PR feedback.
+
+```yaml title="atmos.yaml"
+ci:
+  enabled: true
+  annotations:
+    enabled: true
+```
+
+## Configuration and dependencies
+
+The command respects actionlint configuration at `.github/actionlint.yaml` or `.github/actionlint.yml`. Atmos runs actionlint's built-in checks only; its optional ShellCheck and Pyflakes integrations are disabled so validation does not depend on host-installed tools.
+
+## Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--format` | `text` | Output format: `text`, `rich`, or `sarif`. `rich` writes Atmos source-context diagnostics to standard output and exits non-zero without an Atmos error box. |
+| `--workflow-path` | — | Directory containing workflow files to recursively validate. Cannot be combined with workflow-file arguments. |
+| `--exclude` | — | Repeatable repository-relative glob to omit workflow files from full or affected validation. |
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Configure native CI integration
+- [`atmos ci status`](/cli/commands/ci/status) - Show status for the current branch

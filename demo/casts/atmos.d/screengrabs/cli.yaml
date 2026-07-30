@@ -35,13 +35,17 @@ commands:
           atmos lsp --help
           atmos lsp start --help
           atmos mcp --help
+          atmos mcp add --help
           atmos mcp export --help
+          atmos mcp install --help
           atmos mcp list --help
+          atmos mcp remove --help
           atmos mcp restart --help
           atmos mcp start --help
           atmos mcp status --help
           atmos mcp test --help
           atmos mcp tools --help
+          atmos mcp uninstall --help
           atmos packer --help
           atmos packer build --help
           atmos packer init --help
@@ -150,6 +154,7 @@ commands:
           atmos terraform graph --help
           atmos terraform import --help
           atmos terraform init --help
+          atmos terraform lint --help
           atmos terraform login --help
           atmos terraform logout --help
           atmos terraform metadata --help
@@ -200,10 +205,14 @@ commands:
           atmos config delete --help
           atmos config format --help
           atmos config list --help
+          atmos config schema --help
+          atmos config validate --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
           atmos stack format --help
+          atmos stack schema --help
+          atmos stack validate --help
           atmos stack config --help
           atmos stack config get --help
           atmos stack config set --help
@@ -323,6 +332,11 @@ commands:
           atmos ci cache paths --help
           atmos ci cache restore --help
           atmos ci cache save --help
+          atmos init --help
+          atmos scaffold --help
+          atmos scaffold list --help
+          atmos scaffold validate --help
+          atmos scaffold generate --help
           """
           FIXTURE = REPO / ".context" / "cast-fixtures" / "demo-stacks"
           OUT = REPO / "website" / "static" / "casts" / "screengrabs"
@@ -382,6 +396,7 @@ commands:
               assert_no_error_output,
               assert_no_local_paths,
               assert_body_color,
+              strip_ansi,
           )
 
           REPO = Path("..", "..").resolve()
@@ -400,13 +415,17 @@ commands:
           atmos lsp --help
           atmos lsp start --help
           atmos mcp --help
+          atmos mcp add --help
           atmos mcp export --help
+          atmos mcp install --help
           atmos mcp list --help
+          atmos mcp remove --help
           atmos mcp restart --help
           atmos mcp start --help
           atmos mcp status --help
           atmos mcp test --help
           atmos mcp tools --help
+          atmos mcp uninstall --help
           atmos packer --help
           atmos packer build --help
           atmos packer init --help
@@ -515,6 +534,7 @@ commands:
           atmos terraform graph --help
           atmos terraform import --help
           atmos terraform init --help
+          atmos terraform lint --help
           atmos terraform login --help
           atmos terraform logout --help
           atmos terraform metadata --help
@@ -565,10 +585,14 @@ commands:
           atmos config delete --help
           atmos config format --help
           atmos config list --help
+          atmos config schema --help
+          atmos config validate --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
           atmos stack format --help
+          atmos stack schema --help
+          atmos stack validate --help
           atmos stack config --help
           atmos stack config get --help
           atmos stack config set --help
@@ -688,6 +712,11 @@ commands:
           atmos ci cache paths --help
           atmos ci cache restore --help
           atmos ci cache save --help
+          atmos init --help
+          atmos scaffold --help
+          atmos scaffold list --help
+          atmos scaffold validate --help
+          atmos scaffold generate --help
           """
 
           commands = [line.strip() for line in COMMANDS.splitlines() if line.strip()]
@@ -705,6 +734,10 @@ commands:
               assert_no_error_output(text)
               assert_no_local_paths(text)
               assert_body_color(text)
+              if command.endswith(" --help") and len(re.findall(r"(?m)^USAGE$", strip_ansi(text))) != 1:
+                  raise SystemExit(
+                      f"help cast must contain exactly one USAGE heading: {path.name}"
+                  )
 
           # Every cast referenced by the docs must exist so pages never embed
           # a broken player.

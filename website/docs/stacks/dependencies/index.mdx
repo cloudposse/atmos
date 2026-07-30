@@ -219,7 +219,7 @@ components:
 
 ## Component Dependencies
 
-The `dependencies.components` section declares ordering relationships between Atmos components. Use it to express that one component must be applied before another. These dependencies are used by `atmos describe dependents` to find downstream consumers, by `atmos describe affected` to propagate impact through the dependency graph, and by CI/CD integrations (such as Spacelift) to apply components in the correct order.
+The `dependencies.components` section declares ordering relationships between Atmos components. Use it to express that one component must be applied before another. These dependencies are used by `atmos describe dependents` to find downstream consumers, by `atmos describe affected` to propagate impact through the dependency graph, and by CI/CD integrations to apply components in the correct order.
 
 For the full reference — cross-stack dependencies, cross-type (`kind`) dependencies, merge behavior, and migration from `settings.depends_on` — see the dedicated [Component Dependencies](/stacks/dependencies/components) page.
 
@@ -236,7 +236,7 @@ components:
     subnet:
       dependencies:
         components:
-          - component: vpc     # subnet depends on vpc
+          - name: vpc          # subnet depends on vpc
       vars:
         vpc_id: !terraform.output vpc.vpc_id
 ```

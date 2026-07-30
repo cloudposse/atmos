@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,12 +15,14 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -634,50 +637,82 @@ func TestHandleConfigInitError(t *testing.T) {
 	tests := []struct {
 		name        string
 		initErr     error
-		isVersion   bool
+		args        []string
 		expectError bool
 		expectNil   bool
 	}{
 		{
 			name:      "version command with error returns nil",
 			initErr:   errors.New("config error"),
-			isVersion: true,
+			args:      []string{"atmos", "version"},
 			expectNil: true,
+		},
+		{
+			name:      "version command after global flag with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "--config", "atmos.yaml", "version"},
+			expectNil: true,
+		},
+		{
+			name:      "config validate command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "config", "validate"},
+			expectNil: true,
+		},
+		{
+			name:      "validate config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "config"},
+			expectNil: true,
+		},
+		{
+			name:      "validate schema config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "schema", "config"},
+			expectNil: true,
+		},
+		{
+			name:        "terraform passthrough arguments do not bypass config errors",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "terraform", "plan", "config", "validate"},
+			expectError: true,
+		},
+		{
+			name:        "root flag values do not bypass config errors",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "--config", "config", "validate"},
+			expectError: true,
+		},
+		{
+			name:        "custom command version flag preserves error",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "install", "--version", "1.2.3"},
+			expectError: true,
 		},
 		{
 			name:      "config not found returns nil",
 			initErr:   fmt.Errorf("wrapped: %w", cfg.NotFound),
-			isVersion: false,
+			args:      []string{"atmos", "terraform", "plan"},
 			expectNil: true,
 		},
 		{
 			name:        "invalid log level error preserved",
 			initErr:     fmt.Errorf("%w\nSupported levels: Info, Debug", log.ErrInvalidLogLevel),
-			isVersion:   false,
+			args:        []string{"atmos", "terraform", "plan"},
 			expectError: true,
 		},
 		{
 			name:        "other errors returned as-is",
 			initErr:     errors.New("some other error"),
-			isVersion:   false,
+			args:        []string{"atmos", "terraform", "plan"},
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore os.Args for version command detection.
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
-
-			if tt.isVersion {
-				os.Args = []string{"atmos", "version"}
-			} else {
-				os.Args = []string{"atmos", "terraform", "plan"}
-			}
-
 			atmosConfig := &schema.AtmosConfiguration{}
-			err := handleConfigInitError(tt.initErr, atmosConfig)
+			err := handleConfigInitErrorWithArgs(tt.initErr, atmosConfig, tt.args)
 
 			switch {
 			case tt.expectNil:
@@ -689,6 +724,66 @@ func TestHandleConfigInitError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsBuiltinConfigValidationCommand(t *testing.T) {
+	newCommand := func(uses ...string) *cobra.Command {
+		root := &cobra.Command{Use: "atmos"}
+		current := root
+		for _, use := range uses {
+			child := &cobra.Command{Use: use}
+			current.AddCommand(child)
+			current = child
+		}
+		return current
+	}
+
+	tests := []struct {
+		name string
+		uses []string
+		args []string
+		want bool
+	}{
+		{name: "config validate", uses: []string{"config", "validate"}, want: true},
+		{name: "validate config", uses: []string{"validate", "config"}, want: true},
+		{name: "validate schema config", uses: []string{"validate", "schema"}, args: []string{"config"}, want: true},
+		{name: "validate schema other key", uses: []string{"validate", "schema"}, args: []string{"custom"}, want: false},
+		{name: "terraform passthrough", uses: []string{"terraform"}, args: []string{"plan", "config", "validate"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isBuiltinConfigValidationCommand(newCommand(tt.uses...), tt.args))
+		})
+	}
+}
+
+func TestIsBuiltinConfigValidationArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "too few arguments", args: []string{"atmos"}, want: false},
+		{name: "end of flags", args: []string{"atmos", "--", "config", "validate"}, want: false},
+		{name: "root boolean flag", args: []string{"atmos", "--verbose", "config", "validate"}, want: true},
+		{name: "missing root flag value", args: []string{"atmos", "--config"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isBuiltinConfigValidationArgs(tt.args))
+		})
+	}
+}
+
+func TestConfigForStartupLogger(t *testing.T) {
+	config := &schema.AtmosConfiguration{Logs: schema.Logs{File: "custom.log", Level: "Info"}}
+	assert.Same(t, config, configForStartupLogger(config, nil))
+
+	fallback := configForStartupLogger(config, errors.New("invalid config"))
+	assert.Equal(t, "/dev/stderr", fallback.Logs.File)
+	assert.Equal(t, "Warning", fallback.Logs.Level)
 }
 
 // TestSetupLogger_InvalidLogLevel tests error handling for invalid log levels.
@@ -1208,6 +1303,70 @@ func TestFindExperimentalParent_RegistryBased(t *testing.T) {
 	})
 }
 
+func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
+	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EXPERIMENTAL", "warn")
+	var output strings.Builder
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	writeExperimentalNotice = func(feature string) {
+		output.WriteString(feature)
+		output.WriteByte('\n')
+	}
+	t.Cleanup(func() {
+		writeExperimentalNotice = originalWriteExperimentalNotice
+	})
+
+	command := &cobra.Command{
+		Use:         "experimental-notice-test",
+		Annotations: map[string]string{"experimental": "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Simulate an integration that invokes the root pre-run a second time.
+			RootCmd.PersistentPreRun(cmd, args)
+			return nil
+		},
+	}
+	RootCmd.AddCommand(command)
+	t.Cleanup(func() { RootCmd.RemoveCommand(command) })
+
+	runCommand := func() string {
+		output.Reset()
+		iolib.Reset()
+		RootCmd.SetArgs([]string{"experimental-notice-test"})
+		require.NoError(t, Execute())
+		return output.String()
+	}
+	t.Cleanup(iolib.Reset)
+
+	for range 2 {
+		output := runCommand()
+		assert.Equal(t, 1, strings.Count(output, "experimental-notice-test"))
+	}
+}
+
+func TestShowExperimentalCommandNotice_EdgeCases(t *testing.T) {
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	var notices []string
+	writeExperimentalNotice = func(feature string) { notices = append(notices, feature) }
+	t.Cleanup(func() { writeExperimentalNotice = originalWriteExperimentalNotice })
+
+	showExperimentalCommandNotice(nil, "ignored")
+	assert.Empty(t, notices, "a nil command must not emit a notice")
+
+	command := &cobra.Command{Use: "experimental"}
+	showExperimentalCommandNotice(command, "experimental")
+	showExperimentalCommandNotice(command, "experimental")
+	assert.Equal(t, []string{"experimental"}, notices, "a command must emit at most one notice")
+	require.NotNil(t, command.Annotations)
+	assert.Equal(t, experimentalNoticeEmitted, command.Annotations[experimentalNoticeAnnotation])
+
+	child := &cobra.Command{Use: "child", Annotations: map[string]string{experimentalNoticeAnnotation: experimentalNoticeEmitted}}
+	command.AddCommand(child)
+	resetExperimentalCommandNotices(nil)
+	resetExperimentalCommandNotices(command)
+	assert.NotContains(t, command.Annotations, experimentalNoticeAnnotation)
+	assert.NotContains(t, child.Annotations, experimentalNoticeAnnotation)
+}
+
 // TestIsTopLevelCommand tests the isTopLevelCommand helper.
 func TestIsTopLevelCommand(t *testing.T) {
 	root := &cobra.Command{Use: "atmos"}
@@ -1710,7 +1869,7 @@ func TestGetTerminalWidthPrecedence(t *testing.T) {
 		assert.Equal(t, 60, getTerminalWidth())
 	})
 
-	t.Run("COLUMNS is ignored on non-TTY", func(t *testing.T) {
+	t.Run("COLUMNS is honored on non-TTY", func(t *testing.T) {
 		if terminal.New().IsTTY(terminal.Stdout) {
 			t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
 		}
@@ -1718,7 +1877,7 @@ func TestGetTerminalWidthPrecedence(t *testing.T) {
 		ui.ReinitFormatter()
 		t.Cleanup(ui.Reset)
 		atmosConfig = schema.AtmosConfiguration{}
-		assert.Equal(t, 120, getTerminalWidth())
+		assert.Equal(t, 90, getTerminalWidth())
 	})
 }
 

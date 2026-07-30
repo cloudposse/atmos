@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 func runnableCommand(use, short string, annotations map[string]string) *cobra.Command {
@@ -168,6 +169,18 @@ func TestSetCustomUsageFunc(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, cmd.UsageTemplate(), "CUSTOM COMMANDS")
 	assert.Contains(t, cmd.UsageTemplate(), `{{formatCommands .Commands "customCommands"}}`)
+}
+
+func TestGetTerminalWidthHonorsColumnsWithoutTTY(t *testing.T) {
+	if terminal.New().IsTTY(terminal.Stdout) {
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
+	}
+
+	t.Setenv("COLUMNS", "120")
+	assert.Equal(t, 118, GetTerminalWidth())
+
+	t.Setenv("COLUMNS", "")
+	assert.Equal(t, 80, GetTerminalWidth())
 }
 
 func TestWrappedFlagUsages_DoubleDashAtEnd(t *testing.T) {

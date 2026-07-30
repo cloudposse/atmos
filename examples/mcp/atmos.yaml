@@ -251,8 +251,8 @@ ai:
   tools:
     enabled: true
     require_confirmation: true
-    # Tools that execute without confirmation:
-    allowed_tools:
+    # Only these tools are registered/exposed at all, and they skip confirmation:
+    allowed:
       - atmos_describe_component
       - atmos_list_stacks
       - atmos_validate_stacks

@@ -1,8 +1,11 @@
 package hooks
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,6 +44,59 @@ func (h *flakyHandler) Execute(context.Context, *schema.WorkflowStep, *runnerste
 type envCaptureHandler struct {
 	runnerstep.BaseHandler
 	captured *map[string]string
+}
+
+type hookEnvState struct {
+	template string
+	process  string
+}
+
+// hookEnvCaptureHandler records the independently maintained template and
+// process environments passed to a later hook step.
+type hookEnvCaptureHandler struct {
+	runnerstep.BaseHandler
+	key      string
+	captured *[]hookEnvState
+}
+
+func (h *hookEnvCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *hookEnvCaptureHandler) Execute(_ context.Context, step *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	templateValue, err := vars.Resolve(step.Content)
+	if err != nil {
+		return nil, err
+	}
+	*h.captured = append(*h.captured, hookEnvState{template: templateValue, process: vars.Env[h.key]})
+	return runnerstep.NewStepResult(templateValue), nil
+}
+
+type templateEnvPresenceHandler struct {
+	runnerstep.BaseHandler
+	key     string
+	present *[]bool
+}
+
+func (h *templateEnvPresenceHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *templateEnvPresenceHandler) Execute(_ context.Context, _ *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	env := vars.TemplateData()["env"].(map[string]string)
+	_, ok := env[h.key]
+	*h.present = append(*h.present, ok)
+	return runnerstep.NewStepResult("ok"), nil
+}
+
+// workingDirectoryCaptureHandler records the working directory supplied to a
+// step so hook defaults can be checked without launching a subprocess.
+type workingDirectoryCaptureHandler struct {
+	runnerstep.BaseHandler
+	captured *[]string
+}
+
+func (h *workingDirectoryCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *workingDirectoryCaptureHandler) Execute(_ context.Context, step *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.captured = append(*h.captured, step.WorkingDirectory)
+	return runnerstep.NewStepResult("ok"), nil
 }
 
 func (h *envCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
@@ -178,7 +234,7 @@ with:
 	require.NoError(t, yaml.Unmarshal([]byte(src), &hook))
 
 	assert.Equal(t, stepsKindName, hook.Kind)
-	steps, err := stepsFromHook(&hook)
+	steps, err := StepsFromHook(&hook)
 	require.NoError(t, err)
 	require.Len(t, steps, 2)
 	assert.Equal(t, "emulator", steps[0].Type)
@@ -206,7 +262,7 @@ func TestStepFromHookDecodesNestedConfig(t *testing.T) {
 		},
 	}
 
-	ws, err := stepFromHook(hook)
+	ws, err := StepFromHook(hook)
 	require.NoError(t, err)
 
 	// Envelope wins: type + retry are set from the hook, not `with`.
@@ -258,7 +314,7 @@ func TestStepsFromHookValidationErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := stepsFromHook(tt.hook)
+			_, err := StepsFromHook(tt.hook)
 			require.Error(t, err)
 			assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
 		})
@@ -297,6 +353,80 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 	assert.Equal(t, "test-stack", captured["ATMOS_STACK"])
 	assert.Equal(t, "test-component", captured["ATMOS_COMPONENT"])
 	assert.Equal(t, "from-hook", captured["CUSTOM_HOOK_VAR"])
+}
+
+func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
+	captured := []string{}
+	runnerstep.Register(&workingDirectoryCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("working-directory-capture-test", runnerstep.CategoryCommand, false),
+		captured:    &captured,
+	})
+
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+	}
+
+	t.Run("step defaults when unset", func(t *testing.T) {
+		hook := &Hook{Kind: stepKindName, Type: "working-directory-capture-test"}
+		ctx.Hook = hook
+		_, err := stepEngine{}.Run(ctx)
+		require.NoError(t, err)
+	})
+
+	explicitDir := t.TempDir()
+	t.Run("steps preserve explicit directory", func(t *testing.T) {
+		ctx.Hook = &Hook{
+			Kind: stepsKindName,
+			With: []any{
+				map[string]any{"type": "working-directory-capture-test"},
+				map[string]any{"type": "working-directory-capture-test", "working_directory": explicitDir},
+			},
+		}
+		_, err := stepsEngine{}.Run(ctx)
+		require.NoError(t, err)
+	})
+
+	require.Len(t, captured, 3)
+	assert.Equal(t, []string{componentDir, componentDir, explicitDir}, captured)
+}
+
+// TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType verifies that
+// type: atmos steps are never defaulted to the component directory: that
+// step type re-invokes the atmos binary itself and must inherit the ambient
+// process working directory so the nested run resolves the project's own
+// atmos.yaml/stacks, not the target component's directory (see #2799
+// regression: forcing this default broke `type: atmos` steps that shell out
+// to `atmos terraform ...` from a component subdirectory with no atmos.yaml
+// of its own).
+func TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "app")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "app"},
+	}
+
+	atmosStep := &schema.WorkflowStep{Type: "atmos", Command: "terraform apply vpc -s fixtures"}
+	setDefaultStepWorkingDirectory(ctx, atmosStep)
+	assert.Empty(t, atmosStep.WorkingDirectory, "type: atmos steps must keep inheriting the ambient working directory")
+
+	shellStep := &schema.WorkflowStep{Type: "shell", Command: "echo hi"}
+	setDefaultStepWorkingDirectory(ctx, shellStep)
+	assert.Equal(t, componentDir, shellStep.WorkingDirectory)
+
+	explicitDir := t.TempDir()
+	explicitStep := &schema.WorkflowStep{Type: "atmos", WorkingDirectory: explicitDir}
+	setDefaultStepWorkingDirectory(ctx, explicitStep)
+	assert.Equal(t, explicitDir, explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
 }
 
 func TestStepsSummary(t *testing.T) {
@@ -415,7 +545,7 @@ func TestWithOutcomeTemplateData(t *testing.T) {
 	assert.Equal(t, 0, empty["exit_code"])
 }
 
-func TestResolveHookRendersOutcomeInWith(t *testing.T) {
+func TestResolveStepHookDefersWithRendering(t *testing.T) {
 	hooks := &Hooks{
 		sections: map[string]any{
 			"atmos_component": "vpc",
@@ -438,9 +568,47 @@ func TestResolveHookRendersOutcomeInWith(t *testing.T) {
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, outcome,
 	)
 	require.NoError(t, err)
-	require.NotNil(t, resolved.With)
-	// Component and stack come from the section; status from the outcome.
-	assert.Equal(t, "vpc in foobar: failure", hookWithMap(t, resolved.With)["message"])
+	// Step-backed payloads are deferred until their step runs, so the env
+	// channel can evolve between list items.
+	assert.Equal(t, "{{ .atmos_component }} in {{ .stack }}: {{ .status }}", hookWithMap(t, resolved.With)["message"])
+}
+
+func TestResolveStepHookDefersWithUntilStepExecution(t *testing.T) {
+	captured := []hookEnvState{}
+	runnerstep.Register(&hookEnvCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("resolved-hook-env-capture", runnerstep.CategoryCommand, false),
+		key:         "HOOK_VALUE",
+		captured:    &captured,
+	})
+	hooks := &Hooks{
+		sections: map[string]any{
+			"atmos_component": "vpc",
+			"hooks": map[string]any{
+				"set-and-use": map[string]any{
+					"kind": stepsKindName,
+					"with": []any{
+						map[string]any{"type": "env", "vars": map[string]string{"HOOK_VALUE": "bar"}},
+						map[string]any{"type": "resolved-hook-env-capture", "content": "{{ .env.HOOK_VALUE }}"},
+					},
+				},
+			},
+		},
+	}
+
+	resolved, err := hooks.resolveHookForExecution(
+		"set-and-use", &Hook{Kind: stepsKindName},
+		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess},
+	)
+	require.NoError(t, err)
+	steps, err := StepsFromHook(resolved)
+	require.NoError(t, err)
+	require.Len(t, steps, 2)
+	assert.Equal(t, "{{ .env.HOOK_VALUE }}", steps[1].Content)
+
+	ctx := stepsExecContext(resolved)
+	_, err = stepsEngine{}.Run(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []hookEnvState{{template: "bar", process: "bar"}}, captured)
 }
 
 func TestResolveHookRendersSayApplyOutcome(t *testing.T) {
@@ -470,14 +638,20 @@ Terraform apply for {{ .atmos_component }} in {{ .stack }} was not successful.
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "Terraform apply for hello-world in test was successful.", hookWithMap(t, success.With)["content"])
+	successCtx := stepExecContext(success)
+	successStep, err := stepFromHookWithVariables(successCtx, stepVariables(successCtx))
+	require.NoError(t, err)
+	assert.Equal(t, "Terraform apply for hello-world in test was successful.", successStep.Content)
 
 	failure, err := hooks.resolveHookForExecution(
 		"announce-apply", &Hook{Kind: stepKindName, Type: "say"},
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunFailure, Err: errors.New("apply boom"), ExitCode: 1},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "Terraform apply for hello-world in test was not successful. apply boom", hookWithMap(t, failure.With)["content"])
+	failureCtx := stepExecContext(failure)
+	failureStep, err := stepFromHookWithVariables(failureCtx, stepVariables(failureCtx))
+	require.NoError(t, err)
+	assert.Equal(t, "Terraform apply for hello-world in test was not successful. apply boom", failureStep.Content)
 }
 
 func TestStepEngineSeedsOutcomeEnv(t *testing.T) {
@@ -598,6 +772,104 @@ func TestStepsEngineRunsWithInOrder(t *testing.T) {
 	assert.Equal(t, []string{"start emulator", "apply fixture"}, calls)
 }
 
+func TestStepsEngineEnvStepChannelsAndScope(t *testing.T) {
+	const key = "ATMOS_HOOK_STEP_ENV_CHANNEL_TEST"
+	old, wasSet := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv(key, old)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+
+	for _, tt := range []struct {
+		name        string
+		export      *bool
+		wantProcess string
+	}{
+		{name: "default exports", wantProcess: "bar"},
+		{name: "false is template only", export: hookEnvBoolPtr(false), wantProcess: ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			captured := []hookEnvState{}
+			handlerType := "hook-env-capture-" + tt.name
+			runnerstep.Register(&hookEnvCaptureHandler{
+				BaseHandler: runnerstep.NewBaseHandler(handlerType, runnerstep.CategoryCommand, false),
+				key:         key,
+				captured:    &captured,
+			})
+			hook := &Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "env", "vars": map[string]string{key: "bar"}, "export": tt.export},
+				map[string]any{"type": handlerType, "content": "{{ .env." + key + " }}"},
+			}}
+
+			_, err := stepsEngine{}.Run(stepsExecContext(hook))
+			require.NoError(t, err)
+			require.Len(t, captured, 1)
+			assert.Equal(t, "bar", captured[0].template, "later with payload must be rendered after the env step")
+			assert.Equal(t, tt.wantProcess, captured[0].process)
+		})
+	}
+
+	// A fresh hook invocation must not inherit an exported value from the prior
+	// ordered list.
+	captured := []hookEnvState{}
+	runnerstep.Register(&hookEnvCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-env-scope-capture", runnerstep.CategoryCommand, false),
+		key:         key,
+		captured:    &captured,
+	})
+	_, err := stepsEngine{}.Run(stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+		map[string]any{"type": "hook-env-scope-capture", "content": "static"},
+	}}))
+	require.NoError(t, err)
+	require.Len(t, captured, 1)
+	assert.Empty(t, captured[0].process)
+}
+
+func TestStepsEngineEnvStateResetsForRetry(t *testing.T) {
+	const key = "ATMOS_HOOK_STEP_ENV_RETRY_TEST"
+	old, wasSet := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv(key, old)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+
+	present := []bool{}
+	runnerstep.Register(&templateEnvPresenceHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-env-retry-clean", runnerstep.CategoryCommand, false),
+		key:         key,
+		present:     &present,
+	})
+	failed := false
+	runnerstep.Register(&failOnceOnContentHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-env-retry-fail", runnerstep.CategoryCommand, false),
+		calls:       &[]string{},
+		failContent: "retry",
+		failed:      &failed,
+	})
+	maxAttempts := 2
+	hook := &Hook{Kind: stepsKindName, Retry: &schema.RetryConfig{MaxAttempts: &maxAttempts}, With: []any{
+		map[string]any{"type": "hook-env-retry-clean"},
+		map[string]any{"type": "env", "vars": map[string]string{key: "bar"}},
+		map[string]any{"type": "hook-env-retry-fail", "content": "retry"},
+	}}
+
+	_, err := stepsEngine{}.Run(stepsExecContext(hook))
+	require.NoError(t, err)
+	assert.Equal(t, []bool{false, false}, present)
+}
+
+func hookEnvBoolPtr(value bool) *bool {
+	return &value
+}
+
 func TestStepsEngineRetryWrapsWholeList(t *testing.T) {
 	calls := []string{}
 	failed := false
@@ -633,6 +905,130 @@ func TestStepsEngineRejectsMissingWith(t *testing.T) {
 	_, err := stepsEngine{}.Run(stepsExecContext(&Hook{Kind: stepsKindName}))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestStepsEngineRawStepsFromHookValidationErrors exercises rawStepsFromHook's
+// remaining validation branches (the runtime counterpart to
+// TestStepsFromHookValidationErrors, which only covers the static decoder).
+func TestStepsEngineRawStepsFromHookValidationErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		hook *Hook
+	}{
+		{
+			name: "with is not a list",
+			hook: &Hook{Kind: stepsKindName, With: map[string]any{"type": "log"}},
+		},
+		{
+			name: "empty list",
+			hook: &Hook{Kind: stepsKindName, With: []any{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := stepsEngine{}.Run(stepsExecContext(tt.hook))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		})
+	}
+}
+
+// TestStepsEngineRunRejectsUndecodableStepPayload verifies that a steps-list
+// item whose payload cannot decode into a schema.WorkflowStep (a type
+// mismatch on a typed field) surfaces as an error from the steps engine,
+// rather than panicking or silently dropping the step.
+func TestStepsEngineRunRejectsUndecodableStepPayload(t *testing.T) {
+	// OnFailure: fail so the decode error propagates instead of being
+	// swallowed by the default warn-and-continue on_failure policy.
+	hook := &Hook{Kind: stepsKindName, OnFailure: OnFailureFail, With: []any{
+		// "vars" must decode into map[string]string; a bare scalar cannot.
+		map[string]any{"type": "log", "vars": "not-a-map"},
+	}}
+
+	_, err := stepsEngine{}.Run(stepsExecContext(hook))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestStepEngineRunRejectsUndecodableWithPayload is the kind: step
+// counterpart: stepFromHookWithVariables must propagate a decode failure from
+// workflowStepFromHookPayload instead of running with a zero-value step.
+func TestStepEngineRunRejectsUndecodableWithPayload(t *testing.T) {
+	hook := &Hook{Kind: stepKindName, Type: "log", With: map[string]any{"vars": "not-a-map"}}
+
+	_, err := stepEngine{}.Run(stepExecContext(hook))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestStepEngineRunRejectsTemplateRenderError verifies that a malformed Go
+// template in a step's `with:` payload is reported as an error (through
+// processHookExecutionValue) instead of reaching the step handler unresolved.
+func TestStepEngineRunRejectsTemplateRenderError(t *testing.T) {
+	hook := &Hook{Kind: stepKindName, Type: "log", With: map[string]any{"content": "{{ .Unclosed"}}
+
+	_, err := stepEngine{}.Run(stepExecContext(hook))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestHookStepTemplateInfoFallsBackWhenInfoIsNil guards against a nil pointer
+// dereference: when neither ctx.Info nor the hook's resolved
+// stepTemplateInfo is set (e.g. a step engine invoked outside the normal
+// resolveHookForExecution path), hookStepTemplateInfo must substitute an
+// empty ConfigAndStacksInfo rather than dereferencing a nil *ConfigAndStacksInfo.
+func TestHookStepTemplateInfoFallsBackWhenInfoIsNil(t *testing.T) {
+	var captured map[string]string
+	runnerstep.Register(&envCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("hook-step-template-info-nil-capture", runnerstep.CategoryCommand, false),
+		captured:    &captured,
+	})
+
+	// Built directly (not via stepExecContext) so Info stays nil and the hook
+	// never passed through resolveHookForExecution, leaving stepTemplateInfo unset.
+	ctx := &ExecContext{
+		Hook:  &Hook{Kind: stepKindName, Type: "hook-step-template-info-nil-capture"},
+		Event: AfterTerraformApply,
+	}
+
+	require.NotPanics(t, func() {
+		_, err := stepEngine{}.Run(ctx)
+		require.NoError(t, err)
+	})
+}
+
+// TestStepEngineRunsArchiveType proves the archive step type needs no
+// hook-side code: `kind: step` + `type: archive` already works through the
+// generic bridge, exactly like any other registered step type. See
+// docs/prd/archive-step.md.
+func TestStepEngineRunsArchiveType(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("exports.handler = 1;"), 0o644))
+	dest := filepath.Join(dir, "handler.zip")
+
+	hook := &Hook{
+		Kind: stepKindName,
+		Type: "archive",
+		With: map[string]any{
+			"source":      src,
+			"destination": dest,
+		},
+	}
+
+	out, err := stepEngine{}.Run(stepExecContext(hook))
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	r, err := zip.OpenReader(dest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
 }
 
 func TestVerifyStepsHookTypes(t *testing.T) {

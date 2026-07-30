@@ -3,7 +3,7 @@ package schema
 // AISettings contains configuration for AI assistant.
 type AISettings struct {
 	Enabled            bool                         `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	DefaultProvider    string                       `yaml:"default_provider,omitempty" json:"default_provider,omitempty" mapstructure:"default_provider"` // Default provider for non-interactive commands
+	DefaultProvider    string                       `yaml:"default_provider,omitempty" json:"default_provider,omitempty" mapstructure:"default_provider"` // Default provider. If empty or "auto", Atmos auto-detects an installed CLI provider (claude-code, codex-cli, copilot-cli, gemini-cli) on PATH, then falls back to anthropic
 	DefaultSkill       string                       `yaml:"default_skill,omitempty" json:"default_skill,omitempty" mapstructure:"default_skill"`          // Default skill (defaults to "general")
 	Providers          map[string]*AIProviderConfig `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`                      // Per-provider configurations
 	Skills             map[string]*AISkillConfig    `yaml:"skills,omitempty" json:"skills,omitempty" mapstructure:"skills"`                               // Custom skill configurations
@@ -66,12 +66,20 @@ type AIAutoCompactConfig struct {
 
 // AIToolSettings contains tool execution configuration.
 type AIToolSettings struct {
-	Enabled             bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	RequireConfirmation *bool    `yaml:"require_confirmation,omitempty" json:"require_confirmation,omitempty" mapstructure:"require_confirmation"`
-	AllowedTools        []string `yaml:"allowed_tools,omitempty" json:"allowed_tools,omitempty" mapstructure:"allowed_tools"`
-	RestrictedTools     []string `yaml:"restricted_tools,omitempty" json:"restricted_tools,omitempty" mapstructure:"restricted_tools"`
-	BlockedTools        []string `yaml:"blocked_tools,omitempty" json:"blocked_tools,omitempty" mapstructure:"blocked_tools"`
-	YOLOMode            bool     `yaml:"yolo_mode,omitempty" json:"yolo_mode,omitempty" mapstructure:"yolo_mode"`
+	// Enabled gates whether atmos ai chat/ask/exec initialize the tool subsystem at all.
+	// It does NOT gate the MCP server (`atmos mcp start`) — mcp.enabled is that command's
+	// own, sufficient opt-in, and tools are always registered for MCP regardless of this flag.
+	Enabled             bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	RequireConfirmation *bool `yaml:"require_confirmation,omitempty" json:"require_confirmation,omitempty" mapstructure:"require_confirmation"`
+	// Allowed, when non-empty, restricts which tools are registered/exposed at all (by name
+	// pattern) AND auto-approves them (no confirmation prompt). Empty/unset means all tools
+	// are registered, subject to normal confirmation rules.
+	Allowed []string `yaml:"allowed,omitempty" json:"allowed,omitempty" mapstructure:"allowed"`
+	// Restricted lists tools (already in the allowed set) that always require confirmation.
+	Restricted []string `yaml:"restricted,omitempty" json:"restricted,omitempty" mapstructure:"restricted"`
+	// Blocked lists tools that are always denied outright.
+	Blocked  []string `yaml:"blocked,omitempty" json:"blocked,omitempty" mapstructure:"blocked"`
+	YOLOMode bool     `yaml:"yolo_mode,omitempty" json:"yolo_mode,omitempty" mapstructure:"yolo_mode"`
 }
 
 // AIInstructionsSettings contains project instructions configuration.

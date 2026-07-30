@@ -59,6 +59,13 @@ applied v1/Namespace argocd
 applied apps/v1/Deployment argocd/argocd-server
 ```
 
+Apply components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos kubernetes apply --all --tags production,tier-1
+atmos kubernetes apply --affected --labels cost-center=platform
+```
+
 To publish the rendered manifests to a Git deployment repository instead of
 applying to the cluster, configure `provision.targets` and select a git target
 with `--target`. See
@@ -92,4 +99,18 @@ with `--target`. See
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent Kubernetes components.</dd>
+
+<dt>
+  `--tags` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>
+  `--labels` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
 </dl>

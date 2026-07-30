@@ -674,9 +674,9 @@ func TestGetPermissionMode_AllCombinations(t *testing.T) {
 					Tools: schema.AIToolSettings{
 						YOLOMode:            tt.yoloMode,
 						RequireConfirmation: tt.requireConfirmation,
-						AllowedTools:        tt.allowedTools,
-						RestrictedTools:     tt.restrictedTools,
-						BlockedTools:        tt.blockedTools,
+						Allowed:             tt.allowedTools,
+						Restricted:          tt.restrictedTools,
+						Blocked:             tt.blockedTools,
 					},
 				},
 			}
@@ -751,14 +751,20 @@ func TestInitializeAIComponents_AIDisabled(t *testing.T) {
 	assert.NotNil(t, executor)
 }
 
-// TestInitializeAIComponents_ToolsDisabled tests that initializeAIComponents returns error when tools are disabled.
+// TestInitializeAIComponents_ToolsDisabled tests that initializeAIComponents still registers
+// and exposes tools over MCP even when ai.tools.enabled is false: that setting governs
+// atmos ai chat/ask/exec's own tool-use loop, not MCP tool-serving — mcp.enabled: true is
+// the MCP server's own, sufficient opt-in for exposing tools to external clients.
 func TestInitializeAIComponents_ToolsDisabled(t *testing.T) {
 	atmosConfig := createFullTestAtmosConfig(true, false, false)
 
-	_, _, err := initializeAIComponents(atmosConfig)
+	registryRaw, executorRaw, err := initializeAIComponents(atmosConfig)
 
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrAIToolsDisabled), "error should be ErrAIToolsDisabled")
+	require.NoError(t, err)
+	registry, ok := registryRaw.(*tools.Registry)
+	require.True(t, ok, "registry MUST be a *tools.Registry")
+	assert.Positive(t, registry.Count(), "tools should still be registered for MCP even when ai.tools.enabled is false")
+	assert.NotNil(t, executorRaw)
 }
 
 // TestInitializeAIComponents_ToolsEnabled tests that initializeAIComponents succeeds when tools are enabled.
@@ -851,10 +857,10 @@ func TestInitializeAIComponents_WithToolLists(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{"describe_component", "list_stacks"},
-				RestrictedTools: []string{"write_component_file"},
-				BlockedTools:    []string{"dangerous_tool"},
+				Enabled:    true,
+				Allowed:    []string{"describe_component", "list_stacks"},
+				Restricted: []string{"write_component_file"},
+				Blocked:    []string{"dangerous_tool"},
 			},
 		},
 	}
@@ -1212,10 +1218,10 @@ func TestInitializeAIComponents_PermissionCheckerConfiguration(t *testing.T) {
 				AI: schema.AISettings{
 					Enabled: true,
 					Tools: schema.AIToolSettings{
-						Enabled:      true,
-						YOLOMode:     tt.yoloMode,
-						AllowedTools: tt.allowedTools,
-						BlockedTools: tt.blockedTools,
+						Enabled:  true,
+						YOLOMode: tt.yoloMode,
+						Allowed:  tt.allowedTools,
+						Blocked:  tt.blockedTools,
 					},
 				},
 			}
@@ -1734,9 +1740,9 @@ func TestInitializeAIComponents_WithRestrictedTools(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				RestrictedTools: []string{"write_component_file", "write_stack_file"},
-				YOLOMode:        false,
+				Enabled:    true,
+				Restricted: []string{"write_component_file", "write_stack_file"},
+				YOLOMode:   false,
 			},
 		},
 	}
@@ -2115,10 +2121,10 @@ func TestInitializeAIComponents_PermissionConfig(t *testing.T) {
 				AI: schema.AISettings{
 					Enabled: true,
 					Tools: schema.AIToolSettings{
-						Enabled:         true,
-						AllowedTools:    tt.allowedTools,
-						RestrictedTools: tt.restrictedTools,
-						BlockedTools:    tt.blockedTools,
+						Enabled:    true,
+						Allowed:    tt.allowedTools,
+						Restricted: tt.restrictedTools,
+						Blocked:    tt.blockedTools,
 					},
 				},
 			}
@@ -2486,10 +2492,10 @@ func TestInitializeAIComponents_EmptyToolLists(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{},
-				RestrictedTools: []string{},
-				BlockedTools:    []string{},
+				Enabled:    true,
+				Allowed:    []string{},
+				Restricted: []string{},
+				Blocked:    []string{},
 			},
 		},
 	}
@@ -2646,31 +2652,6 @@ func TestWaitForShutdown_DeeplyWrappedContextCanceled(t *testing.T) {
 	assert.False(t, cancelCalled)
 }
 
-// TestMCPServerEndpoints_HTTPFormat tests the endpoint URL format for HTTP transport.
-func TestMCPServerEndpoints_HTTPFormat(t *testing.T) {
-	tests := []struct {
-		host            string
-		port            int
-		expectedSSE     string
-		expectedMessage string
-	}{
-		{"localhost", 8080, "http://localhost:8080/sse", "http://localhost:8080/message"},
-		{"0.0.0.0", 3000, "http://0.0.0.0:3000/sse", "http://0.0.0.0:3000/message"},
-		{"192.168.1.1", 9000, "http://192.168.1.1:9000/sse", "http://192.168.1.1:9000/message"},
-	}
-
-	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s:%d", tt.host, tt.port), func(t *testing.T) {
-			addr := fmt.Sprintf("%s:%d", tt.host, tt.port)
-			sseEndpoint := fmt.Sprintf("http://%s/sse", addr)
-			messageEndpoint := fmt.Sprintf("http://%s/message", addr)
-
-			assert.Equal(t, tt.expectedSSE, sseEndpoint)
-			assert.Equal(t, tt.expectedMessage, messageEndpoint)
-		})
-	}
-}
-
 // TestInitializeAIComponents_YOLOModeOverride tests that YOLO mode is always set to true for MCP.
 func TestInitializeAIComponents_YOLOModeOverride(t *testing.T) {
 	// Even if YOLOMode is false in config, it should be set to true for MCP.
@@ -2816,9 +2797,9 @@ func TestInitializeAIComponents_WithAllSettings(t *testing.T) {
 				Enabled:             true,
 				YOLOMode:            true,
 				RequireConfirmation: &boolTrue,
-				AllowedTools:        []string{"tool1", "tool2"},
-				RestrictedTools:     []string{"tool3"},
-				BlockedTools:        []string{"tool4"},
+				Allowed:             []string{"tool1", "tool2"},
+				Restricted:          []string{"tool3"},
+				Blocked:             []string{"tool4"},
 			},
 		},
 	}
@@ -2905,9 +2886,9 @@ func TestGetPermissionMode_DeepNesting(t *testing.T) {
 				Enabled:             true,
 				YOLOMode:            false,
 				RequireConfirmation: &boolFalse,
-				AllowedTools:        []string{"a", "b", "c"},
-				RestrictedTools:     []string{"d", "e"},
-				BlockedTools:        []string{"f"},
+				Allowed:             []string{"a", "b", "c"},
+				Restricted:          []string{"d", "e"},
+				Blocked:             []string{"f"},
 			},
 		},
 	}
@@ -3189,16 +3170,17 @@ func TestSetupMCPServer_StartsWithBrokenStackImport(t *testing.T) {
 }
 
 // TestSetupMCPServer_ToolsDisabled tests setupMCPServer when AI tools are disabled.
+// TestSetupMCPServer_ToolsDisabled tests that setupMCPServer starts successfully (with an
+// empty tool registry) rather than failing when ai.tools.enabled is false; mcp.enabled: true
+// is the server's own explicit opt-in.
 func TestSetupMCPServer_ToolsDisabled(t *testing.T) {
 	tmpDir := createTestAtmosDir(t, true, false)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
-	// setupMCPServer should return error because tools are disabled.
 	server, err := setupMCPServer()
 
-	assert.Error(t, err)
-	assert.Nil(t, server)
-	assert.Contains(t, err.Error(), "failed to initialize AI components")
+	require.NoError(t, err)
+	assert.NotNil(t, server)
 }
 
 // TestSetupMCPServer_Success tests setupMCPServer with valid configuration.
@@ -3404,7 +3386,15 @@ func TestExecuteMCPServer_HTTPTransportWithQuickShutdown(t *testing.T) {
 }
 
 // TestExecuteMCPServer_ToolsDisabled tests executeMCPServer when tools are disabled.
+// TestExecuteMCPServer_ToolsDisabled tests that executeMCPServer starts successfully (with an
+// empty tool registry) rather than failing when ai.tools.enabled is false; mcp.enabled: true
+// is the server's own explicit opt-in.
 func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
+	// Skip in short mode since this test involves server startup.
+	if testing.Short() {
+		t.Skip("Skipping server startup test in short mode")
+	}
+
 	tmpDir := createTestAtmosDir(t, true, false)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
@@ -3414,51 +3404,28 @@ func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
 	cmd.Flags().String("host", "localhost", "")
 	cmd.Flags().Int("port", 8080, "")
 
-	err := executeMCPServer(cmd, nil)
+	// Run in goroutine since a successful start blocks waiting for shutdown.
+	done := make(chan error, 1)
+	go func() {
+		done <- executeMCPServer(cmd, nil)
+	}()
 
-	// Should fail because tools are disabled.
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to initialize AI components")
-}
-
-// TestStartHTTPServer_WithHTTPRequest tests that the HTTP server handles requests.
-func TestStartHTTPServer_WithHTTPRequest(t *testing.T) {
-	// Create a real MCP server.
-	registry := tools.NewRegistry()
-	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
-	adapter := mcp.NewAdapter(registry, executor)
-	server := mcp.NewServer(adapter)
-
-	errChan := make(chan error, 1)
-
-	// Use a random available port.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
-
-	// Start the HTTP server.
-	startHTTPServer(server, "127.0.0.1", port, errChan)
-
-	// Give the server time to start.
+	// Give the server time to start past the setup phase.
 	time.Sleep(100 * time.Millisecond)
 
-	// Make a request to the SSE endpoint.
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/sse", port))
-	if err != nil {
-		// Server might not be ready yet, which is acceptable.
-		t.Logf("HTTP request failed: %v", err)
-		return
+	select {
+	case err := <-done:
+		// Server may exit due to stdin being closed; it must not be the old setup error.
+		if err != nil {
+			assert.NotContains(t, err.Error(), "failed to initialize AI components")
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Server is running, test passes.
+		t.Log("Server is running")
 	}
-	defer resp.Body.Close()
-
-	// The SSE endpoint should return a response.
-	// Status code doesn't matter as long as the handler was invoked.
-	t.Logf("SSE endpoint returned status: %d", resp.StatusCode)
 }
 
-// TestStartHTTPServer_MessageEndpoint tests the message endpoint.
+// TestStartHTTPServer_MessageEndpoint tests posting a message to the streamable HTTP endpoint.
 func TestStartHTTPServer_MessageEndpoint(t *testing.T) {
 	// Create a real MCP server.
 	registry := tools.NewRegistry()
@@ -3480,16 +3447,44 @@ func TestStartHTTPServer_MessageEndpoint(t *testing.T) {
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
 
-	// Make a POST request to the message endpoint.
+	// Streamable HTTP handles every message on a single endpoint (no separate /message path).
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d/message", port), "application/json", nil)
+	resp, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d/", port), "application/json", nil)
 	if err != nil {
 		t.Logf("HTTP request failed: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 
-	t.Logf("Message endpoint returned status: %d", resp.StatusCode)
+	t.Logf("Streamable HTTP endpoint returned status: %d", resp.StatusCode)
+}
+
+// TestStartHTTPServer_HealthEndpoint tests the liveness probe endpoint.
+func TestStartHTTPServer_HealthEndpoint(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	errChan := make(chan error, 1)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	listener.Close()
+
+	startHTTPServer(server, "127.0.0.1", port, errChan)
+	time.Sleep(100 * time.Millisecond)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := stdio.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"status":"healthy"}`, string(body))
 }
 
 // TestStartHTTPServer_RootEndpoint tests the root endpoint.
@@ -3577,13 +3572,13 @@ func TestStartHTTPServer_MultipleRequests(t *testing.T) {
 		wg.Add(1)
 		go func(reqNum int) {
 			defer wg.Done()
-			resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/sse", port))
+			resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
 			if err != nil {
-				t.Logf("Request %d failed: %v", reqNum, err)
+				t.Errorf("request %d failed: %v", reqNum, err)
 				return
 			}
-			resp.Body.Close()
-			t.Logf("Request %d returned status: %d", reqNum, resp.StatusCode)
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusOK, resp.StatusCode, "request %d", reqNum)
 		}(i)
 	}
 

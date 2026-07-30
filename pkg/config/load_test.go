@@ -633,7 +633,7 @@ components: {
 			v.SetConfigFile(configPath)
 
 			// Call the function - should return error on malformed YAML
-			_, err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent))
+			_, err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent), "")
 
 			// Assert that an error was returned
 			assert.Error(t, err, tt.description)

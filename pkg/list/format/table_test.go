@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/degradation"
 )
 
 func TestTryExpandScalarArray(t *testing.T) {
@@ -910,6 +912,11 @@ func TestFormatTableCellValue(t *testing.T) {
 			name:     "Float",
 			input:    3.14159,
 			expected: "3.14",
+		},
+		{
+			name:     "AtmosComputedValue renders as (computed), not a JSON dump or struct summary",
+			input:    degradation.AtmosComputedValue{},
+			expected: "(computed)",
 		},
 	}
 

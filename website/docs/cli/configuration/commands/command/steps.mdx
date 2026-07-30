@@ -165,7 +165,8 @@ With this configuration, `atmos ssh i-1234567890` behaves like `docker run -it`:
   <dd>
     Attach host stdin to the step and let the step handle Ctrl-C (like `docker -i`).
     While the step runs, Atmos suspends its own interrupt handling so pressing Ctrl-C
-    interrupts the step's process, not Atmos. Output is still masked and captured normally.
+    interrupts the step's process, not Atmos. The session writes directly to the terminal
+    and does not produce capturable output. Secret masking requires a supported `tty` session.
   </dd>
 
   <dt>`tty`</dt>

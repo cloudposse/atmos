@@ -247,6 +247,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 
 	// Terraform-specific: merge test configuration.
 	var finalComponentTest map[string]any
+	var finalComponentMocks map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
 		var testCtx *m.DeferredMergeContext
 		finalComponentTest, testCtx, err = m.MergeWithDeferred(
@@ -261,6 +262,14 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 
 		if err := m.ApplyDeferredMerges(testCtx, finalComponentTest, mergeConfig, nil); err != nil {
+			return nil, err
+		}
+
+		finalComponentMocks, err = m.Merge(mergeConfig, []map[string]any{
+			result.BaseComponentMocks,
+			result.ComponentMocks,
+		})
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -393,20 +402,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
-	// Merge metadata when inheritance is enabled.
-	// Base component metadata is merged with component metadata.
+	// Merge metadata (global + base component + component metadata).
+	// Priority (lowest to highest): global (stack-wide) → metadata.inherits base chain → component instance.
 	// Excluded from inheritance: 'inherits' and 'type' (already excluded during collection).
 	finalComponentMetadata := result.ComponentMetadata
-	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0 {
-		// Create a copy of base metadata excluding 'inherits' and 'type' (already excluded during collection).
-		// Then merge with component metadata (component metadata wins on conflicts).
-		finalComponentMetadata, err = m.Merge(
-			mergeConfig,
-			[]map[string]any{
-				result.BaseComponentMetadata,
-				result.ComponentMetadata,
-			},
-		)
+	metadataInheritEnabled := atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0
+	if len(opts.GlobalMetadata) > 0 || metadataInheritEnabled {
+		layers := []map[string]any{opts.GlobalMetadata}
+		if metadataInheritEnabled {
+			layers = append(layers, result.BaseComponentMetadata)
+		}
+		layers = append(layers, result.ComponentMetadata)
+		finalComponentMetadata, err = m.Merge(mergeConfig, layers)
 		if err != nil {
 			return nil, err
 		}
@@ -477,6 +484,14 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		cfg.InheritanceSectionName: result.ComponentInheritanceChain,
 		cfg.MetadataSectionName:    finalComponentMetadata,
 		cfg.OverridesSectionName:   result.ComponentOverrides,
+	}
+
+	// Add hooks for every component type that supports lifecycle hooks — kept
+	// here in one place (rather than duplicated per type-specific block below)
+	// so a new hooks-capable component type only needs to be added to
+	// supportsComponentHooks.
+	if supportsComponentHooks(opts.ComponentType) {
+		comp[cfg.HooksSectionName] = finalComponentHooks
 	}
 
 	// Add dependencies if present.
@@ -566,9 +581,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.ProvidersSectionName] = finalComponentProviders
 		comp[cfg.RequiredProvidersSectionName] = finalComponentRequiredProviders
 		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
-		comp[cfg.HooksSectionName] = finalComponentHooks
 		if len(finalComponentTest) > 0 {
 			comp[cfg.TestSectionName] = finalComponentTest
+		}
+		if len(finalComponentMocks) > 0 {
+			comp[cfg.MocksSectionName] = finalComponentMocks
 		}
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
@@ -591,7 +608,6 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		if len(finalComponentRender) > 0 {
 			comp[cfg.RenderSectionName] = finalComponentRender
 		}
-		comp[cfg.HooksSectionName] = finalComponentHooks
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 	}
 
@@ -609,7 +625,6 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		for key, value := range finalComponentHelm {
 			comp[key] = value
 		}
-		comp[cfg.HooksSectionName] = finalComponentHooks
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 	}
 

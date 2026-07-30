@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 // setupTestManager creates a manager with test storage.
@@ -699,4 +700,43 @@ func TestManager_CompactStatusCallback_NilCallback(t *testing.T) {
 	messages, err := manager.GetMessagesWithCompaction(ctx, sess.ID, 0)
 	require.NoError(t, err)
 	assert.NotNil(t, messages)
+}
+
+// TestManager_RunCompactionIfNeeded_CompactFails covers the failure branch of
+// runCompactionIfNeeded: when the compactor reports compaction is needed but
+// Compact itself errors, the manager must notify "failed", log a warning,
+// and fall back to returning the original (uncompacted) messages/summaries
+// rather than propagating the error.
+func TestManager_RunCompactionIfNeeded_CompactFails(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	sess, err := manager.CreateSession(ctx, CreateSessionParams{Name: "test", Model: "gpt-4", Provider: "openai"})
+	require.NoError(t, err)
+
+	err = manager.AddMessage(ctx, sess.ID, "user", "hello")
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	mockCompactor := NewMockCompactor(ctrl)
+	plan := &CompactPlan{MessagesToCompact: []*Message{{ID: 1}}, EstimatedSavings: 42}
+	mockCompactor.EXPECT().ShouldCompact(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, plan)
+	mockCompactor.EXPECT().Compact(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
+	manager.compactor = mockCompactor
+
+	var capturedStatuses []CompactStatus
+	manager.SetCompactStatusCallback(func(status CompactStatus) {
+		capturedStatuses = append(capturedStatuses, status)
+	})
+
+	messages, err := manager.GetMessagesWithCompaction(ctx, sess.ID, 0)
+	require.NoError(t, err)
+	assert.NotEmpty(t, messages, "original messages should still be returned when compaction fails")
+
+	require.Len(t, capturedStatuses, 2)
+	assert.Equal(t, "starting", capturedStatuses[0].Stage)
+	assert.Equal(t, "failed", capturedStatuses[1].Stage)
+	assert.ErrorIs(t, capturedStatuses[1].Error, assert.AnError)
 }

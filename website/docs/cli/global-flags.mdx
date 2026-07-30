@@ -136,8 +136,8 @@ These flags are available for every Atmos command:
     <dd>
         Record an Atmos command as an asciicast. Use bare `--cast` to write a generated `.cast` file, or pass an output file. The file extension determines the output type:
         - `.cast` writes the asciicast recording directly
-        - `.gif` records to a temporary cast and renders a GIF (requires `agg`)
-        - `.mp4` records to a temporary cast and renders an MP4 (requires `agg` and `ffmpeg`)
+        - `.gif` records to a temporary cast and renders a GIF (Atmos installs the managed `agg` renderer automatically on first use)
+        - `.mp4` records to a temporary cast and renders an MP4 (Atmos installs managed `agg` and FFmpeg renderers automatically on first use; MP4 is GIF-derived and can retain GIF palette constraints)
         - `.html` renders a static HTML fragment of the final terminal content (native, no external tools)
         - `.ascii` renders the final terminal content as plain text with no ANSI codes (native)
         - `.png` / `.jpg` render a static image of the final terminal content (native)

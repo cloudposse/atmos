@@ -114,4 +114,6 @@ auth:
   realm: <hash>
   providers: {}
   identities: {}
-
+container:
+  runtime:
+    auto_start: true
