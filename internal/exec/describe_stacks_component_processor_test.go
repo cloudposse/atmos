@@ -1288,10 +1288,12 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 
 func TestProcessComponentEntry_DoesNotEvaluateConfigSources(t *testing.T) {
 	p := newDescribeStacksProcessor(
-		&schema.AtmosConfiguration{},
+		&schema.AtmosConfiguration{
+			Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}},
+		},
 		"", nil, nil, nil,
-		false, // processTemplates.
-		true,  // processYamlFunctions.
+		true, // processTemplates.
+		true, // processYamlFunctions.
 		false, nil, nil,
 	)
 
@@ -1310,7 +1312,15 @@ func TestProcessComponentEntry_DoesNotEvaluateConfigSources(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	assert.Equal(t, componentSection["sources"], p.finalStacksMap["test.yaml"].(map[string]any)["components"].(map[string]any)[cfg.TerraformSectionName].(map[string]any)["vpc"].(map[string]any)["sources"])
+	stack, ok := p.finalStacksMap["test.yaml"].(map[string]any)
+	require.True(t, ok)
+	components, ok := stack["components"].(map[string]any)
+	require.True(t, ok)
+	componentType, ok := components[cfg.TerraformSectionName].(map[string]any)
+	require.True(t, ok)
+	component, ok := componentType["vpc"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, componentSection["sources"], component["sources"])
 }
 
 // ---------------------------------------------------------------------------

@@ -59,6 +59,7 @@ components:
 	assert.Equal(t, "safe", result.ComponentVarsSection["value"])
 	sources, ok := result.ComponentSection["sources"].(schema.ConfigSources)
 	require.True(t, ok)
+	require.Len(t, sources["vars"]["value"].StackDependencies, 2)
 	assert.Equal(t, "!exec __atmos_nonexistent_cmd_abc123_xyz", sources["vars"]["value"].StackDependencies[1].VariableValue)
 }
 
