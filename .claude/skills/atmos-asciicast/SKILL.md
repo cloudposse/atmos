@@ -60,7 +60,7 @@ Atmos casts are product demos, regression evidence, and documentation examples a
 2. Add or update the workflow/custom command that regenerates the cast.
 3. Regenerate the `.cast` into `website/static/casts`.
 4. Review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and shell complexity that distracts from Atmos.
-5. Embed it with the website `CastPlayer` component when the corresponding docs page can show it usefully:
+5. Embed it with the website `CastPlayer` component when the corresponding docs page can show it usefully, **and in the feature's changelog blog post** (see the `pull-request` skill's Blog post section) — new commands and features should ship their blog post with a working demo, not just prose. Use `CastPlayer` directly in blog posts, followed by a `[View the full example](/examples/<name>)` link; don't reach for `EmbedExample` there.
 
    ```mdx
    <CastPlayer src="/casts/cli/describe-component.cast" title="describe component" chrome controls scrubber />

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestNormalizeSessionOptionsDefaultsAndClampsDurations(t *testing.T) {
@@ -38,6 +39,29 @@ func TestNormalizeSessionOptionsDefaultsAndClampsDurations(t *testing.T) {
 	}
 	if opts.KeyInterval != 0 {
 		t.Fatalf("key interval = %s, want 0", opts.KeyInterval)
+	}
+	ps1, ok := opts.Env["PS1"]
+	if !ok || !strings.Contains(ps1, "> ") {
+		t.Fatalf("PS1 = %q, want a default prompt containing %q", ps1, "> ")
+	}
+}
+
+func TestNormalizeSessionOptionsPreservesExplicitPS1(t *testing.T) {
+	opts := &SessionOptions{Env: map[string]string{"PS1": "$ "}}
+	normalizeSessionOptions(opts)
+
+	if got := opts.Env["PS1"]; got != "$ " {
+		t.Fatalf("PS1 = %q, want caller-supplied %q to be preserved", got, "$ ")
+	}
+}
+
+func TestDefaultSessionPromptFallsBackWhenStylesUnavailable(t *testing.T) {
+	original := getCurrentStyles
+	getCurrentStyles = func() *theme.StyleSet { return nil }
+	t.Cleanup(func() { getCurrentStyles = original })
+
+	if got := defaultSessionPrompt(); got != "> " {
+		t.Fatalf("defaultSessionPrompt() = %q, want %q", got, "> ")
 	}
 }
 

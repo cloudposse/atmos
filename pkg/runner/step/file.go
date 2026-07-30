@@ -36,11 +36,25 @@ func (h *FileHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for file selection and returns the chosen path.
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// path is returned without prompting. When there is no TTY and no `default` is
+// set, resolveInteractive returns ErrStepTTYRequired.
 func (h *FileHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.FileHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
+	shouldPrompt, err := h.resolveInteractive(step)
+	if err != nil {
 		return nil, err
+	}
+
+	// Non-TTY with a configured default: use the default path without prompting.
+	if !shouldPrompt {
+		defaultVal, resolveErr := h.ResolveDefault(ctx, step, vars)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		return NewStepResult(defaultVal), nil
 	}
 
 	prompt, err := h.ResolvePrompt(ctx, step, vars)

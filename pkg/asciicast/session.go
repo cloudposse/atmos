@@ -13,9 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -33,6 +37,8 @@ var (
 	ErrWaitTimeout = errUtils.ErrWaitTimeout
 	// ErrUnsupportedCastKey indicates that a key action requested an unknown key sequence.
 	ErrUnsupportedCastKey = errUtils.ErrUnsupportedCastKey
+	// ErrSimulateActionMissingCallback indicates a "simulate" action was built without its Fn callback set.
+	ErrSimulateActionMissingCallback = errUtils.ErrSimulateActionMissingCallback
 
 	errSessionProcessWaitTimeout = errors.New("timed out waiting for cast session process to exit")
 )
@@ -48,6 +54,14 @@ type SessionAction struct {
 	Rate     string
 	Interval string
 	Repeat   int
+	// Fn runs a caller-supplied action (Type == "simulate") in place, letting
+	// a session mix in the same styled, non-interactive narration steps
+	// mode: steps uses (see pkg/runner/step's simulate rendering) instead of
+	// typing raw, unstyled keystrokes for comment/narration lines. asciicast
+	// deliberately has no styling logic of its own; the caller renders and
+	// writes the styled bytes itself, and this callback is how a session
+	// action list carries that back out to it in order.
+	Fn func() error
 }
 
 // SessionOptions configures a scripted shell session used to generate cast output.
@@ -138,6 +152,32 @@ func normalizeSessionOptions(opts *SessionOptions) {
 	if opts.KeyInterval < 0 {
 		opts.KeyInterval = 0
 	}
+	if opts.Env == nil {
+		opts.Env = map[string]string{}
+	}
+	if _, ok := opts.Env["PS1"]; !ok {
+		opts.Env["PS1"] = defaultSessionPrompt()
+	}
+}
+
+// getCurrentStyles resolves the active theme styles; a package-level var so
+// tests can stub the "no styles available" fallback in defaultSessionPrompt.
+var getCurrentStyles = theme.GetCurrentStyles
+
+// defaultSessionPrompt renders a fixed "> " prompt in the same themed
+// "command" style (bold, theme Primary color) that simulate-mode casts use,
+// so a real shell spawned for a session-mode cast shows a prompt consistent
+// with every other recording instead of leaking the shell's own default
+// PS1 (which would also include the local hostname/cwd).
+func defaultSessionPrompt() string {
+	styles := getCurrentStyles()
+	if styles == nil {
+		return "> "
+	}
+	renderer := lipgloss.NewRenderer(io.Discard)
+	renderer.SetColorProfile(termenv.TrueColor)
+	renderer.SetHasDarkBackground(true)
+	return styles.Command.Bold(true).Renderer(renderer).Render("> ")
 }
 
 func sessionShell(configured string) string {
@@ -331,6 +371,11 @@ func runAction(ctx context.Context, input io.Writer, state *sessionState, action
 		return runPauseAction(ctx, action)
 	case "wait":
 		return waitForOutput(ctx, state, action)
+	case "simulate":
+		if action.Fn == nil {
+			return ErrSimulateActionMissingCallback
+		}
+		return action.Fn()
 	default:
 		return fmt.Errorf("%w: %q", ErrUnknownSessionAction, action.Type)
 	}

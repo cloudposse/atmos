@@ -3,6 +3,7 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -21,6 +22,42 @@ const (
 	// ErrFormatWithFile is the error format string for errors with file context.
 	errFormatWithFile = "%w in file '%s'"
 )
+
+// globalMetadataAllowedKeys are the only `metadata:` fields permitted at the
+// stack-manifest root (global scope). Everything else is a structural/identity
+// field (component, inherits, type, name, terraform_workspace) that would be
+// actively harmful if silently applied to every component in the stack.
+var globalMetadataAllowedKeys = map[string]bool{
+	"labels":                      true,
+	"tags":                        true,
+	"custom":                      true,
+	"enabled":                     true,
+	"locked":                      true,
+	"terraform_workspace_pattern": true,
+}
+
+// validateGlobalMetadataSection filters/validates a stack-manifest-root `metadata:`
+// block. Any key outside the allowlist is a hard error (fail-closed), not a
+// silent no-op — this is the exact bug this feature fixes: metadata.labels set
+// at the stack root used to silently do nothing.
+func validateGlobalMetadataSection(raw map[string]any, stackName string) (map[string]any, error) {
+	var disallowed []string
+	for k := range raw {
+		if !globalMetadataAllowedKeys[k] {
+			disallowed = append(disallowed, k)
+		}
+	}
+	if len(disallowed) > 0 {
+		sort.Strings(disallowed)
+		return nil, errUtils.Build(errUtils.ErrGlobalMetadataFieldNotAllowed).
+			WithContext("file", stackName).
+			WithContext("fields", disallowed).
+			WithHint("Global metadata only supports: labels, tags, custom, enabled, locked, terraform_workspace_pattern").
+			WithHint("Move component-identity fields (component, inherits, type, name, terraform_workspace) under components.<type>.<name>.metadata").
+			Err()
+	}
+	return raw, nil
+}
 
 // ProcessStackConfig processes a stack configuration.
 //
@@ -59,6 +96,15 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Extract the stack-level 'version' section (e.g. `version.track`, asserting
+	// which Atmos Version Tracker track this stack resolves `!version`/
+	// `{{ .version.* }}` against) if present. Imports are already deep-merged
+	// into `config` by this point, so a single map assertion is sufficient.
+	var stackVersionSection map[string]any
+	if versionSection, ok := config[cfg.VersionSectionName].(map[string]any); ok {
+		stackVersionSection = versionSection
+	}
+
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
@@ -73,6 +119,7 @@ func ProcessStackConfig(
 	globalComponentsSection := map[string]any{}
 	globalAuthSection := map[string]any{}
 	globalSecretsSection := map[string]any{}
+	globalMetadataSection := map[string]any{}
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
@@ -229,6 +276,23 @@ func ProcessStackConfig(
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
 		}
+	}
+
+	// Stack-level (global) metadata defaults — a restricted allowlist of fields that
+	// make sense stack-wide (data bags and gates). Structural/identity fields
+	// (component, inherits, type, name, terraform_workspace) are rejected with a
+	// clear error rather than silently doing nothing, since that silent no-op is
+	// exactly the confusing behavior this feature fixes.
+	if i, ok := config[cfg.MetadataSectionName]; ok {
+		globalMetadataSectionRaw, ok := i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGlobalMetadataSection, stackName)
+		}
+		validatedGlobalMetadata, err := validateGlobalMetadataSection(globalMetadataSectionRaw, stackName)
+		if err != nil {
+			return nil, err
+		}
+		globalMetadataSection = validatedGlobalMetadata
 	}
 
 	// Stack-level (global) secrets declarations/providers; merged into every component's
@@ -895,6 +959,7 @@ func ProcessStackConfig(
 					GlobalAuth:                      globalAndTerraformAuth,
 					GlobalSecrets:                   globalSecretsSection,
 					GlobalDependencies:              globalAndTerraformDependencies,
+					GlobalMetadata:                  globalMetadataSection,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
@@ -943,6 +1008,7 @@ func ProcessStackConfig(
 					GlobalAuth:               globalAndHelmfileAuth,
 					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndHelmfileDependencies,
+					GlobalMetadata:           globalMetadataSection,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -982,6 +1048,7 @@ func ProcessStackConfig(
 					GlobalAuth:               globalAndPackerAuth,
 					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndPackerDependencies,
+					GlobalMetadata:           globalMetadataSection,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -1021,6 +1088,7 @@ func ProcessStackConfig(
 					GlobalAuth:               globalAndAnsibleAuth,
 					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndAnsibleDependencies,
+					GlobalMetadata:           globalMetadataSection,
 					GlobalCommand:            ansibleCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -1067,6 +1135,7 @@ func ProcessStackConfig(
 					GlobalEnv:                  globalAndKubernetesEnv,
 					GlobalAuth:                 globalAndKubernetesAuth,
 					GlobalDependencies:         globalAndKubernetesDependencies,
+					GlobalMetadata:             globalMetadataSection,
 					GlobalCommand:              kubernetesCommand,
 					AtmosGlobalAuthMap:         atmosAuthConfig,
 					GlobalAndTerraformHooks:    globalAndKubernetesHooks,
@@ -1121,6 +1190,7 @@ func ProcessStackConfig(
 					GlobalEnv:                  globalAndHelmEnv,
 					GlobalAuth:                 globalAndHelmAuth,
 					GlobalDependencies:         globalAndHelmDependencies,
+					GlobalMetadata:             globalMetadataSection,
 					GlobalCommand:              helmCommand,
 					AtmosGlobalAuthMap:         atmosAuthConfig,
 					GlobalAndTerraformHooks:    globalAndHelmHooks,
@@ -1223,6 +1293,18 @@ func ProcessStackConfig(
 			if len(componentEnv) > 0 {
 				componentMap[cfg.EnvSectionName] = componentEnv
 			}
+			// Deep-merge global metadata into component metadata (component-local wins),
+			// consistent with how built-in component types merge metadata in
+			// mergeComponentConfigurations, so nested maps like `labels`/`custom`
+			// retain non-conflicting keys from both sides instead of being replaced wholesale.
+			componentLocalMetadata, _ := componentMap[cfg.MetadataSectionName].(map[string]any)
+			componentMetadata, mergeErr := m.Merge(atmosConfig, []map[string]any{globalMetadataSection, componentLocalMetadata})
+			if mergeErr != nil {
+				return nil, mergeErr
+			}
+			if len(componentMetadata) > 0 {
+				componentMap[cfg.MetadataSectionName] = componentMetadata
+			}
 			// Add metadata fields expected by the template system.
 			componentMap["component"] = componentName
 			componentMap[cfg.ComponentTypeSectionName] = componentType
@@ -1238,6 +1320,12 @@ func ProcessStackConfig(
 	// Include the stack-level 'name' field if it was set.
 	if stackManifestName != "" {
 		result[cfg.NameSectionName] = stackManifestName
+	}
+
+	// Include the stack-level 'version' section if it was set, so
+	// `EffectiveTrackFromStack` can resolve the stack-asserted track.
+	if stackVersionSection != nil {
+		result[cfg.VersionSectionName] = stackVersionSection
 	}
 
 	return result, nil

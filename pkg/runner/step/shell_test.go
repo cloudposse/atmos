@@ -2,8 +2,9 @@ package step
 
 import (
 	"context"
+	"os"
 	"os/exec"
-	"strings"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -149,19 +150,24 @@ func TestShellHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("command with working directory", func(t *testing.T) {
+		// Prove the working directory is honored without depending on the shell's
+		// path format (mvdan/sh prints native paths, e.g. D:\tmp on Windows): drop
+		// a uniquely named marker file and glob it from the working directory.
+		dir := t.TempDir()
+		marker := "atmos_workdir_probe_marker"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, marker), []byte("x"), 0o600))
 		step := &schema.WorkflowStep{
 			Name:             "test_workdir",
 			Type:             "shell",
-			Command:          "pwd",
+			Command:          "echo *",
 			Output:           "capture",
-			WorkingDirectory: "/tmp",
+			WorkingDirectory: dir,
 		}
 		vars := NewVariables()
 
 		result, err := handler.Execute(context.Background(), step, vars)
 		require.NoError(t, err)
-		// On macOS, /tmp is symlinked to /private/tmp.
-		assert.True(t, strings.Contains(result.Value, "/tmp") || strings.Contains(result.Value, "/private/tmp"))
+		assert.Contains(t, result.Value, marker)
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
@@ -299,24 +305,26 @@ func TestShellHandlerExecuteWithWorkflow(t *testing.T) {
 		assert.Contains(t, result.Value, "resolved_value")
 	})
 
-	// Covers the `if workDir != "" { cmd.Dir = workDir }` assignment in
-	// ExecuteWithWorkflow (shell.go), which only the plain Execute() path
-	// exercised previously.
+	// Covers the working-directory handling in ExecuteWithWorkflow (shell.go),
+	// which only the plain Execute() path exercised previously. Uses a marker
+	// file + glob so it is independent of the shell's native path format.
 	t.Run("with resolved working directory", func(t *testing.T) {
+		dir := t.TempDir()
+		marker := "atmos_workflow_workdir_probe_marker"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, marker), []byte("x"), 0o600))
 		step := &schema.WorkflowStep{
 			Name:             "test_workflow_workdir",
 			Type:             "shell",
-			Command:          "pwd",
+			Command:          "echo *",
 			Output:           "capture",
-			WorkingDirectory: "/tmp",
+			WorkingDirectory: dir,
 		}
 		workflow := &schema.WorkflowDefinition{}
 		vars := NewVariables()
 
 		result, err := shellHandler.ExecuteWithWorkflow(context.Background(), step, vars, workflow)
 		require.NoError(t, err)
-		// On macOS, /tmp is symlinked to /private/tmp.
-		assert.True(t, strings.Contains(result.Value, "/tmp") || strings.Contains(result.Value, "/private/tmp"))
+		assert.Contains(t, result.Value, marker)
 	})
 }
 

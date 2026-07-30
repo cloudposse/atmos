@@ -19,6 +19,9 @@ commands:
         name: cli-commands-cast
         command: atmos casts generate cli commands cast
       - type: shell
+        name: cli-interactive-menu
+        command: atmos casts generate cli interactive-menu
+      - type: shell
         name: screengrabs-demo-stacks
         command: atmos casts generate screengrabs demo-stacks
       - type: shell
@@ -46,6 +49,9 @@ commands:
       - type: shell
         name: cli-commands-cast
         command: atmos casts validate cli commands cast
+      - type: shell
+        name: cli-interactive-menu
+        command: atmos casts validate cli interactive-menu
       - type: shell
         name: screengrabs-demo-stacks
         command: atmos casts validate screengrabs demo-stacks

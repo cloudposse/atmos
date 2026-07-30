@@ -6,7 +6,9 @@ import (
 
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -22,6 +24,7 @@ type TerraformRunOptions struct {
 	// Processing flags.
 	ProcessTemplates bool
 	ProcessFunctions bool
+	UseMocks         bool
 	Skip             []string
 
 	// Execution flags.
@@ -41,6 +44,8 @@ type TerraformRunOptions struct {
 	// Multi-component flags.
 	Query      string
 	Components []string
+	Tags       []string
+	Labels     map[string]string
 	All        bool
 	Affected   bool
 
@@ -69,6 +74,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 	opts := &TerraformRunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
+		UseMocks:                v.GetBool("use-mocks"),
 		Skip:                    v.GetStringSlice("skip"),
 		DryRun:                  v.GetBool("dry-run"),
 		SkipInit:                v.GetBool("skip-init"),
@@ -80,6 +86,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		DeployRunInit:           v.GetBool("deploy-run-init"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
+		Tags:                    v.GetStringSlice("tags"),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
@@ -90,6 +97,12 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
 	}
+	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+	if err != nil {
+		return nil, err
+	}
+	opts.Labels = labels
+
 	if err := validateTerraformRunOptions(opts); err != nil {
 		return nil, err
 	}
@@ -106,7 +119,7 @@ func validateTerraformRunOptions(opts *TerraformRunOptions) error {
 		case terraformFailureModeFailFast, terraformFailureModeKeepGoing:
 			opts.FailureMode = mode
 		default:
-			return fmt.Errorf("invalid --failure-mode %q: supported values are %q, %q", opts.FailureMode, terraformFailureModeFailFast, terraformFailureModeKeepGoing)
+			return fmt.Errorf("%w: invalid --failure-mode %q: supported values are %q, %q", errUtils.ErrInvalidFlagValue, opts.FailureMode, terraformFailureModeFailFast, terraformFailureModeKeepGoing)
 		}
 	}
 
@@ -115,7 +128,7 @@ func validateTerraformRunOptions(opts *TerraformRunOptions) error {
 		case terraformLogOrderStream, terraformLogOrderGrouped:
 			opts.LogOrder = logOrder
 		default:
-			return fmt.Errorf("invalid --log-order %q: supported values are %q, %q", opts.LogOrder, terraformLogOrderStream, terraformLogOrderGrouped)
+			return fmt.Errorf("%w: invalid --log-order %q: supported values are %q, %q", errUtils.ErrInvalidFlagValue, opts.LogOrder, terraformLogOrderStream, terraformLogOrderGrouped)
 		}
 	}
 	return nil

@@ -1,9 +1,9 @@
 ## Plan Failed for `foobar-fail` in `plat-ue2-sandbox`
 
 <a href="https://atmos.tools/ci"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
-  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg?v=1.223.0">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=1.223.0">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=1.223.0" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
 [![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-plat-ue2-sandbox-foobar-fail)

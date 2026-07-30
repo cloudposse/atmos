@@ -122,6 +122,9 @@ atmos list stacks --component vpc --format tree --provenance
 
   <dt>`--skip`</dt>
   <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
+
+  <dt>`--error-mode`</dt>
+	<dd>How to handle a recoverable YAML-function error, such as a Terraform backend that has not been provisioned yet (default `warn`). `strict` fails the command on the first such error. `warn` substitutes `(computed)` for the unresolved value, prints a warning naming the stack/component/function, and continues processing the rest of the stacks. `silent` continues without the summary. Errors unrelated to backend provisioning (auth failures, malformed YAML, etc.) still fail the command in either mode.<br/>Environment variable: `ATMOS_LIST_ERROR_MODE`</dd>
 </dl>
 
 ## Tree Format with Import Provenance

@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // TerraformTemplateContext extends the base TemplateContext with terraform-specific fields.
@@ -51,6 +52,9 @@ type TerraformTemplateContext struct {
 
 	// TestResult contains terraform test results (set for the `test` command only).
 	TestResult *plugin.TerraformTestOutputData
+
+	// AtmosVersion is the running Atmos CLI version, used to cache-bust the CI badge image.
+	AtmosVersion string
 }
 
 // NewTemplateContext creates a TerraformTemplateContext from a base context and parsed output.
@@ -59,6 +63,7 @@ func NewTemplateContext(base *plugin.TemplateContext, data *plugin.TerraformOutp
 
 	ctx := &TerraformTemplateContext{
 		TemplateContext: base,
+		AtmosVersion:    version.Version,
 	}
 
 	if data != nil {

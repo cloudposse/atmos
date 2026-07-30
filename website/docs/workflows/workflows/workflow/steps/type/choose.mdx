@@ -35,4 +35,4 @@ steps:
   <dd>Optional default option.</dd>
 </dl>
 
-Interactive steps require a TTY. Reference the selection later with `{{ .steps.environment.value }}`.
+Interactive steps require a TTY; in a non-TTY environment such as CI, the step uses its [`default`](/workflows/steps#interactive-steps-in-ci-non-tty) if set and otherwise errors. Reference the selection later with `{{ .steps.environment.value }}`.

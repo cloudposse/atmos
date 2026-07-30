@@ -73,7 +73,7 @@ func newMirrorModel(platforms int, isTTY bool) *mirrorModel {
 	s.Style = theme.GetCurrentStyles().Spinner
 	fps.Apply(&s)
 	p := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()),
 		progress.WithWidth(mirrorProgressBarWidth),
 		progress.WithoutPercentage(),
 	)

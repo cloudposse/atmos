@@ -7,6 +7,7 @@ description: Run local cloud-API, Kubernetes, and backing-service emulators as s
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Atmos natively supports **emulator components** — stack-scoped, long-running containers that
@@ -62,6 +63,12 @@ atmos emulator reset aws -s dev --force       # stop and wipe the emulator's per
 
 Each instance is named and labeled from its canonical address `<stack>/emulator/<component>`,
 so lifecycle commands discover it by label.
+
+## Try It
+
+Explore a complete, working example that provisions an S3 bucket against a local AWS emulator — no AWS account or credentials required.
+
+<EmbedExample example="emulator-aws" />
 
 ## Related
 

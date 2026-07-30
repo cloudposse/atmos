@@ -25,14 +25,25 @@ import (
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
-	terraformDefaultCommand = "terraform"
-	terraformNodeIDFormat   = "%s-%s"
+	terraformDefaultCommand    = "terraform"
+	terraformNodeIDFormat      = "%s-%s"
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDeploy  = "deploy"
+	terraformSubCommandDestroy = "destroy"
+	terraformSubCommandInit    = "init"
 )
+
+// startTerraformCacheForExecution is a seam for testing the bulk execution
+// lifecycle without binding a real loopback proxy.
+var startTerraformCacheForExecution = tfcache.StartForExecution
 
 const (
 	terraformFailureModeFailFast  = "fail-fast"
@@ -148,7 +159,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 	// Debug, not Info: the user-facing "Processing components..." line is emitted once
 	// by the caller (e.g. ExecuteTerraformAll); this duplicate carries only the count.
-	if opts.Info.SubCommand == "destroy" {
+	if opts.Info.SubCommand == terraformSubCommandDestroy {
 		log.Debug("Processing components in reverse dependency order for destroy", "count", graph.Size())
 	} else {
 		log.Debug("Processing components in dependency order", "count", graph.Size())
@@ -164,6 +175,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err != nil {
 		return err
 	}
+
+	closeCache, err := startSharedTerraformCache(ctx, opts.AtmosConfig, opts.Info)
+	if err != nil {
+		return err
+	}
+	defer closeCache()
 
 	dispatcher := &TerraformDispatcher{
 		atmosConfig:        opts.AtmosConfig,
@@ -187,16 +204,50 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 	finalizeTerraformCIResults(opts.Info, result, timings)
 	if result.Err != nil {
+		if skipped := skippedResultCount(result); skipped > 0 {
+			ui.Warningf("%d component(s) skipped after an earlier failure", skipped)
+		}
 		return result.Err
 	}
 
 	if processedCount(result) == 0 {
 		ui.Success("No components matched")
 	}
-	if opts.Info.SubCommand == "plan" && terraformPlanChanged(result) {
+	if opts.Info.SubCommand == terraformSubCommandPlan && terraformPlanChanged(result) {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
+}
+
+// startSharedTerraformCache starts one registry cache proxy for the complete
+// graph-backed invocation. The scheduler copies info for each node, so marking the
+// parent as externally managed makes every worker reuse the same Setup and prevents
+// ExecuteTerraform from starting and reporting a separate proxy per component.
+func startSharedTerraformCache(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (func(), error) {
+	if info.TerraformCacheExternal {
+		return func() {}, nil
+	}
+
+	setup, cleanup, err := startTerraformCacheForExecution(ctx, atmosConfig)
+	if err != nil {
+		return func() {}, err
+	}
+	info.TerraformCache = setup
+	info.TerraformCacheExternal = true
+	return cleanup, nil
+}
+
+func skippedResultCount(result *scheduler.AggregateResult) int {
+	if result == nil {
+		return 0
+	}
+	count := 0
+	for i := range result.Results {
+		if result.Results[i].Status == scheduler.StatusSkipped {
+			count++
+		}
+	}
+	return count
 }
 
 // BuildTerraformGraph builds a Terraform component graph from described stacks.
@@ -245,22 +296,73 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) (*dependency.Graph, error) {
 	defer perf.Track(atmosConfig, "scheduler.adapters.FilterTerraformGraph")()
 
+	var filtered *dependency.Graph
 	if selection != nil {
-		return filterTerraformGraphBySelection(graph, selection), nil
+		filtered = filterTerraformGraphBySelection(graph, selection)
+	} else {
+		nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
+		if err != nil {
+			return nil, err
+		}
+		if len(nodeIDs) == graph.Size() {
+			filtered = graph
+		} else {
+			filtered = graph.Filter(dependency.Filter{
+				NodeIDs:             nodeIDs,
+				IncludeDependencies: false,
+				IncludeDependents:   false,
+			})
+		}
 	}
 
-	nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
-	if err != nil {
-		return nil, err
+	// Tags/labels compose with whichever selection produced the graph above
+	// (--all/--components/--query or a precomputed --affected selection), rather
+	// than being an alternative selection mechanism.
+	return filterTerraformGraphByTagsAndLabels(filtered, info), nil
+}
+
+// filterTerraformGraphByTagsAndLabels narrows graph nodes to those matching
+// info.Tags (any-match) and info.Labels (all-match), applied as an additional
+// pass after the primary selection. A no-op when neither is set.
+func filterTerraformGraphByTagsAndLabels(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) *dependency.Graph {
+	if info == nil || (len(info.Tags) == 0 && len(info.Labels) == 0) {
+		return graph
 	}
-	if len(nodeIDs) == graph.Size() {
-		return graph, nil
+
+	var nodeIDs []string
+	for _, id := range sortedGraphNodeIDs(graph) {
+		if matchesTerraformTagsAndLabels(graph.Nodes[id], info) {
+			nodeIDs = append(nodeIDs, id)
+		}
 	}
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
 		IncludeDependencies: false,
 		IncludeDependents:   false,
-	}), nil
+	})
+}
+
+// matchesTerraformTagsAndLabels reports whether a node's component metadata
+// matches the requested tags (any) and labels (all).
+func matchesTerraformTagsAndLabels(node *dependency.Node, info *schema.ConfigAndStacksInfo) bool {
+	if node == nil {
+		return false
+	}
+	metadataSection, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
+
+	if len(info.Tags) > 0 {
+		nodeTags := tags.ToStringSlice(metadataSection["tags"])
+		if !tags.MatchesTags(nodeTags, info.Tags, tags.TagModeAny) {
+			return false
+		}
+	}
+	if len(info.Labels) > 0 {
+		nodeLabels := tags.ToStringMap(metadataSection["labels"])
+		if !tags.MatchesLabels(nodeLabels, info.Labels) {
+			return false
+		}
+	}
+	return true
 }
 
 // filterTerraformGraphBySelection narrows graph using precomputed affected node IDs.
@@ -288,7 +390,7 @@ func filterTerraformGraphBySelection(graph *dependency.Graph, selection *Terrafo
 
 // prepareTerraformGraphForCommand adjusts graph ordering for command-specific execution.
 func prepareTerraformGraphForCommand(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) (*dependency.Graph, error) {
-	if info == nil || graph == nil || info.SubCommand != "destroy" {
+	if info == nil || graph == nil || info.SubCommand != terraformSubCommandDestroy {
 		return graph, nil
 	}
 	return reverseTerraformGraph(graph)
@@ -368,7 +470,7 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 
 // requiresTerraformAutoApprove reports whether concurrent execution must be explicitly approved.
 func requiresTerraformAutoApprove(info *schema.ConfigAndStacksInfo) bool {
-	return info != nil && (info.SubCommand == "apply" || info.SubCommand == "destroy")
+	return info != nil && (info.SubCommand == terraformSubCommandApply || info.SubCommand == terraformSubCommandDestroy)
 }
 
 // hasTerraformAutoApprove detects auto-approve from config, CLI flags, or Terraform env flags.
@@ -376,7 +478,7 @@ func hasTerraformAutoApprove(atmosConfig *schema.AtmosConfiguration, info *schem
 	if info == nil {
 		return false
 	}
-	if info.SubCommand == "apply" && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
+	if info.SubCommand == terraformSubCommandApply && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
 		return true
 	}
 	if containsTerraformFlag(info.AdditionalArgsAndFlags, "-auto-approve") {
@@ -476,11 +578,17 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		execution.CaptureOutput = d.output.captureOutput()
 		outcome.LogFiles = logFiles
 	}
-	if d.info != nil && d.info.TerraformPlanCIResultHandler != nil {
+	if d.info != nil && (d.info.TerraformPlanCIResultHandler != nil || d.info.NodeHooks != nil) {
 		execution.CaptureOutput = true
 	}
 
-	execResult, err := d.executor(execution)
+	var execResult TerraformExecutionResult
+	var err error
+	if beforeErr := d.runBeforeNodeHooks(ctx, &nodeInfo); beforeErr != nil {
+		err = beforeErr
+	} else {
+		execResult, err = d.executor(execution)
+	}
 	outcome.ExitCode = terraformExitCode(err)
 	outcome.Changed = terraformPlanChangedError(d.info, err)
 	outcome.Output = execResult.CombinedOutput()
@@ -490,6 +598,13 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 			outcome.ExitCode = terraformExitCode(err)
 		}
 	}
+
+	// After-hooks run before output finalization so a hook failure (on_failure:
+	// fail) is reflected in this node's reported status/output, matching
+	// single-component Terraform behavior where an after-hook failure fails the
+	// command's own exit code.
+	err = d.runAfterNodeHooks(ctx, &nodeInfo, &outcome, err)
+
 	if d.output != nil {
 		execResult.Changed = outcome.Changed
 		d.output.finishNode(node, execResult, err)
@@ -503,13 +618,55 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
 }
 
-func terraformExecutionError(node *dependency.Node, result TerraformExecutionResult, err error) error {
-	baseErr := fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
-	detail := terraformFailureOutputDetail(result)
-	if detail == "" {
-		return baseErr
+// runBeforeNodeHooks runs this node's before-event hooks, if wired, aborting
+// execution of that node (the executor is never called) on failure. Wraps a
+// failure with ErrPerComponentHookFailed so it's distinguishable in logs/
+// errors from a real Terraform execution failure — the outer
+// terraformExecutionError wrap already adds component/stack context.
+func (d *TerraformDispatcher) runBeforeNodeHooks(ctx context.Context, nodeInfo *schema.ConfigAndStacksInfo) error {
+	if d.info == nil || d.info.NodeHooks == nil {
+		return nil
 	}
-	return fmt.Errorf("%w\n\nterraform output:\n```text\n%s\n```", baseErr, detail)
+	if err := d.info.NodeHooks.Before(ctx, nodeInfo); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, err)
+	}
+	return nil
+}
+
+// runAfterNodeHooks runs this node's after-event hooks, if wired, and returns
+// the effective error for this node. A hook failure always fails the node —
+// even if the plan itself reported changes — since outcome.Changed is reset
+// to false here so Dispatch's success short-circuit does not apply.
+func (d *TerraformDispatcher) runAfterNodeHooks(ctx context.Context, nodeInfo *schema.ConfigAndStacksInfo, outcome *TerraformNodeOutcome, err error) error {
+	if d.info == nil || d.info.NodeHooks == nil {
+		return err
+	}
+	afterErr := d.info.NodeHooks.After(ctx, nodeInfo, outcome.Output, err)
+	if afterErr == nil {
+		return err
+	}
+	outcome.Changed = false
+	if err == nil {
+		err = afterErr
+	} else {
+		err = errors.Join(err, afterErr)
+	}
+	outcome.ExitCode = terraformExitCode(err)
+	return err
+}
+
+func terraformExecutionError(node *dependency.Node, result TerraformExecutionResult, err error) error {
+	cause := fmt.Errorf("component=%s stack=%s: %w", node.Component, node.Stack, err)
+	detail := terraformFailureOutputDetail(result)
+	if detail != "" {
+		cause = fmt.Errorf("%w\n\nterraform output:\n```text\n%s\n```", cause, detail)
+	}
+	return errUtils.Build(errUtils.ErrTerraformExecFailed).
+		WithCause(cause).
+		WithExplanationf("Terraform execution failed for component %q in stack %q.", node.Component, node.Stack).
+		WithContext("component", node.Component).
+		WithContext("stack", node.Stack).
+		Err()
 }
 
 func terraformFailureOutputDetail(result TerraformExecutionResult) string {
@@ -615,7 +772,12 @@ func addTerraformDependencies(
 	componentSection map[string]any,
 ) error {
 	fromID := terraformNodeID(componentName, stackName)
-	for _, dep := range terraformDependencies(componentSection) {
+	dependencies, err := terraformDependencies(componentSection)
+	if err != nil {
+		return fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
+	}
+	for dependencyIndex := range dependencies {
+		dep := &dependencies[dependencyIndex]
 		if !dep.IsComponentDependency() {
 			continue
 		}
@@ -642,31 +804,56 @@ func addTerraformDependencies(
 }
 
 // terraformDependencies extracts modern or legacy dependency declarations from a component.
-func terraformDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	if depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any); ok {
-		if _, hasComponents := depsSection["components"]; hasComponents {
-			var deps schema.Dependencies
-			if err := mapstructure.Decode(depsSection, &deps); err == nil && len(deps.Components) > 0 {
-				return deps.Components
-			}
-		}
+func terraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
+	dependencies, found, err := modernTerraformDependencies(componentSection)
+	if err != nil || found {
+		return dependencies, err
 	}
 
+	return legacyTerraformDependencies(componentSection)
+}
+
+func modernTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, bool, error) {
+	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
+	if !ok {
+		return nil, false, nil
+	}
+	if _, hasComponents := depsSection["components"]; !hasComponents {
+		return nil, false, nil
+	}
+
+	var deps schema.Dependencies
+	if err := mapstructure.Decode(depsSection, &deps); err != nil {
+		return nil, false, err
+	}
+	if len(deps.Components) == 0 {
+		return nil, false, nil
+	}
+	if err := deps.Normalize(); err != nil {
+		return nil, true, err
+	}
+	return deps.Components, true, nil
+}
+
+func legacyTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	if dependsOn, ok := settingsSection["depends_on"]; ok {
 		deps := parseLegacyDependsOn(dependsOn)
 		if len(deps) > 0 {
 			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
-			return deps
+			return deps, nil
 		}
 	}
 
 	var settings schema.Settings
-	if err := mapstructure.Decode(settingsSection, &settings); err != nil || len(settings.DependsOn) == 0 {
-		return nil
+	if err := mapstructure.Decode(settingsSection, &settings); err != nil {
+		return nil, err
+	}
+	if len(settings.DependsOn) == 0 {
+		return nil, nil
 	}
 
 	log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
@@ -682,7 +869,7 @@ func terraformDependencies(componentSection map[string]any) []schema.ComponentDe
 			Stage:       ctx.Stage,
 		})
 	}
-	return deps
+	return deps, nil
 }
 
 // parseLegacyDependsOn normalizes settings.depends_on into component dependencies.
@@ -1087,7 +1274,7 @@ func closeTerraformLogFiles(files ...*os.File) func() error {
 }
 
 func terraformPlanHideNoChangesEnabled(info *schema.ConfigAndStacksInfo) (bool, error) {
-	if info == nil || info.SubCommand != "plan" {
+	if info == nil || info.SubCommand != terraformSubCommandPlan {
 		return false, nil
 	}
 	hideNoChanges := info.TerraformPlanHideNoChanges
@@ -1197,7 +1384,7 @@ func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) b
 
 // terraformPlanChangedError treats Terraform plan exit code 2 as a changed result.
 func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
-	if info == nil || info.SubCommand != "plan" {
+	if info == nil || info.SubCommand != terraformSubCommandPlan {
 		return false
 	}
 	var exitCodeErr errUtils.ExitCodeError
@@ -1487,7 +1674,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case "plan", "apply", "deploy", "destroy":
+	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDeploy, terraformSubCommandDestroy, terraformSubCommandInit:
 		return true
 	default:
 		return false

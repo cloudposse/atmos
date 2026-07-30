@@ -466,6 +466,14 @@
             },
             "platforms": {
               "$ref": "#/definitions/terraform_platforms"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "depends_on": {
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             }
           },
           "required": []
@@ -521,6 +529,11 @@
                   "$ref": "#/definitions/vars"
                 }
               }
+            },
+            "mocks": {
+              "type": "object",
+              "description": "Literal Terraform output values used by !terraform.state and !terraform.output when --use-mocks is set.",
+              "additionalProperties": true
             },
             "env": {
               "$ref": "#/definitions/env"
@@ -1328,6 +1341,20 @@
             "locked": {
               "type": "boolean",
               "description": "Flag to lock the component and prevent modifications while allowing read operations"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering components (atmos list components --tags)."
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
             }
           },
           "required": []
@@ -1350,7 +1377,9 @@
               "$ref": "#/definitions/validation"
             },
             "depends_on": {
-              "$ref": "#/definitions/depends_on"
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             },
             "spacelift": {
               "$ref": "#/definitions/spacelift"
@@ -2298,6 +2327,7 @@
                       "checkov",
                       "kics",
                       "trivy",
+                      "tflint",
                       "git",
                       "step",
                       "steps",

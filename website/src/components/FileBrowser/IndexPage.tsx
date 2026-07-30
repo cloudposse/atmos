@@ -74,7 +74,6 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
               title={example.cast.title || displayName}
               chrome
               thumbnail
-              preWrap={false}
               controls={false}
               scrubber={false}
               showCommand={false}

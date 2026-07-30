@@ -29,11 +29,27 @@ var trackGetCmd = &cobra.Command{
 		if locked, err := manager.ResolveLocked(atmosConfig, track, args[0]); err == nil {
 			entry.Locked = locked
 		}
-		return writeFormatted(cmd, entry)
+
+		show, _ := cmd.Flags().GetString("show")
+		value, err := entry.Field(show)
+		if err != nil {
+			return err
+		}
+		return writeFormatted(cmd, value)
 	},
 }
 
+// trackGetParserOptions returns the flag options for `version track get`,
+// extending the shared track verbs with --show since get is the only verb
+// that selects a single field from a single entry.
+func trackGetParserOptions() []flags.Option {
+	return trackParserOptions(
+		flags.WithStringFlag("show", "", "locked",
+			"Entry field to display: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked"),
+	)
+}
+
 func init() {
-	flags.NewStandardParser(trackParserOptions()...).RegisterFlags(trackGetCmd)
+	flags.NewStandardParser(trackGetParserOptions()...).RegisterFlags(trackGetCmd)
 	trackCmd.AddCommand(trackGetCmd)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -42,11 +43,26 @@ func (h *FilterHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for filtered selection and returns the chosen value(s).
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// is returned without prompting. For multi-select (`multiple: true` or
+// `limit > 1`) the default is treated as a comma-separated list. When there is
+// no TTY and no `default` is set, resolveInteractive returns ErrStepTTYRequired.
 func (h *FilterHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.FilterHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
+	shouldPrompt, err := h.resolveInteractive(step)
+	if err != nil {
 		return nil, err
+	}
+
+	// Non-TTY with a configured default: use the default without prompting.
+	if !shouldPrompt {
+		defaultVal, resolveErr := h.ResolveDefault(ctx, step, vars)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		return h.resultFromDefault(step, defaultVal), nil
 	}
 
 	prompt, err := h.ResolvePrompt(ctx, step, vars)
@@ -87,6 +103,38 @@ func (h *FilterHandler) resolveOptions(step *schema.WorkflowStep, vars *Variable
 		options[i] = resolved
 	}
 	return options, nil
+}
+
+// resultFromDefault builds a StepResult from the configured default for the
+// non-TTY path. For multi-select the default is split on commas into Values.
+// The default is used verbatim (no membership check against options), matching
+// the single-select behavior and the documented non-TTY contract.
+func (h *FilterHandler) resultFromDefault(step *schema.WorkflowStep, defaultVal string) *StepResult {
+	if step.Multiple || step.Limit > 1 {
+		values := splitFilterDefaults(defaultVal)
+		first := ""
+		if len(values) > 0 {
+			first = values[0]
+		}
+		return NewStepResult(first).WithValues(values)
+	}
+	return NewStepResult(defaultVal)
+}
+
+// splitFilterDefaults splits a comma-separated default into trimmed, non-empty
+// values for multi-select filter steps.
+func splitFilterDefaults(defaultVal string) []string {
+	if strings.TrimSpace(defaultVal) == "" {
+		return nil
+	}
+	parts := strings.Split(defaultVal, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	return values
 }
 
 // createFilterKeyMap creates a keymap with ESC added to quit keys.

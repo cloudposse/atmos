@@ -1,0 +1,75 @@
+---
+slug: vendor-diff-and-update
+title: "Manage Vendored Dependencies Locally"
+date: 2026-07-12T12:00:00.000Z
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Package managers normally let you discover available updates, review their impact, and apply them
+locally. Vendored Atmos components did not: the only updater was a GitHub Action, so there was no
+native way to run that workflow from your workstation before opening a pull request.
+
+<!--truncate-->
+
+## The Problem
+
+Vendored components pin an upstream version in `vendor.yaml` or `component.yaml`. Before this
+release, Atmos could pull that pinned version, but it could not tell you whether a newer version
+was available, show you what would change, or update the pin locally. Those tasks required the
+legacy Component Updater GitHub Action or a manual sequence of checking upstream tags, cloning a
+repository to compare versions, and editing YAML by hand.
+
+That is a poor fit for a dependency-management workflow. You should be able to inspect an update
+where you work, decide whether to accept it, and make the change without sending a trial pull
+request through CI.
+
+## The Fix
+
+Atmos now provides that package-management workflow directly in the CLI.
+
+- **`atmos vendor update`** finds newer versions for Git-backed component sources, honors each
+  source's version constraints, and updates the pinned version in place while preserving comments,
+  anchors, templates, and formatting. Use `--check` to preview available updates without writing
+  files, or `--pull` to pull the updated sources immediately afterward.
+- **`atmos vendor diff`** compares a component's current pinned version with another tag, branch,
+  or commit so you can review the upstream changes before updating.
+
+Both commands work from your local workspace. They support sources declared in a repository-level
+`vendor.yaml` or in per-component `component.yaml` files, including repositories that use both
+styles. They also respect `vendor.base_path`, `ATMOS_VENDOR_BASE_PATH`, and `--chdir`, so the
+commands use the same vendoring layout as `atmos vendor pull`.
+
+### Migrating from the legacy GitHub Action
+
+The `cloudposse/github-action-atmos-component-updater` GitHub Action is deprecated. Use the
+native package-management commands,
+[`atmos vendor update`](/cli/commands/vendor/vendor-update) and
+[`atmos vendor diff`](/cli/commands/vendor/vendor-diff), instead. The legacy Action documentation
+remains available as a [deprecated reference](/deprecated/github-actions/component-updater).
+
+## How to Use It
+
+```shell
+# See which components have an eligible newer version.
+atmos vendor update --check
+
+# Review the current pinned version against the latest tag.
+atmos vendor diff --component vpc
+
+# Update one component, or every component tagged "networking".
+atmos vendor update --component vpc
+atmos vendor update --tags networking
+
+# Update pins and then pull the selected component sources.
+atmos vendor update --pull
+
+# Compare two explicit versions and limit the diff to one file.
+atmos vendor diff --component vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+```
+
+## Get Involved
+
+Read the [Vendoring](/vendor/) overview, [`vendor diff`](/cli/commands/vendor/vendor-diff), and
+[`vendor update`](/cli/commands/vendor/vendor-update) documentation for the full reference. To
+share feedback or request an improvement, [open an issue](https://github.com/cloudposse/atmos/issues).

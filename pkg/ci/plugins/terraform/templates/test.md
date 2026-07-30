@@ -6,7 +6,7 @@
 ## Tests Passed for `{{.Component}}` in `{{.Stack}}`
 {{- end }}
 
-<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a>
+<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg?v={{.AtmosVersion}}" alt="Atmos CI" height="32" align="right"/></a>
 
 {{- if $test }}
 {{- if gt $test.Total 0 }} [![total](https://shields.io/badge/TESTS-{{$test.Total}}-blue?style=for-the-badge)](#user-content-result-{{$target}}){{- end }}

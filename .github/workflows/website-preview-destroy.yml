@@ -49,7 +49,7 @@ jobs:
         run: echo "branch=$(echo ${PR_HEAD#refs/heads/} | tr / -)" >> $GITHUB_OUTPUT
 
       - name: Seek deployment
-        uses: cloudposse/github-action-seek-deployment@0.1.1
+        uses: cloudposse/github-action-seek-deployment@9c18326d279eaf1683777086a61ca3c744aeb246 # 0.1.1
         id: deployment
         with:
           environment: preview
@@ -58,7 +58,7 @@ jobs:
           status: success
 
       - name: Inactivate deployment
-        uses: chrnorm/deployment-status@9a72af4586197112e0491ea843682b5dc280d806 # v2.0.3
+        uses: chrnorm/deployment-status@6df8d036fd2fee9eb82936733953da1f8382b41e # v2.0.4
         if: ${{ steps.deployment.outputs.id != '' }}
         with:
           state: inactive

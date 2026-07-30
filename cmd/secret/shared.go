@@ -118,8 +118,12 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 }
 
 // loadService initializes config + auth and returns a secrets.Service scoped to (stack,
-// component). It resolves the component section with `!secret` skipped so declarations and
-// includes resolve without retrieving secret values (which is a separate, explicit step).
+// component). It resolves the component section with credentialFreeSkip()'s functions skipped
+// (`!secret`, `!store`, `!store.get`, `!terraform.output`, `!terraform.state`) so declarations and
+// includes resolve without retrieving secret values (a separate, explicit step) and without
+// requiring sibling components' terraform state or store contents to already exist — the service
+// only ever reads secrets.vars/secrets.providers from the resolved section, never those functions'
+// results.
 func loadService(scope secretScope) (*secrets.Service, error) {
 	defer perf.Track(nil, "secret.loadService")()
 
@@ -157,8 +161,11 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 		ComponentType:        scope.ComponentType,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		Skip:                 []string{"secret"}, // resolve includes etc., but never retrieve secrets here.
-		AuthManager:          authManager,
+		// Skip the same credential/state-fetching functions `secret list` already skips (see
+		// credentialFreeSkip): resolving where to write/read a secret only needs secrets.vars/
+		// secrets.providers, never a sibling component's terraform state or store contents.
+		Skip:        credentialFreeSkip(),
+		AuthManager: authManager,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load component config: %w", err)

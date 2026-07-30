@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -81,6 +82,39 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 	require.NoError(t, ExecuteUp(context.Background(), infoFor("api")))
 }
 
+func TestExecuteUp_ResolvesRelativeBindMountAgainstProjectRoot(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	projectRoot := t.TempDir()
+
+	section := map[string]any{
+		"image": "localhost:5001/api:abc",
+		"run": map[string]any{
+			"mounts": []any{
+				map[string]any{"type": "bind", "source": "app/public", "target": "/app/public"},
+				map[string]any{"type": "volume", "source": "cache", "target": "/cache"},
+			},
+		},
+	}
+	withStubsConfig(t, &schema.AtmosConfiguration{BasePathAbsolute: projectRoot}, section, nil, rt)
+
+	gomock.InOrder(
+		rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).Return([]ctr.Info{}, nil),
+		rt.EXPECT().Create(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, c *ctr.CreateConfig) (string, error) {
+				require.Equal(t, []ctr.Mount{
+					{Type: "bind", Source: filepath.Join(projectRoot, "app", "public"), Target: "/app/public"},
+					{Type: "volume", Source: "cache", Target: "/cache"},
+				}, c.Mounts)
+				return "cid", nil
+			}),
+		rt.EXPECT().Start(gomock.Any(), "cid").Return(nil),
+	)
+
+	require.NoError(t, ExecuteUp(context.Background(), infoFor("api")))
+}
+
 func TestExecuteUp_DryRun(t *testing.T) {
 	section := map[string]any{"image": "alpine"}
 	withStubs(t, section, nil, nil) // nil runtime: must not be used in dry-run.
@@ -132,7 +166,17 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
 	section := map[string]any{
-		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
+		"build": map[string]any{
+			"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}, "engine": "buildx",
+			"driver": map[string]any{
+				"name": "component-builder", "provider": "docker-container",
+				"opts": map[string]any{"image": "mirror.gcr.io/moby/buildkit:buildx-stable-1"},
+			},
+			"cache": map[string]any{
+				"from": []any{map[string]any{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+				"to":   []any{map[string]any{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}},
+			},
+		},
 	}
 	withStubs(t, section, nil, rt)
 
@@ -140,6 +184,15 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 		DoAndReturn(func(_ context.Context, b *ctr.BuildConfig) error {
 			assert.Equal(t, "app", b.Context)
 			assert.Equal(t, []string{"img:1"}, b.Tags)
+			require.NotNil(t, b.Driver)
+			assert.Equal(t, "component-builder", b.Driver.Name)
+			assert.Equal(t, "docker-container", b.Driver.Provider)
+			assert.Equal(t, "mirror.gcr.io/moby/buildkit:buildx-stable-1", b.Driver.Opts["image"])
+			require.NotNil(t, b.Cache)
+			require.Len(t, b.Cache.From, 1)
+			require.Len(t, b.Cache.To, 1)
+			assert.Equal(t, "registry.example.com/app:buildcache", b.Cache.From[0]["ref"])
+			assert.Equal(t, "max", b.Cache.To[0]["mode"])
 			return nil
 		})
 

@@ -16,6 +16,14 @@ import (
 
 var terraformStateCache = sync.Map{}
 
+// invalidateTerraformStateCache removes the cached outputs for one component.
+// Terraform can create an empty state file while selecting a workspace, then later
+// populate that same file during apply or deploy. Keeping the empty map cached would
+// make downstream !terraform.state expressions continue to use their fallback values.
+func invalidateTerraformStateCache(stack, component string) {
+	terraformStateCache.Delete(fmt.Sprintf("%s-%s", stack, component))
+}
+
 // ResetStateCache clears the terraform state cache and the nested-component AuthManager cache.
 // This is exported for use in tests to ensure cache isolation between test functions. The two caches
 // are cleared together because the managers in nestedAuthManagerCache are what read the state held in
@@ -170,14 +178,20 @@ func GetTerraformState(
 		return nil, er
 	}
 
-	// Cache the result.
-	terraformStateCache.Store(stackSlug, backend)
-
-	// If `backend` is `nil`, return a recoverable error (the component in the stack has not been provisioned yet).
-	// This allows callers to use YQ defaults if available.
+	// If `backend` is `nil`, the component in the stack has not been provisioned yet: return a
+	// recoverable error so callers can use YQ defaults if available. Do NOT cache this result -
+	// storing a nil map[string]any into the `any`-typed cache would box a non-nil interface with
+	// a nil value, which `found && backend != nil` below treats as a cache HIT forever (Go's
+	// typed-nil-in-interface semantics). During a `deploy --all` DAG run a dependency can be
+	// provisioned by an earlier node after this "not yet provisioned" read; later reads of the
+	// same component must see its real state once it exists, not a poisoned nil frozen from
+	// before the dependency was ever deployed.
 	if backend == nil {
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
+
+	// Cache the result now that we know it reflects a real, provisioned backend.
+	terraformStateCache.Store(stackSlug, backend)
 
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)

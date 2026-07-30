@@ -3,7 +3,6 @@ package cast
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -239,35 +239,21 @@ func recordedCommandArgs(args []string) []string {
 	return append([]string(nil), args...)
 }
 
-// StartHelpRecording starts a cast recording for help output when an explicit
-// --cast flag requests one, and returns a writer that records what is written
-// to it as cast output events. Cobra renders help before the persistent
-// pre-run hooks fire, so the custom help function starts the recording itself
-// and tees the rendered help through the returned writer. It returns nil when
-// no recording is active or requested.
-func StartHelpRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) io.Writer {
+// StartHelpRecording starts a cast recording for help output when explicitly
+// requested. Cobra renders help before the persistent pre-run hooks fire, so
+// the custom help function must start the recorder itself. Help output still
+// flows through the normal masked I/O writer, which is the sole path that
+// records it. It returns true when a recording is active.
+func StartHelpRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) bool {
 	defer perf.Track(atmosConfig, "cmd.cast.StartHelpRecording")()
 
 	if activeCast == nil {
 		if err := StartRecordingIfRequested(cmd, atmosConfig, os.Args[1:]); err != nil {
-			_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to start cast recording: %v\n", err)
-			return nil
+			ui.Errorf("Failed to start cast recording: %v", err)
+			return false
 		}
 	}
-	if activeCast == nil {
-		return nil
-	}
-	return &recorderOutputWriter{rec: activeCast.recorder}
-}
-
-// recorderOutputWriter records writes as cast output events.
-type recorderOutputWriter struct {
-	rec *asciicast.Recorder
-}
-
-func (w *recorderOutputWriter) Write(p []byte) (int, error) {
-	w.rec.Record("o", string(p))
-	return len(p), nil
+	return activeCast != nil
 }
 
 // ActiveRecordingWidth returns the terminal width (in columns) of the active
@@ -297,7 +283,7 @@ func FinalizeRecording() {
 	// back into the recording.
 	activeCast = nil
 	if err := rec.Close(); err != nil {
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to close cast recording: %v\n", err)
+		ui.Errorf("Failed to close cast recording: %v", err)
 		return
 	}
 	if removeCast {
@@ -305,13 +291,13 @@ func FinalizeRecording() {
 	}
 	if renderOutput != "" {
 		if err := renderRecordedCast(rec.Path(), renderOutput); err != nil {
-			_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to render cast: %v\n", err)
+			ui.Errorf("Failed to render cast: %v", err)
 			return
 		}
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast rendered: %s\n", renderOutput)
+		ui.Successf("Cast rendered: %s", renderOutput)
 		return
 	}
-	_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
+	ui.Successf("Cast recorded: %s", rec.Path())
 }
 
 func renderRecordedCast(castPath, output string) error {

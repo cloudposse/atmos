@@ -7,7 +7,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
+
+// errFmtExpectedRows is the shared "wrong input type" error format used by every Filter.Apply.
+const errFmtExpectedRows = "%w: expected []map[string]any, got %T"
 
 // Filter interface for composability.
 type Filter interface {
@@ -30,6 +34,19 @@ type ColumnValueFilter struct {
 type BoolFilter struct {
 	Field string
 	Value *bool // nil = all, true = enabled only, false = disabled only
+}
+
+// TagFilter filters rows whose Field ([]string) matches any of Tags (OR).
+type TagFilter struct {
+	Field string
+	Tags  []string
+}
+
+// LabelFilter filters rows whose Field (map[string]string) matches every
+// key=value pair in Labels (AND).
+type LabelFilter struct {
+	Field  string
+	Labels map[string]string
 }
 
 // Chain combines multiple filters (AND logic).
@@ -66,7 +83,7 @@ func (f *GlobFilter) Apply(data interface{}) (interface{}, error) {
 
 	items, ok := data.([]map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, data)
+		return nil, fmt.Errorf(errFmtExpectedRows, errUtils.ErrInvalidConfig, data)
 	}
 
 	var filtered []map[string]any
@@ -106,7 +123,7 @@ func (f *ColumnValueFilter) Apply(data interface{}) (interface{}, error) {
 
 	items, ok := data.([]map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, data)
+		return nil, fmt.Errorf(errFmtExpectedRows, errUtils.ErrInvalidConfig, data)
 	}
 
 	var filtered []map[string]any
@@ -142,7 +159,7 @@ func (f *BoolFilter) Apply(data interface{}) (interface{}, error) {
 
 	items, ok := data.([]map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, data)
+		return nil, fmt.Errorf(errFmtExpectedRows, errUtils.ErrInvalidConfig, data)
 	}
 
 	// nil = no filtering
@@ -165,6 +182,71 @@ func (f *BoolFilter) Apply(data interface{}) (interface{}, error) {
 		}
 
 		if boolValue == *f.Value {
+			filtered = append(filtered, item)
+		}
+	}
+
+	return filtered, nil
+}
+
+// NewTagFilter creates a filter matching rows whose Field contains any of
+// filterTags. An empty filterTags matches everything (no filter applied).
+func NewTagFilter(field string, filterTags []string) *TagFilter {
+	defer perf.Track(nil, "filter.NewTagFilter")()
+
+	return &TagFilter{Field: field, Tags: filterTags}
+}
+
+// Apply filters rows by any-match against the Field's []string value.
+func (f *TagFilter) Apply(data interface{}) (interface{}, error) {
+	defer perf.Track(nil, "filter.TagFilter.Apply")()
+
+	items, ok := data.([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf(errFmtExpectedRows, errUtils.ErrInvalidConfig, data)
+	}
+
+	if len(f.Tags) == 0 {
+		return items, nil
+	}
+
+	var filtered []map[string]any
+	for _, item := range items {
+		itemTags, _ := item[f.Field].([]string)
+		if tags.MatchesTags(itemTags, f.Tags, tags.TagModeAny) {
+			filtered = append(filtered, item)
+		}
+	}
+
+	return filtered, nil
+}
+
+// NewLabelFilter creates a filter matching rows whose Field contains every
+// key=value pair in filterLabels. An empty filterLabels matches everything
+// (no filter applied).
+func NewLabelFilter(field string, filterLabels map[string]string) *LabelFilter {
+	defer perf.Track(nil, "filter.NewLabelFilter")()
+
+	return &LabelFilter{Field: field, Labels: filterLabels}
+}
+
+// Apply filters rows by all-match against the Field's map[string]string value.
+func (f *LabelFilter) Apply(data interface{}) (interface{}, error) {
+	defer perf.Track(nil, "filter.LabelFilter.Apply")()
+
+	items, ok := data.([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf(errFmtExpectedRows, errUtils.ErrInvalidConfig, data)
+	}
+
+	if len(f.Labels) == 0 {
+		return items, nil
+	}
+
+	var filtered []map[string]any
+	for _, item := range items {
+		itemLabels, _ := item[f.Field].(map[string]string)
+		if tags.MatchesLabels(itemLabels, f.Labels) {
 			filtered = append(filtered, item)
 		}
 	}

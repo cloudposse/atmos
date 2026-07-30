@@ -79,16 +79,48 @@ def sanitize_paths(text, repo_root):
     roots = {str(repo_root), os.path.realpath(str(repo_root))}
     # macOS: cwd-derived paths may carry the /private prefix for /tmp and /var.
     roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
-    for root in sorted(roots, key=len, reverse=True):
-        text = text.replace(root, placeholder)
-    return text
+
+    def sanitize_value(value):
+        for root in sorted(roots, key=len, reverse=True):
+            value = value.replace(root, placeholder)
+
+        # GitHub-hosted runners can also emit fixture, cache, and temporary
+        # paths outside the repository root. None are meaningful in a
+        # committed cast, so redact every Linux home-directory path.
+        return re.sub(r"/home/[^\s\x1b]+", "/absolute/path/to/external", value)
+
+    # Cast files are newline-delimited JSON. Decode output events before
+    # replacing paths so escaped JSON slashes ("\\/home\\/runner\\/...") do not
+    # bypass the sanitizer.
+    sanitized_lines = []
+    decoded_cast = False
+    try:
+        for line in text.splitlines(keepends=True):
+            newline = "\n" if line.endswith("\n") else ""
+            event = json.loads(line)
+            if isinstance(event, list) and len(event) >= 3 and event[1] in ("o", "e") and isinstance(event[2], str):
+                decoded_cast = True
+                sanitized = sanitize_value(event[2])
+                if sanitized != event[2]:
+                    event[2] = sanitized
+                    line = json.dumps(event, separators=(",", ":")) + newline
+            sanitized_lines.append(line)
+    except (json.JSONDecodeError, TypeError):
+        decoded_cast = False
+
+    if decoded_cast:
+        return "".join(sanitized_lines)
+    return sanitize_value(text)
 
 
 def assert_no_error_output(text):
-    """No Atmos error-builder output may appear in a committed cast.
+    """No Atmos error-builder or Terraform/OpenTofu warning output may appear in a committed cast.
 
-    Catches errors printed by commands that still exit zero; non-zero exits
-    already fail the recording (the cast step discards the cast).
+    Catches errors and warnings printed by commands that still exit zero; non-zero exits
+    already fail the recording (the cast step discards the cast). Includes Terraform's
+    "Incomplete lock file information" warning, which shows up whenever a component's
+    .terraform.lock.hcl isn't committed with checksums for every platform Atmos declares
+    (see docs/prd/terraform-registry-cache.md, "Multi-platform lock files").
     """
     for marker in (
         "# Error",
@@ -104,6 +136,7 @@ def assert_no_error_output(text):
         "You're now on a new, empty workspace",
         "currently selected workspace",
         "panic:",
+        "Incomplete lock file information for providers",
     ):
         if marker in text:
             raise SystemExit(f"cast contains error output marker {marker!r}")
@@ -170,8 +203,14 @@ def assert_colored(text, needle):
 
     The needle is matched against the ANSI-stripped line (styling can split a
     phrase mid-word), while the color requirement checks the raw line.
+
+    Unlike assert_body_color, this does not exclude prompt lines: a styled
+    type: simulate narration comment (e.g. "# some note") is typed right
+    after its own prompt on the same raw line with no linebreak in between,
+    and is legitimately colored -- excluding prompt lines here would treat
+    that real styling as if it didn't count.
     """
     for line in text.splitlines():
-        if needle in strip_ansi(line) and _SGR.search(line) and not _PROMPT_LINE.match(line):
+        if needle in strip_ansi(line) and _SGR.search(line):
             return
     raise SystemExit(f"cast does not render {needle!r} with color")

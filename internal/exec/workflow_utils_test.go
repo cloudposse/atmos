@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -18,13 +19,36 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// envSnapshotHandler is an in-process extended step type that records the
+// process environment (vars.Env) it was handed, so a later workflow step can
+// assert on persisted env-step values without shelling out to a Unix-only
+// `test`/`${VAR+set}` command (which fails on Windows and on hosts that
+// already export the variable under test).
+type envSnapshotHandler struct {
+	stepPkg.BaseHandler
+	captured *map[string]string
+}
+
+func (h *envSnapshotHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *envSnapshotHandler) Execute(_ context.Context, _ *schema.WorkflowStep, vars *stepPkg.Variables) (*stepPkg.StepResult, error) {
+	snapshot := make(map[string]string, len(vars.Env))
+	for k, v := range vars.Env {
+		snapshot[k] = v
+	}
+	*h.captured = snapshot
+	return stepPkg.NewStepResult("ok"), nil
+}
 
 // TestIsKnownWorkflowError tests the IsKnownWorkflowError function.
 func TestIsKnownWorkflowError(t *testing.T) {
@@ -616,8 +640,10 @@ func TestBuildWorkflowStepError(t *testing.T) {
 			assert.Error(t, result)
 			assert.ErrorIs(t, result, tt.expectSentinel)
 
-			// Use Format to get the full formatted error including hints.
-			formattedErr := errUtils.Format(result, errUtils.DefaultFormatterConfig())
+			// Use Format to get the full formatted error including hints. Strip ANSI
+			// since CI-enabled color rendering can split an expected substring (e.g. a
+			// syntax-highlighted code fence) across separate escape-coded spans.
+			formattedErr := atmosansi.Strip(errUtils.Format(result, errUtils.DefaultFormatterConfig()))
 			for _, expected := range tt.expectContains {
 				assert.Contains(t, formattedErr, expected)
 			}
@@ -869,7 +895,7 @@ func TestCheckAndGenerateWorkflowStepNames_Coverage(t *testing.T) {
 func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
 	// When no identity is specified, should return base environment with workflow/step env merged.
 	baseEnv := []string{"BASE_VAR=base-value"}
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, nil)
 
 	assert.NoError(t, err)
 	// Should return the base environment.
@@ -879,7 +905,7 @@ func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
 // TestPrepareStepEnvironment_NilAuthManager tests prepareStepEnvironment with nil auth manager.
 func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 	baseEnv := []string{"BASE_VAR=base-value"}
-	env, err := prepareStepEnvironment(baseEnv, "some-identity", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "some-identity", "step1", nil, nil, nil, nil)
 
 	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	assert.Nil(t, env)
@@ -898,6 +924,7 @@ func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
 			DoAndReturn(func(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
 				assert.Equal(t, "parent-id", identityName)
 				assert.Contains(t, currentEnv, "BASE_VAR=base-value")
+				assert.Contains(t, currentEnv, "PERSISTENT_VAR=persistent-value")
 				return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
 			}),
 	)
@@ -920,6 +947,7 @@ func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
 		dryRun:              true,
 		commandLineIdentity: "parent-id",
 		baseEnv:             []string{"BASE_VAR=base-value"},
+		persistentEnv:       map[string]string{"PERSISTENT_VAR": "persistent-value"},
 		authManager:         authManager,
 	}, parent)
 
@@ -1025,7 +1053,7 @@ func TestPrepareStepEnvironment_WithBaseEnv(t *testing.T) {
 	}
 
 	// When no identity is specified, should return base environment.
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
@@ -1039,7 +1067,7 @@ func TestPrepareStepEnvironment_WithBaseEnv(t *testing.T) {
 func TestPrepareStepEnvironment_EmptyBaseEnv(t *testing.T) {
 	baseEnv := []string{}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, nil)
 
 	assert.NoError(t, err)
 	// With empty baseEnv and no workflow/step env, should return empty.
@@ -1053,7 +1081,7 @@ func TestPrepareStepEnvironment_WithWorkflowEnv(t *testing.T) {
 		"WORKFLOW_VAR": "workflow-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
@@ -1063,6 +1091,27 @@ func TestPrepareStepEnvironment_WithWorkflowEnv(t *testing.T) {
 	assert.Contains(t, env, "WORKFLOW_VAR=workflow-value")
 }
 
+func TestPrepareStepEnvironment_PreservesToolchainPathWithWorkflowPathOverride(t *testing.T) {
+	separator := string(os.PathListSeparator)
+	systemPath := strings.Join([]string{"/usr/local/bin", "/usr/bin"}, separator)
+	baseEnv := []string{
+		"PATH=" + systemPath,
+		"PATH=" + strings.Join([]string{"/toolchain/bat", systemPath}, separator),
+	}
+	workflowEnv := map[string]string{
+		"PATH": strings.Join([]string{"/workspace/.context/bin", systemPath}, separator),
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, nil)
+
+	require.NoError(t, err)
+	assert.Contains(t, env, "PATH="+strings.Join([]string{
+		"/workspace/.context/bin",
+		"/toolchain/bat",
+		systemPath,
+	}, separator))
+}
+
 // TestPrepareStepEnvironment_WithStepEnv tests prepareStepEnvironment with step-level env.
 func TestPrepareStepEnvironment_WithStepEnv(t *testing.T) {
 	baseEnv := []string{"BASE_VAR=base-value"}
@@ -1070,7 +1119,7 @@ func TestPrepareStepEnvironment_WithStepEnv(t *testing.T) {
 		"STEP_VAR": "step-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, stepEnv)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil, stepEnv)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
@@ -1090,12 +1139,48 @@ func TestPrepareStepEnvironment_StepOverridesWorkflow(t *testing.T) {
 		"MY_VAR": "step-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, stepEnv)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, stepEnv)
 
 	assert.NoError(t, err)
 
 	// Check that step value is present (not workflow value).
 	assert.Contains(t, env, "MY_VAR=step-value")
+	assert.NotContains(t, env, "MY_VAR=workflow-value")
+}
+
+func TestPrepareStepEnvironment_PersistentEnvPrecedence(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	workflowEnv := map[string]string{
+		"MY_VAR": "workflow-value",
+	}
+	persistentEnv := map[string]string{
+		"MY_VAR": "env-step-value",
+	}
+	stepEnv := map[string]string{
+		"MY_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, persistentEnv, stepEnv)
+
+	require.NoError(t, err)
+	assert.Contains(t, env, "MY_VAR=step-value")
+	assert.NotContains(t, env, "MY_VAR=workflow-value")
+	assert.NotContains(t, env, "MY_VAR=env-step-value")
+}
+
+func TestPrepareStepEnvironment_PersistentEnvOverridesWorkflow(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	workflowEnv := map[string]string{
+		"MY_VAR": "workflow-value",
+	}
+	persistentEnv := map[string]string{
+		"MY_VAR": "env-step-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, persistentEnv, nil)
+
+	require.NoError(t, err)
+	assert.Contains(t, env, "MY_VAR=env-step-value")
 	assert.NotContains(t, env, "MY_VAR=workflow-value")
 }
 
@@ -1109,7 +1194,7 @@ func TestPrepareStepEnvironment_MergesWorkflowAndStep(t *testing.T) {
 		"STEP_VAR": "step-value",
 	}
 
-	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, stepEnv)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil, stepEnv)
 
 	assert.NoError(t, err)
 
@@ -1325,6 +1410,9 @@ func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T
 	err = ExecuteWorkflow(atmosConfig, "test-failure-continuation", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
+	assert.Equal(t, 7, errUtils.GetExitCode(err))
+	_, stored := stepExecutorState.GetResult("fail-step")
+	assert.False(t, stored)
 	formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 	assert.Contains(t, strings.ReplaceAll(formattedErr, "\n", ""), "fail-step")
 
@@ -1446,7 +1534,13 @@ func TestExecuteWorkflow_DryRunShell(t *testing.T) {
 
 	// Dry run should not execute the command.
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	result, stored := stepExecutorState.GetResult("step1")
+	require.True(t, stored)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, "", result.Metadata["stdout"])
+	assert.Equal(t, "", result.Metadata["stderr"])
+	assert.Equal(t, 0, result.Metadata["exit_code"])
 }
 
 func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {
@@ -1648,6 +1742,14 @@ func registerGitHubLogGroupingForWorkflowTest(t *testing.T) *bytes.Buffer {
 		output:   output,
 	})
 	t.Setenv("GITHUB_ACTIONS", "true")
+	// This test binary can itself run as a child of a CI-grouped step (this
+	// repo's own atmos.yaml sets ci.enabled: true, and CI runs `go test` via
+	// an `atmos test acceptance` custom-command step), in which case the ci
+	// package's nesting sentinel is already present in the process
+	// environment and would make grouping silently no-op below. Clear it so
+	// the caller's assertions on emitted markers are deterministic regardless
+	// of how the test binary itself was launched.
+	t.Setenv("ATMOS_CI_LOG_GROUP_ACTIVE", "")
 	return output
 }
 
@@ -1813,6 +1915,91 @@ func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-mixed-types", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_EnvStepPersistsToLaterSteps verifies that ExecuteWorkflow's
+// own accumulation of exported `type: env` values (persistentEnv) reaches a
+// later step's subprocess, not just the step that declared the vars.
+func TestExecuteWorkflow_EnvStepPersistsToLaterSteps(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	var captured map[string]string
+	stepPkg.Register(&envSnapshotHandler{
+		BaseHandler: stepPkg.NewBaseHandler("test-capture-env-persist", stepPkg.CategoryCommand, false),
+		captured:    &captured,
+	})
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test env step values persist to a later step's process env",
+		Steps: []schema.WorkflowStep{
+			{
+				Name: "set-env",
+				Type: "env",
+				Vars: map[string]string{"ATMOS_TEST_PERSIST_ENV": "persisted-value"},
+			},
+			{
+				Name: "verify-env",
+				Type: "test-capture-env-persist",
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-env-persist", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.NoError(t, err, "a later step must see the exported env-step value in its process environment")
+	assert.Equal(t, "persisted-value", captured["ATMOS_TEST_PERSIST_ENV"])
+}
+
+// TestExecuteWorkflow_EnvStepExportFalseDoesNotPersistToProcess is the negative
+// counterpart: an `export: false` env step must NOT reach a later step's
+// process environment (it stays template-only), so the accumulation gate at
+// ExecuteWorkflow's env-step handling must not fire.
+func TestExecuteWorkflow_EnvStepExportFalseDoesNotPersistToProcess(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	var captured map[string]string
+	stepPkg.Register(&envSnapshotHandler{
+		BaseHandler: stepPkg.NewBaseHandler("test-capture-env-persist-false", stepPkg.CategoryCommand, false),
+		captured:    &captured,
+	})
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test export:false env step does not leak into a later step's process env",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:   "set-env",
+				Type:   "env",
+				Export: boolPtr(false),
+				Vars:   map[string]string{"ATMOS_TEST_PERSIST_ENV_FALSE": "should-not-leak"},
+			},
+			{
+				Name: "verify-env-absent",
+				Type: "test-capture-env-persist-false",
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-env-persist-export-false", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.NoError(t, err, "export:false must keep the value out of a later step's process environment")
+	_, present := captured["ATMOS_TEST_PERSIST_ENV_FALSE"]
+	assert.False(t, present, "export:false value must not reach a later step's process environment")
 }
 
 // TestExecuteWorkflow_CommandLineStackOverride tests command-line stack overrides all.
@@ -2123,4 +2310,42 @@ func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
 	err = ExecuteWorkflow(atmosConfig, "exec-not-last", "test.yaml", workflowDefinition, true, "", "", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
+}
+
+// TestExecuteWorkflowUI_TUIStartFailureIsReturned covers the line in
+// ExecuteWorkflowUI right after `w.Execute(...)` (`_ = data.Writeln("")`),
+// which unconditionally runs whether or not the TUI started successfully.
+//
+// In a headless test process there is no controlling TTY, so Bubble Tea's
+// Program.Run() cannot open one (see charmbracelet/bubbletea's
+// openInputTTY, which falls back to opening /dev/tty and fails fast when
+// none is available) and returns an error immediately instead of blocking on
+// input. That lets this test reach the `data.Writeln("")` line and the
+// subsequent `if err != nil { return ..., err }` branch without needing a
+// real interactive session.
+//
+// This fails-fast behavior is Unix-specific: on Windows, Bubble Tea reads
+// input via syscall.ReadConsole against the process's console handle, which
+// blocks waiting for real input instead of erroring when there's no
+// interactive session, hanging this test (and the whole package's test
+// binary) until the CI job's 40-minute timeout kills it.
+func TestExecuteWorkflowUI_TUIStartFailureIsReturned(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: Bubble Tea's console input read blocks instead of failing fast without a TTY")
+	}
+
+	tmpDir := t.TempDir()
+	workflowsDir := filepath.Join(tmpDir, "workflows")
+	require.NoError(t, os.MkdirAll(workflowsDir, 0o755))
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Workflows: schema.Workflows{
+			BasePath: "workflows",
+		},
+	}
+
+	_, _, _, err := ExecuteWorkflowUI(atmosConfig)
+
+	require.Error(t, err)
 }

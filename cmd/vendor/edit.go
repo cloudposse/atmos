@@ -2,7 +2,6 @@ package vendor
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -13,7 +12,7 @@ import (
 )
 
 // DefaultVendorManifest is the default vendor manifest filename.
-const DefaultVendorManifest = "vendor.yaml"
+const DefaultVendorManifest = vendoring.DefaultVendorFile
 
 // vendorFileFlag overrides which vendor manifest to read/edit.
 var vendorFileFlag string
@@ -85,14 +84,11 @@ func resolveVendorFile() (string, error) {
 }
 
 func resolveVendorFileWithOverride(file string) (string, error) {
-	if file != "" {
-		return file, nil
-	}
-	if _, err := os.Stat(DefaultVendorManifest); err == nil {
-		return DefaultVendorManifest, nil
+	if resolved, ok := vendoring.VendorFilePresent(file); ok {
+		return resolved, nil
 	}
 	return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
 		WithExplanation(fmt.Sprintf("No %s found in the current directory.", DefaultVendorManifest)).
-		WithHint("Run from a directory containing vendor.yaml, or pass --file <manifest>.").
+		WithHint("Run from a directory containing vendor.yaml, or pass --file to point at one.").
 		Err()
 }

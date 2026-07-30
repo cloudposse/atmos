@@ -39,6 +39,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -733,6 +734,14 @@ func TestMain(m *testing.M) {
 	// download planfiles from GitHub Artifacts during tests.
 	os.Unsetenv("GITHUB_ACTIONS")
 
+	// Ensure this test-only variable used by the "env-step-template-only"
+	// workflow fixture starts unset. That test asserts the variable is absent
+	// from a subprocess's environment when an env step sets export: false; a
+	// stray pre-existing value (e.g. left over from a developer's shell)
+	// would make the assertion fail even though export: false behaves
+	// correctly. See tests/fixtures/scenarios/workflows/stacks/workflows/test.yaml.
+	os.Unsetenv("ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":
@@ -1108,7 +1117,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
+		// Do not inherit a terminal width from the host. Let Atmos use each
+		// command's documented fallback unless a test explicitly exercises
+		// COLUMNS (for example, the toolchain table tests below).
+		tc.Env["COLUMNS"] = ""
 	}
 
 	// Standardize the terraform binary on OpenTofu for the whole suite so the
@@ -1674,6 +1686,12 @@ func normalizeLineEndings(s string) string {
 func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
 	normalized := normalizeLineEndings(input)
 	normalized = unwrapMarkdownProseLines(normalized)
+	// Cobra help output can differ by one final blank line between platforms.
+	// Canonicalize only output that already ends in a newline, leaving progress
+	// output terminated by a standalone carriage return untouched.
+	if strings.HasSuffix(normalized, "\n") {
+		normalized = strings.TrimRight(normalized, "\n") + "\n"
+	}
 	if ignoreTrailingWhitespace {
 		return stripTrailingWhitespace(normalized)
 	}
@@ -1732,6 +1750,26 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 	return true
 }
 
+// snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
+// at the start of a rendered log line. These must never be merged into
+// adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+
+// snapshotToastIconPrefixes lists the canonical single-line toast icons from
+// pkg/ui/theme/icons.go. A line starting with one of these icons is always an
+// independent ui.Success/Info/Warning/Error/Experimental call, never a
+// word-wrapped continuation of the previous line's markdown paragraph, so it
+// must never be merged during snapshot normalization. Sourced directly from
+// the theme package so new icons don't silently reopen this bug.
+var snapshotToastIconPrefixes = []string{
+	theme.IconCheckmark,
+	theme.IconXMark,
+	theme.IconWarning,
+	theme.IconInfo,
+	theme.IconExperimental,
+}
+
 func isSnapshotStructuralLine(line string) bool {
 	switch {
 	case strings.HasPrefix(line, "#"):
@@ -1740,13 +1778,25 @@ func isSnapshotStructuralLine(line string) bool {
 		return true
 	case strings.HasPrefix(line, "* "):
 		return true
+	// "• " is the glamour-rendered bullet glyph that markdown source "- "/"* "
+	// becomes after rendering; treat it the same as the raw markdown prefixes above.
+	case strings.HasPrefix(line, "• "):
+		return true
 	case strings.HasPrefix(line, "```"):
 		return true
 	case strings.HasPrefix(line, "│"):
 		return true
 	case strings.HasPrefix(line, "╷") || strings.HasPrefix(line, "╵"):
 		return true
+	// charm-log level prefixes must never be merged into adjacent markdown prose.
+	case snapshotLogLevelPrefixRe.MatchString(line):
+		return true
 	default:
+		for _, icon := range snapshotToastIconPrefixes {
+			if strings.HasPrefix(line, icon) {
+				return true
+			}
+		}
 		return false
 	}
 }

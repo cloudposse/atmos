@@ -51,6 +51,52 @@ components:
 	return dir
 }
 
+// writeAtmosProjectWithUnresolvedState is writeMinimalAtmosProject plus a second component,
+// app-config, whose vars reference the vpc component's terraform state (never provisioned in this
+// test) and which declares one secret. It reproduces a component shaped like
+// examples/quick-start-advanced's app-config: resolving where to write/read its secrets should not
+// require sibling components' terraform state to already exist.
+func writeAtmosProjectWithUnresolvedState(t *testing.T) string {
+	t.Helper()
+
+	dir := writeMinimalAtmosProject(t)
+	full := filepath.Join(dir, "stacks", "deploy", "dev.yaml")
+	require.NoError(t, os.WriteFile(full, []byte(`vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      vars:
+        name: myvpc
+    app-config:
+      vars:
+        bucket_id: !terraform.state vpc bucket_id
+      secrets:
+        vars:
+          API_KEY:
+            store: secrets/ssm
+            required: true
+`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "app-config"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "components", "terraform", "app-config", "main.tf"), []byte("# app-config component.\n"), 0o644))
+	return dir
+}
+
+// TestLoadServiceAndConfig_ToleratesUnresolvedTerraformState guards against a regression where
+// loadServiceAndConfig (backing every `secret set/get/delete/push/pull/import/init/validate`
+// subcommand) eagerly evaluated every YAML function in the component's full merged config —
+// including !terraform.state references to sibling components that haven't been deployed yet —
+// even though resolving where to write/read a secret only needs secrets.vars/secrets.providers.
+func TestLoadServiceAndConfig_ToleratesUnresolvedTerraformState(t *testing.T) {
+	t.Chdir(writeAtmosProjectWithUnresolvedState(t))
+
+	svc, atmosConfig, err := loadServiceAndConfig(secretScope{Stack: "dev", Component: "app-config"})
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+	require.NotNil(t, atmosConfig)
+	assert.True(t, svc.IsDeclared("API_KEY"), "the secret declared on app-config must still be visible")
+}
+
 func TestLoadService_Success(t *testing.T) {
 	t.Chdir(writeMinimalAtmosProject(t))
 

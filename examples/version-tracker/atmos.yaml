@@ -1,0 +1,110 @@
+# The Atmos Version Tracker: two complementary stories.
+#
+# 1. File managers (implicit "default" track): one catalog of external
+#    versions in atmos.yaml, resolved deterministically into
+#    versions.lock.yaml, and applied to project files by the file managers:
+#
+#      atmos version track lock      # resolve desired versions into the lock
+#      atmos version track update    # advance within the update policy
+#      atmos version track apply     # rewrite managed files from the lock
+#      atmos version track verify    # CI gate: lock fresh AND files current
+#
+# 2. Track independence + stack vars ("dev"/"prod" tracks): dev and prod
+#    resolve independently across three real ecosystems, and stacks read
+#    locked versions straight into component vars via !version / {{ .version.* }}:
+#
+#      atmos version track list
+#      atmos version track set redis --desired=7.4.1 --track=dev
+#      atmos version track lock dev
+#      atmos describe component app -s dev --query .vars.redis_image
+#
+# Desired versions here are concrete, so every command works offline.
+base_path: "."
+
+version:
+  dependencies:
+    # GitHub Actions ref rewritten in workflows/ci.yaml by the
+    # github-actions file manager.
+    checkout:
+      ecosystem: github-actions
+      package: actions/checkout
+      desired: v6.1.0
+
+    # Tool version rewritten in the Dockerfile via a marker comment.
+    opentofu:
+      ecosystem: toolchain
+      package: opentofu
+      desired: 1.10.6
+
+    # Rendered into versions.json from versions.json.tmpl.
+    nginx:
+      ecosystem: oci
+      package: library/nginx
+      desired: 1.29.0
+
+    # Referenced directly from stack vars (stacks/deploy/*.yaml) — never
+    # file-managed. dev and prod override `desired` independently below, one
+    # real dependency per registered ecosystem (toolchain, oci, github-actions).
+    kubectl:
+      ecosystem: toolchain
+      package: kubectl
+      desired: 1.29.4
+    redis:
+      ecosystem: oci
+      package: library/redis
+      desired: 7.2.5
+    setup_node:
+      ecosystem: github-actions
+      package: actions/setup-node
+      desired: v4.0.0
+
+  tracks:
+    dev:
+      dependencies:
+        kubectl:
+          desired: 1.31.0
+        redis:
+          desired: 7.4.0
+        setup_node:
+          desired: v4.1.0
+    prod:
+      dependencies:
+        kubectl:
+          desired: 1.29.4
+        redis:
+          desired: 7.2.5
+        setup_node:
+          desired: v4.0.0
+
+  files:
+    - manager: github-actions
+      paths:
+        - workflows/*.yaml
+    - manager: marker
+      paths:
+        - Dockerfile
+    - manager: template
+      paths:
+        - "*.tmpl"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true

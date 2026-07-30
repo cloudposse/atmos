@@ -26,7 +26,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
@@ -151,23 +150,7 @@ func buildMirrorArgs(platforms []string, providersDir string) []string {
 // startSharedCache starts the registry cache proxy once and returns it plus a cleanup
 // func. Returns a no-op cleanup when caching is disabled.
 func startSharedCache(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
-	setup, err := tfcache.Start(ctx, atmosConfig)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	if setup == nil {
-		return nil, func() {}, nil
-	}
-	cleanup := func() {
-		if closeErr := setup.Close(ctx); closeErr != nil {
-			log.Debug("Failed to shut down Terraform registry cache", "error", closeErr)
-		}
-	}
-	if trustErr := setup.VerifyTrust(ctx); trustErr != nil {
-		cleanup()
-		return nil, func() {}, trustErr
-	}
-	return setup, cleanup, nil
+	return tfcache.StartForExecution(ctx, atmosConfig)
 }
 
 // runMirror mirrors every target: sequentially (suppressing output) for json/yaml, or

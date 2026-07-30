@@ -230,3 +230,46 @@ func TestGetSkillsDir(t *testing.T) {
 	assert.Contains(t, dir, ".atmos")
 	assert.Contains(t, dir, "skills")
 }
+
+func TestResolveSkillsDir(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	homedir.Reset()
+
+	wantDefault, err := GetSkillsDir()
+	require.NoError(t, err)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		override string
+		want     string
+	}{
+		{
+			name:     "empty override delegates to GetSkillsDir",
+			override: "",
+			want:     wantDefault,
+		},
+		{
+			name:     "absolute override is used verbatim",
+			override: filepath.Join(tempHome, "custom-skills"),
+			want:     filepath.Join(tempHome, "custom-skills"),
+		},
+		{
+			name:     "relative override resolves against CWD",
+			override: filepath.Join(".", "relative-skills"),
+			want:     filepath.Join(cwd, "relative-skills"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveSkillsDir(tt.override)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

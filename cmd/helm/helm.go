@@ -1,18 +1,22 @@
 package helm
 
 import (
+	"context"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -24,6 +28,12 @@ const (
 )
 
 var helmParser *flags.StandardParser
+
+var (
+	helmInitCliConfig     = cfg.InitCliConfig
+	helmDescribeStacks    = e.ExecuteDescribeStacks
+	helmListAllComponents = component.ListAllComponents
+)
 
 var helmCmd = &cobra.Command{
 	Use:   "helm",
@@ -73,44 +83,89 @@ func (p *CommandProvider) GetCompatibilityFlags() map[string]compat.Compatibilit
 func (p *CommandProvider) IsExperimental() bool { return true }
 
 func newOperationCommand(name, short string) *cobra.Command {
+	var parser *flags.StandardParser
 	cmd := &cobra.Command{
 		Use:   name + " [component]",
-		Args:  validateOperationArgs,
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runOperation(cmd, name, args)
+			parsed, err := parser.Parse(context.Background(), args)
+			if err != nil {
+				return err
+			}
+			return runOperation(cmd, name, parsed.GetPositionalArgs())
 		},
 	}
 
-	cmd.Flags().Bool("all", false, "Process all Helm components in dependency order.")
-	cmd.Flags().Bool("affected", false, "Process affected Helm components in dependency order.")
-	cmd.Flags().Bool("ci", false, "Enable CI mode for automated pipelines (writes job summary).")
-	cmd.Flags().Bool("include-dependents", false, "Include dependent components when processing affected Helm components.")
-	cmd.Flags().String("repo-path", "", "Path to the already cloned target repository to use as the affected baseline.")
-	cmd.Flags().String("base", "", "Git base ref or SHA to compare against for affected detection.")
-	cmd.Flags().String("ref", "", "Git ref to compare against for affected detection.")
-	cmd.Flags().String("sha", "", "Git SHA to compare against for affected detection.")
-	cmd.Flags().String("ssh-key", "", "Path to the SSH private key used to clone the target ref for affected detection.")
-	cmd.Flags().String("ssh-key-password", "", "Password for the SSH private key used to clone the target ref for affected detection.")
-	cmd.Flags().Bool("clone-target-ref", false, "Clone the target ref instead of checking it out in the current repository for affected detection.")
+	options := operationFlagOptions(name)
+	options = append(options, flags.WithConditionalPositionalArgPrompt(
+		"component",
+		"Choose a Helm component",
+		componentArgCompletion,
+		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
+	))
+	parser = flags.NewStandardParser(options...)
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:           "component",
+		Description:    "Helm component",
+		Required:       true,
+		TargetField:    "Component",
+		CompletionFunc: componentArgCompletion,
+		PromptTitle:    "Choose a Helm component",
+	})
+	specs, _, usage := argsBuilder.Build()
+	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
+	parser.RegisterFlags(cmd)
+	cmd.ValidArgsFunction = componentArgCompletion
+
+	return cmd
+}
+
+// operationFlagOptions returns the standard-parser options for a Helm operation
+// command: the shared selection/affected flags plus operation-specific output and target flags.
+func operationFlagOptions(name string) []flags.Option {
+	options := []flags.Option{
+		flags.WithBoolFlag("all", "", false, "Process all Helm components in dependency order."),
+		flags.WithBoolFlag("affected", "", false, "Process affected Helm components in dependency order."),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary)."),
+		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected Helm components."),
+		flags.WithStringFlag("repo-path", "", "", "Path to the already cloned target repository to use as the affected baseline."),
+		flags.WithStringFlag("base", "", "", "Git base ref or SHA to compare against for affected detection."),
+		flags.WithStringFlag("ref", "", "", "Git ref to compare against for affected detection."),
+		flags.WithStringFlag("sha", "", "", "Git SHA to compare against for affected detection."),
+		flags.WithStringFlag("ssh-key", "", "", "Path to the SSH private key used to clone the target ref for affected detection."),
+		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
+		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
+		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+	}
 
 	if name == "template" {
-		cmd.Flags().String("output", "", "Write rendered manifests to a single multi-document YAML file.")
-		cmd.Flags().String("output-dir", "", "Write rendered manifests to a directory.")
-		cmd.Flags().Bool("split", false, "Write one rendered manifest file per object. Requires --output-dir.")
+		options = append(
+			options,
+			flags.WithStringFlag("output", "", "", "Write rendered manifests to a single multi-document YAML file."),
+			flags.WithStringFlag("output-dir", "", "", "Write rendered manifests to a directory."),
+			flags.WithBoolFlag("split", "", false, "Write one rendered manifest file per object. Requires --output-dir."),
+		)
 	}
 
 	if name == "apply" || name == "deploy" {
-		cmd.Flags().String("target", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster.")
+		options = append(
+			options,
+			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
+		)
 	}
 
 	if name == "diff" || name == "plan" {
-		cmd.Flags().String("against", "", "Baseline to diff against: 'release' (the deployed release, default), or 'target[:<name>]' for the git deployment-repo provision target (offline).")
-		cmd.Flags().String("from-manifest", "", "Diff against a local baseline manifest file instead of the cluster (offline).")
-		cmd.Flags().Int("context", 3, "Number of unchanged context lines to show around each change.")
+		options = append(
+			options,
+			flags.WithStringFlag("against", "", "", "Baseline to diff against: 'release' (the deployed release, default), or 'target[:<name>]' for the git deployment-repo provision target (offline)."),
+			flags.WithStringFlag("from-manifest", "", "", "Diff against a local baseline manifest file instead of the cluster (offline)."),
+			flags.WithIntFlag("context", "", 3, "Number of unchanged context lines to show around each change."),
+		)
 	}
 
-	return cmd
+	return options
 }
 
 func validateOperationArgs(cmd *cobra.Command, args []string) error {
@@ -119,13 +174,52 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	if all && affected {
 		return errUtils.ErrHelmFlagsMutuallyExclusive
 	}
-	if all || affected {
+
+	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
+	labelsFlag, _ := cmd.Flags().GetString("labels")
+	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
+		return err
+	}
+	hasTagsOrLabels := len(tagsFlag) > 0 || labelsFlag != ""
+
+	if all || affected || hasTagsOrLabels {
 		return validateSelectionFlags(cmd, args)
 	}
 	if len(args) != 1 {
 		return errUtils.ErrHelmComponentArgRequired
 	}
 	return nil
+}
+
+func hasSelectionFlags(cmd *cobra.Command) bool {
+	all, _ := cmd.Flags().GetBool(flagAll)
+	affected, _ := cmd.Flags().GetBool(flagAffected)
+	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
+	labelsFlag, _ := cmd.Flags().GetString("labels")
+	return all || affected || len(tagsFlag) > 0 || labelsFlag != ""
+}
+
+// componentArgCompletion returns names for native Helm components, optionally
+// limited to the selected stack.
+func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	info := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := helmInitCliConfig(info, true)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	stacksMap, err := helmDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.HelmComponentType}, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	components, err := helmListAllComponents(context.Background(), cfg.HelmComponentType, stacksMap)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return components, cobra.ShellCompDirectiveNoFileComp
 }
 
 func validateSelectionFlags(cmd *cobra.Command, args []string) error {
@@ -212,6 +306,13 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	}
 	if affectedFlag := cmd.Flag(flagAffected); affectedFlag != nil && affectedFlag.Value.String() == valueTrue {
 		info.Affected = true
+	}
+	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
+		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
+	}
+	if labelsFlag := cmd.Flag("labels"); labelsFlag != nil {
+		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
+		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
 	}
 
 	return info

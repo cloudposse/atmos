@@ -351,6 +351,55 @@ func TestRecorderOutputRateSplitsTerminalLines(t *testing.T) {
 	}
 }
 
+func TestRecorderRedrawChunkIsNotStretched(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.cast")
+	rec, err := Start(&Options{Path: path, Explicit: true, OutputRate: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mirrors a Bubbletea non-altscreen redraw: cursor-up N lines, then each
+	// row rewritten with erase-to-end-of-line, joined by CRLF.
+	redraw := "\x1b[3A" + "row one\x1b[K\r\n" + "row two\x1b[K\r\n" + "row three\x1b[K"
+	if err := rec.Event("o", redraw); err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := readCastLines(t, path)
+	if len(lines) != 2 {
+		t.Fatalf("line count = %d, want header plus 1 event (redraw must not split):\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[1], `row one`) || !strings.Contains(lines[1], `row three`) {
+		t.Fatalf("event does not contain the full redraw chunk: %s", lines[1])
+	}
+}
+
+func TestIsRedrawChunkDetectsCursorAndEraseSequences(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"cursor up", "\x1b[19Asome text", true},
+		{"erase line", "text\x1b[K", true},
+		{"erase line with param", "text\x1b[2K", true},
+		{"erase screen", "\x1b[Jtext", true},
+		{"cursor home", "\x1b[Htext", true},
+		{"cursor position", "\x1b[3;1Htext", true},
+		{"plain multiline text", "one\ntwo\nthree\n", false},
+		{"sgr color only", "\x1b[38;2;16;255;16mhello\x1b[0m\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isRedrawChunk(tt.content); got != tt.want {
+				t.Fatalf("isRedrawChunk(%q) = %v, want %v", tt.content, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRecorderNilAndEmptyOperationsAreNoops(t *testing.T) {
 	var rec *Recorder
 	if rec.Path() != "" {

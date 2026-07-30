@@ -171,12 +171,13 @@ func TestExecuteControlStepUsesPrefixedOutputAndCustomTemplateData(t *testing.T)
 			ShowSummary: boolPtr(false),
 		},
 		Steps: []schema.WorkflowStep{{
-			Name:    "echo",
-			Type:    schema.TaskTypeShell,
-			Command: "echo {{ .custom }}",
-			Stack:   "{{ .custom }}-stack",
-			Timeout: "{{ .custom }}s",
-			Env:     map[string]string{"CUSTOM": "{{ .custom }}"},
+			Name:             "echo",
+			Type:             schema.TaskTypeShell,
+			Command:          "echo {{ .custom }}",
+			Stack:            "{{ .custom }}-stack",
+			Timeout:          "{{ .custom }}s",
+			WorkingDirectory: "{{ .custom }}-dir",
+			Env:              map[string]string{"CUSTOM": "{{ .custom }}"},
 		}},
 	}
 
@@ -198,6 +199,7 @@ func TestExecuteControlStepUsesPrefixedOutputAndCustomTemplateData(t *testing.T)
 	assert.Equal(t, "echo value", gotStep.Command)
 	assert.Equal(t, "value-stack", gotStep.Stack)
 	assert.Equal(t, "values", gotStep.Timeout)
+	assert.Equal(t, "value-dir", gotStep.WorkingDirectory)
 	assert.Equal(t, map[string]string{"CUSTOM": "value"}, gotStep.Env)
 }
 

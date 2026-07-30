@@ -6,6 +6,7 @@ id: ansible
 description: Run Ansible playbooks with the same stack-based configuration used for Terraform and Helmfile. Stack variables are automatically passed via --extra-vars.
 ---
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Atmos natively supports opinionated workflows for [Ansible](https://docs.ansible.com/ansible/latest/index.html). Ansible provides agentless automation for configuration management, application deployment, and infrastructure orchestration.
@@ -75,6 +76,12 @@ Command-line flags take precedence over stack manifest settings:
 ```bash
 atmos ansible playbook webserver -s prod --playbook deploy.yml -i inventory/staging
 ```
+
+## Try It
+
+Explore a minimal, working example demonstrating how stack variables are passed to Ansible playbooks.
+
+<EmbedExample example="demo-ansible" />
 
 ## Related
 
