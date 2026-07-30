@@ -61,7 +61,7 @@ well-formed error (`errUtils.ErrParseFile` + source + file path + the underlying
   `TestLoadConfig_DefaultConfigWithGitRootAtmosDMalformedYAMLHardFails` (no atmos.yaml,
   broken `.atmos.d` at the git root) as full `LoadConfig` integration tests. All new
   malformed-YAML tests assert the error message contains both the broken file's path and
-  a `line ` marker, locking in that file/line detail survives the `errors.Join`/`%w`
+  a `"line "` substring, locking in that file/line detail survives the `errors.Join`/`%w`
   propagation chain to the terminal.
 
 ## Validation
