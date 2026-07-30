@@ -49,9 +49,12 @@ actually reading/writing the real user-level `cache.yaml`, polluting developer m
     with the same isolation helper.
   - Dropped the now-unused `path/filepath` import.
 
-Commit: `96666c3808` on `osterman/support-ci-git-clone` (PR #2812). Supporting earlier commits in
-the same investigation: `a68e195d85` (forensics), `c0181b8f07` / `fdbb83ff15` (toolchain test
-`InstallPath` isolation), `3f217e6851` / `0cfc8dd925` (lookup error-reporting and TOCTOU fixes).
+Commit: `96666c3808` (originally landed on `osterman/support-ci-git-clone`, PR #2812). Supporting
+earlier commits in the same investigation: `a68e195d85` (forensics), `c0181b8f07` / `fdbb83ff15`
+(toolchain test `InstallPath` isolation), `3f217e6851` / `0cfc8dd925` (lookup error-reporting and
+TOCTOU fixes). This self-contained investigation was cherry-picked off `osterman/support-ci-git-clone`
+onto `osterman/toolchain-cache-fix-own-pr` to ship as its own PR, independent of #2812's unrelated
+CI git-clone-bootstrap feature.
 
 ## Validation
 
