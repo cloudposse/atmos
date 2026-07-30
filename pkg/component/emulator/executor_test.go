@@ -476,6 +476,38 @@ func TestEmulatorStatuses_ConfiguredErrors(t *testing.T) {
 		_, err := emulatorStatuses(context.Background(), baseInfo(), false)
 		require.ErrorIs(t, err, errBoom)
 	})
+
+	for _, testCase := range []struct {
+		name     string
+		sentinel error
+	}{
+		{name: "no stack manifests", sentinel: errUtils.ErrFailedToFindImport},
+		{name: "no stacks found", sentinel: errUtils.ErrNoStacksFound},
+	} {
+		t.Run(testCase.name+" degrades to empty", func(t *testing.T) {
+			stubConfiguredListSeams(t, &fakeManager{}, nil)
+			describeEmulatorStacks = func(
+				_ *schema.AtmosConfiguration,
+				_ string,
+				_ []string,
+				_ []string,
+				_ []string,
+				_ bool,
+				_ bool,
+				_ bool,
+				_ bool,
+				_ []string,
+				_ auth.AuthManager,
+				_ bool,
+			) (map[string]any, error) {
+				return nil, testCase.sentinel
+			}
+
+			statuses, err := emulatorStatuses(context.Background(), baseInfo(), false)
+			require.NoError(t, err)
+			assert.Empty(t, statuses)
+		})
+	}
 }
 
 func TestExecuteList_ListsStatuses(t *testing.T) {
@@ -512,6 +544,28 @@ func TestExecuteList_Error(t *testing.T) {
 	err := ExecuteList(context.Background(), baseInfo(), true)
 	require.ErrorIs(t, err, errBoom)
 	assert.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
+}
+
+func TestExecuteList_NoStackManifests(t *testing.T) {
+	stubConfiguredListSeams(t, &fakeManager{}, nil)
+	describeEmulatorStacks = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ []string,
+		_ []string,
+		_ []string,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ auth.AuthManager,
+		_ bool,
+	) (map[string]any, error) {
+		return nil, errUtils.ErrFailedToFindImport
+	}
+
+	require.NoError(t, ExecuteList(context.Background(), baseInfo(), false))
 }
 
 func TestShortImage(t *testing.T) {
