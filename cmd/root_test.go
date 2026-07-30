@@ -256,6 +256,11 @@ func saveRestoreAtmosConfig(t *testing.T) {
 func TestApplyCIGitCloneBootstrap_AllowsBootstrap(t *testing.T) {
 	saveRestoreAtmosConfig(t)
 	t.Setenv("GITHUB_ACTIONS", "true")
+	// Pin ATMOS_CI: resolveCICloneMode falls back to reading this env var when
+	// --ci isn't set, so an ambient ATMOS_CI=false in the developer/CI
+	// environment would otherwise make this test flaky (mirrors the guard in
+	// cmd/git/bootstrap_test.go).
+	t.Setenv("ATMOS_CI", "true")
 
 	cmd, args := newBootstrapCloneCmd(t, nil)
 	tmpConfig := &schema.AtmosConfiguration{}
@@ -285,6 +290,10 @@ func TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut(t *testing.T) {
 func TestApplyCIGitCloneBootstrap_NoCIProviderDetected(t *testing.T) {
 	saveRestoreAtmosConfig(t)
 	t.Setenv("GITHUB_ACTIONS", "false")
+	// Pin ATMOS_CI for determinism: ci.Detect() short-circuits before it's read
+	// here, but pinning avoids any ambient-value surprises if that ordering
+	// ever changes.
+	t.Setenv("ATMOS_CI", "true")
 
 	cmd, args := newBootstrapCloneCmd(t, nil)
 	tmpConfig := &schema.AtmosConfiguration{}
