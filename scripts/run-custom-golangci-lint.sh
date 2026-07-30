@@ -69,7 +69,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if git diff --cached --quiet -- '*.go'; then
+# During a merge, `git diff --cached` covers the whole incoming-branch diff (every
+# file the merge touches, not just what this resolution changed), so the staged-patch
+# path below would flag every pre-existing issue the other branch already merged as
+# "new". Compare against origin/main directly instead: files that came through
+# unmodified show no new lines, and only this merge's own conflict resolutions do.
+if git diff --cached --quiet -- '*.go' || git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
     ./custom-gcl "${args[@]}" --new-from-rev="${GOLANGCI_NEW_FROM_REV:-origin/main}"
 else
     staged_patch="$(mktemp "${TMPDIR:-/tmp}/atmos-golangci-staged.XXXXXX")"

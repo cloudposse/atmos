@@ -153,6 +153,14 @@ const (
 type DescribeStacksErrorOptions struct {
 	OnError   OnErrorMode
 	OnWarning func(DegradationWarning)
+	// OnProgress, when non-nil, is called once per stack file immediately before it's
+	// processed — stackFile is the file name, index is 0-based, total is the number of
+	// stack files describe-stacks will visit this call (both counted before filtering by
+	// includeEmptyStacks, so total is a stable upper bound even though some files are
+	// skipped). Bundled onto this struct (rather than a new parameter) purely for plumbing
+	// convenience — it shares the same threading path as OnError/OnWarning. Optional; a nil
+	// OnProgress is a no-op, matching every existing caller's behavior exactly.
+	OnProgress func(stackFile string, index, total int)
 }
 
 // ResolveErrorMode determines the effective --error-mode value using the documented
@@ -235,7 +243,27 @@ func ExecuteDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 ) (map[string]any, error) {
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, DescribeStacksErrorOptions{})
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, false, false, DescribeStacksErrorOptions{})
+}
+
+// ExecuteDescribeStacksWithMocks processes stacks with Terraform lookup mocks enabled.
+// It is used by Terraform's multi-component execution paths. It resolves declared
+// secrets eagerly so missing required values fail before the scheduler starts.
+func ExecuteDescribeStacksWithMocks(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	useMocks bool,
+) (map[string]any, error) {
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, true, DescribeStacksErrorOptions{})
 }
 
 // ExecuteDescribeStacksWithAuthDisabled processes stack manifests with auth explicitly disabled.
@@ -257,7 +285,27 @@ func ExecuteDescribeStacksWithAuthDisabled(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithAuthDisabled")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, DescribeStacksErrorOptions{})
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, false, DescribeStacksErrorOptions{})
+}
+
+// ExecuteDescribeStacksWithAuthDisabledAndMocks is the auth-disabled variant used
+// by affected Terraform plan execution when --use-mocks is selected.
+func ExecuteDescribeStacksWithAuthDisabledAndMocks(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	useMocks bool,
+) (map[string]any, error) {
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, useMocks, true, DescribeStacksErrorOptions{})
 }
 
 // ExecuteDescribeStacksWithOptions is ExecuteDescribeStacksWithAuthDisabled plus opt-in
@@ -285,7 +333,7 @@ func ExecuteDescribeStacksWithOptions(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithOptions")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, errOptions)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, false, errOptions)
 }
 
 //nolint:revive // Internal wrapper preserves the existing ExecuteDescribeStacks call shape.
@@ -302,6 +350,8 @@ func executeDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	useMocks bool,
+	resolveSecrets bool,
 	errOptions DescribeStacksErrorOptions,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
@@ -320,11 +370,20 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	processor.useMocks = useMocks
+	processor.resolveSecrets = resolveSecrets
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
 	}
 
+	totalStackFiles := len(stacksMap)
+	stackFileIndex := 0
 	for stackFileName, stackSection := range stacksMap {
+		if errOptions.OnProgress != nil {
+			errOptions.OnProgress(stackFileName, stackFileIndex, totalStackFiles)
+		}
+		stackFileIndex++
+
 		stackMap, ok := stackSection.(map[string]any)
 		if !ok {
 			continue

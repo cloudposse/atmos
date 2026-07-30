@@ -7,6 +7,7 @@ import (
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -563,8 +564,16 @@ func getPathFromEnv() string {
 func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map[string]string) (string, error) {
 	defer perf.Track(atmosConfig, "dependencies.BuildToolchainPATH")()
 
+	proxyEnv, err := toolchain.PrepareProxyEnvironment(atmosConfig)
+	if err != nil {
+		return "", fmt.Errorf("prepare toolchain proxies: %w", err)
+	}
+	currentPath := getPathFromEnv()
 	if len(dependencies) == 0 {
-		return getPathFromEnv(), nil
+		if proxyEnv.Path == "" || strings.HasPrefix(currentPath, proxyEnv.Path+string(os.PathListSeparator)) || currentPath == proxyEnv.Path {
+			return currentPath, nil
+		}
+		return strings.Join([]string{proxyEnv.Path, currentPath}, string(os.PathListSeparator)), nil
 	}
 
 	// Use the same path logic as toolchain installation to ensure PATH points
@@ -584,9 +593,14 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 	paths := collectToolchainDirs(locator, resolver, binDir, dependencies)
 
 	// Prepend toolchain paths to existing PATH.
-	currentPath := getPathFromEnv()
 	if len(paths) == 0 {
-		return currentPath, nil
+		if proxyEnv.Path == "" {
+			return currentPath, nil
+		}
+		paths = append(paths, proxyEnv.Path)
+	}
+	if proxyEnv.Path != "" && !slices.Contains(paths, proxyEnv.Path) {
+		paths = append([]string{proxyEnv.Path}, paths...)
 	}
 
 	// Append currentPath only when non-empty: a trailing list separator is

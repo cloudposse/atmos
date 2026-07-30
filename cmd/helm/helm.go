@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -26,6 +28,12 @@ const (
 )
 
 var helmParser *flags.StandardParser
+
+var (
+	helmInitCliConfig     = cfg.InitCliConfig
+	helmDescribeStacks    = e.ExecuteDescribeStacks
+	helmListAllComponents = component.ListAllComponents
+)
 
 var helmCmd = &cobra.Command{
 	Use:   "helm",
@@ -75,17 +83,40 @@ func (p *CommandProvider) GetCompatibilityFlags() map[string]compat.Compatibilit
 func (p *CommandProvider) IsExperimental() bool { return true }
 
 func newOperationCommand(name, short string) *cobra.Command {
+	var parser *flags.StandardParser
 	cmd := &cobra.Command{
 		Use:   name + " [component]",
-		Args:  validateOperationArgs,
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runOperation(cmd, name, args)
+			parsed, err := parser.Parse(context.Background(), args)
+			if err != nil {
+				return err
+			}
+			return runOperation(cmd, name, parsed.GetPositionalArgs())
 		},
 	}
 
-	// Register operation-specific flags through the standard parser for CLI consistency.
-	flags.NewStandardParser(operationFlagOptions(name)...).RegisterFlags(cmd)
+	options := operationFlagOptions(name)
+	options = append(options, flags.WithConditionalPositionalArgPrompt(
+		"component",
+		"Choose a Helm component",
+		componentArgCompletion,
+		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
+	))
+	parser = flags.NewStandardParser(options...)
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:           "component",
+		Description:    "Helm component",
+		Required:       true,
+		TargetField:    "Component",
+		CompletionFunc: componentArgCompletion,
+		PromptTitle:    "Choose a Helm component",
+	})
+	specs, _, usage := argsBuilder.Build()
+	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
+	parser.RegisterFlags(cmd)
+	cmd.ValidArgsFunction = componentArgCompletion
 
 	return cmd
 }
@@ -158,6 +189,37 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 		return errUtils.ErrHelmComponentArgRequired
 	}
 	return nil
+}
+
+func hasSelectionFlags(cmd *cobra.Command) bool {
+	all, _ := cmd.Flags().GetBool(flagAll)
+	affected, _ := cmd.Flags().GetBool(flagAffected)
+	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
+	labelsFlag, _ := cmd.Flags().GetString("labels")
+	return all || affected || len(tagsFlag) > 0 || labelsFlag != ""
+}
+
+// componentArgCompletion returns names for native Helm components, optionally
+// limited to the selected stack.
+func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	info := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := helmInitCliConfig(info, true)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	stacksMap, err := helmDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.HelmComponentType}, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	components, err := helmListAllComponents(context.Background(), cfg.HelmComponentType, stacksMap)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return components, cobra.ShellCompDirectiveNoFileComp
 }
 
 func validateSelectionFlags(cmd *cobra.Command, args []string) error {

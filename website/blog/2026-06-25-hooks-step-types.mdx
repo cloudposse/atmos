@@ -35,7 +35,7 @@ hooks:
   notify-slack:
     kind: step
     type: http                 # any registered step type
-    events: [after-terraform-apply]
+    events: [after.terraform.apply]
     on_failure: warn           # warn | fail | ignore
     retry:
       max_attempts: 3
@@ -62,7 +62,7 @@ hooks:
     kind: step
     type: container
     action: build
-    events: [after-terraform-apply]
+    events: [after.terraform.apply]
     on_failure: warn
     with:
       context: .
@@ -85,7 +85,7 @@ hooks:
   announce:
     kind: step
     type: say                 # (or http/toast)
-    events: [after-terraform-apply]
+    events: [after.terraform.apply]
     when: always
     with:
       message: >-

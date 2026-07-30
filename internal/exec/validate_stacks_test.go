@@ -91,7 +91,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	importsConfig := make(map[string]map[string]any)
 
 	// Process the YAML config file that imports conflicting configurations
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	_, err := ProcessYAMLConfigFile(
 		atmosConfig,
 		basePath,
 		filePath,
@@ -188,9 +188,9 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 // matrix, which only exercises the positive path (all example stacks must be valid).
 //
 // The invalid manifest is *structurally* valid (the `settings` section is free-form, so
-// the stack processor accepts a string for `settings.templates`) but violates the schema,
-// which requires `settings.templates` to be an object. The failure must therefore come
-// specifically from JSON Schema validation — not from the structural parser.
+// the stack processor accepts a string for `settings.templates`) but violates the schema:
+// that field must be either an object or an `!include` file reference. The failure must
+// therefore come specifically from JSON Schema validation — not from the structural parser.
 func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 	const validManifest = "vars:\n  stage: dev\n" +
 		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
@@ -220,9 +220,15 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 	}
 
 	// Negative: a schema-invalid manifest must be rejected by JSON Schema validation.
+	// Assert on its user-facing `!include` diagnostic (not just any failure) —
+	// the ad-hoc structural parser (e.g. "invalid vars section", "invalid
+	// components section") never produces this message, so its presence proves
+	// the failure came from schema validation.
 	err := validate(invalidManifest)
 	require.Error(t, err, "schema-invalid manifest must fail validation")
-	require.Contains(t, err.Error(), "JSON Schema validation",
+	require.Contains(t, err.Error(), "settings.templates",
+		"failure must come from JSON Schema validation, not the structural parser")
+	require.Contains(t, err.Error(), "file references must use the !include YAML tag",
 		"failure must come from JSON Schema validation, not the structural parser")
 
 	// Positive control: a valid manifest must pass — proving the failure above is the
@@ -250,4 +256,88 @@ func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
 	err = ValidateStacks(&atmosConfig)
 	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
 	require.Contains(t, err.Error(), "!envv")
+}
+
+func TestCheckComponentStackMapClassifiesInvalidConfig(t *testing.T) {
+	componentStackMap := map[string]map[string][]string{
+		"component": {
+			"stack": {"manifest-a", "manifest-b"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		stacksMap     map[string]any
+		componentType string
+		expectedErr   error
+		contains      string
+	}{
+		{
+			name:          "missing manifest",
+			stacksMap:     map[string]any{},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrInvalidStackManifest,
+			contains:      "manifest-a",
+		},
+		{
+			name: "missing components",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrComponentsSectionNotFound,
+			contains:      "manifest-a",
+		},
+		{
+			name: "missing terraform components type",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsTerraform,
+			contains:      "components.terraform",
+		},
+		{
+			name: "missing helmfile components type",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.HelmfileSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsHelmfile,
+			contains:      "components.helmfile",
+		},
+		{
+			name: "missing component",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{
+					cfg.ComponentsSectionName: map[string]any{
+						cfg.TerraformSectionName: map[string]any{},
+					},
+				},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrComponentNotDefined,
+			contains:      "component",
+		},
+		{
+			// Only "terraform" and "helmfile" get a dedicated sentinel error; every
+			// other component type (e.g. packer) falls through to the generic
+			// ErrInvalidComponentsSection in validationComponentTypeError's default case.
+			name: "missing packer components type falls back to generic error",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.PackerSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsSection,
+			contains:      "components.packer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := checkComponentStackMap(tt.stacksMap, tt.componentType, componentStackMap)
+			require.ErrorIs(t, err, tt.expectedErr)
+			assert.Contains(t, err.Error(), tt.contains)
+		})
+	}
 }

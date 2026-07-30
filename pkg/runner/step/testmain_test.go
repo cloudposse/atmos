@@ -41,10 +41,14 @@ const atmosStepFakeRMGlobEnv = "_ATMOS_STEP_FAKE_RM_GLOB"
 // AtmosHandler.runAtmosCommand resolves the binary via os.Executable(), which
 // in tests is this binary, so the sentinel is delivered via the step's env.
 func TestMain(m *testing.M) {
-	if os.Getenv(sessionShellHelperEnv) == "1" {
-		runStepSessionShellHelper()
-		os.Exit(0)
-	}
+	// _ATMOS_STEP_FAKE is checked before sessionShellHelperEnv: a test that
+	// spawns a session (t.Setenv(sessionShellHelperEnv, "1"), a real process
+	// env mutation) and then, in the same test, runs a real `type: atmos`/
+	// `type: shell` child step wants that child's subprocess to behave as
+	// the fake command it explicitly configured via step Env -- not as the
+	// shell helper, whose sentinel it only inherited ambiently through
+	// os.Environ(). An explicit per-step request must win over an inherited
+	// ambient one.
 	switch os.Getenv("_ATMOS_STEP_FAKE") {
 	case "ok":
 		_, _ = os.Stdout.WriteString("fake-atmos-output")
@@ -55,6 +59,10 @@ func TestMain(m *testing.M) {
 	case "rm-glob-and-fail":
 		removeGlobMatches(os.Getenv(atmosStepFakeRMGlobEnv))
 		os.Exit(1)
+	}
+	if os.Getenv(sessionShellHelperEnv) == "1" {
+		runStepSessionShellHelper()
+		os.Exit(0)
 	}
 
 	ioCtx, err := iolib.NewContext()

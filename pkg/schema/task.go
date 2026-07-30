@@ -150,8 +150,15 @@ type Task struct {
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
+	// Command/scanner step arguments (supports templates).
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+
+	// With holds type-specific step parameters for non-container step types.
+	With map[string]any `yaml:"-" json:"with,omitempty" mapstructure:"with"`
+
 	// Env step type fields.
-	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
+	Vars   map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`       // Variables to set for env step type.
+	Export *bool             `yaml:"export,omitempty" json:"export,omitempty" mapstructure:"export"` // Whether env-step values reach later child processes (default true).
 
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
@@ -196,7 +203,7 @@ type Task struct {
 	Run              *ContainerRunStep     `yaml:"-" json:"run,omitempty" mapstructure:"run"`
 	Inspect          *ContainerInspectStep `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
 	RuntimeAutoStart bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // auto, docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
 	// Archive step fields (type: archive). Action reuses the container step's
@@ -270,6 +277,7 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 		color:     &task.Background,
 		forList:   &task.For,
 		steps:     &task.Steps,
+		generic:   &task.With,
 		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
 	})
 }
@@ -417,8 +425,15 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Environment variables.
 		Env: task.Env,
 
+		// Command/scanner step arguments.
+		Args: task.Args,
+
+		// Type-specific step parameters.
+		With: task.With,
+
 		// Env step type fields.
-		Vars: task.Vars,
+		Vars:   task.Vars,
+		Export: task.Export,
 
 		// Exit step type fields.
 		Code: task.Code,
@@ -577,7 +592,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Env: step.Env,
 
 		// Env step type fields.
-		Vars: step.Vars,
+		Vars:   step.Vars,
+		Export: step.Export,
 
 		// Exit step type fields.
 		Code: step.Code,

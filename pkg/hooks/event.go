@@ -54,6 +54,12 @@ const (
 	AfterHelmfileDeploy            HookEvent = "after.helmfile.deploy"
 	BeforeHelmfileDestroy          HookEvent = "before.helmfile.destroy"
 	AfterHelmfileDestroy           HookEvent = "after.helmfile.destroy"
+	// BeforeScaffoldGenerate and AfterScaffoldGenerate fire around atmos
+	// scaffold generate / atmos init, not a component lifecycle operation --
+	// used by scaffold's own hooks: block (see pkg/generator/scaffoldhooks),
+	// which reuses this same Hook vocabulary and MatchesEvent/RunsWhenE.
+	BeforeScaffoldGenerate HookEvent = "before.scaffold.generate"
+	AfterScaffoldGenerate  HookEvent = "after.scaffold.generate"
 )
 
 // Normalize returns the canonical form of a HookEvent, collapsing command

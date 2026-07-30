@@ -273,7 +273,8 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 	// Resolve every dependency to an absolute binary path.
 	resolveBinaryPaths(env, cfg, deps)
 
-	// Build augmented PATH.
+	// Build the legacy augmented PATH as a fallback and retain its error
+	// contract for callers/tests that inject a builder.
 	buildPATH := cfg.buildPATH
 	if buildPATH == nil {
 		buildPATH = BuildToolchainPATH

@@ -18,6 +18,9 @@ var ErrSchemaNotFound = errors.New("failed to fetch schema")
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type Validator interface {
 	ValidateYAMLSchema(schema, sourceFile string) ([]gojsonschema.ResultError, error)
+	// ValidateYAMLContent validates in-memory YAML content (e.g. an unsaved
+	// editor buffer) instead of a fetched source.
+	ValidateYAMLContent(schema string, yamlContent []byte) ([]gojsonschema.ResultError, error)
 }
 
 type yamlSchemaValidator struct {
@@ -105,7 +108,14 @@ func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource string)
 	if err != nil {
 		return nil, err
 	}
-	data, err := yamlToJSON(yamlData)
+	return y.ValidateYAMLContent(schemaSource, yamlData)
+}
+
+// ValidateYAMLContent validates raw YAML content against the schema fetched
+// from schemaSource. Custom YAML function tags (e.g. `!include`) are
+// stringified before validation, matching ValidateYAMLSchema.
+func (y yamlSchemaValidator) ValidateYAMLContent(schemaSource string, yamlContent []byte) ([]gojsonschema.ResultError, error) {
+	data, err := yamlToJSON(yamlContent)
 	if err != nil {
 		return nil, err
 	}

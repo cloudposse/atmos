@@ -734,6 +734,14 @@ func TestMain(m *testing.M) {
 	// download planfiles from GitHub Artifacts during tests.
 	os.Unsetenv("GITHUB_ACTIONS")
 
+	// Ensure this test-only variable used by the "env-step-template-only"
+	// workflow fixture starts unset. That test asserts the variable is absent
+	// from a subprocess's environment when an env step sets export: false; a
+	// stray pre-existing value (e.g. left over from a developer's shell)
+	// would make the assertion fail even though export: false behaves
+	// correctly. See tests/fixtures/scenarios/workflows/stacks/workflows/test.yaml.
+	os.Unsetenv("ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":
@@ -1109,7 +1117,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
+		// Do not inherit a terminal width from the host. Let Atmos use each
+		// command's documented fallback unless a test explicitly exercises
+		// COLUMNS (for example, the toolchain table tests below).
+		tc.Env["COLUMNS"] = ""
 	}
 
 	// Standardize the terraform binary on OpenTofu for the whole suite so the
@@ -1675,6 +1686,12 @@ func normalizeLineEndings(s string) string {
 func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
 	normalized := normalizeLineEndings(input)
 	normalized = unwrapMarkdownProseLines(normalized)
+	// Cobra help output can differ by one final blank line between platforms.
+	// Canonicalize only output that already ends in a newline, leaving progress
+	// output terminated by a standalone carriage return untouched.
+	if strings.HasSuffix(normalized, "\n") {
+		normalized = strings.TrimRight(normalized, "\n") + "\n"
+	}
 	if ignoreTrailingWhitespace {
 		return stripTrailingWhitespace(normalized)
 	}

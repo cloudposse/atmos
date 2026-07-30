@@ -27,6 +27,7 @@ require (
 	github.com/adrg/xdg v0.5.3
 	github.com/agiledragon/gomonkey/v2 v2.14.0
 	github.com/alecthomas/chroma/v2 v2.24.1
+	github.com/alecthomas/participle/v2 v2.1.4
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/anthropics/anthropic-sdk-go v1.43.0
 	github.com/arsham/figurine v1.3.0
@@ -62,6 +63,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.6.1
 	github.com/elewis787/boa v0.1.3
+	github.com/epiclabs-io/diff3 v0.0.0-20241115194849-280ec18688b6
 	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.19.0
 	github.com/gabriel-vasile/mimetype v1.4.13
@@ -72,7 +74,7 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gofrs/flock v0.13.0
-	github.com/google/cel-go v0.26.0
+	github.com/google/cel-go v0.29.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.21.6
 	github.com/google/go-github/v59 v59.0.0
@@ -99,7 +101,7 @@ require (
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-isatty v0.0.22
 	github.com/mattn/go-runewidth v0.0.23
-	github.com/mikefarah/yq/v4 v4.53.2
+	github.com/mikefarah/yq/v4 v4.52.4
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
@@ -115,6 +117,7 @@ require (
 	github.com/playwright-community/playwright-go v0.5700.1
 	github.com/posthog/posthog-go v1.12.6
 	github.com/redis/go-redis/v9 v9.19.0
+	github.com/rhysd/actionlint v1.7.12
 	github.com/samber/lo v1.53.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/sergi/go-diff v1.4.0
@@ -138,7 +141,7 @@ require (
 	golang.org/x/text v0.38.0
 	google.golang.org/api v0.280.0
 	google.golang.org/genai v1.58.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.82.1
 	gopkg.in/ini.v1 v1.67.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -178,7 +181,6 @@ require (
 	github.com/a8m/envsubst v1.4.3 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
-	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/apparentlymart/go-cidr v1.1.1 // indirect
@@ -315,7 +317,7 @@ require (
 	github.com/iancoleman/orderedmap v0.3.0 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/invopop/jsonschema v0.13.0 // indirect; Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates.
+	github.com/invopop/jsonschema v0.13.0 // Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates. Also used by the pkg/config/schema generator; a bump that changes output will trip the atmos.yaml schema drift test - regenerate deliberately.
 	github.com/itchyny/gojq v0.12.19 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
@@ -435,7 +437,7 @@ require (
 	go.shabbyrobe.org/gocovmerge v0.0.0-20230507111327-fa4f82cfbf4d // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
 	go4.org/intern v0.0.0-20230525184215-6c62f75575cb // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
@@ -483,6 +485,7 @@ require (
 	github.com/mxschmitt/playwright-go v0.6100.0
 	github.com/updatecli/updatecli v0.999.0
 	golang.org/x/image v0.43.0
+	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 )
 
 require (
@@ -494,7 +497,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
-	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/aryann/difflib v0.0.0-20210328193216-ff5ff6dc229b // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
@@ -554,6 +557,7 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mattn/go-ciede2000 v0.0.0-20170301095244-782e8c62fec3 // indirect
+	github.com/mattn/go-shellwords v1.0.13 // indirect
 	github.com/mitchellh/go-ps v1.0.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
@@ -568,12 +572,12 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rubenv/sql-migrate v1.8.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
-	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect

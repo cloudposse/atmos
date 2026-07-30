@@ -37,6 +37,14 @@ var (
 
 const wrappedQuotedErrorFormat = "%w: %q"
 
+// castSessionStepType names a steps-mode child that opens a real,
+// interactive PTY session for its own nested `steps:` (write/key/pause/wait/
+// simulate actions), then returns control to the enclosing steps-mode cast.
+// This is the seam that lets one recording open on real interactive prompts
+// and fall through to ordinary, non-interactive command execution -- no
+// separate top-level `mode: session` cast step required.
+const castSessionStepType = "session"
+
 const (
 	defaultCastTypeDelay      = 35 * time.Millisecond
 	defaultCastPromptDelay    = 350 * time.Millisecond
@@ -66,6 +74,7 @@ type castTypedLineOptions struct {
 	Jitter     float64
 	EnterDelay time.Duration
 	Cursor     bool
+	SkipPrompt bool
 }
 
 func init() {
@@ -97,11 +106,17 @@ func validateCastStepsMode(step *schema.WorkflowStep) error {
 		return fmt.Errorf("%w: %v", ErrInvalidSimulateJitter, step.Jitter)
 	}
 	for i := range step.Steps {
-		if step.Steps[i].Type == schema.TaskTypeSimulate {
-			child := step.Steps[i]
-			applyCastSimulateDefaults(step, &child)
-			if err := validateCastSimulateStep(&child); err != nil {
+		child := &step.Steps[i]
+		switch child.Type {
+		case schema.TaskTypeSimulate:
+			clone := *child
+			applyCastSimulateDefaults(step, &clone)
+			if err := validateCastSimulateStep(&clone); err != nil {
 				return fmt.Errorf("cast simulate step %d: %w", i+1, err)
+			}
+		case castSessionStepType:
+			if err := validateCastSessionMode(child); err != nil {
+				return fmt.Errorf("cast session step %d: %w", i+1, err)
 			}
 		}
 	}
@@ -113,7 +128,7 @@ func validateCastSessionMode(step *schema.WorkflowStep) error {
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastSessionRequiresActions, step.Name)
 	}
 	for i := range step.Steps {
-		if err := validateCastSessionAction(&step.Steps[i]); err != nil {
+		if err := validateCastSessionAction(step, &step.Steps[i]); err != nil {
 			return fmt.Errorf("cast session action %d: %w", i+1, err)
 		}
 	}
@@ -344,7 +359,7 @@ func runCastBody(ctx context.Context, castStep *schema.WorkflowStep, vars *Varia
 	case "steps":
 		return runCastStepMode(ctx, castStep, vars, workflow)
 	case "session":
-		return runCastSessionMode(ctx, castStep, vars)
+		return runCastSessionMode(ctx, castStep, vars, workflow)
 	default:
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidCastMode, castStep.Mode)
 	}
@@ -359,6 +374,7 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 	if workflow != nil {
 		executor.SetWorkflow(workflow)
 	}
+	runner := castChildStepRunner{ctx: ctx, castStep: castStep, vars: vars, executor: executor, workflow: workflow}
 	conditionContext := schema.ConditionContext{Status: schema.ConditionPredicateSuccess}
 	var runErr error
 	// fail accumulates a child error and flips the condition status so that
@@ -367,15 +383,24 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 		runErr = errors.Join(runErr, err)
 		conditionContext.Status = schema.ConditionPredicateFailure
 	}
+	// prevWasSession tracks whether the previous child was a `type: session`
+	// block: that block's real shell always leaves its own next prompt
+	// visible the moment the block exits (the shell is idle, waiting for
+	// input, right up until the recording moves on) -- a following
+	// `type: simulate` narration line must not draw a second prompt on top
+	// of it.
+	prevWasSession := false
 	for i := range castStep.Steps {
 		child := &castStep.Steps[i]
 		if !child.When.EvaluateWithImplicitSuccess(conditionContext) {
 			continue
 		}
 		prepareCastChildStep(castStep, child, i)
-		if err := runCastChildStep(ctx, castStep, child, vars, executor); err != nil {
+		skipPrompt := prevWasSession && child.Type == schema.TaskTypeSimulate
+		if err := runner.run(child, skipPrompt); err != nil {
 			fail(err)
 		}
+		prevWasSession = child.Type == castSessionStepType
 	}
 	if err := recordCastPromptWithCursor(nil, castStepHasVisibleCursor(castStep)); err != nil {
 		return errors.Join(runErr, err)
@@ -385,19 +410,93 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 
 // runCastChildStep executes one child step of a steps-mode cast: simulate
 // steps replay scripted output, everything else runs through the executor
-// followed by the configured input pause.
-func runCastChildStep(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables, executor *StepExecutor) error {
-	if child.Type == schema.TaskTypeSimulate {
-		return runCastSimulateStep(ctx, castStep, child, vars)
+// followed by the configured input pause. The skipPrompt flag suppresses a
+// simulate step's own prompt draw when a real prompt is already visible (see the
+// prevWasSession tracking in runCastStepMode, and castSessionActions' Fn
+// wrapper, which always skips it since a live session's real shell prompt is
+// always already showing before any of its actions run).
+type castChildStepRunner struct {
+	ctx      context.Context
+	castStep *schema.WorkflowStep
+	vars     *Variables
+	executor *StepExecutor
+	workflow *schema.WorkflowDefinition
+}
+
+func (r castChildStepRunner) run(child *schema.WorkflowStep, skipPrompt bool) error {
+	switch child.Type {
+	case schema.TaskTypeSimulate:
+		return runCastSimulateStep(r.ctx, r.castStep, child, r.vars, skipPrompt)
+	case castSessionStepType:
+		return runCastSessionBlock(r.ctx, r.castStep, child, r.vars, r.workflow)
+	default:
+		if _, err := r.executor.Execute(r.ctx, child); err != nil {
+			return err
+		}
+		delay, err := castStepPauseDelay(child)
+		if err != nil {
+			return err
+		}
+		return sleepCastInput(r.ctx, delay)
 	}
-	if _, err := executor.Execute(ctx, child); err != nil {
-		return err
-	}
-	delay, err := castStepPauseDelay(child)
+}
+
+// runCastSessionBlock opens a real PTY session scoped to one steps-mode
+// child: session-level config (Shell/WorkingDirectory/Width/Height/
+// WriteRate/KeyInterval/Defaults) falls back to the enclosing cast step's
+// when unset, exactly like a top-level `mode: session` cast step's config
+// -- the block's own `steps:` are its write/key/pause/wait/simulate/exec
+// actions, converted via the same castSessionActions used by top-level
+// session mode. WorkingDirectory is inherited earlier, by
+// prepareCastChildStep, before this runs.
+func runCastSessionBlock(ctx context.Context, castStep, block *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
+	inheritCastSessionBlockDefaults(castStep, block)
+	writeRate, err := parseDurationDefault(block.WriteRate, 40*time.Millisecond)
 	if err != nil {
 		return err
 	}
-	return sleepCastInput(ctx, delay)
+	keyInterval, err := parseDurationDefault(block.KeyInterval, 20*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	env, err := castRecorderEnv(block, vars)
+	if err != nil {
+		return err
+	}
+	if err := applySessionPromptEnv(block, env); err != nil {
+		return err
+	}
+	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
+		Shell:       block.Shell,
+		Dir:         block.WorkingDirectory,
+		Env:         env,
+		Width:       block.Width,
+		Height:      block.Height,
+		WriteRate:   writeRate,
+		KeyInterval: keyInterval,
+		Actions:     castSessionActions(ctx, block, vars, workflow),
+	})
+}
+
+func inheritCastSessionBlockDefaults(parent, block *schema.WorkflowStep) {
+	if block.Shell == "" {
+		block.Shell = parent.Shell
+	}
+	if block.Width <= 0 {
+		block.Width = parent.Width
+	}
+	if block.Height <= 0 {
+		block.Height = parent.Height
+	}
+	if block.WriteRate == "" {
+		block.WriteRate = parent.WriteRate
+	}
+	if block.KeyInterval == "" {
+		block.KeyInterval = parent.KeyInterval
+	}
+	if block.Defaults == nil {
+		block.Defaults = parent.Defaults
+	}
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {
@@ -441,7 +540,7 @@ func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
 	}
 }
 
-func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables) error {
+func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
 	writeRate, err := parseDurationDefault(castStep.WriteRate, 40*time.Millisecond)
 	if err != nil {
 		return err
@@ -454,6 +553,9 @@ func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep, vars
 	if err != nil {
 		return err
 	}
+	if err := applySessionPromptEnv(castStep, env); err != nil {
+		return err
+	}
 	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
 		Shell:       castStep.Shell,
 		Dir:         castStep.WorkingDirectory,
@@ -462,27 +564,104 @@ func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep, vars
 		Height:      castStep.Height,
 		WriteRate:   writeRate,
 		KeyInterval: keyInterval,
-		Actions:     castSessionActions(castStep.Steps),
+		Actions:     castSessionActions(ctx, castStep, vars, workflow),
 	})
 }
 
-func castSessionActions(steps []schema.WorkflowStep) []asciicast.SessionAction {
+// applySessionPromptEnv sets PS1 to the same styled ("command") prompt text
+// mode: steps' simulate rendering uses, so a real shell's own prompt output
+// (printed before/after every real command a session action types) matches
+// the styling of any type: simulate narration mixed into the same session --
+// without this, only the narration lines would be themed and the real
+// prompt would stay plain, unstyled shell output. A caller-supplied PS1 is
+// left untouched.
+func applySessionPromptEnv(castStep *schema.WorkflowStep, env map[string]string) error {
+	if _, ok := env["PS1"]; ok {
+		return nil
+	}
+	prompt, err := renderCastPrompt(sessionPromptDefault(castStep))
+	if err != nil {
+		return err
+	}
+	env["PS1"] = prompt
+	return nil
+}
+
+// sessionPromptDefault resolves the same prompt a type: simulate child of
+// this cast step would use: the step's own SimulatePrompt if set, else
+// castStep.Defaults.Simulate.Prompt, else nil (renderCastPrompt's built-in
+// "> "/"command" fallback).
+func sessionPromptDefault(castStep *schema.WorkflowStep) *schema.SimulatePrompt {
+	if castStep.SimulatePrompt != nil {
+		return castStep.SimulatePrompt
+	}
+	if castStep.Defaults != nil && castStep.Defaults.Simulate != nil {
+		return castStep.Defaults.Simulate.Prompt
+	}
+	return nil
+}
+
+// castSessionActions converts a session-mode cast step's children into
+// SessionActions. "write"/"key"/"pause"/"wait" drive the real interactive
+// PTY as before. Every other type -- "simulate" and any registered step type
+// (e.g. "shell", "atmos", "script") -- runs through the same StepExecutor
+// mode: steps uses, via a callback: this is what lets a recording start
+// interactive (real prompts driving the PTY) and then fall through to
+// non-interactive, real command execution (e.g. a real `terraform apply`)
+// without ever needing the PTY to answer that command's terminal
+// capability-probe escape sequences, since the command never runs inside the
+// PTY at all -- it runs the same way a mode: steps `type: shell` step does.
+func castSessionActions(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) []asciicast.SessionAction {
+	steps := castStep.Steps
+	executor := NewStepExecutorWithVars(vars)
+	if workflow != nil {
+		executor.SetWorkflow(workflow)
+	}
+	runner := castChildStepRunner{ctx: ctx, castStep: castStep, vars: vars, executor: executor, workflow: workflow}
 	actions := make([]asciicast.SessionAction, 0, len(steps))
 	for i := range steps {
 		child := &steps[i]
+		if isCastSessionPTYAction(child.Type) {
+			actions = append(actions, asciicast.SessionAction{
+				Type:     child.Type,
+				Text:     child.Text,
+				Regex:    child.Regex,
+				Key:      child.Key,
+				Duration: child.Duration,
+				Timeout:  child.Timeout,
+				Rate:     child.Rate,
+				Interval: child.Interval,
+				Repeat:   child.Repeat,
+			})
+			continue
+		}
+		prepareCastChildStep(castStep, child, i)
 		actions = append(actions, asciicast.SessionAction{
-			Type:     child.Type,
-			Text:     child.Text,
-			Regex:    child.Regex,
-			Key:      child.Key,
-			Duration: child.Duration,
-			Timeout:  child.Timeout,
-			Rate:     child.Rate,
-			Interval: child.Interval,
-			Repeat:   child.Repeat,
+			// RunSession dispatches callbacks only for simulate actions. The
+			// original child type remains available to runCastChildStep through
+			// this closure, while the session dispatcher invokes it correctly.
+			Type: schema.TaskTypeSimulate,
+			// A live session's real shell prompt is always already visible
+			// before any scripted action runs (even the very first one --
+			// the freshly spawned shell shows its own prompt immediately),
+			// so a simulate action mixed into a session must never draw its
+			// own prompt on top of it.
+			Fn: func() error { return runner.run(child, true) },
 		})
 	}
 	return actions
+}
+
+// isCastSessionPTYAction reports whether a session action type drives the
+// real interactive PTY directly, as opposed to running through the step
+// executor (simulate, and any registered step type).
+func isCastSessionPTYAction(actionType string) bool {
+	switch actionType {
+	case "write", "key", "pause", "wait":
+		return true
+	default:
+		return false
+	}
 }
 
 func castCommandArgs(step *schema.WorkflowStep) []string {
@@ -515,7 +694,7 @@ func castMode(step *schema.WorkflowStep) string {
 	return mode
 }
 
-func validateCastSessionAction(action *schema.WorkflowStep) error {
+func validateCastSessionAction(castStep, action *schema.WorkflowStep) error {
 	switch action.Type {
 	case "write":
 		return validateWriteAction(action)
@@ -525,9 +704,29 @@ func validateCastSessionAction(action *schema.WorkflowStep) error {
 		return validatePauseAction(action)
 	case "wait":
 		return validateWaitAction(action)
+	case schema.TaskTypeSimulate:
+		child := *action
+		applyCastSimulateDefaults(castStep, &child)
+		return validateCastSimulateStep(&child)
 	default:
+		return validateCastSessionExecAction(action)
+	}
+}
+
+// validateCastSessionExecAction validates a session action that isn't one of
+// the PTY-driving verbs or "simulate": it must name a registered step type
+// (e.g. "shell", "atmos", "script"), and that handler's own Validate must
+// accept it -- mirroring how mode: steps validates its children.
+func validateCastSessionExecAction(action *schema.WorkflowStep) error {
+	actionType := action.Type
+	if actionType == "" {
+		actionType = schema.TaskTypeShell
+	}
+	handler, ok := Get(actionType)
+	if !ok {
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrUnsupportedSessionAction, action.Type)
 	}
+	return handler.Validate(action)
 }
 
 func validateWriteAction(action *schema.WorkflowStep) error {

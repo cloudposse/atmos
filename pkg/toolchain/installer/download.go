@@ -191,7 +191,10 @@ func isRetryableDownloadError(err error) bool {
 	if err == nil || errors.Is(err, ErrHTTP404) {
 		return false
 	}
-	return errors.Is(err, errUtils.ErrDownloadRetryable)
+	// Retry on errors explicitly marked retryable (transport failures, 5xx/429)
+	// and on transient network failures detected structurally (e.g. a
+	// connection reset by peer while reading the response body).
+	return errors.Is(err, errUtils.ErrDownloadRetryable) || registry.IsTransientNetworkError(err)
 }
 
 // writeResponseToCache reads the response body and writes it atomically to cache.
@@ -210,10 +213,11 @@ func writeResponseToCacheWithProgress(body io.Reader, cachePath string, total in
 	}
 	_, err := io.Copy(&buf, reader)
 	if err != nil {
-		return "", errors.Join(
-			errUtils.ErrDownloadRetryable,
-			fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err),
-		)
+		// A failure reading the response body (e.g. "connection reset by peer",
+		// a truncated stream) is a transient transfer error. Mark it retryable
+		// so downloadToCache re-issues the request from scratch.
+		return "", errors.Join(errUtils.ErrDownloadRetryable,
+			fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err))
 	}
 
 	fs := filesystem.NewOSFileSystem()
@@ -380,20 +384,27 @@ func isRetryableHTTPStatus(statusCode int) bool {
 	}
 }
 
+// downloadFallbackResult bundles the outcome of a version-fallback download: the
+// downloaded asset path, the effective URL, and the effective version that actually
+// downloaded (which may carry a version prefix the caller did not request, e.g. nodejs
+// "v24.18.0"). The effective version must be used to render files[].src so extraction
+// matches the archive's directory names.
+type downloadFallbackResult struct {
+	assetPath        string
+	effectiveURL     string
+	effectiveVersion string
+}
+
 // downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if 404.
-// It returns the downloaded asset path, the effective URL, and the effective
-// version that actually downloaded (which may carry a version prefix the caller
-// did not request, e.g. nodejs "v24.18.0"). The effective version must be used
-// to render files[].src so extraction matches the archive's directory names.
-func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (assetPath, effectiveURL, effectiveVersion string, err error) {
+func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (downloadFallbackResult, error) {
 	defer perf.Track(nil, "Installer.downloadAssetWithVersionFallback")()
 
-	assetPath, err = i.downloadAsset(assetURL)
+	assetPath, err := i.downloadAsset(assetURL)
 	if err == nil {
-		return assetPath, assetURL, version, nil
+		return downloadFallbackResult{assetPath: assetPath, effectiveURL: assetURL, effectiveVersion: version}, nil
 	}
 	if !isHTTP404(err) {
-		return "", "", "", err
+		return downloadFallbackResult{}, err
 	}
 
 	return i.tryFallbackVersion(tool, version, assetURL, err)
@@ -403,7 +414,7 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 // Uses the tool's VersionPrefix if set, otherwise falls back to the standard "v" prefix.
 // On success it returns the fallback version so callers can render archive paths
 // (files[].src) with the same prefix that produced the working download.
-func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (assetPath, effectiveURL, effectiveVersion string, err error) {
+func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (downloadFallbackResult, error) {
 	defer perf.Track(nil, "Installer.tryFallbackVersion")()
 
 	// Use tool-specific prefix (e.g., "jq-") if available, otherwise use standard "v".
@@ -420,26 +431,26 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 	}
 
 	if fallbackVersion == version {
-		return "", "", "", originalErr
+		return downloadFallbackResult{}, originalErr
 	}
 
 	fallbackURL, buildErr := i.BuildAssetURL(tool, fallbackVersion)
 	if buildErr != nil {
-		return "", "", "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
+		return downloadFallbackResult{}, fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
 	}
 
 	log.Debug("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
-	assetPath, err = i.downloadAsset(fallbackURL)
+	assetPath, err := i.downloadAsset(fallbackURL)
 	if err == nil {
-		return assetPath, fallbackURL, fallbackVersion, nil
+		return downloadFallbackResult{assetPath: assetPath, effectiveURL: fallbackURL, effectiveVersion: fallbackVersion}, nil
 	}
 	if !isHTTP404(err) {
-		return "", "", "", err
+		return downloadFallbackResult{}, err
 	}
 
 	// Both URLs failed - create a user-friendly error message.
 	// Don't nest ErrHTTPRequest again since the inner error already contains it.
-	return "", "", "", buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
+	return downloadFallbackResult{}, buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
 }
 
 // buildDownloadNotFoundError creates a user-friendly error for when both URL attempts fail.

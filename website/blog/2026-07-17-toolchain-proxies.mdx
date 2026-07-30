@@ -1,0 +1,91 @@
+---
+slug: toolchain-proxies
+title: "Toolchain proxies install only the commands you use"
+date: 2026-07-17T12:00:00.000Z
+authors: [atmos]
+tags: [feature, dx]
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Installing every tool a repository might eventually need makes project setup slow and wasteful.
+Atmos toolchain proxies provide on-demand, just-in-time installation instead: invoking a configured
+command resolves its pinned version and installs that binary only when it is first needed. The first
+invocation pays the download-and-prepare cost; later invocations reuse the installed release.
+
+Proxies also make subcommands first-class executable names. A command-named link points back to
+Atmos; when it is invoked, Atmos reads the executed name, finds its proxy configuration, and runs
+the configured tool with its prefix arguments and the caller’s arguments. A multicall tool such as
+uutils/coreutils can therefore expose `coreutils ls` as the normal `ls` command—without shell
+aliases, copied shims, or a different invocation in every repository.
+
+<!--truncate-->
+
+<CastPlayer src="/casts/examples/toolchain/proxies.cast" title="atmos toolchain proxies" chrome controls scrubber />
+
+## Install on Demand, Keep Versions Pinned
+
+An alias resolves the package name, and a proxy maps the familiar command to the package and any
+prefix arguments it needs:
+
+```yaml title="atmos.yaml"
+toolchain:
+  aliases:
+    coreutils: uutils/coreutils
+  proxies:
+    ls:
+      tool: coreutils
+      args: [ls]
+```
+
+```text title=".tool-versions"
+coreutils 0.9.0
+```
+
+## Get Started
+
+Activate every configured proxy in the current Bash or Zsh session with one command:
+
+```sh
+eval "$(atmos toolchain env)"
+```
+
+The normal `ls` command now invokes the `ls` proxy, which resolves to the pinned `coreutils ls`
+implementation. On its first invocation, the proxy installs that version if it is not already
+available, then runs it with the supplied arguments. Later invocations reuse the installed binary.
+
+For an intentionally eager setup—for example, a CI image or an offline preparation step—install
+every pinned tool in `.tool-versions` before activating the environment:
+
+```sh
+atmos toolchain install
+eval "$(atmos toolchain env)"
+```
+
+## Promote a Subcommand to a Command
+
+The same on-demand mechanism is useful when a package exposes many operations through one binary.
+The `args` list supplies the subcommand or default flags, while the proxy name becomes the command
+that developers and automation invoke. This turns a useful part of a larger tool into a normal,
+version-pinned command without a wrapper script.
+
+## Useful Beyond an Interactive Shell
+
+Atmos prepares the proxy environment for built-in command runners, workflows, hooks, components,
+and custom commands. A project can therefore use the familiar command name in its automation while
+retaining the tool version and source in version control. Developers can opt into the same proxy
+directory in their terminal without modifying the system command globally.
+
+The boundary is deliberate: a proxy is available only to Atmos child processes or to a shell that
+has explicitly activated the toolchain environment. It never replaces the system `ls` command for
+the rest of the machine.
+
+## Portable by Design
+
+Atmos creates symbolic links on Unix-like systems and executable hard links on Windows, avoiding a
+Windows symlink-privilege requirement. Proxy activation also carries the configuration context
+across directory changes, so the selected toolchain remains associated with the project that
+declared it.
+
+See [Toolchain Proxies](/cli/configuration/toolchain/proxies) for the configuration reference,
+platform details, and troubleshooting guidance.

@@ -11,8 +11,37 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use these subcommands to validate Atmos configurations.
+Validate the entire project or target an individual Atmos validation command.
 </Intro>
+
+Run `atmos validate` with no subcommand to validate the whole project. It runs configuration/schema validation, stack-manifest validation, EditorConfig validation, and GitHub Actions workflow validation in that order. Atmos runs every applicable check and then prints a pass/fail/skipped summary; it exits non-zero if any check fails.
+
+EditorConfig validation is skipped when the project has no effective EditorConfig file (`.editorconfig`, `.editorconfig-checker.json`, `.ecrc`, or a configured `validate.editorconfig.config_file_paths` file). GitHub Actions validation is skipped when `.github/workflows` contains no YAML workflow files.
+
+Component JSON Schema and OPA policy validation remains explicit because it needs a component and stack target: `atmos validate component <component> --stack <stack>`.
+
+`atmos validate ci` validates GitHub Actions workflow files with the native CI actionlint integration. It is an alias for [`atmos ci validate`](/cli/commands/ci/validate).
+
+## Affected validation
+
+Add `--affected` to validate only inputs changed since the Git merge-base. In GitHub Actions, Atmos reads the pull request base SHA from the event payload; locally, pass `--base <ref-or-sha>` when the default `origin/HEAD` baseline is not appropriate. Uncommitted and untracked files are included for local feedback.
+
+```shell
+atmos validate --affected --format rich
+atmos validate --exclude 'tests/fixtures/**' --format rich
+atmos validate config --affected --base origin/main
+atmos validate stacks --affected --base origin/main
+atmos validate editorconfig --affected --base origin/main
+atmos validate ci --affected --base origin/main
+```
+
+Schema and EditorConfig validation process only affected files unless their configuration or schema/rule file changes, in which case Atmos validates the complete relevant set. Stack validation skips unrelated changes, but validates all stack manifests after a relevant stack or configuration change so imports and duplicate-component checks remain correct. GitHub Actions validation passes only affected workflow files to actionlint unless its actionlint configuration changes.
+
+Use repeatable `--exclude <glob>` with either the full aggregate command or `--affected` to omit repository-relative paths from every aggregate validator. This is useful for test fixtures that deliberately contain invalid YAML or workflows. Globs use forward slashes and support `**`; `atmos validate editorconfig --exclude` retains its existing regex behavior when used directly.
+
+## Rich diagnostics
+
+Every validation command supports `--format=rich` for a source-context report with file and line markers. Use `validate.format: rich` in `atmos.yaml` to make it the default for the shared validators, or run `atmos validate --format=rich` to render separate rich blocks for every failing project-wide validator.
 
 <ActionCard title="Configure Validation Schemas">
     Learn how to configure JSON Schema and OPA policy paths for validating Atmos stack manifests and components.

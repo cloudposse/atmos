@@ -26,6 +26,7 @@ Valid subcommands are:
   • helm
   • helmfile
   • help
+  • init
   • kubernetes
   • list
   • lsp
@@ -33,6 +34,7 @@ Valid subcommands are:
   • packer
   • pro
   • profile
+  • scaffold
   • secret
   • stack
   • support

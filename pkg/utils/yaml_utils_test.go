@@ -285,6 +285,24 @@ value: 123
 	assert.Equal(t, 123, result.Value)
 }
 
+// TestUnmarshalYAML_ExplicitFunctionTagsPreserveFunctionAndArguments verifies that
+// explicit YAML tags remain complete function expressions after raw decoding. Runtime
+// function resolvers receive these strings later, so dropping the tag here would make
+// them receive only the arguments and could transport those arguments as a value.
+func TestUnmarshalYAML_ExplicitFunctionTagsPreserveFunctionAndArguments(t *testing.T) {
+	input := `
+mapping_value: !terraform.state producer ".fields.PRIVATE_KEY"
+list_values:
+  - !env DEMO_EXPLICIT_TAG_VALUE
+`
+
+	result, err := UnmarshalYAML[map[string]any](input)
+	require.NoError(t, err)
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, result["mapping_value"])
+	require.Len(t, result["list_values"], 1)
+	assert.Equal(t, "!env DEMO_EXPLICIT_TAG_VALUE", result["list_values"].([]any)[0])
+}
+
 // TestUnmarshalYAMLFromFile_BasicFunctionality tests the UnmarshalYAMLFromFile function.
 func TestUnmarshalYAMLFromFile_BasicFunctionality(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -1277,8 +1295,12 @@ func TestWriteToFileAsYAML(t *testing.T) {
 
 // TestWriteToFileAsYAML_InvalidPath tests writing to an invalid path.
 func TestWriteToFileAsYAML_InvalidPath(t *testing.T) {
-	// Try to write to a non-existent directory.
-	invalidPath := filepath.Join(string(filepath.Separator), "nonexistent", "directory", "that", "does", "not", "exist", "test.yaml")
+	// Create a regular file and then try to use it as a parent directory.
+	// Opening "parentFile/test.yaml" always fails on every OS because a file
+	// cannot simultaneously be a directory — no drive letters or root paths needed.
+	parentFile := filepath.Join(t.TempDir(), "parent")
+	require.NoError(t, os.WriteFile(parentFile, []byte("x"), 0o644))
+	invalidPath := filepath.Join(parentFile, "test.yaml")
 
 	data := map[string]any{"key": "value"}
 

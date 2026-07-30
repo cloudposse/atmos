@@ -118,6 +118,13 @@ func registerProcessingFlags(registry *flags.FlagRegistry) {
 		Description: "Enable/disable YAML functions processing in Atmos stack manifests",
 		EnvVars:     []string{"ATMOS_PROCESS_FUNCTIONS"},
 	})
+	registry.Register(&flags.BoolFlag{
+		Name:        "use-mocks",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands",
+		EnvVars:     []string{"ATMOS_USE_MOCKS"},
+	})
 	registry.Register(&flags.StringSliceFlag{
 		Name:        "skip",
 		Shorthand:   "",

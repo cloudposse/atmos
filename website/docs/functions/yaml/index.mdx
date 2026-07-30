@@ -246,11 +246,11 @@ components:
           cost-center: platform
           compliance: sox
 
-      settings:
+      dependencies:
         # Append to an inherited list instead of replacing it
-        depends_on: !append
-          - additional-component-1
-          - additional-component-2
+        components: !append
+          - name: additional-component-1
+          - name: additional-component-2
 ```
 </File>
 

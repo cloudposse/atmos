@@ -1,0 +1,98 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: rich-project
+  description: Configuration for initializing an Atmos scaffold template
+  version: 1.0.0
+spec:
+  fields:
+    - name: name
+      type: input
+      label: Name
+      description: The name of your Atmos scaffold template
+      default: my-atmos-project
+      required: true
+      placeholder: Enter name
+    - name: description
+      type: input
+      label: Description
+      description: A brief description of your scaffold template
+      default: An Atmos scaffold template for managing infrastructure as code
+      placeholder: Enter description
+    - name: author
+      type: input
+      label: Author
+      description: Your name or organization
+      default: ""
+      required: true
+      placeholder: Your name
+    - name: year
+      type: input
+      label: Year
+      description: The current year for copyright notices
+      default: "2024"
+      required: true
+      placeholder: "2024"
+    - name: license
+      type: select
+      label: License
+      description: Choose a license for your project
+      default: Apache Software License 2.0
+      required: true
+      options:
+        - Apache Software License 2.0
+        - MIT
+        - GNU GPL v3.0
+        - BSD 3-Clause
+        - ISC
+    - name: cloud_provider
+      type: select
+      label: Cloud Provider
+      description: Primary cloud provider for this project (only AWS is supported by this template)
+      default: aws
+      required: true
+      options:
+        - aws
+    - name: regions
+      type: multiselect
+      label: AWS Regions
+      description: Select the AWS regions to deploy to
+      default: ["us-east-1"]
+      required: true
+      options:
+        - us-east-1
+        - us-west-2
+        - eu-west-1
+        - ap-southeast-1
+        - sa-east-1
+    - name: enable_monitoring
+      type: confirm
+      label: Enable Monitoring
+      description: Set up monitoring and alerting infrastructure
+      default: true
+    - name: enable_logging
+      type: confirm
+      label: Enable Logging
+      description: Set up centralized logging infrastructure
+      default: true
+    - name: environment
+      type: select
+      label: Environment
+      description: The environment this project will run in
+      default: dev
+      required: true
+      options:
+        - dev
+        - staging
+        - prod
+    - name: terraform_version
+      type: select
+      label: Terraform Version
+      description: Terraform version to use
+      default: "1.5.0"
+      required: true
+      options:
+        - "1.5.0"
+        - "1.6.0"
+        - "1.7.0"
+        - latest

@@ -29,16 +29,18 @@ const (
 // container entry points. It keeps the public functions within the
 // argument limit and groups related values together.
 type ContainerStepParams struct {
-	Workflow     string
-	WorkflowPath string
-	BasePath     string
-	WorkflowDef  *schema.WorkflowDefinition
-	Step         *schema.WorkflowStep
-	HostWorkDir  string
-	Command      string
-	StepEnv      []string
-	RuntimeEnv   []string
-	DryRun       bool
+	Workflow      string
+	WorkflowPath  string
+	BasePath      string
+	WorkflowDef   *schema.WorkflowDefinition
+	Step          *schema.WorkflowStep
+	HostWorkDir   string
+	Command       string
+	StepEnv       []string
+	RuntimeEnv    []string
+	DryRun        bool
+	StdoutCapture io.Writer
+	StderrCapture io.Writer
 }
 
 // ContainerSession owns the long-lived container backing a workflow run.
@@ -138,7 +140,7 @@ func buildContainerConfig(params *ContainerStepParams, cfg *schema.WorkflowConta
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
 	if !validRuntime(cfg.Provider) {
-		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container runtime must be docker, podman, or empty", errUtils.ErrContainerRuntimeOperation)
+		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container runtime must be auto, docker, podman, or empty", errUtils.ErrContainerRuntimeOperation)
 	}
 	if !validPull(cfg.Pull) {
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container pull must be missing, always, never, or empty", errUtils.ErrContainerRuntimeOperation)
@@ -212,8 +214,8 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 			AttachStdout: true,
 			AttachStderr: true,
 			Stdin:        stdin,
-			Stdout:       stdout,
-			Stderr:       stderr,
+			Stdout:       teeCapture(stdout, params.StdoutCapture),
+			Stderr:       teeCapture(stderr, params.StderrCapture),
 		})
 	})
 	return err
@@ -313,6 +315,8 @@ func writeEphemeralResult(params *ContainerStepParams, result *container.Ephemer
 	if result == nil || step.Tty || step.Interactive {
 		return
 	}
+	writeCapture(params.StdoutCapture, result.Stdout)
+	writeCapture(params.StderrCapture, result.Stderr)
 	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
 	_, _, _ = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		if result.Stdout != "" {
@@ -323,6 +327,19 @@ func writeEphemeralResult(params *ContainerStepParams, result *container.Ephemer
 		}
 		return runErr
 	})
+}
+
+func teeCapture(primary, capture io.Writer) io.Writer {
+	if capture == nil {
+		return primary
+	}
+	return io.MultiWriter(primary, capture)
+}
+
+func writeCapture(writer io.Writer, value string) {
+	if writer != nil && value != "" {
+		_, _ = io.WriteString(writer, value)
+	}
 }
 
 func mergeWorkflowContainer(base, override *schema.WorkflowContainer) *schema.WorkflowContainer {
@@ -522,7 +539,7 @@ func runtimePreviewName(value string) string {
 }
 
 func validRuntime(value string) bool {
-	return value == "" || value == string(container.TypeDocker) || value == string(container.TypePodman)
+	return value == "" || value == string(container.TypeAuto) || value == string(container.TypeDocker) || value == string(container.TypePodman)
 }
 
 func validPull(value string) bool {

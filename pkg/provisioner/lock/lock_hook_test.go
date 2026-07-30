@@ -82,6 +82,33 @@ func TestAutoLockProviders_PersistsForSourceComponent(t *testing.T) {
 	assert.Equal(t, "locked\n", string(got))
 }
 
+func TestAutoLockProviders_PersistsForLocalWorkdirComponent(t *testing.T) {
+	sourceDir := t.TempDir()
+	workdirPath := filepath.Join(t.TempDir(), ".workdir", "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	require.NoError(t, provWorkdir.WriteMetadata(workdirPath, &provWorkdir.WorkdirMetadata{
+		Component:  "vpc",
+		Stack:      "dev",
+		SourceType: provWorkdir.SourceTypeLocal,
+		Source:     sourceDir,
+	}))
+
+	var calls [][]string
+	cfg := cfgWith([]string{"linux_amd64", "darwin_arm64"}, true, false)
+	cc := map[string]any{
+		"atmos_stack":              "dev",
+		"atmos_component":          "vpc",
+		provWorkdir.WorkdirPathKey: workdirPath,
+	}
+
+	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, recordingExecCtx(workdirPath, &calls)))
+	require.Len(t, calls, 1)
+
+	got, err := os.ReadFile(filepath.Join(sourceDir, provisioner.InstanceLockFilename(cc)))
+	require.NoError(t, err)
+	assert.Equal(t, "locked\n", string(got))
+}
+
 func TestAutoLockProviders_SkipsRemoteWorkdirSource(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

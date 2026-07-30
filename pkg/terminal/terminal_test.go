@@ -129,9 +129,8 @@ func TestForceTTY_Width(t *testing.T) {
 	}
 }
 
-// TestWidth_NonTTYFallback verifies non-TTY streams ignore COLUMNS and use
-// only the explicit forced-TTY default. This keeps piped CI output stable while
-// allowing cast recording code to provide its own explicit width.
+// TestWidth_NonTTYFallback verifies non-TTY streams honor an explicit COLUMNS
+// value and otherwise use the existing forced-TTY fallback behavior.
 func TestWidth_NonTTYFallback(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()
@@ -147,16 +146,16 @@ func TestWidth_NonTTYFallback(t *testing.T) {
 		expected int
 	}{
 		{
-			name:     "positive COLUMNS is ignored on non-TTY",
+			name:     "positive COLUMNS is honored on non-TTY",
 			columns:  "90",
 			forceTTY: false,
-			expected: 0,
+			expected: 90,
 		},
 		{
-			name:     "force-tty default wins over COLUMNS",
+			name:     "COLUMNS is honored before force-tty default",
 			columns:  "80",
 			forceTTY: true,
-			expected: defaultForcedWidth,
+			expected: 80,
 		},
 		{
 			name:     "malformed COLUMNS is ignored",
@@ -195,10 +194,9 @@ func TestWidth_NonTTYFallback(t *testing.T) {
 	}
 }
 
-// TestWidth_ForceTTYRecordingWidthOverride verifies that ATMOS_CAST_RECORDING_WIDTH,
-// unlike the general-purpose COLUMNS variable, can pin an explicit width under
-// --force-tty. Recording pipelines (e.g. docs screengrabs) set this variable
-// deliberately, so honoring it does not reintroduce ambient-COLUMNS instability.
+// TestWidth_ForceTTYRecordingWidthOverride verifies that ATMOS_CAST_RECORDING_WIDTH
+// takes precedence over COLUMNS under --force-tty. Recording pipelines (e.g.
+// docs screengrabs) use it to match the recorded terminal dimensions.
 func TestWidth_ForceTTYRecordingWidthOverride(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()
@@ -209,12 +207,14 @@ func TestWidth_ForceTTYRecordingWidthOverride(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		columns        string
 		recordingWidth string
 		forceTTY       bool
 		expected       int
 	}{
 		{
-			name:           "recording width is honored under force-tty",
+			name:           "recording width overrides COLUMNS under force-tty",
+			columns:        "80",
 			recordingWidth: "90",
 			forceTTY:       true,
 			expected:       90,
@@ -241,6 +241,7 @@ func TestWidth_ForceTTYRecordingWidthOverride(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("COLUMNS", tt.columns)
 			t.Setenv("ATMOS_CAST_RECORDING_WIDTH", tt.recordingWidth)
 			viper.Set("force-tty", tt.forceTTY)
 

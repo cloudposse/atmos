@@ -48,7 +48,7 @@ The three SARIF scanners — `checkov`, `trivy`, `kics` — participate automati
 ```yaml
 hooks:
   tfsec:
-    events: [after-terraform-plan]
+    events: [after.terraform.plan]
     kind: command
     command: tfsec
     args: ["--format", "sarif", "--out", "$ATMOS_OUTPUT_FILE", "$ATMOS_COMPONENT_PATH"]

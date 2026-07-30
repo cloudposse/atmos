@@ -26,11 +26,11 @@ components:
     app:
       dependencies:
         components:
-          - component: vpc
-          - component: rds
+          - name: vpc
+          - name: rds
             stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"
-          - kind: file
-            path: configs/app.json
+        files:
+          - configs/app.json
 ```
 
 ### Key Features
@@ -50,8 +50,8 @@ components:
     app:
       dependencies:
         components:
-          - component: vpc                    # terraform (default)
-          - component: nginx-ingress
+          - name: vpc                         # terraform (default)
+          - name: nginx-ingress
             kind: helmfile                    # helmfile component
             stack: platform-stack
 ```
@@ -66,11 +66,11 @@ components:
     lambda:
       dependencies:
         components:
-          - component: vpc
-          - kind: file
-            path: configs/lambda-settings.json
-          - kind: folder
-            path: src/lambda/handler
+          - name: vpc
+        files:
+          - configs/lambda-settings.json
+        folders:
+          - src/lambda/handler
 ```
 
 ## Coming Soon
