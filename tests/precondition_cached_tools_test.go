@@ -112,6 +112,21 @@ func withFakeCachedTool(t *testing.T, repo, version, binary string) string {
 	return filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", repo, version)
 }
 
+func withFakeAtmosToolchainTool(t *testing.T, repo, version, binary string) string {
+	t.Helper()
+
+	orig := cachedTestTools
+	cachedTestTools = append(append([]cachedTestTool{}, orig...), cachedTestTool{Repo: repo, Version: version, Binary: binary})
+	t.Cleanup(func() { cachedTestTools = orig })
+
+	testToolPathLocks.Delete(binary)
+	t.Cleanup(func() { testToolPathLocks.Delete(binary) })
+
+	cacheDir, err := os.UserCacheDir()
+	require.NoError(t, err)
+	return filepath.Join(cacheDir, "atmos", "toolchain", "bin", repo, version)
+}
+
 func TestCachedTestToolBinaryExists(t *testing.T) {
 	t.Run("bare name exists", func(t *testing.T) {
 		binDir := t.TempDir()
@@ -180,5 +195,19 @@ func TestPrependCachedTestTool(t *testing.T) {
 		prependCachedTestTool("atmos-fake-emptypath")
 		assert.Equal(t, binDir, os.Getenv("PATH"))
 		assert.False(t, strings.Contains(os.Getenv("PATH"), string(os.PathListSeparator)))
+	})
+
+	t.Run("normal Atmos toolchain cache is used when test cache is absent", func(t *testing.T) {
+		binDir := withFakeAtmosToolchainTool(t, "atmos-precond-normal-cache", "v0", "atmos-fake-normal-cache")
+		require.NoError(t, os.MkdirAll(binDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, cachedTestToolBinaryName("atmos-fake-normal-cache")), []byte("fake\n"), 0o755))
+		t.Cleanup(func() { os.RemoveAll(binDir) })
+
+		existingPath := filepath.Join(t.TempDir(), "existing-bin")
+		require.NoError(t, os.MkdirAll(existingPath, 0o755))
+		t.Setenv("PATH", existingPath)
+
+		prependCachedTestTool("atmos-fake-normal-cache")
+		assert.Equal(t, binDir+string(os.PathListSeparator)+existingPath, os.Getenv("PATH"))
 	})
 }
