@@ -372,7 +372,10 @@ func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, 
 	}
 	repository := ciCtx.Repository
 
-	branch := resolveStringPrecedence(opts.Branch, ciCtx.Ref)
+	// ciCtx.Branch is the already-parsed short name (e.g. "main"); ciCtx.Ref is
+	// the raw ref (e.g. "refs/heads/main" or "refs/pull/123/merge") and is not
+	// a valid `git clone --branch` argument.
+	branch := resolveStringPrecedence(opts.Branch, ciCtx.Branch)
 	if err := guardForkCheckout(branch, ciCtx.CloneURL, opts); err != nil {
 		return err
 	}

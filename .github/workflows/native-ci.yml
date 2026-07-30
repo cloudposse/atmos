@@ -15,6 +15,8 @@ on:
       - "pkg/ci/**"
       - "pkg/hooks/**"
       - "actions/cache/**"
+      # The CI git-clone bootstrap path exercised by the ci-bootstrap-clone job.
+      - "cmd/git/**"
       # CI log grouping boundaries exercised by the workflow and Terraform jobs.
       - "cmd/root.go"
       - "internal/exec/terraform_execute_helpers_exec.go"
@@ -84,6 +86,89 @@ jobs:
               ;;
           esac
           atmos workflow ci-log-groups -f ci-log-groups
+
+  ci-bootstrap-clone:
+    name: "[native ci] git clone CI bootstrap (empty workspace)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      # A throwaway local bare repository stands in for the "current CI
+      # repository" so this job never depends on network access or on
+      # cloudposse/atmos's own (large) history -- only the clone-bootstrap
+      # mechanism is under test here, not GitHub connectivity.
+      - name: Create a throwaway fixture repository to bootstrap-clone
+        id: fixture
+        run: |
+          set -euo pipefail
+          server_root="$(mktemp -d)"
+          fixture_seed="$(mktemp -d)"
+          bare_repo="${server_root}/dummy-owner/fixture.git"
+          mkdir -p "$(dirname "${bare_repo}")"
+          git init --quiet --bare "${bare_repo}"
+
+          git init --quiet "${fixture_seed}"
+          git -C "${fixture_seed}" config user.email "ci@example.com"
+          git -C "${fixture_seed}" config user.name "Native CI Fixture"
+          git -C "${fixture_seed}" checkout --quiet -b main
+          echo "native-ci-bootstrap-fixture" > "${fixture_seed}/marker.txt"
+          git -C "${fixture_seed}" add marker.txt
+          git -C "${fixture_seed}" commit --quiet -m "seed fixture"
+          git -C "${fixture_seed}" remote add origin "${bare_repo}"
+          git -C "${fixture_seed}" push --quiet origin main
+
+          echo "server_root=${server_root}" >> "$GITHUB_OUTPUT"
+
+      # Reproduces the real scenario cmd/git/bootstrap.go exists for: a CI
+      # runner with no repository checked out and therefore no atmos.yaml,
+      # where `atmos git clone` must still run (RootCmd's config-init-error
+      # path must tolerate the missing config) and clone the CI-detected
+      # repository into the working directory, replacing actions/checkout.
+      # See docs/prd/git-ops.md#native-ci-behavior.
+      - name: Bootstrap-clone into an empty CI workspace (no atmos.yaml)
+        env:
+          GITHUB_SERVER_URL: file://${{ steps.fixture.outputs.server_root }}
+          GITHUB_REPOSITORY: dummy-owner/fixture
+          GITHUB_EVENT_NAME: push
+          GITHUB_REF: refs/heads/main
+          GITHUB_REF_NAME: main
+        run: |
+          set -euo pipefail
+          empty_ws="$(mktemp -d)"
+          cd "${empty_ws}"
+          if [ -f atmos.yaml ]; then
+            echo "::error::expected an empty workspace with no atmos.yaml" >&2
+            exit 1
+          fi
+          ATMOS_CI=true atmos git clone --depth=1
+          test -f marker.txt
+          grep -qx "native-ci-bootstrap-fixture" marker.txt
+          echo "Bootstrap clone succeeded into an atmos.yaml-less workspace: ${empty_ws}"
+
+      # Negative path (CLAUDE.md: recovery/fallback logic needs a test that
+      # it does NOT trigger when its condition is absent): explicitly opting
+      # out of CI bootstrap must not silently fall through to a clone -- it
+      # must still fail without a repository/config to act on.
+      - name: Explicit opt-out still fails without a repository or config
+        run: |
+          set -euo pipefail
+          empty_ws="$(mktemp -d)"
+          cd "${empty_ws}"
+          if ATMOS_CI=false atmos git clone; then
+            echo "::error::expected 'atmos git clone' to fail when CI bootstrap is explicitly disabled and no config/repository is available" >&2
+            exit 1
+          fi
+          echo "Correctly refused to clone without CI bootstrap enabled and no repository specified."
 
   terraform-plan:
     name: "[native ci] terraform plan"
