@@ -1507,3 +1507,30 @@ func TestOIDCProvider_Environment_SovereignCloud(t *testing.T) {
 		})
 	}
 }
+
+// TestAzureProviders_IsAmbient verifies that both ambient Azure providers opt into the
+// auth manager's ambient handling, which suppresses keyring caching of their short-lived
+// tokens. Without this, `atmos auth login` replays a stale principal after the user runs
+// `az login` as a different account, or after the federated token is rotated — the Azure
+// analogue of issue #2695.
+//
+// The interactive device-code provider is deliberately NOT ambient: it runs its own
+// device flow and owns a purpose-built token cache (device_code_cache.go), so caching is
+// required for it to work at all.
+func TestAzureProviders_IsAmbient(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider authTypes.Provider
+		want     bool
+	}{
+		{name: "azure/cli is ambient", provider: &cliProvider{name: "az-cli"}, want: true},
+		{name: "azure/oidc is ambient", provider: &oidcProvider{name: "az-oidc"}, want: true},
+		{name: "azure/device-code is not ambient", provider: &deviceCodeProvider{name: "az-device"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, authTypes.ProviderIsAmbient(tt.provider))
+		})
+	}
+}
