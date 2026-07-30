@@ -44,14 +44,32 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 		info.Expiration = expTime
 	}
 
-	// Store credentials in the keystore and set a reference handle.
-	// Use the identity name as the opaque handle for retrieval.
-	// CRITICAL: Skip caching session tokens to avoid overwriting long-lived credentials.
-	// Session tokens have a SessionToken field set and are temporary (short-lived).
-	// Long-lived credentials (access key + secret key) are needed for future authentication.
-	// Caching session tokens would overwrite the long-lived credentials in keyring,
-	// causing "keyring contains session credentials" errors on subsequent runs.
-	if !isSessionToken(creds) {
+	m.cacheWhoamiCredentials(identityName, creds, info)
+
+	return info
+}
+
+// cacheWhoamiCredentials stores the credentials in the keystore and sets the opaque
+// reference handle on info, skipping the store for credentials that must not be persisted.
+//
+// CRITICAL: Skip caching session tokens to avoid overwriting long-lived credentials.
+// Session tokens have a SessionToken field set and are temporary (short-lived).
+// Long-lived credentials (access key + secret key) are needed for future authentication.
+// Caching session tokens would overwrite the long-lived credentials in keyring,
+// causing "keyring contains session credentials" errors on subsequent runs.
+// Ambient chains (gcp/adc, azure/cli, the OIDC providers) are equally exempt: their
+// credentials are a snapshot of ambient environment state, and persisting them here
+// would re-poison the entry the chain authentication just purged.
+//
+// The reference handle is set in every branch; callers resolve it only when the
+// in-memory Credentials field is nil.
+func (m *manager) cacheWhoamiCredentials(identityName string, creds types.ICredentials, info *types.WhoamiInfo) {
+	switch {
+	case m.identityChainRootIsAmbient(identityName):
+		log.Debug("Skipping keyring cache for ambient chain in WhoamiInfo", logKeyIdentity, identityName)
+		// Still set the reference so callers can look up the in-memory credentials.
+		info.CredentialsRef = identityName
+	case !isSessionToken(creds):
 		if err := m.credentialStore.Store(identityName, creds, m.realm.Value); err == nil {
 			info.CredentialsRef = identityName
 			// Note: We keep info.Credentials populated for validation purposes.
@@ -60,13 +78,11 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 			// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
 			m.deleteLegacyKeyringEntry(identityName)
 		}
-	} else {
+	default:
 		log.Debug("Skipping keyring cache for session tokens in WhoamiInfo", logKeyIdentity, identityName)
 		// Still set the reference for credential lookups - credentials can be loaded from identity storage.
 		info.CredentialsRef = identityName
 	}
-
-	return info
 }
 
 // buildWhoamiInfoFromEnvironment creates a WhoamiInfo struct when using noop keyring.
