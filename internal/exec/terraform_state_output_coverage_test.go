@@ -3,11 +3,13 @@ package exec
 import (
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -204,6 +206,49 @@ func TestGetTerraformState_CacheHit(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "vpc-12345", result)
+}
+
+func TestGetTerraformState_CachesNotProvisionedState(t *testing.T) {
+	ResetStateCache()
+	t.Cleanup(ResetStateCache)
+
+	setupTerraformYamlFunctionSandbox(t, "../../tests/fixtures/scenarios/terraform-state-jit-workdir")
+	t.Chdir("../../tests/fixtures/scenarios/terraform-state-jit-workdir")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	result, err := GetTerraformState(
+		&atmosConfig,
+		"!terraform.state",
+		"test",
+		"consumer",
+		"vpc_id",
+		false,
+		nil,
+		nil,
+	)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
+
+	cached, found := terraformStateCache.Load("test-consumer")
+	require.True(t, found)
+	_, isNotProvisioned := cached.(terraformStateNotProvisionedCacheEntry)
+	require.True(t, isNotProvisioned)
+
+	result, err = GetTerraformState(
+		&atmosConfig,
+		"!terraform.state",
+		"test",
+		"consumer",
+		"vpc_id",
+		false,
+		nil,
+		nil,
+	)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 }
 
 // TestGetTerraformState_SkipCache tests cache skip behavior.

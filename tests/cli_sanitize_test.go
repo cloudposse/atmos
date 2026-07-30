@@ -465,6 +465,11 @@ func TestSanitizeOutput_WithCustomReplacements(t *testing.T) {
 			},
 			expected: "token-REDACTED and token-REDACTED and token-REDACTED",
 		},
+		{
+			name:     "Preserve quoted provenance template",
+			input:    "provisioned_by_user: '{{ env \"USER\" }}'\nprovisioned_by_user: zack",
+			expected: "provisioned_by_user: '{{ env \"USER\" }}'\nprovisioned_by_user: user",
+		},
 	}
 
 	for _, tt := range tests {

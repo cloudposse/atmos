@@ -503,6 +503,15 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		delete(componentSection, cfg.MocksSectionName)
 	}
 
+	// `sources` is generated provenance for describe output. It can retain overridden
+	// parent values, so it must not be treated as executable component configuration.
+	sources, hasSources := componentSection[sourcesSectionName]
+	if hasSources {
+		componentSection = maps.Clone(componentSection)
+		delete(componentSection, sourcesSectionName)
+		info.ComponentSection = componentSection
+	}
+
 	// Process Go templates.
 	if p.processTemplates {
 		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings)
@@ -539,6 +548,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	if hasLiteralMocks {
 		componentSection[cfg.MocksSectionName] = literalMocks
 		info.ComponentSection[cfg.MocksSectionName] = literalMocks
+	}
+	if hasSources {
+		componentSection[sourcesSectionName] = sources
+		info.ComponentSection[sourcesSectionName] = sources
 	}
 
 	// Write the (optionally filtered) sections into the result map.

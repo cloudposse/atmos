@@ -198,8 +198,6 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
-      sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   - name: describe component with relative path
@@ -219,8 +217,6 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
-      sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   - name: describe component with nested component path
@@ -278,8 +274,6 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
-      sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   # Validate component tests
@@ -397,7 +391,6 @@ tests:
     expect:
       diff: []
       sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
         "basePathAbsolute: .+": "basePathAbsolute: /absolute/path"
       exit_code: 0
 

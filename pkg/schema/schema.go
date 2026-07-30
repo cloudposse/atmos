@@ -1918,9 +1918,9 @@ type Settings struct {
 
 // ConfigSourcesStackDependency defines schema for sources of config sections.
 type ConfigSourcesStackDependency struct {
+	DependencyType   string `yaml:"dependency_type" json:"dependency_type" mapstructure:"dependency_type"`
 	StackFile        string `yaml:"stack_file" json:"stack_file" mapstructure:"stack_file"`
 	StackFileSection string `yaml:"stack_file_section" json:"stack_file_section" mapstructure:"stack_file_section"`
-	DependencyType   string `yaml:"dependency_type" json:"dependency_type" mapstructure:"dependency_type"`
 	VariableValue    any    `yaml:"variable_value" json:"variable_value" mapstructure:"variable_value"`
 }
 
