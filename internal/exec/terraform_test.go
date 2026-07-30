@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -492,30 +492,29 @@ func TestExecuteTerraform_Version(t *testing.T) {
 		name           string
 		workDir        string
 		expectedOutput string
-		requireTool    func(*testing.T)
-		binary         string
+		// requireTool resolves the required binary's path (skipping the test if
+		// missing) and returns it. Returning the path here -- instead of a
+		// separate exec.LookPath call in the test body -- avoids a TOCTOU race:
+		// see requireExecutablePath's doc comment in tests/preconditions.go.
+		requireTool func(*testing.T) string
 	}{
 		{
 			name:           "terraform version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-terraform-version",
 			expectedOutput: "Terraform v",
-			requireTool:    tests.RequireTerraform,
-			binary:         "terraform",
+			requireTool:    tests.RequireTerraformPath,
 		},
 		{
 			name:           "tofu version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-tofu-version",
 			expectedOutput: "OpenTofu v",
-			requireTool:    tests.RequireTofu,
-			binary:         "tofu",
+			requireTool:    tests.RequireTofuPath,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.requireTool(t)
-			binaryPath, err := exec.LookPath(tt.binary)
-			require.NoError(t, err)
+			binaryPath := tt.requireTool(t)
 			isolateTerraformTestBinary(t, binaryPath)
 
 			// Set info for ExecuteTerraform.
@@ -720,49 +719,24 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status=false")
 			}
 
-			// Create a pipe to capture stdout and stderr.
-			oldStdout := os.Stdout
-			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-			os.Stderr = w
-
-			// Ensure stdout/stderr are restored even if test fails.
-			defer func() {
-				os.Stdout = oldStdout
-				os.Stderr = oldStderr
-			}()
+			// Capture subprocess output through the supported process streams.
+			// Reassigning os.Stdout/os.Stderr does not reliably redirect child
+			// process handles on Windows.
+			var buf bytes.Buffer
+			outputWriter := &synchronizedWriter{w: &buf}
 
 			// Save original logger and set up test logger.
 			originalLogger := log.Default()
 			logger := log.New()
-			logger.SetOutput(w)
+			logger.SetOutput(outputWriter)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 
-			// Create a channel to signal when the pipe is closed.
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				defer w.Close()
-				_ = ExecuteTerraform(info)
-			}()
-
-			// Read the output.
-			var buf bytes.Buffer
-			_, err := buf.ReadFrom(r)
-			if err != nil {
-				t.Fatalf("Failed to read from pipe: %v", err)
-			}
+			_ = ExecuteTerraform(info, WithProcessStreams(process.Streams{
+				Stdout: outputWriter,
+				Stderr: outputWriter,
+			}))
 			output := buf.String()
-
-			// Restore stdout, stderr, and logger.
-			os.Stdout = oldStdout
-			os.Stderr = oldStderr
-			log.SetDefault(log.Default())
-
-			// Wait for the command to finish
-			<-done
 
 			// Check the output for drift/no drift and pro warning
 			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")
