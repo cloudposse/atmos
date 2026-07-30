@@ -75,6 +75,11 @@ commands:
         path: "../../.context/cast-fixtures/demo-stacks"
         reset: true
       - type: workdir
+        name: weather-reports-fixture
+        source: fixtures/weather
+        path: "../../.context/cast-fixtures/weather"
+        reset: true
+      - type: workdir
         name: locals-fixture
         source: "../../examples/locals"
         path: "../../.context/cast-fixtures/locals"
