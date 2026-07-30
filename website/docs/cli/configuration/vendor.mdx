@@ -51,12 +51,19 @@ vendor:
 
     When a directory is specified, all `.yaml` files in the directory are processed in lexicographical order.
 
+    Relative paths are resolved against the Atmos `base_path`.
+
+    When this setting is configured, relative [`targets`](/vendor/config/sources) in the manifest are resolved against the Atmos `base_path`
+    as well — not against the directory containing the manifest. This means the manifest can live anywhere (for example, next to `atmos.yaml`
+    in a configuration directory outside the project root) while vendored artifacts still land in the same tree as the components and stacks.
+
     **Default:** `vendor.yaml`
 
     Examples:
     - `vendor.yaml` - Single manifest file
     - `./vendor.yaml` - Explicit relative path
     - `vendor/` - Directory containing multiple manifests
+    - `config/vendor.yaml` - Manifest in a configuration directory
   </dd>
 
   <dt>`list.format`</dt>

@@ -52,10 +52,13 @@ type processTargetsParams struct {
 	Source               *schema.AtmosVendorSource
 	TemplateData         struct{ Component, Version string }
 	VendorConfigFilePath string
-	URI                  string
-	SourceTemplate       string // Raw un-templated source URL for per-target version re-resolution.
-	PkgType              pkgType
-	SourceIsLocalFile    bool
+	// TargetBasePath is the directory that relative `targets` paths are resolved against.
+	// See resolveVendorTargetBasePath for how it's determined.
+	TargetBasePath    string
+	URI               string
+	SourceTemplate    string // Raw un-templated source URL for per-target version re-resolution.
+	PkgType           pkgType
+	SourceIsLocalFile bool
 }
 type executeVendorOptions struct {
 	atmosConfig          *schema.AtmosConfiguration
@@ -73,6 +76,7 @@ type vendorSourceParams struct {
 	tags                 []string
 	vendorConfigFileName string
 	vendorConfigFilePath string
+	targetBasePath       string
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
@@ -127,6 +131,45 @@ func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorC
 		}
 	}
 	return foundVendorConfigFile
+}
+
+// resolveVendorTargetBasePath returns the directory that relative `targets` paths in the vendor
+// manifest are resolved against.
+//
+// When the manifest location is declared in `atmos.yaml` via the `vendor.base_path` setting, the
+// manifest is part of the Atmos configuration and can live anywhere (e.g. next to `atmos.yaml` in a
+// dedicated config directory outside the repo root). In that case relative targets are resolved
+// against the Atmos `base_path` — the same root that `components.terraform.base_path` and
+// `stacks.base_path` are relative to — so vendored artifacts land where the rest of the
+// configuration expects them, not next to the manifest.
+//
+// Otherwise the manifest was discovered next to the working directory, and relative targets stay
+// relative to the manifest itself.
+func resolveVendorTargetBasePath(atmosConfig *schema.AtmosConfiguration, vendorConfigFileName string) string {
+	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
+
+	if atmosConfig == nil || atmosConfig.Vendor.BasePath == "" || atmosConfig.BasePath == "" {
+		return vendorConfigFilePath
+	}
+
+	if atmosConfig.BasePath != vendorConfigFilePath {
+		log.Debug("Resolving relative vendor targets against the Atmos base path",
+			"vendor_config_file", vendorConfigFileName,
+			"vendor_base_path", atmosConfig.Vendor.BasePath,
+			"base_path", atmosConfig.BasePath,
+		)
+	}
+
+	return atmosConfig.BasePath
+}
+
+// resolveVendorTargetPath resolves a single templated target path against the vendor target base
+// path. Absolute targets are honored as-is — joining them to the base path would nest them under it.
+func resolveVendorTargetPath(targetBasePath, target string) string {
+	if filepath.IsAbs(target) {
+		return filepath.Clean(target)
+	}
+	return filepath.Join(targetBasePath, target)
 }
 
 // Helper function to get config files from a path (file or directory).
@@ -205,6 +248,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
+	targetBasePath := resolveVendorTargetBasePath(params.atmosConfig, params.vendorConfigFileName)
 
 	logInitialMessage(params.vendorConfigFileName, params.tags)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
@@ -237,6 +281,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 		tags:                 params.tags,
 		vendorConfigFileName: params.vendorConfigFileName,
 		vendorConfigFilePath: vendorConfigFilePath,
+		targetBasePath:       targetBasePath,
 	}
 	packages, err := processAtmosVendorSource(sourceParams)
 	if err != nil {
@@ -333,6 +378,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			Source:               &params.sources[indexSource],
 			TemplateData:         tmplData,
 			VendorConfigFilePath: params.vendorConfigFilePath,
+			TargetBasePath:       params.targetBasePath,
 			URI:                  uri,
 			SourceTemplate:       params.sources[indexSource].Source,
 			PkgType:              pType,
@@ -435,7 +481,7 @@ func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 		if err != nil {
 			return nil, err
 		}
-		targetPath := filepath.Join(params.VendorConfigFilePath, target)
+		targetPath := resolveVendorTargetPath(params.TargetBasePath, target)
 		pkgName := params.Source.Component
 		if pkgName == "" {
 			pkgName = effectiveURI

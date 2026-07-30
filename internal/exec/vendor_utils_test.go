@@ -922,6 +922,193 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/2.0.0")
 }
 
+// Compile-time sentinels for the schema fields this test file depends on: a rename of either
+// `Vendor.BasePath` or `BasePath` must fail the build rather than silently skip the new behavior.
+var (
+	_ = schema.AtmosConfiguration{BasePath: ""}
+	_ = schema.Vendor{BasePath: ""}
+)
+
+func TestResolveVendorTargetBasePath(t *testing.T) {
+	tests := []struct {
+		name                 string
+		atmosConfig          *schema.AtmosConfiguration
+		vendorConfigFileName string
+		expected             string
+	}{
+		{
+			// The reported bug: with `vendor.base_path` pointing at a manifest in a config
+			// directory, relative targets must resolve against the Atmos `base_path`, not against
+			// the directory holding vendor.yaml.
+			name: "vendor.base_path configured resolves targets against the Atmos base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.Join("repo", "root"),
+				Vendor:   schema.Vendor{BasePath: filepath.Join("config", "vendor.yaml")},
+			},
+			vendorConfigFileName: filepath.Join("repo", "root", "config", "vendor.yaml"),
+			expected:             filepath.Join("repo", "root"),
+		},
+		{
+			name: "absolute vendor.base_path still resolves targets against the Atmos base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.Join("repo", "root"),
+				Vendor:   schema.Vendor{BasePath: filepath.Join("elsewhere", "vendor.yaml")},
+			},
+			vendorConfigFileName: filepath.Join("elsewhere", "vendor.yaml"),
+			expected:             filepath.Join("repo", "root"),
+		},
+		{
+			// No `vendor.base_path`: the manifest was discovered next to the working directory, so
+			// targets stay relative to the manifest itself.
+			name: "vendor.base_path not configured keeps targets relative to the manifest",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.Join("repo", "root"),
+			},
+			vendorConfigFileName: filepath.Join("some", "dir", "vendor.yaml"),
+			expected:             filepath.Join("some", "dir"),
+		},
+		{
+			name: "empty Atmos base path keeps targets relative to the manifest",
+			atmosConfig: &schema.AtmosConfiguration{
+				Vendor: schema.Vendor{BasePath: "vendor.yaml"},
+			},
+			vendorConfigFileName: filepath.Join("some", "dir", "vendor.yaml"),
+			expected:             filepath.Join("some", "dir"),
+		},
+		{
+			name:                 "nil Atmos config keeps targets relative to the manifest",
+			atmosConfig:          nil,
+			vendorConfigFileName: filepath.Join("some", "dir", "vendor.yaml"),
+			expected:             filepath.Join("some", "dir"),
+		},
+		{
+			name: "manifest alongside atmos.yaml resolves to the same directory as before",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: ".",
+				Vendor:   schema.Vendor{BasePath: "./vendor.yaml"},
+			},
+			vendorConfigFileName: "vendor.yaml",
+			expected:             ".",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, resolveVendorTargetBasePath(tt.atmosConfig, tt.vendorConfigFileName))
+		})
+	}
+}
+
+func TestResolveVendorTargetPath(t *testing.T) {
+	absTarget := filepath.Join(string(filepath.Separator), "opt", "vendored", "vpc")
+
+	tests := []struct {
+		name           string
+		targetBasePath string
+		target         string
+		expected       string
+	}{
+		{
+			name:           "relative target is joined to the target base path",
+			targetBasePath: filepath.Join("repo", "root"),
+			target:         filepath.Join("components", "terraform", "vpc"),
+			expected:       filepath.Join("repo", "root", "components", "terraform", "vpc"),
+		},
+		{
+			// `targets` documents support for absolute paths; joining them to the base path would
+			// nest them under it instead.
+			name:           "absolute target is used as-is",
+			targetBasePath: filepath.Join("repo", "root"),
+			target:         absTarget,
+			expected:       absTarget,
+		},
+		{
+			name:           "empty target base path leaves the target unchanged",
+			targetBasePath: "",
+			target:         filepath.Join("components", "terraform", "vpc"),
+			expected:       filepath.Join("components", "terraform", "vpc"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, resolveVendorTargetPath(tt.targetBasePath, tt.target))
+		})
+	}
+}
+
+func TestProcessTargets_TargetBasePathOverridesVendorConfigDir(t *testing.T) {
+	// Relative targets must resolve against TargetBasePath (the Atmos `base_path`), while the
+	// vendor config directory keeps serving as the anchor for resolving local sources.
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/org/repo.git//modules/vpc?ref={{.Version}}",
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/{{.Component}}"},
+			{Path: "components/terraform/{{.Component}}/{{.Version}}", Version: "2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: filepath.Join("repo", "root", "config"),
+		TargetBasePath:       filepath.Join("repo", "root"),
+		URI:                  "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 2)
+
+	assert.Equal(t, filepath.Join("repo", "root", "components", "terraform", "vpc"), pkgs[0].targetPath)
+	assert.Equal(t, filepath.Join("repo", "root", "components", "terraform", "vpc", "2.0.0"), pkgs[1].targetPath)
+
+	// The vendor config directory must not leak into the target paths.
+	for _, p := range pkgs {
+		assert.NotContains(t, filepath.ToSlash(p.targetPath), "config/components")
+	}
+}
+
+func TestProcessTargets_AbsoluteTargetPath(t *testing.T) {
+	// Absolute targets are documented as supported and must not be nested under the target base path.
+	atmosConfig := &schema.AtmosConfiguration{}
+	absTarget := filepath.Join(string(filepath.Separator), "opt", "vendored", "vpc")
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: absTarget},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: filepath.Join("repo", "root", "config"),
+		TargetBasePath:       filepath.Join("repo", "root"),
+		URI:                  "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	assert.Equal(t, absTarget, pkgs[0].targetPath)
+}
+
 func TestValidateTagsAndComponents(t *testing.T) {
 	sources := []schema.AtmosVendorSource{
 		{Component: "vpc", Tags: []string{"network"}},

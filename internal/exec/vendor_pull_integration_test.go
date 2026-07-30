@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -150,6 +151,139 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 
 	err = ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Tag filtering should execute without error")
+}
+
+// vendorBasePathFixture writes an Atmos project where atmos.yaml and vendor.yaml live in a `config`
+// subdirectory while `base_path` points at the project root, and returns the project root.
+// This is the layout from https://github.com/cloudposse/atmos/issues/2409.
+func vendorBasePathFixture(t *testing.T) string {
+	t.Helper()
+
+	// Resolve symlinks (macOS maps /var to /private/var) so the paths written into atmos.yaml match
+	// the paths the assertions stat.
+	tempDir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+
+	configDir := filepath.Join(tempDir, "config")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
+
+	// Vendor from a local directory so the test needs no network access.
+	sourceDir := filepath.Join(tempDir, "source", "mock")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# mock component\n"), 0o644))
+
+	// Forward slashes keep the YAML valid on Windows, where an absolute path contains backslashes.
+	atmosYAML := fmt.Sprintf(`base_path: "%s"
+
+vendor:
+  base_path: "config/vendor.yaml"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+
+logs:
+  level: Info
+`, filepath.ToSlash(tempDir))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	vendorYAML := fmt.Sprintf(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: vendor-base-path
+  description: Vendor manifest stored next to atmos.yaml, outside the project root
+spec:
+  sources:
+    - component: "mock"
+      source: "%s"
+      version: "1.0.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      included_paths:
+        - "**/*.tf"
+`, filepath.ToSlash(sourceDir))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "vendor.yaml"), []byte(vendorYAML), 0o644))
+
+	return tempDir
+}
+
+// newVendorPullTestCmd builds a `vendor pull` command with the flags ExecuteVendorPullCommand reads.
+func newVendorPullTestCmd() *cobra.Command {
+	cmd := newTestCommandWithGlobalFlags("pull")
+
+	flags := cmd.Flags()
+	flags.String("component", "", "")
+	flags.String("stack", "", "")
+	flags.String("tags", "", "")
+	flags.Bool("dry-run", false, "")
+	flags.Bool("everything", false, "")
+
+	return cmd
+}
+
+// TestVendorPullTargetsResolveAgainstBasePath verifies that when Atmos locates vendor.yaml through
+// the `vendor.base_path` setting in atmos.yaml, relative `targets` resolve against the Atmos
+// `base_path` instead of the directory holding vendor.yaml.
+// Regression test for https://github.com/cloudposse/atmos/issues/2409.
+func TestVendorPullTargetsResolveAgainstBasePath(t *testing.T) {
+	tempDir := vendorBasePathFixture(t)
+
+	t.Chdir(tempDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", filepath.Join(tempDir, "config"))
+
+	err := ExecuteVendorPullCommand(newVendorPullTestCmd(), []string{})
+	require.NoError(t, err, "'atmos vendor pull' should execute without error")
+
+	// The artifact lands under `base_path`, where `components.terraform.base_path` points.
+	assert.FileExists(t, filepath.Join(tempDir, "components", "terraform", "mock", "main.tf"),
+		"vendored component should be written relative to the Atmos base path")
+
+	// And not next to vendor.yaml, which is what issue #2409 reported.
+	assert.NoDirExists(t, filepath.Join(tempDir, "config", "components"),
+		"vendored component should not be written next to vendor.yaml")
+}
+
+// TestVendorPullTargetsRelativeToManifestWithoutVendorBasePath verifies the negative path: without
+// `vendor.base_path` in atmos.yaml the manifest is discovered next to the working directory, so
+// relative targets keep resolving against the manifest's own directory.
+func TestVendorPullTargetsRelativeToManifestWithoutVendorBasePath(t *testing.T) {
+	tempDir := vendorBasePathFixture(t)
+	configDir := filepath.Join(tempDir, "config")
+
+	// Drop the `vendor.base_path` setting, leaving vendor.yaml to be discovered in the working
+	// directory instead.
+	atmosYAML := fmt.Sprintf(`base_path: "%s"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+
+logs:
+  level: Info
+`, filepath.ToSlash(tempDir))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	// Run from the config directory, where vendor.yaml lives.
+	t.Chdir(configDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", configDir)
+
+	err := ExecuteVendorPullCommand(newVendorPullTestCmd(), []string{})
+	require.NoError(t, err, "'atmos vendor pull' should execute without error")
+
+	assert.FileExists(t, filepath.Join(configDir, "components", "terraform", "mock", "main.tf"),
+		"vendored component should be written relative to the vendor manifest")
+	assert.NoDirExists(t, filepath.Join(tempDir, "components"),
+		"vendored component should not be written relative to the Atmos base path")
 }
 
 // TestVendorPullTripleSlashNormalization tests end-to-end triple-slash URI normalization.

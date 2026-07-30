@@ -75,9 +75,27 @@ spec:
 
   <dt>`targets`</dt>
   <dd>
-  The `targets` in each source supports absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
-    are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
-    will be considered relative to the `base_path`. Multiple targets can be specified.
+  The `targets` in each source supports absolute paths and relative paths. Multiple targets can be specified.
+
+  Relative targets are resolved against one of two roots, depending on how Atmos located the manifest:
+
+  <dl>
+    <dt>The Atmos `base_path`</dt>
+    <dd>
+      When `atmos.yaml` declares where the manifest lives via the [`vendor.base_path`](/cli/configuration/vendor) setting, relative targets
+      resolve against the Atmos `base_path` — the same root that `components.terraform.base_path` and `stacks.base_path` are relative to.
+      This lets you keep `atmos.yaml` and `vendor.yaml` together in a configuration directory while vendored artifacts still land in the
+      project, rather than next to the manifest.
+    </dd>
+
+    <dt>The manifest's own directory</dt>
+    <dd>
+      When `vendor.base_path` is not configured and Atmos discovers `vendor.yaml` in the working directory, relative targets resolve against
+      the directory containing the manifest.
+    </dd>
+  </dl>
+
+  Absolute targets are always used as-is.
   </dd>
 
   <dt>`included_paths` and `excluded_paths`</dt>
