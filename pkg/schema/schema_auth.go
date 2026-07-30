@@ -36,7 +36,7 @@ type Provider struct {
 	Username                string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
 	Password                string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
 	Driver                  string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
-	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
+	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type" jsonschema_extras:"deprecated=true,x-atmos-replacement=driver"` // Deprecated: use driver.
 	DownloadBrowserDriver   bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
 	BrowserType             string                 `yaml:"browser_type,omitempty" json:"browser_type,omitempty" mapstructure:"browser_type"`                                  // Browser engine type: chromium, firefox, webkit, chrome, msedge, etc.
 	BrowserExecutablePath   string                 `yaml:"browser_executable_path,omitempty" json:"browser_executable_path,omitempty" mapstructure:"browser_executable_path"` // Path to custom browser executable.

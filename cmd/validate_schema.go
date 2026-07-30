@@ -81,8 +81,10 @@ func runValidateSchema(cmd *cobra.Command, args []string) error {
 func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles []string, affected bool, excludes []string) error {
 	// Schema validation does not require a stacks directory — atmos.yaml (and its
 	// fragments) must be validatable in repositories that only carry CLI configuration.
-	if err := checkAtmosConfigE(WithStackValidation(false)); err != nil {
-		return err
+	if !isBuiltinConfigSchemaValidation(args) {
+		if err := checkAtmosConfigE(WithStackValidation(false)); err != nil {
+			return err
+		}
 	}
 
 	schema := ""
@@ -135,7 +137,7 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 	if err != nil {
 		return err
 	}
-	if !report.HasErrors() {
+	if !report.HasErrors() && len(report.Diagnostics) == 0 {
 		_, err := fmt.Fprintln(cmd.OutOrStdout(), "✓ All YAML schemas validated successfully")
 		return err
 	}
@@ -146,7 +148,17 @@ func runValidateSchemaForFiles(cmd *cobra.Command, args []string, affectedFiles 
 	if _, err := fmt.Fprintln(cmd.OutOrStdout(), validation.Rich(report, validation.DefaultRichOptions(root))); err != nil {
 		return err
 	}
+	if !report.HasErrors() {
+		return nil
+	}
 	return errUtils.ExitCodeError{Code: 1, Silent: true}
+}
+
+// isBuiltinConfigSchemaValidation reports whether this command targets the
+// embedded Atmos configuration schema. It must not require successful config
+// decoding before validating the configuration that failed to decode.
+func isBuiltinConfigSchemaValidation(args []string) bool {
+	return len(args) == 1 && args[0] == "config"
 }
 
 func init() {

@@ -169,6 +169,16 @@ func (p *oidcProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 	return nil
 }
 
+// IsAmbient satisfies authTypes.AmbientProvider. The federated token is re-read from
+// ambient state on every call (token_file_path, AZURE_FEDERATED_TOKEN_FILE, or the
+// GitHub Actions OIDC endpoint) and exchanged for a short-lived access token.
+// Persisting the result would let the auth manager replay a principal whose source token
+// has since been rotated, so the manager must never cache credentials for chains rooted
+// at this provider.
+func (p *oidcProvider) IsAmbient() bool {
+	return true
+}
+
 // getHTTPClient returns the HTTP client to use for requests.
 func (p *oidcProvider) getHTTPClient() httpClient.Client {
 	if p.httpClient != nil {

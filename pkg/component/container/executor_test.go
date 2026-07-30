@@ -166,7 +166,17 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
 	section := map[string]any{
-		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
+		"build": map[string]any{
+			"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}, "engine": "buildx",
+			"driver": map[string]any{
+				"name": "component-builder", "provider": "docker-container",
+				"opts": map[string]any{"image": "mirror.gcr.io/moby/buildkit:buildx-stable-1"},
+			},
+			"cache": map[string]any{
+				"from": []any{map[string]any{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+				"to":   []any{map[string]any{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}},
+			},
+		},
 	}
 	withStubs(t, section, nil, rt)
 
@@ -174,6 +184,15 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 		DoAndReturn(func(_ context.Context, b *ctr.BuildConfig) error {
 			assert.Equal(t, "app", b.Context)
 			assert.Equal(t, []string{"img:1"}, b.Tags)
+			require.NotNil(t, b.Driver)
+			assert.Equal(t, "component-builder", b.Driver.Name)
+			assert.Equal(t, "docker-container", b.Driver.Provider)
+			assert.Equal(t, "mirror.gcr.io/moby/buildkit:buildx-stable-1", b.Driver.Opts["image"])
+			require.NotNil(t, b.Cache)
+			require.Len(t, b.Cache.From, 1)
+			require.Len(t, b.Cache.To, 1)
+			assert.Equal(t, "registry.example.com/app:buildcache", b.Cache.From[0]["ref"])
+			assert.Equal(t, "max", b.Cache.To[0]["mode"])
 			return nil
 		})
 
@@ -547,6 +566,47 @@ func TestEnvListToMap(t *testing.T) {
 	assert.Equal(t, "1", env["A"])
 	assert.Equal(t, "secret", env["B"])
 	assert.Equal(t, "3", env["C"])
+}
+
+// TestResolvedRuntime_PropagatesDetectionError verifies (*resolved).runtime
+// returns the detection error unchanged instead of forwarding a partially
+// resolved runtime.
+func TestResolvedRuntime_PropagatesDetectionError(t *testing.T) {
+	orig := detectRuntime
+	t.Cleanup(func() { detectRuntime = orig })
+	detectRuntime = func(_ context.Context, _ string, _ bool) (ctr.Runtime, error) {
+		return nil, assert.AnError
+	}
+
+	// An explicit runtime preference bypasses the durable-cache path entirely,
+	// so detectRuntime is called directly and deterministically.
+	r := &resolved{runtimePref: "docker"}
+	rt, err := r.runtime(context.Background())
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Nil(t, rt)
+}
+
+// TestResolvedRuntime_ForwardsEnvToEnvSetterRuntime verifies (*resolved).runtime
+// forwards the resolved component env to the detected runtime when it
+// implements ctr.EnvSetter (e.g. so registry auth reaches the docker/podman
+// CLI subprocess), and returns the runtime unchanged otherwise.
+func TestResolvedRuntime_ForwardsEnvToEnvSetterRuntime(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	underlying := &envSetterMockRuntime{MockRuntime: NewMockRuntime(ctrl)}
+
+	orig := detectRuntime
+	t.Cleanup(func() { detectRuntime = orig })
+	detectRuntime = func(_ context.Context, _ string, _ bool) (ctr.Runtime, error) {
+		return underlying, nil
+	}
+
+	r := &resolved{runtimePref: "docker", envList: []string{"FOO=bar"}}
+	rt, err := r.runtime(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, underlying, rt)
+	require.Len(t, underlying.setEnvCalls, 1)
+	assert.Equal(t, []string{"FOO=bar"}, underlying.setEnvCalls[0])
 }
 
 func TestDefaultStopTimeoutValue(t *testing.T) {

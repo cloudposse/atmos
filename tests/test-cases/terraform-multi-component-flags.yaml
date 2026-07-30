@@ -29,6 +29,20 @@ tests:
     description: "Verify graph preflight reports the unavailable required-secret backend before any Terraform component runs"
     workdir: "../examples/quick-start-advanced"
     command: "atmos"
+    # Pin the container runtime to Docker for this test only. The test asserts the
+    # "emulator unavailable" failure path, which must resolve fast regardless of what
+    # container runtime happens to be installed on the host. Without this override, a host
+    # with Docker installed-but-not-running (so auto-detection falls through to Podman) and
+    # no Podman machine yet created triggers a real Podman machine init+start here instead of
+    # failing fast — a multi-minute (or, under load, effectively unbounded) real VM bootstrap
+    # unrelated to what this test verifies. Note ATMOS_CONTAINER_RUNTIME_AUTO_START=false does
+    # NOT prevent this: container.runtime.auto_start defaults to true and is OR'd with the env
+    # override in container.DetectRuntimeWithPreferenceAndRecovery, so the env var can only
+    # force auto-start on, never off. Pinning the runtime to "docker" instead sidesteps Podman
+    # (and its auto-start path) entirely: Docker's own probe (`docker info`) fails immediately
+    # when the daemon isn't running, with no recovery/auto-start behavior for Docker.
+    env:
+      ATMOS_CONTAINER_RUNTIME: "docker"
     args:
       - "terraform"
       - "plan"

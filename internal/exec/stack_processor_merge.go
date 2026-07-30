@@ -408,20 +408,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
-	// Merge metadata when inheritance is enabled.
-	// Base component metadata is merged with component metadata.
+	// Merge metadata (global + base component + component metadata).
+	// Priority (lowest to highest): global (stack-wide) → metadata.inherits base chain → component instance.
 	// Excluded from inheritance: 'inherits' and 'type' (already excluded during collection).
 	finalComponentMetadata := result.ComponentMetadata
-	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0 {
-		// Create a copy of base metadata excluding 'inherits' and 'type' (already excluded during collection).
-		// Then merge with component metadata (component metadata wins on conflicts).
-		finalComponentMetadata, err = m.Merge(
-			mergeConfig,
-			[]map[string]any{
-				result.BaseComponentMetadata,
-				result.ComponentMetadata,
-			},
-		)
+	metadataInheritEnabled := atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0
+	if len(opts.GlobalMetadata) > 0 || metadataInheritEnabled {
+		layers := []map[string]any{opts.GlobalMetadata}
+		if metadataInheritEnabled {
+			layers = append(layers, result.BaseComponentMetadata)
+		}
+		layers = append(layers, result.ComponentMetadata)
+		finalComponentMetadata, err = m.Merge(mergeConfig, layers)
 		if err != nil {
 			return nil, err
 		}

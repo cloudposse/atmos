@@ -1779,7 +1779,9 @@
         "docs": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Docs"
+              "$ref": "#/$defs/Docs",
+              "deprecated": true,
+              "x-atmos-replacement": "docs"
             },
             {
               "type": "null"
@@ -4361,7 +4363,9 @@
         "max-width": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.max-width"
             },
             {
               "type": "null"
@@ -4375,7 +4379,9 @@
         "pagination": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.pagination"
             },
             {
               "type": "null"
@@ -5541,7 +5547,9 @@
         "helm_aws_profile_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "--identity"
             },
             {
               "type": "null"
@@ -5552,7 +5560,9 @@
         "cluster_name_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "components.helmfile.cluster_name_template"
             },
             {
               "type": "null"
@@ -7815,7 +7825,9 @@
         "provider_type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "driver"
             },
             {
               "type": "null"
@@ -8847,7 +8859,9 @@
         "name_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "stacks.name_template"
             },
             {
               "type": "null"
@@ -9914,6 +9928,20 @@
             }
           ],
           "description": "Env step type fields."
+        },
+        "export": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Whether env-step values reach later child processes (default true)."
         },
         "code": {
           "anyOf": [
@@ -10984,7 +11012,9 @@
         "no_color": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.color (invert the value)"
             },
             {
               "type": "null"
@@ -13115,7 +13145,9 @@
         "type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "kind"
             },
             {
               "type": "null"
@@ -14341,6 +14373,20 @@
             }
           ],
           "description": "Env step type fields."
+        },
+        "export": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Whether env-step values reach later child processes (default true)."
         },
         "code": {
           "anyOf": [

@@ -481,6 +481,10 @@ var RootCmd = &cobra.Command{
 			} else if isCIGitCloneBootstrapRequested() {
 				tmpConfig.CI.Enabled = true
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
+			} else if isBuiltinConfigValidationCommand(cmd, args) {
+				// The built-in config validation commands must run when config decoding
+				// fails; reporting that invalid configuration is their purpose.
+				log.Debug("CLI configuration error (continuing for config validation)", "error", err)
 			} else if isVersionCommand() {
 				// Version command should always work, even with invalid config.
 				// Log config error but allow version command to proceed.
@@ -621,9 +625,9 @@ var RootCmd = &cobra.Command{
 					"", "",
 				)
 			case "warn":
-				ui.Experimental(experimentalCmd)
+				showExperimentalCommandNotice(cmd, experimentalCmd)
 			case "error":
-				ui.Experimental(experimentalCmd)
+				showExperimentalCommandNotice(cmd, experimentalCmd)
 				errUtils.CheckErrorPrintAndExit(
 					errUtils.Build(errUtils.ErrExperimentalRequiresIn).
 						WithContext("command", experimentalCmd).
@@ -1055,6 +1059,40 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+const (
+	experimentalNoticeAnnotation = "atmos.io/experimental-notice-emitted"
+	experimentalNoticeEmitted    = "true"
+)
+
+var writeExperimentalNotice = ui.Experimental
+
+// showExperimentalCommandNotice emits an experimental warning at most once for a command execution.
+// Cobra integrations can invoke a persistent pre-run more than once while setting up a command.
+func showExperimentalCommandNotice(cmd *cobra.Command, feature string) {
+	if cmd == nil {
+		return
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	if cmd.Annotations[experimentalNoticeAnnotation] == experimentalNoticeEmitted {
+		return
+	}
+
+	cmd.Annotations[experimentalNoticeAnnotation] = experimentalNoticeEmitted
+	writeExperimentalNotice(feature)
+}
+
+func resetExperimentalCommandNotices(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	delete(cmd.Annotations, experimentalNoticeAnnotation)
+	for _, child := range cmd.Commands() {
+		resetExperimentalCommandNotices(child)
+	}
 }
 
 // checkExperimentalSettings checks if any experimental settings are enabled in the config
@@ -1578,6 +1616,12 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
 		return nil
 	}
+	if isBuiltinConfigValidationArgs(args) {
+		// The built-in config validation commands must run when config decoding
+		// fails; reporting that invalid configuration is their purpose.
+		log.Debug("Warning: CLI configuration error (continuing for config validation)", "error", initErr)
+		return nil
+	}
 
 	if isHelpRequestedInArgs() {
 		// Help screens should always render, even with invalid config.
@@ -1618,6 +1662,105 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 
 	// Return other errors as-is.
 	return initErr
+}
+
+// configArgToken is the command-line argument token naming the "config"
+// subcommand family (e.g. `atmos config validate`, `atmos validate config`).
+const configArgToken = "config"
+
+// skipLeadingRootFlags advances past leading root-level flags so the returned
+// slice starts at the first command token. Returns ok=false if a `--`
+// terminator is hit, or a value-consuming flag runs out of arguments.
+func skipLeadingRootFlags(args []string) ([]string, bool) {
+	for len(args) > 0 {
+		if args[0] == "--" {
+			return nil, false
+		}
+		skip, consumesValue := isSkippableRootFlag(args[0])
+		if !skip {
+			break
+		}
+		if consumesValue {
+			if len(args) < 2 {
+				return nil, false
+			}
+			args = args[2:]
+			continue
+		}
+		args = args[1:]
+	}
+	return args, true
+}
+
+// isBuiltinConfigValidationArgs reports whether arguments invoke a built-in
+// command that validates the Atmos configuration itself.
+func isBuiltinConfigValidationArgs(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+
+	// Skip only leading root flags. Once a command token is found, remaining
+	// arguments belong to that command and must not be interpreted as commands.
+	args, ok := skipLeadingRootFlags(args[1:])
+	if !ok {
+		return false
+	}
+	return matchesConfigValidationCommandTokens(args)
+}
+
+// configValidationCommandSpellings lists the built-in command token sequences
+// that invoke config validation: `config validate`, `validate config`, and
+// `validate schema config`.
+var configValidationCommandSpellings = [][]string{
+	{configArgToken, "validate"},
+	{"validate", configArgToken},
+	{"validate", "schema", configArgToken},
+}
+
+// matchesConfigValidationCommandTokens reports whether args (with leading root
+// flags already stripped) start with one of configValidationCommandSpellings.
+func matchesConfigValidationCommandTokens(args []string) bool {
+	for _, spelling := range configValidationCommandSpellings {
+		if hasTokenPrefix(args, spelling) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTokenPrefix reports whether args starts with the given sequence of tokens.
+func hasTokenPrefix(args, prefix []string) bool {
+	if len(args) < len(prefix) {
+		return false
+	}
+	for i, token := range prefix {
+		if args[i] != token {
+			return false
+		}
+	}
+	return true
+}
+
+func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
+	switch cmd.CommandPath() {
+	case "atmos config validate", "atmos validate config":
+		return true
+	case "atmos validate schema":
+		return len(args) > 0 && args[0] == configArgToken
+	default:
+		return false
+	}
+}
+
+// configForStartupLogger returns a safe logger configuration when the main
+// configuration failed to decode, so validation can report the original error.
+func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr error) *schema.AtmosConfiguration {
+	if initErr == nil {
+		return atmosConfig
+	}
+	return &schema.AtmosConfiguration{
+		Logs: schema.Logs{File: "/dev/stderr", Level: "Warning"},
+	}
 }
 
 func isCIGitCloneBootstrapRequested() bool {
@@ -1741,6 +1884,7 @@ func shortChdirHasInlineValue(arg string) bool {
 func Execute() error {
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
 	defer castcmd.FinalizeRecording()
+	resetExperimentalCommandNotices(RootCmd)
 
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
@@ -1805,7 +1949,7 @@ func Execute() error {
 	debugPromote := maybePromoteLogLevelForDebugMode(&atmosConfig, initErr == nil)
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
-	SetupLogger(&atmosConfig)
+	SetupLogger(configForStartupLogger(&atmosConfig, initErr))
 
 	if debugPromote.Promoted {
 		log.Info(
