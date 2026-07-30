@@ -874,6 +874,29 @@ func ProcessStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// Spacelift stack and Atlantis project names must be set before template
+	// processing below: stack-level defaults (e.g. `tags.spacelift_stack:
+	// "{{ .spacelift_stack }}"`) reference them by name, and the template context
+	// is a snapshot of ComponentSection taken before templates run. Both builders
+	// only depend on ComponentSettingsSection/ComponentVarsSection/ComponentFromArg/
+	// Stack, all already populated at this point, so computing them here (instead
+	// of after templates) doesn't lose any information.
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
 	// Component mocks are literal fixture data. Keep them out of template and YAML
 	// function processing so a mock cannot resolve the real dependency it is meant
 	// to replace when --use-mocks is enabled.
@@ -965,24 +988,6 @@ func ProcessStacks(
 	}
 	if hasLiteralMocks {
 		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
-	}
-
-	// Spacelift stack.
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if spaceliftStackName != "" {
-		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
-	}
-
-	// Atlantis project.
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if atlantisProjectName != "" {
-		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
 
 	// Process the ENV variables from the `env` section.
