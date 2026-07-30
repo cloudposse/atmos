@@ -170,6 +170,12 @@ auth:
   <dd>Optional. OIDC audience. Defaults to STS endpoint for the region.</dd>
 </dl>
 
+:::info Credentials are never cached
+`github/oidc` requests a fresh token from the GitHub Actions token endpoint on every
+authentication, and Atmos never writes the resulting credentials to the keyring. A rotated
+Actions token is always picked up on the next run.
+:::
+
 </TabItem>
 <TabItem value="azure" label="Azure">
 
@@ -264,6 +270,13 @@ auth:
   <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
 </dl>
 
+:::info Credentials are never cached
+`azure/oidc` re-reads its federated token on every authentication — from `spec.token_file_path`,
+the `AZURE_FEDERATED_TOKEN_FILE` environment variable, or the GitHub Actions OIDC endpoint,
+whichever applies — and Atmos never writes the resulting tokens (or credentials derived from
+them) to the keyring. Rotate the token at its source and the next run picks it up.
+:::
+
 ### GitHub Actions Setup
 
 <File title=".github/workflows/deploy.yaml">
@@ -320,6 +333,13 @@ auth:
 
 :::note
 The `azure/cli` provider requires existing Azure CLI credentials. Run `az login` first.
+:::
+
+:::info Credentials are never cached
+`azure/cli` re-reads your Azure CLI session on every authentication, and Atmos never writes
+its tokens (or any credentials derived from them) to the keyring. Switch accounts with
+`az login` and the next `atmos auth login` picks up the new principal — no `atmos auth logout`
+needed.
 :::
 
 ## Sovereign Clouds (GCC High, China)
@@ -419,6 +439,13 @@ auth:
 The `gcp/adc` provider requires existing Application Default Credentials. Run `gcloud auth application-default login` first.
 :::
 
+:::info Credentials are never cached
+`gcp/adc` re-reads Application Default Credentials on every authentication, and Atmos never
+writes its tokens (or any credentials derived from them) to the keyring. Switch accounts with
+`gcloud auth application-default login` and the next `atmos auth login` picks up the new
+principal — no `atmos auth logout` needed.
+:::
+
 ## Workload Identity Federation
 
 For CI/CD pipelines using OIDC tokens (e.g., GitHub Actions).
@@ -512,6 +539,13 @@ auth:
   <dt>`scopes`</dt>
   <dd>Optional. OAuth scopes for the access token.</dd>
 </dl>
+
+:::info Credentials are never cached
+Like `gcp/adc`, `gcp/workload-identity-federation` re-reads its OIDC token from whichever
+`token_source` you configured — `url`, `file`, or `environment` — on every authentication, and
+Atmos never writes the resulting tokens (or credentials derived from them) to the keyring.
+Rotate the token at its source and the next run picks it up, with no `atmos auth logout` needed.
+:::
 
 ### GitHub Actions Setup
 
