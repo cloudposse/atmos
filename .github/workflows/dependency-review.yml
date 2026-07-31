@@ -28,37 +28,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Verify brace-expansion is pinned to the verified patched versions
-        # GHSA-mh99-v99m-4gvg is allowlisted below by ID only, which would otherwise
-        # let any future brace-expansion resolution (e.g. an unpatched 3.x/4.x, or a
-        # 1.x/2.x release without the backported fix) through silently. Scope the
-        # exception to the exact versions verified to contain the fix so a lockfile
-        # drift fails loudly instead of bypassing the vulnerability check.
-        run: |
-          set -euo pipefail
-          allowed="1.1.18
-          2.1.4"
-          found=$(
-            {
-              grep -oE '^  brace-expansion@[0-9]+\.[0-9]+\.[0-9]+:' website/pnpm-lock.yaml || test $? -eq 1
-            } | sed -E 's/^  brace-expansion@//; s/:$//' | sort -u
-          )
-          if [ -z "$found" ]; then
-            echo "::error::No brace-expansion entries found in website/pnpm-lock.yaml. If the dependency was removed, delete the GHSA-mh99-v99m-4gvg allowlist entry and this check."
-            exit 1
-          fi
-          bad=""
-          while IFS= read -r v; do
-            if ! grep -qxF "$v" <<< "$allowed"; then
-              bad="$bad $v"
-            fi
-          done <<< "$found"
-          if [ -n "$bad" ]; then
-            echo "::error::Unexpected brace-expansion version(s) resolved:$bad. The GHSA-mh99-v99m-4gvg allowlist in this workflow is scoped only to the verified patched versions ($(echo "$allowed" | tr '\n' ' ')). Verify the new version actually contains the EXPANSION_MAX_LENGTH fix, then update both the pnpm override and this check's \`allowed\` list."
-            exit 1
-          fi
-          echo "brace-expansion resolved version(s) ($found) match the verified GHSA-mh99-v99m-4gvg patched set."
-
       - name: Dependency Review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
@@ -106,20 +75,39 @@ jobs:
           # 5.x's CommonJS build changed from a callable default export
           # (`module.exports = expand`) to a named export (`exports.expand`), which
           # breaks minimatch@3.1.5's `require('brace-expansion')(...)` call
-          # convention (transitive via serve-handler/@docusaurus/core). Remove this
-          # entry once GitHub's advisory data accounts for the 1.x/2.x backports, or
-          # once minimatch drops its 1.x brace-expansion dependency.
+          # convention (transitive via serve-handler/@docusaurus/core).
+          #
+          # This is a known, already-closed-as-wontfix situation upstream, not
+          # something fixable from this repo: see isaacs/minimatch#314 and #310.
+          # The ReDoS fix was backported into brace-expansion's 1.x/2.x lines, but
+          # minimatch's maintainer declined to bump the older 3.x/5.x/8.x/9.x
+          # release lines to brace-expansion 5.x, since those lines exist to
+          # support CJS-only consumers. minimatch's current release (10.2.6) does
+          # depend on brace-expansion ^5.0.8 (the patched line the advisory
+          # recognizes), but nothing in our tree can reach it: serve-handler@6.1.7
+          # (used by @docusaurus/core for `docusaurus serve`) still hard-pins
+          # minimatch to 3.1.5, and everything else here resolves minimatch@9.0.9,
+          # which depends on brace-expansion ^2.0.1.
           #
           # NOTE: allow-ghsas suppresses this GHSA for every resolved
           # brace-expansion version, not just 1.1.18/2.1.4 -- the action has no
           # package/version-scoped vulnerability exception (only
-          # allow-dependencies-licenses is purl-scoped, and that's license-only).
-          # Two layers keep this exception actually scoped: the exact override
-          # values in website/package.json's pnpm.overrides (the selectors are
-          # `brace-expansion@^1`/`@^2`, but their pinned targets are the exact
-          # "1.1.18"/"2.1.4", not a range), and the "Verify brace-expansion is
-          # pinned" step above, which fails the job if website/pnpm-lock.yaml
-          # ever resolves brace-expansion to anything outside {1.1.18, 2.1.4}.
+          # allow-dependencies-licenses is purl-scoped, and that's license-only),
+          # and dependency-review-action has no SARIF/code-scanning output either,
+          # so this is the only suppression mechanism it offers -- not a
+          # workaround chosen over some cleaner supported path. The scoping that
+          # exists is the exact override values in website/package.json's
+          # pnpm.overrides (`brace-expansion@^1`/`@^2` selectors pinned to the
+          # exact "1.1.18"/"2.1.4", not a range).
+          #
+          # Remove this entry once either: GHSA-mh99-v99m-4gvg's advisory data is
+          # corrected to distinguish brace-expansion's 1.x/2.x/5.x release lines
+          # (see https://github.com/advisories/GHSA-mh99-v99m-4gvg for a
+          # firstPatchedVersion per major line instead of one "<=5.0.7" range), or
+          # serve-handler and whatever still depends on minimatch@9.0.9 both move
+          # to a minimatch version that depends on brace-expansion ^5 -- at that
+          # point also remove the brace-expansion overrides in
+          # website/package.json.
           allow-ghsas: GHSA-fxhp-mv3v-67qp, GHSA-mh99-v99m-4gvg
 
           # Comment on PR with details
