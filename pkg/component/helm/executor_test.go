@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -347,10 +349,14 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 			cfg.RepositoriesSectionName: []any{
 				map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
 			},
-			"repository": "https://example.com/charts",
-			"version":    "1.2.3",
-			"name":       "demo",
-			"namespace":  "apps",
+			"repository":                    "https://example.com/charts",
+			"version":                       "1.2.3",
+			"name":                          "demo",
+			"namespace":                     "apps",
+			cfg.HelmWaitStrategySectionName: "watcher",
+			cfg.HelmWaitForJobsSectionName:  true,
+			cfg.HelmTimeoutSectionName:      "15m",
+			cfg.HelmMaxHistorySectionName:   0,
 		},
 	}
 
@@ -362,6 +368,11 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 	assert.Equal(t, "demo", spec.ReleaseName)
 	assert.Equal(t, "apps", spec.Namespace)
 	assert.True(t, spec.IncludeCRDs)
+	assert.Equal(t, kube.StatusWatcherStrategy, spec.Lifecycle.Policy.WaitStrategy)
+	assert.True(t, spec.Lifecycle.Policy.WaitForJobs)
+	assert.Equal(t, 15*time.Minute, spec.Lifecycle.Policy.Timeout)
+	assert.Zero(t, spec.Lifecycle.Policy.MaxHistory)
+	assert.True(t, spec.Lifecycle.TimeoutExplicit)
 	repo, found := findRepository(spec.Repositories, "bitnami")
 	require.True(t, found)
 	assert.Equal(t, "https://charts.bitnami.com/bitnami", repo.URL)

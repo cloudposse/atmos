@@ -345,7 +345,7 @@
     },
     "components": {
       "title": "components",
-      "description": "Components section. Supports built-in types (terraform, helmfile, kubernetes, packer) and custom component types defined in custom commands.",
+      "description": "Components section. Supports built-in types (terraform, helmfile, helm, kubernetes, packer) and custom component types defined in custom commands.",
       "oneOf": [
         {
           "type": "string",
@@ -1000,6 +1000,234 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm": {
+      "title": "helm",
+      "description": "Native Helm component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "rollback_on_failure": {
+              "type": "boolean"
+            },
+            "atomic": {
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "rollback_on_failure"
+            },
+            "wait_strategy": {
+              "$ref": "#/definitions/helm_wait_strategy"
+            },
+            "wait": {
+              "type": "boolean"
+            },
+            "wait_for_jobs": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string"
+            },
+            "cleanup_on_fail": {
+              "type": "boolean"
+            },
+            "max_history": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disable_chart_hooks": {
+              "type": "boolean"
+            },
+            "skip_crds": {
+              "type": "boolean"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_wait_strategy": {
+      "title": "helm_wait_strategy",
+      "description": "Helm 4 release wait strategy",
+      "type": "string",
+      "enum": [
+        "watcher",
+        "hookOnly",
+        "legacy"
+      ]
+    },
+    "helm_components": {
+      "title": "helm_components",
+      "description": "Native Helm components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/helm_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "helm_component_manifest": {
+      "title": "helm_component_manifest",
+      "description": "Native Helm component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "chart": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "values": {
+              "type": "object"
+            },
+            "values_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "rollback_on_failure": {
+              "type": "boolean"
+            },
+            "atomic": {
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "rollback_on_failure"
+            },
+            "wait_strategy": {
+              "$ref": "#/definitions/helm_wait_strategy"
+            },
+            "wait": {
+              "type": "boolean"
+            },
+            "wait_for_jobs": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string"
+            },
+            "cleanup_on_fail": {
+              "type": "boolean"
+            },
+            "max_history": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disable_chart_hooks": {
+              "type": "boolean"
+            },
+            "skip_crds": {
+              "type": "boolean"
             }
           },
           "required": []

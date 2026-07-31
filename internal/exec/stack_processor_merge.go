@@ -674,6 +674,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		finalComponentHelm, err := m.Merge(
 			mergeConfig,
 			[]map[string]any{
+				opts.GlobalHelmLifecycle,
 				result.BaseComponentHelm,
 				result.ComponentHelm,
 			},

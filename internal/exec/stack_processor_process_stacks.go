@@ -178,6 +178,7 @@ func ProcessStackConfig(
 	helmGenerate := map[string]any{}
 	helmSource := map[string]any{}
 	helmProvision := map[string]any{}
+	helmLifecycleDefaults := map[string]any{}
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
@@ -825,6 +826,8 @@ func ProcessStackConfig(
 	}
 
 	// Helm section.
+	helmLifecycleDefaults = extractHelmLifecycleSection(globalHelmSection)
+
 	if i, ok := globalHelmSection[cfg.CommandSectionName]; ok {
 		helmCommand, ok = i.(string)
 		if !ok {
@@ -1220,6 +1223,7 @@ func ProcessStackConfig(
 					GlobalAndTerraformGenerate: globalAndHelmGenerate,
 					GlobalSourceSection:        helmSource,
 					GlobalProvisionSection:     helmProvision,
+					GlobalHelmLifecycle:        helmLifecycleDefaults,
 					AtmosConfig:                atmosConfig,
 				}, nil
 			}
