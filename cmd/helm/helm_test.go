@@ -42,7 +42,10 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	}
 
 	applyCmd := newOperationCommand("apply", "Apply")
-	assert.NotNil(t, applyCmd.Flag("target"))
+	for _, name := range []string{"target", "rollback-on-failure", "atomic", "wait", "wait-for-jobs", "timeout", "cleanup-on-fail", "history-max", "no-hooks", "skip-crds"} {
+		assert.NotNil(t, applyCmd.Flag(name), "expected apply flag %q", name)
+	}
+	assert.Equal(t, "watcher", applyCmd.Flag("wait").NoOptDefVal)
 	assert.Nil(t, applyCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("split"))
 	assert.NotNil(t, applyCmd.ValidArgsFunction)
@@ -51,6 +54,13 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 
 	// template does not get --target; apply/deploy do.
 	assert.Nil(t, templateCmd.Flag("target"))
+	assert.Nil(t, templateCmd.Flag("wait"))
+
+	deleteCmd := newOperationCommand("delete", "Delete")
+	for _, name := range []string{"wait", "timeout", "no-hooks"} {
+		assert.NotNil(t, deleteCmd.Flag(name), "expected delete flag %q", name)
+	}
+	assert.Nil(t, deleteCmd.Flag("rollback-on-failure"))
 
 	// diff/plan get the baseline-selection flags; other operations do not.
 	for _, opName := range []string{"diff", "plan"} {
@@ -61,6 +71,46 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	}
 	assert.Nil(t, applyCmd.Flag("against"))
 	assert.Nil(t, templateCmd.Flag("from-manifest"))
+}
+
+func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
+	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"rollback-on-failure": "true",
+		"atomic":              "false",
+		"wait":                "legacy",
+		"wait-for-jobs":       "true",
+		"timeout":             "15m",
+		"cleanup-on-fail":     "true",
+		"history-max":         "0",
+		"no-hooks":            "true",
+		"skip-crds":           "true",
+	})
+
+	actual := getOperationFlags(cmd)
+	assert.Equal(t, true, actual[cfg.HelmRollbackOnFailureSectionName])
+	assert.Equal(t, false, actual[cfg.HelmAtomicSectionName])
+	assert.Equal(t, "legacy", actual[cfg.HelmWaitStrategySectionName])
+	assert.Equal(t, true, actual[cfg.HelmWaitForJobsSectionName])
+	assert.Equal(t, "15m", actual[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, true, actual[cfg.HelmCleanupOnFailSectionName])
+	assert.Equal(t, 0, actual[cfg.HelmMaxHistorySectionName])
+	assert.Equal(t, true, actual[cfg.HelmDisableChartHooksSectionName])
+	assert.Equal(t, true, actual[cfg.HelmSkipCRDsSectionName])
+
+	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
+	for _, key := range []string{
+		cfg.HelmRollbackOnFailureSectionName,
+		cfg.HelmAtomicSectionName,
+		cfg.HelmWaitStrategySectionName,
+		cfg.HelmWaitForJobsSectionName,
+		cfg.HelmTimeoutSectionName,
+		cfg.HelmCleanupOnFailSectionName,
+		cfg.HelmMaxHistorySectionName,
+		cfg.HelmDisableChartHooksSectionName,
+		cfg.HelmSkipCRDsSectionName,
+	} {
+		assert.NotContains(t, defaults, key)
+	}
 }
 
 func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
