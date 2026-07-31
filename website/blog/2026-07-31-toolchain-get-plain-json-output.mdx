@@ -1,0 +1,73 @@
+---
+slug: toolchain-get-plain-json-output
+title: "Script-Friendly Output for atmos toolchain get"
+authors: [osterman]
+tags: [feature]
+---
+
+Pulling a tool's version into a script usually means scraping decorated terminal output. A checkmark here, a
+color code there, maybe a table row — and now the one-liner that used to grab a version string needs a
+regex, a `head -1`, and a `2>&1` to work around output that was never meant to be parsed.
+
+<!--truncate-->
+
+## The Problem
+
+A CI job that needs a tool's configured version — to pass to another action, or write to
+`GITHUB_OUTPUT` — had to reach for something like:
+
+```shell
+version=$(atmos toolchain get vale-cli/vale 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+echo "version=$version" >> "$GITHUB_OUTPUT"
+```
+
+That's a lot of shell just to answer "what version is configured?" — a regex to strip a checkmark and
+color codes, `head -1` because the human-readable view can list more than one line, and `2>&1` because the
+output goes to stderr, not stdout.
+
+## The Fix
+
+`atmos toolchain get` now supports a `--format` flag with two script-friendly output modes alongside the
+existing human-readable table: `plain` prints just the bare version string, and `json` prints structured
+output including whether that version is installed.
+
+## How to Use It
+
+Grab a version with nothing to parse:
+
+```shell
+atmos toolchain get vale-cli/vale --format=plain
+# 2.20.0
+```
+
+Which collapses the CI snippet above to:
+
+```shell
+version=$(atmos toolchain get vale-cli/vale --format=plain)
+echo "version=$version" >> "$GITHUB_OUTPUT"
+```
+
+Ask for more than the version string with `--format=json`:
+
+```shell
+atmos toolchain get terraform --format=json
+```
+
+```json
+{
+  "tool": "hashicorp/terraform",
+  "version": "1.9.8",
+  "installed": false
+}
+```
+
+`--format=plain` only makes sense for a single resolved version, so it's rejected when combined with
+`--all` (which lists every available version) — use `--format=json` there instead, which returns the full
+list with each entry's installed and default status.
+
+## Get Involved
+
+Try `--format=plain` or `--format=json` the next time you're piping a tool version into a script. If you
+run into a `toolchain` command that still only prints decorated, hard-to-parse output, please
+[open an issue](https://github.com/cloudposse/atmos/issues) so we can add the same script-friendly modes
+there too.

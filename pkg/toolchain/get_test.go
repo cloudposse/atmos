@@ -1,6 +1,9 @@
 package toolchain
 
 import (
+	"bytes"
+	"encoding/json"
+	stdio "io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,8 +12,49 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// testStreams is a minimal io.Streams implementation for capturing data-channel output in tests.
+type testStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (ts *testStreams) Input() stdio.Reader     { return ts.stdin }
+func (ts *testStreams) Output() stdio.Writer    { return ts.stdout }
+func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
+func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
+func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
+
+// installVersionForTest makes FindBinaryPath resolve owner/repo@version as installed by
+// pointing ATMOS_XDG_CACHE_HOME at a temp dir and placing an executable at the exact path
+// GetBinaryPath expects: <cache>/atmos/toolchain/bin/<owner>/<repo>/<version>/<repo>.
+func installVersionForTest(t *testing.T, owner, repo, version string) {
+	t.Helper()
+	cacheDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", cacheDir)
+
+	versionDir := filepath.Join(cacheDir, "atmos", "toolchain", "bin", owner, repo, version)
+	require.NoError(t, os.MkdirAll(versionDir, defaultMkdirPermissions))
+	require.NoError(t, os.WriteFile(filepath.Join(versionDir, repo), []byte("fake binary"), 0o755))
+}
+
+// captureDataOutput redirects the pkg/data writer to a buffer for the duration of the test.
+func captureDataOutput(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	stdout := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	t.Cleanup(data.Reset)
+	return stdout
+}
 
 // Setup temporary .tool-versions file for testing.
 func createTempToolVersionsFile(t *testing.T, content string) string {
@@ -115,7 +159,7 @@ func TestListToolVersions(t *testing.T) {
 				},
 			})
 			// Run the function
-			err := ListToolVersions(tt.showAll, tt.limit, tt.toolName)
+			err := ListToolVersions(tt.showAll, tt.limit, tt.toolName, "table")
 
 			// Check error
 			if tt.expectedError == "" {
@@ -129,6 +173,71 @@ func TestListToolVersions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListToolVersions_FormatPlain(t *testing.T) {
+	filePath := createTempToolVersionsFile(t, "owner/repo 1.0.0 2.0.0\n")
+	binaryDir := createTempBinary(t, "owner", "repo", "1.0.0")
+	t.Setenv("HOME", binaryDir)
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{VersionsFile: filePath},
+	})
+
+	stdout := captureDataOutput(t)
+
+	err := ListToolVersions(false, 0, "owner/repo", "plain")
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0\n", stdout.String())
+}
+
+func TestListToolVersions_FormatPlainWithAllRejected(t *testing.T) {
+	err := ListToolVersions(true, 10, "owner/repo", "plain")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolchainPlainFormatWithAllFlag)
+}
+
+func TestListToolVersions_FormatJSON(t *testing.T) {
+	filePath := createTempToolVersionsFile(t, "owner/repo 1.0.0 2.0.0\n")
+	installVersionForTest(t, "owner", "repo", "1.0.0")
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{VersionsFile: filePath},
+	})
+
+	stdout := captureDataOutput(t)
+
+	err := ListToolVersions(false, 0, "owner/repo", "json")
+	require.NoError(t, err)
+
+	var got ToolVersionInfo
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	assert.Equal(t, ToolVersionInfo{Tool: "owner/repo", Version: "1.0.0", Installed: true}, got)
+}
+
+func TestListToolVersions_FormatJSONWithAll(t *testing.T) {
+	filePath := createTempToolVersionsFile(t, "owner/repo 1.0.0\n")
+	installVersionForTest(t, "owner", "repo", "1.0.0")
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{VersionsFile: filePath},
+	})
+
+	mock := NewMockGitHubAPI()
+	mock.SetReleases("owner", "repo", []string{"1.0.0"})
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+
+	stdout := captureDataOutput(t)
+
+	err := ListToolVersions(true, 5, "owner/repo", "json")
+	require.NoError(t, err)
+
+	var got ToolVersionList
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	assert.Equal(t, "owner/repo", got.Tool)
+	assert.NotEmpty(t, got.Versions)
+	require.Len(t, got.Versions, 1)
+	assert.Equal(t, "1.0.0", got.Versions[0].Version)
+	assert.True(t, got.Versions[0].Installed)
+	assert.True(t, got.Versions[0].Default)
 }
 
 func TestGetDefaultFromFile(t *testing.T) {
