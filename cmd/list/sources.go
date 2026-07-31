@@ -40,8 +40,13 @@ const (
 
 // Package-level function variables for testing.
 var (
-	initCliConfigForSources         = config.InitCliConfig
-	executeDescribeStacksForSources = e.ExecuteDescribeStacks
+	initCliConfigForSources = config.InitCliConfig
+	// This uses the scoped describe variant so --tags/--labels act as an
+	// early-evaluation scope: out-of-scope components are skipped before
+	// auth/template/YAML-function evaluation, matching the sibling list
+	// commands' scope-before-evaluate pattern (see
+	// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md).
+	executeDescribeStacksForSources = e.ExecuteDescribeStacksScoped
 )
 
 var sourcesParser *flags.StandardParser
@@ -196,6 +201,14 @@ func initSourcesCommand(cmd *cobra.Command, args []string) (*SourcesOptions, err
 
 // fetchAndFilterSources fetches stack data and extracts filtered sources.
 func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, err
+	}
+
+	// --tags/--labels also scope the describe pass (early-skip): components
+	// excluded by the selectors never reach auth/template/YAML-function
+	// evaluation.
 	stacksMap, err := executeDescribeStacksForSources(
 		opts.AtmosConfig,
 		opts.Stack,
@@ -206,17 +219,16 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 		false, // includeEmptyStacks
 		opts.Skip,
 		opts.AuthManager,
+		opts.AuthManager == nil,
+		opts.Tags,
+		labels,
+		e.DescribeStacksErrorOptions{},
 	)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrExecuteDescribeStacks).
 			WithCause(err).
 			WithContext(keyStack, opts.Stack).
 			Err()
-	}
-
-	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
-	if err != nil {
-		return nil, err
 	}
 
 	var sources []map[string]any

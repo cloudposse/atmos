@@ -25,10 +25,11 @@ func Stacks(stacksMap map[string]any, tagsFilter []string, labelsFilter map[stri
 	}
 
 	var stacks []map[string]any
+	componentTypes := getComponentTypes()
 
 	for stackName, stackData := range stacksMap {
 		stackMap, isMap := stackData.(map[string]any)
-		if isMap && !stackMatchesAnyComponent(stackMap, tagsFilter, labelsFilter) {
+		if isMap && !stackMatchesAnyComponent(stackMap, componentTypes, tagsFilter, labelsFilter) {
 			continue
 		}
 		if !isMap && (len(tagsFilter) > 0 || len(labelsFilter) > 0) {
@@ -52,9 +53,11 @@ func Stacks(stacksMap map[string]any, tagsFilter []string, labelsFilter map[stri
 }
 
 // stackMatchesAnyComponent reports whether at least one component in stackMap
-// (across every registered component type) independently satisfies both the
-// tags (any-match) and labels (all-match) filters. Empty filters always match.
-func stackMatchesAnyComponent(stackMap map[string]any, tagsFilter []string, labelsFilter map[string]string) bool {
+// (across every component type in componentTypes) independently satisfies
+// both the tags (any-match) and labels (all-match) filters. Empty filters
+// always match; componentTypes is supplied by the caller (see Stacks) so it
+// is computed once per call instead of once per stack.
+func stackMatchesAnyComponent(stackMap map[string]any, componentTypes []string, tagsFilter []string, labelsFilter map[string]string) bool {
 	defer perf.Track(nil, "extract.stackMatchesAnyComponent")()
 
 	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
@@ -66,7 +69,7 @@ func stackMatchesAnyComponent(stackMap map[string]any, tagsFilter []string, labe
 		return false
 	}
 
-	for _, componentType := range getComponentTypes() {
+	for _, componentType := range componentTypes {
 		typeComponents, ok := componentsMap[componentType].(map[string]any)
 		if !ok {
 			continue

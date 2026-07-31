@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -101,6 +103,51 @@ func TestFetchAndFilterSources_TagsLabelsFilter(t *testing.T) {
 	sources, err := fetchAndFilterSources(opts)
 	require.NoError(t, err)
 	assert.Empty(t, sources, "a tag no component carries must exclude every source")
+}
+
+// TestFetchAndFilterSources_ScopesDescribeCall proves --tags/--labels reach
+// executeDescribeStacksForSources as scoping selectors (not nil, nil),
+// matching the scope-before-evaluate pattern used by the sibling list
+// commands: out-of-scope components must never reach auth/template/
+// YAML-function evaluation. See
+// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
+func TestFetchAndFilterSources_ScopesDescribeCall(t *testing.T) {
+	orig := executeDescribeStacksForSources
+	defer func() { executeDescribeStacksForSources = orig }()
+
+	var gotTagsFilter []string
+	var gotLabelsFilter map[string]string
+	executeDescribeStacksForSources = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ []string, _ []string, _ []string,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ auth.AuthManager,
+		_ bool,
+		tagsFilter []string,
+		labelsFilter map[string]string,
+		_ e.DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		gotTagsFilter = tagsFilter
+		gotLabelsFilter = labelsFilter
+		return map[string]any{}, nil
+	}
+
+	opts := &SourcesOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Tags:        []string{"prod"},
+		LabelsRaw:   "team=platform",
+	}
+
+	sources, err := fetchAndFilterSources(opts)
+	require.NoError(t, err)
+	assert.Empty(t, sources)
+	assert.Equal(t, []string{"prod"}, gotTagsFilter, "--tags must scope the describe pass, not just post-filter results")
+	assert.Equal(t, map[string]string{"team": "platform"}, gotLabelsFilter, "--labels must scope the describe pass, not just post-filter results")
 }
 
 // TestGetSourcesListColumnsForContext tests dynamic column configuration.

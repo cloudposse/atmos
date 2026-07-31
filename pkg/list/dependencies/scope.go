@@ -4,6 +4,7 @@ import (
 	"maps"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -98,7 +99,7 @@ func Roots(graph *dependency.Graph, sel *Selector) []string {
 
 // matches reports whether a node satisfies every selector filter.
 func (s *Selector) matches(node *dependency.Node) bool {
-	if len(s.Components) > 0 && !containsString(s.Components, node.Component) {
+	if len(s.Components) > 0 && !slices.Contains(s.Components, node.Component) {
 		return false
 	}
 	if !stackMatches(s.Stack, node.Stack) {
@@ -299,14 +300,4 @@ func pendingComponentsByStack(stackNames []string, componentsByStack map[string]
 		}
 	}
 	return pending
-}
-
-// containsString reports whether values contains value.
-func containsString(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
 }

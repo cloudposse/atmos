@@ -108,34 +108,46 @@ func TestBuildInstanceFilters_FiltersRows(t *testing.T) {
 		{"component": "eks", "stack": "dev", "tags": []string{"network", "compute"}, "labels": map[string]string{"team": "platform", "env": "dev"}},
 	}
 
-	t.Run("multi-tag any-match", func(t *testing.T) {
-		// "database" and "compute" never co-occur on one row, but requesting
-		// both as an any-match still returns every row matching either one.
-		filters, err := buildInstanceFilters("", []string{"database", "compute"}, "", atmosConfig)
-		require.NoError(t, err)
-		require.Len(t, filters, 1)
+	tests := []struct {
+		name           string
+		tags           []string
+		labelsRaw      string
+		wantFilterLen  int
+		wantComponents []string
+	}{
+		{
+			// "database" and "compute" never co-occur on one row, but requesting
+			// both as an any-match still returns every row matching either one.
+			name:           "multi-tag any-match",
+			tags:           []string{"database", "compute"},
+			wantFilterLen:  1,
+			wantComponents: []string{"rds", "eks"},
+		},
+		{
+			// eks has both team=platform and env=dev; vpc has team=platform but no env.
+			// All-match must require every requested label, not just one.
+			name:           "multi-label all-match",
+			labelsRaw:      "team:platform,env:dev",
+			wantFilterLen:  1,
+			wantComponents: []string{"eks"},
+		},
+		{
+			name:           "tags and labels combined match only the intersection",
+			tags:           []string{"network"},
+			labelsRaw:      "team:platform",
+			wantFilterLen:  2,
+			wantComponents: []string{"vpc", "eks"},
+		},
+	}
 
-		filtered := applyInstanceFilters(t, rows, filters)
-		assert.Equal(t, []string{"rds", "eks"}, instanceComponentsOf(filtered))
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			filters, err := buildInstanceFilters("", tc.tags, tc.labelsRaw, atmosConfig)
+			require.NoError(t, err)
+			require.Len(t, filters, tc.wantFilterLen)
 
-	t.Run("multi-label all-match", func(t *testing.T) {
-		// eks has both team=platform and env=dev; vpc has team=platform but no env.
-		filters, err := buildInstanceFilters("", nil, "team:platform,env:dev", atmosConfig)
-		require.NoError(t, err)
-		require.Len(t, filters, 1)
-
-		filtered := applyInstanceFilters(t, rows, filters)
-		require.Len(t, filtered, 1, "all-match must require every requested label, not just one")
-		assert.Equal(t, "eks", filtered[0]["component"])
-	})
-
-	t.Run("tags and labels combined match only the intersection", func(t *testing.T) {
-		filters, err := buildInstanceFilters("", []string{"network"}, "team:platform", atmosConfig)
-		require.NoError(t, err)
-		require.Len(t, filters, 2)
-
-		filtered := applyInstanceFilters(t, rows, filters)
-		assert.Equal(t, []string{"vpc", "eks"}, instanceComponentsOf(filtered))
-	})
+			filtered := applyInstanceFilters(t, rows, filters)
+			assert.Equal(t, tc.wantComponents, instanceComponentsOf(filtered))
+		})
+	}
 }
