@@ -28,6 +28,11 @@ func buildChartSpec(
 
 	section := info.ComponentSection
 
+	lifecycle, err := resolveReleaseLifecycle(section)
+	if err != nil {
+		return nil, err
+	}
+
 	chart, _ := section[cfg.ChartSectionName].(string)
 	chart = resolveLocalChart(chart, componentPath)
 
@@ -45,6 +50,7 @@ func buildChartSpec(
 		Values:       values,
 		IncludeCRDs:  true,
 		Repositories: mergeRepositories(atmosConfig, section),
+		Lifecycle:    lifecycle,
 	}, nil
 }
 

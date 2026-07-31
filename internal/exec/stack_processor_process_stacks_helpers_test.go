@@ -677,6 +677,32 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 	})
 }
 
+func TestExtractHelmLifecycleSections(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:                 "charts/demo-release",
+		cfg.HelmRollbackOnFailureSectionName: true,
+		cfg.HelmWaitStrategySectionName:      "watcher",
+		cfg.HelmTimeoutSectionName:           "30m",
+		cfg.HelmMaxHistorySectionName:        10,
+		"unrecognized":                       "ignored",
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, "charts/demo-release", component[cfg.ChartSectionName])
+	assert.Equal(t, true, component[cfg.HelmRollbackOnFailureSectionName])
+	assert.Equal(t, "watcher", component[cfg.HelmWaitStrategySectionName])
+	assert.Equal(t, "30m", component[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, 10, component[cfg.HelmMaxHistorySectionName])
+	assert.NotContains(t, component, "unrecognized")
+
+	defaults := extractHelmLifecycleSection(section)
+	assert.NotContains(t, defaults, cfg.ChartSectionName)
+	assert.Equal(t, true, defaults[cfg.HelmRollbackOnFailureSectionName])
+	assert.Equal(t, "watcher", defaults[cfg.HelmWaitStrategySectionName])
+	assert.Equal(t, "30m", defaults[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, 10, defaults[cfg.HelmMaxHistorySectionName])
+}
+
 // Compile-time guard: a rename of the schema Plugins fields fails the build.
 var (
 	_ = schema.Helm{Plugins: []string{"diff@v3.9.4"}}
