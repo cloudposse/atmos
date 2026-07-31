@@ -49,10 +49,13 @@ func TestLoadAtmosDFromDirectory_StatPermissionError(t *testing.T) {
 	v.SetConfigType("yaml")
 
 	// Call loadAtmosDFromDirectory - should hit the stat error path.
-	// The error is logged at Debug level (not returned), so function should complete.
-	loadAtmosDFromDirectory(parentDir, v)
+	// Stat/permission errors are logged at Debug level and treated as non-fatal
+	// (unlike YAML parse errors, which are returned), so the function should
+	// complete with a nil error.
+	err = loadAtmosDFromDirectory(parentDir, v)
 
-	// Function should complete without panic even with permission errors.
+	// Function should complete without error even with permission errors.
+	assert.NoError(t, err)
 }
 
 // TestMergeFiles_ReadFileError covers the os.ReadFile failure branch in mergeFiles.
