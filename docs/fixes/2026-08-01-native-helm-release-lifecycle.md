@@ -1,0 +1,23 @@
+# Native Helm release lifecycle
+
+**Date:** 2026-08-01
+
+Native Helm cluster operations now expose Helm 4 wait, timeout, recovery,
+history, hook, and CRD controls through stack configuration and explicit command
+flags. Apply and delete dry runs now reach the Helm SDK without persisting release
+state, and caller cancellation propagates through direct and dependency-ordered
+execution.
+
+## Migration notes
+
+- An omitted `timeout` remains `0s` (unbounded) for one minor release and emits a
+  warning. The omitted default becomes `5m` in the following minor. Configure
+  `timeout: 0s` explicitly to keep unbounded behavior without the warning.
+- An omitted `max_history` now retains ten upgrade revisions, matching the Helm
+  CLI. Configure `max_history: 0` to retain unlimited history.
+- `atomic` is deprecated in favor of `rollback_on_failure`.
+- Boolean `--wait=true` and `--wait=false` remain accepted temporarily; use
+  `--wait=watcher` and `--wait=hookOnly`.
+- Explicit lifecycle flags cannot be combined with a non-Kubernetes provision
+  target. Stored lifecycle configuration is intentionally bypassed for external
+  delivery and is identified as such in the execution summary.

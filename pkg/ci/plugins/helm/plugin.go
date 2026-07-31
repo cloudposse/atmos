@@ -118,6 +118,7 @@ func (p *Plugin) buildTemplateContext(ctx *plugin.HookContext) *TemplateContext 
 		ObjectCount:     data.ObjectCount,
 		ObjectKinds:     data.ObjectKinds,
 		ManifestBytes:   data.ManifestBytes,
+		Lifecycle:       data.Lifecycle,
 		Message:         data.Message,
 		Diff:            plugin.TruncateDetail(data.Diff),
 	}
@@ -135,6 +136,7 @@ type TemplateContext struct {
 	ObjectCount   int
 	ObjectKinds   []string
 	ManifestBytes int
+	Lifecycle     map[string]any
 	Message       string
 	// Diff is the unified diff produced by `helm diff`/`plan` (empty otherwise).
 	Diff string
@@ -152,6 +154,7 @@ type Summary struct {
 	ObjectCount   int
 	ObjectKinds   []string
 	ManifestBytes int
+	Lifecycle     map[string]any
 	Message       string
 	// Diff is the unified diff produced by `helm diff`/`plan` (empty otherwise).
 	Diff string
@@ -185,11 +188,24 @@ func summaryFromMap(m map[string]any) Summary {
 		ObjectCount:   intValue(m["object_count"]),
 		ObjectKinds:   stringSliceValue(m["object_kinds"]),
 		ManifestBytes: intValue(m["manifest_bytes"]),
+		Lifecycle:     mapValue(m["lifecycle"]),
 		Message:       stringValue(m["message"]),
 		Diff:          stringValue(m["diff"]),
 	}
 	sort.Strings(s.ObjectKinds)
 	return s
+}
+
+func mapValue(value any) map[string]any {
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	result := make(map[string]any, len(typed))
+	for key, item := range typed {
+		result[key] = item
+	}
+	return result
 }
 
 func helmTemplateName(command string) string {

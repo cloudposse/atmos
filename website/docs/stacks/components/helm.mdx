@@ -75,6 +75,72 @@ included in affected runs.
   <dd>Delivery targets for <code>apply</code>/<code>deploy</code> — the cluster (default) or an external target such as a Git deployment repository.</dd>
 </dl>
 
+## Release Lifecycle
+
+Cluster-backed `apply`, `deploy`, and `delete` operations can use Helm 4 release
+lifecycle controls. Configure them at the top-level `helm` section as defaults,
+on an abstract component for inheritance, or on a concrete component. Normal
+Atmos precedence applies; concrete components override inherited and type-level
+values.
+
+| Field | Default | Operations | Behavior |
+| --- | --- | --- | --- |
+| `rollback_on_failure` | `false` | install, upgrade | Uninstall a failed first install or roll a failed upgrade back. Enabling it promotes the default wait strategy to `watcher`. |
+| `wait_strategy` | `hookOnly` | install, upgrade, delete | `hookOnly`, `watcher`, or Helm 3-compatible `legacy`. |
+| `wait_for_jobs` | `false` | install, upgrade | Wait for ordinary Jobs. Requires `watcher` or `legacy`; hook Jobs are already handled by Helm hooks. |
+| `timeout` | `0s` during migration | install, upgrade, delete | Helm operation timeout. Explicit `0s` remains unbounded. |
+| `cleanup_on_fail` | `false` | upgrade | Remove resources newly created by a failed upgrade. |
+| `max_history` | `10` | upgrade | Revisions retained. Set `0` for unlimited history. |
+| `disable_chart_hooks` | `false` | install, upgrade, delete | Disable Helm chart hooks. This does not disable Atmos `hooks:`. |
+| `skip_crds` | `false` | install | Do not install CRDs from the chart on first install. |
+
+`atomic` is a deprecated alias for `rollback_on_failure`; `wait: true` and
+`wait: false` are convenience aliases for `watcher` and `hookOnly`. Canonical
+fields win when both forms are inherited or configured.
+
+:::warning Timeout and history migration
+For one minor release, omitting `timeout` preserves the previous unbounded `0s`
+behavior and emits a warning. The following minor changes the omitted default to
+`5m`. Set `timeout: 0s` explicitly to remain unbounded, or set a duration such as
+`30m`. An omitted `max_history` now retains ten revisions; set
+`max_history: 0` if unlimited release history is required.
+:::
+
+<File title="stacks/catalog/demo-release.yaml">
+```yaml
+helm:
+  wait_strategy: watcher
+  timeout: 10m
+  max_history: 10
+
+components:
+  helm:
+    release-policy:
+      metadata:
+        type: abstract
+      rollback_on_failure: true
+      cleanup_on_fail: true
+
+    demo-release:
+      metadata:
+        inherits:
+          - release-policy
+      chart: ./charts/demo-release
+      namespace: demo
+      timeout: 30m
+```
+</File>
+
+With `dependencies.components`, a successful Helm DAG node means the selected
+Helm action completed under this effective policy. `watcher` and `legacy` gate
+dependents on resource readiness; `hookOnly` intentionally does not wait for
+ordinary chart resources. A failed or rolled-back node remains failed, so its
+dependents do not start.
+
+Lifecycle policy applies only to the Kubernetes target. Stored lifecycle values
+are ignored and reported as bypassed for external Git delivery; explicitly
+passing lifecycle flags with an external target is an error.
+
 Reusable repository defaults can also be configured under
 `components.helm.repositories` in `atmos.yaml`. Component-level repositories
 override global entries with the same `name`.
@@ -101,6 +167,11 @@ components:
         - name: prometheus-community
           url: https://prometheus-community.github.io/helm-charts
       namespace: monitoring
+      wait_strategy: watcher
+      wait_for_jobs: true
+      timeout: 20m
+      rollback_on_failure: true
+      max_history: 10
       values:
         grafana:
           enabled: true

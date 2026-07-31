@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -157,7 +158,11 @@ func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
-	return runInstall(ctx, client, actx.settings, spec)
+	manifest, err := runInstall(ctx, client, actx.settings, spec)
+	if err != nil {
+		return "", releaseOperationError("install", spec, err)
+	}
+	return manifest, nil
 }
 
 func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
@@ -189,10 +194,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return "", ctxErr
 		}
-		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
-			return "", fmt.Errorf("failed to upgrade Helm release %q: %w", spec.ReleaseName, err)
-		}
-		return "", fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUpgrade, spec.ReleaseName, err)
+		return "", releaseOperationError("upgrade", spec, err)
 	}
 	rendered, ok := rel.(*release.Release)
 	if !ok {
@@ -267,7 +269,7 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
 		}
-		uninstallErr := fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
+		uninstallErr := releaseOperationError("delete", spec, err)
 		if ctxErr := operationCtx.Err(); ctxErr != nil {
 			return errors.Join(ctxErr, uninstallErr)
 		}
@@ -277,6 +279,21 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 		return err
 	}
 	return nil
+}
+
+func releaseOperationError(operation string, spec *chartSpec, cause error) error {
+	policy := spec.Lifecycle.Policy
+	return fmt.Errorf(
+		"%w: operation=%s release=%q namespace=%q wait_strategy=%s timeout=%s (component field %q): %w",
+		errUtils.ErrHelmReleaseOperation,
+		operation,
+		spec.ReleaseName,
+		spec.Namespace,
+		policy.WaitStrategy,
+		policy.Timeout,
+		cfg.HelmTimeoutSectionName,
+		cause,
+	)
 }
 
 func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {
