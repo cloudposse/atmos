@@ -334,12 +334,16 @@ func TransformStackConfigToSpaceliftStacks(
 						if stackComponentSettingsDependsOnContext.Stage == "" {
 							stackComponentSettingsDependsOnContext.Stage = context.Stage
 						}
+						if stackComponentSettingsDependsOnContext.Region == "" {
+							stackComponentSettingsDependsOnContext.Region = context.Region
+						}
 
 						dependsOnVars := map[string]any{
 							"namespace":   stackComponentSettingsDependsOnContext.Namespace,
 							"tenant":      stackComponentSettingsDependsOnContext.Tenant,
 							"environment": stackComponentSettingsDependsOnContext.Environment,
 							"stage":       stackComponentSettingsDependsOnContext.Stage,
+							"region":      stackComponentSettingsDependsOnContext.Region,
 						}
 						contextPrefixDependsOn, err := e.ResolveSpaceliftContextPrefix(
 							atmosConfig,

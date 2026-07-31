@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -134,11 +135,12 @@ func TestResolveStackFromContext(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		atmosConfig   *schema.AtmosConfiguration
-		expectedStack string
-		expectError   bool
-		expectedErrIs error
+		name                string
+		atmosConfig         *schema.AtmosConfiguration
+		expectedStack       string
+		expectError         bool
+		expectedErrIs       error
+		expectedErrContains string
 	}{
 		{
 			name: "name_template takes precedence and resolves the stack",
@@ -172,7 +174,8 @@ func TestResolveStackFromContext(t *testing.T) {
 					NameTemplate: "{{.vars.tenant}}-{{.vars.region}}",
 				},
 			},
-			expectError: true,
+			expectError:         true,
+			expectedErrContains: "region",
 		},
 		{
 			name: "name_template referencing an undefined var honors ignore_missing_template_values",
@@ -198,6 +201,9 @@ func TestResolveStackFromContext(t *testing.T) {
 				if tt.expectedErrIs != nil {
 					assert.ErrorIs(t, err, tt.expectedErrIs)
 				}
+				if tt.expectedErrContains != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrContains)
+				}
 				return
 			}
 			require.NoError(t, err)
@@ -216,7 +222,7 @@ func TestResolveStackFromContext(t *testing.T) {
 // some error was returned.
 func TestExecuteAwsEksUpdateKubeconfig_ResolvesStackFromNameTemplateContext(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
-	t.Chdir("../../tests/fixtures/scenarios/complete")
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
 
 	ctx := schema.AwsEksUpdateKubeconfigContext{
 		Tenant:      "nonexistent-tenant",

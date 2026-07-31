@@ -251,7 +251,7 @@ func TestTransformStackConfigToSpaceliftStacks_DuplicateStackName(t *testing.T) 
 	assert.Contains(t, err.Error(), "dup-stack")
 }
 
-func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateMissingVar(t *testing.T) {
+func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateResolvesRegion(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	stacks := map[string]any{
@@ -288,16 +288,19 @@ func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateMissingVar(t
 		},
 	}
 
-	// name_template references `.vars.region`, which is present in each component's own
-	// `vars` (so the component's own stack-name resolution succeeds), but the
-	// `settings.depends_on` resolution only ever synthesizes namespace/tenant/environment/
-	// stage for the referenced component -- it never carries a "region" key. That asymmetry
-	// means a name_template referencing anything outside those four tokens fails specifically
-	// while resolving a `depends_on` entry, even though the identical template renders fine
-	// for the component's own stack name a few lines earlier in the same function.
+	// name_template references `.vars.region`. The `settings.depends_on` resolution path
+	// defaults namespace/tenant/environment/stage/region from the *depending* component's
+	// own context (comp1) when the depends_on entry doesn't declare them explicitly, so the
+	// template renders successfully for the depends_on label too, not just the component's
+	// own stack name.
 	stackNameTemplate := "{{.vars.tenant}}-{{.vars.region}}"
 
-	_, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", stackNameTemplate, "", false, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "region")
+	result, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", stackNameTemplate, "", false, nil)
+	require.NoError(t, err)
+
+	comp1, ok := result["tenant1-us-east-2-comp1"].(map[string]any)
+	require.True(t, ok, "expected comp1's Spacelift stack config to be present")
+	labels, ok := comp1["labels"].([]string)
+	require.True(t, ok, "expected comp1's labels to be a []string")
+	assert.Contains(t, labels, "depends-on:tenant1-us-east-2-comp2")
 }
