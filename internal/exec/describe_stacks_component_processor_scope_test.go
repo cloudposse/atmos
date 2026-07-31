@@ -152,6 +152,88 @@ func TestInScopeByTagsAndLabels(t *testing.T) {
 	}
 }
 
+// TestInScopeByTagsAndLabelsWithContext covers the template-resolution layer
+// inScopeByTagsAndLabelsWithContext adds on top of inScopeByTagsAndLabels: a
+// templated tags/labels selector that resolves cleanly against the
+// component's data must produce a decidable scope match (not just fall
+// through to full evaluation), while one that fails to resolve (a missing
+// template key) must stay undecidable so the caller never wrongly excludes
+// the component.
+func TestInScopeByTagsAndLabelsWithContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		metadata      map[string]any
+		data          map[string]any
+		filterTags    []string
+		filterLabels  map[string]string
+		wantInScope   bool
+		wantDecidable bool
+	}{
+		{
+			name: "templated_tag_resolves_and_matches",
+			metadata: map[string]any{
+				"tags": []any{"{{ .vars.stage }}"},
+			},
+			data:          map[string]any{"vars": map[string]any{"stage": "prod"}},
+			filterTags:    []string{"prod"},
+			wantInScope:   true,
+			wantDecidable: true,
+		},
+		{
+			name: "templated_tag_resolves_and_misses",
+			metadata: map[string]any{
+				"tags": []any{"{{ .vars.stage }}"},
+			},
+			data:          map[string]any{"vars": map[string]any{"stage": "dev"}},
+			filterTags:    []string{"prod"},
+			wantInScope:   false,
+			wantDecidable: true,
+		},
+		{
+			name: "templated_tag_fails_to_resolve_stays_undecidable",
+			metadata: map[string]any{
+				"tags": []any{"{{ .vars.missing }}"},
+			},
+			data:          map[string]any{"vars": map[string]any{"stage": "prod"}},
+			filterTags:    []string{"prod"},
+			wantInScope:   true,
+			wantDecidable: false,
+		},
+		{
+			name: "templated_label_resolves_and_matches",
+			metadata: map[string]any{
+				"labels": map[string]any{"tier": "{{ .vars.stage }}"},
+			},
+			data:          map[string]any{"vars": map[string]any{"stage": "prod"}},
+			filterLabels:  map[string]string{"tier": "prod"},
+			wantInScope:   true,
+			wantDecidable: true,
+		},
+		{
+			name: "templated_label_fails_to_resolve_stays_undecidable",
+			metadata: map[string]any{
+				"labels": map[string]any{"tier": "{{ .vars.missing }}"},
+			},
+			data:          map[string]any{"vars": map[string]any{"stage": "prod"}},
+			filterLabels:  map[string]string{"tier": "prod"},
+			wantInScope:   true,
+			wantDecidable: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			inScope, decidable := inScopeByTagsAndLabelsWithContext(tc.metadata, tc.data, tc.filterTags, tc.filterLabels, "{{", "}}")
+			assert.Equal(t, tc.wantInScope, inScope, "inScope")
+			assert.Equal(t, tc.wantDecidable, decidable, "decidable")
+		})
+	}
+}
+
 // componentSectionWithTags returns a component section carrying
 // metadata.tags/metadata.labels plus a default-identity auth section, so that
 // resolveComponentAuthManager's own hasDefaultIdentity gate (see

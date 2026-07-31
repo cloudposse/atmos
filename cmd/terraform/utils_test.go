@@ -1137,6 +1137,19 @@ func TestCheckTerraformFlagsClosureFlags(t *testing.T) {
 			name: "include-dependencies with bare stack selection",
 			info: &schema.ConfigAndStacksInfo{IncludeDependencies: -1, Stack: "dev"},
 		},
+		{
+			// Destroying a selection's prerequisites tears down shared
+			// dependencies other components may still need — allowed, but
+			// checkTerraformFlags must warn rather than reject the run.
+			name: "include-dependencies with destroy warns but does not error",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "destroy"},
+		},
+		{
+			// include-dependents alone (no include-dependencies) must not
+			// trigger the destroy warning.
+			name: "include-dependents with destroy does not warn",
+			info: &schema.ConfigAndStacksInfo{IncludeDependents: -1, All: true, SubCommand: "destroy"},
+		},
 	}
 
 	for _, tt := range tests {

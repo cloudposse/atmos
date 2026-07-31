@@ -181,6 +181,117 @@ func TestExecuteListDependenciesCmd_CoverageIntegration(t *testing.T) {
 		"dependencies fixture should list vpc dependencies cleanly")
 }
 
+// TestDependenciesCmd_RunE_CoverageIntegration exercises dependenciesCmd.RunE
+// end-to-end against the dependencies fixture, covering the full Cobra glue
+// path — checkAtmosConfig → BindFlagsToViper → parseDependenciesOptions →
+// tags.ParseLabelsFlag → executeListDependenciesCmd — including the
+// --labels parsing step that unit tests calling executeListDependenciesCmd
+// directly (with pre-built opts) never reach.
+func TestDependenciesCmd_RunE_CoverageIntegration(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	// See TestSettingsCmd_RunE_CoverageIntegration: other tests in this package
+	// leak a viper "identity" value via the shared viper.GetViper() singleton;
+	// explicitly disabling identity resolution here makes the outcome
+	// independent of test ordering.
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("format", "json"))
+	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
+
+	require.NoError(t, dependenciesCmd.RunE(cmd, []string{"vpc"}),
+		"a valid --labels flag should parse cleanly through the full RunE path")
+}
+
+// TestDependenciesCmd_RunE_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as a command error from the RunE closure's
+// tags.ParseLabelsFlag call, rather than panicking or being silently ignored.
+func TestDependenciesCmd_RunE_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("labels", "not-a-valid-label"))
+
+	err := dependenciesCmd.RunE(cmd, []string{"vpc"})
+	require.Error(t, err)
+}
+
+// TestExecuteListDependenciesCmd_UnboundedSuccessBuildsFullGraph exercises
+// buildDependencyGraphForCommand's unbounded branch (no --stack/--component/
+// --tags/--labels) all the way through a successful dependencies.BuildGraph
+// call. TestExecuteListDependenciesCmd_UnboundedStillEvaluatesEverything
+// (dependencies_scoped_test.go) already covers this branch's describeStacks
+// error path; this covers the success path using a fixture with no
+// always-erroring component, so BuildGraph is actually reached.
+func TestExecuteListDependenciesCmd_UnboundedSuccessBuildsFullGraph(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	opts := &DependenciesOptions{
+		Format:           "json",
+		Direction:        "both",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+		AuthDisabled:     true,
+	}
+
+	require.NoError(t, executeListDependenciesCmd(cmd, []string{}, opts),
+		"an unbounded request over a clean fixture should build the full graph without error")
+}
+
+// TestInstancesCmd_RunE_InvalidClosureFlag proves the RunE closure's
+// parseListClosureOptions error path surfaces as a command error: an
+// unparseable --include-dependencies value must fail before
+// executeListInstancesCmd ever runs.
+func TestInstancesCmd_RunE_InvalidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("instances", instancesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, "not-a-depth"))
+
+	err := instancesCmd.RunE(cmd, []string{})
+	require.Error(t, err)
+}
+
+// TestInstancesCmd_RunE_ValidClosureFlag exercises the RunE closure's
+// success path through parseListClosureOptions with a real depth-carrying
+// closure flag value, all the way to executeListInstancesCmd.
+func TestInstancesCmd_RunE_ValidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("instances", instancesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set("format", "json"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, flags.ClosureDepthUnlimited))
+
+	require.NoError(t, instancesCmd.RunE(cmd, []string{}),
+		"a valid --include-dependencies value should parse cleanly through the full RunE path")
+}
+
+// TestStacksCmd_RunE_InvalidClosureFlag proves the RunE closure's
+// parseListClosureOptions error path surfaces as a command error before
+// listStacksWithOptions ever runs.
+func TestStacksCmd_RunE_InvalidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, "not-a-depth"))
+
+	err := stacksCmd.RunE(cmd, []string{})
+	require.Error(t, err)
+}
+
 // TestListStacksWithOptions_CoverageIntegration exercises the cmd-layer
 // `listStacksWithOptions` + `executeAndExtractStacks` against the
 // `complete` fixture for the non-tree format path and asserts a clean

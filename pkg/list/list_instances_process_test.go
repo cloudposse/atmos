@@ -93,6 +93,43 @@ func TestProcessInstancesWithDeps_EmptyStacksMap(t *testing.T) {
 	assert.Empty(t, instances)
 }
 
+// TestProcessInstancesWithDeps_InvalidStackPattern proves a malformed --stack
+// glob pattern surfaces as an error from processInstancesWithDeps' call to
+// collectInstances, rather than being silently ignored — the describe pass
+// itself succeeds (filterByStack is always "" at that call site; --stack
+// filtering happens afterward via collectInstances), so this isolates the
+// error to the pattern-validation guard.
+func TestProcessInstancesWithDeps_InvalidStackPattern(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStacksProcessor := e.NewMockStacksProcessor(ctrl)
+	atmosConfig := &schema.AtmosConfiguration{}
+	stacksMap := map[string]interface{}{
+		"dev": map[string]interface{}{
+			"components": map[string]interface{}{
+				"terraform": map[string]interface{}{
+					"vpc": map[string]interface{}{
+						"metadata": map[string]interface{}{"type": "real"},
+						"vars":     map[string]interface{}{"region": "us-east-1"},
+					},
+				},
+			},
+		},
+	}
+
+	mockStacksProcessor.EXPECT().
+		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, nil).
+		Return(stacksMap, nil)
+
+	instances, stacksMapResult, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "[", false, nil, nil)
+
+	assert.Error(t, err)
+	assert.Nil(t, instances)
+	assert.Nil(t, stacksMapResult)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+}
+
 // TestProcessInstancesWithDeps_MultipleStacks tests processing multiple stacks.
 func TestProcessInstancesWithDeps_MultipleStacks(t *testing.T) {
 	ctrl := gomock.NewController(t)

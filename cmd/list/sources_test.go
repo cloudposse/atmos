@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestSourcesCommand tests that the sources command has the correct structure.
@@ -57,6 +59,48 @@ func TestSourcesOptions(t *testing.T) {
 	assert.Equal(t, "json", opts.Format)
 	assert.Equal(t, "dev", opts.Stack)
 	assert.Equal(t, "vpc", opts.Component)
+}
+
+// TestFetchAndFilterSources_InvalidLabelsFlag proves a malformed LabelsRaw
+// surfaces as an error from fetchAndFilterSources' tags.ParseLabelsFlag call,
+// rather than being silently ignored.
+func TestFetchAndFilterSources_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	opts := &SourcesOptions{
+		AtmosConfig: &atmosConfig,
+		LabelsRaw:   "not-a-valid-label",
+	}
+
+	_, err = fetchAndFilterSources(opts)
+	require.Error(t, err)
+}
+
+// TestFetchAndFilterSources_TagsLabelsFilter proves a valid --tags/--labels
+// filter reaches filterSourcesByTagsLabels: since the complete fixture's
+// components carry no metadata.tags/metadata.labels, a filter that requires
+// one must exclude every source.
+func TestFetchAndFilterSources_TagsLabelsFilter(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	opts := &SourcesOptions{
+		AtmosConfig: &atmosConfig,
+		Tags:        []string{"nonexistent-tag"},
+	}
+
+	sources, err := fetchAndFilterSources(opts)
+	require.NoError(t, err)
+	assert.Empty(t, sources, "a tag no component carries must exclude every source")
 }
 
 // TestGetSourcesListColumnsForContext tests dynamic column configuration.

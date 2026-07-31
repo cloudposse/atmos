@@ -52,6 +52,31 @@ func TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack(t *test
 		"bounded --stack app-a must never evaluate app-b's always-erroring component")
 }
 
+// TestExecuteListDependenciesCmd_ScopedEvaluationPropagatesError proves that a
+// bounded request whose own seed stack fails evaluation surfaces the error
+// through buildScopedDependencyGraph rather than being swallowed: unlike
+// TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack (which
+// bounds to the healthy app-a), this bounds directly to app-b, whose `broken`
+// component always fails template rendering once evaluated.
+func TestExecuteListDependenciesCmd_ScopedEvaluationPropagatesError(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesScopedFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	opts := &DependenciesOptions{
+		Format:           "json",
+		Direction:        "both",
+		Stack:            "app-b",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		AuthDisabled:     true,
+	}
+
+	err := executeListDependenciesCmd(cmd, []string{}, opts)
+	require.Error(t, err, "a bounded request whose own seed stack fails evaluation must surface the error")
+	assert.Contains(t, err.Error(), "app-b must never be evaluated")
+}
+
 // TestExecuteListDependenciesCmd_UnboundedStillEvaluatesEverything documents the
 // known, unchanged boundary of the fix: with no --stack/--component filter,
 // there is no closure to scope evaluation to, so every stack (including
