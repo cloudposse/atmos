@@ -1089,4 +1089,3 @@ vars:
     terraform_workspace: tenant1-ue2-dev
   tenant: tenant1
 workspace: tenant1-ue2-dev
-
