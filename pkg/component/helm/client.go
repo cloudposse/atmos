@@ -211,8 +211,11 @@ func getDeployedManifest(releaseName, namespace string) (string, error) {
 }
 
 // deleteRelease uninstalls the release.
-func deleteRelease(spec *chartSpec, dryRun bool) error {
+func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 	defer perf.Track(nil, "helm.deleteRelease")()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	actx, err := newActionContext(spec.Namespace)
 	if err != nil {
@@ -226,6 +229,9 @@ func deleteRelease(spec *chartSpec, dryRun bool) error {
 			return nil
 		}
 		return fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return nil
 }

@@ -64,7 +64,7 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 		default:
 		}
 
-		if err := executeGraphNode(opts, &order[i]); err != nil {
+		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
 			return err
 		}
 	}
@@ -103,7 +103,7 @@ func prepareExecutionOrder(opts *GraphExecutionOptions) (dependency.ExecutionOrd
 }
 
 // executeGraphNode executes a single graph node through the component provider.
-func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error {
+func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *dependency.Node) error {
 	nodeInfo := *opts.Info
 	nodeInfo.ComponentType = opts.ComponentType
 	nodeInfo.ComponentFromArg = node.Component
@@ -115,6 +115,7 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 	nodeInfo.Affected = false
 
 	if err := opts.Provider.Execute(&ExecutionContext{
+		Context:             ctx,
 		AtmosConfig:         opts.AtmosConfig,
 		ComponentType:       opts.ComponentType,
 		Component:           node.Component,
