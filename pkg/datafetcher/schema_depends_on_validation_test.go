@@ -115,28 +115,39 @@ const dependsOnDeprecationReplacement = "dependencies.components"
 // practitioners get. Annotating the definition means every `$ref` to it inherits the marker.
 func TestManifestSchema_DependsOnIsMarkedDeprecated(t *testing.T) {
 	for schemaName, schemaData := range dependsOnSchemas(t) {
-		for _, defName := range []string{"depends_on", "depends_on_manifest"} {
-			t.Run(schemaName+"/"+defName, func(t *testing.T) {
-				def := schemaDefinition(t, schemaData, defName)
+		t.Run(schemaName+"/depends_on", func(t *testing.T) {
+			def := schemaDefinition(t, schemaData, "depends_on")
 
-				deprecated, ok := def["deprecated"].(bool)
-				require.Truef(t, ok, "%s.%s must declare a boolean `deprecated`", schemaName, defName)
-				assert.Truef(t, deprecated, "%s.%s must be marked deprecated", schemaName, defName)
+			deprecated, ok := def["deprecated"].(bool)
+			require.Truef(t, ok, "%s.depends_on must declare a boolean `deprecated`", schemaName)
+			assert.Truef(t, deprecated, "%s.depends_on must be marked deprecated", schemaName)
 
-				assert.Equalf(t, dependsOnDeprecationReplacement, def["x-atmos-replacement"],
-					"%s.%s must point at the replacement section", schemaName, defName)
+			assert.Equalf(t, dependsOnDeprecationReplacement, def["x-atmos-replacement"],
+				"%s.depends_on must point at the replacement section", schemaName)
 
-				description, _ := def["description"].(string)
-				assert.Containsf(t, description, dependsOnDeprecationReplacement,
-					"%s.%s description must name the replacement for editors without `deprecated` support", schemaName, defName)
-			})
-		}
+			description, _ := def["description"].(string)
+			assert.Containsf(t, description, dependsOnDeprecationReplacement,
+				"%s.depends_on description must name the replacement for editors without `deprecated` support", schemaName)
+		})
+
+		// The entry shape is deliberately NOT deprecated. `depends_on_manifest` models a single
+		// legacy entry and is reachable only through the deprecated `depends_on` container, so
+		// marking it too would strike through every entry in an editor on top of the already-struck
+		// container. Migration metadata belongs on the container and its call sites only.
+		t.Run(schemaName+"/depends_on_manifest is not independently deprecated", func(t *testing.T) {
+			def := schemaDefinition(t, schemaData, "depends_on_manifest")
+
+			assert.NotContainsf(t, def, "deprecated",
+				"%s.depends_on_manifest must not carry its own `deprecated` marker", schemaName)
+			assert.NotContainsf(t, def, "x-atmos-replacement",
+				"%s.depends_on_manifest must not carry its own replacement pointer", schemaName)
+		})
 	}
 }
 
 // TestManifestSchema_DependsOnCallSitesAreMarkedDeprecated checks every `depends_on` property that
 // `$ref`s the deprecated definition, since editors differ in whether they follow a `$ref` for
-// annotations. Both the definition and each call site must carry the marker.
+// annotations. Both the container definition and each call site must carry the marker.
 func TestManifestSchema_DependsOnCallSitesAreMarkedDeprecated(t *testing.T) {
 	for schemaName, schemaData := range dependsOnSchemas(t) {
 		t.Run(schemaName, func(t *testing.T) {
