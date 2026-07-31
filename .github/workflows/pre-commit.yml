@@ -5,6 +5,9 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
+  # Released binary used by hooks that invoke Atmos. This must not build source
+  # during pre-commit, which runs in a worktree-sensitive lifecycle event.
+  ATMOS_BOOTSTRAP_VERSION: "1.224.1"
   # Ensure pre-commit uses the right Python version
   PYTHON_VERSION: "3.11"
   # Skip hooks that are already running in other CI jobs to avoid redundant work
@@ -34,6 +37,11 @@ jobs:
           persist-credentials: false
           # Fetch full history for proper diff checking
           fetch-depth: 0
+
+      - name: Set up Atmos
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
