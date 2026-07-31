@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -126,8 +127,26 @@ func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
 	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
 	require.NoError(t, err)
 	assert.Equal(t, "deploy-repo", summary[targetKey])
+	assert.Equal(t, map[string]any{"applied": false, "target_kind": "helm-apply-external", "reason": "external_target"}, summary["lifecycle"])
 	require.NotNil(t, ft.delivered)
 	assert.Equal(t, "deploy-repo", ft.delivered.TargetName)
+}
+
+func TestDeliverApply_RejectsLifecycleFlagsForExternalTarget(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+		"provision": map[string]any{
+			"default": "deploy-repo",
+			"targets": map[string]any{
+				"deploy-repo": map[string]any{"kind": "helm-apply-external"},
+			},
+		},
+	}}
+
+	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{
+		cfg.HelmTimeoutSectionName: "10m",
+	}, &chartSpec{})
+	require.ErrorIs(t, err, errUtils.ErrHelmLifecycleExternalTarget)
+	assert.Equal(t, "deploy-repo", summary[targetKey])
 }
 
 func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
@@ -135,9 +154,9 @@ func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
 	t.Cleanup(func() { applyHelmRelease = originalApply })
 
 	var receivedDryRun bool
-	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (string, error) {
+	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
 		receivedDryRun = dryRun
-		return helmExecutorManifest, nil
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 
 	info := &schema.ConfigAndStacksInfo{

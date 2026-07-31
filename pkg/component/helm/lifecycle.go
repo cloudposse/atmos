@@ -21,6 +21,7 @@ type lifecycleWarningCode string
 const (
 	warningAtomicDeprecated lifecycleWarningCode = "atomic_deprecated"
 	warningWaitIgnored      lifecycleWarningCode = "wait_alias_ignored"
+	warningWaitBoolean      lifecycleWarningCode = "wait_boolean_deprecated"
 	warningTimeoutMigration lifecycleWarningCode = "timeout_default_migration"
 )
 
@@ -28,6 +29,18 @@ type lifecycleWarning struct {
 	Code    lifecycleWarningCode
 	Field   string
 	Message string
+}
+
+var lifecycleFlagKeys = []string{
+	cfg.HelmRollbackOnFailureSectionName,
+	cfg.HelmAtomicSectionName,
+	cfg.HelmWaitStrategySectionName,
+	cfg.HelmWaitForJobsSectionName,
+	cfg.HelmTimeoutSectionName,
+	cfg.HelmCleanupOnFailSectionName,
+	cfg.HelmMaxHistorySectionName,
+	cfg.HelmDisableChartHooksSectionName,
+	cfg.HelmSkipCRDsSectionName,
 }
 
 // releaseLifecycle is the canonical Helm release policy after defaults,
@@ -197,6 +210,74 @@ func parseWaitStrategy(value string) (kube.WaitStrategy, error) {
 	default:
 		return "", fmt.Errorf("%w: %q (want watcher, hookOnly, or legacy)", errUtils.ErrHelmWaitStrategyInvalid, value)
 	}
+}
+
+// resolveReleaseLifecycleWithFlags overlays only explicitly provided command
+// flags on the processed component, then performs the normal alias resolution
+// and validation once. Resolving from raw input is important because a CLI
+// rollback override can change whether watcher was derived from hookOnly.
+func resolveReleaseLifecycleWithFlags(section map[string]any, flags map[string]any) (releaseLifecycleResolution, error) {
+	overlaid := make(map[string]any, len(section)+len(lifecycleFlagKeys))
+	for key, value := range section {
+		overlaid[key] = value
+	}
+	extraWarnings := make([]lifecycleWarning, 0, 1)
+
+	if value, ok := flags[cfg.HelmAtomicSectionName].(bool); ok {
+		overlaid[cfg.HelmAtomicSectionName] = value
+		// A CLI alias has higher precedence than stored canonical configuration.
+		if _, canonicalSet := flags[cfg.HelmRollbackOnFailureSectionName]; !canonicalSet {
+			delete(overlaid, cfg.HelmRollbackOnFailureSectionName)
+		}
+	}
+	if value, ok := flags[cfg.HelmRollbackOnFailureSectionName].(bool); ok {
+		overlaid[cfg.HelmRollbackOnFailureSectionName] = value
+	}
+	if value, ok := flags[cfg.HelmWaitStrategySectionName].(string); ok {
+		switch value {
+		case "true":
+			value = string(kube.StatusWatcherStrategy)
+			extraWarnings = append(extraWarnings, lifecycleWarning{
+				Code: warningWaitBoolean, Field: cfg.HelmWaitStrategySectionName,
+				Message: "boolean '--wait=true' is deprecated; use '--wait=watcher'",
+			})
+		case "false":
+			value = string(kube.HookOnlyStrategy)
+			extraWarnings = append(extraWarnings, lifecycleWarning{
+				Code: warningWaitBoolean, Field: cfg.HelmWaitStrategySectionName,
+				Message: "boolean '--wait=false' is deprecated; use '--wait=hookOnly'",
+			})
+		}
+		overlaid[cfg.HelmWaitStrategySectionName] = value
+	}
+	for _, key := range []string{
+		cfg.HelmWaitForJobsSectionName,
+		cfg.HelmTimeoutSectionName,
+		cfg.HelmCleanupOnFailSectionName,
+		cfg.HelmMaxHistorySectionName,
+		cfg.HelmDisableChartHooksSectionName,
+		cfg.HelmSkipCRDsSectionName,
+	} {
+		if value, ok := flags[key]; ok {
+			overlaid[key] = value
+		}
+	}
+
+	resolution, err := resolveReleaseLifecycle(overlaid)
+	if err != nil {
+		return releaseLifecycleResolution{}, err
+	}
+	resolution.Warnings = append(resolution.Warnings, extraWarnings...)
+	return resolution, nil
+}
+
+func hasExplicitLifecycleFlags(flags map[string]any) bool {
+	for _, key := range lifecycleFlagKeys {
+		if _, ok := flags[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func optionalBoolField(section map[string]any, key string) (*bool, error) {

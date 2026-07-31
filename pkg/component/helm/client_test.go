@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -98,6 +100,45 @@ func TestResolveUpgradeChartRef(t *testing.T) {
 	})
 }
 
+func TestConfigureReleaseLifecycleActions(t *testing.T) {
+	policy := releaseLifecycle{
+		RollbackOnFailure: true,
+		WaitStrategy:      kube.LegacyStrategy,
+		WaitForJobs:       true,
+		Timeout:           12 * time.Minute,
+		CleanupOnFail:     true,
+		MaxHistory:        7,
+		DisableChartHooks: true,
+		SkipCRDs:          true,
+	}
+
+	install := &action.Install{}
+	configureInstallLifecycle(install, policy)
+	assert.True(t, install.RollbackOnFailure)
+	assert.Equal(t, kube.LegacyStrategy, install.WaitStrategy)
+	assert.True(t, install.WaitForJobs)
+	assert.Equal(t, 12*time.Minute, install.Timeout)
+	assert.True(t, install.DisableHooks)
+	assert.True(t, install.SkipCRDs)
+
+	upgrade := &action.Upgrade{}
+	configureUpgradeLifecycle(upgrade, policy)
+	assert.True(t, upgrade.RollbackOnFailure)
+	assert.Equal(t, kube.LegacyStrategy, upgrade.WaitStrategy)
+	assert.True(t, upgrade.WaitForJobs)
+	assert.Equal(t, 12*time.Minute, upgrade.Timeout)
+	assert.True(t, upgrade.CleanupOnFail)
+	assert.Equal(t, 7, upgrade.MaxHistory)
+	assert.True(t, upgrade.DisableHooks)
+
+	uninstall := &action.Uninstall{}
+	configureUninstallLifecycle(uninstall, policy, true)
+	assert.Equal(t, kube.LegacyStrategy, uninstall.WaitStrategy)
+	assert.Equal(t, 12*time.Minute, uninstall.Timeout)
+	assert.True(t, uninstall.DisableHooks)
+	assert.True(t, uninstall.DryRun)
+}
+
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	original := newActionContext
 	t.Cleanup(func() { newActionContext = original })
@@ -116,7 +157,7 @@ func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	_, err = getDeployedManifest("nginx", "apps")
 	require.ErrorIs(t, err, sentinel)
 
-	err = deleteRelease("nginx", "apps")
+	err = deleteRelease(spec, false)
 	require.ErrorIs(t, err, sentinel)
 }
 
