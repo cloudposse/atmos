@@ -86,3 +86,30 @@ func TestInitAndExtractComponents_ClosurePreviewNoMatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, result.components)
 }
+
+// TestInitAndExtractComponents_ClosurePreviewPropagatesError proves
+// extractComponentsViaScopedClosure surfaces a genuine evaluation error from
+// dependencies.ResolveScopedClosure instead of swallowing it: seeding by the
+// `broken-tag` tag pulls in the fixture's `broken` component, whose template
+// unconditionally fails to render once evaluated. Mirrors
+// TestListStacksWithOptions_ClosurePreviewPropagatesError
+// (stacks_closure_test.go) for the components command's own closure wiring.
+func TestInitAndExtractComponents_ClosurePreviewPropagatesError(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToListComponentsClosureFixture(t)
+
+	cmd := newCmdWithListParser("components", componentsParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	opts := &ComponentsOptions{
+		Format:              "json",
+		ErrorMode:           "strict", // Force a hard failure instead of the default warn-mode degradation.
+		Tags:                []string{"broken-tag"},
+		IncludeDependencies: -1,
+		ProcessTemplates:    true,
+		ProcessFunctions:    false,
+	}
+
+	_, err := initAndExtractComponents(cmd, []string{}, opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broken component must only be evaluated when explicitly seeded")
+}

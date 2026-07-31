@@ -78,6 +78,39 @@ func TestExecuteListInstancesCmd(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestExecuteListInstancesCmd_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as an error from ExecuteListInstancesCmd's own
+// tags.ParseLabelsFlag call on the non-tree/non-matrix format path, reached
+// after the format-specific validation branches (tree/matrix/upload/output-file)
+// but before instances are ever processed.
+func TestExecuteListInstancesCmd_InvalidLabelsFlag(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:      info,
+		Cmd:       cmd,
+		Args:      []string{},
+		Format:    "table",
+		LabelsRaw: "not-a-valid-label",
+	})
+
+	require.Error(t, err)
+}
+
 // TestExecuteListInstancesCmd_InvalidConfig tests error handling for invalid config.
 func TestExecuteListInstancesCmd_InvalidConfig(t *testing.T) {
 	// Create command with flags.

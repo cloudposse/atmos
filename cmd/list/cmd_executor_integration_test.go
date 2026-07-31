@@ -292,6 +292,93 @@ func TestStacksCmd_RunE_InvalidClosureFlag(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestComponentsCmd_RunE_InvalidClosureFlag proves the RunE closure's
+// parseListClosureOptions error path surfaces as a command error before
+// listComponentsWithOptions ever runs, mirroring
+// TestInstancesCmd_RunE_InvalidClosureFlag / TestStacksCmd_RunE_InvalidClosureFlag
+// for the components command's own RunE wiring.
+func TestComponentsCmd_RunE_InvalidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("components", componentsParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, "not-a-depth"))
+
+	err := componentsCmd.RunE(cmd, []string{})
+	require.Error(t, err)
+}
+
+// TestInitAndExtractComponents_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as an error from initAndExtractComponents' own
+// tags.ParseLabelsFlag call (as opposed to buildComponentFilters' — see
+// TestBuildComponentFilters_TagsAndLabels in components_test.go — which
+// validates the row-filter side, a distinct call site).
+func TestInitAndExtractComponents_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("components", componentsParser.RegisterFlags)
+	opts := &ComponentsOptions{
+		Format:           "json",
+		LabelsRaw:        "not-a-valid-label",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	}
+
+	_, err := initAndExtractComponents(cmd, []string{}, opts)
+	require.Error(t, err)
+}
+
+// TestExecuteAndExtractStacks_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as an error from executeAndExtractStacks' own
+// tags.ParseLabelsFlag call, reached before the closure-vs-non-closure branch
+// splits.
+func TestExecuteAndExtractStacks_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	opts := &StacksOptions{
+		Format:           "json",
+		LabelsRaw:        "not-a-valid-label",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	}
+
+	atmosConfig, authManager, err := initStacksConfig(cmd, []string{}, opts)
+	require.NoError(t, err)
+	errOpts, _ := describeStacksErrorOptions(opts.ErrorMode)
+
+	_, _, err = executeAndExtractStacks(&atmosConfig, opts, authManager, errOpts)
+	require.Error(t, err)
+}
+
+// TestExecuteListDependenciesCmd_ProcessCommandLineArgsError proves
+// buildDependencyGraphForCommand surfaces an error from
+// newDependenciesDescribeContext's e.ProcessCommandLineArgs call (an unknown
+// flag baked into args re-parsed inside ProcessCommandLineArgs) rather than
+// panicking or silently ignoring it. This is a distinct call site from
+// TestDependenciesCmd_RunE_InvalidLabelsFlag, which fails earlier in the RunE
+// closure itself, before executeListDependenciesCmd is ever reached.
+func TestExecuteListDependenciesCmd_ProcessCommandLineArgsError(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	opts := &DependenciesOptions{
+		Format:           "json",
+		Direction:        "both",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+		AuthDisabled:     true,
+	}
+
+	err := executeListDependenciesCmd(cmd, []string{"vpc", "--not-a-real-flag"}, opts)
+	require.Error(t, err)
+}
+
 // TestListStacksWithOptions_CoverageIntegration exercises the cmd-layer
 // `listStacksWithOptions` + `executeAndExtractStacks` against the
 // `complete` fixture for the non-tree format path and asserts a clean
