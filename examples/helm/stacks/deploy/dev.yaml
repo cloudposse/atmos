@@ -6,6 +6,7 @@ helm:
   wait_strategy: watcher
   timeout: 2m
   max_history: 10
+  skip_crds: true
 
 components:
   emulator:
@@ -52,3 +53,101 @@ components:
           tag: "1.27"
         service:
           port: 8080
+
+    demo-jobs:
+      metadata:
+        component: demo
+      chart: "."
+      name: demo-jobs
+      namespace: demo-jobs
+      wait_for_jobs: true
+      values:
+        job:
+          enabled: true
+          sleepSeconds: 3
+
+    demo-no-hooks:
+      metadata:
+        component: demo
+      chart: "."
+      name: demo-no-hooks
+      namespace: demo-no-hooks
+      disable_chart_hooks: true
+
+    demo-hook-only:
+      metadata:
+        component: demo
+      chart: "."
+      name: demo-hook-only
+      namespace: demo-hook-only
+      wait_strategy: hookOnly
+      values:
+        deployment:
+          readinessDelaySeconds: 8
+
+    demo-timeout:
+      metadata:
+        component: demo
+      chart: "."
+      name: demo-timeout
+      namespace: demo-timeout
+      wait_strategy: watcher
+      timeout: 2s
+      rollback_on_failure: true
+      values:
+        deployment:
+          readinessDelaySeconds: 20
+
+    demo-install-fail:
+      metadata:
+        component: demo
+      chart: "."
+      name: demo-install-fail
+      namespace: demo-install-fail
+      rollback_on_failure: true
+      cleanup_on_fail: true
+      values:
+        hooks:
+          fail: true
+
+    demo-upgrade-fail:
+      metadata:
+        component: demo
+      chart: "."
+      # Intentionally targets the already-installed demo release.
+      name: demo
+      namespace: demo
+      rollback_on_failure: true
+      cleanup_on_fail: true
+      values:
+        hooks:
+          fail: true
+        extraConfigMap:
+          enabled: true
+
+    dag-foundation:
+      metadata:
+        component: demo
+        tags: [lifecycle-dag]
+      chart: "."
+      name: dag-foundation
+      namespace: lifecycle-dag
+      values:
+        deployment:
+          readinessDelaySeconds: 3
+        hooks:
+          readyMarker: true
+
+    dag-dependent:
+      metadata:
+        component: demo
+        tags: [lifecycle-dag]
+      dependencies:
+        components:
+          - name: dag-foundation
+      chart: "."
+      name: dag-dependent
+      namespace: lifecycle-dag
+      values:
+        hooks:
+          requiredConfigMap: dag-foundation-ready
