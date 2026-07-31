@@ -1633,6 +1633,7 @@ var (
 	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
 	ErrHelmReleaseUpgrade            = errors.New("failed to upgrade helm release")
 	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
+	ErrHelmReleaseOperation          = errors.New("helm release operation failed")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

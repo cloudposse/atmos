@@ -124,6 +124,13 @@ comments, or artifacts. The summary includes component, stack, command status, a
 command, and Helm metadata such as release name, namespace, chart, target, object counts, object
 kinds, and rendered manifest size when available.
 
+For cluster-backed apply/deploy/delete operations, the aggregate also includes
+an operation-specific `lifecycle` block with the effective wait strategy,
+timeout, chart-hook state, and applicable rollback, Job-wait, CRD, cleanup, and
+history values. For external delivery, it reports `applied: false`, the selected
+target kind, and `reason: external_target` instead of presenting stored release
+policy as active.
+
 ## Helmfile Summaries
 
 Helmfile components write summaries for these operations when `ci.enabled: true` and CI mode is
