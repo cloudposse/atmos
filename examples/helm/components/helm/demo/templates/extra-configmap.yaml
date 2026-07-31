@@ -1,0 +1,9 @@
+{{- if .Values.extraConfigMap.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-upgrade-only
+  namespace: {{ .Release.Namespace }}
+data:
+  created: during-failed-upgrade
+{{- end }}

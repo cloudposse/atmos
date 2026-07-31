@@ -15,6 +15,12 @@ spec:
       labels:
         app: {{ .Release.Name }}
     spec:
+      {{- if gt (int .Values.deployment.readinessDelaySeconds) 0 }}
+      initContainers:
+        - name: readiness-delay
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["/bin/sh", "-c", "sleep {{ .Values.deployment.readinessDelaySeconds }}"]
+      {{- end }}
       containers:
         - name: {{ .Release.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

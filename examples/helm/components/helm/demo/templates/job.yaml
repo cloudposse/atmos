@@ -1,0 +1,16 @@
+{{- if .Values.job.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-job
+  namespace: {{ .Release.Namespace }}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ordinary-job
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["/bin/sh", "-c", "sleep {{ .Values.job.sleepSeconds }}"]
+{{- end }}
