@@ -45,7 +45,7 @@ func deliverApply(
 
 	// Cluster delivery installs/upgrades the Helm release directly.
 	if selected.Kind == target.KindKubernetes {
-		rendered, err := applyHelmRelease(context.Background(), spec, false)
+		rendered, err := applyHelmRelease(context.Background(), spec, info.DryRun)
 		summary["manifest_bytes"] = len(rendered)
 		if objects, decodeErr := manifest.DecodeObjects([]byte(rendered)); decodeErr == nil {
 			addObjectsToSummary(summary, objects)

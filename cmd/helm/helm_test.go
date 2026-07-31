@@ -247,6 +247,28 @@ func TestRunOperationBuildsExecutionContext(t *testing.T) {
 	assert.Equal(t, 5, provider.ctx.Flags["context"])
 }
 
+func TestRunOperationBuildsApplyDryRunExecutionContext(t *testing.T) {
+	provider := &capturingHelmProvider{}
+	original, hadOriginal := component.GetProvider(cfg.HelmComponentType)
+	require.NoError(t, component.Register(provider))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	cmd := newOperationCommand("apply", "Apply")
+	cmd.Flags().Bool("dry-run", false, "")
+	cmd.Flags().String("stack", "", "")
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
+	require.NoError(t, runOperation(cmd, "apply", []string{"app"}))
+	require.NotNil(t, provider.ctx)
+	assert.Equal(t, "apply", provider.ctx.SubCommand)
+	assert.True(t, provider.ctx.ConfigAndStacksInfo.DryRun)
+}
+
 type capturingHelmProvider struct {
 	ctx *component.ExecutionContext
 }
