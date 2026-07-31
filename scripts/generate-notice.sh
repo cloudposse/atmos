@@ -55,6 +55,8 @@ gopkg.in/evanphx/json-patch.v4|github.com/evanphx/json-patch||LICENSE
 gopkg.in/inf.v0|github.com/go-inf/inf||LICENSE
 gopkg.in/op/go-logging.v1|github.com/op/go-logging||LICENSE
 gopkg.in/warnings.v0|github.com/go-warnings/warnings||LICENSE
+gopkg.in/yaml.v2|github.com/go-yaml/yaml||LICENSE
+gopkg.in/yaml.v3|github.com/go-yaml/yaml||LICENSE
 "
 
 # git_ref_from_version maps a module version to a ref usable in a GitHub blob URL:
