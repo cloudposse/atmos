@@ -202,11 +202,11 @@ func TestRunInstall_WithValidToolSpec(t *testing.T) {
 	// the whole acceptance suite depends on for the rest of the run. A test writing real
 	// downloaded binaries there races with every other concurrently-running package's
 	// test process reading from it.
-	originalToolVersionsFile := GetToolVersionsFilePath()
+	prevConfig := atmosConfig
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile, InstallPath: installPath}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing a specific tool with version
@@ -243,11 +243,11 @@ func TestRunInstall_WithSetAsDefault(t *testing.T) {
 	// the whole acceptance suite depends on for the rest of the run. A test writing real
 	// downloaded binaries there races with every other concurrently-running package's
 	// test process reading from it.
-	originalToolVersionsFile := GetToolVersionsFilePath()
+	prevConfig := atmosConfig
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile, InstallPath: installPath}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing with setAsDefault=true
@@ -282,11 +282,11 @@ func TestRunInstall_WithInvalidToolSpec(t *testing.T) {
 	// the whole acceptance suite depends on for the rest of the run. A test writing real
 	// downloaded binaries there races with every other concurrently-running package's
 	// test process reading from it.
-	originalToolVersionsFile := GetToolVersionsFilePath()
+	prevConfig := atmosConfig
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile, InstallPath: installPath}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test with invalid tool spec (no version)
@@ -314,11 +314,11 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 	// the whole acceptance suite depends on for the rest of the run. A test writing real
 	// downloaded binaries there races with every other concurrently-running package's
 	// test process reading from it.
-	originalToolVersionsFile := GetToolVersionsFilePath()
+	prevConfig := atmosConfig
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile, InstallPath: installPath}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing with canonical owner/repo@version format
@@ -361,11 +361,11 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 	// the whole acceptance suite depends on for the rest of the run. A test writing real
 	// downloaded binaries there races with every other concurrently-running package's
 	// test process reading from it.
-	originalToolVersionsFile := GetToolVersionsFilePath()
+	prevConfig := atmosConfig
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile, InstallPath: installPath}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing with "latest" version
@@ -403,11 +403,11 @@ func TestRunInstall_Reinstall(t *testing.T) {
 	// the whole acceptance suite depends on for the rest of the run. A test writing real
 	// downloaded binaries there races with every other concurrently-running package's
 	// test process reading from it.
-	originalToolVersionsFile := GetToolVersionsFilePath()
+	prevConfig := atmosConfig
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile, InstallPath: installPath}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test reinstalling all tools from .tool-versions
