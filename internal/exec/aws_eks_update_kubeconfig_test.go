@@ -138,6 +138,7 @@ func TestResolveStackFromContext(t *testing.T) {
 		atmosConfig   *schema.AtmosConfiguration
 		expectedStack string
 		expectError   bool
+		expectedErrIs error
 	}{
 		{
 			name: "name_template takes precedence and resolves the stack",
@@ -159,9 +160,33 @@ func TestResolveStackFromContext(t *testing.T) {
 			expectedStack: "tenant1-ue2-dev",
 		},
 		{
-			name:        "neither name_template nor name_pattern configured",
-			atmosConfig: &schema.AtmosConfiguration{},
+			name:          "neither name_template nor name_pattern configured",
+			atmosConfig:   &schema.AtmosConfiguration{},
+			expectError:   true,
+			expectedErrIs: errUtils.ErrMissingStackNameTemplateAndPattern,
+		},
+		{
+			name: "name_template referencing an undefined var errors when ignore_missing_template_values is false",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NameTemplate: "{{.vars.tenant}}-{{.vars.region}}",
+				},
+			},
 			expectError: true,
+		},
+		{
+			name: "name_template referencing an undefined var honors ignore_missing_template_values",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NameTemplate: "{{.vars.tenant}}-{{.vars.region}}",
+				},
+				Templates: schema.Templates{
+					Settings: schema.TemplatesSettings{
+						IgnoreMissingTemplateValues: true,
+					},
+				},
+			},
+			expectedStack: "tenant1-<no value>",
 		},
 	}
 
@@ -170,7 +195,9 @@ func TestResolveStackFromContext(t *testing.T) {
 			stack, err := resolveStackFromContext(tt.atmosConfig, &kubeconfigContext)
 			if tt.expectError {
 				require.Error(t, err)
-				assert.ErrorIs(t, err, errUtils.ErrMissingStackNameTemplateAndPattern)
+				if tt.expectedErrIs != nil {
+					assert.ErrorIs(t, err, tt.expectedErrIs)
+				}
 				return
 			}
 			require.NoError(t, err)

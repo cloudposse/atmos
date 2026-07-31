@@ -270,7 +270,7 @@ func resolveStackFromContext(atmosConfig *schema.AtmosConfiguration, kubeconfigC
 				"stage":       kubeconfigContext.Stage,
 			},
 		}
-		return ProcessTmpl(atmosConfig, "name-template-from-context", GetStackNameTemplate(atmosConfig), ctx, false)
+		return ProcessTmpl(atmosConfig, "name-template-from-context", GetStackNameTemplate(atmosConfig), ctx, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 
 	case GetStackNamePattern(atmosConfig) != "":
 		return cfg.GetStackNameFromContextAndStackNamePattern(
