@@ -10,6 +10,7 @@ on:
       - '.vale/**'
       - '.atmos.d/lint.yaml'
       - '.atmos.d/toolchain.yaml'
+      - '.tool-versions'
 
 jobs:
   vale:

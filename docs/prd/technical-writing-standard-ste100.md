@@ -50,11 +50,7 @@ voice, and consistent terminology.
 
 ### Copyright Constraint and Mitigation
 
-ASD (Brussels) owns the copyright of the ASD-STE100 specification and its
-controlled dictionary of approximately 900 approved words. The
-specification states: "no reproduction or publication of it, in whole or in
-part, shall be made without the written authority of an officer of ASD."
-Atmos does not hold this authority.
+ASD (Brussels) owns the copyright of the ASD-STE100 specification and its controlled dictionary of approximately 900 approved words. The specification reserves all reproduction and publication rights to ASD. Nobody may copy or publish any part of it without written authorization from an ASD officer. Atmos holds no such authorization.
 
 This PRD therefore does not copy the specification text or the dictionary.
 Instead, it defines the **Atmos writing style**: our own paraphrase of
@@ -108,9 +104,7 @@ locally   pre-commit hook     CI: .github/workflows/docs-lint.yml
 
 ### 1. Vale Configuration (`.vale.ini`)
 
-Sets `StylesPath = .vale/styles`, scopes the `Atmos` style to `docs/prd/*.md`
-and `website/docs/**/*.{md,mdx}`, maps the `.mdx` format to `.md` for
-parsing, and sets `MinAlertLevel = suggestion`.
+Sets `StylesPath = .vale/styles`, scopes the `Atmos` style to `docs/prd/**/*.md` and `website/docs/**/*.{md,mdx}`, maps the `.mdx` format to `.md` for parsing, and sets `MinAlertLevel = suggestion`. The `**` selector covers nested subdirectories, for example `docs/prd/flag-handling/`.
 
 ### 2. Custom Rules (`.vale/styles/Atmos/*.yml`)
 

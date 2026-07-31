@@ -1,10 +1,14 @@
 # Words to avoid in Atmos technical writing, in favor of plain equivalents.
 # A small, generic plain-language list of our own choosing, not a
 # reproduction of the ASD-STE100 controlled vocabulary.
+#
+# Each entry is prefixed with (?i) because Vale's Vocab entries are
+# case-sensitive by default, and these words appear capitalized at the
+# start of a sentence just as often as lowercase mid-sentence.
 
-leverage
-synergy
-seamlessly
-robust
-simply
-obviously
+(?i)leverage
+(?i)synergy
+(?i)seamlessly
+(?i)robust
+(?i)simply
+(?i)obviously

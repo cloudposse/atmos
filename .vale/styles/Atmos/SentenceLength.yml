@@ -6,5 +6,14 @@ extends: existence
 message: "This sentence may be too long. Simplified Technical English favors short sentences (aim for 20-25 words). Consider splitting it."
 level: suggestion
 scope: sentence
+# nonword: true disables Vale's default \b(...)\b wrapping around the
+# token pattern below. Without it, a sentence ending in terminal
+# punctuation (the common case) has its trailing "." absorbed into the
+# final \S+ token, so the pattern ends on a non-word character; the
+# closing \b then fails to find a boundary against end-of-string (also
+# non-word), and the rule silently stops matching most real sentences.
+# Empirically confirmed: a full-corpus `atmos lint docs` run went from 34
+# Atmos.SentenceLength hits without this flag to 952 with it.
+nonword: true
 tokens:
   - '^(?:\S+\s+){25,}\S+[.!?]?\s*$'

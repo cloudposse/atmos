@@ -138,8 +138,12 @@ commands:
               if [ "{{ .Flags.changed }}" = "true" ]; then
                 # Single-ref diff (not origin/main...HEAD) so staged-but-uncommitted
                 # files are included -- required for the pre-commit hook to see the
-                # file that is about to be committed.
-                if ! files=$(git diff --name-only origin/main -- 'docs/prd/*.md' 'website/docs/**/*.md' 'website/docs/**/*.mdx' 2>&1); then
+                # file that is about to be committed. --diff-filter=ACMR excludes
+                # deleted files: passing a deleted path to `vale` doesn't error,
+                # it silently falls through to reading stdin and reports a
+                # misleading "0 errors ... in stdin" for a file that no longer
+                # exists.
+                if ! files=$(git diff --name-only --diff-filter=ACMR origin/main -- 'docs/prd/*.md' 'website/docs/**/*.md' 'website/docs/**/*.mdx' 2>&1); then
                   echo "Warning: could not determine changed docs via git diff, skipping (Phase 1 is non-blocking):" >&2
                   echo "$files" >&2
                   exit 0
