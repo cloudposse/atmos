@@ -509,8 +509,10 @@ discovered filename).
   embedding template syntax in a physical filename.
 - **With `for_each`:** `Target` would be required (a single fixed `Path` can't serve
   as the output for more than one generated file) and rendered once per resolved
-  item, with the bound loop variable(s) available under a new reserved answers key:
-  `.Config.Item.<as>.key` / `.Config.Item.<as>.value` / `.Config.Item.<as>.index`.
+  item, with each step's bound loop variable hoisted directly onto the template
+  root — `.<as>.key` / `.<as>.value` / `.<as>.index` — rather than nested under
+  `.Config`, so `target:`/content templates write `.region.key` instead of reaching
+  through `.Config.Item.region.key`.
 
 Flat, unbounded free-text field:
 
@@ -522,7 +524,7 @@ spec:
       required: true
   files:
     - path: stacks/deploy/environment.yaml
-      target: "stacks/deploy/{{ .Config.Item.env.value }}.yaml"
+      target: "stacks/deploy/{{ .env.value }}.yaml"
       for_each:
         - as: env
           in: answers.environments
@@ -536,7 +538,7 @@ region):
 spec:
   files:
     - path: templates/deploy.yaml
-      target: "deploy/{{ .Config.Item.region.key }}/{{ .Config.Item.environment.key }}.yaml"
+      target: "deploy/{{ .region.key }}/{{ .environment.key }}.yaml"
       for_each:
         - as: region
           in: answers.regions                 # map: region name -> { environments: [...] }
@@ -584,11 +586,15 @@ existing `for _, file := range embedsConfig.Files` would gain one branch.
 not just `.When`). `.When` still evaluates exactly as today, unconditioned by
 `for_each`, gating the whole entry before any iteration. If the matched spec has
 `ForEach` set, `engine.ExpandForEach` runs and, for each returned record, a
-**shallow-cloned** copy of `mergedValues` gets `iterValues["Item"] = record` plus a
-synthetic `engine.File{Path: spec.Target, Content: file.Content, IsTemplate:
-file.IsTemplate, Permissions: file.Permissions}` — the source contributes
-body/permissions, `Target` contributes the path — run through the *unmodified*
-existing pipeline (`ProcessTemplateWithDelimiters` → `ShouldSkipFile` → `ProcessFile`).
+**shallow-cloned** copy of `mergedValues` gets `iterValues[engine.ItemKey] =
+engine.ItemFromRecord(record)` plus a synthetic `engine.File{Path: spec.Target,
+Content: file.Content, IsTemplate: file.IsTemplate, Permissions: file.Permissions}` —
+the source contributes body/permissions, `Target` contributes the path — run through
+the *unmodified* existing pipeline (`ProcessTemplateWithDelimiters` → `ShouldSkipFile`
+→ `ProcessFile`). `ProcessTemplateWithDelimiters` reads that reserved `ItemKey` entry
+back out of the answers map it's handed and hoists its contents (each step's `as`
+name) directly onto the template root before executing — that's what makes `.region.key`
+resolve, rather than requiring `.Config.Item.region.key`.
 Dry-run labels, `--update`'s 3-way merge, and `validateWriteTarget`'s traversal/symlink
 protection would all apply per-iteration for free, since it's the same `ProcessFile`
 call just invoked N times against N rendered paths. A new `seenRenderedPaths` map
