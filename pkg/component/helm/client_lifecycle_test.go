@@ -131,8 +131,8 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	assert.Contains(t, upgraded.Manifest, "kind: ConfigMap")
 
 	// Delete removes it; deleting an absent release is a no-op (idempotent).
-	require.NoError(t, deleteRelease(spec, false))
-	require.NoError(t, deleteRelease(spec, false))
+	require.NoError(t, deleteRelease(context.Background(), spec, false))
+	require.NoError(t, deleteRelease(context.Background(), spec, false))
 
 	// After delete the baseline is empty (release not found), not an error.
 	deployed, err = getDeployedManifest("lifecycle", "testns")
@@ -180,7 +180,7 @@ func TestDeleteReleaseDryRunPreservesRelease(t *testing.T) {
 
 	_, err := applyRelease(context.Background(), spec, false)
 	require.NoError(t, err)
-	require.NoError(t, deleteRelease(spec, true))
+	require.NoError(t, deleteRelease(context.Background(), spec, true))
 
 	deployed, err := getDeployedManifest(spec.ReleaseName, spec.Namespace)
 	require.NoError(t, err)
@@ -217,4 +217,31 @@ func TestUpgradeRollbackPreservesHistoryLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, history, maxHistory)
 	assert.Equal(t, maxHistory, actx.cfg.Releases.MaxHistory)
+}
+
+func TestApplyReleaseHonorsCanceledContext(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "canceled")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := applyRelease(ctx, spec, false)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestDeleteReleaseHonorsCanceledContext(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "delete-canceled")
+	_, err := applyRelease(context.Background(), spec, false)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, deleteRelease(ctx, spec, false), context.Canceled)
+
+	deployed, getErr := getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	require.NoError(t, getErr)
+	assert.NotEmpty(t, deployed)
 }
