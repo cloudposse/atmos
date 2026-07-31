@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -223,57 +224,83 @@ func TestInvocationGroupLabel(t *testing.T) {
 	assert.Equal(t, "atmos orphan", invocationGroupLabel(&cobra.Command{}, []string{"orphan"}))
 }
 
-func TestArgsRequestNoArgGitClone(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want bool
-	}{
-		{
-			name: "no arg git clone",
-			args: []string{"git", "clone"},
-			want: true,
-		},
-		{
-			name: "global profile flag is ignored for bootstrap detection",
-			args: []string{"--profile", "github", "git", "clone", "--depth", "1", "--filter=blob:none"},
-			want: true,
-		},
-		{
-			name: "positional repository is not CI bootstrap",
-			args: []string{"git", "clone", "repo"},
-			want: false,
-		},
-		{
-			name: "native git args imply explicit clone",
-			args: []string{"git", "clone", "--", "--no-tags"},
-			want: false,
-		},
-		{
-			name: "all flag is not CI bootstrap",
-			args: []string{"git", "clone", "--all"},
-			want: false,
-		},
-	}
+// newBootstrapCloneCmd builds a command tree mirroring cmd/git's real
+// gitCmd -> cloneCmd parent/name relationship (root -> git -> clone), with
+// the same --ci/--all bool flags the real clone command registers. This is
+// enough for gitcmd.CICloneBootstrapRequested's name/parent check to match,
+// without importing cmd/git's unexported command singletons.
+func newBootstrapCloneCmd(t *testing.T, rawArgs []string) (*cobra.Command, []string) {
+	t.Helper()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, argsRequestNoArgGitClone(tt.args))
-		})
-	}
+	root := &cobra.Command{Use: "atmos"}
+	git := &cobra.Command{Use: "git"}
+	clone := &cobra.Command{Use: "clone"}
+	clone.Flags().Bool("ci", false, "")
+	clone.Flags().Bool("all", false, "")
+	root.AddCommand(git)
+	git.AddCommand(clone)
+
+	require.NoError(t, clone.ParseFlags(rawArgs))
+	return clone, clone.Flags().Args()
 }
 
-func TestHandleConfigInitError_AllowsCIGitCloneBootstrap(t *testing.T) {
-	origArgs := os.Args
-	t.Cleanup(func() { os.Args = origArgs })
-	os.Args = []string{"atmos", "--profile", "github", "git", "clone"}
+// saveRestoreAtmosConfig snapshots the package-level atmosConfig (which
+// applyCIGitCloneBootstrap writes to) and restores it after the test, since
+// it is shared global state across this package's tests.
+func saveRestoreAtmosConfig(t *testing.T) {
+	t.Helper()
+	original := atmosConfig
+	t.Cleanup(func() { atmosConfig = original })
+}
+
+func TestApplyCIGitCloneBootstrap_AllowsBootstrap(t *testing.T) {
+	saveRestoreAtmosConfig(t)
+	t.Setenv("GITHUB_ACTIONS", "true")
+	// Pin ATMOS_CI: resolveCICloneMode falls back to reading this env var when
+	// --ci isn't set, so an ambient ATMOS_CI=false in the developer/CI
+	// environment would otherwise make this test flaky (mirrors the guard in
+	// cmd/git/bootstrap_test.go).
+	t.Setenv("ATMOS_CI", "true")
+
+	cmd, args := newBootstrapCloneCmd(t, nil)
+	tmpConfig := &schema.AtmosConfiguration{}
+
+	applied := applyCIGitCloneBootstrap(cmd, args, tmpConfig)
+
+	assert.True(t, applied)
+	assert.True(t, tmpConfig.CI.Enabled)
+	assert.True(t, atmosConfig.CI.Enabled,
+		"the package-level atmosConfig must be enabled too: it's what cmd/git's RunE actually reads")
+}
+
+func TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut(t *testing.T) {
+	saveRestoreAtmosConfig(t)
 	t.Setenv("GITHUB_ACTIONS", "true")
 
-	cfg := &schema.AtmosConfiguration{}
-	err := handleConfigInitError(assert.AnError, cfg)
+	cmd, args := newBootstrapCloneCmd(t, []string{"--ci=false"})
+	tmpConfig := &schema.AtmosConfiguration{}
 
-	assert.NoError(t, err)
-	assert.True(t, cfg.CI.Enabled, "CI clone bootstrap must enable the no-arg CI checkout path without repo-local config")
+	applied := applyCIGitCloneBootstrap(cmd, args, tmpConfig)
+
+	assert.False(t, applied)
+	assert.False(t, tmpConfig.CI.Enabled)
+	assert.False(t, atmosConfig.CI.Enabled)
+}
+
+func TestApplyCIGitCloneBootstrap_NoCIProviderDetected(t *testing.T) {
+	saveRestoreAtmosConfig(t)
+	t.Setenv("GITHUB_ACTIONS", "false")
+	// Pin ATMOS_CI for determinism: ci.Detect() short-circuits before it's read
+	// here, but pinning avoids any ambient-value surprises if that ordering
+	// ever changes.
+	t.Setenv("ATMOS_CI", "true")
+
+	cmd, args := newBootstrapCloneCmd(t, nil)
+	tmpConfig := &schema.AtmosConfiguration{}
+
+	assert.False(t, applyCIGitCloneBootstrap(cmd, args, tmpConfig))
+	assert.False(t, tmpConfig.CI.Enabled)
+	assert.False(t, atmosConfig.CI.Enabled)
 }
 
 func TestPreprocessArgs_NoArgs(t *testing.T) {
