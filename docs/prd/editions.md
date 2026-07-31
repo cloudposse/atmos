@@ -21,8 +21,10 @@ Also available as the `--edition` global flag and the `ATMOS_EDITION` env var
 
 ## Semantics
 
-- **No pin → latest defaults.** The overlay is empty; behavior is byte-for-byte what it was before
-  this feature existed. Zero breaking change.
+- **No pin → latest defaults.** The overlay is empty, so an unpinned project behaves exactly as it
+  did before this feature existed *for defaults that haven't changed* — but it still picks up any
+  default change that ships after upgrade, same as always. Pinning is what preserves historical
+  defaults; going unpinned means opting into the latest ones.
 - **Pinned at date D:** for each config key, the earliest journal entry dated **after** D (if any)
   supplies its `Old` value as the effective default. Entries dated **on or before** D apply their
   `New` value (the pin date is inclusive). Chained changes (A→B→C) resolve to the value the project
@@ -129,14 +131,18 @@ Two test layers make an unjournaled default change un-mergeable:
 
 ### Contributor workflow
 
-Changing a shipped default is now three edits in one PR:
+Changing a shipped default means updating every live layer that sets it, in one PR:
 
-1. Change the literal in `setDefaultConfiguration` (`pkg/config/load.go`).
+1. Change the literal in `setDefaultConfiguration` (`pkg/config/load.go`), **and** in
+    `defaultCliConfig` (`pkg/config/default.go`) if that struct also carries the field — the
+    invariant tests require both to agree with the journal's current value. Confirm the key isn't
+    set in the embedded `atmos.yaml` (layer (b) must stay free of journaled keys).
 2. Append a dated `Entry` to `pkg/edition/journal.go` (date = expected merge date, `Ref` = PR URL,
     `Old`/`New` in the type the field uses today).
 3. Regenerate the snapshot.
 
-Adding a brand-new default needs only edits 1 and 3.
+Adding a brand-new default only needs edit 1 (in whichever layer introduces it) and edit 3 — new
+keys are never journal-gated.
 
 ## Historical drift this feature surfaced (and fixed)
 
