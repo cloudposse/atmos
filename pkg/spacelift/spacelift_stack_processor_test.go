@@ -272,12 +272,21 @@ func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateResolvesRegi
 							},
 						},
 					},
+					// comp2 deliberately uses a DIFFERENT region than comp1. If the
+					// depends_on resolution path used comp2's own vars instead of
+					// defaulting from comp1's context, the computed depends-on name
+					// would use "us-west-2" and coincidentally match comp2's own
+					// resolved name -- masking the bug. Using distinct regions forces
+					// the depends-on name to only match if it's genuinely derived from
+					// comp1's context (region "us-east-2"), which comp2 doesn't share,
+					// so the lookup correctly fails and the error content proves which
+					// region was actually used.
 					"comp2": map[string]any{
 						"vars": map[string]any{
 							"tenant":      "tenant1",
 							"environment": "ue2",
 							"stage":       "dev",
-							"region":      "us-east-2",
+							"region":      "us-west-2",
 						},
 						"settings": map[string]any{
 							"spacelift": map[string]any{"workspace_enabled": true},
@@ -291,16 +300,18 @@ func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateResolvesRegi
 	// name_template references `.vars.region`. The `settings.depends_on` resolution path
 	// defaults namespace/tenant/environment/stage/region from the *depending* component's
 	// own context (comp1) when the depends_on entry doesn't declare them explicitly, so the
-	// template renders successfully for the depends_on label too, not just the component's
-	// own stack name.
+	// template renders successfully (no missing-key error) for the depends_on label too,
+	// not just the component's own stack name.
 	stackNameTemplate := "{{.vars.tenant}}-{{.vars.region}}"
 
-	result, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", stackNameTemplate, "", false, nil)
-	require.NoError(t, err)
+	_, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", stackNameTemplate, "", false, nil)
 
-	comp1, ok := result["tenant1-us-east-2-comp1"].(map[string]any)
-	require.True(t, ok, "expected comp1's Spacelift stack config to be present")
-	labels, ok := comp1["labels"].([]string)
-	require.True(t, ok, "expected comp1's labels to be a []string")
-	assert.Contains(t, labels, "depends-on:tenant1-us-east-2-comp2")
+	// comp2's own resolved name is "tenant1-us-west-2-comp2" (its own region), which does
+	// not match "tenant1-us-east-2-comp2" (comp1's region) -- so the depends_on lookup
+	// fails to find a match. That failure, naming the comp1-region-derived stack, is the
+	// proof that region was defaulted from comp1's context and not silently pulled from
+	// comp2's own vars (which would have rendered fine and hidden the distinction).
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tenant1-us-east-2")
+	assert.NotContains(t, err.Error(), "tenant1-us-west-2")
 }
