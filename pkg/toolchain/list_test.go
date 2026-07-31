@@ -788,6 +788,8 @@ func TestBuildToolRow(t *testing.T) {
 	// toolchain cache dir when InstallPath is empty -- the same directory CI's
 	// "atmos toolchain install --default" step populates for the whole acceptance
 	// suite.
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			ToolsDir:    toolsDir,
@@ -823,6 +825,8 @@ func TestBuildToolRow_NotInstalled(t *testing.T) {
 	// toolchain cache dir when InstallPath is empty -- the same directory CI's
 	// "atmos toolchain install --default" step populates for the whole acceptance
 	// suite.
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			ToolsDir:    tempDir,
