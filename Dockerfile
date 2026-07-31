@@ -19,7 +19,7 @@ RUN set -ex; \
     # Update the package list
     apt-get update; \
     # Install runtime dependencies required by Atmos-managed tools.
-    apt-get -y install  --no-install-recommends curl git ca-certificates python3; \
+    apt-get -y install  --no-install-recommends curl git ca-certificates docker.io python3; \
     # Install the Cloud Posse Debian repository
     curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash -x; \
     # Install OpenTofu
