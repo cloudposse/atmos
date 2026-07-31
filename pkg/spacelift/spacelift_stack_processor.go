@@ -50,10 +50,14 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
+		// Explicit file paths bypass base_path discovery entirely, so — matching legacy
+		// behavior — stacks are identified by their raw file path rather than a
+		// name_template/name_pattern-resolved logical name.
 		return TransformStackConfigToSpaceliftStacks(
 			&atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
+			"",
 			"",
 			processImports,
 			rawStackConfigs,
@@ -79,6 +83,7 @@ func CreateSpaceliftStacks(
 			&atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
+			e.GetStackNameTemplate(&atmosConfig),
 			e.GetStackNamePattern(&atmosConfig),
 			processImports,
 			rawStackConfigs,
@@ -91,6 +96,7 @@ func TransformStackConfigToSpaceliftStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
 	stackConfigPathTemplate string,
+	stackNameTemplate string,
 	stackNamePattern string,
 	processImports bool,
 	rawStackConfigs map[string]map[string]any,
@@ -98,7 +104,9 @@ func TransformStackConfigToSpaceliftStacks(
 	var err error
 	res := map[string]any{}
 
-	allStackNames, err := e.BuildSpaceliftStackNames(stacks, stackNamePattern)
+	stackNaming := e.SpaceliftStackNaming{NameTemplate: stackNameTemplate, NamePattern: stackNamePattern}
+
+	allStackNames, err := e.BuildSpaceliftStackNames(atmosConfig, stacks, stackNaming)
 	if err != nil {
 		return nil, err
 	}
@@ -182,15 +190,9 @@ func TransformStackConfigToSpaceliftStacks(
 					context.Component = component
 					context.BaseComponent = baseComponentName
 
-					var contextPrefix string
-
-					if stackNamePattern != "" {
-						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
-						if err != nil {
-							return nil, err
-						}
-					} else {
-						contextPrefix = strings.Replace(stackName, "/", "-", -1)
+					contextPrefix, err := e.ResolveSpaceliftContextPrefix(atmosConfig, stackName, &context, componentVars, stackNaming)
+					if err != nil {
+						return nil, err
 					}
 
 					spaceliftConfig[cfg.ComponentSectionName] = component
@@ -333,20 +335,21 @@ func TransformStackConfigToSpaceliftStacks(
 							stackComponentSettingsDependsOnContext.Stage = context.Stage
 						}
 
-						var contextPrefixDependsOn string
-
-						if stackNamePattern != "" {
-							contextPrefixDependsOn, err = cfg.GetContextPrefix(
-								stackName,
-								stackComponentSettingsDependsOnContext,
-								stackNamePattern,
-								stackName,
-							)
-							if err != nil {
-								return nil, err
-							}
-						} else {
-							contextPrefixDependsOn = strings.Replace(stackName, "/", "-", -1)
+						dependsOnVars := map[string]any{
+							"namespace":   stackComponentSettingsDependsOnContext.Namespace,
+							"tenant":      stackComponentSettingsDependsOnContext.Tenant,
+							"environment": stackComponentSettingsDependsOnContext.Environment,
+							"stage":       stackComponentSettingsDependsOnContext.Stage,
+						}
+						contextPrefixDependsOn, err := e.ResolveSpaceliftContextPrefix(
+							atmosConfig,
+							stackName,
+							&stackComponentSettingsDependsOnContext,
+							dependsOnVars,
+							stackNaming,
+						)
+						if err != nil {
+							return nil, err
 						}
 
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
@@ -383,9 +386,10 @@ func TransformStackConfigToSpaceliftStacks(
 					if !u.MapKeyExists(res, spaceliftStackNameKey) {
 						res[spaceliftStackNameKey] = spaceliftConfig
 					} else {
-						errorMessage := fmt.Sprintf("\nDuplicate Spacelift stack name '%s' for component '%s' in the stack '%s'."+
-							"\nCheck if the component name is correct and the Spacelift stack name pattern 'stack_name_pattern=%s' is specific enough."+
-							"\nDid you specify the correct context tokens {namespace}, {tenant}, {environment}, {stage}, {component}?",
+						errorMessage := fmt.Sprintf(
+							"\nDuplicate Spacelift stack name '%s' for component '%s' in the stack '%s'."+
+								"\nCheck if the component name is correct and the Spacelift stack name pattern 'stack_name_pattern=%s' is specific enough."+
+								"\nDid you specify the correct context tokens {namespace}, {tenant}, {environment}, {stage}, {component}?",
 							spaceliftStackName,
 							component,
 							stackName,

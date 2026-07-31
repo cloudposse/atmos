@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -121,6 +122,59 @@ func TestGetStackNamePattern(t *testing.T) {
 			} else {
 				assert.Empty(t, result)
 			}
+		})
+	}
+}
+
+func TestResolveStackFromContext(t *testing.T) {
+	kubeconfigContext := schema.AwsEksUpdateKubeconfigContext{
+		Tenant:      "tenant1",
+		Environment: "ue2",
+		Stage:       "dev",
+	}
+
+	tests := []struct {
+		name          string
+		atmosConfig   *schema.AtmosConfiguration
+		expectedStack string
+		expectError   bool
+	}{
+		{
+			name: "name_template takes precedence and resolves the stack",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NameTemplate: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}",
+					NamePattern:  "{tenant}-{environment}-{stage}",
+				},
+			},
+			expectedStack: "tenant1-ue2-dev",
+		},
+		{
+			name: "deprecated name_pattern still works when name_template is not set",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NamePattern: "{tenant}-{environment}-{stage}",
+				},
+			},
+			expectedStack: "tenant1-ue2-dev",
+		},
+		{
+			name:        "neither name_template nor name_pattern configured",
+			atmosConfig: &schema.AtmosConfiguration{},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stack, err := resolveStackFromContext(tt.atmosConfig, &kubeconfigContext)
+			if tt.expectError {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrMissingStackNameTemplateAndPattern)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStack, stack)
 		})
 	}
 }
