@@ -1,0 +1,10 @@
+# Flags long sentences. ASD-STE100 recommends short sentences (roughly 20
+# words for instructions, 25 for descriptions) so a sentence has one meaning
+# and is easy to scan. This is a paraphrase of that principle, not a copy of
+# the ASD-STE100 specification text.
+extends: existence
+message: "This sentence may be too long. Simplified Technical English favors short sentences (aim for 20-25 words). Consider splitting it."
+level: suggestion
+scope: sentence
+tokens:
+  - '^(?:\S+\s+){25,}\S+[.!?]?\s*$'

@@ -2,6 +2,7 @@ toolchain:
   aliases:
     gofumpt: mvdan/gofumpt
     tofu: opentofu/opentofu
+    vale: vale-cli/vale
   registries:
     - name: atmos-dev-tools
       type: atmos

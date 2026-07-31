@@ -1,0 +1,10 @@
+# Words to avoid in Atmos technical writing, in favor of plain equivalents.
+# A small, generic plain-language list of our own choosing, not a
+# reproduction of the ASD-STE100 controlled vocabulary.
+
+leverage
+synergy
+seamlessly
+robust
+simply
+obviously

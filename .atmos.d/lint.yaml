@@ -109,3 +109,36 @@ commands:
             set -eu
             command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
             lychee --config lychee.toml --root-dir "$PWD" '**/*.md'
+
+      - name: docs
+        description: Lint technical docs prose (Atmos writing style, via vale)
+        # Phase 1 (see docs/prd/technical-writing-standard-ste100.md): kept as its
+        # own subcommand rather than folded into `lint changed`, so the existing
+        # `atmos lint --changed` / `make lint` pipeline is unaffected while the
+        # ruleset is still informational (.vale.ini MinAlertLevel = suggestion).
+        flags:
+          - name: changed
+            type: bool
+            description: Lint only files changed from origin/main
+            default: false
+        dependencies:
+          tools:
+            vale: "3.16.0"
+        steps:
+          - type: shell
+            command: |
+              set -eu
+              if [ "{{ .Flags.changed }}" = "true" ]; then
+                # Single-ref diff (not origin/main...HEAD) so staged-but-uncommitted
+                # files are included -- required for the pre-commit hook to see the
+                # file that is about to be committed.
+                files=$(git diff --name-only origin/main -- 'docs/prd/*.md' 'website/docs/**/*.md' 'website/docs/**/*.mdx')
+              else
+                files="docs/prd website/docs"
+              fi
+              if [ -z "$files" ]; then
+                echo "No changed docs to lint."
+                exit 0
+              fi
+              # shellcheck disable=SC2086
+              vale --config=.vale.ini $files

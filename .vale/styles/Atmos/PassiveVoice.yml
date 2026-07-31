@@ -1,0 +1,11 @@
+# Flags likely passive-voice constructions. ASD-STE100 prefers active voice
+# ("the system deletes the file", not "the file is deleted by the system")
+# because it makes the actor explicit. This is a heuristic regex, not a
+# reproduction of any third-party passive-voice word list.
+extends: existence
+message: "'%s' looks like passive voice. Prefer active voice: name the actor and the action ('the component creates X', not 'X is created')."
+level: suggestion
+ignorecase: true
+tokens:
+  - '\b(?:am|is|are|was|were|be|being|been)\s+\w+ed\b'
+  - '\b(?:am|is|are|was|were|be|being|been)\s+\w+en\b'

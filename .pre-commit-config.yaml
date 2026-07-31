@@ -63,6 +63,16 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # Phase 1 (docs/prd/technical-writing-standard-ste100.md): informational
+      # only. .vale.ini MinAlertLevel = suggestion, so this never blocks a commit.
+      - id: vale-docs-lint
+        name: Lint docs prose (vale)
+        description: Run the Atmos writing style lint on changed PRD/docs files
+        entry: atmos lint docs --changed
+        language: system
+        pass_filenames: false
+        always_run: true
+
       # Keep local commits aligned with the affected-file validation job.
       # Pre-commit must not compile Atmos: use an already installed binary.
       # Exclude Go to match CI's raw-string limitation.

@@ -12,6 +12,10 @@ Use this skill whenever you create or edit a post under `website/blog/`. It is t
 for the template, tags, authors, and style rules — `CLAUDE.md`, the `pull-request` skill, and the `docs`
 skill all point here instead of restating these rules. Don't re-duplicate them elsewhere.
 
+Blog posts are narrative, reader-facing content — the rules in this skill (problem-first framing, etc.)
+govern them, not the `writing-style` skill's ASD-STE100-inspired rules (short sentences, active voice, no
+contractions), which apply to PRDs and `website/docs/` only. Don't run `atmos lint docs` against blog posts.
+
 ## When a post is required
 
 Only non-draft PRs targeting `main`, labeled `minor` or `major`, need one — see the `pull-request` skill's
