@@ -59,6 +59,10 @@ commands:
           max_attempts: 2
           initial_delay: 15s
           backoff_strategy: constant
+      # The -2 ConfigMap must exist before the -1 hook Job can mount it.
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
+      # skip_crds is a stack-level lifecycle default.
+      - command: if atmos emulator exec kubernetes -s dev -- kubectl get crd widgets.lifecycle.atmos.test; then echo "skip_crds unexpectedly installed widgets.lifecycle.atmos.test"; exit 1; fi
       - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
         retry:
           max_attempts: 3
@@ -69,8 +73,40 @@ commands:
           max_attempts: 3
           initial_delay: 10s
           backoff_strategy: constant
+      # watcher + wait_for_jobs returns only after the ordinary Job completes.
+      - atmos helm apply demo-jobs -s dev --identity local-k3s
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-jobs wait --for=condition=complete job/demo-jobs-job --timeout=5s
+      # Disabling chart hooks prevents both weighted hook resources.
+      - atmos helm apply demo-no-hooks -s dev --identity local-k3s
+      - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo-no-hooks get configmap demo-no-hooks-hook-order; then echo "disable_chart_hooks unexpectedly ran Helm hooks"; exit 1; fi
+      # hookOnly returns after hooks without waiting for ordinary Deployment readiness.
+      - atmos helm apply demo-hook-only -s dev --identity local-k3s
+      - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=1s; then echo "hookOnly unexpectedly waited for Deployment readiness"; exit 1; fi
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=30s
+      # watcher honors the release timeout and rollback removes the failed install.
+      - command: if atmos helm apply demo-timeout -s dev --identity local-k3s; then echo "timed release unexpectedly succeeded"; exit 1; fi
+      - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo-timeout get deployment demo-timeout; then echo "timeout rollback left release resources"; exit 1; fi
+      # A failed first install is reported as failure and rolled back. The kept
+      # hook ConfigMap survives recovery while ordinary release resources do not.
+      - command: if atmos helm apply demo-install-fail -s dev --identity local-k3s; then echo "failed install unexpectedly succeeded"; exit 1; fi
+      - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo-install-fail get deployment demo-install-fail; then echo "rollback left failed install resources"; exit 1; fi
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-install-fail get configmap demo-install-fail-hook-order
+      # A failed upgrade restores the successful demo release and cleanup removes
+      # the resource introduced only by the failed revision.
+      - command: if atmos helm apply demo-upgrade-fail -s dev --identity local-k3s; then echo "failed upgrade unexpectedly succeeded"; exit 1; fi
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+      - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-upgrade-only; then echo "cleanup_on_fail left the upgrade-only ConfigMap"; exit 1; fi
+      # Dependency execution gates the dependent's pre-install hook on the
+      # foundation's post-readiness marker.
+      - atmos helm apply --all -s dev --identity local-k3s --tags lifecycle-dag
+      - atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get deployment dag-dependent
       # Delete dry-run must leave the deployed release and resources intact.
       - atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
       - atmos helm delete demo -s dev --identity local-k3s
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
+      - atmos helm delete demo-jobs -s dev --identity local-k3s
+      - atmos helm delete demo-no-hooks -s dev --identity local-k3s
+      - atmos helm delete demo-hook-only -s dev --identity local-k3s
+      - atmos helm delete --all -s dev --identity local-k3s --tags lifecycle-dag
       - atmos emulator down kubernetes -s dev

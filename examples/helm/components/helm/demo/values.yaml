@@ -6,3 +6,15 @@ image:
 service:
   type: ClusterIP
   port: 80
+deployment:
+  readinessDelaySeconds: 0
+job:
+  enabled: false
+  sleepSeconds: 0
+hooks:
+  enabled: true
+  fail: false
+  requiredConfigMap: ""
+  readyMarker: false
+extraConfigMap:
+  enabled: false
