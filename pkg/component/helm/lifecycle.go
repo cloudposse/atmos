@@ -3,6 +3,7 @@ package helm
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
 
 	"helm.sh/helm/v4/pkg/kube"
@@ -14,6 +15,7 @@ import (
 const (
 	defaultHelmMaxHistory      = 10
 	helmTimeoutMigrationActive = true
+	decimalRadix               = 10
 )
 
 type lifecycleWarningCode string
@@ -75,14 +77,42 @@ func defaultReleaseLifecycle() releaseLifecycle {
 // already processed component section. Canonical fields win over aliases.
 func resolveReleaseLifecycle(section map[string]any) (releaseLifecycleResolution, error) {
 	resolution := releaseLifecycleResolution{Policy: defaultReleaseLifecycle()}
+	resolvers := []func(map[string]any, *releaseLifecycleResolution) error{
+		resolveRollbackPolicy,
+		resolveWaitPolicy,
+		resolveBooleanPolicies,
+		resolveTimeoutPolicy,
+		resolveMaxHistory,
+	}
+	for _, resolver := range resolvers {
+		if err := resolver(section, &resolution); err != nil {
+			return releaseLifecycleResolution{}, err
+		}
+	}
+	if err := validateAndDeriveLifecycle(&resolution); err != nil {
+		return releaseLifecycleResolution{}, err
+	}
+	return resolution, nil
+}
 
+func validateAndDeriveLifecycle(resolution *releaseLifecycleResolution) error {
+	if resolution.Policy.RollbackOnFailure && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
+		resolution.Policy.WaitStrategy = kube.StatusWatcherStrategy
+	}
+	if resolution.Policy.WaitForJobs && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
+		return errUtils.ErrHelmWaitForJobsRequiresWait
+	}
+	return nil
+}
+
+func resolveRollbackPolicy(section map[string]any, resolution *releaseLifecycleResolution) error {
 	rollbackOnFailure, err := optionalBoolField(section, cfg.HelmRollbackOnFailureSectionName)
 	if err != nil {
-		return releaseLifecycleResolution{}, err
+		return err
 	}
 	atomic, err := optionalBoolField(section, cfg.HelmAtomicSectionName)
 	if err != nil {
-		return releaseLifecycleResolution{}, err
+		return err
 	}
 	if atomic != nil {
 		resolution.Policy.RollbackOnFailure = *atomic
@@ -95,14 +125,17 @@ func resolveReleaseLifecycle(section map[string]any) (releaseLifecycleResolution
 	if rollbackOnFailure != nil {
 		resolution.Policy.RollbackOnFailure = *rollbackOnFailure
 	}
+	return nil
+}
 
+func resolveWaitPolicy(section map[string]any, resolution *releaseLifecycleResolution) error {
 	wait, err := optionalBoolField(section, cfg.HelmWaitSectionName)
 	if err != nil {
-		return releaseLifecycleResolution{}, err
+		return err
 	}
 	waitStrategy, err := optionalStringField(section, cfg.HelmWaitStrategySectionName)
 	if err != nil {
-		return releaseLifecycleResolution{}, err
+		return err
 	}
 	if wait != nil {
 		if *wait {
@@ -114,7 +147,7 @@ func resolveReleaseLifecycle(section map[string]any) (releaseLifecycleResolution
 	if waitStrategy != nil {
 		strategy, parseErr := parseWaitStrategy(*waitStrategy)
 		if parseErr != nil {
-			return releaseLifecycleResolution{}, parseErr
+			return parseErr
 		}
 		resolution.Policy.WaitStrategy = strategy
 		if wait != nil {
@@ -125,18 +158,13 @@ func resolveReleaseLifecycle(section map[string]any) (releaseLifecycleResolution
 			})
 		}
 	}
+	return nil
+}
 
-	waitForJobs, err := optionalBoolField(section, cfg.HelmWaitForJobsSectionName)
-	if err != nil {
-		return releaseLifecycleResolution{}, err
-	}
-	if waitForJobs != nil {
-		resolution.Policy.WaitForJobs = *waitForJobs
-	}
-
+func resolveTimeoutPolicy(section map[string]any, resolution *releaseLifecycleResolution) error {
 	timeout, err := optionalStringField(section, cfg.HelmTimeoutSectionName)
 	if err != nil {
-		return releaseLifecycleResolution{}, err
+		return err
 	}
 	resolution.TimeoutExplicit = timeout != nil
 	if timeout == nil {
@@ -147,60 +175,60 @@ func resolveReleaseLifecycle(section map[string]any) (releaseLifecycleResolution
 				Message: "helm lifecycle timeout is omitted; this release preserves 0s, but the default will become 5m in the next minor release",
 			})
 		}
-	} else {
-		parsed, parseErr := time.ParseDuration(*timeout)
-		if parseErr != nil {
-			return releaseLifecycleResolution{}, fmt.Errorf("%w: %q: %w", errUtils.ErrHelmTimeoutInvalid, *timeout, parseErr)
-		}
-		if parsed < 0 {
-			return releaseLifecycleResolution{}, fmt.Errorf("%w: %s must not be negative", errUtils.ErrHelmTimeoutInvalid, cfg.HelmTimeoutSectionName)
-		}
-		resolution.Policy.Timeout = parsed
+		return nil
 	}
+	parsed, parseErr := time.ParseDuration(*timeout)
+	if parseErr != nil {
+		return fmt.Errorf("%w: %q: %w", errUtils.ErrHelmTimeoutInvalid, *timeout, parseErr)
+	}
+	if parsed < 0 {
+		return fmt.Errorf("%w: %s must not be negative", errUtils.ErrHelmTimeoutInvalid, cfg.HelmTimeoutSectionName)
+	}
+	resolution.Policy.Timeout = parsed
+	return nil
+}
 
-	cleanupOnFail, err := optionalBoolField(section, cfg.HelmCleanupOnFailSectionName)
-	if err != nil {
-		return releaseLifecycleResolution{}, err
-	}
-	if cleanupOnFail != nil {
-		resolution.Policy.CleanupOnFail = *cleanupOnFail
-	}
-
+func resolveMaxHistory(section map[string]any, resolution *releaseLifecycleResolution) error {
 	maxHistory, err := optionalIntField(section, cfg.HelmMaxHistorySectionName)
 	if err != nil {
-		return releaseLifecycleResolution{}, err
+		return err
 	}
 	if maxHistory != nil {
 		if *maxHistory < 0 {
-			return releaseLifecycleResolution{}, fmt.Errorf("%w: %s must not be negative", errUtils.ErrHelmMaxHistoryInvalid, cfg.HelmMaxHistorySectionName)
+			return fmt.Errorf("%w: %s must not be negative", errUtils.ErrHelmMaxHistoryInvalid, cfg.HelmMaxHistorySectionName)
 		}
 		resolution.Policy.MaxHistory = *maxHistory
 	}
+	return nil
+}
 
-	disableChartHooks, err := optionalBoolField(section, cfg.HelmDisableChartHooksSectionName)
+func resolveBooleanPolicies(section map[string]any, resolution *releaseLifecycleResolution) error {
+	fields := []struct {
+		key    string
+		target *bool
+	}{
+		{cfg.HelmWaitForJobsSectionName, &resolution.Policy.WaitForJobs},
+		{cfg.HelmCleanupOnFailSectionName, &resolution.Policy.CleanupOnFail},
+		{cfg.HelmDisableChartHooksSectionName, &resolution.Policy.DisableChartHooks},
+		{cfg.HelmSkipCRDsSectionName, &resolution.Policy.SkipCRDs},
+	}
+	for _, field := range fields {
+		if err := applyOptionalBool(section, field.key, field.target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyOptionalBool(section map[string]any, key string, target *bool) error {
+	value, err := optionalBoolField(section, key)
 	if err != nil {
-		return releaseLifecycleResolution{}, err
+		return err
 	}
-	if disableChartHooks != nil {
-		resolution.Policy.DisableChartHooks = *disableChartHooks
+	if value != nil {
+		*target = *value
 	}
-
-	skipCRDs, err := optionalBoolField(section, cfg.HelmSkipCRDsSectionName)
-	if err != nil {
-		return releaseLifecycleResolution{}, err
-	}
-	if skipCRDs != nil {
-		resolution.Policy.SkipCRDs = *skipCRDs
-	}
-
-	if resolution.Policy.RollbackOnFailure && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
-		resolution.Policy.WaitStrategy = kube.StatusWatcherStrategy
-	}
-	if resolution.Policy.WaitForJobs && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
-		return releaseLifecycleResolution{}, errUtils.ErrHelmWaitForJobsRequiresWait
-	}
-
-	return resolution, nil
+	return nil
 }
 
 func parseWaitStrategy(value string) (kube.WaitStrategy, error) {
@@ -222,7 +250,25 @@ func resolveReleaseLifecycleWithFlags(section map[string]any, flags map[string]a
 		overlaid[key] = value
 	}
 	extraWarnings := make([]lifecycleWarning, 0, 1)
+	overlayRollbackFlags(overlaid, flags)
+	if value, ok := flags[cfg.HelmWaitStrategySectionName].(string); ok {
+		value, warning := normalizeWaitFlag(value)
+		if warning != nil {
+			extraWarnings = append(extraWarnings, *warning)
+		}
+		overlaid[cfg.HelmWaitStrategySectionName] = value
+	}
+	overlayLifecyclePassthroughFlags(overlaid, flags)
 
+	resolution, err := resolveReleaseLifecycle(overlaid)
+	if err != nil {
+		return releaseLifecycleResolution{}, err
+	}
+	resolution.Warnings = append(resolution.Warnings, extraWarnings...)
+	return resolution, nil
+}
+
+func overlayRollbackFlags(overlaid map[string]any, flags map[string]any) {
 	if value, ok := flags[cfg.HelmAtomicSectionName].(bool); ok {
 		overlaid[cfg.HelmAtomicSectionName] = value
 		// A CLI alias has higher precedence than stored canonical configuration.
@@ -233,23 +279,28 @@ func resolveReleaseLifecycleWithFlags(section map[string]any, flags map[string]a
 	if value, ok := flags[cfg.HelmRollbackOnFailureSectionName].(bool); ok {
 		overlaid[cfg.HelmRollbackOnFailureSectionName] = value
 	}
-	if value, ok := flags[cfg.HelmWaitStrategySectionName].(string); ok {
-		switch value {
-		case "true":
-			value = string(kube.StatusWatcherStrategy)
-			extraWarnings = append(extraWarnings, lifecycleWarning{
-				Code: warningWaitBoolean, Field: cfg.HelmWaitStrategySectionName,
-				Message: "boolean '--wait=true' is deprecated; use '--wait=watcher'",
-			})
-		case "false":
-			value = string(kube.HookOnlyStrategy)
-			extraWarnings = append(extraWarnings, lifecycleWarning{
-				Code: warningWaitBoolean, Field: cfg.HelmWaitStrategySectionName,
-				Message: "boolean '--wait=false' is deprecated; use '--wait=hookOnly'",
-			})
+}
+
+func normalizeWaitFlag(value string) (string, *lifecycleWarning) {
+	var warning *lifecycleWarning
+	switch value {
+	case "true":
+		value = string(kube.StatusWatcherStrategy)
+		warning = &lifecycleWarning{
+			Code: warningWaitBoolean, Field: cfg.HelmWaitStrategySectionName,
+			Message: "boolean '--wait=true' is deprecated; use '--wait=watcher'",
 		}
-		overlaid[cfg.HelmWaitStrategySectionName] = value
+	case "false":
+		value = string(kube.HookOnlyStrategy)
+		warning = &lifecycleWarning{
+			Code: warningWaitBoolean, Field: cfg.HelmWaitStrategySectionName,
+			Message: "boolean '--wait=false' is deprecated; use '--wait=hookOnly'",
+		}
 	}
+	return value, warning
+}
+
+func overlayLifecyclePassthroughFlags(overlaid map[string]any, flags map[string]any) {
 	for _, key := range []string{
 		cfg.HelmWaitForJobsSectionName,
 		cfg.HelmTimeoutSectionName,
@@ -262,13 +313,6 @@ func resolveReleaseLifecycleWithFlags(section map[string]any, flags map[string]a
 			overlaid[key] = value
 		}
 	}
-
-	resolution, err := resolveReleaseLifecycle(overlaid)
-	if err != nil {
-		return releaseLifecycleResolution{}, err
-	}
-	resolution.Warnings = append(resolution.Warnings, extraWarnings...)
-	return resolution, nil
 }
 
 func hasExplicitLifecycleFlags(flags map[string]any) bool {
@@ -328,8 +372,8 @@ func exactInt(value any) (int, bool) {
 		return converted, int64(converted) == integer
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		integer := reflected.Uint()
-		converted := int(integer)
-		return converted, converted >= 0 && uint64(converted) == integer
+		converted, err := strconv.Atoi(strconv.FormatUint(integer, decimalRadix))
+		return converted, err == nil
 	default:
 		return 0, false
 	}
