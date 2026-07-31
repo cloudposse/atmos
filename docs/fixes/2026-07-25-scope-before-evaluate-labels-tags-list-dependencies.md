@@ -87,6 +87,20 @@ skipped — correctness is preserved (only the perf optimization is forfeited fo
 (`schema.DescribeSettings.EagerEvaluation`, read via `GetEagerEvaluationSetting`) forces this path for
 every component, as an instant rollback.
 
+**Selector purity contract.** `processComponentEntry` also runs `validateSelectorMetadata`
+(`internal/exec/describe_stacks_component_processor.go`) on every component's `metadata.tags`/
+`metadata.labels`, via `tags.ValidateSelectorValue`. This is a separate, always-on check — it runs
+before `scopeDecision` and is **not** gated by whether a `--tags`/`--labels` filter is active, and
+`describe.settings.eager_evaluation` does **not** bypass it. Selectors decide scope before
+evaluation, so by design they may never contain a construct that requires authentication or process
+execution to resolve — `!terraform.state`, `!store`, `!exec`, `atmos.Component(...)`, and similar are
+rejected immediately with `errUtils.ErrForbiddenSelectorFunction`, whether or not any filter is
+active, so a repo can never accidentally hide an auth-requiring value inside metadata that's
+supposed to be cheaply/statically decidable. See
+`TestProcessComponentEntry_ForbiddenSelectorErrorsByDesign` and
+`TestProcessComponentEntry_AllowedSelectorFunctionsPass`
+(`internal/exec/describe_stacks_component_processor_scope_test.go`).
+
 ### 2. `list dependencies` closure-scoped evaluation (`cmd/list/dependencies.go`, `pkg/list/dependencies/closure.go`)
 
 When `--stack`/`--component` bounds the request, evaluation is now split:

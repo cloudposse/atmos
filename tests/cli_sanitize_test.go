@@ -470,6 +470,11 @@ func TestSanitizeOutput_WithCustomReplacements(t *testing.T) {
 			input:    "provisioned_by_user: '{{ env \"USER\" }}'\nprovisioned_by_user: zack",
 			expected: "provisioned_by_user: '{{ env \"USER\" }}'\nprovisioned_by_user: user",
 		},
+		{
+			name:     "Preserve double-quoted provenance template",
+			input:    "provisioned_by_user: \"{{ env \\\"USER\\\" }}\"\nprovisioned_by_user: zack",
+			expected: "provisioned_by_user: \"{{ env \\\"USER\\\" }}\"\nprovisioned_by_user: user",
+		},
 	}
 
 	for _, tt := range tests {
