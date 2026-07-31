@@ -59,7 +59,7 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	}
 	var deletedRelease, deletedNamespace string
 	var deleteDryRun bool
-	deleteHelmRelease = func(spec *chartSpec, dryRun bool) error {
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, dryRun bool) error {
 		deletedRelease = spec.ReleaseName
 		deletedNamespace = spec.Namespace
 		deleteDryRun = dryRun

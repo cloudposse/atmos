@@ -115,7 +115,7 @@ func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	_, err = getDeployedManifest("nginx", "apps")
 	require.ErrorIs(t, err, sentinel)
 
-	err = deleteRelease(spec, false)
+	err = deleteRelease(context.Background(), spec, false)
 	require.ErrorIs(t, err, sentinel)
 }
 

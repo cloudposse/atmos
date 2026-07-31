@@ -13,7 +13,8 @@ import (
 )
 
 type graphTestProvider struct {
-	calls []ExecutionContext
+	calls         []ExecutionContext
+	cancelOnFirst context.CancelFunc
 }
 
 func (p *graphTestProvider) GetType() string { return cfg.KubernetesComponentType }
@@ -30,6 +31,10 @@ func (p *graphTestProvider) ValidateComponent(map[string]any) error { return nil
 
 func (p *graphTestProvider) Execute(ctx *ExecutionContext) error {
 	p.calls = append(p.calls, *ctx)
+	if p.cancelOnFirst != nil && len(p.calls) == 1 {
+		p.cancelOnFirst()
+		return ctx.GoContext().Err()
+	}
 	return nil
 }
 
@@ -124,8 +129,9 @@ func TestFilterGraph(t *testing.T) {
 
 func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 	provider := &graphTestProvider{}
+	ctx := context.WithValue(context.Background(), graphContextKey{}, "graph")
 
-	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
 		Provider:      provider,
 		Info:          &schema.ConfigAndStacksInfo{},
 		Stacks:        graphTestStacks(),
@@ -139,6 +145,7 @@ func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 	assertLessCallIndex(t, provider.calls, "base", "dev", "api", "dev")
 	assertLessCallIndex(t, provider.calls, "base", "prod", "worker", "dev")
 	for _, call := range provider.calls {
+		assert.Equal(t, "graph", call.GoContext().Value(graphContextKey{}))
 		assert.Equal(t, cfg.KubernetesComponentType, call.ComponentType)
 		assert.Equal(t, "apply", call.SubCommand)
 		assert.False(t, call.ConfigAndStacksInfo.All)
@@ -146,6 +153,8 @@ func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 		assert.Equal(t, true, call.Flags["dry-run"])
 	}
 }
+
+type graphContextKey struct{}
 
 func TestExecuteGraphValidatesRequiredOptions(t *testing.T) {
 	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{Info: &schema.ConfigAndStacksInfo{}})
@@ -204,6 +213,21 @@ func TestExecuteGraphHonorsCanceledContext(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
 	assert.Empty(t, provider.calls)
+}
+
+func TestExecuteGraphCancelsActiveNodeAndStopsDependents(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	provider := &graphTestProvider{cancelOnFirst: cancel}
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Stack: "dev"},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Len(t, provider.calls, 1)
+	assert.Equal(t, "base", provider.calls[0].Component)
 }
 
 func TestLegacyDependsOnParsing(t *testing.T) {

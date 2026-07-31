@@ -69,7 +69,7 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(spec *chartSpec, _ bool) error {
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) error {
 		deleted = spec.ReleaseName
 		return nil
 	}
@@ -141,7 +141,7 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(spec *chartSpec, _ bool) error {
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) error {
 		deleted = spec.ReleaseName
 		return nil
 	}
@@ -232,6 +232,7 @@ func TestResolveDiffBaseline_AgainstTarget(t *testing.T) {
 		},
 	}}
 	got, err := resolveDiffBaseline(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		info,
 		map[string]any{flagAgainst: "target"},
@@ -252,6 +253,7 @@ func TestResolveDiffBaseline_DeployedRelease(t *testing.T) {
 	stubActionContext(t, actx)
 
 	got, err := resolveDiffBaseline(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
 		map[string]any{},
@@ -263,7 +265,7 @@ func TestResolveDiffBaseline_DeployedRelease(t *testing.T) {
 
 func TestFetchTargetBaseline_RejectsKubernetesTarget(t *testing.T) {
 	// No provision section + no name resolves to the implicit cluster target.
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, "target")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, "target")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrHelmDiffFailed)
 }
@@ -275,7 +277,7 @@ func TestFetchTargetBaseline_SelectTargetError(t *testing.T) {
 		},
 	}}
 	// "target:nope" requests a named target that is not configured.
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, info, "target:nope")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, info, "target:nope")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
 }
@@ -289,7 +291,7 @@ func TestFetchTargetBaseline_FetchError(t *testing.T) {
 			"targets": map[string]any{"repo": map[string]any{"kind": "diff-fetch-err"}},
 		},
 	}}
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, info, "target")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, info, "target")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetch boom")
 }
@@ -303,7 +305,7 @@ func TestResolveComponentPath(t *testing.T) {
 	}
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Components.Helm.BasePath = "components/helm"
-	path, err := resolveComponentPath(atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
+	path, err := resolveComponentPath(context.Background(), atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
 	require.NoError(t, err)
 	assert.Contains(t, filepath.ToSlash(path), "components/helm")
 
@@ -311,7 +313,7 @@ func TestResolveComponentPath(t *testing.T) {
 	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
 		return "", false, sentinel
 	}
-	_, err = resolveComponentPath(atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
+	_, err = resolveComponentPath(context.Background(), atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -341,7 +343,7 @@ func TestRenderObjects_Errors(t *testing.T) {
 	renderChartManifest = func(context.Context, *chartSpec) (string, error) {
 		return "", errors.New("render boom")
 	}
-	_, err := renderObjects(&chartSpec{Chart: "demo"})
+	_, err := renderObjects(context.Background(), &chartSpec{Chart: "demo"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "render boom")
 
@@ -349,7 +351,7 @@ func TestRenderObjects_Errors(t *testing.T) {
 	renderChartManifest = func(context.Context, *chartSpec) (string, error) {
 		return "", nil
 	}
-	_, err = renderObjects(&chartSpec{Chart: "demo"})
+	_, err = renderObjects(context.Background(), &chartSpec{Chart: "demo"})
 	require.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }
 
