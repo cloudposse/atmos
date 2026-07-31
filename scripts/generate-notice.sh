@@ -50,6 +50,11 @@ cloud.google.com/go/longrunning|github.com/googleapis/google-cloud-go|longrunnin
 cloud.google.com/go/monitoring|github.com/googleapis/google-cloud-go|monitoring|monitoring/LICENSE
 cloud.google.com/go/secretmanager|github.com/googleapis/google-cloud-go|secretmanager|secretmanager/LICENSE
 cloud.google.com/go/storage|github.com/googleapis/google-cloud-go|storage|storage/LICENSE
+gopkg.in/ini.v1|github.com/go-ini/ini||LICENSE
+gopkg.in/evanphx/json-patch.v4|github.com/evanphx/json-patch||LICENSE
+gopkg.in/inf.v0|github.com/go-inf/inf||LICENSE
+gopkg.in/op/go-logging.v1|github.com/op/go-logging||LICENSE
+gopkg.in/warnings.v0|github.com/go-warnings/warnings||LICENSE
 "
 
 # git_ref_from_version maps a module version to a ref usable in a GitHub blob URL:
