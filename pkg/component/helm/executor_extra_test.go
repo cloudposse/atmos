@@ -74,8 +74,8 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 
@@ -146,8 +146,8 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 	setupRepositories = func([]chartRepository) error {
@@ -181,8 +181,8 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		return &hooks.Hooks{}, nil
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
-	applyHelmRelease = func(context.Context, *chartSpec, bool) (string, error) {
-		return helmExecutorManifest, nil
+	applyHelmRelease = func(context.Context, *chartSpec, bool) (releaseActionResult, error) {
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var setup []chartRepository
 	setupRepositories = func(repositories []chartRepository) error {
