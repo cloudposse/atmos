@@ -20,9 +20,11 @@ atmos validate stacks
 atmos helm template demo -s dev
 atmos emulator up kubernetes -s dev
 atmos helm diff demo -s dev --identity local-k3s
-atmos helm apply demo -s dev --identity local-k3s
+atmos helm apply demo -s dev --identity local-k3s --dry-run
+atmos helm apply demo -s dev --identity local-k3s --rollback-on-failure --wait=watcher --timeout=2m
 atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
 atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
 atmos helm delete demo -s dev --identity local-k3s
 atmos emulator down kubernetes -s dev
 ```
@@ -68,6 +70,11 @@ atmos helm apply demo -s dev
 atmos emulator up kubernetes -s dev
 atmos helm apply demo -s dev --identity local-k3s
 ```
+
+The stack sets `wait_strategy: watcher`, `timeout: 2m`, and
+`max_history: 10` as native Helm type defaults. The component enables
+`rollback_on_failure` and failed-upgrade cleanup. The `atmos test` workflow also
+proves that apply and delete dry runs do not create or remove the Deployment.
 
 ## Helm Repositories
 

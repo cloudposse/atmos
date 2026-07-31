@@ -54,6 +54,14 @@ components:
   </dd>
 </dl>
 
+:::info Release policy belongs in stacks
+Helm 4 lifecycle fields such as `wait_strategy`, `timeout`,
+`rollback_on_failure`, and `max_history` are stack configuration, not
+project-wide `components.helm` settings in `atmos.yaml`. This keeps release
+policy subject to stack imports, component inheritance, and environment-specific
+overrides. See [Helm stack configuration](/stacks/components/helm#release-lifecycle).
+:::
+
 ## Helm Repositories
 
 Global repositories are declared once in `atmos.yaml`:
