@@ -206,6 +206,30 @@ func TestResolveStackFromContext(t *testing.T) {
 	}
 }
 
+// TestExecuteAwsEksUpdateKubeconfig_ResolvesStackFromNameTemplateContext covers the call site in
+// ExecuteAwsEksUpdateKubeconfig that invokes resolveStackFromContext when no `--stack` flag was
+// given. It uses the `complete` fixture, whose atmos.yaml configures `stacks.name_template:
+// "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"`. Passing a tenant that doesn't match
+// any real stack lets us assert on the exact templated stack name embedded in the resulting
+// "component not found" error, proving the namespace/tenant/environment/stage context was
+// actually rendered through name_template and threaded into stack processing -- not just that
+// some error was returned.
+func TestExecuteAwsEksUpdateKubeconfig_ResolvesStackFromNameTemplateContext(t *testing.T) {
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Chdir("../../tests/fixtures/scenarios/complete")
+
+	ctx := schema.AwsEksUpdateKubeconfigContext{
+		Tenant:      "nonexistent-tenant",
+		Environment: "ue2",
+		Stage:       "dev",
+		Component:   "infra/vpc",
+	}
+
+	err := ExecuteAwsEksUpdateKubeconfig(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent-tenant-ue2-dev")
+}
+
 func TestExecuteAwsEksUpdateKubeconfig_WithRequiredParams(t *testing.T) {
 	// Test with all required parameters provided (profile and cluster name).
 	// With DryRun=true, the function should succeed without actually calling AWS CLI.

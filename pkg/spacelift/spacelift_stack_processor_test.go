@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -202,4 +204,100 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestTransformStackConfigToSpaceliftStacks_DuplicateStackName(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Two different stacks, each with a component whose `settings.spacelift.stack_name`
+	// explicitly resolves to the same literal name -- this must be rejected rather than
+	// silently overwriting the first stack's config.
+	stacks := map[string]any{
+		"stackA": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"compA": map[string]any{
+						"vars": map[string]any{},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"workspace_enabled": true,
+								"stack_name":        "dup-stack",
+							},
+						},
+					},
+				},
+			},
+		},
+		"stackB": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"compB": map[string]any{
+						"vars": map[string]any{},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"workspace_enabled": true,
+								"stack_name":        "dup-stack",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", "", "", false, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Duplicate Spacelift stack name")
+	assert.Contains(t, err.Error(), "dup-stack")
+}
+
+func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateMissingVar(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	stacks := map[string]any{
+		"orgs/cp/tenant1/dev/us-east-2": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"comp1": map[string]any{
+						"vars": map[string]any{
+							"tenant":      "tenant1",
+							"environment": "ue2",
+							"stage":       "dev",
+							"region":      "us-east-2",
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{"workspace_enabled": true},
+							"depends_on": map[string]any{
+								"1": map[string]any{"component": "comp2"},
+							},
+						},
+					},
+					"comp2": map[string]any{
+						"vars": map[string]any{
+							"tenant":      "tenant1",
+							"environment": "ue2",
+							"stage":       "dev",
+							"region":      "us-east-2",
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{"workspace_enabled": true},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// name_template references `.vars.region`, which is present in each component's own
+	// `vars` (so the component's own stack-name resolution succeeds), but the
+	// `settings.depends_on` resolution only ever synthesizes namespace/tenant/environment/
+	// stage for the referenced component -- it never carries a "region" key. That asymmetry
+	// means a name_template referencing anything outside those four tokens fails specifically
+	// while resolving a `depends_on` entry, even though the identical template renders fine
+	// for the component's own stack name a few lines earlier in the same function.
+	stackNameTemplate := "{{.vars.tenant}}-{{.vars.region}}"
+
+	_, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", stackNameTemplate, "", false, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "region")
 }

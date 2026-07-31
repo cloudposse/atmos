@@ -86,3 +86,96 @@ func TestBuildSpaceliftStackNames(t *testing.T) {
 		assert.Equal(t, []string{"orgs-cp-tenant1-dev-us-east-2-infra-vpc"}, names)
 	})
 }
+
+func TestBuildSpaceliftStackNames_ComponentLevelSpaceliftSettingsOverride(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stacks := map[string]any{
+		"orgs/cp/tenant1/dev/us-east-2": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"infra-vpc": map[string]any{
+						"vars": map[string]any{
+							"tenant":      "tenant1",
+							"environment": "ue2",
+							"stage":       "dev",
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"stack_name": "custom-explicit-stack-name",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	names, err := BuildSpaceliftStackNames(atmosConfig, stacks, SpaceliftStackNaming{NamePattern: "{tenant}-{environment}-{stage}"})
+	require.NoError(t, err)
+	// A component-level `settings.spacelift.stack_name` overrides the computed context
+	// prefix entirely. This confirms buildSpaceliftStackNameForComponent actually reads
+	// componentMap["settings"]["spacelift"] instead of always falling back to the
+	// naming-derived default.
+	assert.Equal(t, []string{"custom-explicit-stack-name"}, names)
+}
+
+func TestBuildSpaceliftStackNames_NameTemplateErrorPropagates(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stacks := map[string]any{
+		"orgs/cp/tenant1/dev/us-east-2": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"infra-vpc": map[string]any{
+						"vars": map[string]any{
+							"tenant": "tenant1",
+						},
+						"settings": map[string]any{},
+					},
+				},
+			},
+		},
+	}
+
+	naming := SpaceliftStackNaming{NameTemplate: "{{.vars.environment}}"}
+	names, err := BuildSpaceliftStackNames(atmosConfig, stacks, naming)
+	// The component's `vars` doesn't define `environment`, so the template execution
+	// must fail loudly (missingkey=error) instead of silently producing a wrong or
+	// empty stack name, and BuildSpaceliftStackNames must forward that error rather
+	// than swallowing it.
+	require.Error(t, err)
+	assert.Nil(t, names)
+	assert.Contains(t, err.Error(), "environment")
+}
+
+func TestBuildSpaceliftStackNames_SkipsStacksWithoutTerraformComponents(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stacks := map[string]any{
+		"stack-without-components": map[string]any{},
+		"stack-without-terraform": map[string]any{
+			"components": map[string]any{
+				"helmfile": map[string]any{},
+			},
+		},
+		"stack-with-terraform": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"infra-vpc": map[string]any{
+						"vars": map[string]any{
+							"tenant":      "tenant1",
+							"environment": "ue2",
+							"stage":       "dev",
+						},
+						"settings": map[string]any{},
+					},
+				},
+			},
+		},
+	}
+
+	names, err := BuildSpaceliftStackNames(atmosConfig, stacks, SpaceliftStackNaming{})
+	require.NoError(t, err)
+	// Stacks missing a `components` section, or missing a `components.terraform`
+	// section (e.g. helmfile-only stacks), are silently skipped rather than causing a
+	// type-assertion panic or contributing a spurious name.
+	assert.Equal(t, []string{"stack-with-terraform-infra-vpc"}, names)
+}
