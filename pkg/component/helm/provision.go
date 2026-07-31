@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -45,15 +46,45 @@ func deliverApply(
 
 	// Cluster delivery installs/upgrades the Helm release directly.
 	if selected.Kind == target.KindKubernetes {
-		rendered, err := applyHelmRelease(context.Background(), spec, info.DryRun)
-		summary["manifest_bytes"] = len(rendered)
-		if objects, decodeErr := manifest.DecodeObjects([]byte(rendered)); decodeErr == nil {
+		result, err := applyHelmRelease(context.Background(), spec, info.DryRun)
+		summary["manifest_bytes"] = len(result.Manifest)
+		summary["lifecycle"] = lifecycleSummary(result.Operation, spec.Lifecycle.Policy)
+		if objects, decodeErr := manifest.DecodeObjects([]byte(result.Manifest)); decodeErr == nil {
 			addObjectsToSummary(summary, objects)
 		}
 		return summary, err
 	}
+	if hasExplicitLifecycleFlags(flags) {
+		return summary, errUtils.ErrHelmLifecycleExternalTarget
+	}
+	summary["lifecycle"] = map[string]any{
+		"applied":     false,
+		"target_kind": selected.Kind,
+		"reason":      "external_target",
+	}
 
 	return deliverToExternalTarget(atmosConfig, info, selected, spec, summary)
+}
+
+func lifecycleSummary(operation string, policy releaseLifecycle) map[string]any {
+	summary := map[string]any{
+		"operation":           operation,
+		"wait_strategy":       string(policy.WaitStrategy),
+		"timeout":             policy.Timeout.String(),
+		"chart_hooks_enabled": !policy.DisableChartHooks,
+	}
+	switch operation {
+	case "install":
+		summary["wait_for_jobs"] = policy.WaitForJobs
+		summary["rollback_on_failure"] = policy.RollbackOnFailure
+		summary["install_crds"] = !policy.SkipCRDs
+	case "upgrade":
+		summary["wait_for_jobs"] = policy.WaitForJobs
+		summary["rollback_on_failure"] = policy.RollbackOnFailure
+		summary["cleanup_on_fail"] = policy.CleanupOnFail
+		summary["max_history"] = policy.MaxHistory
+	}
+	return summary
 }
 
 // deliverToExternalTarget renders the Helm release to manifests and delivers them

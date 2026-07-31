@@ -53,14 +53,16 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	renderChartManifest = func(_ context.Context, _ *chartSpec) (string, error) {
 		return helmExecutorManifest, nil
 	}
-	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (string, error) {
+	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
 		require.False(t, dryRun)
-		return helmExecutorManifest, nil
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var deletedRelease, deletedNamespace string
-	deleteHelmRelease = func(releaseName, namespace string) error {
-		deletedRelease = releaseName
-		deletedNamespace = namespace
+	var deleteDryRun bool
+	deleteHelmRelease = func(spec *chartSpec, dryRun bool) error {
+		deletedRelease = spec.ReleaseName
+		deletedNamespace = spec.Namespace
+		deleteDryRun = dryRun
 		return nil
 	}
 
@@ -106,10 +108,12 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	assert.Equal(t, 1, summary["object_count"])
 
 	info.SubCommand = "delete"
+	info.DryRun = true
 	summary, err = runOperation(ctx, &schema.AtmosConfiguration{}, info, OperationDelete, spec)
 	require.NoError(t, err)
 	assert.Equal(t, "app", deletedRelease)
 	assert.Equal(t, "demo", deletedNamespace)
+	assert.True(t, deleteDryRun)
 	assert.Equal(t, "app", summary["release_name"])
 }
 

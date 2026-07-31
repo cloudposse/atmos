@@ -161,6 +161,15 @@ func runWithHooks(
 	if spec.ReleaseName == "" {
 		return errUtils.ErrHelmReleaseNameRequired
 	}
+	if operation == OperationApply || operation == OperationDelete {
+		spec.Lifecycle, err = resolveReleaseLifecycleWithFlags(info.ComponentSection, ctx.Flags)
+		if err != nil {
+			return err
+		}
+		for _, warning := range spec.Lifecycle.Warnings {
+			log.Warn(warning.Message, "field", warning.Field, "code", warning.Code)
+		}
+	}
 	if operation != OperationDelete {
 		if err := setupRepositories(spec.Repositories); err != nil {
 			return err
@@ -210,7 +219,8 @@ func runOperation(
 		mergeSummary(summary, applySummary)
 		return summary, err
 	case OperationDelete:
-		err := deleteHelmRelease(spec.ReleaseName, spec.Namespace)
+		err := deleteHelmRelease(spec, info.DryRun)
+		summary["lifecycle"] = lifecycleSummary("delete", spec.Lifecycle.Policy)
 		return summary, err
 	default:
 		return summary, fmt.Errorf("%w: %q", errUtils.ErrHelmUnsupportedOperation, operation)
