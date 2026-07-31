@@ -4,6 +4,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -259,6 +260,11 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	stackManifestName := getStackManifestName(stackMap)
 
 	// Delete the stack-wide imports section (not needed in output).
+	// Shallow-clone first: stackMap is owned by the shared FindStacksMap cache, and
+	// deleting from it in place would strip `imports` (and thus `deps`) from every
+	// subsequent ProcessStacks call in the same process (e.g., DAG-scheduled bulk
+	// commands, which run ExecuteDescribeStacks before executing components).
+	stackMap = maps.Clone(stackMap)
 	delete(stackMap, "imports")
 
 	// When includeEmptyStacks is true, pre-create an entry in the result map so that
@@ -974,6 +980,11 @@ func applyTerraformMetadataInheritance(
 	// regardless of whether an inherit list is present.  This matches the original behaviour:
 	// the cleanup ran unconditionally (outside the inheritList guard) in the old monolith.
 	if _, hasExplicitWorkspace := metadataSection["terraform_workspace"].(string); hasExplicitWorkspace {
+		// Shallow-clone first: unless the inheritance merge above already produced a
+		// fresh map, metadataSection aliases the nested metadata map owned by the
+		// shared FindStacksMap cache, and deleting from it in place would corrupt the
+		// cache for every subsequent caller in the same process.
+		metadataSection = maps.Clone(metadataSection)
 		delete(metadataSection, "terraform_workspace_pattern")
 		delete(metadataSection, "terraform_workspace_template")
 	}
