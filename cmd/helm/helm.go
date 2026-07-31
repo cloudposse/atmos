@@ -20,9 +20,11 @@ import (
 )
 
 const (
-	flagOutput   = "output"
-	flagAll      = "all"
-	flagAffected = "affected"
+	flagOutput            = "output"
+	flagAll               = "all"
+	flagAffected          = "affected"
+	flagWait              = "wait"
+	defaultHelmHistoryMax = 10
 	// The valueTrue const is the string representation of a set boolean flag.
 	valueTrue = "true"
 )
@@ -155,12 +157,12 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
 			flags.WithBoolFlag("rollback-on-failure", "", false, "Roll back an upgrade or uninstall a failed install."),
 			flags.WithBoolFlag("atomic", "", false, "Deprecated alias for --rollback-on-failure."),
-			flags.WithStringFlag("wait", "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher."),
-			flags.WithNoOptDefVal("wait", "watcher"),
+			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher."),
+			flags.WithNoOptDefVal(flagWait, "watcher"),
 			flags.WithBoolFlag("wait-for-jobs", "", false, "Wait for Jobs in the release manifest."),
 			flags.WithStringFlag("timeout", "", "", "Helm release-operation timeout (for example, 10m)."),
 			flags.WithBoolFlag("cleanup-on-fail", "", false, "Delete resources created by a failed upgrade."),
-			flags.WithIntFlag("history-max", "", 10, "Maximum release revisions to retain; 0 means unlimited."),
+			flags.WithIntFlag("history-max", "", defaultHelmHistoryMax, "Maximum release revisions to retain; 0 means unlimited."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 			flags.WithBoolFlag("skip-crds", "", false, "Do not install chart CRDs on first install."),
 		)
@@ -168,8 +170,8 @@ func operationFlagOptions(name string) []flags.Option {
 	if name == "delete" {
 		options = append(
 			options,
-			flags.WithStringFlag("wait", "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher."),
-			flags.WithNoOptDefVal("wait", "watcher"),
+			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher."),
+			flags.WithNoOptDefVal(flagWait, "watcher"),
 			flags.WithStringFlag("timeout", "", "", "Helm uninstall timeout (for example, 10m)."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 		)
