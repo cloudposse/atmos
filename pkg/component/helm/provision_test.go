@@ -130,6 +130,26 @@ func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
 	assert.Equal(t, "deploy-repo", ft.delivered.TargetName)
 }
 
+func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
+	originalApply := applyHelmRelease
+	t.Cleanup(func() { applyHelmRelease = originalApply })
+
+	var receivedDryRun bool
+	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (string, error) {
+		receivedDryRun = dryRun
+		return helmExecutorManifest, nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		DryRun:           true,
+		ComponentSection: map[string]any{},
+	}
+	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
+	require.NoError(t, err)
+	assert.True(t, receivedDryRun)
+	assert.Equal(t, "cluster", summary[targetKey])
+}
+
 func TestDeliverApply_SelectTargetError(t *testing.T) {
 	// An explicitly requested target that is not configured fails to resolve.
 	_, err := deliverApply(
