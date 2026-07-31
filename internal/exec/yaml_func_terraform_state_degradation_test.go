@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/degradation"
@@ -22,37 +23,23 @@ var errCrossAccountAccessDenied = fmt.Errorf(
 	errUtils.ErrReadTerraformState,
 )
 
-// failingStateGetter is a TerraformStateGetter that always fails with the supplied error,
-// standing in for an unreachable cross-account backend without any network or credentials.
-type failingStateGetter struct {
-	err   error
-	calls int
-}
-
-//nolint:revive // argument-limit: matches the TerraformStateGetter interface signature.
-func (f *failingStateGetter) GetState(
-	_ *schema.AtmosConfiguration,
-	_ string,
-	_ string,
-	_ string,
-	_ string,
-	_ bool,
-	_ *schema.AuthContext,
-	_ any,
-) (any, error) {
-	f.calls++
-	return nil, f.err
-}
-
-// installFailingStateGetter swaps the package-level stateGetter for the test's duration.
-func installFailingStateGetter(t *testing.T, err error) *failingStateGetter {
+// installFailingStateGetter swaps the package-level stateGetter for a generated mock that
+// always fails with the supplied error, standing in for an unreachable cross-account backend
+// without any network or credentials. MinTimes(1) enforces that the read is actually
+// attempted — the property that distinguishes degrading a failed read from skipping it.
+func installFailingStateGetter(t *testing.T, err error) {
 	t.Helper()
 
-	getter := &failingStateGetter{err: err}
+	ctrl := gomock.NewController(t)
+	mock := NewMockTerraformStateGetter(ctrl)
+	mock.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, err).
+		MinTimes(1)
+
 	original := stateGetter
 	t.Cleanup(func() { stateGetter = original })
-	stateGetter = getter
-	return getter
+	stateGetter = mock
 }
 
 // TestProcessNodesWithContext_DegradesCrossAccountAccessDenied is the #2566 regression guard
@@ -60,7 +47,7 @@ func installFailingStateGetter(t *testing.T, err error) *failingStateGetter {
 // the current identity cannot avoid must degrade to the `(computed)` placeholder and let the
 // walk finish, so an inventory listing still renders.
 func TestProcessNodesWithContext_DegradesCrossAccountAccessDenied(t *testing.T) {
-	getter := installFailingStateGetter(t, errCrossAccountAccessDenied)
+	installFailingStateGetter(t, errCrossAccountAccessDenied)
 
 	var warnings []DegradationWarning
 	data := map[string]any{
@@ -76,8 +63,9 @@ func TestProcessNodesWithContext_DegradesCrossAccountAccessDenied(t *testing.T) 
 		func(w DegradationWarning) { warnings = append(warnings, w) },
 	)
 
+	// The mock's MinTimes(1) already enforces that the read was attempted rather than
+	// skipped — the property separating this fix from the skip-based approach it replaced.
 	require.NoError(t, err, "a cross-account AccessDenied must not abort the whole walk in warn mode")
-	require.Positive(t, getter.calls, "the state read must actually have been attempted, not skipped")
 
 	vars, ok := result["vars"].(map[string]any)
 	require.True(t, ok, "vars section must survive the degradation")

@@ -98,6 +98,38 @@ func TestExplainRepositoryWideYAMLFunctionFailure_SkipCombinations(t *testing.T)
 	}
 }
 
+// TestExplainRepositoryWideYAMLFunctionFailure_NoHintsInWarnMode is the gate added after
+// degradation landed: a non-nil onWarning means the caller is in warn/silent mode, where the
+// lead hint ("drop --error-mode=strict") would be nonsense advice. Reaching here in warn mode
+// means the error was non-recoverable — a manifest defect, not something an error mode fixes.
+func TestExplainRepositoryWideYAMLFunctionFailure_NoHintsInWarnMode(t *testing.T) {
+	p := &describeStacksProcessor{
+		filterByStack: "",
+		onWarning:     func(DegradationWarning) {},
+	}
+
+	err := p.explainRepositoryWideYAMLFunctionFailure(errStateRead, "global", "dev-pen")
+
+	require.Error(t, err)
+	assert.Equal(t, errStateRead, err, "warn mode must get the error back untouched")
+	assert.Empty(t, cockroachErrors.GetAllHints(err))
+}
+
+// TestExplainRepositoryWideYAMLFunctionFailure_StackHintDoesNotOverpromise guards a wording
+// correction: `--stack` narrows which components are evaluated, but a `!terraform.state`
+// inside the selected stack can still name another stack and account, so the hint must not
+// claim scoping avoids cross-account reads.
+func TestExplainRepositoryWideYAMLFunctionFailure_StackHintDoesNotOverpromise(t *testing.T) {
+	p := &describeStacksProcessor{filterByStack: ""}
+
+	err := p.explainRepositoryWideYAMLFunctionFailure(errStateRead, "global", "dev-pen")
+
+	hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
+	require.Contains(t, hints, "--stack dev-pen")
+	assert.Contains(t, hints, "only limits which components are evaluated",
+		"the --stack hint must state its real effect")
+}
+
 // TestExplainRepositoryWideYAMLFunctionFailure_PassesThroughNil pins the success path: the
 // helper sits on the hot path of every component, so a nil error must stay nil.
 func TestExplainRepositoryWideYAMLFunctionFailure_PassesThroughNil(t *testing.T) {

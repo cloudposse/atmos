@@ -31,7 +31,7 @@ By default, `atmos describe stacks` executes YAML template functions (e.g., `!te
 
 Without `--stack`, the command evaluates these functions for **every** component in **every** stack. In a multi-account repository where each stage keeps its Terraform state in its own account, no single identity can read them all. Values Atmos cannot read are degraded to the `(computed)` placeholder and the command continues, reporting a summary of what was degraded — run with `--logs-level=Debug` for the underlying cause of each.
 
-Use `--error-mode=strict` if you would rather a failed read abort the command. To avoid the reads altogether, scope the run with `--stack <stack>`, skip the credential-backed functions with `--skip=terraform.state --skip=terraform.output`, or turn processing off with `--process-functions=false`.
+Use `--error-mode=strict` if you would rather a failed read abort the command. To avoid the reads altogether, skip the credential-backed functions with `--skip=terraform.state --skip=terraform.output`, or turn processing off with `--process-functions=false`. Narrowing the run with `--stack <stack>` reduces how many components are evaluated, but does not by itself avoid cross-account reads — a `!terraform.state` inside the selected stack can reference a component in another stack and account.
 
 :::
 
