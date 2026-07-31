@@ -1,6 +1,12 @@
 vars:
   stage: dev
 
+# Native Helm lifecycle defaults for every Helm component in this stack.
+helm:
+  wait_strategy: watcher
+  timeout: 2m
+  max_history: 10
+
 components:
   emulator:
     kubernetes:
@@ -18,6 +24,8 @@ components:
       # (components/helm/demo), which contains Chart.yaml.
       chart: "."
       namespace: demo
+      rollback_on_failure: true
+      cleanup_on_fail: true
       # Atmos `values:` are the Helm chart values, merged via Atmos inheritance.
       values:
         replicaCount: 2
