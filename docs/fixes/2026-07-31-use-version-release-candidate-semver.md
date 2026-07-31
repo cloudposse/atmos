@@ -43,8 +43,8 @@ tricky to get right with a naive dot-split, since the prerelease field itself ca
   the exact bug class) and `1.2.3.4.5` (`true` → `false`, not valid semver beyond
   major.minor.patch). Added matching `ParseVersionSpec` cases for the RC input.
 - `pkg/version/reexec_test.go`: added
-  `TestFindOrInstallVersionWithConfig_ReleaseCandidate`, an end-to-end regression test at the
-  `--use-version` entry point.
+  `TestFindOrInstallVersionWithConfig_ReleaseCandidate`, a resolver-level regression test for
+  the cached-binary path used by `--use-version`.
 
 ## Validation
 
