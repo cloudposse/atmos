@@ -19,6 +19,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | `settings.depends_on` | `dependencies.components` |
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |
+| `apt-get install docker.io` in an Atmos container job | Remove it: the official Atmos image already ships with `docker.io` |
 | GitHub Actions `concurrency` around jobs or workflows that invoke `atmos` | An explicit promotion workflow or deployment controller — environments and merge queues are approval/merge-order controls, not deployment-order guarantees; a concurrency group evicts its pending run regardless of `cancel-in-progress` |
 | `hashicorp/setup-terraform` / `opentofu/setup-opentofu` in Atmos jobs | Atmos `dependencies.tools` and toolchain |
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
@@ -87,6 +88,9 @@ jobs:
       - uses: actions/checkout@v6
       - run: atmos terraform plan vpc -s prod
 ```
+
+The official Atmos image includes `docker.io`, so do not add an `apt-get install docker.io` step
+to containerized Atmos jobs. Docker-backed commands use the runner-provided Docker daemon/socket.
 
 Use `atmos describe affected --format=matrix` for PR matrices and `atmos list instances
 --format=matrix` for full estate operations.
