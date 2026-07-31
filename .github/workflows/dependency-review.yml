@@ -65,26 +65,49 @@ jobs:
           # currently the latest tagged v2 release. Remove after Helm/ORAS ships a
           # fixed version for GHSA-fxhp-mv3v-67qp.
           #
-          # Temporary allowlist: brace-expansion's advisory (GHSA-mh99-v99m-4gvg /
-          # CVE-2026-14257) lists "<=5.0.7" as vulnerable and "5.0.8" as the first
-          # patched version, but that range predates the maintainer's later
-          # backport of the same EXPANSION_MAX_LENGTH fix into the 1.x/2.x lines
-          # (verified by unpacking the exact 1.1.18/2.1.4 tarballs pinned -- no
-          # `^` range -- in website/package.json's pnpm overrides: the fix is
-          # present, and the `module.exports = expandTop` callable export is
-          # unchanged). Jumping to 5.0.8+ is not an option: its CommonJS build
-          # switched to a named `exports.expand` export, which breaks the
-          # `require('brace-expansion')` usage in minimatch@3.1.5/9.0.9.
+          # GHSA-mh99-v99m-4gvg (brace-expansion, CVE-2026-14257): the advisory's
+          # recorded vulnerable range ("<=5.0.7") doesn't distinguish between
+          # brace-expansion's parallel 1.x/2.x/5.x release lines, so it still flags
+          # our pinned 1.1.18/2.1.4 even though both contain the same
+          # EXPANSION_MAX_LENGTH bound backported from the 5.0.8 fix (verified by
+          # diffing the published tarballs). The only version the advisory
+          # recognizes as patched, 5.0.8+, is not a safe upgrade here: brace-expansion
+          # 5.x's CommonJS build changed from a callable default export
+          # (`module.exports = expand`) to a named export (`exports.expand`), which
+          # breaks minimatch@3.1.5's `require('brace-expansion')(...)` call
+          # convention (transitive via serve-handler/@docusaurus/core).
+          #
+          # This is a known, already-closed-as-wontfix situation upstream, not
+          # something fixable from this repo: see isaacs/minimatch#314 and #310.
+          # The ReDoS fix was backported into brace-expansion's 1.x/2.x lines, but
+          # minimatch's maintainer declined to bump the older 3.x/5.x/8.x/9.x
+          # release lines to brace-expansion 5.x, since those lines exist to
+          # support CJS-only consumers. minimatch's current release (10.2.6) does
+          # depend on brace-expansion ^5.0.8 (the patched line the advisory
+          # recognizes), but nothing in our tree can reach it: serve-handler@6.1.7
+          # (used by @docusaurus/core for `docusaurus serve`) still hard-pins
+          # minimatch to 3.1.5, and everything else here resolves minimatch@9.0.9,
+          # which depends on brace-expansion ^2.0.1.
           #
           # NOTE: allow-ghsas suppresses this GHSA for every resolved
           # brace-expansion version, not just 1.1.18/2.1.4 -- the action has no
           # package/version-scoped vulnerability exception (only
-          # allow-dependencies-licenses is purl-scoped, and that's license-only).
-          # The exact (non-`^`) pnpm override pins are what keep this exception
-          # scoped in practice: revisit this entry if those pins ever change.
-          # Remove once GitHub's advisory data reflects the backport, or once
-          # minimatch ships a version compatible with brace-expansion 5.x's
-          # export shape.
+          # allow-dependencies-licenses is purl-scoped, and that's license-only),
+          # and dependency-review-action has no SARIF/code-scanning output either,
+          # so this is the only suppression mechanism it offers -- not a
+          # workaround chosen over some cleaner supported path. The scoping that
+          # exists is the exact override values in website/package.json's
+          # pnpm.overrides (`brace-expansion@^1`/`@^2` selectors pinned to the
+          # exact "1.1.18"/"2.1.4", not a range).
+          #
+          # Remove this entry once either: GHSA-mh99-v99m-4gvg's advisory data is
+          # corrected to distinguish brace-expansion's 1.x/2.x/5.x release lines
+          # (see https://github.com/advisories/GHSA-mh99-v99m-4gvg for a
+          # firstPatchedVersion per major line instead of one "<=5.0.7" range), or
+          # serve-handler and whatever still depends on minimatch@9.0.9 both move
+          # to a minimatch version that depends on brace-expansion ^5 -- at that
+          # point also remove the brace-expansion overrides in
+          # website/package.json.
           allow-ghsas: GHSA-fxhp-mv3v-67qp, GHSA-mh99-v99m-4gvg
 
           # Comment on PR with details
