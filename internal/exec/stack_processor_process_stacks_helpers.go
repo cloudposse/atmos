@@ -53,6 +53,8 @@ type ComponentProcessorOptions struct {
 	GlobalKubernetesPaths     any
 	GlobalKubernetesManifests any
 	GlobalKubernetesRender    map[string]any
+	// GlobalHelmLifecycle contains stack-level native Helm lifecycle defaults.
+	GlobalHelmLifecycle map[string]any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -73,8 +75,7 @@ type ComponentProcessorResult struct {
 	// ComponentPlugins holds the Helm CLI plugins list (helm/helmfile components).
 	ComponentPlugins any
 	ComponentRender  map[string]any
-	// ComponentHelm holds native Helm component fields (chart, values, values_files,
-	// repositories, version, repository, namespace, name, render) as a single bag.
+	// ComponentHelm holds native Helm chart and release-lifecycle fields as a single bag.
 	ComponentHelm              map[string]any
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any

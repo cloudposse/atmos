@@ -1527,6 +1527,11 @@ var (
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
+	ErrHelmLifecycleDecode           = errors.New("failed to decode helm release lifecycle")
+	ErrHelmWaitStrategyInvalid       = errors.New("invalid helm wait strategy")
+	ErrHelmTimeoutInvalid            = errors.New("invalid helm release timeout")
+	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")
+	ErrHelmWaitForJobsRequiresWait   = errors.New("helm wait_for_jobs requires watcher or legacy wait strategy")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

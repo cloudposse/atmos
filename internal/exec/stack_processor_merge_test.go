@@ -515,6 +515,42 @@ func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
 	assert.Equal(t, "merged-mutated", testVars["fixture_vpc_id"], "mutating source maps after merge must not mutate merged test vars")
 }
 
+func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.HelmComponentType,
+		Component:     "demo-release",
+		AtmosConfig:   atmosCfg,
+		GlobalHelmLifecycle: map[string]any{
+			cfg.HelmRollbackOnFailureSectionName: true,
+			cfg.HelmWaitStrategySectionName:      "watcher",
+			cfg.HelmTimeoutSectionName:           "10m",
+			cfg.HelmMaxHistorySectionName:        10,
+		},
+	}
+	result := minimalComponentResult()
+	result.BaseComponentHelm = map[string]any{
+		cfg.HelmAtomicSectionName:        true,
+		cfg.HelmTimeoutSectionName:       "20m",
+		cfg.HelmCleanupOnFailSectionName: true,
+	}
+	result.ComponentHelm = map[string]any{
+		cfg.HelmRollbackOnFailureSectionName: false,
+		cfg.HelmTimeoutSectionName:           "30m",
+		cfg.HelmCleanupOnFailSectionName:     false,
+	}
+
+	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	require.NoError(t, err)
+
+	assert.Equal(t, false, component[cfg.HelmRollbackOnFailureSectionName])
+	assert.Equal(t, true, component[cfg.HelmAtomicSectionName])
+	assert.Equal(t, "watcher", component[cfg.HelmWaitStrategySectionName])
+	assert.Equal(t, "30m", component[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, 10, component[cfg.HelmMaxHistorySectionName])
+	assert.Equal(t, false, component[cfg.HelmCleanupOnFailSectionName])
+}
+
 func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
 	atmosCfg := &schema.AtmosConfiguration{}
 	opts := ComponentProcessorOptions{

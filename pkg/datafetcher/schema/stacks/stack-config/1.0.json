@@ -843,6 +843,44 @@
             },
             "generate": {
               "$ref": "#/definitions/generate"
+            },
+            "rollback_on_failure": {
+              "type": "boolean"
+            },
+            "atomic": {
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "rollback_on_failure"
+            },
+            "wait_strategy": {
+              "type": "string",
+              "enum": [
+                "watcher",
+                "hookOnly",
+                "legacy"
+              ]
+            },
+            "wait": {
+              "type": "boolean"
+            },
+            "wait_for_jobs": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string"
+            },
+            "cleanup_on_fail": {
+              "type": "boolean"
+            },
+            "max_history": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disable_chart_hooks": {
+              "type": "boolean"
+            },
+            "skip_crds": {
+              "type": "boolean"
             }
           },
           "required": []
@@ -948,6 +986,44 @@
             },
             "plugins": {
               "$ref": "#/definitions/plugins"
+            },
+            "rollback_on_failure": {
+              "type": "boolean"
+            },
+            "atomic": {
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "rollback_on_failure"
+            },
+            "wait_strategy": {
+              "type": "string",
+              "enum": [
+                "watcher",
+                "hookOnly",
+                "legacy"
+              ]
+            },
+            "wait": {
+              "type": "boolean"
+            },
+            "wait_for_jobs": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string"
+            },
+            "cleanup_on_fail": {
+              "type": "boolean"
+            },
+            "max_history": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disable_chart_hooks": {
+              "type": "boolean"
+            },
+            "skip_crds": {
+              "type": "boolean"
             }
           },
           "required": []

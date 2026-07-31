@@ -37,6 +37,8 @@ type chartSpec struct {
 	IncludeCRDs bool
 	// Repositories lists declarative chart repositories for "repo/name" refs.
 	Repositories []chartRepository
+	// Lifecycle is the canonical release policy plus presence-derived metadata.
+	Lifecycle releaseLifecycleResolution
 }
 
 // newSettings builds Helm CLI environment settings honoring ambient HELM_* env.

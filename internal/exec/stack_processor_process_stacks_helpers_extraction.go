@@ -329,6 +329,29 @@ var helmComponentSectionKeys = []string{
 	"repository",
 	"namespace",
 	"name",
+	cfg.HelmRollbackOnFailureSectionName,
+	cfg.HelmAtomicSectionName,
+	cfg.HelmWaitStrategySectionName,
+	cfg.HelmWaitSectionName,
+	cfg.HelmWaitForJobsSectionName,
+	cfg.HelmTimeoutSectionName,
+	cfg.HelmCleanupOnFailSectionName,
+	cfg.HelmMaxHistorySectionName,
+	cfg.HelmDisableChartHooksSectionName,
+	cfg.HelmSkipCRDsSectionName,
+}
+
+var helmLifecycleSectionKeys = []string{
+	cfg.HelmRollbackOnFailureSectionName,
+	cfg.HelmAtomicSectionName,
+	cfg.HelmWaitStrategySectionName,
+	cfg.HelmWaitSectionName,
+	cfg.HelmWaitForJobsSectionName,
+	cfg.HelmTimeoutSectionName,
+	cfg.HelmCleanupOnFailSectionName,
+	cfg.HelmMaxHistorySectionName,
+	cfg.HelmDisableChartHooksSectionName,
+	cfg.HelmSkipCRDsSectionName,
 }
 
 // extractHelmComponentSection copies the recognized Helm fields out of a
@@ -337,6 +360,19 @@ func extractHelmComponentSection(componentMap map[string]any) map[string]any {
 	bag := make(map[string]any)
 	for _, key := range helmComponentSectionKeys {
 		if value, ok := componentMap[key]; ok {
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+// extractHelmLifecycleSection copies only lifecycle fields from stack-level
+// helm defaults so unrelated type-level configuration is not injected into
+// every component manifest.
+func extractHelmLifecycleSection(section map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmLifecycleSectionKeys {
+		if value, ok := section[key]; ok {
 			bag[key] = value
 		}
 	}

@@ -996,6 +996,10 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 					cfg.GenerateSectionName: map[string]any{
 						"chart": map[string]any{"path": "generated"},
 					},
+					cfg.HelmRollbackOnFailureSectionName: true,
+					cfg.HelmWaitStrategySectionName:      "watcher",
+					cfg.HelmTimeoutSectionName:           "10m",
+					cfg.HelmMaxHistorySectionName:        10,
 				},
 				cfg.ComponentsSectionName: map[string]any{
 					cfg.HelmComponentType: map[string]any{
@@ -1011,6 +1015,9 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 							cfg.RenderSectionName: map[string]any{
 								"output": map[string]any{"path": "rendered.yaml"},
 							},
+							cfg.HelmRollbackOnFailureSectionName: false,
+							cfg.HelmWaitForJobsSectionName:       true,
+							cfg.HelmTimeoutSectionName:           "20m",
 						},
 					},
 				},
@@ -1027,6 +1034,11 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.Equal(t, []any{"values.yaml"}, app[cfg.ValuesFilesSectionName])
 				assert.Equal(t, map[string]any{"output": map[string]any{"path": "rendered.yaml"}}, app[cfg.RenderSectionName])
 				assert.Equal(t, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}, app[cfg.RepositoriesSectionName])
+				assert.Equal(t, false, app[cfg.HelmRollbackOnFailureSectionName])
+				assert.Equal(t, "watcher", app[cfg.HelmWaitStrategySectionName])
+				assert.Equal(t, true, app[cfg.HelmWaitForJobsSectionName])
+				assert.Equal(t, "20m", app[cfg.HelmTimeoutSectionName])
+				assert.Equal(t, 10, app[cfg.HelmMaxHistorySectionName])
 			},
 		},
 	}
