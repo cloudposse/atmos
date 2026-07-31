@@ -89,7 +89,7 @@ func newOperationCommand(name, short string) *cobra.Command {
 		Use:   name + " [component]",
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parsed, err := parser.Parse(context.Background(), args)
+			parsed, err := parser.Parse(cmd.Context(), args)
 			if err != nil {
 				return err
 			}
@@ -261,6 +261,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 	provider := component.MustGetProvider(cfg.HelmComponentType)
 
 	return provider.Execute(&component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       cfg.HelmComponentType,
 		Component:           info.ComponentFromArg,
 		Stack:               info.Stack,

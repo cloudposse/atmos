@@ -304,6 +304,8 @@ func TestRunOperationBuildsExecutionContext(t *testing.T) {
 		"against": "target",
 		"context": "5",
 	})
+	type contextKey struct{}
+	cmd.SetContext(context.WithValue(context.Background(), contextKey{}, "command"))
 	cmd.Flags().String("stack", "", "")
 	require.NoError(t, cmd.Flags().Set("stack", "dev"))
 
@@ -316,6 +318,7 @@ func TestRunOperationBuildsExecutionContext(t *testing.T) {
 	assert.Equal(t, []string{"app"}, provider.ctx.Args)
 	assert.Equal(t, "target", provider.ctx.Flags["against"])
 	assert.Equal(t, 5, provider.ctx.Flags["context"])
+	assert.Equal(t, "command", provider.ctx.GoContext().Value(contextKey{}))
 }
 
 func TestRunOperationBuildsApplyDryRunExecutionContext(t *testing.T) {
