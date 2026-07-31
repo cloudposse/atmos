@@ -44,6 +44,9 @@ const ciHookFailedMsg = "CI hook execution failed"
 // logKeyComponent is the structured-log key for a component name.
 const logKeyComponent = "component"
 
+// logKeyStack is the structured-log key for a stack name.
+const logKeyStack = "stack"
+
 // verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
 // --verify-plan=false).
 const verifyPlanFlagName = "verify-plan"
@@ -1152,7 +1155,7 @@ func handleUnconfiguredPlanfileStorage(atmosConfig *schema.AtmosConfiguration, i
 
 	if v := atmosConfig.Components.Terraform.Planfiles.Verify; v == schema.PlanfileVerifyFail || v == schema.PlanfileVerifyWarn {
 		log.Warn("components.terraform.planfiles.verify is set but planfile storage is not configured; skipping planfile verification",
-			logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
+			logKeyComponent, info.ComponentFromArg, logKeyStack, info.Stack)
 	}
 	return nil
 }
@@ -1169,7 +1172,7 @@ func handleMissingStoredPlan(atmosConfig *schema.AtmosConfiguration, info *schem
 	}
 
 	log.Warn("No stored planfile found to verify; applying a fresh plan without verification",
-		logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
+		logKeyComponent, info.ComponentFromArg, logKeyStack, info.Stack)
 	return nil
 }
 
@@ -1298,7 +1301,7 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	// If stack is already provided (via --stack flag), filter components to that stack.
 	if info.ComponentFromArg == "" {
 		component, err := promptForComponent(cmd, info.Stack)
-		if err = handlePromptError(err, "component"); err != nil {
+		if err = handlePromptError(err, logKeyComponent); err != nil {
 			return err
 		}
 		info.ComponentFromArg = component
@@ -1307,7 +1310,7 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	// Prompt for stack if missing.
 	if info.Stack == "" {
 		stack, err := promptForStack(cmd, info.ComponentFromArg)
-		if err = handlePromptError(err, "stack"); err != nil {
+		if err = handlePromptError(err, logKeyStack); err != nil {
 			return err
 		}
 		info.Stack = stack
