@@ -451,68 +451,33 @@ skip a file, never multiply one. Two gaps follow from that:
 
 **Proposed shape**: everything stays under the existing `spec.files[]` overlay, no new
 top-level `spec` key. `path:` keeps meaning exactly what it means today (the file's
-on-disk discovered path, used as the lookup key); two additions would change what
-happens once a `FileSpec` entry is matched:
+on-disk discovered path); two new, optional keys change what happens once an entry is
+matched:
 
-```go
-// pkg/project/config/config.go
+- **`target:`** — a Go-template string overriding the rendered output path. Without
+  `for_each:`, it's optional and rendered once, exactly like `path:` is rendered
+  today — a cleaner way to do dynamic naming than embedding template syntax in a
+  physical filename. With `for_each:`, it's required (a single fixed `path:` can't
+  serve as the output for more than one generated file) and rendered once per
+  resolved item.
+- **`for_each:`** — a list of steps, each with:
+  - `as:` — the name this step's bound item is reachable under.
+  - `in:` — a dot-path to the value to iterate, not an expression. The **first**
+    step reads `answers.<path>` — a root reference into the same answers map
+    `when:` reads (e.g. `when: "answers.enable_monitoring == true"`). Any **later,
+    chained** step instead reads directly off the *previous* step's `as:` binding,
+    unprefixed (e.g. `in: region.value.environments`), since that binding is a loop
+    variable `for_each` itself introduces, not part of `answers`.
+  - `split:` (optional) — a delimiter, only consulted when the resolved value is a
+    plain string (free text). A value that's already a list or a map (a
+    `multiselect` answer, or a structured value supplied through `--set` or a
+    template-declared preset) needs no `split:` at all — `in:` is a single generic
+    key for all three source shapes, so a template author never has to know in
+    advance whether the referenced answer happens to be a list or a map.
 
-type FileSpec struct {
-    Path    string              `yaml:"path" json:"path"`
-    When    condition.Condition `yaml:"when,omitempty" json:"when,omitempty"`
-    ForEach []ForEachStep       `yaml:"for_each,omitempty" json:"for_each,omitempty"`
-    Target  string              `yaml:"target,omitempty" json:"target,omitempty"`
-}
-
-// ForEachStep binds one iteration variable. In is a plain dot-path, never
-// CEL: the first step in a for_each list resolves In as answers.<path> -- a
-// root reference into the same top-level answers map when:'s CEL expressions
-// read (e.g. when: "answers.enable_monitoring == true"). Any later, chained
-// step instead resolves In directly against the previous step's As binding,
-// unprefixed, since that binding is a loop variable for_each itself
-// introduces, not part of answers.
-type ForEachStep struct {
-    As    string `yaml:"as" json:"as"`
-    In    string `yaml:"in" json:"in"`
-    Split string `yaml:"split,omitempty" json:"split,omitempty"`
-}
-```
-
-**Resolving `in:`**: a step's `in:` is a plain dot-path, never CEL, resolved one of
-two ways depending on the step's position in the list:
-
-- The **first** step in a `for_each` list resolves `in:` as `answers.<path>` — a root
-  reference into the same top-level answers map `when:`'s CEL expressions read (e.g.
-  `when: "answers.enable_monitoring == true"`). This gives `for_each` and `when:` one
-  shared, consistent way to say "an answer," instead of two different conventions.
-- Any **later, chained** step resolves `in:` directly against the *previous* step's
-  `as:` binding, unprefixed — e.g. `in: region.value.environments` reads the
-  `environments` field off whatever `as: region` bound, not off `answers`. That
-  binding isn't in the answers map at all; it's a loop variable `for_each` itself
-  introduces.
-
-This is a single generic key (`in:`) for all three source shapes (list, map,
-delimited string) — a template author shouldn't need to know in advance whether the
-referenced answer happens to be a list or a map to know which YAML key to reach for;
-a shape-specific key (e.g. a separate `map:`) would recreate exactly the kind of
-shape-dependent awkwardness this proposal otherwise avoids (same spirit as not
-wanting the physical filename to encode iteration shape).
-
-**Effective output path** = `Target` if set, else `Path` (today's behavior, unchanged
-— zero regression for existing templates that already put `{{ }}` directly in a
-discovered filename).
-
-- **No `for_each`:** the effective template renders once, exactly as `Path` is
-  rendered today (`ShouldSkipFile`'s sentinel-skip on `""`/`false`/`null`/`<no value>`
-  still applies). This would make `Target` generally useful as a standalone
-  rename/override for a single file too — a cleaner way to do dynamic naming than
-  embedding template syntax in a physical filename.
-- **With `for_each`:** `Target` would be required (a single fixed `Path` can't serve
-  as the output for more than one generated file) and rendered once per resolved
-  item, with each step's bound loop variable hoisted directly onto the template
-  root — `.<as>.key` / `.<as>.value` / `.<as>.index` — rather than nested under
-  `.Config`, so `target:`/content templates write `.region.key` instead of reaching
-  through `.Config.Item.region.key`.
+  Each step's bound item is available directly on the template root as `.<as>.key`
+  / `.<as>.value` / `.<as>.index` — e.g. `.region.key`, `.environment.value` — in
+  both `target:` and the file's own content.
 
 Flat, unbounded free-text field:
 
@@ -546,100 +511,41 @@ spec:
           in: region.value.environments       # unprefixed: resolves against the `region` binding
 ```
 
-A structured answer like `regions` above is never declared under `spec.fields:`
-(structured values fail today's text-only field validation) — it would reach answers
-through the same pre-seeded/`--set`-adjacent channel structured values already use.
-`for_each` wouldn't care how a value got into the answers map, only what type it
+A structured answer like `regions` above can't be declared under `spec.fields:`
+(only free text is prompt-able) — it would reach `answers` through a
+template-declared preset or a non-interactive `--set`-adjacent channel instead.
+`for_each` doesn't care how a value got into the answers map, only what type it
 resolves to.
 
-**Expansion algorithm** (proposed new file: `pkg/generator/engine/foreach.go`):
+**Behavior**:
+- Iterating a map source is stable and deterministic (sorted by key), so
+  regenerating the same answers produces the same file set, in the same order,
+  every time.
+- A source with zero items generates zero files for that entry, silently — not an
+  error, the same as an unmatched `when:` today.
+- Everything that already works for a single generated file — `--dry-run` labels,
+  `--update`'s 3-way merge, and path-traversal/symlink protection — applies per
+  iteration too, since under the hood each iteration is still just one generated
+  file.
+- Two files — iterated or not — rendering to the same output path is a hard error,
+  never a silent overwrite. (A `for_each` entry whose `target:` doesn't actually vary
+  per item, e.g. forgetting to reference `.<as>.value`, would trip this immediately.)
 
-```go
-type ForEachBinding struct {
-    Key   string // map key, or stringified index for a list/split source
-    Value any
-    Index int
-}
-
-// ExpandForEach recursively resolves each step's In -- answers.<path> for a
-// root reference, or a bare <as-name>.<path> referencing an earlier step's
-// binding -- and returns one "iteration record" (map[as]ForEachBinding) per
-// leaf combination.
-func ExpandForEach(steps []config.ForEachStep, answers map[string]interface{}) ([]map[string]ForEachBinding, error)
-```
-
-- Type-switch on the resolved value: `Slice`/`Array` → index-keyed bindings; `Map` →
-  bindings from **sorted keys** (same determinism convention as
-  `pkg/workflow/control_matrix.go`'s `expandMatrix`, which sorts axes before
-  generating rows — needed so repeated `generate` runs produce identical output and
-  diff cleanly against `--update`'s 3-way merge base); `String` **only if `Split` is
-  set** → split, trim, index-keyed; anything else (bool, number, nil, or a bare string
-  with no `split`) is a hard error naming the offending step and the resolved Go type.
-- Zero resolved items ⇒ zero iterations for that entry (silently, mirroring `when:`'s
-  existing skip semantics) — not an error.
-- Duplicate `as` names across steps in one `for_each` list would be a structural
-  validation error (caught statically, doesn't need answers).
-
-**Wiring** (`pkg/generator/ui/ui.go`, `executeWithSetup`): one loop, not two — the
-existing `for _, file := range embedsConfig.Files` would gain one branch.
-`fileConditionsByPath` becomes `fileSpecByPath` (returns the whole matched `FileSpec`,
-not just `.When`). `.When` still evaluates exactly as today, unconditioned by
-`for_each`, gating the whole entry before any iteration. If the matched spec has
-`ForEach` set, `engine.ExpandForEach` runs and, for each returned record, a
-**shallow-cloned** copy of `mergedValues` gets `iterValues[engine.ItemKey] =
-engine.ItemFromRecord(record)` plus a synthetic `engine.File{Path: spec.Target,
-Content: file.Content, IsTemplate: file.IsTemplate, Permissions: file.Permissions}` —
-the source contributes body/permissions, `Target` contributes the path — run through
-the *unmodified* existing pipeline (`ProcessTemplateWithDelimiters` → `ShouldSkipFile`
-→ `ProcessFile`). `ProcessTemplateWithDelimiters` reads that reserved `ItemKey` entry
-back out of the answers map it's handed and hoists its contents (each step's `as`
-name) directly onto the template root before executing — that's what makes `.region.key`
-resolve, rather than requiring `.Config.Item.region.key`.
-Dry-run labels, `--update`'s 3-way merge, and `validateWriteTarget`'s traversal/symlink
-protection would all apply per-iteration for free, since it's the same `ProcessFile`
-call just invoked N times against N rendered paths. A new `seenRenderedPaths` map
-would be tracked across the *whole* file loop (not just `for_each` entries) — two
-files (iterated or not) rendering to the same output path should be a hard error, not
-a silent overwrite; this would also double as a diagnostic for an author who forgot to
-make `Target` vary per item. `executeWithSetup` is already
-`//nolint:gocognit,revive,cyclop,funlen`; this logic should be extracted into a new
-helper (e.g. `processFileEntry`) rather than growing that function further, matching
-the existing `buildX`/`resolveX`/`handleX` extraction convention used elsewhere in
-this codebase for exactly this reason.
-
-**New errors** (`errors/errors.go`, "Generator errors" block): `ErrForEachSourceNotFound`,
-`ErrForEachSourceNotIterable`, `ErrForEachTargetRequired`, `ErrForEachDuplicateBinding`,
-`ErrForEachDuplicateOutputPath` — each wrapped via the error builder with hints, per
-this repo's mandatory error-handling conventions.
-
-**Validation** (`pkg/project/config/validation.go`, wired from `persistence.go`'s
-`LoadScaffoldConfigFromContent`): `for_each` present ⇒ `target` must be non-empty;
-each step's `as`/`in` non-empty (schema `required`, no `omitempty`, same pattern as
-`FileSpec.Path` today); no duplicate `as` names within one `for_each` list. All
-checkable without answers, so `atmos scaffold validate` would pick them up
-automatically.
-
-**Schema**: would require regenerating `pkg/datafetcher/schema/scaffold/scaffold-config/1.0.json`
-via `go generate ./pkg/project/config/` after the struct changes — both
-`FieldDefinition` and `FileSpec` are reflected with `additionalProperties: false`, so
-this is required, not cosmetic.
+**Validation**: checkable at load time, without needing real answers, so
+`atmos scaffold validate` would catch these before `generate` ever runs: `target:` is
+required whenever `for_each:` is set; each step's `as:`/`in:` must be non-empty; `as:`
+names must be unique within one `for_each:` list.
 
 **Open questions / non-goals for a first cut**:
-- No CEL in `for_each` sources — `in:` would stay a plain dot-path, not an expression
-  language. `pkg/condition`'s CEL compiler is hard-restricted to bool output (both at
-  compile time and via a runtime type assertion) and is shared by
-  workflows/hooks/custom-commands; extending it for list output is a separate, larger
-  change. Filtering/transformation before iterating (e.g. "exclude prod") could be an
-  additive follow-up, not a first-cut requirement.
-- No directory-level `for_each` (stamping a whole per-item subtree in one entry). The
-  `source`/`target` split this proposal is built around would generalize to that later
-  (`target` becoming a directory-prefix template, preserving each file's relative
-  sub-path) but isn't part of the first cut.
-- No changes to `FieldDefinition`/the interactive `huh` form. Free-text fields already
-  yield a plain string answer; `for_each`'s `split:` would read that string directly.
-  Structured (list/map) answers already reach the merged-answers map through
-  non-interactive channels (`cmdTemplateValues`, pre-seeded records) — `for_each`
-  would only need to read what's already there.
+- No expressions in `for_each` sources — `in:` stays a plain dot-path. Filtering or
+  transforming a source before iterating (e.g. "exclude prod") could be an additive
+  follow-up, not a first-cut requirement.
+- No directory-level `for_each` (stamping a whole per-item subtree from one entry).
+  The `path`/`target` split this proposal is built around should generalize to that
+  later, but isn't part of the first cut.
+- No changes to field types or the interactive prompt form. Free-text fields already
+  yield a plain string answer for `split:` to read; structured (list/map) answers
+  already reach the merged-answers map through non-interactive channels.
 
 ### Update Flow (with 3-Way Merge)
 
