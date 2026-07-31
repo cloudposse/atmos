@@ -1,8 +1,8 @@
 # PRD: Atmos Git (GitOps Enablement)
 
 **Status:** Proposed (Component Updater PR publishing is implemented separately)
-**Version:** 0.3
-**Last Updated:** 2026-06-10
+**Version:** 0.4
+**Last Updated:** 2026-07-30
 **Author:** Atmos Team
 
 **Related PRDs:**
@@ -680,6 +680,16 @@ No-arg clone targets the **working directory** (e.g., `GITHUB_WORKSPACE`), exact
 If `ci.enabled` is false, no-arg clone fails with `ErrGitRepositoryRequired`.
 
 GitHub STS should be documented as the preferred native CI credential path for private GitHub repositories.
+
+**Config-init tolerance for the bootstrap case:** an empty CI workspace (no-arg clone replacing
+`actions/checkout`) has no `atmos.yaml` yet, by definition — Atmos's normal config-loading step
+would otherwise fail the command before `atmos git clone` ever runs. RootCmd's config-init-error
+path (`cmd/root.go`) tolerates a missing/malformed config specifically for this case, deferring to
+`cmd/git.CICloneBootstrapRequested` to recognize it: the invoked command must be exactly `atmos git
+clone` with no positional args, no `--all`, and no native `--` separator, under a detected CI
+provider that has not explicitly opted out via `--ci=false`/`ATMOS_CI=false`. Any other command, or
+clone invocation, still requires a valid config as normal — this tolerance is narrowly scoped to
+the one command whose entire purpose is producing that config's repository in the first place.
 
 ### Native CI Clone Lifecycle
 

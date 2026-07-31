@@ -475,11 +475,16 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+				// The CI git-clone bootstrap clone runs in an empty workspace
+				// (e.g. replacing actions/checkout), where atmos.yaml cannot
+				// exist yet -- NotFound is the expected error for that flow.
+				if applyCIGitCloneBootstrap(cmd, args, &tmpConfig) {
+					log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
+				}
 			} else if isHelpRequested {
 				// Help screens should always render, even with invalid config.
 				log.Debug("CLI configuration error (continuing for help)", "error", err)
-			} else if isCIGitCloneBootstrapRequested() {
-				tmpConfig.CI.Enabled = true
+			} else if applyCIGitCloneBootstrap(cmd, args, &tmpConfig) {
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
 			} else if isBuiltinConfigValidationCommand(cmd, args) {
 				// The built-in config validation commands must run when config decoding
@@ -1629,12 +1634,6 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		return nil
 	}
 
-	if isCIGitCloneBootstrapRequested() {
-		atmosConfig.CI.Enabled = true
-		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
-		return nil
-	}
-
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1750,115 +1749,25 @@ func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr erro
 	}
 }
 
-func isCIGitCloneBootstrapRequested() bool {
-	return ci.Detect() != nil && argsRequestNoArgGitClone(os.Args[1:])
-}
-
-const (
-	rootFlagChdirShort       = "-C"
-	rootFlagChdirShortPrefix = "-C="
-)
-
-var (
-	gitCloneBootstrapValueFlags = map[string]struct{}{
-		"--repo-uri":       {},
-		"-r":               {},
-		"--branch":         {},
-		"-b":               {},
-		"--remote":         {},
-		"--workdir":        {},
-		"--filter":         {},
-		"--depth":          {},
-		rootFlagChdirShort: {},
-	}
-	rootBootstrapValueFlags = map[string]struct{}{
-		"--chdir":          {},
-		rootFlagChdirShort: {},
-		"--profile":        {},
-		"--config":         {},
-		"--config-path":    {},
-		"--base-path":      {},
-		"--logs-level":     {},
-		"--logs-file":      {},
-		"--use-version":    {},
-	}
-)
-
-func argsRequestNoArgGitClone(args []string) bool {
-	args = stripRootFlagsForBootstrapCheck(args)
-	if len(args) < 2 || args[0] != "git" || args[1] != "clone" {
+// applyCIGitCloneBootstrap enables CI mode when the invoked command is a
+// no-argument CI git-clone bootstrap (see gitcmd.CICloneBootstrapRequested),
+// and reports whether it did so.
+//
+// It writes CI.Enabled to BOTH the package-level atmosConfig and the
+// PersistentPreRun-local tmpConfig. The global write is the load-bearing one:
+// cmd/git's RunE reads CI.Enabled off atmosConfigPtr, which Execute() points
+// at the package-level atmosConfig (gitcmd.SetAtmosConfig(&atmosConfig))
+// before PersistentPreRun ever runs. The tmpConfig parameter, by contrast, is
+// a separate cfg.InitCliConfig() result that PersistentPreRun uses locally
+// for the rest of this invocation and discards afterward -- writing only
+// tmpConfig would silently never reach the git-clone command that needs it.
+func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *schema.AtmosConfiguration) bool {
+	if !gitcmd.CICloneBootstrapRequested(cmd, args) {
 		return false
 	}
-	return gitCloneArgsAllowBootstrap(args[2:])
-}
-
-type bootstrapArgAction int
-
-const (
-	bootstrapArgAllow bootstrapArgAction = iota
-	bootstrapArgConsumeNext
-	bootstrapArgReject
-)
-
-func gitCloneArgsAllowBootstrap(args []string) bool {
-	for i := 0; i < len(args); i++ {
-		switch gitCloneBootstrapArgAction(args[i]) {
-		case bootstrapArgReject:
-			return false
-		case bootstrapArgConsumeNext:
-			i++
-		}
-	}
+	atmosConfig.CI.Enabled = true
+	tmpConfig.CI.Enabled = true
 	return true
-}
-
-func gitCloneBootstrapArgAction(arg string) bootstrapArgAction {
-	switch {
-	case arg == "--" || arg == "--all":
-		return bootstrapArgReject
-	case flagTakesSeparateValue(arg, gitCloneBootstrapValueFlags):
-		return bootstrapArgConsumeNext
-	case flagHasInlineValue(arg, gitCloneBootstrapValueFlags), shortChdirHasInlineValue(arg), strings.HasPrefix(arg, "-"):
-		return bootstrapArgAllow
-	default:
-		return bootstrapArgReject
-	}
-}
-
-func stripRootFlagsForBootstrapCheck(args []string) []string {
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case flagTakesSeparateValue(arg, rootBootstrapValueFlags):
-			if len(args) < 2 {
-				return nil
-			}
-			args = args[2:]
-		case flagHasInlineValue(arg, rootBootstrapValueFlags):
-			args = args[1:]
-		default:
-			return args
-		}
-	}
-	return args
-}
-
-func flagTakesSeparateValue(arg string, flags map[string]struct{}) bool {
-	_, ok := flags[arg]
-	return ok
-}
-
-func flagHasInlineValue(arg string, flags map[string]struct{}) bool {
-	for flag := range flags {
-		if strings.HasPrefix(arg, flag+"=") {
-			return true
-		}
-	}
-	return false
-}
-
-func shortChdirHasInlineValue(arg string) bool {
-	return strings.HasPrefix(arg, rootFlagChdirShort) && len(arg) > len(rootFlagChdirShort)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
