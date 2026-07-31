@@ -1,9 +1,7 @@
 
 👽 test linux/amd64
 
-This command allows you to execute Terraform commands, such as plan, apply, and
-destroy, using Atmos stack configurations for consistent infrastructure
-management.
+This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.
 
 USAGE
 
@@ -42,6 +40,7 @@ BUILT-IN COMMANDS
       help                              Show help for terraform command
       import                            Import existing infrastructure into Terraform state
       init                              Prepare your working directory for other commands
+      lint                              Lint Terraform components with TFLint
       login                             Obtain and save credentials for a remote host
       logout                            Remove locally-stored credentials for a remote host
       metadata                          Metadata related commands
@@ -83,6 +82,9 @@ FLAGS
 
       --init-pass-vars            Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)
 
+      --labels string             Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-
+                                  center=platform,compliance=sox
+
       --process-functions         Enable/disable YAML functions processing in Atmos stack manifests (default true)
 
       --process-templates         Enable/disable Go template processing in Atmos stack manifests (default true)
@@ -110,7 +112,12 @@ FLAGS
 
   -s, --stack string              Stack name
 
+      --tags strings              Filter by tags (comma-separated, matches any): --tags=production,tier-1
+
       --upload-status             Upload plan status to Atmos Pro
+
+      --use-mocks                 Resolve Terraform state/output YAML functions from component mocks instead of remote
+                                  state. Supported only by plan and describe commands
 
 
 COMPATIBILITY FLAGS

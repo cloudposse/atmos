@@ -1,3 +1,6 @@
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
 repos:
   # Go-specific hooks
   - repo: https://github.com/tekwizely/pre-commit-golang
@@ -6,10 +9,6 @@ repos:
       - id: go-fumpt
         args: [-w]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
-
-      - id: go-build-mod
-        name: Check Go build
-        description: Ensure code compiles before commit
 
       - id: go-mod-tidy
         name: Tidy go.mod
@@ -56,18 +55,44 @@ repos:
         files: ^(CLAUDE\.md|\.conductor/.*/CLAUDE\.md)$
         pass_filenames: false
 
+      - id: tracked-symlinks-check
+        name: Verify tracked symlinks
+        description: Ensure every Git-tracked symbolic link resolves
+        entry: scripts/check-symlinks.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Keep local commits aligned with the affected-file validation job.
+      # Pre-commit must not compile Atmos: use an already installed binary.
+      # Exclude Go to match CI's raw-string limitation.
+      - id: atmos-validate-editorconfig
+        name: Validate EditorConfig
+        description: Validate affected non-Go files against EditorConfig rules
+        entry: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --format rich
+        language: system
+        pass_filenames: false
+        always_run: true
+
 
   # General file hygiene
+  # NOTE: trailing-whitespace, end-of-file-fixer, and check-added-large-files hardcode
+  # `stages: [commit, push, manual]` upstream, which overrides our repo-level
+  # default_stages - so they need an explicit stages: override here to stay
+  # commit-only like every other hook.
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: end-of-file-fixer
+        stages: [pre-commit]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: check-yaml
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tests/fixtures/)
         args: [--allow-multiple-documents, --unsafe]
       - id: check-added-large-files
+        stages: [pre-commit]
         args: [--maxkb=500]
         exclude: ^(docs/demo.gif|website/)

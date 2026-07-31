@@ -77,8 +77,8 @@ func TestIsArchived_LiveNetwork(t *testing.T) {
 	}
 
 	archived, err := IsArchived(context.Background(), "cloudposse", "atmos")
-	if isRateLimitError(err) {
-		t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+	if isGitHubTransientError(err) {
+		t.Skipf("Skipping due to transient GitHub API error: %v", err)
 	}
 	require.NoError(t, err)
 	assert.False(t, archived, "cloudposse/atmos is expected to be an active, non-archived repository")

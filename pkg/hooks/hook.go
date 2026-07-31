@@ -77,6 +77,11 @@ type Hook struct {
 	// Retry wraps the step execution in retry.Do. Same schema as a
 	// workflow step's retry block; interpreted by the bridge, not the step.
 	Retry *schema.RetryConfig `yaml:"retry,omitempty"`
+
+	// stepTemplateInfo is the already-resolved static hook context retained for
+	// step-backed hooks. Their `with:` payload is rendered immediately before
+	// each step so env steps can update the template context for later items.
+	stepTemplateInfo *schema.ConfigAndStacksInfo
 }
 
 // GitCommitSpec is the `commit` block of a git-kind hook. Message supports

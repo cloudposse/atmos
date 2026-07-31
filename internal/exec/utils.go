@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -65,6 +67,52 @@ func getStackManifestName(stackSection any) string {
 		}
 	}
 	return ""
+}
+
+// normalizedComponentConfig returns the fields that determine a component's
+// effective configuration. Atmos adds the omitted fields while resolving a
+// component; they identify the source manifest or describe output, rather than
+// changing what the component executes.
+func normalizedComponentConfig(componentConfig map[string]any) map[string]any {
+	sourceSpecificFields := map[string]struct{}{
+		"atmos_cli_config": {},
+		"atmos_stack":      {},
+		"stack":            {},
+		"atmos_stack_file": {},
+		"atmos_manifest":   {},
+		"sources":          {},
+		"imports":          {},
+		"deps_all":         {},
+		"deps":             {},
+	}
+
+	normalized := make(map[string]any, len(componentConfig))
+	for key, value := range componentConfig {
+		if _, sourceSpecific := sourceSpecificFields[key]; !sourceSpecific {
+			normalized[key] = value
+		}
+	}
+
+	return normalized
+}
+
+// componentConfigsEqual reports whether every resolved candidate has the same
+// effective component configuration. It intentionally disregards the parent
+// stack file and other provenance-only fields so a component imported through
+// multiple top-level manifests remains usable.
+func componentConfigsEqual(componentConfigs []map[string]any) bool {
+	if len(componentConfigs) < 2 {
+		return true
+	}
+
+	first := normalizedComponentConfig(componentConfigs[0])
+	for _, componentConfig := range componentConfigs[1:] {
+		if !reflect.DeepEqual(first, normalizedComponentConfig(componentConfig)) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // ProcessComponentConfig processes component config sections.
@@ -126,6 +174,20 @@ func ProcessComponentConfig(
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
 		return fmt.Errorf("no config found for the component '%s' in the stack manifest '%s'", component, stack)
 	}
+
+	// Shallow-clone the component section so top-level mutations by downstream code
+	// (ProcessStacks injecting `atmos_component`/`workspace`/`sources`/`deps`/etc.,
+	// and mergeGlobalAuthConfig installing the merged `auth` section) never write into
+	// the map tree owned by the shared FindStacksMap cache. DAG-scheduled bulk commands
+	// (`terraform <cmd> --all/--affected/--query`) run ProcessStacks concurrently, and
+	// all workers share that cache, so an in-place write here is a data race
+	// (`fatal error: concurrent map iteration and map write`).
+	//
+	// INVARIANT: nested maps (`vars`, `settings`, `metadata`, etc.) still alias the
+	// cache and MUST be treated as read-only. Code that needs to transform them must
+	// build a new tree (as template processing and ProcessCustomYamlTags already do).
+	// TestProcessStacksDoesNotMutateSharedStacksMapCache enforces this invariant.
+	componentSection = maps.Clone(componentSection)
 
 	if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
 		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack manifest '%s'", component, stack)
@@ -321,9 +383,6 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	return hex.EncodeToString(hash[:])
 }
 
-// FindStacksMap processes stack config and returns a map of all stacks.
-// Results are cached to avoid re-processing the same YAML files multiple times
-// within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
 // ClearFindStacksMapCache clears the FindStacksMap cache.
 func ClearFindStacksMapCache() {
 	defer perf.Track(nil, "exec.ClearFindStacksMapCache")()
@@ -334,6 +393,16 @@ func ClearFindStacksMapCache() {
 	findStacksMapCacheMu.Unlock()
 }
 
+// FindStacksMap processes stack config and returns a map of all stacks.
+// Results are cached to avoid re-processing the same YAML files multiple times
+// within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
+//
+// IMPORTANT: on a cache hit the returned maps are the cache's own maps, shared by
+// reference across all callers and goroutines (bulk terraform commands run
+// ProcessStacks concurrently against them). Callers must treat both returned maps
+// as strictly read-only. ProcessComponentConfig shallow-clones the per-component
+// section before handing it out; any new code that needs to mutate stack or
+// component config must copy first.
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -447,13 +516,22 @@ func findComponentInStacks(
 	stacksMap map[string]any,
 	authManager auth.AuthManager,
 ) (int, []string, schema.ConfigAndStacksInfo, map[string]string) {
-	foundStackCount := 0
-	var foundStacks []string
-	var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
+	type componentCandidate struct {
+		stackFile string
+		info      schema.ConfigAndStacksInfo
+	}
+
+	var candidates []componentCandidate
 	// Track filename -> canonical name mappings for suggestion purposes.
 	stackNameMappings := make(map[string]string)
 
+	stackNames := make([]string, 0, len(stacksMap))
 	for stackName := range stacksMap {
+		stackNames = append(stackNames, stackName)
+	}
+	sort.Strings(stackNames)
+
+	for _, stackName := range stackNames {
 		// Extract manifest name FIRST (before checking component) for suggestion purposes.
 		// This allows us to suggest correct stack names even when the component isn't found.
 		stackManifestName := getStackManifestName(stacksMap[stackName])
@@ -465,20 +543,23 @@ func findComponentInStacks(
 		}
 
 		// Check if we've found the component in the stack.
+		// Resolve each parent manifest independently. Reusing the caller's info
+		// would let a prior candidate's component sections leak into the next one.
+		candidateInfo := *configAndStacksInfo
 		err := ProcessComponentConfig(
 			atmosConfig,
-			configAndStacksInfo,
+			&candidateInfo,
 			stackName,
 			stacksMap,
-			configAndStacksInfo.ComponentType,
-			configAndStacksInfo.ComponentFromArg,
+			candidateInfo.ComponentType,
+			candidateInfo.ComponentFromArg,
 			authManager,
 		)
 		if err != nil {
 			continue
 		}
 
-		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName); err != nil {
+		if err := processStackContextPrefix(atmosConfig, &candidateInfo, stackName, stackManifestName); err != nil {
 			continue
 		}
 
@@ -494,10 +575,10 @@ func findComponentInStacks(
 		case stackManifestName != "":
 			// Priority 1: Explicit name from manifest.
 			canonicalStackName = stackManifestName
-		case configAndStacksInfo.ContextPrefix != "" && configAndStacksInfo.ContextPrefix != stackName:
+		case candidateInfo.ContextPrefix != "" && candidateInfo.ContextPrefix != stackName:
 			// Priority 2/3: Generated from name_template or name_pattern.
 			// Only use if ContextPrefix differs from filename (indicates template/pattern was applied).
-			canonicalStackName = configAndStacksInfo.ContextPrefix
+			canonicalStackName = candidateInfo.ContextPrefix
 		default:
 			// Priority 4: Filename (when nothing else is configured).
 			canonicalStackName = stackName
@@ -509,30 +590,47 @@ func findComponentInStacks(
 		}
 
 		// Check if user's requested stack matches the canonical name.
-		stackMatches := configAndStacksInfo.Stack == canonicalStackName
+		stackMatches := candidateInfo.Stack == canonicalStackName
 
 		if stackMatches {
-			configAndStacksInfo.StackFile = stackName
+			candidateInfo.StackFile = stackName
 			// Set StackManifestName if the stack has an explicit name.
 			if stackManifestName != "" {
-				configAndStacksInfo.StackManifestName = stackManifestName
+				candidateInfo.StackManifestName = stackManifestName
 			}
-			foundConfigAndStacksInfo = *configAndStacksInfo
-			foundStackCount++
-			foundStacks = append(foundStacks, stackName)
+			candidates = append(candidates, componentCandidate{stackFile: stackName, info: candidateInfo})
 
 			log.Debug(
 				fmt.Sprintf(
 					"Found component '%s' in the stack '%s' in the stack manifest '%s'",
-					configAndStacksInfo.ComponentFromArg,
-					configAndStacksInfo.Stack,
+					candidateInfo.ComponentFromArg,
+					candidateInfo.Stack,
 					stackName,
 				),
 			)
 		}
 	}
 
-	return foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings
+	if len(candidates) == 0 {
+		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings
+	}
+
+	componentConfigs := make([]map[string]any, 0, len(candidates))
+	foundStacks := make([]string, 0, len(candidates))
+	for i := range candidates {
+		candidate := &candidates[i]
+		componentConfigs = append(componentConfigs, candidate.info.ComponentSection)
+		foundStacks = append(foundStacks, candidate.stackFile)
+	}
+
+	if !componentConfigsEqual(componentConfigs) {
+		return len(candidates), foundStacks, candidates[0].info, stackNameMappings
+	}
+
+	// candidates are resolved in lexical manifest-path order. Keep the first
+	// equivalent definition as the canonical source for stable execution,
+	// sources, and provenance output.
+	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings
 }
 
 // ProcessStacks processes stack config.
@@ -721,12 +819,12 @@ func ProcessStacks(
 				"%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
 					"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
 					"Check that all imports are valid",
-				errUtils.ErrInvalidComponent,
+				errUtils.ErrDuplicateComponentConfig,
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return configAndStacksInfo, err
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -776,13 +874,49 @@ func ProcessStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// Spacelift stack and Atlantis project names must be set before template
+	// processing below: stack-level defaults (e.g. `tags.spacelift_stack:
+	// "{{ .spacelift_stack }}"`) reference them by name, and the template context
+	// is a snapshot of ComponentSection taken before templates run. Both builders
+	// only depend on ComponentSettingsSection/ComponentVarsSection/ComponentFromArg/
+	// Stack, all already populated at this point, so computing them here (instead
+	// of after templates) doesn't lose any information.
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
+	// Component mocks are literal fixture data. Keep them out of template and YAML
+	// function processing so a mock cannot resolve the real dependency it is meant
+	// to replace when --use-mocks is enabled.
+	literalMocks, hasLiteralMocks := configAndStacksInfo.ComponentSection[cfg.MocksSectionName]
+	if hasLiteralMocks {
+		delete(configAndStacksInfo.ComponentSection, cfg.MocksSectionName)
+	}
+
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
+		// Sections computed from Terraform source code (`component_info`) are not Atmos
+		// configuration and must not be rendered as `Go` templates. They stay in the template
+		// context below, only the rendered input excludes them. See #2145.
+		templateInput, nonTemplatedSections := splitNonTemplatedSections(configAndStacksInfo.ComponentSection)
+
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
 		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
 		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-			configAndStacksInfo.ComponentSection,
+			templateInput,
 			atmosConfig.Templates.Settings.Delimiters,
 		)
 		if err != nil {
@@ -841,6 +975,8 @@ func ProcessStacks(
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
+		restoreNonTemplatedSections(componentSectionConverted, nonTemplatedSections)
+
 		configAndStacksInfo.ComponentSection = componentSectionConverted
 	}
 
@@ -857,23 +993,8 @@ func ProcessStacks(
 	if processTemplates || processYamlFunctions {
 		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
 	}
-
-	// Spacelift stack.
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if spaceliftStackName != "" {
-		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
-	}
-
-	// Atlantis project.
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if atlantisProjectName != "" {
-		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	if hasLiteralMocks {
+		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
 	}
 
 	// Process the ENV variables from the `env` section.

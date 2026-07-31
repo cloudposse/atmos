@@ -159,6 +159,15 @@ func TestErrorBuilder_Err_WithHints(t *testing.T) {
 	assert.Equal(t, "hint 2", hints[1])
 }
 
+func TestErrorBuilder_WithCausePreservesExplanation(t *testing.T) {
+	cause := Build(errors.New("cause error")).
+		WithExplanation("A detailed cause explanation.").
+		Err()
+
+	err := Build(errors.New("outer error")).WithCause(cause).Err()
+	assert.Contains(t, errors.GetAllDetails(err), "A detailed cause explanation.")
+}
+
 func TestErrorBuilder_Err_WithExitCode(t *testing.T) {
 	baseErr := errors.New("test error")
 	err := Build(baseErr).

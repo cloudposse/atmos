@@ -4,6 +4,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -32,6 +33,7 @@ type componentSections struct {
 	providers   map[string]any
 	hooks       map[string]any
 	test        map[string]any
+	secrets     map[string]any
 	overrides   map[string]any
 	backend     map[string]any
 	backendType string
@@ -72,10 +74,15 @@ type describeStacksProcessor struct {
 	processTemplates     bool
 	processYamlFunctions bool
 	authDisabled         bool
-	includeEmptyStacks   bool
-	skip                 []string
-	authManager          auth.AuthManager
-	finalStacksMap       map[string]any
+	useMocks             bool
+	// resolveSecrets makes this processor retrieve !secret values while it resolves
+	// YAML functions. It is used by Terraform graph execution preflight; inspection
+	// commands retain their mask-only behavior even when output masking is enabled.
+	resolveSecrets     bool
+	includeEmptyStacks bool
+	skip               []string
+	authManager        auth.AuthManager
+	finalStacksMap     map[string]any
 	// componentAuthResolver builds a per-component AuthManager; defaults to
 	// createComponentAuthManager and is overridable in tests.
 	componentAuthResolver componentAuthManagerResolver
@@ -85,6 +92,20 @@ type describeStacksProcessor struct {
 	// single-threaded, so a plain map needs no locking.
 	// See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
 	authManagerCache map[string]auth.AuthManager
+	// onWarning, when non-nil, switches YAML-function processing to lenient mode: a
+	// recoverable per-value error (e.g. backend not yet provisioned) is substituted with
+	// nil and reported here instead of aborting the whole describe-stacks call. See
+	// ProcessCustomYamlTagsLenient and ExecuteDescribeStacksWithOptions.
+	onWarning func(DegradationWarning)
+}
+
+// withDegradation switches the processor to lenient YAML-function processing: recoverable
+// per-value errors are substituted with nil and reported via onWarning instead of failing
+// the whole describe-stacks call. Passing a nil onWarning restores the default strict
+// behavior (equivalent to not calling withDegradation at all).
+func (p *describeStacksProcessor) withDegradation(onWarning func(DegradationWarning)) *describeStacksProcessor {
+	p.onWarning = onWarning
+	return p
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
@@ -156,8 +177,14 @@ func shouldResolvePerComponentAuth(processTemplates, processYamlFunctions bool) 
 // It returns the parent AuthManager unchanged when per-component resolution is
 // disabled (see shouldResolvePerComponentAuth) or when the component does not
 // declare its own default identity in its auth section. When the component
-// declares a default identity, resolver errors are fatal: falling back to the
-// parent manager could read the wrong backend/account.
+// declares a default identity, resolver errors are fatal by default: falling
+// back to the parent manager could silently read the wrong backend/account
+// for a manager that *did* resolve, just not to what was declared. In warn/silent
+// mode (p.onWarning set), a construction FAILURE — no manager was built at all,
+// as opposed to one resolving to an unexpected identity — is instead reported as
+// a degradation warning and this component falls back to the parent manager,
+// matching the same "recoverable, substitute, continue" pattern YAML-function
+// processing already uses for e.g. a not-yet-provisioned backend.
 func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentSection map[string]any,
 	componentName, stackName string,
@@ -187,6 +214,15 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
 	if createErr != nil {
+		if p.onWarning != nil {
+			p.onWarning(DegradationWarning{
+				Stack:     stackName,
+				Component: componentName,
+				Function:  "auth",
+				Reason:    createErr.Error(),
+			})
+			return componentAuthManager, nil
+		}
 		return componentAuthManager, fmt.Errorf("%w: failed to resolve auth for component %q in stack %q: %w", errUtils.ErrAuthManager, componentName, stackName, createErr)
 	}
 	result := componentAuthManager
@@ -224,6 +260,11 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	stackManifestName := getStackManifestName(stackMap)
 
 	// Delete the stack-wide imports section (not needed in output).
+	// Shallow-clone first: stackMap is owned by the shared FindStacksMap cache, and
+	// deleting from it in place would strip `imports` (and thus `deps`) from every
+	// subsequent ProcessStacks call in the same process (e.g., DAG-scheduled bulk
+	// commands, which run ExecuteDescribeStacks before executing components).
+	stackMap = maps.Clone(stackMap)
 	delete(stackMap, "imports")
 
 	// When includeEmptyStacks is true, pre-create an entry in the result map so that
@@ -375,6 +416,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 	info.Context = resolvedContext
 	info.AuthDisabled = p.authDisabled
+	info.UseMocks = p.useMocks
 
 	// Filter: skip this component if it does not belong to the requested stack.
 	// Done before resolveComponentAuthManager (below) so out-of-scope components don't trigger a
@@ -431,6 +473,14 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	componentSection[componentInfoKey] = componentInfo
 	info.ComponentSection[componentInfoKey] = componentInfo
 
+	// Mocks are literal fixture data. Do not render templates or resolve YAML
+	// functions within them; doing so could reach the real dependency that the
+	// mock is intended to replace.
+	literalMocks, hasLiteralMocks := componentSection[cfg.MocksSectionName]
+	if hasLiteralMocks {
+		delete(componentSection, cfg.MocksSectionName)
+	}
+
 	// Process Go templates.
 	if p.processTemplates {
 		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings)
@@ -452,10 +502,21 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if !isComponentEnabled(secs.metadata, componentName) {
 			skip = disabledComponentTerraformSkip(p.skip)
 		}
-		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, skip)
+		componentSection, err = processComponentSectionYAMLFunctions(
+			p.atmosConfig,
+			&info,
+			componentSection,
+			skip,
+			p.onWarning,
+			!p.resolveSecrets && iolib.MaskingEnabled(),
+		)
 		if err != nil {
 			return err
 		}
+	}
+	if hasLiteralMocks {
+		componentSection[cfg.MocksSectionName] = literalMocks
+		info.ComponentSection[cfg.MocksSectionName] = literalMocks
 	}
 
 	// Write the (optionally filtered) sections into the result map.
@@ -539,6 +600,12 @@ func extractDescribeComponentSections(componentSection map[string]any) component
 		s.test = map[string]any{}
 	}
 
+	if v, ok := componentSection[cfg.SecretsSectionName].(map[string]any); ok {
+		s.secrets = v
+	} else {
+		s.secrets = map[string]any{}
+	}
+
 	if v, ok := componentSection[cfg.OverridesSectionName].(map[string]any); ok {
 		s.overrides = v
 	} else {
@@ -586,6 +653,7 @@ func buildConfigAndStacksInfo(
 			cfg.ProvidersSectionName:   secs.providers,
 			cfg.HooksSectionName:       secs.hooks,
 			cfg.TestSectionName:        secs.test,
+			cfg.SecretsSectionName:     secs.secrets,
 			cfg.OverridesSectionName:   secs.overrides,
 			cfg.BackendSectionName:     secs.backend,
 			cfg.BackendTypeSectionName: secs.backendType,
@@ -736,8 +804,13 @@ func processComponentSectionTemplates(
 	componentSection map[string]any,
 	settingsSection map[string]any,
 ) (map[string]any, error) {
+	// Sections computed from Terraform source code (`component_info`) are not Atmos
+	// configuration and must not be rendered as `Go` templates. They stay in the template
+	// context below, only the rendered input excludes them. See #2145.
+	templateInput, nonTemplatedSections := splitNonTemplatedSections(componentSection)
+
 	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-		componentSection,
+		templateInput,
 		atmosConfig.Templates.Settings.Delimiters,
 	)
 	if err != nil {
@@ -794,27 +867,45 @@ func processComponentSectionTemplates(
 		}
 		return nil, err
 	}
+
+	restoreNonTemplatedSections(converted, nonTemplatedSections)
+
 	return converted, nil
 }
 
 // processComponentSectionYAMLFunctions applies YAML function processing to a component section.
+// When onWarning is non-nil, recoverable per-value errors are tolerated — see
+// ProcessCustomYamlTagsLenient. For example, a Terraform backend might not yet be provisioned.
+// The secretsMaskOnly parameter selects the inspection behavior that replaces !secret values without a backend lookup.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	skip []string,
+	onWarning func(DegradationWarning),
+	secretsMaskOnly bool,
 ) (map[string]any, error) {
-	// `describe stacks` and the `list` family are inspection commands: when masking is enabled
-	// (the default), resolve `!secret` to the mask replacement WITHOUT contacting the backend,
-	// so inspection needs no credentials for the secret provider.
-	info.SecretsMaskOnly = iolib.MaskingEnabled()
-	converted, err := ProcessCustomYamlTags(
-		atmosConfig,
-		componentSection,
-		info.Stack,
-		skip,
-		info,
-	)
+	info.SecretsMaskOnly = secretsMaskOnly
+	var converted map[string]any
+	var err error
+	if onWarning != nil {
+		converted, err = ProcessCustomYamlTagsLenient(
+			atmosConfig,
+			componentSection,
+			info.Stack,
+			skip,
+			info,
+			onWarning,
+		)
+	} else {
+		converted, err = ProcessCustomYamlTags(
+			atmosConfig,
+			componentSection,
+			info.Stack,
+			skip,
+			info,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -889,6 +980,11 @@ func applyTerraformMetadataInheritance(
 	// regardless of whether an inherit list is present.  This matches the original behaviour:
 	// the cleanup ran unconditionally (outside the inheritList guard) in the old monolith.
 	if _, hasExplicitWorkspace := metadataSection["terraform_workspace"].(string); hasExplicitWorkspace {
+		// Shallow-clone first: unless the inheritance merge above already produced a
+		// fresh map, metadataSection aliases the nested metadata map owned by the
+		// shared FindStacksMap cache, and deleting from it in place would corrupt the
+		// cache for every subsequent caller in the same process.
+		metadataSection = maps.Clone(metadataSection)
 		delete(metadataSection, "terraform_workspace_pattern")
 		delete(metadataSection, "terraform_workspace_template")
 	}

@@ -3,10 +3,12 @@ package cmd
 import (
 	"os"
 	"reflect"
+	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -14,6 +16,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+// ensureIOInitialized initializes the global I/O writer and ui formatter for
+// tests that invoke data.Write*/ui.Write* code paths directly, without going
+// through RootCmd.Execute() (whose PersistentPreRun normally does this).
+// Needed because restoreRootCmdState (registered via NewTestKit's cleanup)
+// resets this global state to nil at the end of every test that uses it, so
+// a later test that calls a migrated helper directly can otherwise panic.
+func ensureIOInitialized(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+}
 
 // flagSnapshot stores the state of a flag for restoration.
 type flagSnapshot struct {
@@ -102,6 +118,21 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	data.Reset()
 	ui.Reset()
 	homedir.Reset()
+
+	// Re-establish a valid default I/O context immediately after resetting.
+	// Many tests in this package call migrated data.Write*/ui.Write* code paths
+	// (directly or transitively) without going through RootCmd.Execute()'s
+	// PersistentPreRun, which normally does this initialization. Leaving the
+	// global state nil between tests means whichever test happens to run next
+	// would panic (data.Write*) or silently no-op (ui.Write*) depending on
+	// test execution order — restoring a fresh baseline here keeps ambient
+	// I/O state valid the way it always is in the real binary, while a test
+	// that explicitly needs its own stream capture can still call
+	// iolib.Initialize()/data.InitWriter/ui.InitFormatter itself afterward.
+	if ioCtx, err := iolib.NewContext(); err == nil {
+		data.InitWriter(ioCtx)
+		ui.InitFormatter(ioCtx)
+	}
 
 	// Restore command args.
 	RootCmd.SetArgs(snapshot.args)

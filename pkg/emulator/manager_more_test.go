@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // errRuntimeBoom is a sentinel runtime error used to drive the manager's error paths.
@@ -410,7 +411,13 @@ func init() {
 
 func TestManager_namedConfig_RootlessOverrideAndMerge(t *testing.T) {
 	m := newManagerWithRuntime(nil)
-	spec := &Spec{Driver: rootlessTestDriverName}
+	spec := &Spec{
+		Driver: rootlessTestDriverName,
+		Container: &schema.ContainerRunStep{Env: map[string]string{
+			"K3S_TOKEN":     "container",
+			"CONTAINER_ENV": "1",
+		}},
+	}
 
 	cfgRootless, err := m.namedConfig(spec, "dev", "k8s",
 		map[string]string{"K3S_TOKEN": "override", "EXTRA": "1"}, true)
@@ -422,6 +429,7 @@ func TestManager_namedConfig_RootlessOverrideAndMerge(t *testing.T) {
 	assert.True(t, cfgRootless.Privileged)
 	// Component env overrides the driver default; other driver defaults survive.
 	assert.Equal(t, "override", cfgRootless.Env["K3S_TOKEN"])
+	assert.Equal(t, "1", cfgRootless.Env["CONTAINER_ENV"])
 	assert.Equal(t, "1", cfgRootless.Env["EXTRA"])
 	assert.Len(t, cfgRootless.Ports, 1)
 	assert.Equal(t, 6443, cfgRootless.Ports[0].ContainerPort)
@@ -432,7 +440,8 @@ func TestManager_namedConfig_RootlessOverrideAndMerge(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, cfgRootful.RunArgs)
 	assert.Equal(t, []string{"server"}, cfgRootful.Command)
-	assert.Equal(t, "secret", cfgRootful.Env["K3S_TOKEN"])
+	assert.Equal(t, "container", cfgRootful.Env["K3S_TOKEN"])
+	assert.Equal(t, "1", cfgRootful.Env["CONTAINER_ENV"])
 }
 
 func TestManager_namedConfig_UnknownDriverErrors(t *testing.T) {

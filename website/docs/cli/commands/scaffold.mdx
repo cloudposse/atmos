@@ -1,0 +1,149 @@
+---
+title: atmos scaffold
+sidebar_label: scaffold
+sidebar_class_name: command
+id: scaffold
+description: Generate, validate, and update template-driven boilerplate with versioned Atmos scaffold manifests.
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
+
+<Intro>
+Atmos scaffolds turn a template directory into a governed generation workflow. A template asks for
+validated values, conditionally generates files, runs declared finishing steps, and can later merge
+upstream template improvements into an existing project.
+</Intro>
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| [`atmos scaffold list`](/cli/commands/scaffold/list) | List embedded, configured, and catalog templates. |
+| [`atmos scaffold generate`](/cli/commands/scaffold/generate) | Generate or update output from a template. |
+| [`atmos scaffold validate`](/cli/commands/scaffold/validate) | Validate a template's `scaffold.yaml` manifest. |
+
+## Template Contract
+
+Each template directory contains a versioned `scaffold.yaml` plus files to generate. Files are
+discovered automatically; use `spec.files` only to conditionally gate discovered files.
+
+```yaml title="scaffold.yaml"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: terraform-component
+  description: Standard Terraform component
+spec:
+  fields:
+    - name: component_name
+      label: Component name
+      type: input
+      required: true
+      validation:
+        pattern: "^[a-z0-9-]+$"
+        message: Use lowercase letters, digits, and hyphens.
+    - name: environments
+      label: Environments
+      type: multiselect
+      options: [dev, staging, prod]
+      default: [dev]
+```
+
+`spec.fields` replaces the retired `prompts:` shape. Fields are available to rendered files as
+`{{ .Config.component_name }}`. Atmos validates declared fields after it merges interactive input,
+defaults, persisted `spec.values`, and repeated `--set key=value` flags, so automation follows the
+same rules as an interactive run.
+
+Supported field types are `input`, `text`, `string`, `select`, `multiselect`, `confirm`, `bool`,
+and `boolean`. Required fields reject missing or blank text and empty multiselect values; `false`
+is a valid boolean answer. Select values must come from `options`, and text fields can use
+`validation.pattern` with an optional `validation.message`.
+
+## Conditions and Files
+
+Use `when:` to make one template adapt to its answers. A condition can be `always`, `never`,
+`ci`, or `local`; a CEL expression; or a list treated as an implicit logical `all`. A field can
+only read answers from fields declared before it.
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: enable_monitoring
+      type: confirm
+      default: false
+    - name: alert_email
+      type: input
+      when: "answers.enable_monitoring == true"
+  files:
+    - path: monitoring/alerts.tf
+      when: "answers.enable_monitoring == true"
+    - path: stacks/staging.yaml
+      when: "'staging' in answers.environments"
+```
+
+Use CEL operators such as `&&`, `||`, and `!` for compound conditions. The map form
+`{all: ...}`, `{any: ...}`, or `{not: ...}` is not accepted in scaffold manifests.
+
+## Generation Hooks
+
+Scaffold hooks run around generation at `before.scaffold.generate` and
+`after.scaffold.generate`. They use the shared hook envelope but intentionally support only
+`kind: step` and `kind: steps` because generation has no stack/component context.
+
+```yaml title="scaffold.yaml"
+spec:
+  hooks:
+    format:
+      events: [after.scaffold.generate]
+      kind: step
+      type: shell
+      with:
+        command: terraform fmt -recursive
+    verify:
+      events: [after.scaffold.generate]
+      kind: steps
+      when: "answers.enable_monitoring == true"
+      with:
+        - type: require
+          tools: [terraform]
+        - type: shell
+          command: terraform validate
+```
+
+For `kind: step`, `type:` selects one registered [step type](/workflows/steps/type) and `with:`
+is its configuration. For `kind: steps`, `with:` is an ordered step list. The envelope owns
+`events`, `when`, `env`, `retry`, and `on_failure`; answer values are available in conditions as
+`answers` and in step templates as `{{ .Answers.<field> }}`. Hooks run in stable name order.
+
+Use `--skip-hooks` or `--skip-hooks=name1,name2` when inspecting an untrusted template or
+diagnosing generation. See [lifecycle hooks](/stacks/hooks) for the broader stack-hook kinds and
+the shared step bridge.
+
+## Update Existing Output
+
+```shell
+atmos scaffold generate terraform-component ./components/terraform/vpc
+atmos scaffold generate terraform-component ./components/terraform/vpc --update
+atmos scaffold generate terraform-component ./components/terraform/vpc --update --merge-strategy=theirs
+```
+
+`--update` uses the recorded base revision to perform an optimistic three-way merge. The default
+`manual` strategy surfaces real conflicts; `ours` keeps local changes and `theirs` applies the
+template side of a conflict.
+
+## Project Initialization
+
+[`atmos init`](/cli/commands/init) consumes the same manifest and generation engine for complete
+project templates. Use `init` to select a built-in or catalog project starting point; use
+`scaffold generate` to distribute an organization-specific component, configuration, or other
+golden path.
+
+<EmbedExample example="scaffolding" />
+
+## Learn More
+
+- [Generate from a scaffold](/cli/commands/scaffold/generate)
+- [Validate a scaffold](/cli/commands/scaffold/validate)
+- [Workflow and hook step types](/workflows/steps/type)
+- [Manage lifecycle events with hooks](/stacks/hooks)

@@ -29,6 +29,9 @@ import (
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
 
+// logKeyStatus is the structured-log/template key for a hook's lifecycle outcome status.
+const logKeyStatus = "status"
+
 // runHookLogGroup is a test seam for wrapping each lifecycle hook in CI log
 // group markers without making hooks tests depend on the active CI provider.
 //
@@ -144,8 +147,8 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		outcome.Status = RunSuccess
 	}
 
-	log.Debug("Running hooks", "count", len(h.items), "status", outcome.Status)
-	skipPredicate := newSkipPredicate(resolveSkipHooks(cmd))
+	log.Debug("Running hooks", "count", len(h.items), logKeyStatus, outcome.Status)
+	skipPredicate := NewSkipPredicate(ResolveSkipHooks(cmd))
 	filter := hookFilter{
 		event:         event.Normalize(),
 		skipPredicate: skipPredicate,
@@ -213,7 +216,7 @@ func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) err
 		return err
 	}
 	if !runs {
-		log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, "status", ctx.outcome.Status)
+		log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, logKeyStatus, ctx.outcome.Status)
 		return nil
 	}
 
@@ -279,7 +282,21 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	// in a step's `with:` message). Component/stack are already in the section
 	// (`{{ .atmos_component }}`, `{{ .stack }}`).
 	stackInfo.ComponentSection = withOutcomeTemplateData(stackInfo.ComponentSection, outcome)
-	processed, err := processHookExecutionValue(atmosConfig, rawHook, stackInfo)
+	// Step-backed hooks render their payload immediately before each step, not
+	// when the hook starts. This allows an earlier type: env item to provide
+	// values to {{ .env.* }} in a later item while leaving the envelope's
+	// lifecycle fields eagerly resolved.
+	rawForEnvelope := make(map[string]any, len(rawHook))
+	for key, value := range rawHook {
+		rawForEnvelope[key] = value
+	}
+	rawWith, hasWith := rawForEnvelope["with"]
+	deferWith := hook.Kind == stepKindName || hook.Kind == stepsKindName
+	if deferWith {
+		delete(rawForEnvelope, "with")
+	}
+
+	processed, err := processHookExecutionValue(atmosConfig, rawForEnvelope, stackInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render hook %q: %w", name, err)
 	}
@@ -287,6 +304,9 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	processedHook, ok := processed.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%w: hook %q expected map, got %T", errRenderedHookNotMap, name, processed)
+	}
+	if deferWith && hasWith {
+		processedHook["with"] = rawWith
 	}
 
 	yamlData, err := yaml.Marshal(processedHook)
@@ -298,6 +318,7 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	if err := yaml.Unmarshal(yamlData, &rendered); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal rendered hook %q: %w", name, err)
 	}
+	rendered.stepTemplateInfo = stackInfo
 	return &rendered, nil
 }
 
@@ -362,7 +383,7 @@ func withOutcomeTemplateData(section map[string]any, outcome Outcome) map[string
 	for k, v := range section {
 		augmented[k] = v
 	}
-	augmented["status"] = string(outcome.Status)
+	augmented[logKeyStatus] = string(outcome.Status)
 	augmented["exit_code"] = outcome.ExitCode
 	if outcome.Err != nil {
 		augmented["error"] = outcome.Err.Error()
@@ -502,14 +523,14 @@ func processHookExecutionYAMLFunction(atmosConfig *schema.AtmosConfiguration, va
 	return processHookExecutionString(atmosConfig, processedString, info)
 }
 
-// resolveSkipHooks returns the effective --skip-hooks value. It prefers the
+// ResolveSkipHooks returns the effective --skip-hooks value. It prefers the
 // Cobra flag when explicitly set, because before-* hooks run in PreRunE —
 // before the flag is bound to Viper in RunE (see pkg/flags/standard.go
 // BindFlagsToViper) — so viper.GetString would miss the CLI value there (it
 // only sees ATMOS_SKIP_HOOKS / the default). Reading the parsed Cobra flag
 // makes skipping symmetric across before-* and after-* events. Falling back to
 // Viper preserves env-var support and the nil-cmd path used by tests.
-func resolveSkipHooks(cmd *cobra.Command) string {
+func ResolveSkipHooks(cmd *cobra.Command) string {
 	if cmd != nil {
 		if f := cmd.Flags().Lookup("skip-hooks"); f != nil && f.Changed {
 			return f.Value.String()
@@ -518,11 +539,11 @@ func resolveSkipHooks(cmd *cobra.Command) string {
 	return viper.GetString("skip-hooks")
 }
 
-// newSkipPredicate builds the per-hook skip decision from the value of the
+// NewSkipPredicate builds the per-hook skip decision from the value of the
 // --skip-hooks flag / ATMOS_SKIP_HOOKS env. Empty / "false" runs all hooks;
 // "*" / "true" (set when --skip-hooks is passed without a value) skips
 // everything; a comma-separated list skips only the named hooks.
-func newSkipPredicate(raw string) func(string) bool {
+func NewSkipPredicate(raw string) func(string) bool {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.EqualFold(raw, "false") {
 		return func(string) bool { return false }
@@ -879,6 +900,62 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 		ExitCode:     opts.ExitCode,
 		Aggregate:    opts.Aggregate,
 	})
+}
+
+// RunPerComponentHooksOptions configures a RunPerComponentHooks invocation for
+// one resolved component/stack node in a multi-component (bulk) Terraform run,
+// or for Helmfile's single-component execution.
+type RunPerComponentHooksOptions struct {
+	// Event is the hook event (e.g., "before.terraform.apply", "after.terraform.apply").
+	Event HookEvent
+
+	// AtmosConfig is the Atmos configuration, already initialized for this component.
+	AtmosConfig *schema.AtmosConfiguration
+
+	// Info is the fully resolved component/stack info for this node (Component,
+	// ComponentFromArg, and Stack already set to this node's values).
+	Info *schema.ConfigAndStacksInfo
+
+	// Cmd is the cobra command in effect, used for --skip-hooks resolution
+	// (ResolveSkipHooks) exactly as the single-component Terraform path does.
+	Cmd *cobra.Command
+
+	// Args is the CLI args threaded through to hook engines that read them.
+	// Optional; nil is safe.
+	Args []string
+
+	// Outcome is the lifecycle outcome (success/failure) used to filter `when:`
+	// and expose status to hook engines. Zero value defaults to success.
+	Outcome Outcome
+}
+
+// RunPerComponentHooks resolves and runs one component's user-defined hooks
+// (the `hooks:` stack section) for a single lifecycle event. It is the exact
+// GetHooks + SetOutcome + RunAll sequence used by the single-component
+// Terraform CLI path (runUserHooks in cmd/terraform/utils.go), parameterized
+// so it can be called once per graph node — both before and after that node's
+// execution — from bulk Terraform/Helmfile dispatch. The returned error
+// already reflects each hook's on_failure resolution (fail returns non-nil;
+// warn/ignore already resolve to nil inside RunAll) — callers must not
+// swallow it.
+func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
+	if opts == nil || opts.Info == nil {
+		return nil
+	}
+	defer perf.Track(opts.AtmosConfig, "hooks.RunPerComponentHooks")()
+
+	hooksForComponent, err := GetHooks(opts.AtmosConfig, opts.Info)
+	if err != nil {
+		return err
+	}
+	if hooksForComponent == nil || !hooksForComponent.HasHooks() {
+		return nil
+	}
+
+	hooksForComponent.SetOutcome(opts.Outcome)
+	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
+		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
+	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
 }
 
 // ciExperimentalFeature is the feature name used in experimental warnings for CI hooks.

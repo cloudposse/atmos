@@ -61,4 +61,9 @@ type Formatter interface {
 	// Markdown rendering - returns rendered markdown string (pure function, no I/O)
 	// For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage()
 	Markdown(content string) (string, error)
+
+	// MarkdownNoWrap renders markdown without word-wrapping long lines, for
+	// deterministic, snapshot-stable single-line notices. For writing to
+	// channels, use package-level ui.MarkdownMessageNoWrap().
+	MarkdownNoWrap(content string) (string, error)
 }

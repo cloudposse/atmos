@@ -148,7 +148,8 @@ func SetComponentVersion(vendorFile, component, version string) error {
 	if err != nil {
 		return err
 	}
-	return atmosyaml.SetFileWithType(vendorFile, path, version, atmosyaml.TypeString)
+	_, err = atmosyaml.SetFileWithType(vendorFile, path, version, atmosyaml.TypeString)
+	return err
 }
 
 // readVendorSources returns the sources declared directly in a manifest file

@@ -9,5 +9,6 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/git"       // kind: git.
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/infracost" // kind: infracost.
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/kics"      // kind: kics.
+	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/tflint"    // kind: tflint.
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/trivy"     // kind: trivy.
 )
