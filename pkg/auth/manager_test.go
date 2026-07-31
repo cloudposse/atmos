@@ -1019,6 +1019,10 @@ func TestManager_Authenticate_PostAuthenticateErrorDoesNotPrint(t *testing.T) {
 	os.Stderr = w
 	t.Cleanup(func() {
 		os.Stderr = oldStderr
+		// Close both pipe endpoints even if an assertion below fails early via
+		// require, so we never leak file descriptors.
+		_ = w.Close()
+		_ = r.Close()
 	})
 
 	_, err = m.Authenticate(context.Background(), "dev")

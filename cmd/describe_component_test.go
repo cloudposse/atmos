@@ -39,19 +39,42 @@ func TestHasIdentityBackedStore(t *testing.T) {
 	identityAware := store.NewMockIdentityAwareStore(ctrl)
 	plain := store.NewMockStore(ctrl)
 
-	assert.False(t, hasIdentityBackedStore(nil))
-	assert.False(t, hasIdentityBackedStore(&schema.AtmosConfiguration{
-		StoresConfig: store.StoresConfig{"plain": {Identity: "platform"}},
-		Stores:       store.StoreRegistry{"plain": plain},
-	}))
-	assert.False(t, hasIdentityBackedStore(&schema.AtmosConfiguration{
-		StoresConfig: store.StoresConfig{"cloud": {}},
-		Stores:       store.StoreRegistry{"cloud": identityAware},
-	}))
-	assert.True(t, hasIdentityBackedStore(&schema.AtmosConfiguration{
-		StoresConfig: store.StoresConfig{"cloud": {Identity: "platform"}},
-		Stores:       store.StoreRegistry{"cloud": identityAware},
-	}))
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		want        bool
+	}{
+		{name: "nil configuration", atmosConfig: nil, want: false},
+		{
+			name: "plain store with identity",
+			atmosConfig: &schema.AtmosConfiguration{
+				StoresConfig: store.StoresConfig{"plain": {Identity: "platform"}},
+				Stores:       store.StoreRegistry{"plain": plain},
+			},
+			want: false,
+		},
+		{
+			name: "identity-aware store without identity",
+			atmosConfig: &schema.AtmosConfiguration{
+				StoresConfig: store.StoresConfig{"cloud": {}},
+				Stores:       store.StoreRegistry{"cloud": identityAware},
+			},
+			want: false,
+		},
+		{
+			name: "identity-aware store with identity",
+			atmosConfig: &schema.AtmosConfiguration{
+				StoresConfig: store.StoresConfig{"cloud": {Identity: "platform"}},
+				Stores:       store.StoreRegistry{"cloud": identityAware},
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, hasIdentityBackedStore(tt.atmosConfig))
+		})
+	}
 }
 
 // TestGetRunnableDescribeComponentCmd_InvalidErrorMode covers the dispatch call site

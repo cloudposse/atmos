@@ -42,17 +42,33 @@ func captureEditionsOutput(t *testing.T) *bytes.Buffer {
 }
 
 func TestParseOptionalAnchor(t *testing.T) {
-	anchor, err := parseOptionalAnchor("")
-	require.NoError(t, err)
-	assert.Nil(t, anchor, "empty string means unbounded")
-
-	anchor, err = parseOptionalAnchor("2026-01")
-	require.NoError(t, err)
-	require.NotNil(t, anchor)
-	assert.Equal(t, "2026-01", anchor.Raw)
-
-	_, err = parseOptionalAnchor("not-a-date")
-	require.ErrorIs(t, err, edition.ErrInvalidEdition)
+	tests := []struct {
+		name    string
+		raw     string
+		wantNil bool
+		wantRaw string
+		wantErr error
+	}{
+		{name: "empty string means unbounded", raw: "", wantNil: true},
+		{name: "valid anchor", raw: "2026-01", wantRaw: "2026-01"},
+		{name: "invalid anchor", raw: "not-a-date", wantErr: edition.ErrInvalidEdition},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			anchor, err := parseOptionalAnchor(tt.raw)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tt.wantNil {
+				assert.Nil(t, anchor)
+				return
+			}
+			require.NotNil(t, anchor)
+			assert.Equal(t, tt.wantRaw, anchor.Raw)
+		})
+	}
 }
 
 func TestEditionsToDataNewestFirst(t *testing.T) {
@@ -75,18 +91,35 @@ func TestEditionsToDataNewestFirst(t *testing.T) {
 }
 
 func TestExecuteListEditionsWithOptionsInvalidAnchors(t *testing.T) {
-	err := executeListEditionsWithOptions(&EditionsOptions{From: "13-2026"})
-	require.ErrorIs(t, err, edition.ErrInvalidEdition)
-
-	err = executeListEditionsWithOptions(&EditionsOptions{To: "2026-99"})
-	require.ErrorIs(t, err, edition.ErrInvalidEdition)
+	tests := []struct {
+		name string
+		opts EditionsOptions
+	}{
+		{name: "invalid from", opts: EditionsOptions{From: "13-2026"}},
+		{name: "invalid to", opts: EditionsOptions{To: "2026-99"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := executeListEditionsWithOptions(&tt.opts)
+			require.ErrorIs(t, err, edition.ErrInvalidEdition)
+		})
+	}
 }
 
 func TestExecuteListEditionsWithOptionsFormats(t *testing.T) {
 	initTestIO(t)
-	for _, outputFormat := range []string{"", "json", "yaml", "csv", "tsv"} {
-		t.Run(outputFormat, func(t *testing.T) {
-			require.NoError(t, executeListEditionsWithOptions(&EditionsOptions{Format: outputFormat, From: "2025", To: "2026"}))
+	for _, tt := range []struct {
+		name         string
+		outputFormat string
+	}{
+		{name: "default", outputFormat: ""},
+		{name: "json", outputFormat: "json"},
+		{name: "yaml", outputFormat: "yaml"},
+		{name: "csv", outputFormat: "csv"},
+		{name: "tsv", outputFormat: "tsv"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, executeListEditionsWithOptions(&EditionsOptions{Format: tt.outputFormat, From: "2025", To: "2026"}))
 		})
 	}
 }

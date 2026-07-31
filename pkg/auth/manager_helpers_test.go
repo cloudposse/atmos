@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -900,8 +899,7 @@ func TestCreateManagerWithAtmosConfigForStack(t *testing.T) {
 
 	t.Run("errors when auth is not configured", func(t *testing.T) {
 		manager, err := CreateManagerWithAtmosConfigForStack(&schema.AuthConfig{}, nil, "")
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, errUtils.ErrAuthNotConfigured))
+		require.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
 		assert.Nil(t, manager)
 	})
 

@@ -2,12 +2,18 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/edition"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// describeEditionParser handles flag parsing for `describe edition`, per this repo's
+// mandated flags.NewStandardParser() pattern (see cmd/version/version.go).
+var describeEditionParser *flags.StandardParser
 
 // describeEditionCmd shows the active edition pin and the defaults it rolls back.
 var describeEditionCmd = &cobra.Command{
@@ -25,6 +31,9 @@ Use "atmos list editions" to see the journal of default changes.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := describeEditionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+			return err
+		}
 		format, err := cmd.Flags().GetString("format")
 		if err != nil {
 			return err
@@ -49,7 +58,14 @@ Use "atmos list editions" to see the journal of default changes.`,
 
 func init() {
 	describeEditionCmd.DisableFlagParsing = false
-	describeEditionCmd.PersistentFlags().StringP("format", "f", "yaml", "The output format: yaml or json")
+
+	describeEditionParser = flags.NewStandardParser(
+		flags.WithStringFlag("format", "f", "yaml", "The output format: yaml or json"),
+	)
+	describeEditionParser.RegisterFlags(describeEditionCmd)
+	if err := describeEditionParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	describeCmd.AddCommand(describeEditionCmd)
 }

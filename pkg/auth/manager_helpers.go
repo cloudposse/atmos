@@ -285,7 +285,7 @@ func CreateAndAuthenticateManagerWithAtmosConfigForStack(
 
 	// Validate auth is configured when we have an identity to use.
 	if !isAuthConfigured(authConfig) {
-		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
+		return nil, fmt.Errorf("authentication requires at least one identity configured in atmos.yaml: %w", errUtils.ErrAuthNotConfigured)
 	}
 
 	// Create AuthManager instance, seeding the target stack so stack-scoped identities
@@ -318,7 +318,7 @@ func CreateManagerWithAtmosConfigForStack(
 	defer perf.Track(atmosConfig, "auth.CreateManagerWithAtmosConfigForStack")()
 
 	if !isAuthConfigured(authConfig) {
-		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
+		return nil, fmt.Errorf("authentication requires at least one identity configured in atmos.yaml: %w", errUtils.ErrAuthNotConfigured)
 	}
 
 	cliConfigPath := ""

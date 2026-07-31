@@ -226,8 +226,9 @@ func TestLoadConfigEditionExposedOnConfig(t *testing.T) {
 func TestLoadConfigEditionFromGlobalFlag(t *testing.T) {
 	writeEditionTestConfig(t, "base_path: ./\nedition: \"2026-07\"\n")
 
+	origEdition := viper.GetViper().Get(editionKey)
 	viper.GetViper().Set(editionKey, "2026-01")
-	t.Cleanup(func() { viper.GetViper().Set(editionKey, "") })
+	t.Cleanup(func() { viper.GetViper().Set(editionKey, origEdition) })
 
 	atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
 	require.NoError(t, err)
