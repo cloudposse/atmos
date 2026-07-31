@@ -128,11 +128,22 @@ commands:
           - type: shell
             command: |
               set -eu
+              # Anchor to the repo root explicitly rather than trusting cwd: some
+              # containerized CI runners (Native CI's ghcr.io/cloudposse/atmos image)
+              # do not start `type: shell` steps inside $GITHUB_WORKSPACE, which makes
+              # a plain `git diff` fail with "Not a git repository".
+              repo_root="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+              cd "$repo_root"
+              git config --global --add safe.directory "$repo_root" 2>/dev/null || true
               if [ "{{ .Flags.changed }}" = "true" ]; then
                 # Single-ref diff (not origin/main...HEAD) so staged-but-uncommitted
                 # files are included -- required for the pre-commit hook to see the
                 # file that is about to be committed.
-                files=$(git diff --name-only origin/main -- 'docs/prd/*.md' 'website/docs/**/*.md' 'website/docs/**/*.mdx')
+                if ! files=$(git diff --name-only origin/main -- 'docs/prd/*.md' 'website/docs/**/*.md' 'website/docs/**/*.mdx' 2>&1); then
+                  echo "Warning: could not determine changed docs via git diff, skipping (Phase 1 is non-blocking):" >&2
+                  echo "$files" >&2
+                  exit 0
+                fi
               else
                 files="docs/prd website/docs"
               fi

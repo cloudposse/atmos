@@ -22,15 +22,11 @@ agent-facing summary.
 
 ## Core rules
 
-1. **Short sentences.** Aim for 20-25 words. Split a sentence that has more
-   than one clause chained with "and," "which," or "that."
-2. **Active voice.** Name the actor: "Atmos writes the file," not "the file
-   is written."
+1. **Short sentences.** Aim for 20-25 words. Split a sentence that has more than one clause chained with "and," "which," or "that."
+2. **Active voice.** Name the actor: "Atmos writes the file," not "the file is written."
 3. **No contractions.** Write "do not," not "don't."
-4. **Plain words over wordy phrases.** "To," not "in order to." "Use," not
-   "utilize."
-5. **One word, one meaning.** Pick one term per concept and use it
-   consistently — do not alternate between synonyms for the same thing.
+4. **Plain words over wordy phrases.** "To," not "in order to." "Use," not "utilize."
+5. **One word, one meaning.** Pick one term per concept and use it consistently — do not alternate between synonyms for the same thing.
 6. **One instruction per step** in a numbered procedure.
 
 ## Checking your writing

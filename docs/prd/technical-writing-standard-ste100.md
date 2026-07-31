@@ -81,36 +81,28 @@ Author writes or edits a PRD or a docs page
               ▼
     atmos lint docs [--changed]
               │
-   ┌──────────┼───────────────────┐
-   │          │                   │
+    ┌──────────┼───────────────────┐
+    │          │                   │
 locally   pre-commit hook     CI: .github/workflows/docs-lint.yml
           (vale-docs-lint)    (runs inside the ghcr.io/cloudposse/atmos
                                 container image)
               │
               ▼
-   vale --config=.vale.ini <files>
+    vale --config=.vale.ini <files>
               │
-   ┌──────────┴───────────────────────────────┐
-   │                                           │
+    ┌──────────┴───────────────────────────────┐
+    │                                           │
 .vale/styles/Atmos/*.yml            .vale/styles/config/vocabularies/Atmos/
 (the four paraphrased rules)         {accept,reject}.txt (technical dictionary)
 ```
 
 ### Key Design Principles
 
-1. **One command everywhere.** `atmos lint docs [--changed]` runs the same
-   way locally, in the pre-commit hook, and in CI. No separate code path can
-   drift from what a contributor sees on their own machine.
-2. **Toolchain-managed installation.** `vale` is a `dependencies.tools`
-   entry on the command, resolved through the `vale-cli/vale` Aqua registry
-   alias. Atmos installs it automatically wherever the command runs.
-3. **No copyrighted content.** The rule set and dictionary are original
-   work, inspired by ASD-STE100 but not a copy of it.
-4. **Non-blocking rollout.** Phase 1 sets every rule to `suggestion` level.
-   A suggestion never fails a commit, a pre-commit run, or a CI check.
-5. **Patch-scoped enforcement.** The `--changed` flag lints only files that
-   differ from `origin/main`, the same pattern `atmos lint --changed`
-   already uses for `golangci-lint`.
+1. **One command everywhere.** `atmos lint docs [--changed]` runs the same way locally, in the pre-commit hook, and in CI. No separate code path can drift from what a contributor sees on their own machine.
+2. **Toolchain-managed installation.** `vale` is a `dependencies.tools` entry on the command, resolved through the `vale-cli/vale` Aqua registry alias. Atmos installs it automatically wherever the command runs.
+3. **No copyrighted content.** The rule set and dictionary are original work, inspired by ASD-STE100 but not a copy of it.
+4. **Non-blocking rollout.** Phase 1 sets every rule to `suggestion` level. A suggestion never fails a commit, a pre-commit run, or a CI check.
+5. **Patch-scoped enforcement.** The `--changed` flag lints only files that differ from `origin/main`, the same pattern `atmos lint --changed` already uses for `golangci-lint`.
 
 ## Implementation
 
