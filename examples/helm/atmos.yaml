@@ -51,6 +51,9 @@ commands:
           max_attempts: 2
           initial_delay: 15s
           backoff_strategy: constant
+      # Apply dry-run must not persist a release or create Kubernetes objects.
+      - atmos helm apply demo -s dev --identity local-k3s --dry-run
+      - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo; then echo "dry-run unexpectedly created deployment/demo"; exit 1; fi
       - command: atmos helm apply demo -s dev --identity local-k3s
         retry:
           max_attempts: 2
@@ -66,5 +69,8 @@ commands:
           max_attempts: 3
           initial_delay: 10s
           backoff_strategy: constant
+      # Delete dry-run must leave the deployed release and resources intact.
+      - atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
       - atmos helm delete demo -s dev --identity local-k3s
       - atmos emulator down kubernetes -s dev

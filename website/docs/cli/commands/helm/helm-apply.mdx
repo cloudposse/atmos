@@ -26,6 +26,18 @@ Install or upgrade the release in the cluster:
 atmos helm apply monitoring -s plat-ue2-dev
 ```
 
+Apply an explicit production readiness and recovery policy:
+
+```shell
+atmos helm apply monitoring -s plat-ue2-dev \
+  --rollback-on-failure \
+  --wait=watcher \
+  --wait-for-jobs \
+  --timeout=30m \
+  --cleanup-on-fail \
+  --history-max=10
+```
+
 Deliver rendered manifests to a provision target instead of the cluster:
 
 ```shell
@@ -58,6 +70,30 @@ atmos helm apply --affected --labels cost-center=platform
   <dt>`--dependency-update` <em>(optional)</em></dt>
   <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
 
+  <dt>`--rollback-on-failure` <em>(optional)</em></dt>
+  <dd>Uninstall a failed first install or roll a failed upgrade back. The deprecated alias is `--atomic`.</dd>
+
+  <dt>`--wait[=strategy]` <em>(optional)</em></dt>
+  <dd>Use `watcher`, `hookOnly`, or `legacy`. Passing `--wait` without a value selects `watcher`. Boolean values remain accepted temporarily but are deprecated.</dd>
+
+  <dt>`--wait-for-jobs` <em>(optional)</em></dt>
+  <dd>Wait for ordinary Jobs in the release manifest. Requires `watcher` or `legacy`.</dd>
+
+  <dt>`--timeout` <em>(optional)</em></dt>
+  <dd>Helm release-operation timeout, such as `10m` or `1h`. `0s` is explicitly unbounded.</dd>
+
+  <dt>`--cleanup-on-fail` <em>(optional)</em></dt>
+  <dd>Delete resources newly created by a failed upgrade before rollback.</dd>
+
+  <dt>`--history-max` <em>(optional)</em></dt>
+  <dd>Maximum retained release revisions. Defaults to `10`; `0` means unlimited.</dd>
+
+  <dt>`--no-hooks` <em>(optional)</em></dt>
+  <dd>Disable Helm chart hooks. Atmos lifecycle hooks are unaffected.</dd>
+
+  <dt>`--skip-crds` <em>(optional)</em></dt>
+  <dd>Skip CRD installation on a first install.</dd>
+
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Apply all Helm components in dependency order.</dd>
 
@@ -73,3 +109,7 @@ atmos helm apply --affected --labels cost-center=platform
   <dt>`--labels` <em>(optional)</em></dt>
   <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
 </dl>
+
+Lifecycle flags apply only to direct Kubernetes delivery. Combining an explicit
+lifecycle flag with an external `--target` fails instead of implying that Atmos
+waited for or rolled back a GitOps deployment.

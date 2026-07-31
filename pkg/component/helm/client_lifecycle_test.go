@@ -213,3 +213,37 @@ func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
 	_, hasDeadline := ctx.Deadline()
 	assert.False(t, hasDeadline)
 }
+
+func TestUpgradeReleasePrunesDefaultHistory(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "history")
+
+	for revision := 0; revision < defaultHelmMaxHistory+3; revision++ {
+		spec.Values["replicaCount"] = revision + 1
+		_, err := applyRelease(context.Background(), spec, false)
+		require.NoError(t, err)
+	}
+
+	history, err := actx.cfg.Releases.History(spec.ReleaseName)
+	require.NoError(t, err)
+	assert.Len(t, history, defaultHelmMaxHistory)
+}
+
+func TestUpgradeReleaseUnlimitedHistory(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "unlimited-history")
+	spec.Lifecycle.Policy.MaxHistory = 0
+
+	const revisions = defaultHelmMaxHistory + 3
+	for revision := 0; revision < revisions; revision++ {
+		spec.Values["replicaCount"] = revision + 1
+		_, err := applyRelease(context.Background(), spec, false)
+		require.NoError(t, err)
+	}
+
+	history, err := actx.cfg.Releases.History(spec.ReleaseName)
+	require.NoError(t, err)
+	assert.Len(t, history, revisions)
+}

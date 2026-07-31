@@ -60,6 +60,10 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 			"object_count":   2,
 			"object_kinds":   []any{"Service", "Deployment"},
 			"manifest_bytes": 1234,
+			"lifecycle": map[string]any{
+				"operation":     "upgrade",
+				"wait_strategy": "watcher",
+			},
 		},
 	})
 
@@ -73,6 +77,8 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	assert.Equal(t, 2, ctx.ObjectCount)
 	assert.Equal(t, 1234, ctx.ManifestBytes)
 	assert.Equal(t, []string{"Deployment", "Service"}, ctx.ObjectKinds)
+	assert.Equal(t, "upgrade", ctx.Lifecycle["operation"])
+	assert.Equal(t, "watcher", ctx.Lifecycle["wait_strategy"])
 }
 
 func TestNormalizeSummary(t *testing.T) {
@@ -94,6 +100,7 @@ func TestNormalizeSummary(t *testing.T) {
 		"manifest_bytes": float64(123),
 		"message":        42,
 		"diff":           "diff text",
+		"lifecycle":      map[string]any{"operation": "install"},
 	})
 	assert.Equal(t, "app", got.Component)
 	assert.Equal(t, "dev", got.Stack)
@@ -107,6 +114,7 @@ func TestNormalizeSummary(t *testing.T) {
 	assert.Equal(t, 123, got.ManifestBytes)
 	assert.Equal(t, "42", got.Message)
 	assert.Equal(t, "diff text", got.Diff)
+	assert.Equal(t, map[string]any{"operation": "install"}, got.Lifecycle)
 }
 
 func TestPluginBuildTemplateContextFallbacksAndErrors(t *testing.T) {
@@ -146,6 +154,7 @@ func TestSummaryEnabledAndPrimitiveConversions(t *testing.T) {
 	assert.Zero(t, intValue("9"))
 	assert.Equal(t, []string{"b", "a"}, stringSliceValue([]string{"b", "a"}))
 	assert.Nil(t, stringSliceValue(1))
+	assert.Nil(t, mapValue("not-a-map"))
 	assert.Equal(t, "Helm", title(""))
 }
 
@@ -241,6 +250,16 @@ func TestTemplateRendering(t *testing.T) {
 			ObjectCount:   2,
 			ObjectKinds:   []string{"Deployment", "Service"},
 			ManifestBytes: 1234,
+			Lifecycle: map[string]any{
+				"operation":           "upgrade",
+				"wait_strategy":       "watcher",
+				"timeout":             "30m0s",
+				"chart_hooks_enabled": true,
+				"wait_for_jobs":       true,
+				"rollback_on_failure": true,
+				"cleanup_on_fail":     true,
+				"max_history":         10,
+			},
 		},
 	})
 
@@ -249,4 +268,19 @@ func TestTemplateRendering(t *testing.T) {
 	assert.Contains(t, rendered, "Helm Apply Summary")
 	assert.Contains(t, rendered, "bitnami/nginx")
 	assert.Contains(t, rendered, "Deployment")
+	assert.Contains(t, rendered, "Release lifecycle")
+	assert.Contains(t, rendered, "watcher")
+	assert.Contains(t, rendered, "Maximum history")
+	assert.Contains(t, rendered, "`10`")
+
+	external := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
+		Command: "apply",
+		Aggregate: Summary{Lifecycle: map[string]any{
+			"applied": false, "target_kind": "git", "reason": "external_target",
+		}},
+	})
+	rendered, err = templates.NewLoader(nil).LoadAndRender("helm", "apply", defaultTemplates, external)
+	require.NoError(t, err)
+	assert.Contains(t, rendered, "external_target")
+	assert.NotContains(t, rendered, "Wait strategy")
 }

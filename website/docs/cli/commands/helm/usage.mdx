@@ -72,6 +72,21 @@ Supported summaries:
 Summaries include component, stack, command status, a local reproduction command, and Helm metadata
 such as release name, namespace, chart, target, object counts, object kinds, and rendered manifest
 size when available.
+Cluster-backed release summaries also show the effective Helm lifecycle policy.
+External-target summaries explicitly report that release lifecycle was bypassed.
+
+## Release lifecycle
+
+For cluster delivery, `apply`/`deploy` and `delete` expose Helm 4 wait and timeout
+behavior. Apply/deploy additionally support rollback on failure, ordinary Job
+waiting, failed-upgrade cleanup, history limits, chart-hook suppression, and CRD
+skipping. Configure defaults and inherited policy in the stack component, then
+use command flags only for an explicit invocation override.
+
+See [Helm stack release lifecycle](/stacks/components/helm#release-lifecycle),
+[`helm apply`](/cli/commands/helm/apply), and
+[`helm delete`](/cli/commands/helm/delete) for the complete field and flag
+reference.
 
 ## Chart sources
 
