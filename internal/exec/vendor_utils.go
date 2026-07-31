@@ -47,13 +47,15 @@ var (
 )
 
 type processTargetsParams struct {
-	AtmosConfig          *schema.AtmosConfiguration
-	IndexSource          int
-	Source               *schema.AtmosVendorSource
-	TemplateData         struct{ Component, Version string }
-	VendorConfigFilePath string
+	AtmosConfig  *schema.AtmosConfiguration
+	IndexSource  int
+	Source       *schema.AtmosVendorSource
+	TemplateData struct{ Component, Version string }
+	// SourceBasePath is the directory that a relative local `source` is resolved against: the
+	// directory of the manifest that declared it. See resolveVendorSourceBasePath.
+	SourceBasePath string
 	// TargetBasePath is the directory that relative `targets` paths are resolved against.
-	// See resolveVendorTargetBasePath for how it's determined.
+	// See resolveVendorTargetBasePath.
 	TargetBasePath    string
 	URI               string
 	SourceTemplate    string // Raw un-templated source URL for per-target version re-resolution.
@@ -163,6 +165,22 @@ func resolveVendorTargetBasePath(atmosConfig *schema.AtmosConfiguration, vendorC
 	return atmosConfig.BasePath
 }
 
+// resolveVendorSourceBasePath returns the directory a relative local `source` is resolved against:
+// the directory of the manifest that declared it, following the Atmos convention that a relative
+// path in a configuration file is anchored to the file declaring it
+// (see docs/prd/base-path-resolution-semantics.md).
+//
+// Sources pulled in through `spec.imports` are merged into one flat list, so without the per-source
+// provenance recorded in BasePath they would all be anchored to the root manifest instead of the
+// imported manifest that declares them. Falls back to the root manifest's directory for sources
+// that carry no provenance.
+func resolveVendorSourceBasePath(source *schema.AtmosVendorSource, vendorConfigFilePath string) string {
+	if source != nil && source.BasePath != "" {
+		return source.BasePath
+	}
+	return vendorConfigFilePath
+}
+
 // resolveVendorTargetPath resolves a single templated target path against the vendor target base
 // path. Absolute targets are honored as-is — joining them to the base path would nest them under it.
 func resolveVendorTargetPath(targetBasePath, target string) string {
@@ -227,6 +245,14 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
 				}
 				sourceMap[source.Component] = true
+			}
+			// Record which manifest declared this source before it's merged into the flat list, so a
+			// relative local `source` can be anchored to that manifest's directory. Set here rather
+			// than in processVendorImports because a single import can name a directory of
+			// manifests, and each file in it anchors its own sources.
+			source.BasePath = filepath.Dir(configFile)
+			if source.File == "" {
+				source.File = configFile
 			}
 			vendorConfig.Spec.Sources = append(vendorConfig.Spec.Sources, source)
 		}
@@ -354,7 +380,11 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		// security fixes.
 		uri = normalizeVendorURI(uri)
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
+		// Anchor a relative local `source` to the manifest that declared it, which is not
+		// necessarily the root manifest: sources merged in from `spec.imports` carry their own.
+		sourceBasePath := resolveVendorSourceBasePath(&params.sources[indexSource], params.vendorConfigFilePath)
+
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, sourceBasePath)
 		if err != nil {
 			return nil, err
 		}
@@ -373,16 +403,16 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 
 		// Process each target within the source.
 		pkgs, err := processTargets(&processTargetsParams{
-			AtmosConfig:          params.atmosConfig,
-			IndexSource:          indexSource,
-			Source:               &params.sources[indexSource],
-			TemplateData:         tmplData,
-			VendorConfigFilePath: params.vendorConfigFilePath,
-			TargetBasePath:       params.targetBasePath,
-			URI:                  uri,
-			SourceTemplate:       params.sources[indexSource].Source,
-			PkgType:              pType,
-			SourceIsLocalFile:    sourceIsLocalFile,
+			AtmosConfig:       params.atmosConfig,
+			IndexSource:       indexSource,
+			Source:            &params.sources[indexSource],
+			TemplateData:      tmplData,
+			SourceBasePath:    sourceBasePath,
+			TargetBasePath:    params.targetBasePath,
+			URI:               uri,
+			SourceTemplate:    params.sources[indexSource].Source,
+			PkgType:           pType,
+			SourceIsLocalFile: sourceIsLocalFile,
 		})
 		if err != nil {
 			return nil, err
@@ -433,7 +463,7 @@ func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt sc
 
 	// Recompute source classification from the re-resolved URI, since per-target version
 	// overrides may produce a URI with a different scheme or locality than the source-level URI.
-	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&effectiveURI, params.VendorConfigFilePath)
+	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&effectiveURI, params.SourceBasePath)
 	if err != nil {
 		return nil, err
 	}
@@ -585,7 +615,10 @@ func normalizeVendorURI(uri string) string {
 	return vendor.NormalizeURI(uri)
 }
 
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
+// determineSourceType classifies a vendor source URI as OCI, local, or remote. sourceBasePath is the
+// directory a relative local source is anchored to — the manifest that declared the source, see
+// resolveVendorSourceBasePath.
+func determineSourceType(uri *string, sourceBasePath string) (bool, bool, bool, error) {
 	// Determine if the URI is an OCI scheme, a local file, or remote
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
@@ -595,15 +628,21 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
-	absPath, err := u.JoinPathAndValidate(vendorConfigFilePath, *uri)
+	absPath, err := u.JoinPathAndValidate(sourceBasePath, *uri)
 	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
 	}
 	if err == nil {
-		uri = &absPath
+		// Write the anchored path back to the caller: the package is downloaded from this URI, so
+		// leaving it relative would resolve it against the process working directory instead of the
+		// manifest that declared it. Return here rather than falling through to url.Parse — the URI
+		// is now a filesystem path, and parsing it as a URL would read a Windows drive letter
+		// ("C:\...") as a scheme.
+		*uri = absPath
 		useLocalFileSystem = true
 		sourceIsLocalFile = u.FileExists(*uri)
+		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
 	parsedURL, err := url.Parse(*uri)

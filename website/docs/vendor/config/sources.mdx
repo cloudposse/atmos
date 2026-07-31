@@ -52,6 +52,11 @@ spec:
 
     See [Vendor URL Syntax](/vendor/url-syntax) for complete documentation on supported URL formats, authentication, and subdirectory syntax.
 
+    A relative local path is resolved against the directory containing the manifest that declares it. For a source declared in a manifest
+    pulled in through [`spec.imports`](/vendor/config/imports), that's the imported manifest's own directory — not the directory of the
+    manifest doing the importing. This keeps a manifest self-contained: it can be moved, or imported from anywhere, and its local sources
+    still point at the same files.
+
     **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
 
     For example, for `http` and `https` sources, use the following format:

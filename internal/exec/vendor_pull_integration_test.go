@@ -286,6 +286,93 @@ logs:
 		"vendored component should not be written relative to the Atmos base path")
 }
 
+// TestVendorPullImportedManifestAnchorsItsOwnLocalSources verifies that a relative local `source`
+// declared in an imported manifest resolves against that manifest's own directory, not against the
+// root manifest that imported it. Covers a chain of nested imports, each declaring a local source
+// relative to itself from a different depth.
+func TestVendorPullImportedManifestAnchorsItsOwnLocalSources(t *testing.T) {
+	tempDir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+
+	// Each manifest sits at a different depth and vendors a sibling directory named "local-src",
+	// so anchoring to the root manifest instead of the declaring manifest cannot accidentally pass.
+	manifestDirs := map[string]string{
+		"root":   tempDir,
+		"mid":    filepath.Join(tempDir, "vendor"),
+		"nested": filepath.Join(tempDir, "vendor", "nested"),
+	}
+	for name, dir := range manifestDirs {
+		srcDir := filepath.Join(dir, "local-src")
+		require.NoError(t, os.MkdirAll(srcDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"),
+			[]byte("# "+name+"\n"), 0o644))
+	}
+
+	atmosYAML := fmt.Sprintf(`base_path: "%s"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+
+logs:
+  level: Info
+`, filepath.ToSlash(tempDir))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	// manifest renders a vendor manifest that imports `imports` and declares one source pointing at
+	// its own sibling "local-src" directory.
+	manifest := func(name, imports string) string {
+		return fmt.Sprintf(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: %[1]s
+spec:
+  imports: [%[2]s]
+  sources:
+    - component: "%[1]s"
+      source: "./local-src"
+      version: "1.0.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      included_paths:
+        - "**/*.tf"
+`, name, imports)
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "vendor.yaml"),
+		[]byte(manifest("root", `"vendor/mid.yaml"`)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "vendor", "mid.yaml"),
+		[]byte(manifest("mid", `"vendor/nested/deep.yaml"`)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "vendor", "nested", "deep.yaml"),
+		[]byte(manifest("nested", "")), 0o644))
+
+	t.Chdir(tempDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	require.NoError(t, ExecuteVendorPullCommand(newVendorPullTestCmd(), []string{}),
+		"'atmos vendor pull' should execute without error")
+
+	// Every source resolved against its own manifest, so each component carries that manifest's
+	// marker file content rather than another manifest's.
+	for name := range manifestDirs {
+		vendored := filepath.Join(tempDir, "components", "terraform", name, "main.tf")
+		content, readErr := os.ReadFile(vendored)
+		require.NoError(t, readErr, "component %q should have been vendored from its declaring manifest", name)
+		assert.Equal(t, "# "+name+"\n", string(content),
+			"component %q was vendored from the wrong local-src directory", name)
+	}
+
+	// Targets stay anchored to the root manifest for every source regardless of import depth, so
+	// nothing lands beside an imported manifest.
+	assert.NoDirExists(t, filepath.Join(tempDir, "vendor", "components"))
+	assert.NoDirExists(t, filepath.Join(tempDir, "vendor", "nested", "components"))
+}
+
 // TestVendorPullTripleSlashNormalization tests end-to-end triple-slash URI normalization.
 // This complements the unit tests with integration-level verification.
 func TestVendorPullTripleSlashNormalization(t *testing.T) {
