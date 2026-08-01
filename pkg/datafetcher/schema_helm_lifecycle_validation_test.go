@@ -41,6 +41,7 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 				"demo-release": map[string]any{
 					"chart":               "charts/demo-release",
 					"namespace":           "demo",
+					"secrets":             map[string]any{},
 					"wait_for_jobs":       true,
 					"cleanup_on_fail":     false,
 					"disable_chart_hooks": false,
