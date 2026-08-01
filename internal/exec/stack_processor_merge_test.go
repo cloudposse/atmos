@@ -557,6 +557,33 @@ func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
 	assert.Equal(t, map[string]any{"source": "override"}, component[cfg.ValuesSectionName])
 }
 
+func TestMergeComponentConfigurations_EmptyHelmValuesDoNotEraseInheritedDefaults(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.HelmComponentType,
+		Component:     "demo-release",
+		AtmosConfig:   atmosCfg,
+		GlobalHelmLifecycle: map[string]any{
+			cfg.ValuesSectionName: map[string]any{"cluster": "shared"},
+		},
+	}
+	result := minimalComponentResult()
+	result.BaseComponentHelm = map[string]any{
+		cfg.ValuesSectionName: map[string]any{"image": map[string]any{"tag": "stable"}},
+	}
+	result.ComponentHelm = extractHelmComponentSection(map[string]any{
+		cfg.ValuesSectionName: nil,
+	})
+
+	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string]any{
+		"cluster": "shared",
+		"image":   map[string]any{"tag": "stable"},
+	}, component[cfg.ValuesSectionName])
+}
+
 func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
 	atmosCfg := &schema.AtmosConfiguration{}
 	opts := ComponentProcessorOptions{
