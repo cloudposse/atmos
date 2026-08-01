@@ -73,6 +73,17 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, templateCmd.Flag("from-manifest"))
 }
 
+func TestBareWaitDoesNotConsumeComponentArgument(t *testing.T) {
+	for _, operation := range []string{"apply", "deploy", "delete"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation)
+			require.NoError(t, cmd.ParseFlags([]string{"--wait", "app"}))
+			assert.Equal(t, "watcher", cmd.Flag("wait").Value.String())
+			assert.Equal(t, []string{"app"}, cmd.Flags().Args())
+		})
+	}
+}
+
 func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 	cmd := configuredOperationCommand(t, "apply", map[string]string{
 		"rollback-on-failure": "true",
