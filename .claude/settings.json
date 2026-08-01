@@ -47,7 +47,6 @@
       "Bash(gh pr merge:*)",
       "Bash(gh workflow:*)",
       "Bash(gh secret:*)",
-      "Bash(gh api graphql*mutation*)",
       "Bash(gh api repos/cloudposse/atmos/pulls/* -X PATCH*)",
       "Bash(gh api repos/cloudposse/atmos/pulls/* -X POST*)",
       "Bash(gh api repos/cloudposse/atmos/pulls/* -X PUT*)",
