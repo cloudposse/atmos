@@ -247,7 +247,7 @@ func TestRenderManifest_LocalChart(t *testing.T) {
 	assert.Contains(t, rendered, `replicas: "5"`)
 	assert.Contains(t, rendered, "nginx:9.9")
 	assert.Contains(t, rendered, "# Source: testchart/templates/hook.yaml")
-	assert.Contains(t, rendered, "name: unit-settings")
+	assert.Contains(t, rendered, `name: "unit-settings"`)
 	assert.True(t, strings.Contains(rendered, "ConfigMap"))
 }
 
