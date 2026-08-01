@@ -18,8 +18,7 @@ stacks:
   excluded_paths:
     - "globals/**/*"
     - "catalog/**/*"
-  name_pattern: "{tenant}-{environment}-{stage}"
-
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 # Schemas for validation
 schemas:
   jsonschema:
