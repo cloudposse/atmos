@@ -73,6 +73,9 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 			}
 			return err
 		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctxErr)
+		}
 	}
 
 	return nil

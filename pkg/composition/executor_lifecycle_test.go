@@ -229,3 +229,32 @@ func TestRunLifecycleTargetsStopsDispatchingAfterCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, []string{"frontend"}, calls)
 }
+
+func TestRunLifecycleTargetsReportsCancellationAfterSuccessfulFinalDispatch(t *testing.T) {
+	provider := testCompositionProvider{componentType: cfg.ContainerComponentType, commands: []string{"up"}}
+	origGet, origExec := getComponentProvider, executeProvider
+	t.Cleanup(func() {
+		getComponentProvider, executeProvider = origGet, origExec
+	})
+	getComponentProvider = func(string) (component.ComponentProvider, bool) {
+		return provider, true
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	executeProvider = func(_ component.ComponentProvider, _ *component.ExecutionContext) error {
+		cancel()
+		return nil
+	}
+
+	err := runLifecycleTargets(lifecycleRun{
+		ctx:         ctx,
+		atmosConfig: &schema.AtmosConfiguration{},
+		info:        &schema.ConfigAndStacksInfo{},
+		verb:        "up",
+		targets: []member{
+			{Stack: "local", Composition: "storefront", ComponentType: cfg.ContainerComponentType, Component: "frontend"},
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+}
