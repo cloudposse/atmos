@@ -87,6 +87,7 @@ func TestNormalizeSummary(t *testing.T) {
 	assert.Equal(t, Summary{}, normalizeSummary((*Summary)(nil)))
 	assert.Equal(t, Summary{}, normalizeSummary("not-summary"))
 
+	lifecycle := map[string]any{"operation": "install"}
 	got := normalizeSummary(map[string]any{
 		"component":      "app",
 		"stack":          "dev",
@@ -100,7 +101,7 @@ func TestNormalizeSummary(t *testing.T) {
 		"manifest_bytes": float64(123),
 		"message":        42,
 		"diff":           "diff text",
-		"lifecycle":      map[string]any{"operation": "install"},
+		"lifecycle":      lifecycle,
 	})
 	assert.Equal(t, "app", got.Component)
 	assert.Equal(t, "dev", got.Stack)
@@ -115,6 +116,11 @@ func TestNormalizeSummary(t *testing.T) {
 	assert.Equal(t, "42", got.Message)
 	assert.Equal(t, "diff text", got.Diff)
 	assert.Equal(t, map[string]any{"operation": "install"}, got.Lifecycle)
+
+	lifecycle["operation"] = "upgrade"
+	assert.Equal(t, "install", got.Lifecycle["operation"])
+	got.Lifecycle["timeout"] = "30m0s"
+	assert.NotContains(t, lifecycle, "timeout")
 }
 
 func TestPluginBuildTemplateContextFallbacksAndErrors(t *testing.T) {
