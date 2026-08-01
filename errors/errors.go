@@ -1533,6 +1533,8 @@ var (
 	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")
 	ErrHelmWaitForJobsRequiresWait   = errors.New("helm wait_for_jobs requires watcher or legacy wait strategy")
 	ErrHelmLifecycleExternalTarget   = errors.New("helm release lifecycle flags require a Kubernetes target")
+	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
+	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

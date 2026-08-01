@@ -72,7 +72,7 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 		manifest, installErr := installRelease(ctx, actx, spec, dryRun)
 		return releaseActionResult{Manifest: manifest, Operation: "install"}, installErr
 	} else if historyErr != nil {
-		return releaseActionResult{}, fmt.Errorf("failed to inspect Helm release %q history: %w", spec.ReleaseName, historyErr)
+		return releaseActionResult{}, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr)
 	}
 	manifest, upgradeErr := upgradeRelease(ctx, actx, spec, dryRun)
 	return releaseActionResult{Manifest: manifest, Operation: "upgrade"}, upgradeErr
@@ -183,7 +183,7 @@ func deleteRelease(spec *chartSpec, dryRun bool) error {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
 		}
-		return fmt.Errorf("failed to uninstall Helm release %q: %w", spec.ReleaseName, err)
+		return fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
 	}
 	return nil
 }
