@@ -98,6 +98,12 @@ func TestResolveReleaseLifecycle_DerivedWaitStrategy(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, kube.StatusWatcherStrategy, resolution.Policy.WaitStrategy)
+	require.True(t, hasLifecycleWarning(resolution.Warnings, warningWaitDerived))
+	assert.Contains(t, resolution.Warnings, lifecycleWarning{
+		Code:    warningWaitDerived,
+		Field:   cfg.HelmWaitStrategySectionName,
+		Message: "helm wait strategy was derived as 'watcher' because 'rollback_on_failure' is enabled",
+	})
 }
 
 func TestApplyLifecycleFlagOverrides(t *testing.T) {
