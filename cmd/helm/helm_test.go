@@ -310,11 +310,14 @@ func TestRunOperationBuildsExecutionContext(t *testing.T) {
 
 func TestRunOperationBuildsApplyDryRunExecutionContext(t *testing.T) {
 	provider := &capturingHelmProvider{}
-	original, hadOriginal := component.GetProvider(cfg.HelmComponentType)
+	originalProviders := component.ListProviders()
 	require.NoError(t, component.Register(provider))
 	t.Cleanup(func() {
-		if hadOriginal {
-			require.NoError(t, component.Register(original))
+		component.Reset()
+		for _, providers := range originalProviders {
+			for _, original := range providers {
+				require.NoError(t, component.Register(original))
+			}
 		}
 	})
 
