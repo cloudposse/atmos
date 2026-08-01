@@ -90,7 +90,7 @@ repos:
         stages: [pre-commit]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: check-yaml
-        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tests/fixtures/)
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tests/fixtures/|examples/helm/components/helm/demo/templates/)
         args: [--allow-multiple-documents, --unsafe]
       - id: check-added-large-files
         stages: [pre-commit]
