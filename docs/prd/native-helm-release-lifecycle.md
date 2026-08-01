@@ -387,7 +387,7 @@ Required propagation includes:
 - Delete wait and hook phases through Helm uninstall wait options. Helm 4 does not accept a context for the uninstall request itself, so cancellation is also checked before and after the action and the operation remains bounded by the configured timeout.
 - External delivery and rendering call sites, without changing their timeout configuration in this PRD.
 
-Scheduler cancellation or an operating-system signal must prevent new dependent nodes from starting and cancel the active Helm action. Atmos must not replace a cancelled context with a fresh background context for rollback. Helm's built-in rollback-on-failure behavior remains responsible for its documented interrupted-release semantics.
+Scheduler cancellation or an operating-system signal must prevent new dependent nodes from starting and stop the caller from waiting for the active Helm action. Because Helm install and upgrade actions may continue work after `RunWithContext` returns, this PRD does not promise that caller cancellation terminates already-running SDK work. Atmos must prevent a new Atmos-managed rollback attempt from starting with a fresh background context after cancellation. Any stronger guarantee requires Atmos to own the action worker goroutine and wait for it to terminate before returning. Helm's built-in rollback-on-failure behavior remains responsible for its documented interrupted-release semantics.
 
 ## Dry-Run Semantics
 
@@ -479,7 +479,7 @@ During the timeout migration release, schema generation and stack processing MUS
 | `DisableChartHooks` | `DisableHooks` | `DisableHooks` | `DisableHooks` |
 | `SkipCRDs` | Set | — | — |
 
-Dry-run is execution intent, not release lifecycle policy, and therefore remains outside `releaseLifecycle`. The command-to-provider path MUST propagate it independently to `Install.DryRun` or `Upgrade.DryRun` for apply/deploy and `Uninstall.DryRun` for delete.
+Dry-run is execution intent, not release lifecycle policy, and therefore remains outside `releaseLifecycle`. The command-to-provider path MUST propagate it independently to `Install.DryRunStrategy` or `Upgrade.DryRunStrategy` for apply/deploy and `Uninstall.DryRun` for delete. Apply and deploy use Helm's server-side dry-run strategy so validation reaches the cluster without persisting a release.
 
 | Atmos operation | Provider operation | Helm timeout and recovery behavior |
 | --- | --- | --- |
