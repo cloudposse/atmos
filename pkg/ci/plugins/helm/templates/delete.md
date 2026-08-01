@@ -21,6 +21,7 @@
 | Deleted | `false` |
 | Target kind | `{{ index . "target_kind" }}` |
 | Reason | `external_target` |
+
 {{- else }}
 
 | Field | Value |
@@ -29,7 +30,9 @@
 | Wait strategy | `{{ index . "wait_strategy" }}` |
 | Timeout | `{{ index . "timeout" }}` |
 | Chart hooks enabled | `{{ index . "chart_hooks_enabled" }}` |
+
 {{- end }}
+
 {{- end }}
 
 To reproduce locally:
