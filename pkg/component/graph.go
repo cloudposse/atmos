@@ -116,6 +116,22 @@ func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *de
 	nodeInfo.SubCommand = opts.SubCommand
 	nodeInfo.All = false
 	nodeInfo.Affected = false
+	nodeInfo.Query = ""
+	nodeInfo.Components = nil
+	nodeInfo.Tags = nil
+	nodeInfo.Labels = nil
+
+	// Selection flags belong to the outer graph dispatch. Passing them to a node
+	// can make providers treat the node as another bulk invocation and recurse.
+	nodeFlags := make(map[string]any, len(opts.Flags))
+	for key, value := range opts.Flags {
+		switch key {
+		case "all", "affected", "components", "query", "tags", "labels", "include-dependents":
+			continue
+		default:
+			nodeFlags[key] = value
+		}
+	}
 
 	if err := opts.Provider.Execute(&ExecutionContext{
 		Context:             ctx,
@@ -127,7 +143,7 @@ func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *de
 		SubCommand:          opts.SubCommand,
 		ComponentConfig:     node.Metadata,
 		ConfigAndStacksInfo: nodeInfo,
-		Flags:               opts.Flags,
+		Flags:               nodeFlags,
 	}); err != nil {
 		return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrComponentExecutionFailed, node.Component, node.Stack, err)
 	}
