@@ -68,6 +68,12 @@ commands:
       - command: >-
           if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo 2>&1); then echo "dry-run unexpectedly created deployment/demo"; exit 1;
           else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify deployment/demo absence: $output"; exit 1;; esac; fi
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo 2>&1); then echo "dry-run unexpectedly created service/demo"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify service/demo absence: $output"; exit 1;; esac; fi
+      - command: >-
+          releases=$(atmos emulator exec kubernetes -s dev -- kubectl get secrets --all-namespaces -l owner=helm,name=demo -o name);
+          if [ -n "$releases" ]; then echo "dry-run unexpectedly persisted Helm release records: $releases"; exit 1; fi
       - command: atmos helm apply demo -s dev --identity local-k3s
         retry:
           max_attempts: 2
@@ -135,6 +141,10 @@ commands:
       # Delete dry-run must leave the deployed release and resources intact.
       - atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+      - command: >-
+          releases=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get secrets -l owner=helm,name=demo -o name);
+          if [ -z "$releases" ]; then echo "delete dry-run removed the Helm release record"; exit 1; fi
       - atmos helm delete demo -s dev --identity local-k3s
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
       - atmos helm delete demo-jobs -s dev --identity local-k3s
