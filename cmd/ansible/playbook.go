@@ -60,6 +60,7 @@ func runPlaybook(cmd *cobra.Command, args []string) error {
 
 	// Build execution context for the component provider.
 	ctx := &component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       "ansible",
 		Component:           info.ComponentFromArg,
 		Stack:               info.Stack,

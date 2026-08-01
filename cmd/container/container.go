@@ -176,6 +176,7 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	info := initConfigAndStacksInfo(cmd, subCommand, args)
 	provider := component.MustGetProvider(cfg.ContainerComponentType)
 	return provider.Execute(&component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       cfg.ContainerComponentType,
 		Component:           info.ComponentFromArg,
 		Stack:               info.Stack,

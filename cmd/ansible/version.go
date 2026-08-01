@@ -47,6 +47,7 @@ func runVersion(cmd *cobra.Command, _ []string) error {
 
 	// Build execution context for the component provider.
 	ctx := &component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       "ansible",
 		Command:             "ansible",
 		SubCommand:          "version",

@@ -48,6 +48,7 @@ type status struct {
 }
 
 type lifecycleRun struct {
+	ctx         context.Context
 	atmosConfig *schema.AtmosConfiguration
 	info        *schema.ConfigAndStacksInfo
 	verb        string
@@ -153,6 +154,7 @@ func ExecuteLifecycle(ctx context.Context, info *schema.ConfigAndStacksInfo, ver
 	}
 
 	return runLifecycleTargets(lifecycleRun{
+		ctx:         ctx,
 		atmosConfig: &atmosConfig,
 		info:        info,
 		verb:        verb,
@@ -446,6 +448,7 @@ func runLifecycleTargets(run lifecycleRun) error {
 		itemInfo.All = false
 
 		err := executeProvider(provider, &component.ExecutionContext{
+			Context:             run.ctx,
 			AtmosConfig:         run.atmosConfig,
 			ComponentType:       target.ComponentType,
 			Component:           target.Component,

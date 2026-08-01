@@ -195,6 +195,7 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	info := initConfigAndStacksInfo(cmd, subCommand, args)
 	provider := component.MustGetProvider(cfg.EmulatorComponentType)
 	return provider.Execute(&component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       cfg.EmulatorComponentType,
 		Component:           info.ComponentFromArg,
 		Stack:               info.Stack,
