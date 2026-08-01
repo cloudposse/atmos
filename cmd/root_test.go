@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,24 +24,62 @@ func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
 		iolib.Reset()
 		viper.Reset()
 	})
-	iolib.Reset()
-	viper.Reset()
-	viper.Set("mask", true)
-	require.NoError(t, iolib.Initialize())
-	require.True(t, iolib.MaskingEnabled(), "masking should start enabled")
 
-	root := &cobra.Command{Use: "root"}
-	root.PersistentFlags().Bool("mask", true, "")
-	group := &cobra.Command{Use: "group"}
-	group.PersistentFlags().Bool("mask", true, "")
-	leaf := &cobra.Command{Use: "leaf"}
-	root.AddCommand(group)
-	group.AddCommand(leaf)
-	require.NoError(t, group.PersistentFlags().Set("mask", "false"))
+	boolPtr := func(value bool) *bool { return &value }
+	tests := []struct {
+		name       string
+		configured bool
+		root       *bool
+		group      *bool
+		leaf       *bool
+		want       bool
+	}{
+		{
+			name:       "changed leaf wins over changed group",
+			configured: true,
+			group:      boolPtr(false),
+			leaf:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "changed root wins without child override",
+			configured: false,
+			root:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "no local override preserves reconciled viper state",
+			configured: false,
+			want:       false,
+		},
+	}
 
-	reconcileMaskingForCommand(leaf)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			iolib.Reset()
+			viper.Reset()
+			viper.Set("mask", tt.configured)
+			require.NoError(t, iolib.Initialize())
 
-	assert.False(t, iolib.MaskingEnabled())
+			root := &cobra.Command{Use: "root"}
+			root.PersistentFlags().Bool("mask", true, "")
+			group := &cobra.Command{Use: "group"}
+			group.PersistentFlags().Bool("mask", true, "")
+			leaf := &cobra.Command{Use: "leaf"}
+			leaf.PersistentFlags().Bool("mask", true, "")
+			root.AddCommand(group)
+			group.AddCommand(leaf)
+
+			for command, value := range map[*cobra.Command]*bool{root: tt.root, group: tt.group, leaf: tt.leaf} {
+				if value != nil {
+					require.NoError(t, command.PersistentFlags().Set("mask", strconv.FormatBool(*value)))
+				}
+			}
+
+			reconcileMaskingForCommand(leaf)
+			assert.Equal(t, tt.want, iolib.MaskingEnabled())
+		})
+	}
 }
 
 func TestNoColorLog(t *testing.T) {

@@ -136,7 +136,7 @@ func (a *AnsibleComponentProvider) Execute(ctx *component.ExecutionContext) erro
 	// Route to the appropriate executor based on subcommand.
 	switch ctx.SubCommand {
 	case "version":
-		return ExecuteVersion(&ctx.ConfigAndStacksInfo)
+		return ExecuteVersion(ctx.GoContext(), &ctx.ConfigAndStacksInfo)
 	case "playbook":
 		return ExecutePlaybook(&ctx.ConfigAndStacksInfo, flags)
 	default:
