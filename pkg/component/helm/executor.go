@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -167,7 +168,7 @@ func runWithHooks(
 			return err
 		}
 		for _, warning := range spec.Lifecycle.Warnings {
-			log.Warn(warning.Message, "field", warning.Field, "code", warning.Code)
+			ui.Warningf("%s (field: %s, code: %s)", warning.Message, warning.Field, warning.Code)
 		}
 	}
 	if operation != OperationDelete {

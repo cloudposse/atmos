@@ -138,6 +138,16 @@
     }
   ],
   "definitions": {
+    "helm_wait_strategy": {
+      "title": "helm_wait_strategy",
+      "description": "Helm 4 release wait strategy",
+      "type": "string",
+      "enum": [
+        "watcher",
+        "hookOnly",
+        "legacy"
+      ]
+    },
     "helm_repository": {
       "title": "helm_repository",
       "description": "Helm chart repository",
@@ -853,12 +863,7 @@
               "x-atmos-replacement": "rollback_on_failure"
             },
             "wait_strategy": {
-              "type": "string",
-              "enum": [
-                "watcher",
-                "hookOnly",
-                "legacy"
-              ]
+              "$ref": "#/definitions/helm_wait_strategy"
             },
             "wait": {
               "type": "boolean"
@@ -996,12 +1001,7 @@
               "x-atmos-replacement": "rollback_on_failure"
             },
             "wait_strategy": {
-              "type": "string",
-              "enum": [
-                "watcher",
-                "hookOnly",
-                "legacy"
-              ]
+              "$ref": "#/definitions/helm_wait_strategy"
             },
             "wait": {
               "type": "boolean"
