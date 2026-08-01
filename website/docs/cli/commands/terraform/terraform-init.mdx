@@ -241,6 +241,28 @@ Atmos will:
         atmos terraform init --all -s dev --max-concurrency 4 --log-order grouped
         ```
     </dd>
+
+    <dt>`--include-dependencies` <em>(optional)</em></dt>
+    <dd>
+        With a multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`), also initialize everything the selected components depend on (their prerequisites), in dependency order — even prerequisites in other stacks. Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds it to direct dependencies. Pass the depth with `=`; a space-separated value is not bound to the flag.
+
+        ```shell
+        atmos terraform init --components=eks/apps -s dev --include-dependencies
+        ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENCIES`
+    </dd>
+
+    <dt>`--include-dependents` <em>(optional)</em></dt>
+    <dd>
+        With a multi-component selection, also initialize everything that depends on the selected components, in dependency order. Accepts an optional depth (for example, `--include-dependents=2` for two levels).
+
+        ```shell
+        atmos terraform init --components=vpc -s dev --include-dependents
+        ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENTS`
+    </dd>
 </dl>
 
 ## Native Terraform Flags
