@@ -3,6 +3,7 @@ package datafetcher
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,8 +13,8 @@ import (
 
 func TestHelmLifecycleManifestSchemas(t *testing.T) {
 	schemaPaths := []string{
-		"schema/atmos/manifest/1.0.json",
-		"schema/stacks/stack-config/1.0.json",
+		filepath.Join("schema", "atmos", "manifest", "1.0.json"),
+		filepath.Join("schema", "stacks", "stack-config", "1.0.json"),
 	}
 
 	valid := map[string]any{
@@ -46,16 +47,19 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 
 	invalid := []struct {
 		name     string
+		field    string
 		manifest map[string]any
 	}{
 		{
-			name: "unknown wait strategy",
+			name:  "unknown wait strategy",
+			field: "helm.wait_strategy",
 			manifest: map[string]any{
 				"helm": map[string]any{"wait_strategy": "unknown"},
 			},
 		},
 		{
-			name: "negative history",
+			name:  "negative history",
+			field: "components.helm.demo-release.max_history",
 			manifest: map[string]any{
 				"components": map[string]any{
 					"helm": map[string]any{
@@ -65,7 +69,8 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 			},
 		},
 		{
-			name: "numeric timeout",
+			name:  "numeric timeout",
+			field: "components.helm.demo-release.timeout",
 			manifest: map[string]any{
 				"components": map[string]any{
 					"helm": map[string]any{
@@ -75,9 +80,17 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 			},
 		},
 		{
-			name: "non-boolean rollback",
+			name:  "non-boolean rollback",
+			field: "helm.rollback_on_failure",
 			manifest: map[string]any{
 				"helm": map[string]any{"rollback_on_failure": "true"},
+			},
+		},
+		{
+			name:  "helm values rejected by shared overrides",
+			field: "overrides",
+			manifest: map[string]any{
+				"overrides": map[string]any{"values": map[string]any{"invalid": true}},
 			},
 		},
 	}
@@ -94,6 +107,11 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					result := validateHelmManifest(t, schemaData, tt.manifest)
 					assert.False(t, result.Valid(), "invalid native Helm lifecycle manifest was accepted")
+					fields := make([]string, 0, len(result.Errors()))
+					for _, validationErr := range result.Errors() {
+						fields = append(fields, validationErr.Field())
+					}
+					assert.Contains(t, fields, tt.field, "rejection did not cite the expected field: %v", result.Errors())
 				})
 			}
 		})
