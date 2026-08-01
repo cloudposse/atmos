@@ -1,0 +1,6 @@
+dependencies:
+- name: helm-test-library
+  repository: file://../helm-test-library
+  version: 0.1.0
+digest: sha256:cf07c19b9e23d03dec7c67e6160c8d59a941059e48f9c47e86878cd29ce16098
+generated: "2026-08-01T15:03:42.45764+04:00"
