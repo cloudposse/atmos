@@ -116,6 +116,9 @@ func newInstallAction(spec *chartSpec) (*action.Install, *cli.EnvSettings, error
 // runInstall resolves the chart reference, loads the chart, runs the action, and
 // returns the rendered manifest string.
 func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSettings, spec *chartSpec) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	chartRef := resolveChartRef(client, spec)
 
 	chartPath, err := client.LocateChart(chartRef, settings)
@@ -123,7 +126,7 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
 	}
 
-	loaded, err := loadChartForAction(chartPath, settings, client.GetRegistryClient(), spec.DependencyUpdate)
+	loaded, err := loadChartForAction(ctx, chartPath, settings, client.GetRegistryClient(), spec.DependencyUpdate)
 	if err != nil {
 		return "", err
 	}
@@ -144,15 +147,19 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 // The Helm action package assumes its CLI caller performed this check; without it,
 // a missing library chart fails later with an unrelated template-definition error.
 func loadChart(chartPath string) (helmchart.Charter, error) {
-	return loadChartForAction(chartPath, nil, nil, false)
+	return loadChartForAction(context.Background(), chartPath, nil, nil, false)
 }
 
 func loadChartForAction(
+	ctx context.Context,
 	chartPath string,
 	settings *cli.EnvSettings,
 	registryClient *registry.Client,
 	dependencyUpdate bool,
 ) (helmchart.Charter, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	loaded, err := loader.Load(chartPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
@@ -179,6 +186,9 @@ func loadChartForAction(
 				ContentCache:     settings.ContentCache,
 				RegistryClient:   registryClient,
 				Debug:            settings.Debug,
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
 			}
 			if updateErr := manager.Update(); updateErr != nil {
 				return nil, fmt.Errorf("%w: failed to update dependencies for Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, updateErr)

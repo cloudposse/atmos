@@ -288,8 +288,21 @@ func TestLoadChartUpdatesMissingDependenciesWhenRequested(t *testing.T) {
 	settings.RepositoryCache = filepath.Join(testdataRoot, "repository")
 	settings.ContentCache = filepath.Join(testdataRoot, "content")
 
-	loaded, err := loadChartForAction(chartPath, settings, nil, true)
+	loaded, err := loadChartForAction(context.Background(), chartPath, settings, nil, true)
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 	assert.FileExists(t, filepath.Join(chartPath, "charts", "helm-test-library-0.1.0.tgz"))
+}
+
+func TestLoadChartDoesNotUpdateDependenciesAfterCancellation(t *testing.T) {
+	testdataRoot := t.TempDir()
+	require.NoError(t, os.CopyFS(testdataRoot, os.DirFS("testdata")))
+	chartPath := filepath.Join(testdataRoot, "chart-missing-dependency")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := loadChartForAction(ctx, chartPath, newSettings(), nil, true)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NoFileExists(t, filepath.Join(chartPath, "charts", "helm-test-library-0.1.0.tgz"))
 }

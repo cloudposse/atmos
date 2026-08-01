@@ -113,6 +113,9 @@ func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 }
 
 func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	client := action.NewUpgrade(actx.cfg)
 	client.SetRegistryClient(actx.cfg.RegistryClient)
 	client.Namespace = spec.Namespace
@@ -127,7 +130,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	if err != nil {
 		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
 	}
-	loaded, err := loadChartForAction(chartPath, actx.settings, actx.cfg.RegistryClient, spec.DependencyUpdate)
+	loaded, err := loadChartForAction(ctx, chartPath, actx.settings, actx.cfg.RegistryClient, spec.DependencyUpdate)
 	if err != nil {
 		return "", err
 	}
