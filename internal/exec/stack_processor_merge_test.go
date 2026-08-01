@@ -530,14 +530,19 @@ func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
 	}
 	result := minimalComponentResult()
 	result.BaseComponentHelm = map[string]any{
+		cfg.ValuesSectionName:            map[string]any{"source": "base"},
 		cfg.HelmAtomicSectionName:        true,
 		cfg.HelmTimeoutSectionName:       "20m",
 		cfg.HelmCleanupOnFailSectionName: true,
 	}
 	result.ComponentHelm = map[string]any{
+		cfg.ValuesSectionName:                map[string]any{"source": "component"},
 		cfg.HelmRollbackOnFailureSectionName: false,
 		cfg.HelmTimeoutSectionName:           "30m",
 		cfg.HelmCleanupOnFailSectionName:     false,
+	}
+	result.ComponentOverridesHelm = map[string]any{
+		cfg.ValuesSectionName: map[string]any{"source": "override"},
 	}
 
 	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
@@ -549,6 +554,7 @@ func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
 	assert.Equal(t, "30m", component[cfg.HelmTimeoutSectionName])
 	assert.Equal(t, 10, component[cfg.HelmMaxHistorySectionName])
 	assert.Equal(t, false, component[cfg.HelmCleanupOnFailSectionName])
+	assert.Equal(t, map[string]any{"source": "override"}, component[cfg.ValuesSectionName])
 }
 
 func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
