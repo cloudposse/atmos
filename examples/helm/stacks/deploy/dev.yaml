@@ -119,6 +119,9 @@ components:
     demo-upgrade-fail:
       metadata:
         component: demo
+      dependencies:
+        components:
+          - name: demo
       chart: "."
       # Intentionally targets the already-installed demo release.
       name: demo
