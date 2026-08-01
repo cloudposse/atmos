@@ -17,6 +17,7 @@ Run the local chart workflow end to end:
 
 ```shell
 atmos validate stacks
+atmos toolchain exec helm -- dependency build --skip-refresh components/helm/demo
 atmos helm template demo -s dev
 atmos emulator up kubernetes -s dev
 atmos helm diff demo -s dev --identity local-k3s
@@ -77,7 +78,9 @@ The stack sets `wait_strategy: watcher`, `timeout: 2m`, and
 covers non-mutating apply and delete dry runs, ordinary Job waiting, chart-hook
 suppression, CRD skipping, weighted hook ordering, retained hook resources,
 install and upgrade rollback, failed-upgrade cleanup, timeout handling, and
-dependency-gated Helm releases. The intentionally slow resources are observed
+dependency-gated Helm releases. Rendering also verifies a built `file://` library
+dependency, hook manifests, and a Helm `tpl` expression preserved in stack values.
+The intentionally slow resources are observed
 with bounded Kubernetes readiness checks rather than fixed-delay assertions.
 
 ## Helm Repositories
