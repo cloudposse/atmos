@@ -51,6 +51,21 @@ type ScopeRequest struct {
 	RightDelim string
 }
 
+// selector builds the seed selector for this request. Both the lightweight
+// seed pass and the resolved-graph root refinement must use the same filters —
+// constructing them in one place keeps the two passes identical by
+// construction when a selector field is added.
+func (r *ScopeRequest) selector() *Selector {
+	return &Selector{
+		Components: r.Components,
+		Stack:      r.Stack,
+		Tags:       r.Tags,
+		Labels:     r.Labels,
+		LeftDelim:  r.LeftDelim,
+		RightDelim: r.RightDelim,
+	}
+}
+
 // ScopeResult is the outcome of a scoped closure resolution.
 type ScopeResult struct {
 	// Stacks is the merged union of the resolved per-stack describe passes —
@@ -169,14 +184,7 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 		return &ScopeResult{Stacks: lightweightStacks, Closure: graph}, nil
 	}
 
-	roots := Roots(graph, &Selector{
-		Components: req.Components,
-		Stack:      req.Stack,
-		Tags:       req.Tags,
-		Labels:     req.Labels,
-		LeftDelim:  req.LeftDelim,
-		RightDelim: req.RightDelim,
-	})
+	roots := Roots(graph, req.selector())
 	closure := ReachableClosure(graph, roots, req.Direction, req.Depths)
 	if closure.Size() == 0 {
 		return &ScopeResult{Stacks: map[string]any{}, Closure: closure}, nil
@@ -261,14 +269,7 @@ func refineRoots(resolvedGraph *dependency.Graph, roots []string, req *ScopeRequ
 	if resolvedGraph == nil {
 		return roots
 	}
-	sel := &Selector{
-		Components: req.Components,
-		Stack:      req.Stack,
-		Tags:       req.Tags,
-		Labels:     req.Labels,
-		LeftDelim:  req.LeftDelim,
-		RightDelim: req.RightDelim,
-	}
+	sel := req.selector()
 	refined := make([]string, 0, len(roots))
 	for _, id := range roots {
 		node, ok := resolvedGraph.GetNode(id)
