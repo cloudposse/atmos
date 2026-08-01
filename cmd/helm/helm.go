@@ -317,7 +317,7 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 		}
 	}
 	stringFlags := map[string]string{
-		"wait":    cfg.HelmWaitStrategySectionName,
+		flagWait:  cfg.HelmWaitStrategySectionName,
 		"timeout": cfg.HelmTimeoutSectionName,
 	}
 	for flagName, fieldName := range stringFlags {

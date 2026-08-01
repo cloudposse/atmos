@@ -1080,7 +1080,7 @@
               }
             },
             "overrides": {
-              "$ref": "#/definitions/overrides"
+              "$ref": "#/definitions/helm_overrides"
             },
             "generate": {
               "$ref": "#/definitions/generate"
@@ -1237,7 +1237,7 @@
               "$ref": "#/definitions/plugins"
             },
             "overrides": {
-              "$ref": "#/definitions/overrides"
+              "$ref": "#/definitions/helm_overrides"
             },
             "rollback_on_failure": {
               "type": "boolean"
@@ -2527,9 +2527,6 @@
             "vars": {
               "$ref": "#/definitions/vars"
             },
-            "values": {
-              "type": "object"
-            },
             "env": {
               "$ref": "#/definitions/env"
             },
@@ -2538,6 +2535,26 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_overrides": {
+      "title": "helm_overrides",
+      "description": "Native Helm overrides section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "values": {
+              "type": "object"
             }
           },
           "required": []
