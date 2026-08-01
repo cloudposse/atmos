@@ -73,7 +73,46 @@ included in affected runs.
 
   <dt>`provision`</dt>
   <dd>Delivery targets for <code>apply</code>/<code>deploy</code> — the cluster (default) or an external target such as a Git deployment repository.</dd>
+
+  <dt>`secrets`</dt>
+  <dd>Component-scoped secret declarations and providers. Helm components support the same secret processing as other component types.</dd>
 </dl>
+
+## Type-Level Defaults and Overrides
+
+The top-level `helm` section in a stack manifest can provide defaults for every
+native Helm component in that stack. Use `helm.values` for shared chart values;
+component and inherited `values` are merged over those defaults.
+
+Use `helm.overrides` when a stack must enforce values after component-level
+configuration is resolved. Type-level overrides are deep-merged over each
+component's `overrides`, including components supplied by imported manifests.
+The block accepts `values` plus the common component override sections such as
+`vars`, `env`, `settings`, `auth`, `secrets`, and `retry`.
+
+```yaml
+helm:
+  values:
+    cluster: shared
+  overrides:
+    values:
+      environment: production
+
+components:
+  helm:
+    monitoring:
+      chart: ./charts/monitoring
+      values:
+        replicaCount: 2
+      overrides:
+        values:
+          image:
+            tag: stable
+```
+
+In this example, every Helm component receives `cluster: shared`, while the
+stack-level override enforces `environment: production` after component
+inheritance and component overrides are merged.
 
 ## Release Lifecycle
 
