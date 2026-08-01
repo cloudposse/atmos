@@ -18,6 +18,13 @@ type AtmosSectionMapType = map[string]any
 // DescribeSettings contains settings for the describe command output.
 type DescribeSettings struct {
 	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
+	// EagerEvaluation disables the early-skip scope optimization for `--tags`/`--labels`
+	// bulk Terraform selection and `list dependencies`: when true, every stack is fully
+	// evaluated (templates, YAML functions, auth) before filtering, matching pre-optimization
+	// behavior. Use as a rollback if a repo has templated metadata.tags/metadata.labels that
+	// the lightweight scope pass cannot safely resolve. See
+	// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
+	EagerEvaluation *bool `yaml:"eager_evaluation,omitempty" json:"eager_evaluation,omitempty" mapstructure:"eager_evaluation"`
 }
 
 // DescribeAffected contains configuration for the `atmos describe affected` command.
@@ -1633,14 +1640,22 @@ type ConfigAndStacksInfo struct {
 	ProcessFunctions          bool
 	// UseMocks resolves Terraform state/output YAML functions from the referenced
 	// component's literal `mocks` map instead of remote Terraform state.
-	UseMocks                   bool
-	Skip                       []string
-	CliArgs                    []string
-	Affected                   bool
-	All                        bool
-	Components                 []string
-	Tags                       []string
-	Labels                     map[string]string
+	UseMocks   bool
+	Skip       []string
+	CliArgs    []string
+	Affected   bool
+	All        bool
+	Components []string
+	Tags       []string
+	Labels     map[string]string
+	// IncludeDependencies expands a multi-component selection with everything
+	// the selected components depend on: 0 = off, -1 = unlimited depth,
+	// N>0 = N dependency levels.
+	IncludeDependencies int
+	// IncludeDependents expands a multi-component selection with everything
+	// that depends on the selected components: 0 = off, -1 = unlimited depth,
+	// N>0 = N dependent levels.
+	IncludeDependents          int
 	MaxConcurrency             int
 	TerraformFailureMode       string
 	FailFast                   bool
@@ -1903,9 +1918,9 @@ type Settings struct {
 
 // ConfigSourcesStackDependency defines schema for sources of config sections.
 type ConfigSourcesStackDependency struct {
+	DependencyType   string `yaml:"dependency_type" json:"dependency_type" mapstructure:"dependency_type"`
 	StackFile        string `yaml:"stack_file" json:"stack_file" mapstructure:"stack_file"`
 	StackFileSection string `yaml:"stack_file_section" json:"stack_file_section" mapstructure:"stack_file_section"`
-	DependencyType   string `yaml:"dependency_type" json:"dependency_type" mapstructure:"dependency_type"`
 	VariableValue    any    `yaml:"variable_value" json:"variable_value" mapstructure:"variable_value"`
 }
 
