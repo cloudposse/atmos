@@ -44,8 +44,8 @@ type ComponentProvider interface {
 	GetAvailableCommands() []string
 }
 
-// ExecutionContext provides all necessary context for component execution.
-// Construct values with keyed fields; new execution metadata may be added over time.
+// ExecutionContext contains component execution metadata and the caller context.
+// Construct values with keyed fields because new execution metadata may be added over time.
 type ExecutionContext struct {
 	// Context carries caller cancellation and deadlines into component execution.
 	// Use GoContext so legacy callers that omit it retain background behavior.

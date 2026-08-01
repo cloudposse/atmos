@@ -38,6 +38,8 @@ type GraphExecutionOptions struct {
 	Selection     *GraphSelection
 }
 
+// ExecuteGraph runs selected components in dependency order and stops before
+// starting another component when the caller context is canceled.
 func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 	defer perf.Track(nil, "component.ExecuteGraph")()
 

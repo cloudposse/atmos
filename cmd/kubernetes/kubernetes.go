@@ -103,7 +103,7 @@ func newOperationCommand(name string, short string) *cobra.Command {
 		Use:   name + " [component]",
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parsed, err := parser.Parse(context.Background(), args)
+			parsed, err := parser.Parse(cmd.Context(), args)
 			if err != nil {
 				return err
 			}
