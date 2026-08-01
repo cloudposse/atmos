@@ -568,7 +568,10 @@ jobs:
           - demo-helmfile
           - helm
 
-    timeout-minutes: 60
+    # The macOS matrix may spend up to 45 minutes starting Colima, followed by
+    # two bounded 25-minute test attempts. Keep the job ceiling above those
+    # nested budgets so the second retry can finish and emit diagnostics.
+    timeout-minutes: 105
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
