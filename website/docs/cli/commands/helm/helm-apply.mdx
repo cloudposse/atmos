@@ -70,6 +70,9 @@ atmos helm apply --affected --labels cost-center=platform
   <dt>`--dependency-update` <em>(optional)</em></dt>
   <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
 
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Preview the install or upgrade without persisting release state or creating Kubernetes resources.</dd>
+
   <dt>`--rollback-on-failure` <em>(optional)</em></dt>
   <dd>Uninstall a failed first install or roll a failed upgrade back. Enabling it promotes the default wait strategy to `watcher`. The deprecated alias is `--atomic`.</dd>
 
