@@ -647,19 +647,19 @@ jobs:
           }
 
           cleanup_k3s() {
-            atmos emulator down kubernetes -s dev || true
-            docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
+            run_with_timeout 60 atmos emulator down kubernetes -s dev || true
+            run_with_timeout 30 docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
           }
 
           diagnose_k3s() {
-            if ! docker inspect atmos-dev-emulator-kubernetes >/dev/null 2>&1; then
+            if ! run_with_timeout 15 docker inspect atmos-dev-emulator-kubernetes >/dev/null 2>&1; then
               return
             fi
 
             echo "::group::k3s workload diagnostics"
-            docker exec atmos-dev-emulator-kubernetes kubectl get pods,jobs,deployments -A -o wide || true
-            docker exec atmos-dev-emulator-kubernetes kubectl get events -A --sort-by=.lastTimestamp || true
-            docker exec atmos-dev-emulator-kubernetes ctr --namespace k8s.io images list || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get pods,jobs,deployments -A -o wide || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get events -A --sort-by=.lastTimestamp || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes ctr --namespace k8s.io images list || true
             echo "::endgroup::"
           }
 
