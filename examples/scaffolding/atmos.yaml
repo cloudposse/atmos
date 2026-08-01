@@ -16,9 +16,8 @@ components:
 stacks:
   # Path to stack files (relative to base_path).
   base_path: "stacks"
-  # Stack naming pattern.
-  name_pattern: "{environment}-{stage}"
-
+  # Stack naming template.
+  name_template: "{{.vars.environment}}-{{.vars.stage}}"
 # Template configuration.
 templates:
   settings:
