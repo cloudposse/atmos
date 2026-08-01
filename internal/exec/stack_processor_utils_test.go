@@ -1634,6 +1634,92 @@ func TestProcessYAMLConfigFileInvalidHelmfileOverridesSection(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestApplyHelmTypeOverrides(t *testing.T) {
+	stack := map[string]any{
+		cfg.HelmSectionName: map[string]any{
+			cfg.OverridesSectionName: map[string]any{
+				cfg.ValuesSectionName: map[string]any{
+					"cluster":      "shared",
+					"replicaCount": 3,
+				},
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.HelmComponentType: map[string]any{
+				"imported-app": map[string]any{
+					cfg.OverridesSectionName: map[string]any{
+						cfg.ValuesSectionName: map[string]any{
+							"image":        map[string]any{"tag": "stable"},
+							"replicaCount": 2,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack))
+	component := stack[cfg.ComponentsSectionName].(map[string]any)[cfg.HelmComponentType].(map[string]any)["imported-app"].(map[string]any)
+	overrides := component[cfg.OverridesSectionName].(map[string]any)
+	assert.Equal(t, map[string]any{
+		"cluster":      "shared",
+		"image":        map[string]any{"tag": "stable"},
+		"replicaCount": 3,
+	}, overrides[cfg.ValuesSectionName])
+}
+
+func TestProcessYAMLConfigFileAppliesHelmOverridesToImportedComponents(t *testing.T) {
+	stacksDir := t.TempDir()
+	basePath := filepath.Join(stacksDir, "base.yaml")
+	rootPath := filepath.Join(stacksDir, "root.yaml")
+	require.NoError(t, os.WriteFile(basePath, []byte(`
+components:
+  helm:
+    imported-app:
+      chart: charts/app
+      overrides:
+        values:
+          image:
+            tag: stable
+          replicaCount: 2
+`), 0o600))
+	require.NoError(t, os.WriteFile(rootPath, []byte(`
+import:
+  - base
+helm:
+  overrides:
+    values:
+      cluster: shared
+      replicaCount: 3
+`), 0o600))
+
+	result, err := ProcessYAMLConfigFile(
+		&schema.AtmosConfiguration{},
+		stacksDir,
+		rootPath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		false,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	require.NoError(t, err)
+
+	component := result.DeepMergedConfig[cfg.ComponentsSectionName].(map[string]any)[cfg.HelmComponentType].(map[string]any)["imported-app"].(map[string]any)
+	overrides := component[cfg.OverridesSectionName].(map[string]any)
+	assert.Equal(t, map[string]any{
+		"cluster":      "shared",
+		"image":        map[string]any{"tag": "stable"},
+		"replicaCount": 3,
+	}, overrides[cfg.ValuesSectionName])
+}
+
 func TestProcessYAMLConfigFileInvalidHelmfileUnknownOptionSchema(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
 	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/invalid-helmfile-unknown-option.yaml"

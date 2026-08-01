@@ -618,6 +618,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				opts.GlobalHelmLifecycle,
 				result.BaseComponentHelm,
 				result.ComponentHelm,
+				result.ComponentOverridesHelm,
 			},
 		)
 		if err != nil {

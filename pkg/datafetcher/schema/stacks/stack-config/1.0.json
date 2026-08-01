@@ -827,6 +827,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "values": {
+              "type": "object"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -850,6 +853,9 @@
               "items": {
                 "$ref": "#/definitions/helm_repository"
               }
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
             },
             "generate": {
               "$ref": "#/definitions/generate"
@@ -991,6 +997,9 @@
             },
             "plugins": {
               "$ref": "#/definitions/plugins"
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
             },
             "rollback_on_failure": {
               "type": "boolean"
@@ -1752,6 +1761,9 @@
             },
             "vars": {
               "$ref": "#/definitions/vars"
+            },
+            "values": {
+              "type": "object"
             },
             "env": {
               "$ref": "#/definitions/env"

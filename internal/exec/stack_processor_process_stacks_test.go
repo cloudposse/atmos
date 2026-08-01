@@ -969,6 +969,10 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 			config: map[string]any{
 				cfg.HelmSectionName: map[string]any{
 					cfg.CommandSectionName: "helm",
+					cfg.ValuesSectionName: map[string]any{
+						"image":        map[string]any{"tag": "stable"},
+						"replicaCount": 1,
+					},
 					cfg.VarsSectionName: map[string]any{
 						"namespace": "apps",
 					},
@@ -1030,7 +1034,10 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				app, ok := helm["app"].(map[string]any)
 				require.True(t, ok, "helm component 'app' must exist")
 				assert.Equal(t, "bitnami/nginx", app[cfg.ChartSectionName])
-				assert.Equal(t, map[string]any{"replicaCount": 2}, app[cfg.ValuesSectionName])
+				assert.Equal(t, map[string]any{
+					"image":        map[string]any{"tag": "stable"},
+					"replicaCount": 2,
+				}, app[cfg.ValuesSectionName])
 				assert.Equal(t, []any{"values.yaml"}, app[cfg.ValuesFilesSectionName])
 				assert.Equal(t, map[string]any{"output": map[string]any{"path": "rendered.yaml"}}, app[cfg.RenderSectionName])
 				assert.Equal(t, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}, app[cfg.RepositoriesSectionName])

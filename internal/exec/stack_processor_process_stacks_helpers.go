@@ -76,7 +76,9 @@ type ComponentProcessorResult struct {
 	ComponentPlugins any
 	ComponentRender  map[string]any
 	// ComponentHelm holds native Helm chart and release-lifecycle fields as a single bag.
-	ComponentHelm              map[string]any
+	ComponentHelm map[string]any
+	// ComponentOverridesHelm holds native Helm fields from the component overrides block.
+	ComponentOverridesHelm     map[string]any
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any

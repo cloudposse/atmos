@@ -1811,6 +1811,9 @@ func processYAMLConfigFileWithContextInternal(
 		// The error already contains context information from MergeWithContext
 		return nil, nil, err
 	}
+	if err := applyHelmTypeOverrides(atmosConfig, stackConfigsDeepMerged); err != nil {
+		return nil, nil, err
+	}
 
 	// NOTE: We don't store merge context here because ProcessYAMLConfigFileWithContext
 	// can be called from parallel goroutines in ProcessYAMLConfigFiles, which would create
@@ -1825,6 +1828,44 @@ func processYAMLConfigFileWithContextInternal(
 		HelmfileOverridesInline:   parentHelmfileOverridesInline,
 		HelmfileOverridesImports:  parentHelmfileOverridesImports,
 	}, mergeContext, nil
+}
+
+// applyHelmTypeOverrides applies the effective stack-level helm.overrides block
+// after imports have been deep-merged. Applying it here makes the override cover
+// native Helm components declared by the current manifest and by any import,
+// with the closest manifest's values taking precedence.
+func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig map[string]any) error {
+	helmSection, ok := stackConfig[cfg.HelmSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	helmOverrides, ok := helmSection[cfg.OverridesSectionName].(map[string]any)
+	if !ok || len(helmOverrides) == 0 {
+		return nil
+	}
+
+	components, ok := stackConfig[cfg.ComponentsSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	helmComponents, ok := components[cfg.HelmComponentType].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	for _, value := range helmComponents {
+		component, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		componentOverrides, _ := component[cfg.OverridesSectionName].(map[string]any)
+		merged, err := m.Merge(atmosConfig, []map[string]any{componentOverrides, helmOverrides})
+		if err != nil {
+			return err
+		}
+		component[cfg.OverridesSectionName] = merged
+	}
+	return nil
 }
 
 // emptyStackManifestProcessingResult returns a result with initialized empty
