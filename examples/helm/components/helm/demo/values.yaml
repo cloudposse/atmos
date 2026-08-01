@@ -11,6 +11,7 @@ service:
   port: 80
 deployment:
   readinessDelaySeconds: 0
+  readinessGate: false
 job:
   enabled: false
   sleepSeconds: 0
