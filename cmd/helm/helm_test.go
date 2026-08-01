@@ -37,12 +37,12 @@ func TestCommandProviderMetadata(t *testing.T) {
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
-	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
+	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels", "dependency-update"} {
 		assert.NotNil(t, templateCmd.Flag(name), "expected template flag %q", name)
 	}
 
 	applyCmd := newOperationCommand("apply", "Apply")
-	for _, name := range []string{"namespace", "target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds"} {
+	for _, name := range []string{"namespace", "target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds", "dependency-update"} {
 		assert.NotNil(t, applyCmd.Flag(name), "expected apply flag %q", name)
 	}
 	assert.Equal(t, "watcher", applyCmd.Flag("wait").NoOptDefVal)
@@ -61,6 +61,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 		assert.NotNil(t, deleteCmd.Flag(name), "expected delete flag %q", name)
 	}
 	assert.Nil(t, deleteCmd.Flag("on-failure"))
+	assert.Nil(t, deleteCmd.Flag("dependency-update"))
 
 	// diff/plan get the baseline-selection flags; other operations do not.
 	for _, opName := range []string{"diff", "plan"} {
@@ -68,6 +69,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 		for _, name := range []string{"against", "from-manifest", "context"} {
 			assert.NotNil(t, opCmd.Flag(name), "expected %q flag on %q", name, opName)
 		}
+		assert.NotNil(t, opCmd.Flag("dependency-update"))
 	}
 	assert.Nil(t, applyCmd.Flag("against"))
 	assert.Nil(t, templateCmd.Flag("from-manifest"))
@@ -95,6 +97,7 @@ func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 		"history-max":        "0",
 		"no-hooks":           "true",
 		"skip-crds":          "true",
+		"dependency-update":  "true",
 	})
 
 	actual := getOperationFlags(cmd)
@@ -107,6 +110,7 @@ func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 	assert.Equal(t, 0, actual[cfg.HelmHistoryMaxSectionName])
 	assert.Equal(t, false, actual[cfg.HelmChartHooksSectionName])
 	assert.Equal(t, "skip", actual[cfg.HelmCRDsSectionName])
+	assert.Equal(t, true, actual[cfg.HelmDependencyUpdateSectionName])
 
 	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
 	assert.NotContains(t, defaults, "namespace")
@@ -119,6 +123,7 @@ func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 		cfg.HelmHistoryMaxSectionName,
 		cfg.HelmChartHooksSectionName,
 		cfg.HelmCRDsSectionName,
+		cfg.HelmDependencyUpdateSectionName,
 	} {
 		assert.NotContains(t, defaults, key)
 	}

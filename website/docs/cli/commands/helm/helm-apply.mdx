@@ -55,6 +55,9 @@ atmos helm apply --affected --labels cost-center=platform
   <dt>`--target` <em>(optional)</em></dt>
   <dd>Provision target to deliver to (e.g. a Git deployment repository). Defaults to `provision.default`, otherwise the cluster.</dd>
 
+  <dt>`--dependency-update` <em>(optional)</em></dt>
+  <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
+
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Apply all Helm components in dependency order.</dd>
 

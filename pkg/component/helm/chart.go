@@ -13,6 +13,8 @@ import (
 	helmchart "helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/downloader"
+	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/registry"
 	release "helm.sh/helm/v4/pkg/release/v1"
 
@@ -38,6 +40,8 @@ type chartSpec struct {
 	Values map[string]any
 	// IncludeCRDs includes CRDs from the chart's crds/ directory in the output.
 	IncludeCRDs bool
+	// DependencyUpdate fetches missing dependencies before loading the chart.
+	DependencyUpdate bool
 	// Repositories lists declarative chart repositories for "repo/name" refs.
 	Repositories []chartRepository
 	// Release is the presence-aware policy tree before an action is selected.
@@ -119,7 +123,7 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
 	}
 
-	loaded, err := loadChart(chartPath)
+	loaded, err := loadChartForAction(chartPath, settings, client.GetRegistryClient(), spec.DependencyUpdate)
 	if err != nil {
 		return "", err
 	}
@@ -140,6 +144,15 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 // The Helm action package assumes its CLI caller performed this check; without it,
 // a missing library chart fails later with an unrelated template-definition error.
 func loadChart(chartPath string) (helmchart.Charter, error) {
+	return loadChartForAction(chartPath, nil, nil, false)
+}
+
+func loadChartForAction(
+	chartPath string,
+	settings *cli.EnvSettings,
+	registryClient *registry.Client,
+	dependencyUpdate bool,
+) (helmchart.Charter, error) {
 	loaded, err := loader.Load(chartPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
@@ -151,7 +164,29 @@ func loadChart(chartPath string) (helmchart.Charter, error) {
 	}
 	if dependencies := accessor.MetaDependencies(); len(dependencies) > 0 {
 		if err := action.CheckDependencies(loaded, dependencies); err != nil {
-			return nil, fmt.Errorf("%w: an error occurred while checking Helm chart dependencies; run 'helm dependency build %s' to fetch missing dependencies: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+			if !dependencyUpdate {
+				return nil, fmt.Errorf("%w: an error occurred while checking Helm chart dependencies; run 'helm dependency build %s' or pass '--dependency-update' to fetch missing dependencies: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+			}
+			if settings == nil {
+				return nil, fmt.Errorf("%w: cannot update dependencies for Helm chart %q without Helm environment settings", errUtils.ErrHelmRenderFailed, chartPath)
+			}
+			manager := &downloader.Manager{
+				Out:              io.Discard,
+				ChartPath:        chartPath,
+				Getters:          getter.All(settings),
+				RepositoryConfig: settings.RepositoryConfig,
+				RepositoryCache:  settings.RepositoryCache,
+				ContentCache:     settings.ContentCache,
+				RegistryClient:   registryClient,
+				Debug:            settings.Debug,
+			}
+			if updateErr := manager.Update(); updateErr != nil {
+				return nil, fmt.Errorf("%w: failed to update dependencies for Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, updateErr)
+			}
+			loaded, err = loader.Load(chartPath)
+			if err != nil {
+				return nil, fmt.Errorf("%w: failed to reload Helm chart %q after dependency update: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+			}
 		}
 	}
 

@@ -165,6 +165,9 @@ func runWithHooks(
 	if namespace, ok := ctx.Flags["namespace"].(string); ok && namespace != "" {
 		spec.Namespace = namespace
 	}
+	if dependencyUpdate, ok := ctx.Flags[cfg.HelmDependencyUpdateSectionName].(bool); ok {
+		spec.DependencyUpdate = dependencyUpdate
+	}
 	if operation == OperationApply {
 		spec.LifecycleFlags = ctx.Flags
 	}
@@ -520,13 +523,14 @@ func helmSummary(info *schema.ConfigAndStacksInfo, spec *chartSpec, flags map[st
 		target = value
 	}
 	return map[string]any{
-		"component":    info.ComponentFromArg,
-		"stack":        info.Stack,
-		"command":      info.SubCommand,
-		"chart":        spec.Chart,
-		"release_name": spec.ReleaseName,
-		"namespace":    spec.Namespace,
-		"target":       target,
+		"component":         info.ComponentFromArg,
+		"stack":             info.Stack,
+		"command":           info.SubCommand,
+		"chart":             spec.Chart,
+		"release_name":      spec.ReleaseName,
+		"namespace":         spec.Namespace,
+		"target":            target,
+		"dependency_update": spec.DependencyUpdate,
 	}
 }
 

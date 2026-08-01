@@ -127,7 +127,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	if err != nil {
 		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
 	}
-	loaded, err := loadChart(chartPath)
+	loaded, err := loadChartForAction(chartPath, actx.settings, actx.cfg.RegistryClient, spec.DependencyUpdate)
 	if err != nil {
 		return "", err
 	}

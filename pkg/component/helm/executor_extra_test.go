@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
@@ -176,9 +177,9 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		return &hooks.Hooks{}, nil
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
-	var appliedNamespace string
+	var appliedSpec *chartSpec
 	applyHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) (releaseActionResult, error) {
-		appliedNamespace = spec.Namespace
+		appliedSpec = spec
 		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var setup []chartRepository
@@ -199,9 +200,14 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 			},
 		},
 	}
-	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{"namespace": "incident-ns"}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
+	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{
+		"namespace":                         "incident-ns",
+		cfg.HelmDependencyUpdateSectionName: true,
+	}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
 	require.NoError(t, err)
-	assert.Equal(t, "incident-ns", appliedNamespace)
+	require.NotNil(t, appliedSpec)
+	assert.Equal(t, "incident-ns", appliedSpec.Namespace)
+	assert.True(t, appliedSpec.DependencyUpdate)
 	require.Len(t, setup, 1)
 	assert.Equal(t, "bitnami", setup[0].Name)
 }
