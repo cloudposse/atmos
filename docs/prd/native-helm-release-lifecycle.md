@@ -12,7 +12,7 @@ Add configurable release lifecycle behavior to native Helm components. Atmos wil
 
 The feature makes native Helm suitable for ordered production rollouts in which a successful component must mean more than "resources were submitted to Kubernetes." A Helm component participating in a dependency DAG completes successfully only after its configured release lifecycle and readiness policy succeeds. Dependents remain blocked when the release fails, times out, or is rolled back.
 
-This PRD includes the release-operation portion of timeout configuration because timeout semantics are inseparable from waiting and rollback. Chart acquisition, client-side rendering, external target delivery, rendered hook visibility, and pre-rollback Kubernetes diagnostics remain separate work.
+This PRD includes the release-operation portion of timeout configuration because timeout semantics are inseparable from waiting and rollback. It also requires rendered hook visibility because omitting `release.Hooks` makes template and diff silently incomplete. Chart acquisition, external target delivery, and pre-rollback Kubernetes diagnostics remain separate work.
 
 ## Problem
 
@@ -51,15 +51,16 @@ These gaps force users migrating from Helm or Helmfile to choose between depende
 - Define an explicit completion contract for Helm nodes participating in `dependencies.components` execution.
 - Fix apply dry-run propagation as a release-blocking safety prerequisite, then correctly propagate delete dry-run, cancellation, and deadlines through cluster operations.
 - Validate configuration before chart download or cluster mutation.
+- Keep template and diff complete by including Helm chart hook resources alongside the ordinary release manifest.
 - Keep the design compatible with future pre-rollback diagnostics without requiring another public configuration rename.
 - Follow Atmos schema, stack-processing, command parsing, provider, error, logging, and testing conventions.
 
 ## Non-Goals
 
-- Including Helm chart hook resources from `release.Hooks` in template or diff output. That is a separate render/diff correctness change.
 - Collecting Pod status, Kubernetes Events, or container logs before rollback. This release uses Helm's built-in rollback behavior; failure diagnostics require separate orchestration.
 - Configuring chart download, OCI registry, client-side render, or external provision-target delivery timeouts.
-- Adding `--set-file`; Atmos `!include.raw` already covers file-backed value content.
+- Automatically running `helm dependency build` after chart provisioning. Atmos MUST report missing dependencies with the explicit build command, while dependency acquisition remains a caller-controlled step to avoid hidden network access and chart-directory mutation.
+- Adding `--set-file`; Atmos `!include.raw` already covers byte-preserving file-backed value content, including a source file's terminal newline. Content normalization is separate from Helm lifecycle behavior.
 - Supporting Helm CLI subcommand, getter, downloader, post-renderer, or Wasm plugins in native SDK operations.
 - Adding force replacement, server-side apply selection, dependency update, value reuse/reset, ownership takeover, validation bypass, or uninstall history/cascade options. In particular, Helm `Uninstall.KeepHistory`, the `--keep-history` flag, and a `keep_history` component field are deferred from R1.
 - Changing dependency selection or scheduler algorithms.
