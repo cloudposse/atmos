@@ -18,6 +18,7 @@ type graphTestProvider struct {
 	calls         []ExecutionContext
 	cancelOnFirst context.CancelFunc
 	errorOnFirst  error
+	nilOnCancel   bool
 }
 
 func (p *graphTestProvider) GetType() string { return cfg.KubernetesComponentType }
@@ -38,6 +39,9 @@ func (p *graphTestProvider) Execute(ctx *ExecutionContext) error {
 		p.cancelOnFirst()
 		if p.errorOnFirst != nil {
 			return p.errorOnFirst
+		}
+		if p.nilOnCancel {
+			return nil
 		}
 		return ctx.GoContext().Err()
 	}
@@ -292,6 +296,21 @@ func TestExecuteGraphCancelsActiveNodeAndStopsDependents(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
 	require.Len(t, provider.calls, 1)
 	assert.Equal(t, "base", provider.calls[0].Component)
+}
+
+func TestExecuteGraphReportsCancellationAfterSuccessfulDispatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	provider := &graphTestProvider{cancelOnFirst: cancel, nilOnCancel: true}
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Stack: "dev"},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
+	require.Len(t, provider.calls, 1)
 }
 
 func TestLegacyDependsOnParsing(t *testing.T) {

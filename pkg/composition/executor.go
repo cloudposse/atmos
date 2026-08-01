@@ -468,6 +468,10 @@ func runLifecycleTargets(run lifecycleRun) error {
 			ui.Errorf("%s/%s.%s: %s failed: %v", target.Stack, target.ComponentType, target.Component, run.verb, err)
 			errs = append(errs, fmt.Errorf("%s/%s.%s: %w", target.Stack, target.ComponentType, target.Component, err))
 		}
+		if ctxErr := run.ctx.Err(); ctxErr != nil {
+			errs = append(errs, ctxErr)
+			break
+		}
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)
