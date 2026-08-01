@@ -1659,13 +1659,62 @@ func TestApplyHelmTypeOverrides(t *testing.T) {
 	}
 
 	require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack))
-	component := stack[cfg.ComponentsSectionName].(map[string]any)[cfg.HelmComponentType].(map[string]any)["imported-app"].(map[string]any)
-	overrides := component[cfg.OverridesSectionName].(map[string]any)
+	overrides := helmComponentOverrides(t, stack, "imported-app")
 	assert.Equal(t, map[string]any{
 		"cluster":      "shared",
 		"image":        map[string]any{"tag": "stable"},
 		"replicaCount": 3,
 	}, overrides[cfg.ValuesSectionName])
+}
+
+func TestApplyHelmTypeOverridesEarlyReturns(t *testing.T) {
+	overrides := map[string]any{cfg.ValuesSectionName: map[string]any{"cluster": "shared"}}
+	tests := []struct {
+		name  string
+		stack func() map[string]any
+	}{
+		{name: "missing helm section", stack: func() map[string]any { return map[string]any{} }},
+		{name: "missing overrides", stack: func() map[string]any {
+			return map[string]any{cfg.HelmSectionName: map[string]any{}}
+		}},
+		{name: "empty overrides", stack: func() map[string]any {
+			return map[string]any{cfg.HelmSectionName: map[string]any{cfg.OverridesSectionName: map[string]any{}}}
+		}},
+		{name: "missing components", stack: func() map[string]any {
+			return map[string]any{cfg.HelmSectionName: map[string]any{cfg.OverridesSectionName: overrides}}
+		}},
+		{name: "missing helm components", stack: func() map[string]any {
+			return map[string]any{
+				cfg.HelmSectionName:       map[string]any{cfg.OverridesSectionName: overrides},
+				cfg.ComponentsSectionName: map[string]any{},
+			}
+		}},
+		{name: "non-map component", stack: func() map[string]any {
+			return map[string]any{
+				cfg.HelmSectionName: map[string]any{cfg.OverridesSectionName: overrides},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.HelmComponentType: map[string]any{"invalid": "component"},
+				},
+			}
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stack := tt.stack()
+			expected := tt.stack()
+			require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack))
+			assert.Equal(t, expected, stack)
+		})
+	}
+}
+
+func TestApplyHelmTypeOverridesRejectsInvalidOverrides(t *testing.T) {
+	stack := map[string]any{
+		cfg.HelmSectionName: map[string]any{cfg.OverridesSectionName: []any{"invalid"}},
+	}
+
+	require.ErrorIs(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack), errUtils.ErrInvalidHelmOverridesSection)
 }
 
 func TestProcessYAMLConfigFileAppliesHelmOverridesToImportedComponents(t *testing.T) {
@@ -1711,13 +1760,25 @@ helm:
 	)
 	require.NoError(t, err)
 
-	component := result.DeepMergedConfig[cfg.ComponentsSectionName].(map[string]any)[cfg.HelmComponentType].(map[string]any)["imported-app"].(map[string]any)
-	overrides := component[cfg.OverridesSectionName].(map[string]any)
+	overrides := helmComponentOverrides(t, result.DeepMergedConfig, "imported-app")
 	assert.Equal(t, map[string]any{
 		"cluster":      "shared",
 		"image":        map[string]any{"tag": "stable"},
 		"replicaCount": 3,
 	}, overrides[cfg.ValuesSectionName])
+}
+
+func helmComponentOverrides(t *testing.T, stackConfig map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := stackConfig[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "stack config must contain a components section")
+	helmComponents, ok := components[cfg.HelmComponentType].(map[string]any)
+	require.True(t, ok, "components section must contain helm components")
+	componentSection, ok := helmComponents[component].(map[string]any)
+	require.True(t, ok, "helm component %q must exist", component)
+	overrides, ok := componentSection[cfg.OverridesSectionName].(map[string]any)
+	require.True(t, ok, "helm component %q must have an overrides section", component)
+	return overrides
 }
 
 func TestProcessYAMLConfigFileInvalidHelmfileUnknownOptionSchema(t *testing.T) {

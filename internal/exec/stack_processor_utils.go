@@ -1839,8 +1839,15 @@ func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig 
 	if !ok {
 		return nil
 	}
-	helmOverrides, ok := helmSection[cfg.OverridesSectionName].(map[string]any)
-	if !ok || len(helmOverrides) == 0 {
+	overridesValue, exists := helmSection[cfg.OverridesSectionName]
+	if !exists || overridesValue == nil {
+		return nil
+	}
+	helmOverrides, ok := overridesValue.(map[string]any)
+	if !ok {
+		return errUtils.ErrInvalidHelmOverridesSection
+	}
+	if len(helmOverrides) == 0 {
 		return nil
 	}
 

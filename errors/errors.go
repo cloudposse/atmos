@@ -642,6 +642,7 @@ var (
 	ErrClearCache                       = errors.New("failed to clear cache")
 	ErrInvalidOverridesSection          = errors.New("invalid overrides section")
 	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
+	ErrInvalidHelmOverridesSection      = errors.New("invalid helm overrides section")
 	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
 	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
 	ErrCircularComponentInheritance     = ErrStackCircularInheritance
