@@ -2256,10 +2256,10 @@ MIT LICENSED DEPENDENCIES
 ================================================================================
 
 For the complete list of dependencies and their licenses, run:
-	go-licenses report ./...
+  go-licenses report ./...
 
 To view the full license text for a specific dependency, visit the URL
 listed above or check the dependency's repository.
 
 For more information about Atmos licensing, see:
-	https://github.com/cloudposse/atmos
+  https://github.com/cloudposse/atmos
