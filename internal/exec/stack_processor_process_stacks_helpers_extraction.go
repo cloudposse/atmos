@@ -369,6 +369,11 @@ func extractHelmComponentSection(componentMap map[string]any) map[string]any {
 	bag := make(map[string]any)
 	for _, key := range helmComponentSectionKeys {
 		if value, ok := componentMap[key]; ok {
+			// A bare `values:` key decodes to nil. Treat it as omitted so an
+			// accidental empty key cannot silently erase inherited Helm values.
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
 			bag[key] = value
 		}
 	}
@@ -382,6 +387,9 @@ func extractHelmLifecycleSection(section map[string]any) map[string]any {
 	bag := make(map[string]any)
 	for _, key := range helmLifecycleSectionKeys {
 		if value, ok := section[key]; ok {
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
 			bag[key] = value
 		}
 	}
@@ -394,6 +402,9 @@ func extractHelmOverrideSection(section map[string]any) map[string]any {
 	bag := make(map[string]any)
 	for _, key := range helmOverrideSectionKeys {
 		if value, ok := section[key]; ok {
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
 			bag[key] = value
 		}
 	}

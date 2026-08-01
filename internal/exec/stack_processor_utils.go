@@ -1847,6 +1847,11 @@ func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig 
 	if !ok {
 		return fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmOverridesSection, relativeFilePath)
 	}
+	// A bare `helm.overrides.values:` key is an accidental YAML null, not an
+	// instruction to erase component-level values.
+	if helmOverrides[cfg.ValuesSectionName] == nil {
+		delete(helmOverrides, cfg.ValuesSectionName)
+	}
 	if len(helmOverrides) == 0 {
 		return nil
 	}
