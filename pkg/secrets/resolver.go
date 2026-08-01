@@ -17,10 +17,11 @@ const secretTag = "!secret"
 // Resolve resolves a `!secret NAME [| path ...] [| default ...]` expression to a value.
 //
 // Behavior (in order):
-//  1. If the processing scope is an inspection command with masking enabled
+//  1. It validates that the secret is declared in the component section.
+//  2. If the processing scope is an inspection command with masking enabled
 //     (stackInfo.SecretsMaskOnly), it returns the mask replacement WITHOUT retrieving the
 //     value from the backend — no provider call, no credentials required.
-//  2. Otherwise it looks up the declaration in the component section, resolves the backend
+//  3. Otherwise it resolves the backend
 //     provider, retrieves the value, applies the optional path/default modifiers, registers
 //     the value (recursively) with the I/O masker, and returns it.
 func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string, stackInfo *schema.ConfigAndStacksInfo) (any, error) {
@@ -29,11 +30,6 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string,
 	name, opts, err := parseSecretArgs(input)
 	if err != nil {
 		return nil, err
-	}
-
-	// Mask-without-retrieval fast path for inspection commands.
-	if stackInfo != nil && stackInfo.SecretsMaskOnly {
-		return io.GetContext().Masker().Replacement(), nil
 	}
 
 	component := componentName(stackInfo)
@@ -46,6 +42,12 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string,
 	decl, ok := LookupDeclaration(componentSection, name)
 	if !ok {
 		return nil, fmt.Errorf("%w: %q (declare it under the component's secrets.vars)", ErrSecretNotDeclared, name)
+	}
+
+	// Mask-without-retrieval fast path for inspection commands. Declaration lookup happens
+	// first so masked inspection still catches misspelled or malformed secret references.
+	if stackInfo != nil && stackInfo.SecretsMaskOnly {
+		return io.GetContext().Masker().Replacement(), nil
 	}
 
 	provider, err := providerFor(atmosConfig, &decl, componentSection)

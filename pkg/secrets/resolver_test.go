@@ -59,6 +59,29 @@ func TestResolve_MaskOnly_SkipsRetrieval(t *testing.T) {
 	assert.Equal(t, iolib.GetContext().Masker().Replacement(), got)
 }
 
+// TestResolve_MaskOnly_RejectsUndeclared proves that masked inspection validates the local
+// declaration registry without contacting the backend.
+func TestResolve_MaskOnly_RejectsUndeclared(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	cfg, componentSection := newSecretTestConfig(mockStore)
+	require.NoError(t, iolib.Initialize())
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "prod",
+		Component:        "api",
+		ComponentSection: componentSection,
+		SecretsMaskOnly:  true,
+	}
+
+	_, err := Resolve(cfg, "!secret UNDECLARED_KEY", "prod", info)
+	require.ErrorIs(t, err, ErrSecretNotDeclared)
+}
+
 // TestResolve_RealValue retrieves the real value when masking does not skip retrieval.
 func TestResolve_RealValue(t *testing.T) {
 	ctrl := gomock.NewController(t)

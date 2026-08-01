@@ -1351,6 +1351,7 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 	tests := []struct {
 		name           string
 		resolveSecrets bool
+		secretName     string
 		storeValue     any
 		storeErr       error
 		expectError    error
@@ -1359,17 +1360,26 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 		{
 			name:           "inspection masks without retrieving",
 			resolveSecrets: false,
+			secretName:     "API_KEY",
 			expectValue:    iolib.GetContext().Masker().Replacement(),
+		},
+		{
+			name:           "inspection rejects undeclared without retrieving",
+			resolveSecrets: false,
+			secretName:     "UNDECLARED_KEY",
+			expectError:    secrets.ErrSecretNotDeclared,
 		},
 		{
 			name:           "execution fails for a missing required secret",
 			resolveSecrets: true,
+			secretName:     "API_KEY",
 			storeErr:       errors.New("secret not found"),
 			expectError:    secrets.ErrSecretMissing,
 		},
 		{
 			name:           "execution resolves and registers the secret for masking",
 			resolveSecrets: true,
+			secretName:     "API_KEY",
 			storeValue:     "api-secret-value",
 			expectValue:    "api-secret-value",
 		},
@@ -1398,7 +1408,7 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 						"API_KEY": map[string]any{"store": "app-secrets", "required": true},
 					},
 				},
-				"vars": map[string]any{"api_key": "!secret API_KEY"},
+				"vars": map[string]any{"api_key": "!secret " + tt.secretName},
 			}
 			processor := newDescribeStacksProcessor(
 				atmosConfig,
