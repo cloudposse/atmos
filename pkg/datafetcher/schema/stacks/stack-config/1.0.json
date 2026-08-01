@@ -2040,6 +2040,9 @@
             "secrets": {
               "type": "object"
             },
+            "retry": {
+              "$ref": "#/definitions/workflow_retry"
+            },
             "values": {
               "type": "object"
             }

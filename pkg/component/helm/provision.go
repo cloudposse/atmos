@@ -74,11 +74,11 @@ func lifecycleSummary(operation string, policy releaseLifecycle) map[string]any 
 		"chart_hooks_enabled": !policy.DisableChartHooks,
 	}
 	switch operation {
-	case "install":
+	case releaseOperationInstall:
 		summary["wait_for_jobs"] = policy.WaitForJobs
 		summary["rollback_on_failure"] = policy.RollbackOnFailure
 		summary["install_crds"] = !policy.SkipCRDs
-	case "upgrade":
+	case releaseOperationUpgrade:
 		summary["wait_for_jobs"] = policy.WaitForJobs
 		summary["rollback_on_failure"] = policy.RollbackOnFailure
 		summary["cleanup_on_fail"] = policy.CleanupOnFail
