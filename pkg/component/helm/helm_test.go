@@ -190,6 +190,27 @@ func TestBuildValues_MergeAndFiles(t *testing.T) {
 	assert.Equal(t, "override", img["tag"]) // inline values win over values_files
 }
 
+func TestBuildValues_PreservesHelmTemplateSyntaxAcrossSources(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	dir := t.TempDir()
+	valuesFile := filepath.Join(dir, "templated.yaml")
+	templateValue := "{{ .Values.kafka.password }}"
+	require.NoError(t, os.WriteFile(valuesFile, []byte("fromFile: '{{ .Values.kafka.password }}'\n"), 0o600))
+
+	section := map[string]any{
+		cfg.ValuesFilesSectionName: []any{valuesFile},
+		cfg.ValuesSectionName: map[string]any{
+			"inline": templateValue,
+		},
+	}
+
+	values, err := buildValues(atmosConfig, section, "")
+	require.NoError(t, err)
+	assert.Equal(t, templateValue, values["fromFile"])
+	assert.Equal(t, templateValue, values["inline"])
+	assert.Equal(t, values["fromFile"], values["inline"])
+}
+
 func TestResolveRenderOptions_FlagsOverrideComponent(t *testing.T) {
 	componentSection := map[string]any{
 		"render": map[string]any{"output": map[string]any{"path": "from-component.yaml"}},
