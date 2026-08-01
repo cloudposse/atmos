@@ -196,6 +196,14 @@ func TestListToolVersions_FormatPlainWithAllRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrToolchainPlainFormatWithAllFlag)
 }
 
+func TestListToolVersions_UnsupportedFormatRejected(t *testing.T) {
+	// A direct caller passing an unvalidated format (bypassing the cmd-layer check) must still
+	// be rejected rather than silently falling back to table output.
+	err := ListToolVersions(false, 10, "owner/repo", "xml")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
 func TestListToolVersions_FormatJSON(t *testing.T) {
 	filePath := createTempToolVersionsFile(t, "owner/repo 1.0.0 2.0.0\n")
 	installVersionForTest(t, "owner", "repo", "1.0.0")

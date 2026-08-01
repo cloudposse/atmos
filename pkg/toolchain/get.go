@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -38,10 +39,16 @@ type ToolVersionList struct {
 	Versions       []ToolVersionListEntry `json:"versions" yaml:"versions"`
 }
 
+// supportedListFormats are the values ListToolVersions accepts for format.
+var supportedListFormats = []string{"table", "plain", "json"}
+
 // ListToolVersions handles the logic for listing tool versions.
 func ListToolVersions(showAll bool, limit int, toolName, format string) error {
 	defer perf.Track(nil, "toolchain.ListToolVersions")()
 
+	if !slices.Contains(supportedListFormats, format) {
+		return fmt.Errorf("%w: %q (supported: %v)", errUtils.ErrInvalidFlagValue, format, supportedListFormats)
+	}
 	if format == "plain" && showAll {
 		return errUtils.ErrToolchainPlainFormatWithAllFlag
 	}
