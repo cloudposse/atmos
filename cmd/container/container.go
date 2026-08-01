@@ -1,7 +1,6 @@
 package container
 
 import (
-	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -163,7 +162,7 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 		return err
 	}
 	if parser, ok := componentPromptParsers[cmd]; ok {
-		parsed, err := parser.Parse(context.Background(), args)
+		parsed, err := parser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
