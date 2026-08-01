@@ -75,13 +75,18 @@ commands:
           backoff_strategy: constant
       # watcher + wait_for_jobs returns only after the ordinary Job completes.
       - atmos helm apply demo-jobs -s dev --identity local-k3s
-      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-jobs wait --for=condition=complete job/demo-jobs-job --timeout=5s
+      - command: >-
+          completed=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-jobs get job demo-jobs-job -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}');
+          if [ "$completed" != "True" ]; then echo "wait_for_jobs returned before demo-jobs-job completed: status=$completed"; exit 1; fi
       # Disabling chart hooks prevents both weighted hook resources.
       - atmos helm apply demo-no-hooks -s dev --identity local-k3s
       - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo-no-hooks get configmap demo-no-hooks-hook-order; then echo "disable_chart_hooks unexpectedly ran Helm hooks"; exit 1; fi
-      # hookOnly returns after hooks without waiting for ordinary Deployment readiness.
+      # hookOnly returns after hooks without waiting for the Deployment's explicit readiness gate.
       - atmos helm apply demo-hook-only -s dev --identity local-k3s
-      - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=1s; then echo "hookOnly unexpectedly waited for Deployment readiness"; exit 1; fi
+      - command: >-
+          available=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only get deployment demo-hook-only -o jsonpath='{.status.conditions[?(@.type=="Available")].status}');
+          if [ "$available" = "True" ]; then echo "hookOnly unexpectedly satisfied the Deployment readiness gate"; exit 1; fi
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only patch deployment demo-hook-only --type=json -p='[{"op":"remove","path":"/spec/template/spec/readinessGates"}]'
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=30s
       # watcher honors the release timeout and rollback removes the failed install.
       - command: if atmos helm apply demo-timeout -s dev --identity local-k3s; then echo "timed release unexpectedly succeeded"; exit 1; fi
@@ -93,8 +98,11 @@ commands:
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo-install-fail get configmap demo-install-fail-hook-order
       # A failed upgrade restores the successful demo release and cleanup removes
       # the resource introduced only by the failed revision.
-      - command: if atmos helm apply demo-upgrade-fail -s dev --identity local-k3s; then echo "failed upgrade unexpectedly succeeded"; exit 1; fi
-      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+      - command: >-
+          before=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}');
+          if atmos helm apply demo-upgrade-fail -s dev --identity local-k3s; then echo "failed upgrade unexpectedly succeeded"; exit 1; fi;
+          after=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}');
+          if [ "$before" != "$after" ]; then echo "rollback did not restore Deployment/demo: before=$before after=$after"; exit 1; fi
       - command: if atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-upgrade-only; then echo "cleanup_on_fail left the upgrade-only ConfigMap"; exit 1; fi
       # Dependency execution gates the dependent's pre-install hook on the
       # foundation's post-readiness marker.
