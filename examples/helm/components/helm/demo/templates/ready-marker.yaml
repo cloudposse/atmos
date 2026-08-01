@@ -10,4 +10,5 @@ metadata:
     "helm.sh/resource-policy": keep
 data:
   ready: "true"
+  order: "foundation-ready"
 {{- end }}

@@ -3,6 +3,9 @@ replicaCount: 1
 image:
   repository: nginx
   tag: "latest"
+jobImage:
+  repository: busybox
+  tag: "1.36.1"
 service:
   type: ClusterIP
   port: 80
