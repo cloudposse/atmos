@@ -156,7 +156,7 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
 			flags.WithBoolFlag("rollback-on-failure", "", false, "Roll back an upgrade or uninstall a failed install."),
 			flags.WithBoolFlag("atomic", "", false, "Deprecated alias for --rollback-on-failure."),
-			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher."),
+			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher; deprecated true/false map to watcher/hookOnly."),
 			flags.WithNoOptDefVal(flagWait, "watcher"),
 			flags.WithBoolFlag("wait-for-jobs", "", false, "Wait for Jobs in the release manifest."),
 			flags.WithStringFlag("timeout", "", "", "Helm release-operation timeout (for example, 10m)."),
@@ -169,7 +169,7 @@ func operationFlagOptions(name string) []flags.Option {
 	if name == "delete" {
 		options = append(
 			options,
-			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher."),
+			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. An omitted value selects watcher; deprecated true/false map to watcher/hookOnly."),
 			flags.WithNoOptDefVal(flagWait, "watcher"),
 			flags.WithStringFlag("timeout", "", "", "Helm uninstall timeout (for example, 10m)."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
