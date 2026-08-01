@@ -81,7 +81,7 @@ commands:
           if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo 2>&1); then echo "dry-run unexpectedly created service/demo"; exit 1;
           else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify service/demo absence: $output"; exit 1;; esac; fi
       - command: >-
-          if ! releases=$(atmos emulator exec kubernetes -s dev -- kubectl get secrets --all-namespaces -l owner=helm,name=demo -o name 2>&1); then echo "failed to query Helm release records after dry-run: $releases"; exit 1; fi;
+          if ! releases=$(atmos emulator exec kubernetes -s dev -- kubectl get secrets --all-namespaces -l owner=helm,name=demo -o name); then echo "failed to query Helm release records after dry-run"; exit 1; fi;
           if [ -n "$releases" ]; then echo "dry-run unexpectedly persisted Helm release records: $releases"; exit 1; fi
       - command: atmos helm apply demo -s dev --identity local-k3s
         retry:
