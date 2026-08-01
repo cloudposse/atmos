@@ -2,7 +2,7 @@
 
 **Status:** Draft
 
-**Last Updated:** 2026-08-01
+**Last Updated:** 2026-07-31
 
 **Related:** [DAG-Based Concurrent Execution](./dag-concurrent-execution.md), [Component Dependencies](./component-dependencies.md), [PR #2667](https://github.com/cloudposse/atmos/pull/2667)
 
@@ -345,7 +345,7 @@ helm/foundation-release
             └── success ───────────────────────▶ dependent nodes become ready
                                                   │
                                                   ▼
-                                         helm/dependent-release
+                                          helm/dependent-release
 ```
 
 The following rules apply:
@@ -384,7 +384,7 @@ Required propagation includes:
 - Graph-backed bulk execution.
 - Release-history lookup where supported by the SDK.
 - Install and upgrade `RunWithContext`.
-- Delete when the SDK exposes context-aware behavior; otherwise cancellation is checked before and after the action and bounded by the configured timeout.
+- Delete wait and hook phases through Helm uninstall wait options. Helm 4 does not accept a context for the uninstall request itself, so cancellation is also checked before and after the action and the operation remains bounded by the configured timeout.
 - External delivery and rendering call sites, without changing their timeout configuration in this PRD.
 
 Scheduler cancellation or an operating-system signal must prevent new dependent nodes from starting and cancel the active Helm action. Atmos must not replace a cancelled context with a fresh background context for rollback. Helm's built-in rollback-on-failure behavior remains responsible for its documented interrupted-release semantics.
@@ -419,19 +419,19 @@ The processed map and flag inputs normalize into one internal value before actio
 
 ```go
 type releaseLifecycle struct {
-	RollbackOnFailure bool
-	WaitStrategy      kube.WaitStrategy
-	WaitForJobs       bool
-	Timeout           time.Duration
-	CleanupOnFail     bool
-	MaxHistory        int
-	DisableChartHooks bool
-	SkipCRDs          bool
+  RollbackOnFailure bool
+  WaitStrategy      kube.WaitStrategy
+  WaitForJobs       bool
+  Timeout           time.Duration
+  CleanupOnFail     bool
+  MaxHistory        int
+  DisableChartHooks bool
+  SkipCRDs          bool
 }
 
 type releaseLifecycleResolution struct {
-	Policy          releaseLifecycle
-	TimeoutExplicit bool
+  Policy          releaseLifecycle
+  TimeoutExplicit bool
 }
 ```
 
@@ -478,6 +478,15 @@ During the timeout migration release, schema generation and stack processing MUS
 | `MaxHistory` | — | Set | — |
 | `DisableChartHooks` | `DisableHooks` | `DisableHooks` | `DisableHooks` |
 | `SkipCRDs` | Set | — | — |
+
+Dry-run is execution intent, not release lifecycle policy, and therefore remains outside `releaseLifecycle`. The command-to-provider path MUST propagate it independently to `Install.DryRun` or `Upgrade.DryRun` for apply/deploy and `Uninstall.DryRun` for delete.
+
+| Atmos operation | Provider operation | Helm timeout and recovery behavior |
+| --- | --- | --- |
+| apply/deploy, no release history | Install | `Install.Timeout`; on failure, `RollbackOnFailure` performs Helm's internal uninstall recovery using the same action configuration. |
+| apply/deploy, existing release | Upgrade | `Upgrade.Timeout`; on failure, `RollbackOnFailure` performs Helm's internal rollback, with `CleanupOnFail` applied when configured. |
+| Helm internal upgrade recovery | Rollback | Helm propagates the upgrade timeout and wait configuration into its internal rollback action; Atmos returns the original operation as failed even when recovery succeeds. |
+| delete | Uninstall | `Uninstall.Timeout`; no automatic recovery action follows an uninstall failure. |
 
 Action mapping should live in small, unit-testable helpers. The scheduler and command packages must not import Helm SDK action types merely to configure lifecycle policy.
 
