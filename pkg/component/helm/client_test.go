@@ -13,6 +13,7 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 func TestResolveUpgradeChartRef(t *testing.T) {
@@ -112,12 +113,12 @@ func TestReleaseOperationErrorIncludesEffectivePolicy(t *testing.T) {
 
 	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Contains(t, err.Error(), "operation=upgrade")
-	assert.Contains(t, err.Error(), `release="demo"`)
-	assert.Contains(t, err.Error(), `namespace="apps"`)
-	assert.Contains(t, err.Error(), "wait_strategy=watcher")
-	assert.Contains(t, err.Error(), "timeout=7m0s")
-	assert.Contains(t, err.Error(), `component field "timeout"`)
+	assert.True(t, errUtils.HasContext(err, "operation", "upgrade"))
+	assert.True(t, errUtils.HasContext(err, "release", "demo"))
+	assert.True(t, errUtils.HasContext(err, "namespace", "apps"))
+	assert.True(t, errUtils.HasContext(err, "wait_strategy", "watcher"))
+	assert.True(t, errUtils.HasContext(err, "timeout", "7m0s"))
+	assert.True(t, errUtils.HasContext(err, "timeout_field", cfg.HelmTimeoutSectionName))
 }
 
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
