@@ -242,7 +242,7 @@ func ExecutePlaybook(
 }
 
 // ExecuteVersion executes the ansible version command.
-func ExecuteVersion(info *schema.ConfigAndStacksInfo) error {
+func ExecuteVersion(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "ansible.ExecuteVersion")()
 
 	atmosConfig, err := cfg.InitCliConfig(*info, false)
@@ -265,6 +265,7 @@ func ExecuteVersion(info *schema.ConfigAndStacksInfo) error {
 		nil,   // env
 		false, // dryRun
 		"",    // redirectStdError
+		e.WithProcessContext(ctx),
 	)
 }
 
