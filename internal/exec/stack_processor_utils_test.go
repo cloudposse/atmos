@@ -1733,6 +1733,7 @@ func TestApplyHelmTypeOverridesRejectsInvalidComponentOverrides(t *testing.T) {
 
 	err := applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack, "stack.yaml")
 	require.ErrorIs(t, err, errUtils.ErrInvalidHelmOverridesSection)
+	assert.Contains(t, err.Error(), `component "invalid"`)
 	assert.Contains(t, err.Error(), "in the stack manifest 'stack.yaml'")
 }
 

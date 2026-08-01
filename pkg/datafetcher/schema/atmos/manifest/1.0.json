@@ -2918,6 +2918,9 @@
             "secrets": {
               "$ref": "#/definitions/component_secrets"
             },
+            "retry": {
+              "$ref": "#/definitions/workflow_retry"
+            },
             "values": {
               "type": "object"
             }
