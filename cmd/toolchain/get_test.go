@@ -1,11 +1,8 @@
 package toolchain
 
 import (
-	"bytes"
-	"slices"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,54 +57,49 @@ func TestGetCommand_SupportedFormats(t *testing.T) {
 	assert.Equal(t, []string{"table", "plain", "json"}, supportedGetFormats)
 }
 
+// TestGetCommand_FormatValidation exercises the real getCmd.RunE (not a re-implementation of its
+// logic), so it covers the actual format-validation and plain+all-conflict branches added to
+// cmd/toolchain/get.go. Valid formats fall through to toolchain.ListToolVersions with an empty
+// tool name, which fails fast on an invalid tool spec without any network or filesystem access
+// (pkg/toolchain has its own coverage for ListToolVersions' internal behavior) — what matters
+// here is that RunE reaches that call instead of being rejected by one of the two guard checks.
 func TestGetCommand_FormatValidation(t *testing.T) {
 	tests := []struct {
 		name    string
 		format  string
-		all     bool
+		all     string
 		wantErr error
 	}{
-		{name: "table format is valid", format: "table"},
-		{name: "plain format is valid", format: "plain"},
-		{name: "json format is valid", format: "json"},
-		{name: "invalid format is rejected", format: "xml", wantErr: errUtils.ErrInvalidFlagValue},
-		{name: "empty format is rejected", format: "", wantErr: errUtils.ErrInvalidFlagValue},
-		{name: "plain with all is rejected", format: "plain", all: true, wantErr: errUtils.ErrToolchainPlainFormatWithAllFlag},
+		{name: "table format is valid", format: "table", all: "false"},
+		{name: "plain format is valid", format: "plain", all: "false"},
+		{name: "json format is valid", format: "json", all: "false"},
+		{name: "invalid format is rejected", format: "xml", all: "false", wantErr: errUtils.ErrInvalidFlagValue},
+		{name: "empty format is rejected", format: "", all: "false", wantErr: errUtils.ErrInvalidFlagValue},
+		{name: "plain with all is rejected", format: "plain", all: "true", wantErr: errUtils.ErrToolchainPlainFormatWithAllFlag},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := viper.New()
-			v.Set("format", tt.format)
-			v.Set("all", tt.all)
+			t.Cleanup(func() {
+				require.NoError(t, getCmd.Flags().Set("format", "table"))
+				require.NoError(t, getCmd.Flags().Set("all", "false"))
+				viper.Reset()
+			})
 
-			// Mimic getCmd's RunE validation logic without invoking network/filesystem lookups.
-			testCmd := &cobra.Command{
-				Use: "get",
-				RunE: func(cmd *cobra.Command, args []string) error {
-					format := v.GetString("format")
-					all := v.GetBool("all")
-					if !slices.Contains(supportedGetFormats, format) {
-						return errUtils.ErrInvalidFlagValue
-					}
-					if format == "plain" && all {
-						return errUtils.ErrToolchainPlainFormatWithAllFlag
-					}
-					return nil
-				},
-			}
+			require.NoError(t, getCmd.Flags().Set("format", tt.format))
+			require.NoError(t, getCmd.Flags().Set("all", tt.all))
 
-			var stdout, stderr bytes.Buffer
-			testCmd.SetOut(&stdout)
-			testCmd.SetErr(&stderr)
+			err := getCmd.RunE(getCmd, []string{})
 
-			err := testCmd.Execute()
-
+			require.Error(t, err)
 			if tt.wantErr != nil {
-				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
-				require.NoError(t, err)
+				// A valid format must reach ListToolVersions rather than being rejected by
+				// either guard check — the empty tool name still errors, but with neither
+				// guard sentinel.
+				assert.NotErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				assert.NotErrorIs(t, err, errUtils.ErrToolchainPlainFormatWithAllFlag)
 			}
 		})
 	}
