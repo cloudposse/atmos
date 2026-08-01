@@ -97,6 +97,20 @@ atmos terraform destroy --all -s dev --max-concurrency 2 -auto-approve
 
 Use `--failure-mode keep-going` to continue independent graph branches after one component fails. The default is `fail-fast`.
 
+Use `--include-dependents` to tear down a selection plus everything that depends on it, dependents first:
+
+```shell
+# Destroy the vpc components and everything that depends on them, dependents first
+atmos terraform destroy --components=vpc -s dev --include-dependents
+
+# Bound the expansion to direct dependents only
+atmos terraform destroy --components=vpc -s dev --include-dependents=1
+```
+
+:::warning
+Using `--include-dependencies` with destroy also destroys the shared prerequisites of your selection — components that other, unselected components may still depend on. Atmos prints a warning when this flag is used with destroy. Prefer `--include-dependents`, which tears down the selection plus everything that depends on it, in safe dependents-first order.
+:::
+
 ## Arguments
 
 <dl>
@@ -145,6 +159,28 @@ Use `--failure-mode keep-going` to continue independent graph branches after one
         ```shell
         atmos terraform destroy --all -s dev --max-concurrency 2 -auto-approve --log-order grouped
         ```
+    </dd>
+
+    <dt>`--include-dependents` <em>(optional)</em></dt>
+    <dd>
+        With a multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`), also destroy everything that depends on the selected components, dependents first. Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=1` bounds it to direct dependents. Pass the depth with `=`; a space-separated value is not bound to the flag.
+
+        ```shell
+        atmos terraform destroy --components=vpc -s dev --include-dependents
+        ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENTS`
+    </dd>
+
+    <dt>`--include-dependencies` <em>(optional)</em></dt>
+    <dd>
+        With a multi-component selection, also destroy the prerequisites of the selected components — even prerequisites in other stacks. Because prerequisites may be shared with components outside the selection, Atmos warns when this flag is used with destroy; prefer `--include-dependents` for safe teardown. Accepts an optional depth (for example, `--include-dependencies=1` for direct dependencies only).
+
+        ```shell
+        atmos terraform destroy --components=eks/cluster -s dev --include-dependencies
+        ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENCIES`
     </dd>
 </dl>
 
