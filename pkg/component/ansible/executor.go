@@ -72,6 +72,7 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 
 // ExecutePlaybook executes an Ansible playbook command.
 func ExecutePlaybook(
+	ctx context.Context,
 	info *schema.ConfigAndStacksInfo,
 	flags *Flags,
 ) error {
@@ -230,7 +231,7 @@ func ExecutePlaybook(
 		return nil
 	}
 
-	return executePlaybookCommandWithRetry(&atmosConfig, info, cmdArgs, componentPath, envVars)
+	return executePlaybookCommandWithRetry(ctx, &atmosConfig, info, cmdArgs, componentPath, envVars)
 }
 
 // executePlaybookCommandWithRetry runs the resolved ansible-playbook command through
@@ -238,6 +239,7 @@ func ExecutePlaybook(
 // be unit-tested directly with a fake invoke, without standing up ExecutePlaybook's full
 // stack-processing/auth preamble or requiring a real ansible-playbook binary.
 func executePlaybookCommandWithRetry(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	cmdArgs *CommandArgs,
@@ -260,6 +262,7 @@ func executePlaybookCommandWithRetry(
 				o...,
 			)
 		},
+		e.WithProcessContext(ctx),
 	)
 }
 
