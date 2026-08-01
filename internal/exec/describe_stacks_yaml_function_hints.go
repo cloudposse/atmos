@@ -46,8 +46,8 @@ func (p *describeStacksProcessor) resolvesTerraformStateFunctions() bool {
 // wrong advice for them:
 //   - The caller scoped the run with `--stack`: they asked for that stack specifically, so the
 //     underlying error is the whole answer.
-//   - The terraform state/output functions are already skipped: the caller is an inventory `list`
-//     command, which never performs these reads and does not accept these flags the same way.
+//   - Both terraform state/output functions are already in `skip`: the caller explicitly opted
+//     out of credentialed reads, so telling them to skip those functions is redundant.
 //
 // Enrichment is transparent to `errors.Is`: callers branch on sentinels propagated from the inner
 // describe (e.g. ErrCircularDependency from a `!terraform.state` cycle), and those must keep

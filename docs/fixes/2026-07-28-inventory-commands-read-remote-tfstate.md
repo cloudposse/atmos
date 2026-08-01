@@ -118,13 +118,14 @@ describe pipeline benefits rather than the four commands that were patched by ha
 ## Verification
 
 - `internal/exec/yaml_func_terraform_state_degradation_test.go` drives
-  `processNodesWithContext` with the package-level `stateGetter` swapped for one that fails
-  with a wrapped `AccessDenied` — deterministic, no network, no credentials.
+  `processNodesWithContext` with the package-level `stateGetter` swapped for a generated
+  `MockTerraformStateGetter` that fails with a wrapped `AccessDenied` — deterministic, no
+  network, no credentials.
   - `TestProcessNodesWithContext_DegradesCrossAccountAccessDenied` asserts the walk
     completes, the value becomes `AtmosComputedValue{}` rendering as `(computed)`, unrelated
-    values are untouched, and exactly one warning carries the real cause. It also asserts the
-    read was actually **attempted** (`getter.calls > 0`), which is what distinguishes this
-    fix from the skip-based approach it replaces.
+    values are untouched, and exactly one warning carries the real cause. The mock's
+    `MinTimes(1)` enforces that the read was actually **attempted** — the property that
+    distinguishes this fix from the skip-based approach it replaces.
   - `TestProcessNodesWithContext_StrictModeStillFailsOnAccessDenied` is the negative path:
     strict mode must still fail, with the cause matchable by `errors.Is`.
   - `TestProcessNodesWithContext_FatalErrorsStillAbortInWarnMode` proves the widening is
@@ -145,6 +146,12 @@ describe pipeline benefits rather than the four commands that were patched by ha
   degrading, and each unreachable backend costs its full retry budget. Correct, but
   potentially slow on a large repository. Resolving values lazily — only when something is
   about to render them — is the real answer, and is worth tracking separately.
-- **Consider whether `!store` and `!aws.*` need the same treatment.** This fix covers the
-  terraform state/output path. The other credential-backed YAML functions can fail the same
-  way in the same topology.
+- **`!terraform.output` is not covered and should be.** It is the closest sibling to the
+  function this fixes and fails the same way in the same topology, but it shells out to
+  `terraform output` and wraps every subprocess failure in `ErrTerraformOutputFailed` —
+  missing binary, HCL error, timeout, and access denial alike. Degrading that wholesale would
+  hide real defects, so it is deliberately left strict here. Closing the gap means classifying
+  the subprocess failure (or having the executor surface an access-denied sentinel) before
+  degrading it.
+- **Consider whether `!store` and `!aws.*` need the same treatment.** The other
+  credential-backed YAML functions can fail the same way in the same topology.

@@ -39,22 +39,29 @@ func isRecoverableTerraformError(err error) bool {
 // isRecoverableTerraformError: warn mode degrades a value it could not read to
 // `(computed)` and keeps going, rather than failing the whole command.
 //
-// Besides a genuinely unprovisioned state/output, that includes a backend read that
-// failed — most importantly a cross-account `AccessDenied`. In a multi-account
-// repository each stage keeps its Terraform state in its own account, so a command that
-// walks every stack (`atmos list stacks`, an unfiltered `atmos describe stacks`) will
-// always hit backends the current identity cannot read. Those are expected in that
-// topology, not defects, and one of them must not abort an inventory listing. See
-// https://github.com/cloudposse/atmos/issues/2566.
+// Besides a genuinely unprovisioned state/output, that includes a backend read that failed —
+// most importantly a cross-account `AccessDenied`. In a multi-account repository each stage
+// keeps its Terraform state in its own account, so a command that walks every stack
+// (`atmos list stacks`, an unfiltered `atmos describe stacks`) will always hit backends the
+// current identity cannot read. Those are expected in that topology, not defects, and one of
+// them must not abort the command. See https://github.com/cloudposse/atmos/issues/2566.
 //
-// This is warn/silent mode only. `--error-mode=strict` still surfaces every one of these,
-// and isRecoverableTerraformError — which gates the YQ `//` default operator — is
-// unchanged, so a `!terraform.state … // "fallback"` expression still refuses to paper
-// over a credential failure with its literal default.
-// Note this covers the *read* failing, not a bad expression: ErrEvaluateTerraformBackendVariable
-// (the YQ expression failed against state Atmos successfully retrieved) stays fatal in every
-// mode, because that is a manifest defect the user needs to see rather than an environmental
-// one to degrade past.
+// Three deliberate limits:
+//
+//   - Warn/silent mode only. `--error-mode=strict` still surfaces every one of these.
+//   - isRecoverableTerraformError — which gates the YQ `//` default operator — is unchanged,
+//     so `!terraform.state … // "fallback"` still refuses to paper over a credential failure
+//     with its literal default.
+//   - Only the *read* failing. ErrEvaluateTerraformBackendVariable (the YQ expression failed
+//     against state Atmos successfully retrieved) stays fatal in every mode: that is a
+//     manifest defect the user needs to see, not an environmental one to degrade past.
+//
+// Scope: this covers `!terraform.state`, which reads the backend directly and wraps every
+// failure in ErrReadTerraformState. `!terraform.output` shells out to `terraform output` and
+// wraps any subprocess failure in ErrTerraformOutputFailed — far broader (missing binary, HCL
+// error, timeout) — so degrading it wholesale would hide real defects. It is left strict;
+// narrowing that error enough to degrade only access failures is tracked as follow-up in
+// docs/fixes/2026-07-28-inventory-commands-read-remote-tfstate.md.
 func isRecoverableInWarnMode(err error) bool {
 	return isRecoverableTerraformError(err) ||
 		errors.Is(err, errUtils.ErrReadTerraformState)
