@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -259,4 +260,19 @@ func TestLoadChartReportsMissingDependencies(t *testing.T) {
 	assert.Contains(t, err.Error(), "while checking Helm chart dependencies")
 	assert.Contains(t, err.Error(), "helm dependency build "+chartPath)
 	assert.Contains(t, err.Error(), "helm-test-library")
+}
+
+func TestRenderManifestReportsMissingDependenciesOnce(t *testing.T) {
+	chartPath, err := filepath.Abs(filepath.Join("testdata", "chart-missing-dependency"))
+	require.NoError(t, err)
+
+	_, err = renderManifest(context.Background(), &chartSpec{
+		Chart:       chartPath,
+		ReleaseName: "unit",
+		Namespace:   "testns",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrHelmRenderFailed.Error()))
+	assert.Contains(t, err.Error(), "helm dependency build "+chartPath)
 }
