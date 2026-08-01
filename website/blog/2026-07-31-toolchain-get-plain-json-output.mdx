@@ -36,8 +36,8 @@ output including whether that version is installed.
 Grab a version with nothing to parse:
 
 ```shell
-atmos toolchain get vale-cli/vale --format=plain
-# 2.20.0
+$ atmos toolchain get vale-cli/vale --format=plain
+2.20.0
 ```
 
 Which collapses the CI snippet above to:
@@ -50,7 +50,7 @@ echo "version=$version" >> "$GITHUB_OUTPUT"
 Ask for more than the version string with `--format=json`:
 
 ```shell
-atmos toolchain get terraform --format=json
+$ atmos toolchain get terraform --format=json
 ```
 
 ```json
