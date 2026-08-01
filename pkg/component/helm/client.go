@@ -10,6 +10,7 @@ import (
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -199,6 +200,10 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 
 	client := action.NewUninstall(actx.cfg)
 	configureUninstallLifecycle(client, spec.Lifecycle.Policy, dryRun)
+	client.WaitOptions = []kube.WaitOption{
+		kube.WithWaitContext(ctx),
+		kube.WithWaitForDeleteMethodContext(ctx),
+	}
 	if _, err := client.Run(spec.ReleaseName); err != nil {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
