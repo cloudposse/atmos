@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"helm.sh/helm/v4/pkg/action"
-	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
@@ -128,9 +127,9 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	if err != nil {
 		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
 	}
-	loaded, err := loader.Load(chartPath)
+	loaded, err := loadChart(chartPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to load Helm chart %q: %w", chartPath, err)
+		return "", err
 	}
 
 	rel, err := client.RunWithContext(ctx, spec.ReleaseName, loaded, spec.Values)
@@ -141,7 +140,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	if !ok {
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return rendered.Manifest, nil
+	return renderReleaseManifest(rendered), nil
 }
 
 // resolveUpgradeChartRef applies the same repo/name resolution as the install
@@ -186,7 +185,7 @@ func getDeployedManifest(releaseName, namespace string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return deployed.Manifest, nil
+	return renderReleaseManifest(deployed), nil
 }
 
 // deleteRelease uninstalls the release.

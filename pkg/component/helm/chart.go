@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"helm.sh/helm/v4/pkg/action"
+	helmchart "helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/registry"
@@ -113,9 +115,9 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
 	}
 
-	loaded, err := loader.Load(chartPath)
+	loaded, err := loadChart(chartPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to load Helm chart %q: %w", chartPath, err)
+		return "", err
 	}
 
 	rel, err := client.RunWithContext(ctx, loaded, spec.Values)
@@ -127,7 +129,47 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 	if !ok {
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return rendered.Manifest, nil
+	return renderReleaseManifest(rendered), nil
+}
+
+// loadChart loads a chart and verifies that every declared dependency is present.
+// The Helm action package assumes its CLI caller performed this check; without it,
+// a missing library chart fails later with an unrelated template-definition error.
+func loadChart(chartPath string) (helmchart.Charter, error) {
+	loaded, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load Helm chart %q: %w", chartPath, err)
+	}
+
+	accessor, err := helmchart.NewAccessor(loaded)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect Helm chart %q: %w", chartPath, err)
+	}
+	if dependencies := accessor.MetaDependencies(); len(dependencies) > 0 {
+		if err := action.CheckDependencies(loaded, dependencies); err != nil {
+			return nil, fmt.Errorf("an error occurred while checking Helm chart dependencies; run 'helm dependency build %s' to fetch missing dependencies: %w", chartPath, err)
+		}
+	}
+
+	return loaded, nil
+}
+
+// renderReleaseManifest returns the same manifest surface as `helm template`:
+// regular resources followed by hook resources with their source annotations.
+// Helm keeps hooks outside Release.Manifest, so returning that field alone makes
+// template, plan, and diff silently omit resources such as migration Jobs.
+func renderReleaseManifest(rendered *release.Release) string {
+	var manifests bytes.Buffer
+	if manifest := strings.TrimSpace(rendered.Manifest); manifest != "" {
+		fmt.Fprintln(&manifests, manifest)
+	}
+	for _, hook := range rendered.Hooks {
+		if hook == nil || strings.TrimSpace(hook.Manifest) == "" {
+			continue
+		}
+		fmt.Fprintf(&manifests, "---\n# Source: %s\n%s\n", hook.Path, strings.TrimSpace(hook.Manifest))
+	}
+	return manifests.String()
 }
 
 // resolveChartRef maps a "repo/name" chart reference to an explicit RepoURL +

@@ -225,5 +225,18 @@ func TestRenderManifest_LocalChart(t *testing.T) {
 	assert.Contains(t, rendered, "namespace: testns")
 	assert.Contains(t, rendered, `replicas: "5"`)
 	assert.Contains(t, rendered, "nginx:9.9")
+	assert.Contains(t, rendered, "# Source: testchart/templates/hook.yaml")
+	assert.Contains(t, rendered, "name: unit-settings")
 	assert.True(t, strings.Contains(rendered, "ConfigMap"))
+}
+
+func TestLoadChartReportsMissingDependencies(t *testing.T) {
+	chartPath, err := filepath.Abs(filepath.Join("testdata", "chart-missing-dependency"))
+	require.NoError(t, err)
+
+	_, err = loadChart(chartPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "while checking Helm chart dependencies")
+	assert.Contains(t, err.Error(), "helm dependency build "+chartPath)
+	assert.Contains(t, err.Error(), "helm-test-library")
 }

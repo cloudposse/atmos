@@ -9,13 +9,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// renderInputTemplates renders Go templates in the component input sections so
-// fields that reference component values (e.g. chart version, a git target's
-// path/commit.message, value file paths) are materialized before use.
+// renderInputTemplates renders Go templates in Helm component control fields so
+// chart versions, paths, repositories, and provision metadata are materialized.
+// Helm values are deliberately excluded: Helm treats them as data and charts may
+// evaluate template expressions in values later with `tpl`.
 func renderInputTemplates(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any) error {
 	for _, key := range []string{
 		cfg.ChartSectionName,
-		cfg.ValuesSectionName,
 		cfg.ValuesFilesSectionName,
 		cfg.RepositoriesSectionName,
 		cfg.RenderSectionName,
