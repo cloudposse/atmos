@@ -941,6 +941,9 @@
             "auth": {
               "$ref": "#/definitions/component_auth"
             },
+            "secrets": {
+              "type": "object"
+            },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
             },
