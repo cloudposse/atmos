@@ -1860,7 +1860,7 @@ func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig 
 		return nil
 	}
 
-	for _, value := range helmComponents {
+	for name, value := range helmComponents {
 		component, ok := value.(map[string]any)
 		if !ok {
 			continue
@@ -1869,7 +1869,7 @@ func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig 
 		if overridesValue, exists := component[cfg.OverridesSectionName]; exists && overridesValue != nil {
 			componentOverrides, ok = overridesValue.(map[string]any)
 			if !ok {
-				return fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmOverridesSection, relativeFilePath)
+				return fmt.Errorf("%w for component %q in the stack manifest '%s'", errUtils.ErrInvalidHelmOverridesSection, name, relativeFilePath)
 			}
 		}
 		merged, err := m.Merge(atmosConfig, []map[string]any{componentOverrides, helmOverrides})

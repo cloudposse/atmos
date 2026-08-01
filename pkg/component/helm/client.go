@@ -30,6 +30,11 @@ type releaseActionResult struct {
 	Operation string
 }
 
+const (
+	releaseOperationInstall = "install"
+	releaseOperationUpgrade = "upgrade"
+)
+
 // newActionContext initializes a cluster-capable Helm action configuration.
 // The RESTClientGetter resolves credentials from the ambient KUBECONFIG, which
 // the toolchain/auth environment configures before execution.
@@ -70,12 +75,12 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 	histClient.Max = 1
 	if _, historyErr := histClient.Run(spec.ReleaseName); errors.Is(historyErr, driver.ErrReleaseNotFound) {
 		manifest, installErr := installRelease(ctx, actx, spec, dryRun)
-		return releaseActionResult{Manifest: manifest, Operation: "install"}, installErr
+		return releaseActionResult{Manifest: manifest, Operation: releaseOperationInstall}, installErr
 	} else if historyErr != nil {
 		return releaseActionResult{}, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr)
 	}
 	manifest, upgradeErr := upgradeRelease(ctx, actx, spec, dryRun)
-	return releaseActionResult{Manifest: manifest, Operation: "upgrade"}, upgradeErr
+	return releaseActionResult{Manifest: manifest, Operation: releaseOperationUpgrade}, upgradeErr
 }
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
