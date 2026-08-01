@@ -4,7 +4,10 @@ vars:
 # Native Helm lifecycle defaults for every Helm component in this stack.
 helm:
   wait_strategy: watcher
-  timeout: 2m
+  # Leave enough headroom for nested k3s workloads on resource-constrained
+  # macOS/Colima runners. Components that exercise timeout behavior override
+  # this value explicitly below.
+  timeout: 4m
   max_history: 10
   skip_crds: true
 

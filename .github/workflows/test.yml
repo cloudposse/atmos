@@ -648,19 +648,29 @@ jobs:
             docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
           }
 
+          diagnose_k3s() {
+            if ! docker inspect atmos-dev-emulator-kubernetes >/dev/null 2>&1; then
+              return
+            fi
+
+            echo "::group::k3s workload diagnostics"
+            docker exec atmos-dev-emulator-kubernetes k3s kubectl get pods,jobs,deployments -A -o wide || true
+            docker exec atmos-dev-emulator-kubernetes k3s kubectl get events -A --sort-by=.lastTimestamp || true
+            docker exec atmos-dev-emulator-kubernetes ctr --namespace k8s.io images list || true
+            echo "::endgroup::"
+          }
+
           # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
           # Bound each attempt so the matrix can retry instead of consuming the
           # whole job timeout and cancelling the required aggregate check.
           attempt_timeout=1500
-          if [ "${{ matrix.flavor.target }}" = "macos" ]; then
-            attempt_timeout=900
-          fi
 
           trap cleanup_k3s EXIT
           for attempt in 1 2; do
             run_with_timeout "${attempt_timeout}" atmos test && exit 0
             status=$?
             echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            diagnose_k3s
             cleanup_k3s
             [ "${attempt}" -lt 2 ] && sleep 15
           done
