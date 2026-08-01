@@ -90,7 +90,14 @@ func TestGetMatchesForPattern_ShallowNoMatch(t *testing.T) {
 }
 
 // TestCopyFile_FailCreate tests error when creating destination file fails on Unix.
+// The privilege-independent version of this coverage is TestCopyFile_CreateDestFileError, which
+// forces the same failure with a directory in the destination's place.
 func TestCopyFile_FailCreate(t *testing.T) {
+	// Root bypasses the read-only directory this test relies on, so os.Create would succeed.
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
 	srcDir := t.TempDir()
 
 	dstDir := t.TempDir()
