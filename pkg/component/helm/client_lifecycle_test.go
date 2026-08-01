@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/common"
 	"helm.sh/helm/v4/pkg/cli"
@@ -219,7 +221,7 @@ func TestUpgradeReleasePrunesDefaultHistory(t *testing.T) {
 	stubActionContext(t, actx)
 	spec := testdataChartSpec(t, "history")
 
-	for revision := 0; revision < defaultHelmMaxHistory+3; revision++ {
+	for revision := 0; revision < cfg.HelmDefaultMaxHistory+3; revision++ {
 		spec.Values["replicaCount"] = revision + 1
 		_, err := applyRelease(context.Background(), spec, false)
 		require.NoError(t, err)
@@ -227,7 +229,7 @@ func TestUpgradeReleasePrunesDefaultHistory(t *testing.T) {
 
 	history, err := actx.cfg.Releases.History(spec.ReleaseName)
 	require.NoError(t, err)
-	assert.Len(t, history, defaultHelmMaxHistory)
+	assert.Len(t, history, cfg.HelmDefaultMaxHistory)
 }
 
 func TestUpgradeReleaseUnlimitedHistory(t *testing.T) {
@@ -236,7 +238,7 @@ func TestUpgradeReleaseUnlimitedHistory(t *testing.T) {
 	spec := testdataChartSpec(t, "unlimited-history")
 	spec.Lifecycle.Policy.MaxHistory = 0
 
-	const revisions = defaultHelmMaxHistory + 3
+	const revisions = cfg.HelmDefaultMaxHistory + 3
 	for revision := 0; revision < revisions; revision++ {
 		spec.Values["replicaCount"] = revision + 1
 		_, err := applyRelease(context.Background(), spec, false)
