@@ -681,6 +681,7 @@ func TestExtractHelmLifecycleSections(t *testing.T) {
 	section := map[string]any{
 		cfg.ChartSectionName:                 "charts/demo-release",
 		cfg.ValuesSectionName:                map[string]any{"cluster": "shared"},
+		cfg.RepositoriesSectionName:          []any{map[string]any{"name": "internal"}},
 		cfg.HelmRollbackOnFailureSectionName: true,
 		cfg.HelmWaitStrategySectionName:      "watcher",
 		cfg.HelmTimeoutSectionName:           "30m",
@@ -699,6 +700,7 @@ func TestExtractHelmLifecycleSections(t *testing.T) {
 	defaults := extractHelmLifecycleSection(section)
 	assert.NotContains(t, defaults, cfg.ChartSectionName)
 	assert.Equal(t, map[string]any{"cluster": "shared"}, defaults[cfg.ValuesSectionName])
+	assert.Equal(t, []any{map[string]any{"name": "internal"}}, defaults[cfg.RepositoriesSectionName])
 	assert.Equal(t, true, defaults[cfg.HelmRollbackOnFailureSectionName])
 	assert.Equal(t, "watcher", defaults[cfg.HelmWaitStrategySectionName])
 	assert.Equal(t, "30m", defaults[cfg.HelmTimeoutSectionName])

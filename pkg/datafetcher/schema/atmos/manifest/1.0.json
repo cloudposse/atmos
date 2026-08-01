@@ -2553,6 +2553,24 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
             "values": {
               "type": "object"
             }
