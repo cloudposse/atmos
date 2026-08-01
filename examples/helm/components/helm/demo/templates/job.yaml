@@ -11,6 +11,6 @@ spec:
       restartPolicy: Never
       containers:
         - name: ordinary-job
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.jobImage.repository }}:{{ .Values.jobImage.tag }}"
           command: ["/bin/sh", "-c", "sleep {{ .Values.job.sleepSeconds }}"]
 {{- end }}
