@@ -138,16 +138,16 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 func loadChart(chartPath string) (helmchart.Charter, error) {
 	loaded, err := loader.Load(chartPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load Helm chart %q: %w", chartPath, err)
+		return nil, fmt.Errorf("%w: failed to load Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
 	}
 
 	accessor, err := helmchart.NewAccessor(loaded)
 	if err != nil {
-		return nil, fmt.Errorf("failed to inspect Helm chart %q: %w", chartPath, err)
+		return nil, fmt.Errorf("%w: failed to inspect Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
 	}
 	if dependencies := accessor.MetaDependencies(); len(dependencies) > 0 {
 		if err := action.CheckDependencies(loaded, dependencies); err != nil {
-			return nil, fmt.Errorf("an error occurred while checking Helm chart dependencies; run 'helm dependency build %s' to fetch missing dependencies: %w", chartPath, err)
+			return nil, fmt.Errorf("%w: an error occurred while checking Helm chart dependencies; run 'helm dependency build %s' to fetch missing dependencies: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
 		}
 	}
 
