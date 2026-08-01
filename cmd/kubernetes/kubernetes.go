@@ -256,6 +256,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 	provider := component.MustGetProvider(cfg.KubernetesComponentType)
 
 	return provider.Execute(&component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       cfg.KubernetesComponentType,
 		Component:           info.ComponentFromArg,
 		Stack:               info.Stack,
