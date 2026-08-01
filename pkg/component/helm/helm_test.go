@@ -275,4 +275,21 @@ func TestRenderManifestReportsMissingDependenciesOnce(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrHelmRenderFailed.Error()))
 	assert.Contains(t, err.Error(), "helm dependency build "+chartPath)
+	assert.Contains(t, err.Error(), "--dependency-update")
+}
+
+func TestLoadChartUpdatesMissingDependenciesWhenRequested(t *testing.T) {
+	testdataRoot := t.TempDir()
+	require.NoError(t, os.CopyFS(testdataRoot, os.DirFS("testdata")))
+	chartPath := filepath.Join(testdataRoot, "chart-missing-dependency")
+
+	settings := newSettings()
+	settings.RepositoryConfig = filepath.Join(testdataRoot, "repositories.yaml")
+	settings.RepositoryCache = filepath.Join(testdataRoot, "repository")
+	settings.ContentCache = filepath.Join(testdataRoot, "content")
+
+	loaded, err := loadChartForAction(chartPath, settings, nil, true)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	assert.FileExists(t, filepath.Join(chartPath, "charts", "helm-test-library-0.1.0.tgz"))
 }
