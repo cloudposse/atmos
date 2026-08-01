@@ -78,7 +78,9 @@ type StoreCandidate struct {
 }
 
 // Description returns a short human-readable identifier for log and error messages.
-func (c StoreCandidate) Description() string {
+func (c *StoreCandidate) Description() string {
+	defer perf.Track(nil, "planfile.StoreCandidate.Description")()
+
 	if c.Name != "" && c.Name != c.Options.Type {
 		return fmt.Sprintf("%s (%s)", c.Name, c.Options.Type)
 	}
@@ -111,14 +113,14 @@ func ResolveStoreCandidates(atmosConfig *schema.AtmosConfiguration, storeName st
 
 	// An explicit `--store` overrides everything in configuration.
 	if storeName != "" {
-		candidate, err := candidateFromName(storeName, planfilesConfig, StoreSourceExplicit, "--store")
+		candidate, err := candidateFromName(storeName, &planfilesConfig, StoreSourceExplicit, "--store")
 		if err != nil {
 			return nil, err
 		}
 		return withAtmosConfig([]StoreCandidate{candidate}, atmosConfig), nil
 	}
 
-	configured, err := configuredCandidates(planfilesConfig)
+	configured, err := configuredCandidates(&planfilesConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -135,34 +137,55 @@ func ResolveStoreCandidates(atmosConfig *schema.AtmosConfiguration, storeName st
 
 // configuredCandidates resolves the candidates selected by configuration.
 // Returns an empty slice when configuration does not select any store.
-func configuredCandidates(planfilesConfig schema.PlanfilesConfig) ([]StoreCandidate, error) {
+func configuredCandidates(planfilesConfig *schema.PlanfilesConfig) ([]StoreCandidate, error) {
 	// `default` names a single store, so it takes precedence over the priority list.
 	if planfilesConfig.Default != "" {
-		if len(planfilesConfig.Priority) > 0 {
-			log.Debug("Both planfiles.default and planfiles.priority are set; default takes precedence",
-				"default", planfilesConfig.Default, "priority", planfilesConfig.Priority)
-		}
-		candidate, err := candidateFromName(planfilesConfig.Default, planfilesConfig, StoreSourceDefault,
-			"components.terraform.planfiles.default")
-		if err != nil {
-			return nil, err
-		}
-		return []StoreCandidate{candidate}, nil
+		return defaultCandidate(planfilesConfig)
 	}
 
 	if len(planfilesConfig.Priority) > 0 {
-		candidates := make([]StoreCandidate, 0, len(planfilesConfig.Priority))
-		for i, name := range planfilesConfig.Priority {
-			setting := fmt.Sprintf("components.terraform.planfiles.priority[%d]", i)
-			candidate, err := candidateFromName(name, planfilesConfig, StoreSourcePriority, setting)
-			if err != nil {
-				return nil, err
-			}
-			candidates = append(candidates, candidate)
-		}
-		return candidates, nil
+		return priorityCandidates(planfilesConfig)
 	}
 
+	return soleStoreCandidate(planfilesConfig)
+}
+
+// defaultCandidate resolves the store named by `planfiles.default`.
+func defaultCandidate(planfilesConfig *schema.PlanfilesConfig) ([]StoreCandidate, error) {
+	if len(planfilesConfig.Priority) > 0 {
+		log.Debug("Both planfiles.default and planfiles.priority are set; default takes precedence",
+			"default", planfilesConfig.Default, "priority", planfilesConfig.Priority)
+	}
+
+	candidate, err := candidateFromName(planfilesConfig.Default, planfilesConfig, StoreSourceDefault,
+		"components.terraform.planfiles.default")
+	if err != nil {
+		return nil, err
+	}
+
+	return []StoreCandidate{candidate}, nil
+}
+
+// priorityCandidates resolves every entry of `planfiles.priority`, in order.
+func priorityCandidates(planfilesConfig *schema.PlanfilesConfig) ([]StoreCandidate, error) {
+	candidates := make([]StoreCandidate, 0, len(planfilesConfig.Priority))
+
+	for i, name := range planfilesConfig.Priority {
+		setting := fmt.Sprintf("components.terraform.planfiles.priority[%d]", i)
+		candidate, err := candidateFromName(name, planfilesConfig, StoreSourcePriority, setting)
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, candidate)
+	}
+
+	return candidates, nil
+}
+
+// soleStoreCandidate resolves the lone entry of `planfiles.stores` when neither
+// `default` nor `priority` selects one. Returns no candidates when the choice is
+// ambiguous, leaving the caller to fall back to environment detection.
+func soleStoreCandidate(planfilesConfig *schema.PlanfilesConfig) ([]StoreCandidate, error) {
 	// A single named store with no explicit selection is unambiguous: use it.
 	if len(planfilesConfig.Stores) == 1 {
 		for name := range planfilesConfig.Stores {
@@ -194,7 +217,7 @@ func configuredCandidates(planfilesConfig schema.PlanfilesConfig) ([]StoreCandid
 // either a key of `planfiles.stores` or a store type (e.g. `aws/s3`), matching what
 // `--store` has always accepted. Anything else is a configuration error: silently
 // skipping an unresolvable name is how a configured store ends up being ignored.
-func candidateFromName(name string, planfilesConfig schema.PlanfilesConfig, source StoreSource, setting string) (StoreCandidate, error) {
+func candidateFromName(name string, planfilesConfig *schema.PlanfilesConfig, source StoreSource, setting string) (StoreCandidate, error) {
 	if spec, ok := planfilesConfig.Stores[name]; ok {
 		if spec.Type == "" {
 			return StoreCandidate{}, fmt.Errorf("%w: store %q (referenced by %s) has no `type`; set one of %s, %s, or %s",
@@ -286,7 +309,7 @@ func withAtmosConfig(candidates []StoreCandidate, atmosConfig *schema.AtmosConfi
 }
 
 // storeNames returns the sorted names of the configured stores.
-func storeNames(planfilesConfig schema.PlanfilesConfig) []string {
+func storeNames(planfilesConfig *schema.PlanfilesConfig) []string {
 	names := make([]string, 0, len(planfilesConfig.Stores))
 	for name := range planfilesConfig.Stores {
 		names = append(names, name)
