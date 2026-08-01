@@ -40,10 +40,9 @@ commands:
     description: "Render the local Helm chart, deploy it to the k3s emulator, verify it, then tear it down"
     steps:
       - atmos validate stacks
-      # Native Helm validates declared chart dependencies before rendering. CI
-      # and local contributors provision Helm on PATH before running the demo.
-      - helm dependency build --skip-refresh components/helm/demo
-      - atmos helm template demo -s dev --output=/tmp/atmos-helm-template.yaml
+      # Dependency acquisition is explicit: the opt-in flag fetches the missing
+      # file:// library and updates the local chart before the first render.
+      - atmos helm template demo -s dev --dependency-update --output=/tmp/atmos-helm-template.yaml
       # Template output includes weighted hooks and leaves Helm `tpl` expressions
       # in values for the chart to evaluate with its native .Values context.
       - command: >-

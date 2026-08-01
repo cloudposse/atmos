@@ -34,6 +34,9 @@ atmos helm deploy --affected --labels cost-center=platform
   <dt>`--target` <em>(optional)</em></dt>
   <dd>Provision target to deliver to. Defaults to `provision.default`, otherwise the cluster.</dd>
 
+  <dt>`--dependency-update` <em>(optional)</em></dt>
+  <dd>Fetch declared chart dependencies when they are missing. See [`apply`](/cli/commands/helm/apply#flags).</dd>
+
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order. See [`apply`](/cli/commands/helm/apply).</dd>
 
