@@ -528,3 +528,69 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 		_, _ = GetAffectedComponents(args)
 	}
 }
+
+// TestAffectedTerraformSelection verifies the selection carries the parsed
+// --include-dependents depth from info: a zero DependentDepth means unlimited
+// in dependency.Filter encoding, so omitting it silently erased a user-supplied
+// depth bound on the --affected path (the closure spec keeps the most
+// permissive depth when merging selection and info).
+func TestAffectedTerraformSelection(t *testing.T) {
+	affected := []schema.Affected{{Component: "vpc", Stack: "dev"}}
+
+	tests := []struct {
+		name                  string
+		argsIncludeDependents bool
+		infoIncludeDependents int
+		wantInclude           bool
+		wantDepth             int
+	}{
+		{
+			name:                  "flag off",
+			argsIncludeDependents: false,
+			infoIncludeDependents: 0,
+			wantInclude:           false,
+			wantDepth:             0,
+		},
+		{
+			name:                  "bare flag is unlimited",
+			argsIncludeDependents: true,
+			infoIncludeDependents: -1,
+			wantInclude:           true,
+			wantDepth:             0,
+		},
+		{
+			name:                  "numeric depth is carried through, not erased to unlimited",
+			argsIncludeDependents: true,
+			infoIncludeDependents: 2,
+			wantInclude:           true,
+			wantDepth:             2,
+		},
+		{
+			name:                  "programmatically forced dependents without flag depth stay unlimited",
+			argsIncludeDependents: true,
+			infoIncludeDependents: 0,
+			wantInclude:           true,
+			wantDepth:             0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			args := &DescribeAffectedCmdArgs{IncludeDependents: tc.argsIncludeDependents}
+			info := &schema.ConfigAndStacksInfo{IncludeDependents: tc.infoIncludeDependents}
+
+			selection := affectedTerraformSelection(affected, args, info)
+
+			assert.Equal(t, []string{"vpc-dev"}, selection.NodeIDs)
+			assert.Equal(t, tc.wantInclude, selection.IncludeDependents)
+			assert.Equal(t, tc.wantDepth, selection.DependentDepth)
+		})
+	}
+
+	t.Run("nil info leaves depth unlimited", func(t *testing.T) {
+		args := &DescribeAffectedCmdArgs{IncludeDependents: true}
+		selection := affectedTerraformSelection(affected, args, nil)
+		assert.True(t, selection.IncludeDependents)
+		assert.Equal(t, 0, selection.DependentDepth)
+	})
+}
