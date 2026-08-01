@@ -1,8 +1,6 @@
 package emulator
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -184,7 +182,7 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 		}
 	}
 	if parser, ok := componentPromptParsers[cmd]; ok {
-		parsed, err := parser.Parse(context.Background(), positional)
+		parsed, err := parser.Parse(cmd.Context(), positional)
 		if err != nil {
 			return err
 		}
@@ -213,7 +211,7 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 // in the parsed result, so the value is carried forward explicitly rather than
 // by mutating global Viper state.
 func applyParsedStackFlag(cmd *cobra.Command, positional []string) error {
-	parsed, err := emulatorParser.Parse(context.Background(), positional)
+	parsed, err := emulatorParser.Parse(cmd.Context(), positional)
 	if err != nil {
 		return err
 	}

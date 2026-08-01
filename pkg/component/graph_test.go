@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,7 @@ import (
 type graphTestProvider struct {
 	calls         []ExecutionContext
 	cancelOnFirst context.CancelFunc
+	errorOnFirst  error
 }
 
 func (p *graphTestProvider) GetType() string { return cfg.KubernetesComponentType }
@@ -34,6 +36,9 @@ func (p *graphTestProvider) Execute(ctx *ExecutionContext) error {
 	p.calls = append(p.calls, *ctx)
 	if p.cancelOnFirst != nil && len(p.calls) == 1 {
 		p.cancelOnFirst()
+		if p.errorOnFirst != nil {
+			return p.errorOnFirst
+		}
 		return ctx.GoContext().Err()
 	}
 	return nil
@@ -272,7 +277,8 @@ func TestExecuteGraphHonorsCanceledContext(t *testing.T) {
 
 func TestExecuteGraphCancelsActiveNodeAndStopsDependents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	provider := &graphTestProvider{cancelOnFirst: cancel}
+	providerErr := errors.New("provider canceled operation")
+	provider := &graphTestProvider{cancelOnFirst: cancel, errorOnFirst: providerErr}
 	err := ExecuteGraph(ctx, &GraphExecutionOptions{
 		Provider:      provider,
 		Info:          &schema.ConfigAndStacksInfo{Stack: "dev"},
@@ -281,6 +287,7 @@ func TestExecuteGraphCancelsActiveNodeAndStopsDependents(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, providerErr)
 	require.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
 	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
 	require.Len(t, provider.calls, 1)

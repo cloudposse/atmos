@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -67,8 +68,8 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 		}
 
 		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
-			if ctx.Err() != nil {
-				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, err)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, errors.Join(ctxErr, err))
 			}
 			return err
 		}
