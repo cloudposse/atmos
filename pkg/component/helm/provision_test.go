@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/kube"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -156,7 +158,7 @@ func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
 	var receivedDryRun bool
 	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
 		receivedDryRun = dryRun
-		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: releaseOperationInstall}, nil
 	}
 
 	info := &schema.ConfigAndStacksInfo{
@@ -167,6 +169,38 @@ func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, receivedDryRun)
 	assert.Equal(t, "cluster", summary[targetKey])
+}
+
+func TestLifecycleSummary(t *testing.T) {
+	policy := releaseLifecycle{
+		RollbackOnFailure: true,
+		WaitStrategy:      kube.StatusWatcherStrategy,
+		WaitForJobs:       true,
+		Timeout:           5 * time.Minute,
+		CleanupOnFail:     true,
+		MaxHistory:        7,
+		DisableChartHooks: true,
+		SkipCRDs:          true,
+	}
+
+	install := lifecycleSummary(releaseOperationInstall, policy)
+	assert.Equal(t, releaseOperationInstall, install["operation"])
+	assert.Equal(t, "watcher", install["wait_strategy"])
+	assert.Equal(t, "5m0s", install["timeout"])
+	assert.Equal(t, false, install["chart_hooks_enabled"])
+	assert.Equal(t, true, install["wait_for_jobs"])
+	assert.Equal(t, true, install["rollback_on_failure"])
+	assert.Equal(t, false, install["install_crds"])
+
+	upgrade := lifecycleSummary(releaseOperationUpgrade, policy)
+	assert.Equal(t, true, upgrade["wait_for_jobs"])
+	assert.Equal(t, true, upgrade["rollback_on_failure"])
+	assert.Equal(t, true, upgrade["cleanup_on_fail"])
+	assert.Equal(t, 7, upgrade["max_history"])
+
+	deleted := lifecycleSummary("delete", policy)
+	assert.NotContains(t, deleted, "wait_for_jobs")
+	assert.NotContains(t, deleted, "rollback_on_failure")
 }
 
 func TestDeliverApply_SelectTargetError(t *testing.T) {

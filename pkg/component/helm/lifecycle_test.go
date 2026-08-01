@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -239,6 +240,29 @@ func TestResolveReleaseLifecycle_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := resolveReleaseLifecycle(tt.section)
 			require.ErrorIs(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestExactInt(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+		want  int
+		ok    bool
+	}{
+		{name: "nil", value: nil, ok: false},
+		{name: "signed", value: int8(-7), want: -7, ok: true},
+		{name: "unsigned", value: uint16(9), want: 9, ok: true},
+		{name: "unsigned overflow", value: uint64(math.MaxInt) + 1, ok: false},
+		{name: "non integer", value: 1.5, ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := exactInt(tt.value)
+			assert.Equal(t, tt.ok, ok)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
