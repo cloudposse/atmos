@@ -73,11 +73,13 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	assert.Equal(t, "install", result.Operation)
 	assert.Contains(t, result.Manifest, "kind: ConfigMap")
 	assert.Contains(t, result.Manifest, "name: lifecycle")
+	assert.Contains(t, result.Manifest, "name: lifecycle-settings")
 
 	// The installed release is now the diff baseline.
 	deployed, err := getDeployedManifest("lifecycle", "testns")
 	require.NoError(t, err)
 	assert.Contains(t, deployed, "kind: ConfigMap")
+	assert.Contains(t, deployed, "name: lifecycle-settings")
 
 	// Release exists -> applyRelease takes the upgrade branch.
 	upgraded, err := applyRelease(context.Background(), spec, false)
