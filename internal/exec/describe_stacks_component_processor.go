@@ -411,12 +411,15 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	// Enforce the selector purity contract on metadata.tags/metadata.labels —
-	// always, whether or not a filter is active. Selectors drive scoping
-	// decisions before evaluation, so by design they may not contain constructs
+	// whether or not a filter is active. Selectors drive scoping decisions
+	// before evaluation, so by design they may not contain constructs
 	// requiring authentication or process execution; this errors early with a
 	// by-design explanation instead of deferring to a later evaluation failure.
+	// describe.settings.eager_evaluation is the escape hatch: it forces full
+	// evaluation (no pre-evaluation scoping), under which selectors are
+	// evaluated like any other value and the purity contract is moot.
 	if err := p.validateSelectorMetadata(secs.metadata); err != nil {
-		return err
+		return fmt.Errorf("component %q in stack manifest %q: %w", componentName, stackFileName, err)
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
@@ -781,7 +784,14 @@ func (p *describeStacksProcessor) templateDelims() (string, string) {
 
 // validateSelectorMetadata enforces the selector purity contract on this
 // component's metadata.tags and metadata.labels (see tags.ValidateSelectorValue).
+// When describe.settings.eager_evaluation forces full evaluation, the contract
+// is not enforced: no scoping decision is made before evaluation, selectors are
+// evaluated like any other value, and rejecting previously-working manifests
+// would leave users without a rollback path.
 func (p *describeStacksProcessor) validateSelectorMetadata(metadata map[string]any) error {
+	if GetEagerEvaluationSetting(p.atmosConfig) {
+		return nil
+	}
 	rawTags, hasTags := metadata[metadataTagsKey]
 	rawLabels, hasLabels := metadata[metadataLabelsKey]
 	if !hasTags && !hasLabels {
@@ -841,7 +851,16 @@ func inScopeByTagsAndLabelsWithContext(metadata, data map[string]any, filterTags
 	}
 
 	if len(filterLabels) > 0 {
-		rawLabels := any(tags.RequestedLabels(metadata[metadataLabelsKey], filterLabels))
+		// Narrow BEFORE the unresolved check only when narrowing is safe:
+		// a non-map labels value (templated scalar) or a templated map key
+		// makes the selector undecidable — narrowing first would collapse the
+		// unresolved marker into a decidable non-match and wrongly exclude
+		// the component.
+		narrowed, safe := tags.RequestedLabels(metadata[metadataLabelsKey], filterLabels, leftDelim)
+		if !safe {
+			return true, false
+		}
+		rawLabels := any(narrowed)
 		if tags.SelectorUnresolved(rawLabels, leftDelim) {
 			resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, data, leftDelim, rightDelim)
 			if !ok {

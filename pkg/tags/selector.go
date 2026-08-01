@@ -48,19 +48,48 @@ var forbiddenSelectorFunctions = map[string]struct{}{
 }
 
 // forbiddenTemplateIdentifiers are template function identifiers that reach
-// external data sources and therefore may not appear in selector templates.
+// external data sources, require authentication, perform network I/O, or are
+// nondeterministic, and therefore may not appear in selector templates.
+// Nondeterministic functions are rejected because they would resolve to a
+// different value in the early scope gate than in full template evaluation,
+// making the gate and the authoritative post-filter disagree. The namespace
+// identifiers (aws/gcp/net/random) catch gomplate namespace calls such as
+// `aws.EC2Tag` or `net.LookupIP`, whose base parses as an identifier node.
 var forbiddenTemplateIdentifiers = map[string]struct{}{
-	"ds":         {},
-	"datasource": {},
+	// Gomplate datasource access.
+	"ds":                  {},
+	"datasource":          {},
+	"include":             {},
+	"datasourceExists":    {},
+	"datasourceReachable": {},
+	"defineDatasource":    {},
+	// Gomplate namespaces requiring auth or performing network I/O,
+	// or nondeterministic.
+	"aws":    {},
+	"gcp":    {},
+	"net":    {},
+	"random": {},
+	// Sprig network and nondeterministic functions.
+	"getHostByName": {},
+	"uuidv4":        {},
+	"randAlpha":     {},
+	"randAlphaNum":  {},
+	"randNumeric":   {},
+	"randAscii":     {},
+	"randBytes":     {},
+	"now":           {},
 }
 
 // forbiddenAtmosMethods are methods on the "atmos" template namespace that
-// evaluate other components or reach stores, both of which require the full
-// evaluation pipeline selectors exist to avoid.
+// evaluate other components, reach stores, or evaluate arbitrary YAML
+// functions (Resolve would otherwise launder the entire
+// forbiddenSelectorFunctions list through a template call), all of which
+// require the full evaluation pipeline selectors exist to avoid.
 var forbiddenAtmosMethods = map[string]struct{}{
 	"Component":          {},
 	"Store":              {},
 	"GomplateDatasource": {},
+	"Resolve":            {},
 }
 
 // TemplateDelims returns the effective template delimiters from a raw
@@ -110,8 +139,11 @@ func selectorUnresolved(v any, leftDelim string) bool {
 			}
 		}
 	case map[string]any:
-		for _, item := range value {
-			if selectorUnresolved(item, leftDelim) {
+		for key, item := range value {
+			// A templated KEY is as unresolved as a templated value: literal
+			// key lookups (e.g. RequestedLabels) cannot see what it will
+			// render to, so the whole map is undecidable.
+			if selectorUnresolved(key, leftDelim) || selectorUnresolved(item, leftDelim) {
 				return true
 			}
 		}
@@ -158,6 +190,12 @@ func validateSelectorValue(field string, v any, leftDelim, rightDelim string) er
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
+			// Keys are rendered by whole-section template processing just like
+			// values, so a forbidden construct in a label KEY would execute
+			// there — validate both.
+			if err := validateSelectorString(field, key, leftDelim, rightDelim); err != nil {
+				return err
+			}
 			if err := validateSelectorValue(field, value[key], leftDelim, rightDelim); err != nil {
 				return err
 			}
@@ -392,17 +430,40 @@ func ResolveSelectorValue(v any, data map[string]any, leftDelim, rightDelim stri
 // RequestedLabels keeps only the label values named by the current selector so
 // unrelated (possibly templated) labels cannot affect the scope decision or
 // force full component evaluation.
-func RequestedLabels(raw any, filter map[string]string) map[string]any {
+//
+// An ok=false result means the raw value cannot be safely narrowed and the
+// caller must treat the selector as undecidable (fall through to full evaluation): the
+// value is a non-map (e.g. a templated scalar that whole-manifest rendering
+// may re-parse into a map — the gate cannot reproduce that), or one of its
+// KEYS is itself unresolved (a templated key may render to a requested key,
+// so a literal-key lookup would wrongly report a decidable non-match). A nil
+// raw value narrows to an empty map with ok=true — a component without labels
+// genuinely does not match a labels filter.
+func RequestedLabels(raw any, filter map[string]string, leftDelim string) (map[string]any, bool) {
 	defer perf.Track(nil, "tags.RequestedLabels")()
 
-	labels, _ := raw.(map[string]any)
+	if leftDelim == "" {
+		leftDelim = DefaultLeftDelim
+	}
+	if raw == nil {
+		return make(map[string]any, len(filter)), true
+	}
+	labels, isMap := raw.(map[string]any)
+	if !isMap {
+		return nil, false
+	}
+	for key := range labels {
+		if selectorUnresolved(key, leftDelim) {
+			return nil, false
+		}
+	}
 	requested := make(map[string]any, len(filter))
 	for key := range filter {
 		if value, ok := labels[key]; ok {
 			requested[key] = value
 		}
 	}
-	return requested
+	return requested, true
 }
 
 // resolveSelectorValue walks nested slices/maps without re-entering perf tracking.

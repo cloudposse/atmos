@@ -55,10 +55,12 @@ atmos list components --labels=env=dev --include-dependencies
 atmos list stacks --labels=env=dev --include-dependencies
 ```
 
-Two things to know:
+A few things to know:
 
 - Using `--include-dependencies` with `destroy` also destroys *shared* prerequisites of your selection — components other stacks may still rely on. Atmos warns when you combine them.
-- Because `metadata.tags` and `metadata.labels` now drive scoping decisions *before* evaluation, they are selectors by design: plain strings, simple templates, and local functions like `!env`, `!git.*`, and `!include` are allowed, but values that require authentication or execution (`!terraform.state`, `!store`, `!exec`, `atmos.Component`, ...) are rejected with an error. This contract is enforced for every component whenever stacks are enumerated — by `describe`, `list`, and bulk terraform commands — even when no selector flag is used and the component is outside the current stack filter, so an existing impure value fails fast rather than surfacing later as a confusing scoping bug. Move those values into `vars` or `settings` instead.
+- Because `metadata.tags` and `metadata.labels` now drive scoping decisions *before* evaluation, they are selectors by design: plain strings, simple templates, and local functions like `!env`, `!git.*`, and `!include` are allowed, but values that require authentication or execution (`!terraform.state`, `!store`, `!exec`, `atmos.Component`, ...) are rejected with an error. This contract is enforced for every component whenever stacks are enumerated — by `describe`, `list`, and bulk terraform commands — even when no selector flag is used and the component is outside the current stack filter, so an existing impure value fails fast rather than surfacing later as a confusing scoping bug. The error names the offending component and stack manifest. Move those values into `vars` or `settings` instead — or, if you need time to migrate, set `describe.settings.eager_evaluation: true` in `atmos.yaml` to restore the previous full-evaluation behavior (see the [describe configuration](/cli/configuration/describe) reference).
+- If you already combine `--affected --include-dependents` with `--tags` or `--labels`, note the semantics changed: previously the tag/label filter also removed non-matching dependents from the expanded set; now selectors narrow only the *seed* and closure members are retained regardless. That is the whole point of closure expansion — but it does mean such runs can now include more components than before.
+- The depth value must be attached with `=` (for example `--include-dependencies=2`). On the terraform commands a bare `--include-dependencies` followed by a separate value is also accepted, so take care that a following positional argument isn't consumed as the depth — Atmos rejects non-numeric values loudly rather than guessing.
 
 ## Get Involved
 

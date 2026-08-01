@@ -394,10 +394,10 @@ func terraformClosureSpec(info *schema.ConfigAndStacksInfo, selection *Terraform
 	}
 	if info != nil {
 		if info.IncludeDependencies != 0 {
-			mergeClosureDepth(&spec.includeDependencies, &spec.dependencyDepth, flagDepthToFilterDepth(info.IncludeDependencies))
+			mergeClosureDepth(&spec.includeDependencies, &spec.dependencyDepth, FlagDepthToFilterDepth(info.IncludeDependencies))
 		}
 		if info.IncludeDependents != 0 {
-			mergeClosureDepth(&spec.includeDependents, &spec.dependentDepth, flagDepthToFilterDepth(info.IncludeDependents))
+			mergeClosureDepth(&spec.includeDependents, &spec.dependentDepth, FlagDepthToFilterDepth(info.IncludeDependents))
 		}
 	}
 	return spec
@@ -409,9 +409,14 @@ func terraformClosureRequested(info *schema.ConfigAndStacksInfo, selection *Terr
 	return spec.includeDependencies || spec.includeDependents
 }
 
-// flagDepthToFilterDepth converts the flag encoding (-1 = unlimited, N>0 =
-// depth) into dependency.Filter's encoding (0 = unlimited).
-func flagDepthToFilterDepth(flagValue int) int {
+// FlagDepthToFilterDepth converts the flag encoding (-1 = unlimited, N>0 =
+// depth) into dependency.Filter's encoding (0 = unlimited). Exported so
+// selection producers (e.g. the terraform --affected path) can carry the
+// flag-side depth into TerraformSelection using the same conversion the
+// closure spec applies to info.
+//
+//nolint:lintroller // Trivial pure conversion on the closure hot path; perf tracking would only add noise.
+func FlagDepthToFilterDepth(flagValue int) int {
 	if flagValue < 0 {
 		return 0
 	}

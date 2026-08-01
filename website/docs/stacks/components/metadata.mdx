@@ -331,12 +331,14 @@ Allowed in `metadata.tags` and `metadata.labels`:
 - Simple Go templates over the stack context (for example, `{{ .vars.stage }}`)
 - Local YAML functions: `!env`, `!git.*`, `!include`
 
-Rejected with a hard error on any command that processes the manifest:
+Rejected with a hard error on any command that enumerates stacks (`describe stacks`, `describe affected`, the `list` commands, and multi-component `terraform` selections such as `--all` and `--affected`):
 
 - YAML functions that require authentication or process execution: `!terraform.state`, `!terraform.output`, `!store`, `!store.get`, `!secret`, `!aws.*`, `!emulator`, `!exec`, `!random`
-- Template calls to `atmos.Component`, `atmos.Store`, `atmos.GomplateDatasource`, and gomplate datasources (`ds`/`datasource`)
+- Template calls to `atmos.Component`, `atmos.Store`, `atmos.GomplateDatasource`, `atmos.Resolve`, gomplate datasources (`ds`/`datasource`, `include`, `datasourceExists`, `datasourceReachable`, `defineDatasource`), the gomplate `aws.*`/`gcp.*`/`net.*`/`random.*` namespaces, and network or non-deterministic template functions (`getHostByName`, `uuidv4`, `randAlpha`, `randAlphaNum`, `randNumeric`, `randAscii`, `randBytes`, `now`)
 
-If a value needs one of these, move it into `vars` or `settings` and reference it from there — the value stays available to the component while the selectors remain pure.
+The error names the offending component and stack manifest. If a value needs one of these constructs, move it into `vars` or `settings` and reference it from there — the value stays available to the component while the selectors remain pure.
+
+If upgrading surfaces this error for existing manifests and you need time to migrate, set `describe.settings.eager_evaluation: true` in `atmos.yaml`: it disables pre-evaluation scoping entirely (every stack is fully evaluated before filtering, matching pre-optimization behavior), under which selectors are evaluated like any other value and the purity contract is not enforced.
 
 ## Examples
 

@@ -146,6 +146,14 @@ func stackMatches(pattern, stack string) bool {
 // pass never touches (e.g. a remote store lookup). The
 // describe.settings.eager_evaluation setting remains the fallback to the
 // historical full-repo-evaluation behavior.
+//
+// Reverse/both directions additionally evaluate every component whose
+// dependency declarations were unresolved in the lightweight pass (see
+// UnresolvedDependencySources): a dependent with a templated edge would
+// otherwise never be evaluated (it is not yet IN the closure) and thus never
+// discovered. This is a conservative extra-evaluation cost, never an
+// extra-execution cost — membership is still decided by the closure computed
+// against the resolved graph.
 func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResult, error) {
 	defer perf.Track(nil, "dependencies.ResolveScopedClosure")()
 
@@ -188,15 +196,23 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 	resolvedStacks := make(map[string]any)
 	evaluatedComponents := make(map[string]map[string]bool)
 	var resolvedGraph *dependency.Graph
-	stackNames := StackNames(closure)
+
+	// Reverse/both directions conservatively evaluate components whose
+	// dependency declarations were unresolved in the lightweight pass — see
+	// UnresolvedDependencySources and the ResolveScopedClosure doc comment.
+	extraEval := map[string][]string{}
+	if req.Direction != DirectionForward {
+		extraEval = UnresolvedDependencySources(lightweightStacks, req.LeftDelim)
+	}
 
 	for {
-		componentsByStack := closureComponentsByStack(closure)
+		stackNames, componentsByStack := evaluationTargets(closure, extraEval)
 		pending := pendingComponentsByStack(stackNames, componentsByStack, evaluatedComponents)
 		if len(pending) == 0 {
+			finalRoots := refineRoots(resolvedGraph, roots, req)
 			return &ScopeResult{
 				Stacks:  resolvedStacks,
-				Closure: ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths),
+				Closure: ReachableClosure(resolvedGraph, finalRoots, req.Direction, req.Depths),
 			}, nil
 		}
 
@@ -230,8 +246,57 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 			return nil, err
 		}
 		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
-		stackNames = StackNames(closure)
 	}
+}
+
+// refineRoots re-tests the seed roots against the RESOLVED graph so the final
+// closure matches what execution will actually select. The lightweight-pass
+// roots are a conservative superset: a templated selector that could not be
+// resolved matched conservatively. Every root is a closure member, so by the
+// time Phase C converges its selector values are resolved and can be tested
+// exactly. Only the ORIGINAL roots are re-tested — never a full rescan of the
+// resolved graph, which still contains unevaluated (conservatively-matching)
+// non-closure nodes that must not join the seed now.
+func refineRoots(resolvedGraph *dependency.Graph, roots []string, req *ScopeRequest) []string {
+	if resolvedGraph == nil {
+		return roots
+	}
+	sel := &Selector{
+		Components: req.Components,
+		Stack:      req.Stack,
+		Tags:       req.Tags,
+		Labels:     req.Labels,
+		LeftDelim:  req.LeftDelim,
+		RightDelim: req.RightDelim,
+	}
+	refined := make([]string, 0, len(roots))
+	for _, id := range roots {
+		node, ok := resolvedGraph.GetNode(id)
+		if ok && sel.matches(node) {
+			refined = append(refined, id)
+		}
+	}
+	return refined
+}
+
+// evaluationTargets returns the stacks and per-stack components Phase C must
+// evaluate this round: the closure's own members plus the conservative extras
+// (components whose dependency declarations were unresolved in the lightweight
+// pass — see UnresolvedDependencySources). Extras are evaluated so their edges
+// materialize, but only the recomputed closure decides membership.
+func evaluationTargets(closure *dependency.Graph, extraEval map[string][]string) ([]string, map[string][]string) {
+	byStack := closureComponentsByStack(closure)
+	for stack, components := range extraEval {
+		byStack[stack] = append(byStack[stack], components...)
+	}
+	stacks := make([]string, 0, len(byStack))
+	for stack := range byStack {
+		sort.Strings(byStack[stack])
+		byStack[stack] = slices.Compact(byStack[stack])
+		stacks = append(stacks, stack)
+	}
+	sort.Strings(stacks)
+	return stacks, byStack
 }
 
 // mergeResolvedClosureStacks overlays evaluated closure components onto the

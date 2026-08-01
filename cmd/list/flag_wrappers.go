@@ -13,6 +13,7 @@ const (
 	flagColumns = "columns"
 	flagSkip    = "skip"
 	flagFormat  = "format"
+	flagTags    = "tags"
 
 	// Environment variables.
 	envListColumns = "ATMOS_LIST_COLUMNS"
@@ -259,8 +260,25 @@ func WithTagsFlag(options *[]flags.Option) {
 
 	*options = append(
 		*options,
-		flags.WithStringFlag("tags", "", "", "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithEnvVars("tags", "ATMOS_COMPONENT_TAGS"),
+		flags.WithStringFlag(flagTags, "", "", "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithEnvVars(flagTags, "ATMOS_COMPONENT_TAGS"),
+	)
+}
+
+// WithVendorTagsFlag adds a tags filter flag for vendor manifest tags.
+// Vendor tags come from `tags:` entries on vendor manifest sources
+// (vendor.yaml), not from component `metadata.tags`, so the env var is
+// deliberately distinct from ATMOS_COMPONENT_TAGS — sharing it would make a
+// component-metadata filter exported for other list commands silently filter
+// vendor listings by an unrelated concept.
+// Used by: vendor.
+func WithVendorTagsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithVendorTagsFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag(flagTags, "", "", "Filter by vendor manifest tags (comma-separated, matches any): --tags=networking,storage"),
+		flags.WithEnvVars(flagTags, "ATMOS_VENDOR_TAGS"),
 	)
 }
 

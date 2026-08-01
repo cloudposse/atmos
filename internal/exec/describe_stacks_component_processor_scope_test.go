@@ -428,6 +428,78 @@ func TestProcessComponentEntry_TagsLabelsResolvableTemplateSkipsAuth(t *testing.
 	assert.Empty(t, p.finalStacksMap, "no entry should be created for a resolved out-of-scope label")
 }
 
+// TestProcessComponentEntry_TemplatedScalarLabelsFallsThroughToAuth is the
+// regression test for the wrongful-exclusion edge: metadata.labels that is a
+// templated SCALAR (whole-manifest rendering may re-parse it into a map — the
+// gate cannot reproduce that) must be undecidable and fall through to full
+// evaluation, not collapse to an empty narrowed map and a decidable non-match.
+func TestProcessComponentEntry_TemplatedScalarLabelsFallsThroughToAuth(t *testing.T) {
+	t.Parallel()
+
+	spy := &componentAuthResolverSpy{returnErr: nil}
+	componentSection := componentSectionWithTags(nil, nil)
+	metadata := componentSection["metadata"].(map[string]any)
+	metadata["labels"] = "{{ toJson .vars.labels }}"
+	allTypeComponents := map[string]any{"test-component": componentSection}
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		labelsFilter:          map[string]string{"env": "prod"},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+
+	err := p.processComponentEntry(
+		"test-stack",
+		"",
+		"helmfile",
+		"test-component",
+		componentSection,
+		allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	require.EqualValues(t, 1, spy.calls.Load(),
+		"a templated scalar labels value must fall through to full evaluation, not be wrongly excluded")
+}
+
+// TestProcessComponentEntry_TemplatedLabelKeyFallsThroughToAuth: a templated
+// label KEY may render to the requested key, so the gate must treat the map as
+// undecidable instead of missing it in a literal-key lookup.
+func TestProcessComponentEntry_TemplatedLabelKeyFallsThroughToAuth(t *testing.T) {
+	t.Parallel()
+
+	spy := &componentAuthResolverSpy{returnErr: nil}
+	componentSection := componentSectionWithTags(nil, map[string]any{
+		"{{ .vars.env_key }}": "prod",
+	})
+	allTypeComponents := map[string]any{"test-component": componentSection}
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		labelsFilter:          map[string]string{"env": "prod"},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+
+	err := p.processComponentEntry(
+		"test-stack",
+		"",
+		"helmfile",
+		"test-component",
+		componentSection,
+		allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	require.EqualValues(t, 1, spy.calls.Load(),
+		"a templated label key must fall through to full evaluation, not be wrongly excluded")
+}
+
 func TestProcessComponentEntry_RequestedTemplatedLabelSkipsAuthDespiteUnrelatedUnresolvedLabel(t *testing.T) {
 	t.Parallel()
 
@@ -570,8 +642,48 @@ func TestProcessComponentEntry_ForbiddenSelectorErrorsByDesign(t *testing.T) {
 			require.Error(t, err)
 			require.ErrorIs(t, err, errUtils.ErrForbiddenSelectorFunction)
 			require.EqualValues(t, 0, spy.calls.Load(), "forbidden selectors must error before per-component auth")
+
+			// The error must identify the offending component and manifest so
+			// users of large repos can locate the violation without a search.
+			require.Contains(t, err.Error(), `component "test-component"`)
+			require.Contains(t, err.Error(), `stack manifest "test-stack"`)
 		})
 	}
+}
+
+// TestProcessComponentEntry_EagerEvaluationBypassesSelectorPurity verifies the
+// escape hatch: with describe.settings.eager_evaluation enabled there is no
+// pre-evaluation scoping, selectors are evaluated like any other value, and a
+// previously-working manifest with an impure selector must not be rejected.
+func TestProcessComponentEntry_EagerEvaluationBypassesSelectorPurity(t *testing.T) {
+	t.Parallel()
+
+	eager := true
+	spy := &componentAuthResolverSpy{returnErr: nil}
+	componentSection := componentSectionWithTags([]any{"!terraform.state vpc dev id"}, nil)
+	allTypeComponents := map[string]any{"test-component": componentSection}
+	p := &describeStacksProcessor{
+		atmosConfig: &schema.AtmosConfiguration{
+			Describe: schema.Describe{Settings: schema.DescribeSettings{EagerEvaluation: &eager}},
+		},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+
+	err := p.processComponentEntry(
+		"test-stack",
+		"",
+		"helmfile",
+		"test-component",
+		componentSection,
+		allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err, "eager_evaluation must bypass the selector purity contract")
+	require.EqualValues(t, 1, spy.calls.Load(), "processing must proceed to per-component auth")
 }
 
 // TestProcessComponentEntry_AllowedSelectorFunctionsPass is the positive

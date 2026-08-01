@@ -41,6 +41,40 @@ func terraformClosureTestStacks() map[string]any {
 	}
 }
 
+// terraformCrossStackClosureTestStacks builds a dependency chain that spans
+// two stacks — app in stack "dev" depends on vpc in stack "core" via the
+// modern dependencies.components declaration — so cross-stack closure
+// expansion and ordering can be asserted precisely.
+func terraformCrossStackClosureTestStacks() map[string]any {
+	return map[string]any{
+		"core": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"vpc": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"component": "mock"},
+						"vars":                  map[string]any{},
+					},
+				},
+			},
+		},
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"component": "mock"},
+						"vars":                  map[string]any{},
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"component": "vpc", "stack": "core"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // executedClosureComponents runs ExecuteTerraform over the closure fixture and
 // returns component names in execution order (concurrency is 1, so the order
 // is the scheduler's dependency order).
@@ -55,6 +89,26 @@ func executedClosureComponents(t *testing.T, info *schema.ConfigAndStacksInfo, s
 		Selection:   selection,
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 			executed = append(executed, execution.Info.Component)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+	require.NoError(t, err)
+	return executed
+}
+
+// executedClosureNodes runs ExecuteTerraform over the given stacks fixture and
+// returns "component-stack" node IDs in execution order (concurrency is 1, so
+// the order is the scheduler's dependency order).
+func executedClosureNodes(t *testing.T, stacks map[string]any, info *schema.ConfigAndStacksInfo) []string {
+	t.Helper()
+
+	var executed []string
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        info,
+		Stacks:      stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, terraformNodeID(execution.Info.Component, execution.Info.Stack))
 			return TerraformExecutionResult{}, nil
 		},
 	})
@@ -105,6 +159,51 @@ func TestExecuteTerraformIncludeDependenciesExpandsAcrossSelectors(t *testing.T)
 			IncludeDependents: -1,
 		}, nil)
 		require.Equal(t, []string{"app", "database", "vpc"}, executed)
+	})
+
+	t.Run("destroy with dependencies destroys the seed first and prerequisites last", func(t *testing.T) {
+		// Seed app and pull in its dependency closure (database, vpc); on
+		// destroy the graph is reversed, so the seed is torn down before the
+		// prerequisites it depends on.
+		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
+			SubCommand:          "destroy",
+			Tags:                []string{"app"},
+			IncludeDependencies: -1,
+		}, nil)
+		require.Equal(t, []string{"app", "database", "vpc"}, executed)
+	})
+}
+
+// TestExecuteTerraformIncludeDependenciesCrossesStackBoundaries proves the
+// dependency closure follows edges into OTHER stacks: app in stack "dev"
+// depends on vpc in stack "core" (dependencies.components with an explicit
+// stack), so seeding only stack "dev" with --include-dependencies must also
+// execute vpc in "core" — and in dependency order.
+func TestExecuteTerraformIncludeDependenciesCrossesStackBoundaries(t *testing.T) {
+	t.Run("plan runs the cross-stack prerequisite first", func(t *testing.T) {
+		executed := executedClosureNodes(t, terraformCrossStackClosureTestStacks(), &schema.ConfigAndStacksInfo{
+			SubCommand:          "plan",
+			Stack:               "dev",
+			IncludeDependencies: -1,
+		})
+		require.Equal(t, []string{"vpc-core", "app-dev"}, executed)
+	})
+
+	t.Run("destroy reverses the cross-stack order", func(t *testing.T) {
+		executed := executedClosureNodes(t, terraformCrossStackClosureTestStacks(), &schema.ConfigAndStacksInfo{
+			SubCommand:          "destroy",
+			Stack:               "dev",
+			IncludeDependencies: -1,
+		})
+		require.Equal(t, []string{"app-dev", "vpc-core"}, executed)
+	})
+
+	t.Run("without closure flags the stack filter excludes the cross-stack prerequisite", func(t *testing.T) {
+		executed := executedClosureNodes(t, terraformCrossStackClosureTestStacks(), &schema.ConfigAndStacksInfo{
+			SubCommand: "plan",
+			Stack:      "dev",
+		})
+		require.Equal(t, []string{"app-dev"}, executed)
 	})
 }
 
@@ -167,6 +266,16 @@ func TestTerraformClosureSpecMerging(t *testing.T) {
 			info:      &schema.ConfigAndStacksInfo{IncludeDependencies: 3},
 			selection: &TerraformSelection{IncludeDependencies: true, DependencyDepth: 1},
 			want:      terraformClosure{includeDependencies: true, dependencyDepth: 3},
+		},
+		{
+			// The --affected path derives both inputs from the SAME flag
+			// (affectedTerraformSelection copies the parsed depth onto the
+			// selection), so merging them must preserve the user's bound
+			// instead of widening to unlimited.
+			name:      "affected path: selection carrying the flag depth keeps the bound",
+			info:      &schema.ConfigAndStacksInfo{IncludeDependents: 2},
+			selection: &TerraformSelection{IncludeDependents: true, DependentDepth: 2},
+			want:      terraformClosure{includeDependents: true, dependentDepth: 2},
 		},
 	}
 

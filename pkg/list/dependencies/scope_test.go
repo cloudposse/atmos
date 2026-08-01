@@ -422,3 +422,177 @@ func mapKeys(m map[string]any) []string {
 	}
 	return keys
 }
+
+// TestResolveScopedClosureReverseDiscoversTemplatedDependent is the regression
+// test for the reverse-direction blind spot: a dependent whose dependency
+// declaration is templated produces NO edge in the lightweight graph, so it is
+// not in the initial closure and — without the conservative
+// UnresolvedDependencySources evaluation — would never be evaluated and never
+// discovered. Covers both a same-stack dependent (templated component) and a
+// cross-stack dependent (templated stack target).
+func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
+	t.Parallel()
+
+	lightweight := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": dependsOn(map[string]any{"component": "{{ .vars.dep_component }}"}),
+		},
+		"ops": {
+			"monitor": dependsOn(map[string]any{"component": "vpc", "stack": "{{ .vars.dep_stack }}"}),
+		},
+		"qa": {
+			// Also has a templated dependency, but it resolves to a target
+			// OUTSIDE the closure: it must be evaluated (conservatively) yet
+			// excluded from the final closure.
+			"batch": dependsOn(map[string]any{"component": "{{ .vars.other_component }}"}),
+			"other": {},
+		},
+	})
+	resolved := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": dependsOn(map[string]any{"component": "vpc"}),
+		},
+		"ops": {
+			"monitor": dependsOn(map[string]any{"component": "vpc", "stack": "dev"}),
+		},
+		"qa": {
+			"batch": dependsOn(map[string]any{"component": "other"}),
+			"other": {},
+		},
+	})
+	describe := &fakeDescribe{full: lightweight, resolved: resolved}
+
+	result, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+		Components:       []string{"vpc"},
+		Stack:            "dev",
+		Direction:        DirectionReverse,
+		Depths:           Depths{Dependents: 1},
+		ProcessTemplates: true,
+	})
+
+	require.NoError(t, err)
+	_, ok := result.Closure.GetNode(NodeID("app", "dev"))
+	require.True(t, ok, "reverse closure must discover a same-stack dependent with a templated component target")
+	_, ok = result.Closure.GetNode(NodeID("monitor", "ops"))
+	require.True(t, ok, "reverse closure must discover a cross-stack dependent with a templated stack target")
+
+	// Extra evaluation is conservative, not membership: batch resolved to a
+	// dependency outside the closure and must be excluded from it.
+	_, ok = result.Closure.GetNode(NodeID("batch", "qa"))
+	require.False(t, ok, "an evaluated non-dependent must not join the closure")
+	_, ok = result.Closure.GetNode(NodeID("other", "qa"))
+	require.False(t, ok, "the non-dependent's own dependency must not join the closure")
+}
+
+// TestResolveScopedClosureForwardSkipsUnresolvedSourceEvaluation is the
+// negative path: the conservative extra evaluation is a reverse/both-direction
+// recovery. A forward-only request converges through the closure itself (the
+// declaring component is already a member), so unrelated components with
+// templated dependencies must NOT be evaluated.
+func TestResolveScopedClosureForwardSkipsUnresolvedSourceEvaluation(t *testing.T) {
+	t.Parallel()
+
+	lightweight := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+		},
+		"ops": {
+			"monitor": dependsOn(map[string]any{"component": "vpc", "stack": "{{ .vars.dep_stack }}"}),
+		},
+	})
+	describe := &fakeDescribe{full: lightweight}
+
+	result, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+		Components:       []string{"vpc"},
+		Stack:            "dev",
+		Direction:        DirectionForward,
+		Depths:           Depths{Dependencies: 1},
+		ProcessTemplates: true,
+	})
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"dev"}, describe.evaluatedStacks(),
+		"forward direction must not evaluate stacks that only hold unresolved-dependency sources")
+	_, ok := result.Closure.GetNode(NodeID("monitor", "ops"))
+	require.False(t, ok)
+}
+
+func TestUnresolvedDependencySources(t *testing.T) {
+	t.Parallel()
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": dependsOn(map[string]any{"component": "{{ .vars.dep }}"}),
+			"db":  dependsOn(map[string]any{"component": "vpc"}),
+		},
+		"ops": {
+			"monitor": dependsOn(map[string]any{"component": "vpc", "stack": "{{ .vars.stack }}"}),
+			"scanner": dependsOn(map[string]any{"component": "!terraform.output meta dep"}),
+		},
+	})
+
+	sources := UnresolvedDependencySources(stacks, "")
+
+	assert.Equal(t, map[string][]string{
+		"dev": {"app"},
+		"ops": {"monitor", "scanner"},
+	}, sources, "only components with templated or YAML-function dependency values are unresolved sources")
+}
+
+// TestResolveScopedClosureRefinesRootsAgainstResolvedSelectors is the
+// preview/execution alignment regression test: a root whose templated selector
+// conservatively matched in the lightweight pass but resolves to a
+// NON-matching value must be dropped from the final closure — the terraform
+// adapter re-derives its seed from resolved values, so keeping the root would
+// make list previews a superset of the execution set.
+func TestResolveScopedClosureRefinesRootsAgainstResolvedSelectors(t *testing.T) {
+	t.Parallel()
+
+	lightweight := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"metadata": map[string]any{"tags": []any{"{{ .vars.tier }}"}},
+				"settings": map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc"}}},
+			},
+			"web": {
+				"metadata": map[string]any{"tags": []any{"frontend"}},
+				"settings": map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc"}}},
+			},
+			"vpc": {},
+		},
+	})
+	resolved := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				// The templated tag resolves OUTSIDE the selection.
+				"metadata": map[string]any{"tags": []any{"backend"}},
+				"settings": map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc"}}},
+			},
+			"web": {
+				"metadata": map[string]any{"tags": []any{"frontend"}},
+				"settings": map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc"}}},
+			},
+			"vpc": {},
+		},
+	})
+	describe := &fakeDescribe{full: lightweight, resolved: resolved}
+
+	result, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+		Tags:             []string{"frontend"},
+		Direction:        DirectionForward,
+		Depths:           Depths{Dependencies: 1},
+		ProcessTemplates: true,
+	})
+
+	require.NoError(t, err)
+	_, ok := result.Closure.GetNode(NodeID("web", "dev"))
+	require.True(t, ok, "the genuinely matching root must stay in the closure")
+	_, ok = result.Closure.GetNode(NodeID("vpc", "dev"))
+	require.True(t, ok, "the matching root's dependency must stay in the closure")
+	_, ok = result.Closure.GetNode(NodeID("app", "dev"))
+	require.False(t, ok,
+		"a root whose templated selector resolved to a non-matching value must be dropped from the final closure")
+}

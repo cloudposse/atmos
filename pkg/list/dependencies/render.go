@@ -205,26 +205,39 @@ func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFil
 	}
 
 	metadata, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
-	rawTags := metadata[tagsMetadataKey]
-	if len(tagsFilter) > 0 && tags.SelectorUnresolved(rawTags, leftDelim) {
-		resolvedTags, ok := tags.ResolveSelectorValue(rawTags, node.Metadata, leftDelim, rightDelim)
-		if !ok {
-			return true
-		}
-		rawTags = resolvedTags
+	rawTags, decidable := resolveNodeSelector(metadata[tagsMetadataKey], node.Metadata, len(tagsFilter) > 0, leftDelim, rightDelim)
+	if !decidable {
+		return true
 	}
 
-	rawLabels := any(tags.RequestedLabels(metadata[labelsMetadataKey], labelsFilter))
-	if len(labelsFilter) > 0 && tags.SelectorUnresolved(rawLabels, leftDelim) {
-		resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, node.Metadata, leftDelim, rightDelim)
-		if !ok {
-			return true
-		}
-		rawLabels = resolvedLabels
+	// Narrow BEFORE the unresolved check only when narrowing is safe: a
+	// non-map labels value or a templated map key is undecidable, and an
+	// unresolved selector must never wrongly exclude a component.
+	narrowed, safe := tags.RequestedLabels(metadata[labelsMetadataKey], labelsFilter, leftDelim)
+	if len(labelsFilter) > 0 && !safe {
+		return true
+	}
+	rawLabels, decidable := resolveNodeSelector(any(narrowed), node.Metadata, len(labelsFilter) > 0, leftDelim, rightDelim)
+	if !decidable {
+		return true
 	}
 
 	return tags.MatchesTags(tags.ToStringSlice(rawTags), tagsFilter, tags.TagModeAny) &&
 		tags.MatchesLabels(tags.ToStringMap(rawLabels), labelsFilter)
+}
+
+// resolveNodeSelector best-effort resolves one selector value when its filter
+// is active. A decidable=false result means the value stayed unresolved and
+// the caller must conservatively count the node as a match.
+func resolveNodeSelector(raw any, data map[string]any, filterActive bool, leftDelim, rightDelim string) (value any, decidable bool) {
+	if !filterActive || !tags.SelectorUnresolved(raw, leftDelim) {
+		return raw, true
+	}
+	resolved, ok := tags.ResolveSelectorValue(raw, data, leftDelim, rightDelim)
+	if !ok {
+		return nil, false
+	}
+	return resolved, true
 }
 
 // sortNodes orders nodes by stack then component for stable, readable output.

@@ -1,17 +1,21 @@
 package terraform
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestCheckTerraformFlags(t *testing.T) {
@@ -1160,6 +1164,64 @@ func TestCheckTerraformFlagsClosureFlags(t *testing.T) {
 				return
 			}
 			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestCheckTerraformFlagsDestroyDependenciesWarning verifies the destroy warning is
+// actually emitted (or withheld) on the UI stream, not just that checkTerraformFlags
+// returns no error: destroying a selection's dependencies tears down shared
+// prerequisites, so `destroy --include-dependencies` must warn, while
+// `--include-dependents` alone and non-destroy subcommands must stay silent.
+func TestCheckTerraformFlagsDestroyDependenciesWarning(t *testing.T) {
+	const warningText = "--include-dependencies with destroy also destroys shared prerequisites of the selected components"
+
+	tests := []struct {
+		name       string
+		info       *schema.ConfigAndStacksInfo
+		expectWarn bool
+	}{
+		{
+			name:       "destroy with include-dependencies emits the warning",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "destroy"},
+			expectWarn: true,
+		},
+		{
+			name:       "destroy with include-dependents only does not warn",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependents: -1, All: true, SubCommand: "destroy"},
+			expectWarn: false,
+		},
+		{
+			name:       "plan with include-dependencies does not warn",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "plan"},
+			expectWarn: false,
+		},
+		{
+			name:       "apply with include-dependencies does not warn",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "apply"},
+			expectWarn: false,
+		},
+	}
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	// Initialize the package formatter once for these output assertions. PushUIWriter
+	// captures only this test's UI stream and restores the previous sink on return.
+	ui.InitFormatter(ioCtx)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			restore := iolib.PushUIWriter(&output)
+			defer restore()
+
+			require.NoError(t, checkTerraformFlags(tt.info))
+
+			if tt.expectWarn {
+				assert.Contains(t, output.String(), warningText, "destroy with --include-dependencies must emit the shared-prerequisites warning")
+			} else {
+				assert.NotContains(t, output.String(), warningText, "the destroy warning must only fire for destroy with --include-dependencies")
+			}
 		})
 	}
 }

@@ -66,6 +66,8 @@ func TestSelectorUnresolved(t *testing.T) {
 		{name: "plain_map", v: map[string]any{"env": "prod"}, want: false},
 		{name: "templated_map_value", v: map[string]any{"env": "{{ .vars.stage }}"}, want: true},
 		{name: "yaml_function_map_value", v: map[string]any{"env": "!store ssm env"}, want: true},
+		{name: "templated_map_key", v: map[string]any{"{{ .vars.env }}": "true"}, want: true},
+		{name: "yaml_function_map_key", v: map[string]any{"!env KEY": "true"}, want: true},
 		{name: "non_string_scalar", v: 42, want: false},
 		{name: "custom_delims_detected", v: "[[ .vars.stage ]]", leftDelim: "[[", want: true},
 		{name: "custom_delims_default_marker_is_plain", v: "{{ .vars.stage }}", leftDelim: "[[", want: false},
@@ -148,6 +150,41 @@ func TestValidateSelectorValue(t *testing.T) {
 			rightDelim: "]]",
 			wantErr:    false,
 		},
+		// atmos.Resolve would launder any YAML function through a template call.
+		{name: "atmos_resolve_rejected", v: `{{ atmos.Resolve "!store ssm env" }}`, wantErr: true},
+		{name: "atmos_resolve_of_allowed_function_still_rejected", v: `{{ atmos.Resolve "!env TIER" }}`, wantErr: true},
+		// Gomplate datasource access beyond ds/datasource.
+		{name: "gomplate_include_rejected", v: `{{ include "config" }}`, wantErr: true},
+		{name: "gomplate_datasource_exists_rejected", v: `{{ if datasourceExists "config" }}a{{ end }}`, wantErr: true},
+		{name: "gomplate_datasource_reachable_rejected", v: `{{ if datasourceReachable "config" }}a{{ end }}`, wantErr: true},
+		{name: "gomplate_define_datasource_rejected", v: `{{ defineDatasource "cfg" "s3://b/k" }}`, wantErr: true},
+		// Gomplate auth/network/nondeterministic namespaces.
+		{name: "gomplate_aws_namespace_rejected", v: `{{ aws.EC2Tag "Name" }}`, wantErr: true},
+		{name: "gomplate_gcp_namespace_rejected", v: `{{ gcp.Meta "instance" }}`, wantErr: true},
+		{name: "gomplate_net_namespace_rejected", v: `{{ net.LookupIP "example.com" }}`, wantErr: true},
+		{name: "gomplate_random_namespace_rejected", v: `{{ random.ASCII 5 }}`, wantErr: true},
+		// Sprig network and nondeterministic functions: they would resolve to
+		// a different value in the early gate than in full evaluation.
+		{name: "sprig_get_host_by_name_rejected", v: `{{ getHostByName "example.com" }}`, wantErr: true},
+		{name: "sprig_uuidv4_rejected", v: `{{ uuidv4 }}`, wantErr: true},
+		{name: "sprig_rand_alpha_rejected", v: `{{ randAlpha 5 }}`, wantErr: true},
+		{name: "sprig_rand_alpha_num_rejected", v: `{{ randAlphaNum 5 }}`, wantErr: true},
+		{name: "sprig_rand_numeric_rejected", v: `{{ randNumeric 4 }}`, wantErr: true},
+		{name: "sprig_rand_ascii_rejected", v: `{{ randAscii 5 }}`, wantErr: true},
+		{name: "sprig_rand_bytes_rejected", v: `{{ randBytes 16 }}`, wantErr: true},
+		{name: "sprig_now_rejected", v: `{{ now }}`, wantErr: true},
+		// Namespace/function names as data fields stay allowed (only bare
+		// identifiers are function calls).
+		{name: "aws_as_field_name_allowed", v: "{{ .vars.aws }}", wantErr: false},
+		{name: "now_as_field_name_allowed", v: "{{ .vars.now }}", wantErr: false},
+		{name: "include_as_field_name_allowed", v: "{{ .vars.include }}", wantErr: false},
+		// Documented conservatism: a capitalized field named like a forbidden
+		// atmos method is rejected regardless of binding.
+		{name: "component_as_field_name_rejected_by_design", v: "{{ .vars.Component }}", wantErr: true},
+		// Map KEYS are rendered like values and must obey the same contract.
+		{name: "forbidden_template_in_map_key", v: map[string]any{`{{ atmos.Store "ssm" .stack "vpc" "id" }}`: "x"}, wantErr: true},
+		{name: "forbidden_function_in_map_key", v: map[string]any{"!store ssm owner": "x"}, wantErr: true},
+		{name: "templated_map_key_allowed_when_pure", v: map[string]any{"{{ .vars.env }}": "true"}, wantErr: false},
 	}
 
 	for _, tc := range tests {
@@ -304,43 +341,79 @@ func TestRequestedLabels(t *testing.T) {
 		raw    any
 		filter map[string]string
 		want   map[string]any
+		wantOK bool
 	}{
 		{
 			name:   "keeps_only_requested_keys",
 			raw:    map[string]any{"env": "prod", "team": "{{ .vars.team }}"},
 			filter: map[string]string{"env": "prod"},
 			want:   map[string]any{"env": "prod"},
+			wantOK: true,
 		},
 		{
 			name:   "missing_requested_key_is_omitted",
 			raw:    map[string]any{"env": "prod"},
 			filter: map[string]string{"tier": "gold"},
 			want:   map[string]any{},
+			wantOK: true,
 		},
 		{
 			name:   "nil_raw_yields_empty",
 			raw:    nil,
 			filter: map[string]string{"env": "prod"},
 			want:   map[string]any{},
+			wantOK: true,
 		},
 		{
-			name:   "non_map_raw_yields_empty",
+			// A non-map labels value may be a templated scalar that
+			// whole-manifest rendering re-parses into a map; the gate cannot
+			// reproduce that, so narrowing is unsafe and the selector is
+			// undecidable.
+			name:   "non_map_raw_is_not_narrowable",
+			raw:    "{{ toJson .vars.labels }}",
+			filter: map[string]string{"env": "prod"},
+			want:   nil,
+			wantOK: false,
+		},
+		{
+			name:   "non_map_slice_is_not_narrowable",
 			raw:    []any{"env"},
 			filter: map[string]string{"env": "prod"},
-			want:   map[string]any{},
+			want:   nil,
+			wantOK: false,
+		},
+		{
+			// A templated KEY may render to a requested key, so a literal-key
+			// lookup cannot decide the match.
+			name:   "templated_map_key_is_not_narrowable",
+			raw:    map[string]any{"{{ .vars.env }}": "true", "team": "a"},
+			filter: map[string]string{"prod": "true"},
+			want:   nil,
+			wantOK: false,
+		},
+		{
+			name:   "yaml_function_map_key_is_not_narrowable",
+			raw:    map[string]any{"!env KEY": "true"},
+			filter: map[string]string{"env": "prod"},
+			want:   nil,
+			wantOK: false,
 		},
 		{
 			name:   "empty_filter_yields_empty",
 			raw:    map[string]any{"env": "prod"},
 			filter: map[string]string{},
 			want:   map[string]any{},
+			wantOK: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := RequestedLabels(tt.raw, tt.filter)
+			got, ok := RequestedLabels(tt.raw, tt.filter, "")
+			if ok != tt.wantOK {
+				t.Fatalf("RequestedLabels(%v, %v) ok = %v, want %v", tt.raw, tt.filter, ok, tt.wantOK)
+			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("RequestedLabels(%v, %v) = %v, want %v", tt.raw, tt.filter, got, tt.want)
 			}

@@ -109,7 +109,7 @@ func init() {
 		WithVendorColumnsFlag,
 		WithSortFlag,
 		WithStackFlag,
-		WithTagsFlag,
+		WithVendorTagsFlag,
 	)
 
 	// Register flags.
