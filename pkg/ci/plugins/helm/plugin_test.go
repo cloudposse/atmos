@@ -242,21 +242,17 @@ func TestPluginOnAfterOperation(t *testing.T) {
 }
 
 func TestTemplateRendering(t *testing.T) {
-	ctx := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
-		Command: "apply",
-		Info: &schema.ConfigAndStacksInfo{
-			ComponentFromArg: "nginx",
-			Stack:            "plat-ue2-dev",
-		},
-		Aggregate: Summary{
-			Chart:         "bitnami/nginx",
-			ReleaseName:   "nginx",
-			Namespace:     "apps",
-			Target:        "kubernetes",
-			ObjectCount:   2,
-			ObjectKinds:   []string{"Deployment", "Service"},
-			ManifestBytes: 1234,
-			Lifecycle: map[string]any{
+	tests := []struct {
+		name        string
+		command     string
+		lifecycle   map[string]any
+		contains    []string
+		notContains []string
+	}{
+		{
+			name:    "cluster apply",
+			command: "apply",
+			lifecycle: map[string]any{
 				"operation":           "upgrade",
 				"wait_strategy":       "watcher",
 				"timeout":             "30m0s",
@@ -266,27 +262,72 @@ func TestTemplateRendering(t *testing.T) {
 				"cleanup_on_fail":     true,
 				"max_history":         10,
 			},
+			contains: []string{
+				"Helm Apply Summary", "bitnami/nginx", "Deployment", "Release lifecycle",
+				"Wait strategy", "watcher", "Maximum history", "`10`",
+			},
 		},
-	})
+		{
+			name:    "external apply",
+			command: "apply",
+			lifecycle: map[string]any{
+				"applied": false, "target_kind": "git", "reason": "external_target",
+			},
+			contains:    []string{"Helm Apply Summary", "external_target"},
+			notContains: []string{"Wait strategy", "Timeout"},
+		},
+		{
+			name:    "cluster delete",
+			command: "delete",
+			lifecycle: map[string]any{
+				"operation":           "uninstall",
+				"wait_strategy":       "legacy",
+				"timeout":             "10m0s",
+				"chart_hooks_enabled": false,
+			},
+			contains: []string{
+				"Helm Delete Summary", "Release lifecycle", "Wait strategy", "legacy", "10m0s",
+			},
+		},
+		{
+			name:    "external delete",
+			command: "delete",
+			lifecycle: map[string]any{
+				"deleted": false, "target_kind": "git", "reason": "external_target",
+			},
+			contains:    []string{"Helm Delete Summary", "external_target"},
+			notContains: []string{"Wait strategy", "Timeout"},
+		},
+	}
 
-	rendered, err := templates.NewLoader(nil).LoadAndRender("helm", "apply", defaultTemplates, ctx)
-	require.NoError(t, err)
-	assert.Contains(t, rendered, "Helm Apply Summary")
-	assert.Contains(t, rendered, "bitnami/nginx")
-	assert.Contains(t, rendered, "Deployment")
-	assert.Contains(t, rendered, "Release lifecycle")
-	assert.Contains(t, rendered, "watcher")
-	assert.Contains(t, rendered, "Maximum history")
-	assert.Contains(t, rendered, "`10`")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
+				Command: tt.command,
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentFromArg: "nginx",
+					Stack:            "plat-ue2-dev",
+				},
+				Aggregate: Summary{
+					Chart:         "bitnami/nginx",
+					ReleaseName:   "nginx",
+					Namespace:     "apps",
+					Target:        "kubernetes",
+					ObjectCount:   2,
+					ObjectKinds:   []string{"Deployment", "Service"},
+					ManifestBytes: 1234,
+					Lifecycle:     tt.lifecycle,
+				},
+			})
 
-	external := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
-		Command: "apply",
-		Aggregate: Summary{Lifecycle: map[string]any{
-			"applied": false, "target_kind": "git", "reason": "external_target",
-		}},
-	})
-	rendered, err = templates.NewLoader(nil).LoadAndRender("helm", "apply", defaultTemplates, external)
-	require.NoError(t, err)
-	assert.Contains(t, rendered, "external_target")
-	assert.NotContains(t, rendered, "Wait strategy")
+			rendered, err := templates.NewLoader(nil).LoadAndRender("helm", tt.command, defaultTemplates, ctx)
+			require.NoError(t, err)
+			for _, expected := range tt.contains {
+				assert.Contains(t, rendered, expected)
+			}
+			for _, unexpected := range tt.notContains {
+				assert.NotContains(t, rendered, unexpected)
+			}
+		})
+	}
 }
