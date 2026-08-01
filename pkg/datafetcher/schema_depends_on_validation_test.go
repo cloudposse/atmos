@@ -20,8 +20,10 @@ import (
 // the build so the schema property below is revisited alongside it.
 var _ = schema.Dependent{Stack: "tenant1-ue2-prod"}
 
-// dependsOnSchemas returns every schema copy that models `depends_on_manifest`. They are separate
-// files that drift independently, so each one is asserted.
+// dependsOnSchemas returns every schema copy that models `depends_on_manifest`, so a fix applied to
+// one but not another fails CI. `website` currently resolves to the same bytes as `embedded` (the
+// published copy is generated from the embedded schema), and is listed anyway — matching the sibling
+// schema tests — so coverage is already in place if the two ever diverge again.
 func dependsOnSchemas(t *testing.T) map[string][]byte {
 	t.Helper()
 
@@ -108,11 +110,14 @@ func TestManifestSchema_DependsOnRejectsInvalidEntries(t *testing.T) {
 // dependsOnDeprecationReplacement is the modern section that supersedes `settings.depends_on`.
 const dependsOnDeprecationReplacement = "dependencies.components"
 
-// TestManifestSchema_DependsOnIsMarkedDeprecated pins the deprecation annotations on the
-// `depends_on` definitions themselves, not just on individual call sites. `settings.depends_on` is
-// deprecated in favor of `dependencies.components` but still supported, so the schema must keep
-// saying so — editors surface `deprecated` as a strikethrough, which is the only in-IDE signal
-// practitioners get. Annotating the definition means every `$ref` to it inherits the marker.
+// TestManifestSchema_DependsOnIsMarkedDeprecated pins where the migration metadata lives.
+// `settings.depends_on` is deprecated in favor of `dependencies.components` but still supported, so
+// the schema must keep saying so — editors surface `deprecated` as a strikethrough, which is the
+// only in-IDE signal practitioners get.
+//
+// The marker belongs on the `depends_on` container and nowhere else: the entry shape
+// (`depends_on_manifest`) is asserted to stay unmarked, so both halves of that decision are pinned
+// and neither can drift.
 func TestManifestSchema_DependsOnIsMarkedDeprecated(t *testing.T) {
 	for schemaName, schemaData := range dependsOnSchemas(t) {
 		t.Run(schemaName+"/depends_on", func(t *testing.T) {
@@ -134,7 +139,7 @@ func TestManifestSchema_DependsOnIsMarkedDeprecated(t *testing.T) {
 		// legacy entry and is reachable only through the deprecated `depends_on` container, so
 		// marking it too would strike through every entry in an editor on top of the already-struck
 		// container. Migration metadata belongs on the container and its call sites only.
-		t.Run(schemaName+"/depends_on_manifest is not independently deprecated", func(t *testing.T) {
+		t.Run(schemaName+"/depends_on_manifest-not-independently-deprecated", func(t *testing.T) {
 			def := schemaDefinition(t, schemaData, "depends_on_manifest")
 
 			assert.NotContainsf(t, def, "deprecated",
