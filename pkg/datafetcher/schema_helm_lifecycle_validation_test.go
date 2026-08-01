@@ -19,6 +19,12 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 
 	valid := map[string]any{
 		"helm": map[string]any{
+			"command":             "helm",
+			"auth":                map[string]any{},
+			"secrets":             map[string]any{},
+			"dependencies":        map[string]any{},
+			"source":              map[string]any{"uri": "github.com/cloudposse/atmos"},
+			"provision":           map[string]any{},
 			"rollback_on_failure": true,
 			"wait_strategy":       "watcher",
 			"timeout":             "10m",
