@@ -96,6 +96,9 @@ func verifyExpectedKubernetesEndpoint(settings *cli.EnvSettings) error {
 // returned for preview.
 func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseActionResult, error) {
 	defer perf.Track(nil, "helm.applyRelease")()
+	if err := ctx.Err(); err != nil {
+		return releaseActionResult{}, err
+	}
 
 	actx, err := newActionContext(spec.Namespace)
 	if err != nil {
