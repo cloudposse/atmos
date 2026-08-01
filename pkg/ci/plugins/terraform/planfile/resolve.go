@@ -2,9 +2,11 @@ package planfile
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -29,6 +31,10 @@ const (
 	// GitHub Actions store.
 	DefaultGitHubPrefix = "planfile"
 )
+
+// ambiguousStoreWarning keeps the "several stores, nothing selects one" warning to
+// one emission per process, so a run over many components does not repeat it.
+var ambiguousStoreWarning sync.Once
 
 // StoreSource identifies where a resolved store candidate came from. It exists so
 // callers (and log output) can explain *why* a particular backend was selected,
@@ -171,10 +177,14 @@ func configuredCandidates(planfilesConfig schema.PlanfilesConfig) ([]StoreCandid
 
 	// Several stores are defined but nothing picks one. Environment detection still
 	// applies (that is the historical behavior), but it is worth saying out loud,
-	// because the detected store is very likely not the one the user meant.
+	// because the detected store is very likely not the one the user meant. Store
+	// resolution runs once per component per hook, so the warning is emitted once
+	// per process rather than once per resolution.
 	if len(planfilesConfig.Stores) > 1 {
-		log.Warn("Multiple planfile stores are defined but neither planfiles.default nor planfiles.priority selects one; falling back to environment detection",
-			"stores", storeNames(planfilesConfig))
+		ambiguousStoreWarning.Do(func() {
+			log.Warn("Multiple planfile stores are defined but neither planfiles.default nor planfiles.priority selects one; falling back to environment detection",
+				"stores", storeNames(planfilesConfig))
+		})
 	}
 
 	return nil, nil
@@ -190,10 +200,13 @@ func candidateFromName(name string, planfilesConfig schema.PlanfilesConfig, sour
 			return StoreCandidate{}, fmt.Errorf("%w: store %q (referenced by %s) has no `type`; set one of %s, %s, or %s",
 				errUtils.ErrPlanfileStoreInvalidArgs, name, setting, S3StoreType, GitHubStoreType, LocalStoreType)
 		}
+		// Clone the options so a backend (or a caller's decorator) cannot write
+		// through into the loaded Atmos configuration, which is shared across every
+		// component in a run.
 		return StoreCandidate{
 			Name:    name,
 			Source:  source,
-			Options: StoreOptions{Type: spec.Type, Options: spec.Options},
+			Options: StoreOptions{Type: spec.Type, Options: maps.Clone(spec.Options)},
 		}, nil
 	}
 

@@ -51,6 +51,9 @@ func TestResolveStore(t *testing.T) {
 
 	t.Run("explicit store type is used", func(t *testing.T) {
 		clearStoreEnv(t)
+		// The local backend creates its directory on construction; keep that out of
+		// the source tree.
+		t.Chdir(t.TempDir())
 
 		store, selected, err := resolveStore(&schema.AtmosConfiguration{}, planfile.LocalStoreType)
 		require.NoError(t, err)
@@ -96,6 +99,7 @@ func TestResolveStore(t *testing.T) {
 
 	t.Run("falls back to local storage", func(t *testing.T) {
 		clearStoreEnv(t)
+		t.Chdir(t.TempDir())
 
 		store, selected, err := resolveStore(&schema.AtmosConfiguration{}, "")
 		require.NoError(t, err)

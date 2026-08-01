@@ -293,6 +293,35 @@ func TestResolveStoreCandidates_AtmosConfigAttached(t *testing.T) {
 	}
 }
 
+func TestResolveStoreCandidates_OptionsAreIsolatedFromConfig(t *testing.T) {
+	clearStoreEnv(t)
+
+	stores := map[string]schema.PlanfileStoreSpec{
+		"s3": {Type: S3StoreType, Options: map[string]any{"bucket": "configured-bucket"}},
+	}
+	atmosConfig := configWithStores("", []string{"s3"}, stores)
+
+	candidates, err := ResolveStoreCandidates(atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+
+	// Result -> source: writing through the candidate must not reach the loaded
+	// configuration, which is shared by every component in a run.
+	candidates[0].Options.Options["bucket"] = "mutated-by-backend"
+	assert.Equal(t, "configured-bucket", stores["s3"].Options["bucket"])
+	assert.Equal(t, "configured-bucket",
+		atmosConfig.Components.Terraform.Planfiles.Stores["s3"].Options["bucket"])
+
+	// Source -> result: a later edit of the configuration must not reach candidates
+	// that were already resolved.
+	stores["s3"].Options["bucket"] = "changed-after-resolve"
+	candidates2, err := ResolveStoreCandidates(atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, candidates2, 1)
+	assert.Equal(t, "mutated-by-backend", candidates[0].Options.Options["bucket"])
+	assert.Equal(t, "changed-after-resolve", candidates2[0].Options.Options["bucket"])
+}
+
 func TestStoreCandidateDescription(t *testing.T) {
 	tests := []struct {
 		name      string
