@@ -132,7 +132,10 @@ commands:
           else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify timeout rollback cleanup: $output"; exit 1;; esac; fi
       # A failed first install is reported as failure and rolled back. The kept
       # hook ConfigMap survives recovery while ordinary release resources do not.
-      - command: if atmos helm apply demo-install-fail -s dev --identity local-k3s; then echo "failed install unexpectedly succeeded"; exit 1; fi
+      - command: >-
+          if output=$(NO_COLOR=1 atmos helm apply demo-install-fail -s dev --identity local-k3s 2>&1); then echo "failed install unexpectedly succeeded"; exit 1; fi;
+          case "$output" in *"helm release operation failed"*) ;; *) echo "failed install stopped outside the Helm lifecycle operation: $output"; exit 1;; esac;
+          case "$output" in *"job demo-install-fail-failing-hook failed: BackoffLimitExceeded"*) ;; *) echo "failed install did not report the expected hook failure: $output"; exit 1;; esac
       - command: >-
           if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-install-fail get deployment demo-install-fail 2>&1); then echo "rollback left failed install resources"; exit 1;
           else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify failed-install rollback cleanup: $output"; exit 1;; esac; fi
