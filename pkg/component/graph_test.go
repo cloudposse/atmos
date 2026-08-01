@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -152,6 +153,60 @@ func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 		assert.False(t, call.ConfigAndStacksInfo.Affected)
 		assert.Equal(t, true, call.Flags["dry-run"])
 	}
+}
+
+func TestExecuteGraphNodeDoesNotRedispatchBulkSelection(t *testing.T) {
+	provider := &graphTestProvider{}
+	info := &schema.ConfigAndStacksInfo{
+		All:        true,
+		Affected:   true,
+		Query:      ".components",
+		Components: []string{"base"},
+		Tags:       []string{"lifecycle-dag"},
+		Labels:     map[string]string{"tier": "platform"},
+	}
+	flags := map[string]any{
+		"all":                true,
+		"affected":           true,
+		"query":              ".components",
+		"components":         []string{"base"},
+		"tags":               []string{"lifecycle-dag"},
+		"labels":             "tier=platform",
+		"include-dependents": true,
+		"dry-run":            true,
+	}
+
+	err := executeGraphNode(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          info,
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "apply",
+		Flags:         flags,
+	}, &dependency.Node{Component: "base", Stack: "dev"})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 1)
+	call := provider.calls[0]
+	assert.False(t, call.ConfigAndStacksInfo.All)
+	assert.False(t, call.ConfigAndStacksInfo.Affected)
+	assert.Empty(t, call.ConfigAndStacksInfo.Query)
+	assert.Empty(t, call.ConfigAndStacksInfo.Components)
+	assert.Empty(t, call.ConfigAndStacksInfo.Tags)
+	assert.Empty(t, call.ConfigAndStacksInfo.Labels)
+	for _, key := range []string{"all", "affected", "query", "components", "tags", "labels", "include-dependents"} {
+		assert.NotContains(t, call.Flags, key)
+	}
+	assert.Equal(t, true, call.Flags["dry-run"])
+	assert.Equal(t, flags, map[string]any{
+		"all":                true,
+		"affected":           true,
+		"query":              ".components",
+		"components":         []string{"base"},
+		"tags":               []string{"lifecycle-dag"},
+		"labels":             "tier=platform",
+		"include-dependents": true,
+		"dry-run":            true,
+	}, "outer graph flags must remain unchanged")
 }
 
 type graphContextKey struct{}
