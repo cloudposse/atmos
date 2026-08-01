@@ -216,7 +216,7 @@ The target timeout default is five minutes, matching the Helm CLI. R1 introduces
 2. An explicit `timeout`, including `timeout: 0s`, suppresses the migration warning.
 3. In the following minor release, an omitted `timeout` resolves to `5m`.
 
-An explicit `timeout: 0s` disables the Helm action timeout. Negative durations are invalid. Documentation MUST warn that a zero timeout can leave hook or resource waits unbounded. Timeout errors MUST include the effective duration and identify the `timeout` component field so users can correct long-running releases without inspecting debug logs.
+An explicit `timeout: 0s` disables the Helm action timeout. Negative durations are invalid. Documentation MUST warn that a zero timeout can leave hook or resource waits unbounded. This is especially important for delete: Helm 4's uninstall request does not accept the caller context, so `timeout: 0s` can leave an uninstall wait unbounded after the caller stops waiting. Timeout errors MUST include the effective duration and identify the `timeout` component field so users can correct long-running releases without inspecting debug logs.
 
 The `max_history` default is `10`, matching the Helm CLI rather than the Helm SDK zero value. An explicit `max_history: 0` disables history pruning. Negative values are invalid. Release notes MUST call out that an omitted value now bounds upgrade history and that users who require unlimited history must explicitly configure `0`.
 
@@ -282,7 +282,7 @@ Lifecycle values resolve from lowest to highest priority:
 4. The concrete `components.helm.<name>` instance.
 5. Explicit command-line flags.
 
-Only flags explicitly present on the command line override component configuration. A Cobra Boolean default of `false` MUST NOT overwrite `true` from the stack unless the user explicitly supplied the flag or its negative form.
+Only flags explicitly present on the command line override component configuration. A Cobra Boolean default of `false` MUST NOT overwrite `true` from the stack. Every lifecycle Boolean flag accepts an explicit `=false` value, such as `--rollback-on-failure=false`, `--wait-for-jobs=false`, `--cleanup-on-fail=false`, `--no-hooks=false`, and `--skip-crds=false`, so command-line input can disable a stack-level `true` value. Bare Boolean flags mean `true`.
 
 Lifecycle fields are not added to `atmos.yaml` global `components.helm` configuration. That structure remains responsible for process-wide native Helm settings such as `base_path`, source behavior, repositories, and plugin management. Release policy belongs to processed stack configuration where inheritance and per-environment overrides are available.
 
@@ -294,7 +294,7 @@ Lifecycle fields are not added to `atmos.yaml` global `components.helm` configur
 | `wait_strategy` | Applied | Applied | Applied | Not applicable | Not applicable |
 | `wait_for_jobs` | Applied | Applied | Not applicable | Not applicable | Not applicable |
 | `timeout` | Applied | Applied | Applied | Not applicable | Not applicable |
-| `cleanup_on_fail` | Ignored | Applied before rollback, matching Helm | Not applicable | Not applicable | Not applicable |
+| `cleanup_on_fail` | Ignored | Applied on upgrade failure independently of rollback | Not applicable | Not applicable | Not applicable |
 | `max_history` | Ignored | Applied | Not applicable | Not applicable | Not applicable |
 | `disable_chart_hooks` | Applied | Applied | Applied | Not part of this PRD | Not applicable |
 | `skip_crds` | Applied | Ignored | Not applicable | Not applicable | Not applicable |
@@ -365,6 +365,7 @@ Specifically, `timeout` does not govern:
 
 - Resolving or downloading an HTTP/OCI chart.
 - Loading a chart from disk.
+- Installing CRDs from a chart's `crds/` directory or waiting for the Kubernetes API to recognize them. Helm uses its own fixed 60-second CRD recognition wait before the release action timeout applies.
 - Client-side template/diff rendering.
 - Cloning, committing, or pushing an external delivery target.
 
@@ -384,7 +385,7 @@ Required propagation includes:
 - Graph-backed bulk execution.
 - Release-history lookup where supported by the SDK.
 - Install and upgrade `RunWithContext`.
-- Delete wait and hook phases through Helm uninstall wait options. Helm 4 does not accept a context for the uninstall request itself, so cancellation is also checked before and after the action and the operation remains bounded by the configured timeout.
+- Delete wait and hook phases through Helm uninstall wait options. Helm 4 does not accept a context for the uninstall request itself, so cancellation is checked before and after the action. A positive configured timeout bounds the wait; `timeout: 0s` does not.
 - External delivery and rendering call sites, without changing their timeout configuration in this PRD.
 
 Scheduler cancellation or an operating-system signal must prevent new dependent nodes from starting and stop the caller from waiting for the active Helm action. Because Helm install and upgrade actions may continue work after `RunWithContext` returns, this PRD does not promise that caller cancellation terminates already-running SDK work. Atmos must prevent a new Atmos-managed rollback attempt from starting with a fresh background context after cancellation. Any stronger guarantee requires Atmos to own the action worker goroutine and wait for it to terminate before returning. Helm's built-in rollback-on-failure behavior remains responsible for its documented interrupted-release semantics.
@@ -405,7 +406,7 @@ R1 uses Helm 4's built-in `RollbackOnFailure` behavior:
 
 - Failed install: Helm uninstalls the newly created release.
 - Failed upgrade: Helm rolls back to the most recent successful release.
-- `cleanup_on_fail`: Helm removes resources newly created during the failed upgrade before rollback.
+- `cleanup_on_fail`: Helm removes resources newly created during a failed upgrade whenever configured, whether or not `rollback_on_failure` is enabled. When rollback is enabled, cleanup occurs as part of handling the failure before recovery completes.
 - Failure after successful recovery: Atmos returns a failed node with an error explaining that recovery completed.
 - Failed recovery: Atmos returns both the original action failure and the rollback/uninstall failure using error wrapping or `errors.Join` without losing either cause.
 
@@ -496,15 +497,15 @@ Use the standard Atmos parser and command registry. Mirror Helm names when the m
 
 | Atmos flag | Configuration field | Commands |
 | --- | --- | --- |
-| `--rollback-on-failure` | `rollback_on_failure` | apply, deploy |
-| `--atomic` | Deprecated alias | apply, deploy |
+| `--rollback-on-failure[=bool]` | `rollback_on_failure` | apply, deploy |
+| `--atomic[=bool]` | Deprecated alias | apply, deploy |
 | `--wait[=strategy]` | `wait_strategy` | apply, deploy, delete |
-| `--wait-for-jobs` | `wait_for_jobs` | apply, deploy |
+| `--wait-for-jobs[=bool]` | `wait_for_jobs` | apply, deploy |
 | `--timeout` | `timeout` | apply, deploy, delete |
-| `--cleanup-on-fail` | `cleanup_on_fail` | apply, deploy |
+| `--cleanup-on-fail[=bool]` | `cleanup_on_fail` | apply, deploy |
 | `--history-max` | `max_history` | apply, deploy |
-| `--no-hooks` | `disable_chart_hooks` | apply, deploy, delete |
-| `--skip-crds` | `skip_crds` | apply, deploy |
+| `--no-hooks[=bool]` | `disable_chart_hooks` | apply, deploy, delete |
+| `--skip-crds[=bool]` | `skip_crds` | apply, deploy |
 
 Flags must be represented in execution summaries using canonical field names. Deprecated aliases emit warnings through Atmos UI/logging primitives, not direct standard-output writes.
 
@@ -521,8 +522,7 @@ lifecycle:
   rollback_on_failure: true
   cleanup_on_fail: true
   max_history: 10
-  chart_hooks_enabled: true
-  install_crds: false
+  disable_chart_hooks: false
 ```
 
 The summary reports effective values after alias normalization and CLI overrides. It does not report inapplicable settings as if Helm used them.
@@ -587,6 +587,7 @@ The release notes must call out the timeout migration schedule and the new ten-r
 - Verify every install, upgrade, and delete action field mapping.
 - Verify operation-inapplicable fields are omitted.
 - Verify only explicitly changed flags override stack configuration.
+- Verify explicit `=false` command-line values override stack-level `true` for every lifecycle Boolean flag.
 - Verify explicit lifecycle flags fail for external provision targets.
 - Verify apply and delete dry-run propagation through the complete command-to-provider path.
 - Verify caller-context propagation and cancellation.
@@ -611,6 +612,7 @@ Use the existing in-memory release lifecycle tests to cover:
 - Default history pruning at ten revisions, a positive `max_history` override, and explicit unlimited `max_history: 0`.
 - Chart-hook suppression on install and upgrade.
 - CRD skipping on install.
+- Upgrade cleanup with rollback both enabled and disabled.
 - Delete timeout, wait strategy, chart-hook suppression, and dry run.
 
 ### k3s Integration Tests
@@ -633,6 +635,7 @@ Required scenarios:
 - Failed first install with rollback leaves no deployed release.
 - Failed upgrade with rollback restores the previous successful release.
 - Failed upgrade cleanup removes newly created resources.
+- CRD installation uses Helm's separate recognition wait and is not shortened by the release `timeout` value.
 - Weighted hooks execute in ascending weight order on first install and upgrade.
 - Rollback and failed-install cleanup preserve resources marked `helm.sh/resource-policy: keep`.
 - `disable_chart_hooks` prevents the fixture hooks from executing.
