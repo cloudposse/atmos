@@ -20,11 +20,10 @@ import (
 )
 
 const (
-	flagOutput            = "output"
-	flagAll               = "all"
-	flagAffected          = "affected"
-	flagWait              = "wait"
-	defaultHelmHistoryMax = 10
+	flagOutput   = "output"
+	flagAll      = "all"
+	flagAffected = "affected"
+	flagWait     = "wait"
 	// The valueTrue const is the string representation of a set boolean flag.
 	valueTrue = "true"
 )
@@ -162,7 +161,7 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithBoolFlag("wait-for-jobs", "", false, "Wait for Jobs in the release manifest."),
 			flags.WithStringFlag("timeout", "", "", "Helm release-operation timeout (for example, 10m)."),
 			flags.WithBoolFlag("cleanup-on-fail", "", false, "Delete resources created by a failed upgrade."),
-			flags.WithIntFlag("history-max", "", defaultHelmHistoryMax, "Maximum release revisions to retain; 0 means unlimited."),
+			flags.WithIntFlag("history-max", "", cfg.HelmDefaultMaxHistory, "Maximum release revisions to retain; 0 means unlimited."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 			flags.WithBoolFlag("skip-crds", "", false, "Do not install chart CRDs on first install."),
 		)

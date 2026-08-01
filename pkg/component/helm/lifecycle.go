@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	defaultHelmMaxHistory      = 10
 	helmTimeoutMigrationActive = true
 	decimalRadix               = 10
 )
@@ -69,7 +68,7 @@ type releaseLifecycleResolution struct {
 func defaultReleaseLifecycle() releaseLifecycle {
 	return releaseLifecycle{
 		WaitStrategy: kube.HookOnlyStrategy,
-		MaxHistory:   defaultHelmMaxHistory,
+		MaxHistory:   cfg.HelmDefaultMaxHistory,
 	}
 }
 
@@ -245,7 +244,7 @@ func parseWaitStrategy(value string) (kube.WaitStrategy, error) {
 // and validation once. Resolving from raw input is important because a CLI
 // rollback override can change whether watcher was derived from hookOnly.
 func resolveReleaseLifecycleWithFlags(section map[string]any, flags map[string]any) (releaseLifecycleResolution, error) {
-	overlaid := make(map[string]any, len(section)+len(lifecycleFlagKeys))
+	overlaid := make(map[string]any, len(section))
 	for key, value := range section {
 		overlaid[key] = value
 	}

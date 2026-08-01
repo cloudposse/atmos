@@ -215,7 +215,7 @@ func runWithHooks(
 			return err
 		}
 		for _, warning := range spec.Lifecycle.Warnings {
-			log.Warn(warning.Message, "field", warning.Field, "code", warning.Code)
+			ui.Warningf("%s (field: %s, code: %s)", warning.Message, warning.Field, warning.Code)
 		}
 	}
 	if operation != OperationDelete {
