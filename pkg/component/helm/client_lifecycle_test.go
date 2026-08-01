@@ -151,6 +151,10 @@ func TestApplyReleaseHonorsCanceledContext(t *testing.T) {
 
 	_, err := applyRelease(ctx, spec, false)
 	require.ErrorIs(t, err, context.Canceled)
+
+	deployed, getErr := getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	require.NoError(t, getErr)
+	assert.Empty(t, deployed)
 }
 
 func TestDeleteReleaseHonorsCanceledContext(t *testing.T) {
