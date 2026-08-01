@@ -72,8 +72,9 @@ atmos helm apply demo -s dev --identity local-k3s
 ```
 
 The stack sets `wait_strategy: watcher`, `timeout: 2m`, and
-`max_history: 10` as native Helm type defaults. The component enables
-`rollback_on_failure` and failed-upgrade cleanup. The `atmos test` workflow
+`max_history: 10` as native Helm type defaults. The `demo` component overrides
+the wait strategy to `legacy`, and enables `rollback_on_failure` and
+failed-upgrade cleanup. The `atmos test` workflow
 covers non-mutating apply and delete dry runs, ordinary Job waiting, chart-hook
 suppression, CRD skipping, weighted hook ordering, retained hook resources,
 install and upgrade rollback, failed-upgrade cleanup, timeout handling, and
