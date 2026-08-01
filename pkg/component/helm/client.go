@@ -258,17 +258,15 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 
 func releaseOperationError(operation string, spec *chartSpec, cause error) error {
 	policy := spec.Lifecycle.Policy
-	return fmt.Errorf(
-		"%w: operation=%s release=%q namespace=%q wait_strategy=%s timeout=%s (component field %q): %w",
-		errUtils.ErrHelmReleaseOperation,
-		operation,
-		spec.ReleaseName,
-		spec.Namespace,
-		policy.WaitStrategy,
-		policy.Timeout,
-		cfg.HelmTimeoutSectionName,
-		cause,
-	)
+	return errUtils.Build(errUtils.ErrHelmReleaseOperation).
+		WithCause(cause).
+		WithContext("operation", operation).
+		WithContext("release", spec.ReleaseName).
+		WithContext("namespace", spec.Namespace).
+		WithContext("wait_strategy", policy.WaitStrategy).
+		WithContext("timeout", policy.Timeout).
+		WithContext("timeout_field", cfg.HelmTimeoutSectionName).
+		Err()
 }
 
 func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {

@@ -14,12 +14,22 @@
 
 ### Release lifecycle
 
+{{- if eq (index . "reason") "external_target" }}
+
+| Field | Value |
+| --- | --- |
+| Deleted | `false` |
+| Target kind | `{{ index . "target_kind" }}` |
+| Reason | `external_target` |
+{{- else }}
+
 | Field | Value |
 | --- | --- |
 | Operation | `{{ index . "operation" }}` |
 | Wait strategy | `{{ index . "wait_strategy" }}` |
 | Timeout | `{{ index . "timeout" }}` |
 | Chart hooks enabled | `{{ index . "chart_hooks_enabled" }}` |
+{{- end }}
 {{- end }}
 
 To reproduce locally:
