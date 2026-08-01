@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 func TestProcessStackConfig_ErrorPaths(t *testing.T) {
@@ -914,6 +915,7 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 		{
 			name: "config with kubernetes section and component",
 			config: map[string]any{
+				cfg.SecretsSectionName: secretsSection("SHARED", nil),
 				cfg.KubernetesSectionName: map[string]any{
 					cfg.CommandSectionName: "kubectl",
 					cfg.VarsSectionName: map[string]any{
@@ -962,11 +964,15 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.Equal(t, []any{"base"}, app[cfg.PathsSectionName])
 				assert.Equal(t, map[string]any{"deployment": "d.yaml"}, app[cfg.ManifestsSectionName])
 				assert.Equal(t, map[string]any{"engine": "kustomize"}, app[cfg.RenderSectionName])
+				secretsSection, ok := app[cfg.SecretsSectionName].(map[string]any)
+				require.True(t, ok, "stack-level secrets must flow into kubernetes components")
+				assert.Equal(t, string(secrets.ScopeStack), secretScopeOf(t, secretsSection, "SHARED"))
 			},
 		},
 		{
 			name: "config with helm section and component",
 			config: map[string]any{
+				cfg.SecretsSectionName: secretsSection("SHARED", nil),
 				cfg.HelmSectionName: map[string]any{
 					cfg.CommandSectionName: "helm",
 					cfg.ValuesSectionName: map[string]any{
@@ -1046,6 +1052,9 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.Equal(t, true, app[cfg.HelmWaitForJobsSectionName])
 				assert.Equal(t, "20m", app[cfg.HelmTimeoutSectionName])
 				assert.Equal(t, 10, app[cfg.HelmMaxHistorySectionName])
+				secretsSection, ok := app[cfg.SecretsSectionName].(map[string]any)
+				require.True(t, ok, "stack-level secrets must flow into helm components")
+				assert.Equal(t, string(secrets.ScopeStack), secretScopeOf(t, secretsSection, "SHARED"))
 			},
 		},
 	}
