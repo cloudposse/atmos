@@ -388,6 +388,8 @@ func extractHelmLifecycleSection(section map[string]any) map[string]any {
 	return bag
 }
 
+// extractHelmOverrideSection copies only native Helm fields with documented
+// override semantics from a component or type-level overrides block.
 func extractHelmOverrideSection(section map[string]any) map[string]any {
 	bag := make(map[string]any)
 	for _, key := range helmOverrideSectionKeys {

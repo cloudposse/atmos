@@ -705,6 +705,13 @@ func TestExtractHelmLifecycleSections(t *testing.T) {
 	assert.Equal(t, "watcher", defaults[cfg.HelmWaitStrategySectionName])
 	assert.Equal(t, "30m", defaults[cfg.HelmTimeoutSectionName])
 	assert.Equal(t, 10, defaults[cfg.HelmMaxHistorySectionName])
+
+	overrides := extractHelmOverrideSection(section)
+	assert.Equal(t, map[string]any{"cluster": "shared"}, overrides[cfg.ValuesSectionName])
+	assert.NotContains(t, overrides, cfg.ChartSectionName)
+	assert.NotContains(t, overrides, cfg.RepositoriesSectionName)
+	assert.NotContains(t, overrides, cfg.HelmTimeoutSectionName)
+	assert.NotContains(t, overrides, "unrecognized")
 }
 
 // Compile-time guard: a rename of the schema Plugins fields fails the build.

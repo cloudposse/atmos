@@ -53,6 +53,8 @@ type ComponentProcessorOptions struct {
 	GlobalKubernetesPaths     any
 	GlobalKubernetesManifests any
 	GlobalKubernetesRender    map[string]any
+
+	// Helm-specific global defaults (lowest precedence in the final merge).
 	// GlobalHelmLifecycle contains stack-level native Helm lifecycle defaults.
 	GlobalHelmLifecycle map[string]any
 

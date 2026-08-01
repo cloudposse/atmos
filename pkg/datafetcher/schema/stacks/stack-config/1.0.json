@@ -839,6 +839,24 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "type": "object"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
             "render": {
               "$ref": "#/definitions/kubernetes_render"
             },
