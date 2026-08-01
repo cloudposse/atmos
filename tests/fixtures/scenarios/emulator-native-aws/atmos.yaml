@@ -14,7 +14,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 # A single aws/emulator identity binds every component to the emulator. The
 # provider contributor injects the AWS provider behaviour flags; the identity
