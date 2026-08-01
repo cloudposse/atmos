@@ -15,7 +15,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: verify-weighted-configmap
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.jobImage.repository }}:{{ .Values.jobImage.tag }}"
           command: ["/bin/sh", "-c", "test -f /hook-order/order"]
           volumeMounts:
             - name: hook-order
