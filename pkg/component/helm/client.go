@@ -210,7 +210,11 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
 		}
-		return fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
+		uninstallErr := fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return errors.Join(ctxErr, uninstallErr)
+		}
+		return uninstallErr
 	}
 	if err := ctx.Err(); err != nil {
 		return err
