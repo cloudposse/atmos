@@ -25,5 +25,5 @@ spec:
       volumes:
         - name: hook-order
           configMap:
-            name: {{ default (printf "%s-hook-order" .Release.Name) .Values.hooks.requiredConfigMap }}
+            name: {{ printf "%s-hook-order" .Release.Name }}
 {{- end }}

@@ -215,40 +215,53 @@ func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
 	assert.False(t, hasDeadline)
 }
 
-func TestUpgradeReleasePrunesDefaultHistory(t *testing.T) {
-	actx := memoryActionContext(t)
-	stubActionContext(t, actx)
-	spec := testdataChartSpec(t, "history")
-
-	for revision := 0; revision < cfg.HelmDefaultMaxHistory+3; revision++ {
-		spec.Values["replicaCount"] = revision + 1
-		_, err := applyRelease(context.Background(), spec, false)
-		require.NoError(t, err)
-	}
-
-	history, err := actx.cfg.Releases.History(spec.ReleaseName)
-	require.NoError(t, err)
-	assert.Len(t, history, cfg.HelmDefaultMaxHistory)
-	assert.Equal(t, []int{4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, releaseVersions(t, history))
-}
-
-func TestUpgradeReleaseUnlimitedHistory(t *testing.T) {
-	actx := memoryActionContext(t)
-	stubActionContext(t, actx)
-	spec := testdataChartSpec(t, "unlimited-history")
-	spec.Lifecycle.Policy.MaxHistory = 0
-
+func TestUpgradeReleaseHistoryRetention(t *testing.T) {
 	const revisions = cfg.HelmDefaultMaxHistory + 3
-	for revision := 0; revision < revisions; revision++ {
-		spec.Values["replicaCount"] = revision + 1
-		_, err := applyRelease(context.Background(), spec, false)
-		require.NoError(t, err)
+	tests := []struct {
+		name          string
+		releaseName   string
+		maxHistory    int
+		override      bool
+		expectedCount int
+		expected      []int
+	}{
+		{
+			name:          "default bounded history",
+			releaseName:   "history",
+			expectedCount: cfg.HelmDefaultMaxHistory,
+			expected:      []int{4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
+		},
+		{
+			name:          "explicit unlimited history",
+			releaseName:   "unlimited-history",
+			maxHistory:    0,
+			override:      true,
+			expectedCount: revisions,
+			expected:      []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
+		},
 	}
 
-	history, err := actx.cfg.Releases.History(spec.ReleaseName)
-	require.NoError(t, err)
-	assert.Len(t, history, revisions)
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, releaseVersions(t, history))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			stubActionContext(t, actx)
+			spec := testdataChartSpec(t, tt.releaseName)
+			if tt.override {
+				spec.Lifecycle.Policy.MaxHistory = tt.maxHistory
+			}
+
+			for revision := 0; revision < revisions; revision++ {
+				spec.Values["replicaCount"] = revision + 1
+				_, err := applyRelease(context.Background(), spec, false)
+				require.NoError(t, err)
+			}
+
+			history, err := actx.cfg.Releases.History(spec.ReleaseName)
+			require.NoError(t, err)
+			assert.Len(t, history, tt.expectedCount)
+			assert.Equal(t, tt.expected, releaseVersions(t, history))
+		})
+	}
 }
 
 func releaseVersions(t *testing.T, history []helmrelease.Releaser) []int {
