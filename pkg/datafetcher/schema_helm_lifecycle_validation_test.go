@@ -26,6 +26,14 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 			"values":              map[string]any{"cluster": "shared"},
 			"overrides": map[string]any{
 				"values": map[string]any{"environment": "test"},
+				"vars":   map[string]any{"region": "us-east-1"},
+				"env":    map[string]any{"HELM_DEBUG": "true"},
+				"settings": map[string]any{
+					"enabled": true,
+				},
+				"command": "helm",
+				"auth":    map[string]any{},
+				"secrets": map[string]any{},
 			},
 		},
 		"components": map[string]any{
@@ -39,6 +47,7 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 					"skip_crds":           false,
 					"overrides": map[string]any{
 						"values": map[string]any{"replicaCount": 2},
+						"vars":   map[string]any{"region": "us-west-2"},
 					},
 				},
 			},

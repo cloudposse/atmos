@@ -361,6 +361,7 @@ var helmComponentSectionKeys = []string{
 
 var helmLifecycleSectionKeys = []string{
 	cfg.ValuesSectionName,
+	cfg.RepositoriesSectionName,
 	cfg.HelmRollbackOnFailureSectionName,
 	cfg.HelmAtomicSectionName,
 	cfg.HelmWaitStrategySectionName,

@@ -1139,6 +1139,9 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 						"image":        map[string]any{"tag": "stable"},
 						"replicaCount": 1,
 					},
+					cfg.RepositoriesSectionName: []any{
+						map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
+					},
 					cfg.VarsSectionName: map[string]any{
 						"namespace": "apps",
 					},
@@ -1179,9 +1182,6 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 								"replicaCount": 2,
 							},
 							cfg.ValuesFilesSectionName: []any{"values.yaml"},
-							cfg.RepositoriesSectionName: []any{
-								map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
-							},
 							cfg.RenderSectionName: map[string]any{
 								"output": map[string]any{"path": "rendered.yaml"},
 							},
