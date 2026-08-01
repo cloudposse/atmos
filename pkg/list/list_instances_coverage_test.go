@@ -1,7 +1,9 @@
-//nolint:dupl // Test structure similarity is intentional for comprehensive coverage
 package list
 
 import (
+	"bytes"
+	"encoding/json"
+	stdio "io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,6 +78,42 @@ func TestExecuteListInstancesCmd(t *testing.T) {
 
 	// Should succeed with valid fixture.
 	assert.NoError(t, err)
+}
+
+// TestExecuteListInstancesCmd_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as an error from ExecuteListInstancesCmd's own
+// tags.ParseLabelsFlag call on the non-tree/non-matrix format path, reached
+// after the format-specific validation branches (tree/matrix/upload/output-file)
+// but before instances are ever processed.
+func TestExecuteListInstancesCmd_InvalidLabelsFlag(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:      info,
+		Cmd:       cmd,
+		Args:      []string{},
+		Format:    "table",
+		LabelsRaw: "not-a-valid-label",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag,
+		"the failure must come from label parsing, not an unrelated config/describe error")
+	assert.Contains(t, err.Error(), "not-a-valid-label")
 }
 
 // TestExecuteListInstancesCmd_InvalidConfig tests error handling for invalid config.
@@ -546,16 +584,130 @@ func TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix(t *testing.T) {
 	assert.Contains(t, err.Error(), "--output-file is only supported with --format=matrix")
 }
 
+// TestExecuteListInstancesCmd_ClosurePreview exercises the closure-requested
+// success path (processInstancesScopedClosure, the row-tags/labels-cleared
+// branch, and the closure-membership row filter) end to end against the
+// vpc -> eks/cluster -> eks/istio/* fixture: seeding by --tags=istio and
+// expanding with --include-dependencies must render exactly the istio chain
+// plus its forward prerequisites, never the unrelated eks/karpenter that
+// merely shares the stack.
+func TestExecuteListInstancesCmd_ClosurePreview(t *testing.T) {
+	// Capture the data stream so the rendered closure SET is asserted, not
+	// just the absence of an error — a closure regression returning every
+	// component in the stack must fail this test.
+	stdout := &bytes.Buffer{}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(&closureTestStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: &bytes.Buffer{},
+	}))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/list-components-closure-tags"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+	// The fixture's atmos.yaml (included_paths: deploy/**/*, name_template)
+	// must actually be discovered — Info.BasePath alone does not make
+	// cfg.InitCliConfig load it, so chdir into the fixture like the cmd/list
+	// closure integration tests do.
+	t.Chdir(fixturePath)
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "json", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:                info,
+		Cmd:                 cmd,
+		Args:                []string{},
+		Format:              "json",
+		Tags:                []string{"istio"},
+		IncludeDependencies: -1,
+		ProcessTemplates:    true,
+		AuthDisabled:        true,
+	})
+
+	require.NoError(t, err, "a closure preview over a healthy fixture should render cleanly")
+
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &rows),
+		"closure preview must render a JSON array of instance rows: %s", stdout.String())
+	components := make([]string, 0, len(rows))
+	for _, row := range rows {
+		component, _ := row["Component"].(string)
+		components = append(components, component)
+	}
+	assert.ElementsMatch(t, []string{
+		"vpc",
+		"eks/cluster",
+		"eks/istio/base",
+		"eks/istio/istiod",
+	}, components, "the closure preview must render exactly the istio chain plus forward prerequisites, never eks/karpenter")
+}
+
+// closureTestStreams is a minimal io.Streams implementation backed by buffers
+// so tests can assert what the data channel actually rendered.
+type closureTestStreams struct {
+	stdin  *bytes.Buffer
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+}
+
+func (s *closureTestStreams) Input() stdio.Reader     { return s.stdin }
+func (s *closureTestStreams) Output() stdio.Writer    { return s.stdout }
+func (s *closureTestStreams) Error() stdio.Writer     { return s.stderr }
+func (s *closureTestStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *closureTestStreams) RawError() stdio.Writer  { return s.stderr }
+
+// TestExecuteListInstancesCmd_ClosurePreviewPropagatesError proves
+// processInstancesScopedClosure surfaces a genuine evaluation error from
+// dependencies.ResolveScopedClosure instead of swallowing it: seeding by the
+// `broken-tag` tag pulls in the fixture's `broken` component, whose template
+// unconditionally fails to render once evaluated.
+func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/list-components-closure-tags"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+	t.Chdir(fixturePath)
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "json", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:                info,
+		Cmd:                 cmd,
+		Args:                []string{},
+		Format:              "json",
+		Tags:                []string{"broken-tag"},
+		IncludeDependencies: -1,
+		ProcessTemplates:    true,
+		AuthDisabled:        true,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broken component must only be evaluated when explicitly seeded")
+}
+
 // TestBuildInstanceFilters covers the YQ-predicate wiring of `--filter`.
 func TestBuildInstanceFilters(t *testing.T) {
 	t.Run("empty spec returns no filters", func(t *testing.T) {
-		result, err := buildInstanceFilters("", nil)
+		result, err := buildInstanceFilters("", nil, "", nil)
 		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
 
 	t.Run("non-empty spec yields one YQ filter", func(t *testing.T) {
-		result, err := buildInstanceFilters(".component == \"vpc\"", nil)
+		result, err := buildInstanceFilters(".component == \"vpc\"", nil, "", nil)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 	})
@@ -661,6 +813,120 @@ func TestExecuteListInstancesCmd_FilterAndQueryRejectedInTreeMatrix(t *testing.T
 				Format:     tc.format,
 				FilterSpec: tc.filter,
 				Query:      tc.query,
+			})
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+			assert.Contains(t, err.Error(), tc.wantMatch)
+		})
+	}
+}
+
+// TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix verifies
+// --tags/--labels are rejected wherever row filtering cannot apply: with
+// --upload (the Atmos Pro inventory upload is always unfiltered, so a filtered
+// table alongside a full upload would mislead) and with the tree/matrix
+// formats (which bypass the row-filter pipeline entirely).
+func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	tests := []struct {
+		name      string
+		format    string
+		upload    bool
+		tags      []string
+		labelsRaw string
+		wantMatch string
+	}{
+		{
+			name:      "tags+upload rejected",
+			tags:      []string{"network"},
+			upload:    true,
+			wantMatch: "--tags/--labels is not supported with --upload",
+		},
+		{
+			name:      "labels+upload rejected",
+			labelsRaw: "team=platform",
+			upload:    true,
+			wantMatch: "--tags/--labels is not supported with --upload",
+		},
+		{
+			name:      "tags+tree rejected",
+			format:    "tree",
+			tags:      []string{"network"},
+			wantMatch: "--tags/--labels is not supported with --format=tree",
+		},
+		{
+			name:      "labels+matrix rejected",
+			format:    "matrix",
+			labelsRaw: "team=platform",
+			wantMatch: "--tags/--labels is not supported with --format=matrix",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+				Info:      info,
+				Cmd:       &cobra.Command{},
+				Args:      []string{},
+				Format:    tc.format,
+				Upload:    tc.upload,
+				Tags:      tc.tags,
+				LabelsRaw: tc.labelsRaw,
+			})
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+			assert.Contains(t, err.Error(), tc.wantMatch)
+		})
+	}
+}
+
+// TestExecuteListInstancesCmd_ClosureRejectedWithUploadTreeMatrix verifies
+// --include-dependencies/--include-dependents are rejected wherever row
+// filtering/membership cannot apply: with --upload (the inventory upload is
+// always unfiltered) and with the tree/matrix formats (which bypass the
+// row-filter pipeline entirely). Mirrors
+// TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix for the
+// closure preview flags.
+func TestExecuteListInstancesCmd_ClosureRejectedWithUploadTreeMatrix(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	tests := []struct {
+		name      string
+		format    string
+		upload    bool
+		wantMatch string
+	}{
+		{
+			name:      "closure+upload rejected",
+			upload:    true,
+			wantMatch: "--include-dependencies/--include-dependents is not supported with --upload",
+		},
+		{
+			name:      "closure+tree rejected",
+			format:    "tree",
+			wantMatch: "--include-dependencies/--include-dependents is not supported with --format=tree",
+		},
+		{
+			name:      "closure+matrix rejected",
+			format:    "matrix",
+			wantMatch: "--include-dependencies/--include-dependents is not supported with --format=matrix",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+				Info:                info,
+				Cmd:                 &cobra.Command{},
+				Args:                []string{},
+				Format:              tc.format,
+				Upload:              tc.upload,
+				IncludeDependencies: -1,
 			})
 			require.Error(t, err)
 			assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)

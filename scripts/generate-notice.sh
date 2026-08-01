@@ -40,10 +40,6 @@ export PATH="${GO_BIN}:${PATH}"
 REPO_OVERRIDES="
 dario.cat/mergo|github.com/imdario/mergo||LICENSE
 inet.af/netaddr|github.com/inetaf/netaddr||LICENSE
-gopkg.in/yaml.v2|github.com/go-yaml/yaml||LICENSE
-gopkg.in/yaml.v3|github.com/go-yaml/yaml||LICENSE
-gopkg.in/op/go-logging.v1|github.com/op/go-logging||LICENSE
-gopkg.in/warnings.v0|github.com/go-warnings/warnings||LICENSE
 cloud.google.com/go|github.com/googleapis/google-cloud-go||LICENSE
 cloud.google.com/go/auth|github.com/googleapis/google-cloud-go|auth|auth/LICENSE
 cloud.google.com/go/auth/oauth2adapt|github.com/googleapis/google-cloud-go|auth/oauth2adapt|auth/oauth2adapt/LICENSE
@@ -54,6 +50,13 @@ cloud.google.com/go/longrunning|github.com/googleapis/google-cloud-go|longrunnin
 cloud.google.com/go/monitoring|github.com/googleapis/google-cloud-go|monitoring|monitoring/LICENSE
 cloud.google.com/go/secretmanager|github.com/googleapis/google-cloud-go|secretmanager|secretmanager/LICENSE
 cloud.google.com/go/storage|github.com/googleapis/google-cloud-go|storage|storage/LICENSE
+gopkg.in/ini.v1|github.com/go-ini/ini||LICENSE
+gopkg.in/evanphx/json-patch.v4|github.com/evanphx/json-patch||LICENSE
+gopkg.in/inf.v0|github.com/go-inf/inf||LICENSE
+gopkg.in/op/go-logging.v1|github.com/op/go-logging||LICENSE
+gopkg.in/warnings.v0|github.com/go-warnings/warnings||LICENSE
+gopkg.in/yaml.v2|github.com/go-yaml/yaml||LICENSE
+gopkg.in/yaml.v3|github.com/go-yaml/yaml||LICENSE
 "
 
 # git_ref_from_version maps a module version to a ref usable in a GitHub blob URL:
@@ -221,20 +224,25 @@ EOF
 		awk -F',' '{printf "  - %s\n    License: MIT\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}"
 fi
 
-# Add footer
-cat >> "${NOTICE_FILE}" <<'EOF'
-
-================================================================================
-
-For the complete list of dependencies and their licenses, run:
-	go-licenses report ./...
-
-To view the full license text for a specific dependency, visit the URL
-listed above or check the dependency's repository.
-
-For more information about Atmos licensing, see:
-	https://github.com/cloudposse/atmos
-EOF
+# Add footer.
+# Uses individual echo statements (not a heredoc) because the two indented
+# lines below need a literal "  " content prefix; a heredoc line starting
+# with whitespace trips the repo's tab-only *.sh indentation rule, and an
+# indented heredoc body isn't shell indentation, it's literal output, so it
+# can't just be converted to a tab like real code without changing NOTICE.
+{
+	echo ""
+	echo "================================================================================"
+	echo ""
+	echo "For the complete list of dependencies and their licenses, run:"
+	echo "  go-licenses report ./..."
+	echo ""
+	echo "To view the full license text for a specific dependency, visit the URL"
+	echo "listed above or check the dependency's repository."
+	echo ""
+	echo "For more information about Atmos licensing, see:"
+	echo "  https://github.com/cloudposse/atmos"
+} >> "${NOTICE_FILE}"
 
 echo "✅ NOTICE file generated successfully: ${NOTICE_FILE}"
 echo ""
