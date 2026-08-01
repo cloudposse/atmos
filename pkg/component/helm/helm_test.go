@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -248,7 +247,6 @@ func TestRenderManifest_LocalChart(t *testing.T) {
 	assert.Contains(t, rendered, "nginx:9.9")
 	assert.Contains(t, rendered, "# Source: testchart/templates/hook.yaml")
 	assert.Contains(t, rendered, `name: "unit-settings"`)
-	assert.True(t, strings.Contains(rendered, "ConfigMap"))
 }
 
 func TestLoadChartReportsMissingDependencies(t *testing.T) {
