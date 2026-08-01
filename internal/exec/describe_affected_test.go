@@ -24,6 +24,7 @@ import (
 	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -1912,6 +1913,123 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 
 		assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
 	})
+}
+
+// TestIncludeDependentsFlagValue covers includeDependentsFlagValue's dual flag
+// shape: `atmos describe affected` registers --include-dependents as a plain
+// bool, while the terraform commands register it as a depth-carrying string
+// flag (bare = unlimited, --include-dependents=N bounds the expansion). The
+// function must read either registration correctly.
+func TestIncludeDependentsFlagValue(t *testing.T) {
+	t.Run("flag not registered returns false with no error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("bool flag type set true", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.Bool(flagsPkg.FlagIncludeDependents, false, "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "true"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("bool flag type set false", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.Bool(flagsPkg.FlagIncludeDependents, false, "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "false"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("depth-carrying string flag bare/unlimited", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, flagsPkg.ClosureDepthUnlimited))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.True(t, got, "unlimited depth means dependents are included")
+	})
+
+	t.Run("depth-carrying string flag bounded depth", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "2"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.True(t, got, "a bounded but non-zero depth still means dependents are included")
+	})
+
+	t.Run("depth-carrying string flag explicitly off", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "0"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("flag registered as neither bool nor string returns a GetString error", func(t *testing.T) {
+		// Defensive path: includeDependentsFlagValue only special-cases "bool"
+		// and otherwise assumes "string" (the two shapes this flag is actually
+		// registered as across commands). Registering it as a third type proves
+		// the GetString error is still propagated rather than panicking.
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.Int(flagsPkg.FlagIncludeDependents, 0, "")
+
+		_, err := includeDependentsFlagValue(flags)
+
+		require.Error(t, err)
+	})
+
+	t.Run("depth-carrying string flag invalid value returns error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "not-a-depth"))
+
+		_, err := includeDependentsFlagValue(flags)
+
+		require.Error(t, err)
+	})
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_IncludeDependents proves the
+// caller in SetDescribeAffectedFlagValueInCliArgs actually wires
+// includeDependentsFlagValue's result into describe.IncludeDependents when
+// the flag was explicitly changed by the user, using the depth-carrying
+// string-flag shape the terraform commands register.
+func TestSetDescribeAffectedFlagValueInCliArgs_IncludeDependents(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("CI", "")
+
+	// Built without newDescribeAffectedFlagSet's bool registration for
+	// --include-dependents: the terraform commands register it as a
+	// depth-carrying string flag instead, and the two can't coexist on one
+	// FlagSet, so this test exercises that shape end to end on its own set.
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.String(flagsPkg.FlagIncludeDependents, "", "")
+	require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, flagsPkg.ClosureDepthUnlimited))
+
+	describe := &DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
+	SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+	assert.True(t, describe.IncludeDependents)
 }
 
 // TestExecute_MatrixFormat tests the matrix format code path through Execute.
