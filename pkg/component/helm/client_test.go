@@ -177,4 +177,5 @@ func TestInstallAndUpgradeReleaseLocateChartErrors(t *testing.T) {
 	_, err = upgradeRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }
