@@ -40,6 +40,9 @@ atmos helm plan --all --tags production
   <dt>`--against=<source>` / `--from-manifest=<path>` / `--context=<n>` <em>(optional)</em></dt>
   <dd>Select and tune the diff baseline. See [`diff`](/cli/commands/helm/diff#flags).</dd>
 
+  <dt>`--dependency-update` <em>(optional)</em></dt>
+  <dd>Fetch declared chart dependencies when they are missing. See [`diff`](/cli/commands/helm/diff#flags).</dd>
+
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order.</dd>
 
