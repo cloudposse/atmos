@@ -23,6 +23,7 @@ const (
 	warningAtomicDeprecated lifecycleWarningCode = "atomic_deprecated"
 	warningWaitIgnored      lifecycleWarningCode = "wait_alias_ignored"
 	warningWaitBoolean      lifecycleWarningCode = "wait_boolean_deprecated"
+	warningWaitDerived      lifecycleWarningCode = "wait_strategy_derived_from_rollback"
 	warningTimeoutMigration lifecycleWarningCode = "timeout_default_migration"
 )
 
@@ -97,6 +98,11 @@ func resolveReleaseLifecycle(section map[string]any) (releaseLifecycleResolution
 func validateAndDeriveLifecycle(resolution *releaseLifecycleResolution) error {
 	if resolution.Policy.RollbackOnFailure && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
 		resolution.Policy.WaitStrategy = kube.StatusWatcherStrategy
+		resolution.Warnings = append(resolution.Warnings, lifecycleWarning{
+			Code:    warningWaitDerived,
+			Field:   cfg.HelmWaitStrategySectionName,
+			Message: "helm wait strategy was derived as 'watcher' because 'rollback_on_failure' is enabled",
+		})
 	}
 	if resolution.Policy.WaitForJobs && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
 		return errUtils.ErrHelmWaitForJobsRequiresWait
