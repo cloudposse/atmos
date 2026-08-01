@@ -59,6 +59,36 @@ func TestVendor(t *testing.T) {
 	assert.Equal(t, "components/terraform/eks/cluster", eks["folder"])
 }
 
+func TestVendor_TagsListField(t *testing.T) {
+	vendorInfos := []VendorInfo{
+		{
+			Component: "vpc/v1",
+			Type:      VendorTypeComponent,
+			Manifest:  "components/terraform/vpc/v1/component.yaml",
+			Folder:    "components/terraform/vpc/v1",
+			Tags:      []string{"networking", "aws"},
+		},
+		{
+			Component: "rds",
+			Type:      VendorTypeVendor,
+			Manifest:  "vendor.d/rds.yaml",
+			Folder:    "components/terraform/rds",
+		},
+	}
+
+	vendors, err := Vendor(vendorInfos)
+	require.NoError(t, err)
+	require.Len(t, vendors, 2)
+
+	// The "tags" key is a comma-joined display string; "tags_list" keeps the
+	// raw slice for --tags filtering.
+	assert.Equal(t, "networking, aws", vendors[0]["tags"])
+	assert.Equal(t, []string{"networking", "aws"}, vendors[0]["tags_list"])
+
+	assert.Equal(t, "", vendors[1]["tags"])
+	assert.Equal(t, []string(nil), vendors[1]["tags_list"])
+}
+
 func TestVendor_EmptyList(t *testing.T) {
 	vendors, err := Vendor([]VendorInfo{})
 	require.NoError(t, err)
