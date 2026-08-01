@@ -236,6 +236,7 @@ func TestLoadChartReportsMissingDependencies(t *testing.T) {
 
 	_, err = loadChart(chartPath)
 	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 	assert.Contains(t, err.Error(), "while checking Helm chart dependencies")
 	assert.Contains(t, err.Error(), "helm dependency build "+chartPath)
 	assert.Contains(t, err.Error(), "helm-test-library")
