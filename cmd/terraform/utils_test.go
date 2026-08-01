@@ -3,6 +3,7 @@ package terraform
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -1217,11 +1218,40 @@ func TestCheckTerraformFlagsDestroyDependenciesWarning(t *testing.T) {
 
 			require.NoError(t, checkTerraformFlags(tt.info))
 
+			// Normalize before asserting: depending on the environment's
+			// terminal capabilities the formatter renders the UI stream with
+			// ANSI colors and width-dependent wrapping (CI does), which
+			// splits the sentence across styled segments or lines.
+			normalized := normalizeUIOutput(output.String())
 			if tt.expectWarn {
-				assert.Contains(t, output.String(), warningText, "destroy with --include-dependencies must emit the shared-prerequisites warning")
+				assert.Contains(t, normalized, warningText, "destroy with --include-dependencies must emit the shared-prerequisites warning")
 			} else {
-				assert.NotContains(t, output.String(), warningText, "the destroy warning must only fire for destroy with --include-dependencies")
+				assert.NotContains(t, normalized, warningText, "the destroy warning must only fire for destroy with --include-dependencies")
 			}
 		})
 	}
+}
+
+// normalizeUIOutput strips ANSI escape sequences and collapses all whitespace
+// (including wrap-inserted newlines) to single spaces, so text assertions on
+// the captured UI stream hold regardless of the environment's color and
+// terminal-width settings.
+func normalizeUIOutput(s string) string {
+	var b strings.Builder
+	inEscape := false
+	for i := 0; i < len(s); i++ {
+		switch {
+		case inEscape:
+			// A CSI sequence ends at the first alphabetic byte (e.g. the
+			// `m` in `\x1b[93m`).
+			if (s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') {
+				inEscape = false
+			}
+		case s[i] == '\x1b':
+			inEscape = true
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }
