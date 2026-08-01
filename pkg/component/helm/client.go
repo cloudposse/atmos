@@ -166,7 +166,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	chartRef := resolveUpgradeChartRef(client, spec)
 	chartPath, err := client.LocateChart(chartRef, actx.settings)
 	if err != nil {
-		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
+		return "", fmt.Errorf("%w: failed to locate Helm chart %q for upgrade: %w", errUtils.ErrHelmRenderFailed, spec.Chart, err)
 	}
 	loaded, err := loadChartForAction(ctx, chartPath, actx.settings, actx.cfg.RegistryClient, spec.DependencyUpdate)
 	if err != nil {
@@ -180,6 +180,9 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 		}
 	}
 	if err != nil {
+		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
+			return "", fmt.Errorf("failed to upgrade Helm release %q: %w", spec.ReleaseName, err)
+		}
 		return "", err
 	}
 	rendered, ok := rel.(*release.Release)
