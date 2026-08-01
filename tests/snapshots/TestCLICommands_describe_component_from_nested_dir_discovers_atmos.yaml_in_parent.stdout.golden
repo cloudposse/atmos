@@ -48,8 +48,8 @@ atmos_cli_config:
     included_paths:
       - '**/*'
     excluded_paths: []
-    name_pattern: '{stage}'
-    name_template: ""
+    name_pattern: ""
+    name_template: '{{.vars.stage}}'
   workflows:
     base_path: ""
     list:
@@ -146,4 +146,3 @@ vars:
   simple_var: simple_value
   stage: test
 workspace: test
-
