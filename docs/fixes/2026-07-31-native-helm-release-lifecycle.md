@@ -22,3 +22,7 @@ Helm 4 does not expose a context-aware uninstall request.
 - Explicit lifecycle flags cannot be combined with a non-Kubernetes provision
   target. Stored lifecycle configuration is intentionally bypassed for external
   delivery and is identified as such in the execution summary.
+- Chart-loading commands do not fetch missing dependencies unless
+  `--dependency-update` is explicitly supplied. The opt-in follows Helm's
+  dependency-update behavior and may access repositories and mutate the chart's
+  `charts/` directory and lock file.
