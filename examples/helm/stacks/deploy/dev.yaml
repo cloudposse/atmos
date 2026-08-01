@@ -86,7 +86,7 @@ components:
       wait_strategy: hookOnly
       values:
         deployment:
-          readinessDelaySeconds: 8
+          readinessGate: true
 
     demo-timeout:
       metadata:
