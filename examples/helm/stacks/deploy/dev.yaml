@@ -108,7 +108,6 @@ components:
       namespace: demo-install-fail
       wait_strategy: legacy
       rollback_on_failure: true
-      cleanup_on_fail: true
       values:
         hooks:
           fail: true
