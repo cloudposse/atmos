@@ -3,6 +3,7 @@ package helm
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -70,6 +71,9 @@ func renderManifest(ctx context.Context, spec *chartSpec) (string, error) {
 
 	manifest, err := runInstall(ctx, client, settings, spec)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
+			return "", err
+		}
 		return "", fmt.Errorf("%w: %w", errUtils.ErrHelmRenderFailed, err)
 	}
 	return manifest, nil
