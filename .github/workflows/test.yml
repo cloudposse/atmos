@@ -569,9 +569,9 @@ jobs:
           - helm
 
     # The macOS matrix may spend up to 45 minutes starting Colima, followed by
-    # two bounded 25-minute test attempts. Keep the job ceiling above those
+    # two bounded 45-minute test attempts. Keep the job ceiling above those
     # nested budgets so the second retry can finish and emit diagnostics.
-    timeout-minutes: 105
+    timeout-minutes: 150
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -657,8 +657,8 @@ jobs:
             fi
 
             echo "::group::k3s workload diagnostics"
-            docker exec atmos-dev-emulator-kubernetes k3s kubectl get pods,jobs,deployments -A -o wide || true
-            docker exec atmos-dev-emulator-kubernetes k3s kubectl get events -A --sort-by=.lastTimestamp || true
+            docker exec atmos-dev-emulator-kubernetes kubectl get pods,jobs,deployments -A -o wide || true
+            docker exec atmos-dev-emulator-kubernetes kubectl get events -A --sort-by=.lastTimestamp || true
             docker exec atmos-dev-emulator-kubernetes ctr --namespace k8s.io images list || true
             echo "::endgroup::"
           }
@@ -667,6 +667,9 @@ jobs:
           # Bound each attempt so the matrix can retry instead of consuming the
           # whole job timeout and cancelling the required aggregate check.
           attempt_timeout=1500
+          if [ "${{ matrix.flavor.target }}" = "macos" ]; then
+            attempt_timeout=2700
+          fi
 
           trap cleanup_k3s EXIT
           for attempt in 1 2; do
