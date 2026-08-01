@@ -19,6 +19,7 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	"helm.sh/helm/v4/pkg/registry"
+	helmrelease "helm.sh/helm/v4/pkg/release"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -312,6 +313,7 @@ func TestUpgradeReleasePrunesDefaultHistory(t *testing.T) {
 	history, err := actx.cfg.Releases.History(spec.ReleaseName)
 	require.NoError(t, err)
 	assert.Len(t, history, cfg.HelmDefaultMaxHistory)
+	assert.Equal(t, []int{4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, releaseVersions(t, history))
 }
 
 func TestUpgradeReleaseUnlimitedHistory(t *testing.T) {
@@ -330,4 +332,16 @@ func TestUpgradeReleaseUnlimitedHistory(t *testing.T) {
 	history, err := actx.cfg.Releases.History(spec.ReleaseName)
 	require.NoError(t, err)
 	assert.Len(t, history, revisions)
+	assert.Equal(t, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, releaseVersions(t, history))
+}
+
+func releaseVersions(t *testing.T, history []helmrelease.Releaser) []int {
+	t.Helper()
+	versions := make([]int, len(history))
+	for i, item := range history {
+		typed, ok := item.(*release.Release)
+		require.True(t, ok)
+		versions[i] = typed.Version
+	}
+	return versions
 }
