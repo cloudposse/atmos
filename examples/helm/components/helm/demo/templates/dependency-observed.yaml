@@ -1,0 +1,14 @@
+{{- if .Values.hooks.requiredConfigMap }}
+{{- $required := lookup "v1" "ConfigMap" .Release.Namespace .Values.hooks.requiredConfigMap }}
+{{- if not $required }}
+{{- fail (printf "required dependency marker ConfigMap %q is not ready" .Values.hooks.requiredConfigMap) }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-dependency-observed
+  namespace: {{ .Release.Namespace }}
+data:
+  requiredConfigMap: {{ .Values.hooks.requiredConfigMap | quote }}
+  ready: {{ index $required.data "ready" | quote }}
+{{- end }}

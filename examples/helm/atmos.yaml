@@ -114,6 +114,9 @@ commands:
       - command: >-
           if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-no-hooks get configmap demo-no-hooks-hook-order 2>&1); then echo "disable_chart_hooks unexpectedly ran Helm hooks"; exit 1;
           else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify disabled Helm hooks: $output"; exit 1;; esac; fi
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-no-hooks get job demo-no-hooks-hook-order 2>&1); then echo "disable_chart_hooks unexpectedly ran the Helm hook Job"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify disabled Helm hook Job: $output"; exit 1;; esac; fi
       # hookOnly returns after hooks without waiting for the Deployment's explicit readiness gate.
       - atmos helm apply demo-hook-only -s dev --identity local-k3s
       - command: >-
@@ -155,6 +158,9 @@ commands:
       # foundation's post-readiness marker.
       - atmos helm apply --all -s dev --identity local-k3s --tags lifecycle-dag
       - atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get deployment dag-dependent
+      - command: >-
+          observed=$(atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get configmap dag-dependent-dependency-observed -o jsonpath='{.data.ready}');
+          if [ "$observed" != "true" ]; then echo "dependent did not observe the ready foundation marker: ready=$observed"; exit 1; fi
       # Delete dry-run must leave the deployed release and resources intact.
       - atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
