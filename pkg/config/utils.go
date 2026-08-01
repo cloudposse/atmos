@@ -840,8 +840,7 @@ func GetContextFromVars(vars map[string]any) schema.Context {
 // GetContextPrefix calculates context prefix from the context.
 func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
-		return "",
-			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	contextPrefix := ""
@@ -921,8 +920,7 @@ func GetStackNameFromContextAndStackNamePattern(
 	stackNamePattern string,
 ) (string, error) {
 	if len(stackNamePattern) == 0 {
-		return "",
-			fmt.Errorf("stack name pattern must be provided")
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	var stack string
