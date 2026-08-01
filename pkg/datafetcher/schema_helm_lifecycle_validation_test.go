@@ -22,6 +22,10 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 			"wait_strategy":       "watcher",
 			"timeout":             "10m",
 			"max_history":         10,
+			"values":              map[string]any{"cluster": "shared"},
+			"overrides": map[string]any{
+				"values": map[string]any{"environment": "test"},
+			},
 		},
 		"components": map[string]any{
 			"helm": map[string]any{
@@ -32,6 +36,9 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 					"cleanup_on_fail":     false,
 					"disable_chart_hooks": false,
 					"skip_crds":           false,
+					"overrides": map[string]any{
+						"values": map[string]any{"replicaCount": 2},
+					},
 				},
 			},
 		},
