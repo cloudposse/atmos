@@ -40,7 +40,17 @@ commands:
     description: "Render the local Helm chart, deploy it to the k3s emulator, verify it, then tear it down"
     steps:
       - atmos validate stacks
-      - atmos helm template demo -s dev
+      # Native Helm validates declared chart dependencies before rendering. Build
+      # the local library dependency exactly as a chart consumer would.
+      - atmos toolchain exec helm -- dependency build --skip-refresh components/helm/demo
+      - atmos helm template demo -s dev --output=/tmp/atmos-helm-template.yaml
+      # Template output includes weighted hooks and leaves Helm `tpl` expressions
+      # in values for the chart to evaluate with its native .Values context.
+      - command: >-
+          test "$(grep -c '^  name: demo-hook-order$' /tmp/atmos-helm-template.yaml)" -eq 2 &&
+          grep -q 'helm.sh/hook-weight: "-2"' /tmp/atmos-helm-template.yaml &&
+          grep -q 'helm.sh/hook-weight: "-1"' /tmp/atmos-helm-template.yaml &&
+          grep -q 'rendered: from-stack' /tmp/atmos-helm-template.yaml
       - command: atmos emulator up kubernetes -s dev
         retry:
           max_attempts: 2

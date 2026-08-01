@@ -35,6 +35,9 @@ components:
           tag: "1.27"
         service:
           port: 8080
+        tpl:
+          source: from-stack
+          expression: !literal "{{ .Values.tpl.source }}"
 
     demo-repo:
       metadata:

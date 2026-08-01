@@ -22,3 +22,6 @@ hooks:
   readyMarker: false
 extraConfigMap:
   enabled: false
+tpl:
+  source: default
+  expression: "{{ .Values.tpl.source }}"
