@@ -851,27 +851,42 @@ func inScopeByTagsAndLabelsWithContext(metadata, data map[string]any, filterTags
 	}
 
 	if len(filterLabels) > 0 {
-		// Narrow BEFORE the unresolved check only when narrowing is safe:
-		// a non-map labels value (templated scalar) or a templated map key
-		// makes the selector undecidable — narrowing first would collapse the
-		// unresolved marker into a decidable non-match and wrongly exclude
-		// the component.
-		narrowed, safe := tags.RequestedLabels(metadata[metadataLabelsKey], filterLabels, leftDelim)
-		if !safe {
+		rawLabels, ok := resolveLabelSelector(metadata, data, filterLabels, leftDelim, rightDelim)
+		if !ok {
 			return true, false
-		}
-		rawLabels := any(narrowed)
-		if tags.SelectorUnresolved(rawLabels, leftDelim) {
-			resolvedLabels, ok := tags.ResolveSelectorValue(rawLabels, data, leftDelim, rightDelim)
-			if !ok {
-				return true, false
-			}
-			rawLabels = resolvedLabels
 		}
 		selectors[metadataLabelsKey] = rawLabels
 	}
 
 	return inScopeByTagsAndLabels(selectors, filterTags, filterLabels, leftDelim)
+}
+
+// resolveLabelSelector narrows metadata.labels to only the requested filter
+// keys and resolves any simple selector template against data, mirroring the
+// metadata.tags resolution in inScopeByTagsAndLabelsWithContext. Returns
+// ok=false when the selector must remain undecidable (narrowing is unsafe, or
+// a resolved template value could not be determined), signaling the caller to
+// preserve the full evaluation path rather than incorrectly excluding the
+// component.
+func resolveLabelSelector(metadata, data map[string]any, filterLabels map[string]string, leftDelim, rightDelim string) (rawLabels any, ok bool) {
+	// Narrow BEFORE the unresolved check only when narrowing is safe:
+	// a non-map labels value (templated scalar) or a templated map key
+	// makes the selector undecidable — narrowing first would collapse the
+	// unresolved marker into a decidable non-match and wrongly exclude
+	// the component.
+	narrowed, safe := tags.RequestedLabels(metadata[metadataLabelsKey], filterLabels, leftDelim)
+	if !safe {
+		return nil, false
+	}
+	rawLabels = any(narrowed)
+	if tags.SelectorUnresolved(rawLabels, leftDelim) {
+		resolvedLabels, resolveOK := tags.ResolveSelectorValue(rawLabels, data, leftDelim, rightDelim)
+		if !resolveOK {
+			return nil, false
+		}
+		rawLabels = resolvedLabels
+	}
+	return rawLabels, true
 }
 
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that
