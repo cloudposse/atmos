@@ -22,12 +22,14 @@ agent-facing summary.
 
 ## Core rules
 
-1. **Short sentences.** Aim for 20-25 words. Split a sentence that has more than one clause chained with "and," "which," or "that."
-2. **Active voice.** Name the actor: "Atmos writes the file," not "the file is written."
+1. **One idea per sentence.** 20-25 words is a rough guide, not a hard cap. Split a sentence only when it genuinely holds more than one idea — not merely because it contains "and," "which," "so," or "because." Those are normal connectors; removing them is what produces flat, disconnected prose.
+2. **Active voice, unless the actor doesn't matter.** Name the actor when it adds clarity: "Atmos writes the file," not "the file is written." Leave a passive construction alone when naming the actor would be forced or irrelevant ("no third-party action is involved" is fine as written).
 3. **No contractions.** Write "do not," not "don't."
 4. **Plain words over wordy phrases.** "To," not "in order to." "Use," not "utilize."
 5. **One word, one meaning.** Pick one term per concept and use it consistently — do not alternate between synonyms for the same thing.
 6. **One instruction per step** in a numbered procedure.
+
+Write naturally first, using these rules as a mental checklist while drafting. Run `atmos lint docs` afterward as a spot check, not as a loop you edit against sentence by sentence — see "Treat findings as prompts" below.
 
 ## Checking your writing
 
@@ -48,6 +50,23 @@ never fail a commit, a pre-commit run, or a CI check. Treat a suggestion as a
 prompt to consider a rewrite, not a hard requirement — especially in existing
 docs that predate this standard (they are grandfathered until edited; see the
 Migration Path in `docs/prd/technical-writing-standard-ste100.md`).
+
+### Treat findings as prompts, not mandates
+
+Do not rewrite every flagged sentence just to clear the finding. Read each
+one and decide:
+
+- **`Atmos.SentenceLength`** flags length as a proxy for "more than one
+  idea." If a long sentence is genuinely one connected idea, leave it —
+  the word count alone is not a defect.
+- **`Atmos.PassiveVoice`** flags a pattern, not a verdict. If naming the
+  actor would be forced, or the actor is unknown or beside the point,
+  the passive form may already be the clearest option.
+
+A PRD or docs page that clears every single finding by mechanically
+rewriting each one usually reads worse, not better — see
+`docs/writing-style-guide.md`'s "A `vale` finding is a prompt, not a
+mandate" section for the fuller version of this guidance.
 
 ## When a new domain term gets flagged
 

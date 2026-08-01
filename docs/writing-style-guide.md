@@ -37,6 +37,36 @@ a commit, or a CI check.
 These four rules are a starting set, not the full standard. Expect the rule
 set to grow as Phase 2 and Phase 3 of the rollout add more checks.
 
+## A `vale` finding is a prompt, not a mandate
+
+Write naturally first. Run `atmos lint docs` afterward, as a spot check —
+not as a loop you edit against sentence by sentence until every finding
+clears. Writing to satisfy a linter, one finding at a time, produces flat,
+disconnected prose: short declarative sentences with no "because," "so," or
+"which" between them, because those words add length or (in the case of
+"which") look like the start of a forbidden clause. That is not what
+ASD-STE100 asks for. Real Simplified Technical English still reads as
+connected reasoning — it just avoids ambiguity and unnecessary complexity.
+
+Two rules need real judgment, not mechanical compliance, more than the
+others:
+
+- **`Atmos.SentenceLength` is a rough proxy, not the rule.** The actual
+  rule is one idea per sentence. A 30-word sentence that states one
+  connected idea, joined by plain connectors, usually reads more clearly
+  than the same idea chopped into three fragments. Split a flagged
+  sentence only if it genuinely holds more than one idea — never just to
+  clear the finding.
+- **Passive voice is sometimes the right choice.** "No third-party action
+  is involved" reads better than any active rewrite, because the actor
+  ("nobody") is not the point of the sentence. Rewrite a flagged passive
+  construction only when naming the actor actually removes ambiguity.
+  Inventing an actor just to satisfy the rule ("the workflow does not
+  involve a third-party action") usually reads worse, not better.
+
+If a finding does not hold up to that judgment, leave it. `suggestion`
+severity means exactly that: a suggestion.
+
 ## Rules to apply by hand
 
 `vale` cannot check everything ASD-STE100 recommends. Until we add automated
