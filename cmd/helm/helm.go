@@ -150,6 +150,9 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithBoolFlag("split", "", false, "Write one rendered manifest file per object. Requires --output-dir."),
 		)
 	}
+	if name != "delete" {
+		options = append(options, flags.WithBoolFlag("dependency-update", "", false, "Update missing chart dependencies before rendering or applying."))
+	}
 
 	if name == "apply" || name == "deploy" {
 		options = append(
@@ -301,6 +304,9 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 	}
 	if flag := cmd.Flag("namespace"); flag != nil && flag.Changed {
 		result["namespace"] = flag.Value.String()
+	}
+	if flag := cmd.Flag("dependency-update"); flag != nil && flag.Changed {
+		result[cfg.HelmDependencyUpdateSectionName] = flag.Value.String() == valueTrue
 	}
 	addLifecycleOperationFlags(cmd, result)
 	return result

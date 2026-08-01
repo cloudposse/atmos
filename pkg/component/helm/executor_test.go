@@ -282,9 +282,12 @@ func TestSummaryHelpers(t *testing.T) {
 	summary := helmSummary(info, spec, map[string]any{})
 	assert.Equal(t, "kubernetes", summary["target"])
 	assert.Equal(t, "release", summary["release_name"])
+	assert.Equal(t, false, summary["dependency_update"])
 
+	spec.DependencyUpdate = true
 	summary = helmSummary(info, spec, map[string]any{"target": "git"})
 	assert.Equal(t, "git", summary["target"])
+	assert.Equal(t, true, summary["dependency_update"])
 
 	mergeSummary(summary, map[string]any{"target": "gitops", "extra": true})
 	assert.Equal(t, "gitops", summary["target"])
