@@ -10,4 +10,4 @@ stacks:
     - parents/**/*
   excluded_paths:
     - catalog/**/*
-  name_pattern: "{environment}-{stage}"
+  name_template: "{{.vars.environment}}-{{.vars.stage}}"
