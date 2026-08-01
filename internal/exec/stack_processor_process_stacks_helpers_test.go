@@ -714,6 +714,19 @@ func TestExtractHelmLifecycleSections(t *testing.T) {
 	assert.NotContains(t, overrides, "unrecognized")
 }
 
+func TestExtractHelmSectionsIgnoreBareNullValues(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:  ".",
+		cfg.ValuesSectionName: nil,
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, ".", component[cfg.ChartSectionName])
+	assert.NotContains(t, component, cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmLifecycleSection(section), cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmOverrideSection(section), cfg.ValuesSectionName)
+}
+
 // Compile-time guard: a rename of the schema Plugins fields fails the build.
 var (
 	_ = schema.Helm{Plugins: []string{"diff@v3.9.4"}}

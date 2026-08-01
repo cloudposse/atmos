@@ -1709,6 +1709,27 @@ func TestApplyHelmTypeOverridesEarlyReturns(t *testing.T) {
 	}
 }
 
+func TestApplyHelmTypeOverridesIgnoresBareNullValues(t *testing.T) {
+	stack := map[string]any{
+		cfg.HelmSectionName: map[string]any{
+			cfg.OverridesSectionName: map[string]any{cfg.ValuesSectionName: nil},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.HelmComponentType: map[string]any{
+				"app": map[string]any{
+					cfg.OverridesSectionName: map[string]any{
+						cfg.ValuesSectionName: map[string]any{"image": "stable"},
+					},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack, "stack.yaml"))
+	overrides := helmComponentOverrides(t, stack, "app")
+	assert.Equal(t, map[string]any{"image": "stable"}, overrides[cfg.ValuesSectionName])
+}
+
 func TestApplyHelmTypeOverridesRejectsInvalidOverrides(t *testing.T) {
 	stack := map[string]any{
 		cfg.HelmSectionName: map[string]any{cfg.OverridesSectionName: []any{"invalid"}},
