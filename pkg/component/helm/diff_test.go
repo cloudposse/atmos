@@ -125,3 +125,13 @@ func TestResolveDiffBaseline_FromManifestFileMissing(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrHelmBaselineRead)
 }
+
+func TestResolveDiffBaseline_FromManifestHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	flags := map[string]any{flagFromManifest: filepath.Join(t.TempDir(), "nope.yaml")}
+
+	_, err := resolveDiffBaseline(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, flags, &chartSpec{})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, errUtils.ErrHelmBaselineRead)
+}

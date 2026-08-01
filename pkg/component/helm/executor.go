@@ -301,6 +301,10 @@ func resolveDiffBaseline(
 	flags map[string]any,
 	spec *chartSpec,
 ) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	if path := flagString(flags, flagFromManifest); path != "" {
 		content, err := os.ReadFile(path)
 		if err != nil {
