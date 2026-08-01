@@ -427,6 +427,12 @@ func isReverseVerb(verb string) bool {
 func runLifecycleTargets(run lifecycleRun) error {
 	var errs []error
 	for _, target := range run.targets {
+		if run.ctx != nil {
+			if err := run.ctx.Err(); err != nil {
+				errs = append(errs, err)
+				break
+			}
+		}
 		provider, ok := getComponentProvider(target.ComponentType)
 		if !ok {
 			errs = append(errs, fmt.Errorf("%w: %s", errUtils.ErrComponentProviderNotFound, target.ComponentType))
