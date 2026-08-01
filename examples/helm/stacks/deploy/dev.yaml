@@ -25,6 +25,7 @@ components:
       # (components/helm/demo), which contains Chart.yaml.
       chart: "."
       namespace: demo
+      wait_strategy: legacy
       rollback_on_failure: true
       cleanup_on_fail: true
       # Atmos `values:` are the Helm chart values, merged via Atmos inheritance.
@@ -62,6 +63,8 @@ components:
       namespace: demo-jobs
       wait_for_jobs: true
       values:
+        hooks:
+          enabled: false
         job:
           enabled: true
           sleepSeconds: 3
@@ -97,6 +100,8 @@ components:
       values:
         deployment:
           readinessDelaySeconds: 20
+        hooks:
+          enabled: false
 
     demo-install-fail:
       metadata:
@@ -104,6 +109,7 @@ components:
       chart: "."
       name: demo-install-fail
       namespace: demo-install-fail
+      wait_strategy: legacy
       rollback_on_failure: true
       cleanup_on_fail: true
       values:
@@ -117,6 +123,7 @@ components:
       # Intentionally targets the already-installed demo release.
       name: demo
       namespace: demo
+      wait_strategy: legacy
       rollback_on_failure: true
       cleanup_on_fail: true
       values:
@@ -132,6 +139,7 @@ components:
       chart: "."
       name: dag-foundation
       namespace: lifecycle-dag
+      wait_strategy: legacy
       values:
         deployment:
           readinessDelaySeconds: 3
@@ -148,6 +156,7 @@ components:
       chart: "."
       name: dag-dependent
       namespace: lifecycle-dag
+      wait_strategy: legacy
       values:
         hooks:
           requiredConfigMap: dag-foundation-ready
