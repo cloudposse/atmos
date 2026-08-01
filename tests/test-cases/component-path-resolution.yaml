@@ -190,6 +190,11 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../../.."
+      # Pin both vars so `env "USER" | default (env "USERNAME")` in the fixture
+      # resolves identically on Unix, Windows, and CI (usernames with spaces or
+      # missing vars would otherwise leak into the snapshot).
+      USER: "user"
+      USERNAME: "user"
     args:
       - "describe"
       - "component"
@@ -209,6 +214,11 @@ tests:
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
       ATMOS_BASE_PATH: "../.."
+      # Pin both vars so `env "USER" | default (env "USERNAME")` in the fixture
+      # resolves identically on Unix, Windows, and CI (usernames with spaces or
+      # missing vars would otherwise leak into the snapshot).
+      USER: "user"
+      USERNAME: "user"
     args:
       - "describe"
       - "component"
@@ -266,6 +276,12 @@ tests:
     description: "Test that traditional component names still work with describe"
     workdir: "fixtures/scenarios/complete"
     command: "atmos"
+    env:
+      # Pin both vars so `env "USER" | default (env "USERNAME")` in the fixture
+      # resolves identically on Unix, Windows, and CI (usernames with spaces or
+      # missing vars would otherwise leak into the snapshot).
+      USER: "user"
+      USERNAME: "user"
     args:
       - "describe"
       - "component"

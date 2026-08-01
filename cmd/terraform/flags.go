@@ -231,7 +231,7 @@ func registerAffectedBehaviorFlags(registry *flags.FlagRegistry) {
 		Name:        "include-dependents",
 		Shorthand:   "",
 		Default:     "",
-		Description: "Also process everything that depends on the selected components, in dependency order. Optionally bound the expansion: --include-dependents=N",
+		Description: "Also process everything that depends on the selected components, in dependency order (reversed for destroy). Optionally bound the expansion: --include-dependents=N",
 		EnvVars:     []string{"ATMOS_INCLUDE_DEPENDENTS"},
 		NoOptDefVal: flags.ClosureDepthUnlimited,
 	})
@@ -239,7 +239,7 @@ func registerAffectedBehaviorFlags(registry *flags.FlagRegistry) {
 		Name:        "include-dependencies",
 		Shorthand:   "",
 		Default:     "",
-		Description: "Also process everything the selected components depend on (their prerequisites), in dependency order. Optionally bound the expansion: --include-dependencies=N",
+		Description: "Also process everything the selected components depend on (their prerequisites), in dependency order (reversed for destroy). Optionally bound the expansion: --include-dependencies=N",
 		EnvVars:     []string{"ATMOS_INCLUDE_DEPENDENCIES"},
 		NoOptDefVal: flags.ClosureDepthUnlimited,
 	})

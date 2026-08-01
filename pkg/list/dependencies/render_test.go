@@ -141,30 +141,38 @@ func TestRender_LevelsHonorsTagsAndAllLabelsForRoots(t *testing.T) {
 			"vpc": withMetadata(map[string]any{
 				"labels": map[string]any{"team": "platform"},
 			}),
-			"app": dependsOn(map[string]any{"component": "vpc"}),
+			"app": {
+				"metadata": map[string]any{
+					"tags":   []any{"application"},
+					"labels": map[string]any{"team": "platform", "environment": "test"},
+				},
+				"settings": map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc"}}},
+			},
 			"ignored": withMetadata(map[string]any{
 				"tags":   []any{"other"},
 				"labels": map[string]any{"team": "platform", "environment": "other"},
 			}),
 		},
 	})
-	app := stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
-	app["metadata"] = map[string]any{
-		"tags":   []any{"application"},
-		"labels": map[string]any{"team": "platform", "environment": "test"},
-	}
 	graph, err := BuildGraph(stacks)
 	require.NoError(t, err)
 
-	for _, opts := range []Options{
-		{Format: FormatLevels, Direction: DirectionForward, Tags: []string{"application", "tier-1"}},
-		{Format: FormatLevels, Direction: DirectionForward, Labels: map[string]string{"team": "platform", "environment": "test"}},
-	} {
-		out, err := Render(graph, opts)
-		require.NoError(t, err)
-		assertLevel(t, out, "app", 0)
-		assertLevel(t, out, "vpc", 1)
-		assert.NotContains(t, out, "ignored")
+	tests := []struct {
+		name string
+		opts Options
+	}{
+		{"tags_root", Options{Format: FormatLevels, Direction: DirectionForward, Tags: []string{"application", "tier-1"}}},
+		{"labels_root", Options{Format: FormatLevels, Direction: DirectionForward, Labels: map[string]string{"team": "platform", "environment": "test"}}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := Render(graph, tc.opts)
+			require.NoError(t, err)
+			assertLevel(t, out, "app", 0)
+			assertLevel(t, out, "vpc", 1)
+			assert.NotContains(t, out, "ignored")
+		})
 	}
 }
 

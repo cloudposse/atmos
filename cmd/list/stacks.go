@@ -384,14 +384,67 @@ func extractStacksViaScopedClosure(
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Shape rows with the same extraction the non-closure path uses so
-	// var-derived columns stay populated; result.Stacks already holds exactly
-	// the closure's stacks, so no further filtering is needed.
-	stacks, err := extract.Stacks(result.Stacks, nil, nil)
+	// Restrict output to the FINAL closure's stacks before extraction.
+	// result.Stacks can hold conservatively evaluated stacks that are not
+	// closure members: the reverse direction evaluates unresolved dependency
+	// sources so their edges materialize, and refineRoots can drop an
+	// initially conservative root once its selector resolves — in both cases
+	// the evaluated stack stays in result.Stacks. list components and
+	// list instances already filter rows by closure membership; stacks must
+	// too so the preview matches the execution set.
+	closureStacks := filterStacksByNames(result.Stacks, dependencies.StackNames(result.Closure))
+	stacks, err := extract.Stacks(closureStacks, nil, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	return stacks, result.Stacks, nil
+	if opts.Component != "" {
+		annotateStackRowsWithComponent(stacks, closureStacks, opts.Component)
+	}
+	return stacks, closureStacks, nil
+}
+
+// annotateStackRowsWithComponent mirrors extract.StacksForComponent's row
+// shape on the closure path: rows for stacks that actually contain the
+// selected component carry it under "component", so configured columns like
+// `{{ .component }}` render identically with and without closure flags.
+// Prerequisite stacks pulled in by the closure without the component keep no
+// component key rather than claiming one they do not have.
+func annotateStackRowsWithComponent(rows []map[string]any, stacksMap map[string]any, component string) {
+	for _, row := range rows {
+		stackName, _ := row["stack"].(string)
+		if stackContainsComponent(stacksMap, stackName, component) {
+			row["component"] = component
+		}
+	}
+}
+
+// stackContainsComponent reports whether the described stack holds the named
+// component under any component type.
+func stackContainsComponent(stacksMap map[string]any, stackName, component string) bool {
+	stack, _ := stacksMap[stackName].(map[string]any)
+	componentsSection, _ := stack["components"].(map[string]any)
+	for _, typeValue := range componentsSection {
+		typeSection, _ := typeValue.(map[string]any)
+		if _, ok := typeSection[component]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// filterStacksByNames keeps only the named stacks from the describe map.
+func filterStacksByNames(stacks map[string]any, names []string) map[string]any {
+	allowed := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		allowed[name] = struct{}{}
+	}
+	filtered := make(map[string]any, len(names))
+	for name, section := range stacks {
+		if _, ok := allowed[name]; ok {
+			filtered[name] = section
+		}
+	}
+	return filtered
 }
 
 // renderStacksTable renders stacks in table format with filters, columns, and sorters.

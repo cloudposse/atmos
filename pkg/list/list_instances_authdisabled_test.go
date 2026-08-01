@@ -181,6 +181,31 @@ func TestExecuteDescribeStacksForInstances_FallsBackWhenInterfaceNotImplemented(
 		"a processor that doesn't implement authDisabledStacksProcessor must still be called via the regular path")
 }
 
+// TestExecuteDescribeStacksForInstances_ScopedFiltersFallBackWhenUnsupported
+// covers the fail-open contract of the scoped dispatch branch: tags/labels
+// filters must not break dispatch for a processor without the optional
+// scopedStacksProcessor interface — the run falls through to the
+// auth-disabled path and simply describes unscoped.
+func TestExecuteDescribeStacksForInstances_ScopedFiltersFallBackWhenUnsupported(t *testing.T) {
+	fake := &authDisabledFakeProcessor{}
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	_, err := executeDescribeStacksForInstances(
+		atmosConfig,
+		fake,
+		nil,                              // authManager
+		true,                             // processTemplates
+		true,                             // processYamlFunctions
+		nil,                              // skip
+		true,                             // authDisabled
+		[]string{"production"},           // tagsFilter
+		map[string]string{"env": "prod"}, // labelsFilter
+	)
+	require.NoError(t, err)
+	assert.True(t, fake.executeDescribeStacksAuthDisabled,
+		"a processor without the scoped interface must fall back to the auth-disabled path")
+}
+
 // TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag verifies
 // the test seam: processInstancesWithDeps must reach the auth-disabled method
 // on a capable processor when authDisabled=true is passed, and surface no

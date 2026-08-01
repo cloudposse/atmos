@@ -716,47 +716,79 @@ func TestEnrichUniqueComponentMetadata_InvalidData(t *testing.T) {
 // TestGetTagsFromMetadata covers the exported metadata.tags accessor used by
 // callers outside package extract (cmd/list sources, pkg/list/dependencies).
 func TestGetTagsFromMetadata(t *testing.T) {
-	t.Run("extracts_tags", func(t *testing.T) {
-		tags := GetTagsFromMetadata(map[string]any{
-			"tags": []any{"network", "database"},
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		want     []string
+	}{
+		{
+			name:     "extracts_tags",
+			metadata: map[string]any{"tags": []any{"network", "database"}},
+			want:     []string{"network", "database"},
+		},
+		{
+			name:     "absent_returns_empty_non_nil_slice",
+			metadata: map[string]any{},
+			want:     []string{},
+		},
+		{
+			name:     "wrong_type_returns_empty_non_nil_slice",
+			metadata: map[string]any{"tags": "not-a-list"},
+			want:     []string{},
+		},
+		{
+			name:     "non_string_entries_are_dropped",
+			metadata: map[string]any{"tags": []any{"network", 42, true, "database"}},
+			want:     []string{"network", "database"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tags := GetTagsFromMetadata(tc.metadata)
+			assert.NotNil(t, tags)
+			assert.Equal(t, tc.want, tags)
 		})
-		assert.Equal(t, []string{"network", "database"}, tags)
-	})
-
-	t.Run("absent_returns_empty_non_nil_slice", func(t *testing.T) {
-		tags := GetTagsFromMetadata(map[string]any{})
-		assert.NotNil(t, tags)
-		assert.Empty(t, tags)
-	})
-
-	t.Run("wrong_type_returns_empty_non_nil_slice", func(t *testing.T) {
-		tags := GetTagsFromMetadata(map[string]any{"tags": "not-a-list"})
-		assert.NotNil(t, tags)
-		assert.Empty(t, tags)
-	})
+	}
 }
 
 // TestGetLabelsFromMetadata covers the exported metadata.labels accessor used
 // by callers outside package extract.
 func TestGetLabelsFromMetadata(t *testing.T) {
-	t.Run("extracts_labels", func(t *testing.T) {
-		labels := GetLabelsFromMetadata(map[string]any{
-			"labels": map[string]any{"team": "platform", "tier": "gold"},
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		want     map[string]string
+	}{
+		{
+			name:     "extracts_labels",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "tier": "gold"}},
+			want:     map[string]string{"team": "platform", "tier": "gold"},
+		},
+		{
+			name:     "absent_returns_empty_non_nil_map",
+			metadata: map[string]any{},
+			want:     map[string]string{},
+		},
+		{
+			name:     "wrong_type_returns_empty_non_nil_map",
+			metadata: map[string]any{"labels": "not-a-map"},
+			want:     map[string]string{},
+		},
+		{
+			name:     "non_string_values_are_dropped",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "count": 3, "flag": true}},
+			want:     map[string]string{"team": "platform"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := GetLabelsFromMetadata(tc.metadata)
+			assert.NotNil(t, labels)
+			assert.Equal(t, tc.want, labels)
 		})
-		assert.Equal(t, map[string]string{"team": "platform", "tier": "gold"}, labels)
-	})
-
-	t.Run("absent_returns_empty_non_nil_map", func(t *testing.T) {
-		labels := GetLabelsFromMetadata(map[string]any{})
-		assert.NotNil(t, labels)
-		assert.Empty(t, labels)
-	})
-
-	t.Run("wrong_type_returns_empty_non_nil_map", func(t *testing.T) {
-		labels := GetLabelsFromMetadata(map[string]any{"labels": "not-a-map"})
-		assert.NotNil(t, labels)
-		assert.Empty(t, labels)
-	})
+	}
 }
 
 // Tests for buildBaseComponent function.

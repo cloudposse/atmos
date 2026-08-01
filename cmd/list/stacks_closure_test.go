@@ -73,6 +73,17 @@ func TestListStacksWithOptions_ClosurePreview(t *testing.T) {
 		"eks/istio/base",
 		"eks/istio/istiod",
 	}, prodComponents)
+
+	// The closure path must mirror extract.StacksForComponent's row shape:
+	// with --component set, rows for stacks containing the component carry it
+	// under "component" so `{{ .component }}` columns render identically with
+	// and without closure flags.
+	for _, row := range rows {
+		if row["stack"] == "prod" {
+			assert.Equal(t, "eks/istio/istiod", row["component"],
+				"closure rows for stacks containing the selected component must carry it")
+		}
+	}
 }
 
 // TestListStacksWithOptions_ClosurePreviewPropagatesError proves
@@ -121,4 +132,48 @@ func stacksMapTerraformComponentNames(t *testing.T, stacksMap map[string]any, st
 		names = append(names, name)
 	}
 	return names
+}
+
+// TestListStacksWithOptions_ClosurePreviewExcludesConservativelyEvaluatedStacks
+// is the regression test for restricting `list stacks` output to the FINAL
+// closure: in the dependents direction the scoped-closure engine conservatively
+// evaluates components whose dependency declarations are templated (so their
+// edges can materialize — see dependencies.UnresolvedDependencySources), which
+// lands their stacks in the resolved stacks map even when the resolved edge
+// points outside the closure. The fixture's `qa` stack resolves its `batch`
+// dependency to eks/karpenter — outside the istio dependents closure — and
+// must not be listed.
+func TestListStacksWithOptions_ClosurePreviewExcludesConservativelyEvaluatedStacks(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToListComponentsClosureFixture(t)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	// See TestSettingsCmd_RunE_CoverageIntegration: other tests in this package
+	// leak a viper "identity" value via the shared viper.GetViper() singleton;
+	// this fixture configures no auth, so identity resolution must be disabled
+	// explicitly to keep this test's outcome independent of test ordering.
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	opts := &StacksOptions{
+		Format:            "json",
+		Tags:              []string{"istio"},
+		IncludeDependents: -1,
+		ProcessTemplates:  true,
+		ProcessFunctions:  false,
+	}
+
+	atmosConfig, authManager, err := initStacksConfig(cmd, []string{}, opts)
+	require.NoError(t, err)
+	errOpts, _ := describeStacksErrorOptions(opts.ErrorMode)
+
+	rows, stacksMap, err := executeAndExtractStacks(&atmosConfig, opts, authManager, errOpts)
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+
+	require.Contains(t, stacksMap, "prod")
+	assert.NotContains(t, stacksMap, "qa",
+		"a conservatively evaluated stack outside the final closure must not be listed")
+	for _, row := range rows {
+		assert.NotEqual(t, "qa", row["stack"],
+			"row for a stack outside the final closure must not be rendered")
+	}
 }

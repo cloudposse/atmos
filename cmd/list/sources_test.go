@@ -81,6 +81,9 @@ func TestFetchAndFilterSources_InvalidLabelsFlag(t *testing.T) {
 
 	_, err = fetchAndFilterSources(opts)
 	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag,
+		"the failure must come from label parsing, not an unrelated config/describe error")
+	assert.Contains(t, err.Error(), "not-a-valid-label")
 }
 
 // TestFetchAndFilterSources_TagsLabelsFilter proves a valid --tags/--labels

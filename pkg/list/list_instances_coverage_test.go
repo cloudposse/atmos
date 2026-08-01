@@ -1,7 +1,9 @@
-//nolint:dupl // Test structure similarity is intentional for comprehensive coverage
 package list
 
 import (
+	"bytes"
+	"encoding/json"
+	stdio "io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -109,6 +111,9 @@ func TestExecuteListInstancesCmd_InvalidLabelsFlag(t *testing.T) {
 	})
 
 	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag,
+		"the failure must come from label parsing, not an unrelated config/describe error")
+	assert.Contains(t, err.Error(), "not-a-valid-label")
 }
 
 // TestExecuteListInstancesCmd_InvalidConfig tests error handling for invalid config.
@@ -587,7 +592,15 @@ func TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix(t *testing.T) {
 // plus its forward prerequisites, never the unrelated eks/karpenter that
 // merely shares the stack.
 func TestExecuteListInstancesCmd_ClosurePreview(t *testing.T) {
-	ioCtx, err := iolib.NewContext()
+	// Capture the data stream so the rendered closure SET is asserted, not
+	// just the absence of an error — a closure regression returning every
+	// component in the stack must fail this test.
+	stdout := &bytes.Buffer{}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(&closureTestStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: &bytes.Buffer{},
+	}))
 	require.NoError(t, err)
 	ui.InitFormatter(ioCtx)
 	data.InitWriter(ioCtx)
@@ -618,7 +631,36 @@ func TestExecuteListInstancesCmd_ClosurePreview(t *testing.T) {
 	})
 
 	require.NoError(t, err, "a closure preview over a healthy fixture should render cleanly")
+
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &rows),
+		"closure preview must render a JSON array of instance rows: %s", stdout.String())
+	components := make([]string, 0, len(rows))
+	for _, row := range rows {
+		component, _ := row["Component"].(string)
+		components = append(components, component)
+	}
+	assert.ElementsMatch(t, []string{
+		"vpc",
+		"eks/cluster",
+		"eks/istio/base",
+		"eks/istio/istiod",
+	}, components, "the closure preview must render exactly the istio chain plus forward prerequisites, never eks/karpenter")
 }
+
+// closureTestStreams is a minimal io.Streams implementation backed by buffers
+// so tests can assert what the data channel actually rendered.
+type closureTestStreams struct {
+	stdin  *bytes.Buffer
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+}
+
+func (s *closureTestStreams) Input() stdio.Reader     { return s.stdin }
+func (s *closureTestStreams) Output() stdio.Writer    { return s.stdout }
+func (s *closureTestStreams) Error() stdio.Writer     { return s.stderr }
+func (s *closureTestStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *closureTestStreams) RawError() stdio.Writer  { return s.stderr }
 
 // TestExecuteListInstancesCmd_ClosurePreviewPropagatesError proves
 // processInstancesScopedClosure surfaces a genuine evaluation error from

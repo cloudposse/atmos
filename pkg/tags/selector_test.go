@@ -433,9 +433,15 @@ func TestResolveSelectorValue(t *testing.T) {
 		"settings": map[string]any{"team": "platform"},
 	}
 
+	dataWithTemplated := map[string]any{
+		"vars": map[string]any{"templated": "{{ .something }}", "stage": "dev", "layer": "app"},
+	}
+
 	tests := []struct {
-		name     string
-		v        any
+		name string
+		v    any
+		// data overrides the default resolution context for this case.
+		data     map[string]any
 		want     any
 		resolved bool
 	}{
@@ -445,7 +451,7 @@ func TestResolveSelectorValue(t *testing.T) {
 		{name: "sprig_function", v: "{{ .vars.stage | upper }}", want: "DEV", resolved: true},
 		{name: "missing_key_unresolved", v: "{{ .vars.nonexistent }}", resolved: false},
 		{name: "yaml_function_unresolved", v: "!env TIER", resolved: false},
-		{name: "nested_template_output_unresolved", v: "{{ .vars.templated }}", resolved: false},
+		{name: "nested_template_output_unresolved", v: "{{ .vars.templated }}", data: dataWithTemplated, resolved: false},
 		{
 			name:     "slice_resolves_elementwise",
 			v:        []any{"static", "{{ .vars.stage }}"},
@@ -464,17 +470,13 @@ func TestResolveSelectorValue(t *testing.T) {
 		{name: "malformed_template_syntax_unresolved", v: "{{ .vars.stage", resolved: false},
 	}
 
-	dataWithTemplated := map[string]any{
-		"vars": map[string]any{"templated": "{{ .something }}", "stage": "dev", "layer": "app"},
-	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			input := data
-			if tc.name == "nested_template_output_unresolved" {
-				input = dataWithTemplated
+			if tc.data != nil {
+				input = tc.data
 			}
 			got, resolved := ResolveSelectorValue(tc.v, input, "", "")
 			if resolved != tc.resolved {
