@@ -17,7 +17,7 @@ func TestResolveReleaseLifecycle_Defaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, kube.HookOnlyStrategy, resolution.Policy.WaitStrategy)
-	assert.Equal(t, 10, resolution.Policy.MaxHistory)
+	assert.Equal(t, cfg.HelmDefaultMaxHistory, resolution.Policy.MaxHistory)
 	assert.Zero(t, resolution.Policy.Timeout)
 	assert.False(t, resolution.TimeoutExplicit)
 	assert.False(t, resolution.Policy.RollbackOnFailure)

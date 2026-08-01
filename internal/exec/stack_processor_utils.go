@@ -1816,7 +1816,7 @@ func processYAMLConfigFileWithContextInternal(
 		// The error already contains context information from MergeWithContext
 		return nil, nil, err
 	}
-	if err := applyHelmTypeOverrides(atmosConfig, stackConfigsDeepMerged); err != nil {
+	if err := applyHelmTypeOverrides(atmosConfig, stackConfigsDeepMerged, relativeFilePath); err != nil {
 		return nil, nil, err
 	}
 
@@ -1839,7 +1839,7 @@ func processYAMLConfigFileWithContextInternal(
 // after imports have been deep-merged. Applying it here makes the override cover
 // native Helm components declared by the current manifest and by any import,
 // with the closest manifest's values taking precedence.
-func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig map[string]any) error {
+func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig map[string]any, relativeFilePath string) error {
 	helmSection, ok := stackConfig[cfg.HelmSectionName].(map[string]any)
 	if !ok {
 		return nil
@@ -1850,7 +1850,7 @@ func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig 
 	}
 	helmOverrides, ok := overridesValue.(map[string]any)
 	if !ok {
-		return errUtils.ErrInvalidHelmOverridesSection
+		return fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmOverridesSection, relativeFilePath)
 	}
 	if len(helmOverrides) == 0 {
 		return nil
@@ -1870,7 +1870,13 @@ func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig 
 		if !ok {
 			continue
 		}
-		componentOverrides, _ := component[cfg.OverridesSectionName].(map[string]any)
+		componentOverrides := map[string]any{}
+		if overridesValue, exists := component[cfg.OverridesSectionName]; exists && overridesValue != nil {
+			componentOverrides, ok = overridesValue.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmOverridesSection, relativeFilePath)
+			}
+		}
 		merged, err := m.Merge(atmosConfig, []map[string]any{componentOverrides, helmOverrides})
 		if err != nil {
 			return err

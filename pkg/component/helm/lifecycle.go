@@ -2,8 +2,8 @@ package helm
 
 import (
 	"fmt"
+	"math"
 	"reflect"
-	"strconv"
 	"time"
 
 	"helm.sh/helm/v4/pkg/kube"
@@ -14,7 +14,6 @@ import (
 
 const (
 	helmTimeoutMigrationActive = true
-	decimalRadix               = 10
 )
 
 type lifecycleWarningCode string
@@ -377,8 +376,10 @@ func exactInt(value any) (int, bool) {
 		return converted, int64(converted) == integer
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		integer := reflected.Uint()
-		converted, err := strconv.Atoi(strconv.FormatUint(integer, decimalRadix))
-		return converted, err == nil
+		if integer > math.MaxInt {
+			return 0, false
+		}
+		return int(integer), true
 	default:
 		return 0, false
 	}

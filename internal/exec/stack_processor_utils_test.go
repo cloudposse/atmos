@@ -1731,7 +1731,7 @@ func TestApplyHelmTypeOverrides(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack))
+	require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack, "stack.yaml"))
 	overrides := helmComponentOverrides(t, stack, "imported-app")
 	assert.Equal(t, map[string]any{
 		"cluster":      "shared",
@@ -1776,7 +1776,7 @@ func TestApplyHelmTypeOverridesEarlyReturns(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stack := tt.stack()
 			expected := tt.stack()
-			require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack))
+			require.NoError(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack, "stack.yaml"))
 			assert.Equal(t, expected, stack)
 		})
 	}
@@ -1787,7 +1787,26 @@ func TestApplyHelmTypeOverridesRejectsInvalidOverrides(t *testing.T) {
 		cfg.HelmSectionName: map[string]any{cfg.OverridesSectionName: []any{"invalid"}},
 	}
 
-	require.ErrorIs(t, applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack), errUtils.ErrInvalidHelmOverridesSection)
+	err := applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack, "stack.yaml")
+	require.ErrorIs(t, err, errUtils.ErrInvalidHelmOverridesSection)
+	assert.Contains(t, err.Error(), "in the stack manifest 'stack.yaml'")
+}
+
+func TestApplyHelmTypeOverridesRejectsInvalidComponentOverrides(t *testing.T) {
+	stack := map[string]any{
+		cfg.HelmSectionName: map[string]any{
+			cfg.OverridesSectionName: map[string]any{cfg.ValuesSectionName: map[string]any{"cluster": "shared"}},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.HelmComponentType: map[string]any{
+				"invalid": map[string]any{cfg.OverridesSectionName: []any{"invalid"}},
+			},
+		},
+	}
+
+	err := applyHelmTypeOverrides(&schema.AtmosConfiguration{}, stack, "stack.yaml")
+	require.ErrorIs(t, err, errUtils.ErrInvalidHelmOverridesSection)
+	assert.Contains(t, err.Error(), "in the stack manifest 'stack.yaml'")
 }
 
 func TestProcessYAMLConfigFileAppliesHelmOverridesToImportedComponents(t *testing.T) {
