@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
@@ -48,6 +49,10 @@ type TerraformRunOptions struct {
 	Labels     map[string]string
 	All        bool
 	Affected   bool
+	// IncludeDependencies/IncludeDependents expand the selection with the
+	// dependency closure: 0 = off, -1 = unlimited depth, N>0 = N levels.
+	IncludeDependencies int
+	IncludeDependents   int
 
 	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
@@ -102,6 +107,13 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		return nil, err
 	}
 	opts.Labels = labels
+
+	if opts.IncludeDependencies, err = flags.ParseClosureDepth("include-dependencies", v.GetString("include-dependencies")); err != nil {
+		return nil, err
+	}
+	if opts.IncludeDependents, err = flags.ParseClosureDepth("include-dependents", v.GetString("include-dependents")); err != nil {
+		return nil, err
+	}
 
 	if err := validateTerraformRunOptions(opts); err != nil {
 		return nil, err
