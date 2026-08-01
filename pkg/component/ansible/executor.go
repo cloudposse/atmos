@@ -71,6 +71,7 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 
 // ExecutePlaybook executes an Ansible playbook command.
 func ExecutePlaybook(
+	ctx context.Context,
 	info *schema.ConfigAndStacksInfo,
 	flags *Flags,
 ) error {
@@ -237,6 +238,7 @@ func ExecutePlaybook(
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		e.WithProcessContext(ctx),
 	)
 }
 

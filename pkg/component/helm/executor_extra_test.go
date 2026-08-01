@@ -212,6 +212,35 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 	assert.Equal(t, "bitnami", setup[0].Name)
 }
 
+func TestRunWithHooks_CanceledContextSkipsHooksAndRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		setupRepositories = originalSetup
+	})
+
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		t.Fatal("canceled operation must not discover or run hooks")
+		return nil, nil
+	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("canceled operation must not set up repositories")
+		return nil
+	}
+
+	goContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := runWithHooks(
+		&component.ExecutionContext{Context: goContext, Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationApply,
+		"",
+	)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestRunWithHooks_GetHooksError(t *testing.T) {
 	originalHooks := getHooks
 	t.Cleanup(func() { getHooks = originalHooks })

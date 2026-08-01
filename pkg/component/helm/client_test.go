@@ -11,6 +11,8 @@ import (
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/kube"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestResolveUpgradeChartRef(t *testing.T) {
@@ -133,4 +135,5 @@ func TestInstallAndUpgradeReleaseLocateChartErrors(t *testing.T) {
 	_, err = upgradeRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }

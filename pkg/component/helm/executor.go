@@ -146,6 +146,9 @@ func runWithHooks(
 	operation Operation,
 	componentPath string,
 ) error {
+	if err := ctx.GoContext().Err(); err != nil {
+		return err
+	}
 	hookSet, err := getHooks(atmosConfig, info)
 	if err != nil {
 		return err
