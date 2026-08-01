@@ -38,7 +38,7 @@ atmos helm delete --all --tags production,tier-1
   <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
   <dt>`--wait[=strategy]` <em>(optional)</em></dt>
-  <dd>Use `watcher`, `hookOnly`, or `legacy` while deleting. Passing `--wait` without a value selects `watcher`.</dd>
+  <dd>Use `watcher`, `hookOnly`, or `legacy` while deleting. Passing `--wait` without a value selects `watcher`. Boolean values remain accepted temporarily but are deprecated.</dd>
 
   <dt>`--timeout` <em>(optional)</em></dt>
   <dd>Helm uninstall timeout, such as `10m`. `0s` is explicitly unbounded.</dd>
