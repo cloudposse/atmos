@@ -346,6 +346,7 @@ var helmComponentSectionKeys = []string{
 }
 
 var helmLifecycleSectionKeys = []string{
+	cfg.ValuesSectionName,
 	cfg.HelmRollbackOnFailureSectionName,
 	cfg.HelmAtomicSectionName,
 	cfg.HelmWaitStrategySectionName,
@@ -356,6 +357,13 @@ var helmLifecycleSectionKeys = []string{
 	cfg.HelmMaxHistorySectionName,
 	cfg.HelmDisableChartHooksSectionName,
 	cfg.HelmSkipCRDsSectionName,
+}
+
+// helmOverrideSectionKeys are native Helm fields accepted in a component or
+// type-level overrides block. Keep this intentionally narrow until other Helm
+// fields have documented override semantics.
+var helmOverrideSectionKeys = []string{
+	cfg.ValuesSectionName,
 }
 
 // extractHelmComponentSection copies the recognized Helm fields out of a
@@ -376,6 +384,16 @@ func extractHelmComponentSection(componentMap map[string]any) map[string]any {
 func extractHelmLifecycleSection(section map[string]any) map[string]any {
 	bag := make(map[string]any)
 	for _, key := range helmLifecycleSectionKeys {
+		if value, ok := section[key]; ok {
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+func extractHelmOverrideSection(section map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmOverrideSectionKeys {
 		if value, ok := section[key]; ok {
 			bag[key] = value
 		}
