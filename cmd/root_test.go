@@ -13,9 +13,34 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+	iolib.Reset()
+	viper.Reset()
+	viper.Set("mask", true)
+	require.NoError(t, iolib.Initialize())
+
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().Bool("mask", true, "")
+	group := &cobra.Command{Use: "group"}
+	group.PersistentFlags().Bool("mask", true, "")
+	leaf := &cobra.Command{Use: "leaf"}
+	root.AddCommand(group)
+	group.AddCommand(leaf)
+	require.NoError(t, group.PersistentFlags().Set("mask", "false"))
+
+	reconcileMaskingForCommand(leaf)
+
+	assert.False(t, iolib.MaskingEnabled())
+}
 
 func TestNoColorLog(t *testing.T) {
 	// Skip in CI environments without TTY.
