@@ -226,6 +226,8 @@ func TestExecuteGraphCancelsActiveNodeAndStopsDependents(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
 	require.Len(t, provider.calls, 1)
 	assert.Equal(t, "base", provider.calls[0].Component)
 }
