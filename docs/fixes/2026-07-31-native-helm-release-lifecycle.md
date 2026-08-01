@@ -1,12 +1,13 @@
 # Native Helm release lifecycle
 
-**Date:** 2026-08-01
+**Date:** 2026-07-31
 
 Native Helm cluster operations now expose Helm 4 wait, timeout, recovery,
 history, hook, and CRD controls through stack configuration and explicit command
 flags. Apply and delete dry runs now reach the Helm SDK without persisting release
-state, and caller cancellation propagates through direct and dependency-ordered
-execution.
+state. Caller cancellation propagates through direct and dependency-ordered
+execution into install and upgrade actions and into delete wait and hook phases;
+Helm 4 does not expose a context-aware uninstall request.
 
 ## Migration notes
 
