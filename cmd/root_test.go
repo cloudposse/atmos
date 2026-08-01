@@ -27,6 +27,7 @@ func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
 	viper.Reset()
 	viper.Set("mask", true)
 	require.NoError(t, iolib.Initialize())
+	require.True(t, iolib.MaskingEnabled(), "masking should start enabled")
 
 	root := &cobra.Command{Use: "root"}
 	root.PersistentFlags().Bool("mask", true, "")
