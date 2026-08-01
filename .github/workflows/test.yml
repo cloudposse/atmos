@@ -1427,7 +1427,7 @@ jobs:
     # The macOS matrix may spend up to 45 minutes starting Colima, followed by
     # two bounded 45-minute test attempts. Keep the job ceiling above those
     # nested budgets so the second retry can finish and emit diagnostics.
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
