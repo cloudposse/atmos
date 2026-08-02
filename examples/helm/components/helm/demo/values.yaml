@@ -19,6 +19,7 @@ hooks:
   enabled: true
   fail: false
   requiredConfigMap: ""
+  validateDependency: false
   readyMarker: false
 extraConfigMap:
   enabled: false

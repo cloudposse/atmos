@@ -162,3 +162,6 @@ components:
       values:
         hooks:
           requiredConfigMap: dag-foundation-ready
+          # The lifecycle DAG integration test explicitly opts into a live
+          # cluster lookup; ordinary offline chart rendering leaves this off.
+          validateDependency: true
