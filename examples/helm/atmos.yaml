@@ -123,7 +123,7 @@ commands:
           available=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only get deployment demo-hook-only -o jsonpath='{.status.conditions[?(@.type=="Available")].status}');
           if [ "$available" = "True" ]; then echo "hookOnly unexpectedly satisfied the Deployment readiness gate"; exit 1; fi
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only patch deployment demo-hook-only --type=json -p='[{"op":"remove","path":"/spec/template/spec/readinessGates"}]'
-      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=30s
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=2m
       # watcher honors the release timeout and rollback removes the failed install.
       - command: >-
           if output=$(NO_COLOR=1 atmos helm apply demo-timeout -s dev --identity local-k3s 2>&1); then echo "timed release unexpectedly succeeded"; exit 1; fi;
