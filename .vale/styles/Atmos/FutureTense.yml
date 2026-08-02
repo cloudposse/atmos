@@ -1,0 +1,17 @@
+# Flags future tense where present tense reads better. ASD-STE100 prefers the
+# simplest tense: reference documentation describes what the software does,
+# not what it will do. "Atmos writes the file", not "Atmos will write the
+# file". This is a paraphrase of that principle, not a copy of the
+# ASD-STE100 specification text.
+#
+# Matches lowercase "will" only, so the proper noun "Will" and sentence-initial
+# "Will ..." questions do not fire. "Will not" is included: "Atmos will not
+# overwrite" is better written "Atmos does not overwrite".
+extends: existence
+message: "'%s' is future tense. Reference documentation describes what Atmos does now, so prefer the present tense."
+level: suggestion
+ignorecase: false
+scope: text
+nonword: true
+tokens:
+  - '\bwill\s+(?:not\s+)?[a-z]+\b'

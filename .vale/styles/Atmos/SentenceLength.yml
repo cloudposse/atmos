@@ -13,11 +13,16 @@
 # The word count is a rough proxy, not the actual rule. A 30-word sentence
 # that states one connected idea, with its clauses joined by plain
 # connectors ("and", "so", "because"), can read more clearly than the same
-# idea chopped into three fragments. Don't split a flagged sentence just to
+# idea chopped into three fragments. Do not split a flagged sentence just to
 # clear this suggestion -- split it only if it actually holds more than one
 # idea, or if removing a clause makes it easier to follow.
+#
+# This is the one rule in the set where a finding is genuinely advisory.
+# Mechanical sentence-splitting is what flattened this standard's own PRD
+# once already (see its v1.0.1 changelog entry), so the message below asks
+# for a judgment call. Active voice does not get the same latitude.
 extends: occurrence
-message: "Long sentence (%d words). If it holds more than one idea, consider splitting it. If it's one connected idea, the length alone isn't a defect."
+message: "Long sentence (%d words). If it holds more than one idea, consider splitting it. If it is one connected idea, the length alone is not a defect."
 level: suggestion
 scope: sentence
 max: 30

@@ -6,7 +6,9 @@ authors: [osterman]
 tags: [feature]
 ---
 
-The new `atmos list dependencies` command renders the dependency relationships between your components as a tree — showing, for every component, both what it **depends on** and what **depends on it**. It reads `dependencies.components` (preferred) and the legacy `settings.depends_on`, so the output stays consistent with [`atmos describe dependents`](/cli/commands/describe/dependents).
+Every infrastructure repository encodes a dependency graph, whether or not anyone ever writes it down. The network comes before the cluster, the cluster comes before the workloads, and the shared key comes before everything that encrypts with it. The graph is real, but it is invisible — so you end up rebuilding it in your head each time someone asks what breaks if this one thing changes.
+
+The `atmos list dependencies` command renders that graph as a tree instead, showing for every component both what it **depends on** and what **depends on it**. It reads `dependencies.components` (preferred) and the legacy `settings.depends_on`, so the output stays consistent with [`atmos describe dependents`](/cli/commands/describe/dependents).
 
 <!--truncate-->
 
@@ -14,9 +16,9 @@ The new `atmos list dependencies` command renders the dependency relationships b
 
 As infrastructure grows, the relationships between components matter as much as the components themselves. A `vpc` is a prerequisite for the `eks` cluster, which is a prerequisite for the `alb-controller`, and so on. Until now, answering "what would break if I change this?" or "what has to exist before I deploy that?" meant reading `atmos describe dependents` for one component at a time and stitching the picture together in your head.
 
-## The Solution
+## The Fix
 
-`atmos list dependencies` gives you the whole graph at a glance, as a tree:
+Running `atmos list dependencies` gives you the whole graph at a glance, as a tree:
 
 ```shell
 atmos list dependencies
@@ -39,6 +41,8 @@ plat-ue2-dev  app-config                terraform
 Triangle markers show edge direction: `▶` means the component depends on that
 child, and `◀` means that child depends on the selected component.
 
+## How to Use It
+
 By default it walks every component and renders **both directions** — prerequisites and dependents. Scope it to a stack, focus on a single component, pick a direction, or emit structured data instead:
 
 ```shell
@@ -58,7 +62,7 @@ atmos list dependencies vpc --stack plat-ue2-dev --direction reverse
 atmos list dependencies --format json
 ```
 
-## Why It Matters
+Each of those answers a different question you actually ask day to day:
 
 - **See blast radius before you change anything.** `--direction reverse` answers "what depends on this?" so you know what a change could affect.
 - **Understand deployment order.** `--direction forward` shows prerequisites, so you know what must exist first.
@@ -66,4 +70,4 @@ atmos list dependencies --format json
 
 ## Get Involved
 
-See the [`atmos list dependencies`](/cli/commands/list/dependencies) reference for all flags and output formats. As always, feedback and ideas are welcome in the [Atmos community](https://github.com/cloudposse/atmos).
+See the [`atmos list dependencies`](/cli/commands/list/dependencies) reference for all flags and output formats. As always, feedback and ideas are welcome in the [Atmos issue tracker](https://github.com/cloudposse/atmos/issues).

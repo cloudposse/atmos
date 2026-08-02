@@ -143,13 +143,25 @@ commands:
                 # it silently falls through to reading stdin and reports a
                 # misleading "0 errors ... in stdin" for a file that no longer
                 # exists.
-                if ! files=$(git diff --name-only --diff-filter=ACMR origin/main -- 'docs/prd/*.md' 'website/docs/**/*.md' 'website/docs/**/*.mdx' 2>&1); then
+                # Single `*`, not `**`, in every pathspec below. A git pathspec
+                # is not a shell glob: `*` already matches `/`, so 'docs/prd/*.md'
+                # covers nested PRDs such as docs/prd/flag-handling/. The `**`
+                # form is worse here, not better -- it requires at least one
+                # intermediate directory, so 'website/docs/**/*.mdx' silently
+                # skipped website/docs/experimental.mdx and unreleased.mdx.
+                # (.vale.ini keeps `**` because Vale uses gobwas/glob, where a
+                # single `*` does NOT cross `/` and `**` DOES match zero
+                # directories -- the opposite of git on both counts. Verified:
+                # vale lints website/docs/experimental.mdx via its `**` section.
+                # Different engine, different semantics. Do not "fix" one to
+                # match the other.)
+                if ! files=$(git diff --name-only --diff-filter=ACMR origin/main -- 'docs/prd/*.md' 'website/docs/*.md' 'website/docs/*.mdx' 'website/blog/*.md' 'website/blog/*.mdx' 2>&1); then
                   echo "Warning: could not determine changed docs via git diff, skipping (Phase 1 is non-blocking):" >&2
                   echo "$files" >&2
                   exit 0
                 fi
               else
-                files="docs/prd website/docs"
+                files="docs/prd website/docs website/blog"
               fi
               if [ -z "$files" ]; then
                 echo "No changed docs to lint."

@@ -1,0 +1,30 @@
+# Enforces one word per concept, which is ASD-STE100's "one word, one
+# meaning" rule applied to the abbreviations that drift most in Atmos prose.
+# This is a paraphrase of that principle, not a copy of the ASD-STE100
+# specification text.
+#
+# Deliberately narrow, and kept that way on measured evidence.
+#
+# Abbreviations that are also literal identifiers in Atmos -- `config`,
+# `env`, `var`, `auth`, `args` -- are NOT listed, because they name real YAML
+# keys, command names, and flags. Flagging those would fire wherever the docs
+# correctly quote a key name.
+#
+# "spec" was tried and removed. It produced 142 corpus hits, and too many of
+# them were proper nouns naming a standard ("Devcontainer Spec", "OpenAPI
+# spec") or this repository's own spec.md paths, rather than sloppy
+# shorthand for "specification".
+#
+# Around a fifth of the remaining hits fall inside inline code spans, which
+# Vale's `text` scope does not exclude. Those read as obvious false positives
+# at a glance, and Phase 1 is non-blocking, so they are acceptable. Revisit
+# if this rule is ever promoted above `suggestion`.
+extends: substitution
+message: "Use '%s' instead of '%s'. Pick one term per concept and use it consistently."
+level: suggestion
+ignorecase: true
+scope: text
+swap:
+  repos?: repository
+  params: parameters
+  dirs?: directory

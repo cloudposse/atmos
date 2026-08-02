@@ -10,13 +10,17 @@
 # unevenly. Unrelated to the ASD-STE100 copyright restriction: this is a
 # different, permissively-licensed source, reused with attribution.
 #
-# Passive voice is sometimes the right choice: when the actor is unknown,
-# irrelevant, or already established in context ("no third-party action is
-# involved" reads better than any active rewrite). The message below asks
-# for a judgment call, not a mechanical rewrite -- don't invent an actor
-# just to silence this rule.
+# Treat a finding here as something to fix. Passive voice is easy to write
+# by accident and it hides the actor, which is exactly the ambiguity this
+# style exists to remove. The default response is to name the actor.
+#
+# The exception is real but narrow: keep the passive form when the actor is
+# genuinely unknown or genuinely beside the point ("no third-party action
+# is involved" reads better than any active rewrite). Do not invent an
+# actor just to silence the rule. That exception covers a minority of
+# findings, so do not read it as general permission to skip them.
 extends: existence
-message: "'%s' looks like passive voice. If the actor matters and isn't obvious, name it directly. If the actor is unknown, irrelevant, or already clear, the passive form may already be the clearest choice."
+message: "'%s' is passive. Name the actor: \"Atmos writes the file\", not \"the file is written\". Keep the passive form only when the actor is genuinely unknown or beside the point."
 level: suggestion
 ignorecase: true
 raw:

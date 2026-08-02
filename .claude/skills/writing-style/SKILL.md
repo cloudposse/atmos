@@ -1,79 +1,145 @@
 ---
 name: writing-style
-description: "Atmos writing style for PRDs and website docs, based on ASD-STE100 (Simplified Technical English) principles: short sentences, active voice, no contractions, plain words, and the atmos lint docs vale check. Invoke when writing or reviewing a PRD (docs/prd/) or a website/docs page, or when a docs-lint (vale) finding needs interpreting. Not for website/blog posts — use the changelog skill instead."
+description: "Atmos writing style for PRDs and website docs, based on ASD-STE100 (Simplified Technical English): active voice, one idea per sentence, plain words, no contractions, and the atmos lint docs vale check. Invoke when writing or reviewing a PRD (docs/prd/) or a website/docs page, or when a docs-lint (vale) finding needs interpreting. Not for website/blog posts — use the changelog skill instead."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
 # Writing Style
 
-Use this skill when you write or review a PRD (`docs/prd/`) or a page under
-`website/docs/`. It does not apply to `website/blog/` — blog posts are
-narrative content owned by the `changelog` skill.
+Atmos PRDs (`docs/prd/`) and website documentation (`website/docs/`) are written in
+**ASD-STE100 (Simplified Technical English)**, adapted for software documentation.
+This skill does not apply to `website/blog/` — blog posts are narrative content owned by
+the `changelog` skill.
 
-## The standard
+Apply the standard the way a technical writer would: as a way of thinking about clarity,
+not as a checklist to run against each sentence. You already know what Simplified
+Technical English asks for. What follows is only where Atmos differs from it, or where a
+naive reading of it goes wrong.
 
-Atmos PRDs and docs follow a writing style inspired by **ASD-STE100**
-(Simplified Technical English). The full rule list, rationale, and the Atmos
-technical dictionary live in `docs/writing-style-guide.md` — read it before
-writing a PRD or a substantial docs page. This skill is the short,
-agent-facing summary.
+This is deliberate. An earlier version of this skill enumerated six rules instead, and a
+controlled test found that framing produced the *flattest* prose of any variant tested —
+worse than giving no style guidance at all. Restating a lossy subset of a standard you
+already know narrows it rather than adding to it. `docs/writing-style-guide.md` records
+the measurements.
 
-## Core rules
+## Where Atmos differs from a strict reading
 
-1. **One idea per sentence.** 20-25 words is a rough guide, not a hard cap. Split a sentence only when it genuinely holds more than one idea — not merely because it contains "and," "which," "so," or "because." Those are normal connectors; removing them is what produces flat, disconnected prose.
-2. **Active voice, unless the actor doesn't matter.** Name the actor when it adds clarity: "Atmos writes the file," not "the file is written." Leave a passive construction alone when naming the actor would be forced or irrelevant ("no third-party action is involved" is fine as written).
-3. **No contractions.** Write "do not," not "don't."
-4. **Plain words over wordy phrases.** "To," not "in order to." "Use," not "utilize."
-5. **One word, one meaning.** Pick one term per concept and use it consistently — do not alternate between synonyms for the same thing.
-6. **One instruction per step** in a numbered procedure.
+- **Keep ordinary subordinate connectors.** "Because," "so," "since," and "which" are
+  normal English and STE does not ban them. Prose that removes them reads as a list of
+  disconnected fragments. Connected reasoning is the goal, not clipped sentences.
+- **Sentence length is a smell, not a limit.** One connected idea at 40 words beats the
+  same idea chopped into three fragments. Split for a second idea, never for a word count.
+- **Active voice gets no such latitude.** Passive is the easiest thing to write by
+  accident and it hides the actor. Rewrite it by default. Keep the passive form only when
+  the actor is genuinely unknown or genuinely beside the point.
+- **First person plural is fine in PRD rationale** ("we rejected this because…") and is
+  avoided in `website/docs/` reference pages, which address the reader directly instead.
+- **There is no controlled dictionary.** Atmos does not reproduce ASD's approved word
+  list, so domain and technical nouns are unrestricted. Write "idempotent," "vendoring,"
+  and "OIDC" freely.
+- **Present tense for facts and instructions.** "Atmos writes the file," not "Atmos will
+  write the file." Future tense is almost always avoidable in reference documentation.
+- **No contractions.** Write the full form of every verb pair.
+- **Never open prose with an inline code span.** Start a sentence or paragraph with a
+  word. Bullets may open with a backtick.
+- **Voice is engineering-peer: dry, specific, concrete.** No marketing adjectives.
+  Avoid "leverage," "seamlessly," "robust," "simply," and "obviously" entirely.
 
-Write naturally first, using these rules as a mental checklist while drafting. Run `atmos lint docs` afterward as a spot check, not as a loop you edit against sentence by sentence — see "Treat findings as prompts" below.
+## Worked examples
 
-## Checking your writing
+These are the patterns that matter most, drawn from real Atmos documentation.
+
+**Passive hiding the actor — rewrite it.**
+
+> Before: The varfile is generated from the stack configuration and is written to the
+> component directory.
+>
+> After: Atmos generates the varfile from the stack configuration and writes it to the
+> component directory.
+
+The actor is knowable and load-bearing. Naming it removes the ambiguity.
+
+**Passive where the actor is genuinely irrelevant — leave it.**
+
+> Keep as written: No third-party action is involved.
+
+The actor here is "nobody." An active rewrite ("the workflow does not involve a
+third-party action") is longer and reads worse. This case is a minority of findings, not
+a general excuse.
+
+**Future tense in reference prose — use present.**
+
+> Before: A major release will be published when there is a breaking change. Several
+> release candidates will be published prior to a major release.
+>
+> After: A major release follows any breaking change. Release candidates come first, so
+> the change gets feedback before it ships.
+
+Fixing the tense also removed the passive and the wordy "prior to." These defects travel
+together, which is why editing for one rule at a time works badly.
+
+**Noun cluster — break it up.**
+
+> Before: the stack config validation error handler
+>
+> After: the handler that processes validation errors in the stack config
+
+**Over-application — the failure to avoid.** This standard's own PRD was once edited
+sentence by sentence against the linter until every finding cleared. The result:
+
+> Atmos has around 218 PRDs. It has around 815 documentation pages. Many authors wrote
+> them. They were written over several years. Sentence length varies. Voice varies. Word
+> choice varies.
+
+That clears every rule and is worse writing. What it should say, and now does:
+
+> Atmos has around 218 PRDs in `docs/prd/` and around 815 pages in `website/docs/`,
+> written by many different authors over several years, so sentence length, voice, and
+> word choice vary widely from one document to the next.
+
+One connected idea, plain connectors, 34 words. The linter flags it. The linter is wrong
+here, and that is the expected and acceptable outcome.
+
+## Checking your work
 
 ```shell
 atmos lint docs            # lint every PRD and docs page
 atmos lint docs --changed  # lint only files changed from origin/main
 ```
 
-This runs `vale` against `.vale.ini` and the custom rules in
-`.vale/styles/Atmos/`. The Atmos toolchain installs `vale` automatically —
-no manual setup. The same command runs locally, in the pre-commit hook
-(`vale-docs-lint`), and in CI (`.github/workflows/docs-lint.yml`, inside the
-Atmos container image).
+Write naturally first, then run the linter as a spot check. Do not edit against it
+sentence by sentence until every finding clears. That produces flat prose and it is a
+mistake this project has already made once.
 
-**Phase 1 (current):** every rule is `suggestion` level
-(`.vale.ini` `MinAlertLevel = suggestion`). Findings are informational and
-never fail a commit, a pre-commit run, or a CI check. Treat a suggestion as a
-prompt to consider a rewrite, not a hard requirement — especially in existing
-docs that predate this standard (they are grandfathered until edited; see the
-Migration Path in `docs/prd/technical-writing-standard-ste100.md`).
+This runs `vale` against `.vale.ini` and the custom rules in `.vale/styles/Atmos/`. The
+Atmos toolchain installs `vale` automatically. The same command runs locally, in the
+pre-commit hook (`vale-docs-lint`), and in CI (`.github/workflows/docs-lint.yml`).
 
-### Treat findings as prompts, not mandates
+**Phase 1 (current):** every rule is `suggestion` level, so findings never fail a commit,
+a pre-commit run, or a CI check. Existing documents are grandfathered until someone edits
+them; see the Migration Path in `docs/prd/technical-writing-standard-ste100.md`.
 
-Do not rewrite every flagged sentence just to clear the finding. Read each
-one and decide:
+Which findings to trust:
 
-- **`Atmos.SentenceLength`** flags length as a proxy for "more than one
-  idea." If a long sentence is genuinely one connected idea, leave it —
-  the word count alone is not a defect.
-- **`Atmos.PassiveVoice`** flags a pattern, not a verdict. If naming the
-  actor would be forced, or the actor is unknown or beside the point,
-  the passive form may already be the clearest option.
+- **`Atmos.PassiveVoice`** — fix it. This is the rule that carries the most weight, and
+  the narrow exception above covers a minority of hits, not a general license to skip.
+- **`Atmos.Contractions`**, **`Atmos.WordyPhrases`**, **`Atmos.FutureTense`**,
+  **`Vale.Avoid`** — fix these. They have almost no false positives.
+- **`Atmos.Terminology`** — mostly right. About a fifth of its hits fall inside inline
+  code spans, where the abbreviation is a real identifier and must stay.
+- **`Atmos.SentenceLength`** — advisory. It flags at 30 words as a proxy for "more than
+  one idea." A long sentence carrying one connected idea is fine as written.
 
-A PRD or docs page that clears every single finding by mechanically
-rewriting each one usually reads worse, not better — see
-`docs/writing-style-guide.md`'s "A `vale` finding is a prompt, not a
-mandate" section for the fuller version of this guidance.
+Noun clusters are not checked by any rule; that one is on you.
 
 ## When a new domain term gets flagged
 
-If `vale` flags a legitimate Atmos or infrastructure term (for example, a new
-component type name), add it to
-`.vale/styles/config/vocabularies/Atmos/accept.txt` rather than rewording
-around it. See `docs/writing-style-guide.md` for the rationale.
+If `vale` flags a legitimate Atmos or infrastructure term, add it to
+`.vale/styles/config/vocabularies/Atmos/accept.txt` rather than rewording around it.
+Do not leave a bare `#` on its own line in that file or in `reject.txt`; Vale compiles it
+into a live pattern that matches every hash in the corpus.
 
 ## Related skills
 

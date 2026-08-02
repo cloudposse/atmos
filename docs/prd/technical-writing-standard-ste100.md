@@ -4,7 +4,7 @@
 
 Atmos PRDs and documentation pages have no shared writing style, and nothing checks one. This PRD adopts a style inspired by ASD-STE100 (Simplified Technical English). It also builds the tooling to check that style: a `vale` configuration, a new `atmos lint docs` custom command, a pre-commit hook, and a CI workflow. The rollout starts non-blocking and tightens over three phases, described below.
 
-This document follows the style it proposes.
+This document is written in the style it proposes. It does not clear every linter finding, and that is the intended outcome rather than an oversight: several of its sentences run past the 30-word threshold while carrying one connected idea. See the Migration Path and the style guide's "A `vale` finding is a prompt, not a mandate" section.
 
 ## Problem Statement
 
@@ -58,7 +58,7 @@ locally   pre-commit hook     CI: .github/workflows/docs-lint.yml
     ┌──────────┴───────────────────────────────┐
     │                                           │
 .vale/styles/Atmos/*.yml            .vale/styles/config/vocabularies/Atmos/
-(the four paraphrased rules)         {accept,reject}.txt (technical dictionary)
+(the six paraphrased rules)          {accept,reject}.txt (technical dictionary)
 ```
 
 ### Key Design Principles
@@ -79,14 +79,16 @@ The design follows five principles:
 
 ### 2. Custom Rules (`.vale/styles/Atmos/*.yml`)
 
-Four rules approximate the ASD-STE100 principles we care about most. `Contractions` and `WordyPhrases` are original work. `PassiveVoice` and `SentenceLength` adapt the irregular-verb list and word-count mechanism from Vale's official Google and Microsoft style packages (MIT-licensed) — see Alternatives Considered for why we borrowed those two pieces but did not adopt either package wholesale.
+Six rules approximate the ASD-STE100 principles we care about most. `Contractions`, `WordyPhrases`, `FutureTense`, and `Terminology` are original work. `PassiveVoice` and `SentenceLength` adapt the irregular-verb list and word-count mechanism from Vale's official Google and Microsoft style packages (MIT-licensed) — see Alternatives Considered for why we borrowed those two pieces but did not adopt either package wholesale.
 
 | Rule | Checks | Approximates |
 |---|---|---|
-| `SentenceLength` | Sentences over roughly 25 words | ASD-STE100's short-sentence rule |
 | `PassiveVoice` | Likely passive constructions | ASD-STE100's active-voice rule |
-| `Contractions` | Contractions such as "don't" | ASD-STE100's no-contractions rule |
+| `Contractions` | Contractions | ASD-STE100's no-contractions rule |
 | `WordyPhrases` | Wordy phrases such as "in order to" | ASD-STE100's plain-word rule |
+| `SentenceLength` | Sentences over 30 words | ASD-STE100's short-sentence rule |
+| `FutureTense` | "will" plus a verb | ASD-STE100's simplest-tense rule |
+| `Terminology` | Abbreviations that drift from their full form | ASD-STE100's one-word-one-meaning rule |
 
 ### 3. Technical Dictionary
 
@@ -131,7 +133,7 @@ A new skill, `.claude/skills/writing-style/SKILL.md`, gives an agent-facing summ
 
 ## Testing Strategy
 
-Running `atmos lint docs` against the full existing corpus — 1,033 files today — completes with zero errors and zero crashes, which confirms the configuration loads and every rule runs without breaking the scan. Running `atmos lint docs --changed` on a branch with new and modified files confirms the `git diff` scoping picks up exactly those files, and reports "No changed docs to lint" when nothing in scope changed. `pre-commit run vale-docs-lint` confirms the hook executes and reports Passed under the default `suggestion` severity. Direct `vale --config=.vale.ini` runs against sample pages confirm each of the four rules fires on a matching pattern and stays silent otherwise.
+Running `atmos lint docs` against the full existing corpus — 1,034 files today — completes with zero errors and zero crashes, which confirms the configuration loads and every rule runs without breaking the scan. Running `atmos lint docs --changed` on a branch with new and modified files confirms the `git diff` scoping picks up exactly those files, and reports "No changed docs to lint" when nothing in scope changed. `pre-commit run vale-docs-lint` confirms the hook executes and reports Passed under the default `suggestion` severity. Direct `vale --config=.vale.ini` runs against sample pages confirm each rule fires on a matching pattern and stays silent otherwise. A blog file produces `Vale.Avoid` findings only, with no `SentenceLength`, `Contractions`, or `PassiveVoice`, which confirms the narrower `website/blog/**` scope.
 
 The one thing we could not test locally is `.github/workflows/docs-lint.yml` itself — a GitHub Actions run needs an actual push to a pull request branch, so this PR documents that limitation rather than skipping it silently.
 
@@ -143,11 +145,15 @@ The tooling lands with `MinAlertLevel = suggestion`, so every finding is informa
 
 ### Phase 2 — Promote (future PR)
 
-After a validation window against real pull requests, we promote the rules with the lowest false-positive rate to `warning` or `error`, scoped to changed lines only. We will also consider folding `lint docs --changed` into the shared `lint changed` pipeline once the rule set has proven stable.
+After a validation window against real pull requests, we promote the rules with the lowest false-positive rate to `warning` or `error`, scoped to changed files. That is what `atmos lint docs --changed` actually does: it selects files with `git diff --name-only` and passes whole files to `vale`, so a promoted rule would flag a pre-existing line in a file the author touched for an unrelated reason. Narrowing enforcement to changed *lines* needs a diff-aware filter that does not exist yet, so it is out of scope for Phase 2 rather than assumed. We will also consider folding `lint docs --changed` into the shared `lint changed` pipeline once the rule set has proven stable.
 
 ### Phase 3 — Expand (future PR)
 
-Add further checks — noun-cluster length, tense consistency, procedure-step structure — as the rule set matures. Existing files stay grandfathered until an author edits them; this PRD does not propose a retroactive rewrite.
+Add further checks as the rule set matures. Tense consistency shipped in v1.0.3 as `FutureTense`. Procedure-step structure remains unbuilt.
+
+Noun-cluster length is the one check we tried and abandoned, and the reason is worth recording so nobody rebuilds it. Recognizing a noun cluster needs part-of-speech tagging, which Vale exposes through its `sequence` extension point. That rule produced 2,407 findings against the corpus, roughly four in five of them wrong, and the `tag` filter that would narrow it had no effect: a sequence restricted to common nouns still matched a line of four proper nouns. An untunable rule at that false-positive rate buries every real finding, which is the same failure `Vale.Terms` produced. Noun clusters stay a human rule until a tagger we can constrain exists.
+
+Existing files stay grandfathered until an author edits them; this PRD does not propose a retroactive rewrite.
 
 ## Risks & Mitigation
 
@@ -177,6 +183,18 @@ Add further checks — noun-cluster length, tense consistency, procedure-step st
 
 **Adopt Vale's official Google or Microsoft style packages wholesale, instead of writing our own rules.** We tested this directly: synced both packages and ran them against this PRD. The result was 58 errors, 65 warnings, and 128 suggestions on one file — more than ten times our own rule set's output — and much of it actively worked against our goals rather than toward them. Both packages flag em-dash spacing as a hard error, which would have broken Phase 1's non-blocking design outright. Both flag first-person plural ("we," "our"), which fights the voice this repo's PRDs normally use ("we rejected this because…"). Worse, both packages' `Contractions` rule pushes in the opposite direction from ours — Microsoft enforces contractions as an error, exactly what ASD-STE100 tells us to avoid. We rejected wholesale adoption for these reasons, but we did borrow two things directly. Their (identical) `Passive.yml` has a comprehensive irregular-verb list that catches verbs ours missed, such as "torn" and "given." Microsoft's `SentenceLength.yml` uses an `occurrence`-based word-count mechanism, less fragile than our raw regex, and settles on a better-calibrated 30-word threshold. Both packages are MIT-licensed, so this reuse raises no copyright concern — a different situation from ASD-STE100's own specification.
 
+**Enumerate the rules in the agent-facing skill.** The skill shipped this way in v1.0.0, listing six numbered rules, and we replaced that structure in v1.0.3 after measuring it. Four style instructions went to four fresh agents, each writing the same two documents: a rewrite of a real documentation page, and two PRD sections drafted from a fixed bullet spec. None could read the real skill files or run the linter. We scored the output on `vale` findings and on two signals the linter cannot see — sentence-length standard deviation, and subordinate-connector density — because flattened prose shows up as low values on both.
+
+| Instruction given | Sentence-length stdev | Connectors per 100 words | `vale` per 100 words |
+|---|---|---|---|
+| Six enumerated rules | 6.4 | 0.64 | 0.21 |
+| Standard named, deviations only | 9.0 | 1.76 | 0.78 |
+| Deviations plus worked examples | 9.6 | 2.15 | 0.59 |
+| No style guidance (control) | 8.3 | 1.35 | 1.16 |
+| *A well-written PRD, for reference* | *10.1* | *2.15* | *0.49* |
+
+The enumeration scored best on the linter and worst on everything else. It produced flatter prose than giving no guidance at all, reproducing on demand the exact regression recorded in this document's v1.0.1 entry. The mechanism is that enumerating a partial subset of a standard the reader already knows does not add information — it narrows attention to the listed items, which here were the four mechanically checkable ones, so the writer optimizes those and sacrifices the connected reasoning the standard asks for. Adding worked examples recovered the target voice almost exactly. The skill now names ASD-STE100, documents only where Atmos deviates from it, and carries before/after exemplars.
+
 **Enforce blocking severity from day one.** We rejected this because no prose linting exists today, and a sudden blocking gate would fail most open pull requests and create avoidable churn. The phased Migration Path above exists for exactly this reason.
 
 ## References
@@ -194,3 +212,4 @@ Add further checks — noun-cluster length, tense consistency, procedure-step st
 | 1.0.0 | 2026-07-31 | Initial adoption: Vale configuration, custom rules, technical dictionary, `atmos lint docs` command, pre-commit hook, CI workflow, `writing-style` skill, and style guide. |
 | 1.0.1 | 2026-07-31 | Rewrote the prose: restored natural sentence connectors (because, so, since) that a linter-driven editing pass had stripped out, producing flat, disconnected sentences. ASD-STE100 controls sentence length and vocabulary; it does not forbid ordinary subordinate clauses. |
 | 1.0.2 | 2026-07-31 | Softened the `PassiveVoice` and `SentenceLength` rule messages to invite judgment instead of demanding mechanical compliance; tested Vale's official Google and Microsoft style packages against this PRD and adapted their `Passive.yml` verb list and `SentenceLength.yml` mechanism, but rejected wholesale adoption (see Alternatives Considered). |
+| 1.0.3 | 2026-07-31 | Recalibration after measuring the shipped Phase 1 against the corpus. Removed 1,618 false positives: a bare `#` in `reject.txt` that Vale compiled into a live pattern matching every hash in the docs (30 hits), and `Vale.Terms`, which flagged `yaml`/`json` in code fences and environment variable names such as `KUBECONFIG` as miscased prose (1,588 hits). Re-tightened the `PassiveVoice` guidance, which v1.0.2 had over-softened: the flattening incident came from splitting sentences, not from active voice. Added `FutureTense` and `Terminology`. Built and rejected a `NounClusters` rule (Vale's `sequence` tag filter has no effect; 2,407 findings at roughly 80% false positive). Extended `Vale.Avoid` alone to `website/blog/**`. Replaced the `writing-style` skill's six-rule enumeration with an anchor-plus-exemplars structure after a controlled test showed the enumeration produced flatter prose than giving no guidance at all. Fixed the `--changed` pathspec, which silently skipped two top-level `website/docs/*.mdx` files. |

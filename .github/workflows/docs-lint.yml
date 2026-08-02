@@ -6,6 +6,8 @@ on:
       - 'docs/prd/**.md'
       - 'website/docs/**.md'
       - 'website/docs/**.mdx'
+      - 'website/blog/**.md'
+      - 'website/blog/**.mdx'
       - '.vale.ini'
       - '.vale/**'
       - '.atmos.d/lint.yaml'
