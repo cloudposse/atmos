@@ -5,9 +5,9 @@
 set -e
 
 if [[ ! -x ./custom-gcl ]]; then
-    echo "Error: custom-gcl binary not found." >&2
-    echo "Please build it first by running: atmos lint custom-gcl" >&2
-    exit 1
+	echo "Error: custom-gcl binary not found." >&2
+	echo "Please build it first by running: atmos lint custom-gcl" >&2
+	exit 1
 fi
 
 # --- Per-worktree isolation so parallel worktree lints (e.g. rebase storms) don't
@@ -33,56 +33,69 @@ fi
 # Set ATMOS_LINT_SHARED_CACHE=1 to opt back into the old machine-global shared cache
 # and serialized lock (e.g. if per-worktree disk usage is a concern).
 if [[ "${ATMOS_LINT_SHARED_CACHE:-}" != "1" ]]; then
-    export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-$PWD/.golangci-cache}"
-    export TMPDIR="$PWD/.golangci-tmp"
-    mkdir -p "$TMPDIR"
+	export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-$PWD/.golangci-cache}"
+	export TMPDIR="$PWD/.golangci-tmp"
+	mkdir -p "$TMPDIR"
 fi
 
 args=(
-    run
-    --config=.golangci.yml
+	run
+	--config=.golangci.yml
 )
 
 if [[ -n "${GOLANGCI_CONCURRENCY:-}" ]]; then
-    args+=(--concurrency="${GOLANGCI_CONCURRENCY}")
+	args+=(--concurrency="${GOLANGCI_CONCURRENCY}")
+fi
+
+# --allow-serial-runners: within a single checkout, queue concurrent runs around
+# the cache lock (wait) instead of failing fast. Cross-checkout runs already use
+# separate caches and never contend, so this only smooths the same-checkout case
+# (e.g. a manual `make lint` racing a pre-commit). The lock is kept, so the cache
+# is never written by two runners at once.
+args+=(--allow-serial-runners)
+
+# --allow-parallel-runners drops the lock entirely (real risk of racing writes to
+# the same cache), so it stays opt-in via GOLANGCI_ALLOW_PARALLEL rather than on
+# by default.
+if [[ "${GOLANGCI_ALLOW_PARALLEL:-0}" != "0" ]]; then
+	args+=(--allow-parallel-runners)
 fi
 
 staged_patch=""
 cleanup() {
-    if [[ -n "${staged_patch}" ]]; then
-        rm -f "${staged_patch}"
-    fi
+	if [[ -n "${staged_patch}" ]]; then
+		rm -f "${staged_patch}"
+	fi
 }
 trap cleanup EXIT
 
-if git diff --cached --quiet -- '*.go'; then
-    if [[ "${GOLANGCI_ALLOW_PARALLEL:-0}" != "0" ]]; then
-        args+=(--allow-parallel-runners)
-    fi
-    ./custom-gcl "${args[@]}" --new-from-rev="${GOLANGCI_NEW_FROM_REV:-origin/main}"
+# During a merge, `git diff --cached` covers the whole incoming-branch diff (every
+# file the merge touches, not just what this resolution changed), so the staged-patch
+# path below would flag every pre-existing issue the other branch already merged as
+# "new". Compare against origin/main directly instead: files that came through
+# unmodified show no new lines, and only this merge's own conflict resolutions do.
+if git diff --cached --quiet -- '*.go' || git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+	./custom-gcl "${args[@]}" --new-from-rev="${GOLANGCI_NEW_FROM_REV:-origin/main}"
 else
-    if [[ "${GOLANGCI_ALLOW_PARALLEL:-0}" != "0" ]]; then
-        args+=(--allow-parallel-runners)
-    fi
-    staged_patch="$(mktemp "${TMPDIR:-/tmp}/atmos-golangci-staged.XXXXXX")"
-    git diff --cached --binary -- '*.go' > "${staged_patch}"
-    package_list="$(
-        git diff --cached --name-only --diff-filter=ACMR -- '*.go' |
-            while IFS= read -r file; do
-                dir="$(dirname "${file}")"
-                if [[ "${dir}" == "." ]]; then
-                    printf '.\n'
-                else
-                    printf './%s\n' "${dir}"
-                fi
-            done |
-            sort -u
-    )"
-    packages=()
-    while IFS= read -r package; do
-        if [[ -n "${package}" ]]; then
-            packages+=("${package}")
-        fi
-    done <<< "${package_list}"
-    ./custom-gcl "${args[@]}" --new-from-patch="${staged_patch}" "${packages[@]}"
+	staged_patch="$(mktemp "${TMPDIR:-/tmp}/atmos-golangci-staged.XXXXXX")"
+	git diff --cached --binary -- '*.go' > "${staged_patch}"
+	package_list="$(
+		git diff --cached --name-only --diff-filter=ACMR -- '*.go' |
+			while IFS= read -r file; do
+				dir="$(dirname "${file}")"
+				if [[ "${dir}" == "." ]]; then
+					printf '.\n'
+				else
+					printf './%s\n' "${dir}"
+				fi
+			done |
+			sort -u
+	)"
+	packages=()
+	while IFS= read -r package; do
+		if [[ -n "${package}" ]]; then
+			packages+=("${package}")
+		fi
+	done <<< "${package_list}"
+	./custom-gcl "${args[@]}" --new-from-patch="${staged_patch}" "${packages[@]}"
 fi
