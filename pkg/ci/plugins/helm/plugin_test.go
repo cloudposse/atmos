@@ -264,7 +264,13 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			contains: []string{
 				"Helm Apply Summary", "bitnami/nginx", "Deployment", "Release lifecycle",
-				"Wait strategy", "watcher", "Maximum history", "`10`",
+				"| Wait strategy | `watcher` |",
+				"| Timeout | `30m0s` |",
+				"| Chart hooks enabled | `true` |",
+				"| Wait for Jobs | `true` |",
+				"| Rollback on failure | `true` |",
+				"| Cleanup on failure | `true` |",
+				"| Maximum history | `10` |",
 			},
 		},
 		{
