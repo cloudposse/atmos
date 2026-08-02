@@ -4,8 +4,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  name_pattern: "{stage}"
-
+  name_template: "{{.vars.stage}}"
 components:
   script:
     base_path: "components/script"

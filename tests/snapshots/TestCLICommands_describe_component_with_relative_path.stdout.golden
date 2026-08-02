@@ -509,7 +509,34 @@ deps_all:
 env: {}
 generate: {}
 hooks: {}
-imports: []
+imports:
+  - catalog/helmfile/echo-server
+  - catalog/helmfile/infra-server
+  - catalog/helmfile/infra-server-override
+  - catalog/packer/aws/bastion/defaults
+  - catalog/terraform/mixins/test-1
+  - catalog/terraform/mixins/test-2
+  - catalog/terraform/services/service-1
+  - catalog/terraform/services/service-1-override
+  - catalog/terraform/services/service-1-override-2
+  - catalog/terraform/services/service-2
+  - catalog/terraform/services/service-2-override
+  - catalog/terraform/services/service-2-override-2
+  - catalog/terraform/services/top-level-service-1
+  - catalog/terraform/services/top-level-service-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/tenant1-ue2-dev
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+  - catalog/terraform/test-component-override-2
+  - catalog/terraform/test-component-override-3
+  - catalog/terraform/top-level-component1
+  - catalog/terraform/vpc
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - orgs/cp/_defaults
+  - orgs/cp/tenant1/_defaults
+  - orgs/cp/tenant1/dev/_defaults
 inheritance: []
 metadata: {}
 overrides:
@@ -1004,32 +1031,32 @@ sources:
           variable_value: dev
     tags:
       final_value:
-        atlantis_project: tenant1-ue2-dev-top-level-component1
-        atmos_component: '{{ .atmos_component }}'
-        atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
-        atmos_manifest: orgs/cp/tenant1/dev/us-east-2
-        atmos_stack: tenant1-ue2-dev
-        provisioned_by_user: user
-        region: us-east-2
-        spacelift_stack: tenant1-ue2-dev-top-level-component1
-        terraform_component: top-level-component1
-        terraform_workspace: tenant1-ue2-dev
+        atlantis_project: '{{ .atlantis_project }}'
+        atmos_component: '{{`{{ .atmos_component }}`}}'
+        atmos_component_description: '{{ strings.Title .atmos_component }} component provisioned in the stack {{ .atmos_stack | strings.Quote }}'
+        atmos_manifest: '{{ .atmos_stack_file }}'
+        atmos_stack: '{{ .atmos_stack }}'
+        provisioned_by_user: '{{ env "USER" | default (env "USERNAME") }}'
+        region: '{{ .vars.region }}'
+        spacelift_stack: '{{ .spacelift_stack }}'
+        terraform_component: '{{ .component }}'
+        terraform_workspace: '{{ .workspace }}'
       name: tags
       stack_dependencies:
         - dependency_type: import
           stack_file: orgs/cp/_defaults
           stack_file_section: terraform.vars
           variable_value:
-            atlantis_project: tenant1-ue2-dev-top-level-component1
-            atmos_component: '{{ .atmos_component }}'
-            atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
-            atmos_manifest: orgs/cp/tenant1/dev/us-east-2
-            atmos_stack: tenant1-ue2-dev
-            provisioned_by_user: user
-            region: us-east-2
-            spacelift_stack: tenant1-ue2-dev-top-level-component1
-            terraform_component: top-level-component1
-            terraform_workspace: tenant1-ue2-dev
+            atlantis_project: '{{ .atlantis_project }}'
+            atmos_component: '{{`{{ .atmos_component }}`}}'
+            atmos_component_description: '{{ strings.Title .atmos_component }} component provisioned in the stack {{ .atmos_stack | strings.Quote }}'
+            atmos_manifest: '{{ .atmos_stack_file }}'
+            atmos_stack: '{{ .atmos_stack }}'
+            provisioned_by_user: '{{ env "USER" | default (env "USERNAME") }}'
+            region: '{{ .vars.region }}'
+            spacelift_stack: '{{ .spacelift_stack }}'
+            terraform_component: '{{ .component }}'
+            terraform_workspace: '{{ .workspace }}'
     tenant:
       final_value: tenant1
       name: tenant
@@ -1062,4 +1089,3 @@ vars:
     terraform_workspace: tenant1-ue2-dev
   tenant: tenant1
 workspace: tenant1-ue2-dev
-
