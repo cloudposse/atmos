@@ -20,13 +20,15 @@ func TestPlugin_GetType(t *testing.T) {
 
 func TestPlugin_GetHookBindings(t *testing.T) {
 	bindings := (&Plugin{}).GetHookBindings()
-	require.Len(t, bindings, 5)
+	require.Len(t, bindings, 7)
 
 	for _, event := range []string{
 		"after.helm.template",
 		"after.helm.diff",
+		"after.helm.plan.aggregate",
 		"after.helm.apply",
 		"after.helm.deploy",
+		"after.helm.apply.aggregate",
 		"after.helm.delete",
 	} {
 		t.Run(event, func(t *testing.T) {

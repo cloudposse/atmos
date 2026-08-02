@@ -58,6 +58,10 @@ atmos helm apply --all --tags production,tier-1
 atmos helm apply --affected --labels cost-center=platform
 ```
 
+In CI, bulk applies selected with `--all` or `--affected` write one aggregate GitHub job summary
+after the dependency graph completes. It lists component status and Helm release metadata in stable
+stack/component order and includes details for failures.
+
 ## Flags
 
 <dl>
