@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -25,6 +26,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -42,6 +44,13 @@ type StacksOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	ErrorMode        string
+	Tags             []string
+	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels): the listed stacks are exactly
+	// the ones a terraform bulk run with the same selection flags would touch.
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // stacksCmd lists atmos stacks.
@@ -68,6 +77,9 @@ var stacksCmd = &cobra.Command{
 		}
 
 		opts := parseStacksOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
+		}
 
 		return listStacksWithOptions(cmd, args, opts)
 	},
@@ -88,6 +100,8 @@ func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 }
 
@@ -127,6 +141,9 @@ func init() {
 		WithStacksColumnsFlag,
 		WithSortFlag,
 		WithComponentFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
+		WithClosureFlags,
 		WithProvenanceFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
@@ -264,7 +281,23 @@ func executeAndExtractStacks(
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
 	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// With closure flags, the whole describe/extract flow goes through the
+	// shared scoped closure engine: only the stacks (and components) the
+	// closure touches are ever evaluated, matching the terraform bulk paths.
+	closureRequested := opts.IncludeDependencies != 0 || opts.IncludeDependents != 0
+	if closureRequested {
+		return extractStacksViaScopedClosure(atmosConfig, opts, labels, &scopedDescribeDeps{authManager: authManager, skip: skip, errOpts: errOpts})
+	}
+
+	// Without closure flags, --tags/--labels also scope the describe pass
+	// (early-skip): components excluded by the selectors never evaluate
+	// templates/YAML functions/auth.
+	stacksMap, err := e.ExecuteDescribeStacksScoped(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -273,6 +306,8 @@ func executeAndExtractStacks(
 		skip,
 		authManager,
 		authManager == nil,
+		opts.Tags,
+		labels,
 		errOpts,
 	)
 	if err != nil {
@@ -281,15 +316,147 @@ func executeAndExtractStacks(
 
 	var stacks []map[string]any
 	if opts.Component != "" {
-		stacks, err = extract.StacksForComponent(opts.Component, stacksMap)
+		stacks, err = extract.StacksForComponent(opts.Component, stacksMap, opts.Tags, labels)
 	} else {
-		stacks, err = extract.Stacks(stacksMap)
+		stacks, err = extract.Stacks(stacksMap, opts.Tags, labels)
 	}
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return stacks, stacksMap, nil
+}
+
+// scopedDescribeDeps bundles the describe-side dependencies shared by the
+// list commands' scoped closure helpers, keeping the helpers within the
+// argument-count limit.
+type scopedDescribeDeps struct {
+	authManager auth.AuthManager
+	skip        []string
+	errOpts     e.DescribeStacksErrorOptions
+}
+
+// newScopedDescribeFunc builds the dependencies.DescribeFunc the list
+// commands hand to ResolveScopedClosure: one ExecuteDescribeStacksScoped pass
+// per closure stack, narrowed to the closure's own components, never to the
+// caller's tags/labels (closure scoping owns selection).
+func newScopedDescribeFunc(atmosConfig *schema.AtmosConfiguration, describeDeps *scopedDescribeDeps) dependencies.DescribeFunc {
+	return func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
+		return e.ExecuteDescribeStacksScoped(
+			atmosConfig, stackName, closureComponents, nil, nil,
+			false, // ignoreMissingFiles
+			processTemplates,
+			processFunctions,
+			false, // includeEmptyStacks
+			describeDeps.skip,
+			describeDeps.authManager,
+			describeDeps.authManager == nil,
+			nil, // tagsFilter: closure scoping owns selection.
+			nil, // labelsFilter: closure scoping owns selection.
+			describeDeps.errOpts,
+		)
+	}
+}
+
+// extractStacksViaScopedClosure lists the stacks the dependency closure
+// touches, using the shared three-phase scoped evaluation: a lightweight
+// structural pass seeds the closure (optional component + tags/labels
+// selectors), and only the closure's own components are then fully evaluated —
+// exactly the stacks a terraform bulk run with the same selection flags would
+// touch, without evaluating anything outside the closure. Closure members are
+// kept even when they do not match the selectors that seeded them.
+func extractStacksViaScopedClosure(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *StacksOptions,
+	labels map[string]string,
+	describeDeps *scopedDescribeDeps,
+) ([]map[string]any, map[string]any, error) {
+	defer perf.Track(nil, "list.stacks.extractStacksViaScopedClosure")()
+
+	describe := newScopedDescribeFunc(atmosConfig, describeDeps)
+
+	var components []string
+	if opts.Component != "" {
+		components = []string{opts.Component}
+	}
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := dependencies.ResolveScopedClosure(describe, &dependencies.ScopeRequest{
+		Components:       components,
+		Tags:             opts.Tags,
+		Labels:           labels,
+		Direction:        direction,
+		Depths:           depths,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
+		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	// Restrict output to the FINAL closure's stacks before extraction.
+	// result.Stacks can hold conservatively evaluated stacks that are not
+	// closure members: the reverse direction evaluates unresolved dependency
+	// sources so their edges materialize, and refineRoots can drop an
+	// initially conservative root once its selector resolves — in both cases
+	// the evaluated stack stays in result.Stacks. list components and
+	// list instances already filter rows by closure membership; stacks must
+	// too so the preview matches the execution set.
+	closureStacks := filterStacksByNames(result.Stacks, dependencies.StackNames(result.Closure))
+	stacks, err := extract.Stacks(closureStacks, nil, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if opts.Component != "" {
+		annotateStackRowsWithComponent(stacks, closureStacks, opts.Component)
+	}
+	return stacks, closureStacks, nil
+}
+
+// annotateStackRowsWithComponent mirrors extract.StacksForComponent's row
+// shape on the closure path: rows for stacks that actually contain the
+// selected component carry it under "component", so configured columns like
+// `{{ .component }}` render identically with and without closure flags.
+// Prerequisite stacks pulled in by the closure without the component keep no
+// component key rather than claiming one they do not have.
+func annotateStackRowsWithComponent(rows []map[string]any, stacksMap map[string]any, component string) {
+	for _, row := range rows {
+		stackName, _ := row["stack"].(string)
+		if stackContainsComponent(stacksMap, stackName, component) {
+			row["component"] = component
+		}
+	}
+}
+
+// stackContainsComponent reports whether the described stack holds the named
+// component under any component type.
+func stackContainsComponent(stacksMap map[string]any, stackName, component string) bool {
+	stack, _ := stacksMap[stackName].(map[string]any)
+	componentsSection, _ := stack["components"].(map[string]any)
+	for _, typeValue := range componentsSection {
+		typeSection, _ := typeValue.(map[string]any)
+		if _, ok := typeSection[component]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// filterStacksByNames keeps only the named stacks from the describe map.
+func filterStacksByNames(stacks map[string]any, names []string) map[string]any {
+	allowed := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		allowed[name] = struct{}{}
+	}
+	filtered := make(map[string]any, len(names))
+	for name, section := range stacks {
+		if _, ok := allowed[name]; ok {
+			filtered[name] = section
+		}
+	}
+	return filtered
 }
 
 // renderStacksTable renders stacks in table format with filters, columns, and sorters.
@@ -318,8 +485,10 @@ func renderStacksTable(atmosConfig *schema.AtmosConfiguration, stacks []map[stri
 func buildStackFilters(opts *StacksOptions) []filter.Filter {
 	var filters []filter.Filter
 
-	// Component filter already handled by extraction logic.
-	// Add any additional filters here in the future.
+	// Component and tags/labels filters are already handled by extraction
+	// logic (extract.Stacks/extract.StacksForComponent), so the tree format
+	// and structured outputs honor them too. Add any additional
+	// renderer-level filters here in the future.
 
 	return filters
 }

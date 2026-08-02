@@ -48,6 +48,21 @@ atmos list stacks -c vpc
 atmos list stacks --component eks
 ```
 
+Filter by component tags and labels:
+```shell
+# List stacks where any component is tagged production or tier-1 (matches any)
+atmos list stacks --tags=production,tier-1
+
+# List stacks where any component is labeled cost-center=platform (matches all given labels)
+atmos list stacks --labels=cost-center=platform
+
+# The `:` separator works too
+atmos list stacks --labels=cost-center:platform
+
+# Combine with --component to consult only that component's own tags/labels
+atmos list stacks -c vpc --labels=team=network
+```
+
 Output in different formats:
 ```shell
 # JSON format
@@ -98,6 +113,18 @@ atmos list stacks --component vpc --format tree --provenance
 <dl>
   <dt>`--component` / `-c`</dt>
   <dd>Filter stacks by component name.<br/>Environment variable: `ATMOS_COMPONENT`</dd>
+
+  <dt>`--tags`</dt>
+  <dd>Filter stacks by component tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Without `--component`, a stack is listed when **any** of its components matches; with `--component`, only that component's own tags are consulted.<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Filter stacks by component labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. When `--tags` and `--labels` are combined, a single component must satisfy both for its stack to match — a tag on one component and a label on another does not qualify the stack.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+
+  <dt>`--include-dependencies`</dt>
+  <dd>Expand the listing to the stacks touched by the dependency closure of the selected components — previewing the exact set of stacks a terraform bulk command with the same selection flags would execute in, including stacks that hold prerequisites of the selection. The closure covers Terraform components (the dependency graph the scheduler executes). Accepts an optional depth (for example, `--include-dependencies=1` for direct dependencies only).<br/>`atmos list stacks --labels=env=dev --include-dependencies`<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>Expand the listing to the stacks touched by components that depend on the selection — previewing the exact set of stacks a terraform bulk command with the same selection flags would execute in. Accepts an optional depth (for example, `--include-dependents=2` for two levels).<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
 
   <dt>`--format` / `-f`</dt>
   <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `stacks.list.format` configuration in atmos.yaml (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>

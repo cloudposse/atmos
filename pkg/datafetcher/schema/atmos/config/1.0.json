@@ -4281,6 +4281,20 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "eager_evaluation": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "EagerEvaluation disables the early-skip scope optimization for `--tags`/`--labels`\nbulk Terraform selection and `list dependencies`: when true, every stack is fully\nevaluated (templates, YAML functions, auth) before filtering, matching pre-optimization\nbehavior. Use as a rollback if a repo has templated metadata.tags/metadata.labels that\nthe lightweight scope pass cannot safely resolve. See\ndocs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md."
         }
       },
       "type": "object",

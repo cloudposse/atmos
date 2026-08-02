@@ -392,22 +392,27 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
 	// we can safely replace backslashes that are followed by path-like characters.
 	//
-	// First, protect JSON unicode escapes like \u003e from being corrupted by filepath.ToSlash
-	// and the path normalization regex below. On Windows, filepath.ToSlash converts ALL backslashes
-	// to forward slashes, which would turn \u003e into /u003e.
+	// First, protect JSON unicode escapes like \u003e and escaped quotes like \" from
+	// being corrupted by filepath.ToSlash and the path normalization regex below. On
+	// Windows, filepath.ToSlash converts ALL backslashes to forward slashes, which would
+	// turn \u003e into /u003e and \" into /" (e.g. a quoted provenance template embedding
+	// `env \"USER\"`).
 	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
 	const shellContinuationPlaceholder = "\x00SHELL_CONTINUATION\x00"
+	const escapedQuotePlaceholder = "\x00ESCAPED_QUOTE\x00"
 	// A trailing backslash in a help example is shell continuation syntax, not
 	// a path separator. Preserve it before Windows path normalization.
 	shellContinuation := regexp.MustCompile(`\\(\r?\n)`)
 	protectedOutput := shellContinuation.ReplaceAllString(output, shellContinuationPlaceholder+"$1")
 	protectedOutput = jsonUnicodeEscape.ReplaceAllString(protectedOutput, unicodePlaceholder+"$1")
+	protectedOutput = strings.ReplaceAll(protectedOutput, `\"`, escapedQuotePlaceholder)
 	normalizedOutput := filepath.ToSlash(protectedOutput)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
-	// Restore protected unicode escapes.
+	// Restore protected unicode escapes and escaped quotes.
 	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, escapedQuotePlaceholder, `\"`)
 
 	// Restore shell continuations after path normalization.
 	normalizedOutput = strings.ReplaceAll(normalizedOutput, shellContinuationPlaceholder, `\`)
@@ -568,8 +573,9 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
 	// Its rendered padding also depends on that value's display width, so normalize
-	// both the value and the padding before the provenance comment.
-	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+[ \t]*`)
+	// both the value and the padding before the provenance comment. The first-character
+	// exclusion of quotes/apostrophes keeps this from matching a quoted value.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^'"\s][^\s]*[ \t]*`)
 	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user ")
 
 	// 17. Join diagnostic messages where the sanitized path ended up on the next line.

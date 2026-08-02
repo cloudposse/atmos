@@ -13,4 +13,3 @@ vars:                                             # ● [1] test-stack.yaml:10
       module_version: v1.0.0                      # ● [1] test-stack.yaml:13
   simple_var: simple_value                        # ● [1] test-stack.yaml:16
   stage: test                                     # ● [1] test-stack.yaml:2
-

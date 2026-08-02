@@ -33,6 +33,8 @@ import (
 const (
 	// TerraformConfigKey is the key used in componentInfo maps to store terraform configuration.
 	terraformConfigKey = "terraform_config"
+	// SourcesSectionName is the generated component provenance section.
+	sourcesSectionName = "sources"
 )
 
 // extractRequiredProviders extracts required_providers from a component section.
@@ -80,7 +82,7 @@ func normalizedComponentConfig(componentConfig map[string]any) map[string]any {
 		"stack":            {},
 		"atmos_stack_file": {},
 		"atmos_manifest":   {},
-		"sources":          {},
+		sourcesSectionName: {},
 		"imports":          {},
 		"deps_all":         {},
 		"deps":             {},
@@ -745,17 +747,14 @@ func processStacks(
 
 		configAndStacksInfo.StackFile = configAndStacksInfo.Stack
 
-		// Process context.
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
-			configAndStacksInfo.Stack,
-			configAndStacksInfo.Context,
-			GetStackNamePattern(atmosConfig),
-			configAndStacksInfo.Stack,
-		)
+		// Process context. Precedence: name (from manifest) > name_template > name_pattern >
+		// filename, matching the same precedence documented and applied by
+		// processStackContextPrefix (used by the non-Directory lookup path below) and by
+		// terraform workspace resolution. Previously this branch only checked name_pattern,
+		// so a Directory-type stack with only name_template configured (and no legacy
+		// name_pattern) would fail with ErrMissingStackNameTemplateAndPattern.
+		stackManifestName := getStackManifestName(stacksMap[configAndStacksInfo.Stack])
+		err = processStackContextPrefix(atmosConfig, &configAndStacksInfo, configAndStacksInfo.Stack, stackManifestName)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -905,7 +904,7 @@ func processStacks(
 		return configAndStacksInfo, err
 	}
 
-	configAndStacksInfo.ComponentSection["sources"] = sources
+	configAndStacksInfo.ComponentSection[sourcesSectionName] = sources
 
 	// Component dependencies.
 	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
@@ -927,24 +926,10 @@ func processStacks(
 	// Spacelift stack and Atlantis project names must be set before template
 	// processing below: stack-level defaults (e.g. `tags.spacelift_stack:
 	// "{{ .spacelift_stack }}"`) reference them by name, and the template context
-	// is a snapshot of ComponentSection taken before templates run. Both builders
-	// only depend on ComponentSettingsSection/ComponentVarsSection/ComponentFromArg/
-	// Stack, all already populated at this point, so computing them here (instead
-	// of after templates) doesn't lose any information.
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
+	// is a snapshot of ComponentSection taken before templates run. Computing them
+	// here (instead of after templates) doesn't lose any information.
+	if err := computeSpaceliftAndAtlantisNames(atmosConfig, &configAndStacksInfo); err != nil {
 		return configAndStacksInfo, err
-	}
-	if spaceliftStackName != "" {
-		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
-	}
-
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if atlantisProjectName != "" {
-		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
 
 	// Component mocks are literal fixture data. Keep them out of template and YAML
@@ -954,6 +939,10 @@ func processStacks(
 	if hasLiteralMocks {
 		delete(configAndStacksInfo.ComponentSection, cfg.MocksSectionName)
 	}
+
+	// `sources` is generated provenance and must not be treated as executable
+	// component configuration during template/YAML-function processing.
+	restoreSources := excludeSourcesFromEvaluation(&configAndStacksInfo)
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
@@ -1051,6 +1040,7 @@ func processStacks(
 	if hasLiteralMocks {
 		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
 	}
+	restoreSources()
 
 	// Process the ENV variables from the `env` section.
 	configAndStacksInfo.ComponentEnvList = env.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
@@ -1228,6 +1218,50 @@ func processStacks(
 	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	return configAndStacksInfo, nil
+}
+
+// computeSpaceliftAndAtlantisNames sets `spacelift_stack`/`atlantis_project` on
+// ComponentSection before template processing runs, so template expressions like
+// `{{ .spacelift_stack }}` can resolve them. Both builders only depend on
+// ComponentSettingsSection/ComponentVarsSection/ComponentFromArg/Stack, all already
+// populated by the time this is called.
+func computeSpaceliftAndAtlantisNames(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, *configAndStacksInfo)
+	if err != nil {
+		return err
+	}
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, *configAndStacksInfo)
+	if err != nil {
+		return err
+	}
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
+	return nil
+}
+
+// excludeSourcesFromEvaluation removes the generated `sources` provenance section from
+// configAndStacksInfo.ComponentSection before template/YAML-function processing runs.
+// `sources` can retain overridden parent values, so it must not be treated as executable
+// component configuration. It returns a restore function that puts `sources` back
+// afterward. The restore function reads configAndStacksInfo.ComponentSection at call
+// time (not the map captured here) because template processing reassigns
+// ComponentSection to a new map before restoration happens.
+func excludeSourcesFromEvaluation(configAndStacksInfo *schema.ConfigAndStacksInfo) func() {
+	sourcesSection, hasSources := configAndStacksInfo.ComponentSection[sourcesSectionName]
+	if hasSources {
+		delete(configAndStacksInfo.ComponentSection, sourcesSectionName)
+	}
+	return func() {
+		if hasSources {
+			configAndStacksInfo.ComponentSection[sourcesSectionName] = sourcesSection
+		}
+	}
 }
 
 // generateComponentBackendConfig generates backend config for components.
