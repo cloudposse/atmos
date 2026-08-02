@@ -31,6 +31,11 @@ atmos helm plan monitoring -s plat-ue2-dev --against=target
 atmos helm plan --all --tags production
 ```
 
+In CI, bulk plans selected with `--all` or `--affected` write one aggregate GitHub job summary
+after the dependency graph completes. It lists every attempted component in stable stack/component
+order, distinguishes changed, unchanged, and failed results, and includes collapsible diffs for
+changed components.
+
 ## Flags
 
 <dl>
