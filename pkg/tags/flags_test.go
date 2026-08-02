@@ -85,14 +85,72 @@ func TestParseLabelsFlag(t *testing.T) {
 		}
 	})
 
-	t.Run("missing equals sign errors", func(t *testing.T) {
+	t.Run("colon separator pairs", func(t *testing.T) {
+		got, err := ParseLabelsFlag("cost-center:platform, compliance : sox")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"cost-center": "platform", "compliance": "sox"}
+		if len(got) != len(want) {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", k, got[k], v)
+			}
+		}
+	})
+
+	t.Run("mixed equals and colon separators", func(t *testing.T) {
+		got, err := ParseLabelsFlag("cost-center:platform,compliance=sox")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"cost-center": "platform", "compliance": "sox"}
+		if len(got) != len(want) {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", k, got[k], v)
+			}
+		}
+	})
+
+	t.Run("colon first splits on colon", func(t *testing.T) {
+		got, err := ParseLabelsFlag("key:val=ue")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got["key"] != "val=ue" {
+			t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", "key", got["key"], "val=ue")
+		}
+	})
+
+	t.Run("equals first splits on equals", func(t *testing.T) {
+		got, err := ParseLabelsFlag("key=val:ue")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got["key"] != "val:ue" {
+			t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", "key", got["key"], "val:ue")
+		}
+	})
+
+	t.Run("missing separator errors", func(t *testing.T) {
 		if _, err := ParseLabelsFlag("cost-center"); err == nil {
-			t.Fatal("expected error for missing '='")
+			t.Fatal("expected error for missing separator")
 		}
 	})
 
 	t.Run("empty key errors", func(t *testing.T) {
 		if _, err := ParseLabelsFlag("=platform"); err == nil {
+			t.Fatal("expected error for empty key")
+		}
+	})
+
+	t.Run("empty key via colon errors", func(t *testing.T) {
+		if _, err := ParseLabelsFlag(":platform"); err == nil {
 			t.Fatal("expected error for empty key")
 		}
 	})

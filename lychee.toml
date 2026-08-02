@@ -190,4 +190,7 @@ exclude = [
   # both verified to return 200 outside CI via curl.
   "github\\.com/github/github-mcp-server/blob/main/docs/installation-guides/install-gemini-cli\\.md",
   "github\\.com/99designs/aws-vault/blob/master/USAGE\\.md",
+  # This PDF intermittently times out from CI runners across multiple docs
+  # referencing it; verified to return 200 outside CI via curl.
+  "cis\\.upenn\\.edu/~bcpierce/papers/diff3-short\\.pdf",
 ]
