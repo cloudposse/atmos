@@ -274,6 +274,25 @@ func TestTemplateRendering(t *testing.T) {
 			},
 		},
 		{
+			name:    "cluster install",
+			command: "apply",
+			lifecycle: map[string]any{
+				"operation":           "install",
+				"wait_strategy":       "hookOnly",
+				"timeout":             "5m0s",
+				"chart_hooks_enabled": true,
+				"wait_for_jobs":       false,
+				"rollback_on_failure": false,
+				"install_crds":        true,
+			},
+			contains: []string{
+				"Helm Apply Summary", "Release lifecycle",
+				"| Operation | `install` |",
+				"| Install CRDs | `true` |",
+			},
+			notContains: []string{"Cleanup on failure", "Maximum history"},
+		},
+		{
 			name:    "external apply",
 			command: "apply",
 			lifecycle: map[string]any{
