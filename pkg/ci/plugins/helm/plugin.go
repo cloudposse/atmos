@@ -40,8 +40,10 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 	return []plugin.HookBinding{
 		{Event: "after.helm.template", Handler: p.onAfterOperation},
 		{Event: "after.helm.diff", Handler: p.onAfterOperation},
+		{Event: "after.helm.plan.aggregate", Handler: p.onAfterAggregate},
 		{Event: "after.helm.apply", Handler: p.onAfterOperation},
 		{Event: "after.helm.deploy", Handler: p.onAfterOperation},
+		{Event: "after.helm.apply.aggregate", Handler: p.onAfterAggregate},
 		{Event: "after.helm.delete", Handler: p.onAfterOperation},
 	}
 }

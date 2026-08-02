@@ -191,14 +191,18 @@ func runWithHooks(
 	}
 
 	summary, opErr := runOperation(ctx, atmosConfig, info, operation, spec)
-	runHelmCIHook(helmCIHookParams{
-		ctx:         ctx,
-		atmosConfig: atmosConfig,
-		info:        info,
-		event:       after,
-		summary:     summary,
-		commandErr:  opErr,
-	})
+	if collector := helmBulkCollector(ctx); collector != nil {
+		collector.setSummary(info, summary, opErr)
+	} else {
+		runHelmCIHook(helmCIHookParams{
+			ctx:         ctx,
+			atmosConfig: atmosConfig,
+			info:        info,
+			event:       after,
+			summary:     summary,
+			commandErr:  opErr,
+		})
+	}
 	if opErr != nil {
 		return opErr
 	}

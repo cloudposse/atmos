@@ -42,16 +42,36 @@ func executeBulk(
 		return err
 	}
 
-	return executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
-		Provider:      &ComponentProvider{},
+	provider := component.ComponentProvider(&ComponentProvider{})
+	command := info.SubCommand
+	if command == "" {
+		command = string(operation)
+	}
+	var collector *helmBulkCICollector
+	if supportsHelmAggregateCI(command) {
+		collector = newHelmBulkCICollector(command)
+		if ctx.Flags == nil {
+			ctx.Flags = make(map[string]any)
+		}
+		ctx.Flags[helmBulkCICollectorFlag] = collector
+		defer delete(ctx.Flags, helmBulkCICollectorFlag)
+		provider = &bulkCollectingProvider{ComponentProvider: &ComponentProvider{}, collector: collector}
+	}
+
+	graphErr := executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
+		Provider:      provider,
 		AtmosConfig:   atmosConfig,
 		Info:          info,
 		Stacks:        stacks,
 		ComponentType: cfg.HelmComponentType,
-		SubCommand:    string(operation),
+		SubCommand:    command,
 		Flags:         ctx.Flags,
 		Selection:     selection,
 	})
+	if collector != nil {
+		runHelmAggregateCIHook(ctx, atmosConfig, info, collector.resultSet(), graphErr)
+	}
+	return graphErr
 }
 
 func authManagerForBulk(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {

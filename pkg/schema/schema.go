@@ -900,6 +900,29 @@ type TerraformPlanCIResult struct {
 	Error      string
 }
 
+// HelmCIResultSet contains deterministic per-node Helm results for one
+// graph-backed plan or apply run.
+type HelmCIResultSet struct {
+	Command string
+	Results []HelmCIResult
+}
+
+// HelmCIResult contains the execution outcome and structured Helm summary for
+// one component in a graph-backed run.
+type HelmCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	ExitCode   int
+	Summary    map[string]any
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
+}
+
 // KubernetesCIResult contains the compact result data rendered into native CI
 // job summaries for one Kubernetes component command.
 type KubernetesCIResult struct {
