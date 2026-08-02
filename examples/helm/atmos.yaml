@@ -166,7 +166,7 @@ commands:
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
       - command: >-
-          releases=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get secrets -l owner=helm,name=demo -o name);
+          if ! releases=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get secrets -l owner=helm,name=demo -o name); then echo "failed to query Helm release records after delete dry-run"; exit 1; fi;
           if [ -z "$releases" ]; then echo "delete dry-run removed the Helm release record"; exit 1; fi
       - atmos helm delete demo -s dev --identity local-k3s
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
