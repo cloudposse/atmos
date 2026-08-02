@@ -16,6 +16,8 @@ import (
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // memoryActionContext builds an actionContext backed by Helm's in-memory storage
@@ -153,6 +155,7 @@ func TestApplyReleaseHonorsCanceledContext(t *testing.T) {
 
 	_, err := applyRelease(ctx, spec, false)
 	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, errUtils.ErrHelmReleaseUpgrade)
 
 	deployed, getErr := getDeployedManifest(spec.ReleaseName, spec.Namespace)
 	require.NoError(t, getErr)
