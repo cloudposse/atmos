@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -188,6 +189,20 @@ func processComponentConfig(
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
 		return fmt.Errorf("no config found for the component '%s' in the stack manifest '%s'", component, stack)
 	}
+
+	// Shallow-clone the component section so top-level mutations by downstream code
+	// (ProcessStacks injecting `atmos_component`/`workspace`/`sources`/`deps`/etc.,
+	// and mergeGlobalAuthConfig installing the merged `auth` section) never write into
+	// the map tree owned by the shared FindStacksMap cache. DAG-scheduled bulk commands
+	// (`terraform <cmd> --all/--affected/--query`) run ProcessStacks concurrently, and
+	// all workers share that cache, so an in-place write here is a data race
+	// (`fatal error: concurrent map iteration and map write`).
+	//
+	// INVARIANT: nested maps (`vars`, `settings`, `metadata`, etc.) still alias the
+	// cache and MUST be treated as read-only. Code that needs to transform them must
+	// build a new tree (as template processing and ProcessCustomYamlTags already do).
+	// TestProcessStacksDoesNotMutateSharedStacksMapCache enforces this invariant.
+	componentSection = maps.Clone(componentSection)
 
 	if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
 		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack manifest '%s'", component, stack)
@@ -383,9 +398,6 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	return hex.EncodeToString(hash[:])
 }
 
-// FindStacksMap processes stack config and returns a map of all stacks.
-// Results are cached to avoid re-processing the same YAML files multiple times
-// within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
 // ClearFindStacksMapCache clears the FindStacksMap cache.
 func ClearFindStacksMapCache() {
 	defer perf.Track(nil, "exec.ClearFindStacksMapCache")()
@@ -396,6 +408,16 @@ func ClearFindStacksMapCache() {
 	findStacksMapCacheMu.Unlock()
 }
 
+// FindStacksMap processes stack config and returns a map of all stacks.
+// Results are cached to avoid re-processing the same YAML files multiple times
+// within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
+//
+// IMPORTANT: on a cache hit the returned maps are the cache's own maps, shared by
+// reference across all callers and goroutines (bulk terraform commands run
+// ProcessStacks concurrently against them). Callers must treat both returned maps
+// as strictly read-only. ProcessComponentConfig shallow-clones the per-component
+// section before handing it out; any new code that needs to mutate stack or
+// component config must copy first.
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -902,6 +924,29 @@ func processStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// Spacelift stack and Atlantis project names must be set before template
+	// processing below: stack-level defaults (e.g. `tags.spacelift_stack:
+	// "{{ .spacelift_stack }}"`) reference them by name, and the template context
+	// is a snapshot of ComponentSection taken before templates run. Both builders
+	// only depend on ComponentSettingsSection/ComponentVarsSection/ComponentFromArg/
+	// Stack, all already populated at this point, so computing them here (instead
+	// of after templates) doesn't lose any information.
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
 	// Component mocks are literal fixture data. Keep them out of template and YAML
 	// function processing so a mock cannot resolve the real dependency it is meant
 	// to replace when --use-mocks is enabled.
@@ -1005,24 +1050,6 @@ func processStacks(
 	}
 	if hasLiteralMocks {
 		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
-	}
-
-	// Spacelift stack.
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if spaceliftStackName != "" {
-		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
-	}
-
-	// Atlantis project.
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if atlantisProjectName != "" {
-		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
 
 	// Process the ENV variables from the `env` section.

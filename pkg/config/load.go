@@ -389,8 +389,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		if err == nil && gitRoot != "" && gitRoot != "." {
 			log.Debug("Loading .atmos.d from git root", "path", gitRoot)
 			if err := mergeDefaultImports(gitRoot, v); err != nil {
+				if !errors.Is(err, errUtils.ErrAtmosDirConfigNotFound) {
+					return atmosConfig, err
+				}
 				log.Trace("Failed to load .atmos.d from git root", "path", gitRoot, "error", err)
-				// Non-fatal: continue with default config.
+				// Non-fatal: directory doesn't exist, continue with default config.
 			}
 		}
 	}
@@ -1194,6 +1197,9 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// Process default imports (e.g., .atmos.d) first.
 	// These don't need the main config to be loaded.
 	if err := mergeDefaultImports(configDir, tempViper); err != nil {
+		if !errors.Is(err, errUtils.ErrAtmosDirConfigNotFound) {
+			return nil, err
+		}
 		log.Debug("error process default imports", "path", configDir, "error", err)
 	}
 	defaultCommands := tempViper.Get(commandsKey)
@@ -1435,6 +1441,9 @@ func loadAtmosConfigsFromDirectoryWithMerge(searchPattern string, dst *viper.Vip
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
 // from a specified directory into the destination configuration.
 // It also searches the git/worktree root for .atmos.d with lower priority.
+// Returns an error (wrapping errUtils.ErrParseFile) if a file in either
+// directory fails to parse; errUtils.ErrAtmosDirConfigNotFound is returned
+// when dirPath itself doesn't exist, which callers treat as non-fatal.
 func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	isDir := false
 	if stat, err := os.Stat(dirPath); err == nil && stat.IsDir() {
@@ -1452,27 +1461,30 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 
 	// Search git/worktree root FIRST (lower priority - gets overridden by config dir).
 	// This enables .atmos.d to be discovered at the repo root even when running from subdirectories.
-	loadAtmosDFromGitRoot(dirPath, dst)
+	gitRootErr := loadAtmosDFromGitRoot(dirPath, dst)
 
 	// Search the config directory (higher priority - loaded second, overrides git root).
 	log.Trace("Checking for .atmos.d in config directory", "path", dirPath)
-	loadAtmosDFromDirectory(dirPath, dst)
+	dirErr := loadAtmosDFromDirectory(dirPath, dst)
 
-	return nil
+	return errors.Join(gitRootErr, dirErr)
 }
 
 // loadAtmosDFromGitRoot searches for .atmos.d/ at the git repository root
 // and loads its configuration if different from the config directory.
-func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) {
+func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) error {
 	gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
 	if err != nil || gitRoot == "" || gitRoot == "." {
-		return
+		// Not being able to determine a git root is not a user-facing error: it just
+		// means the opportunistic git-root .atmos.d check is skipped.
+		return nil //nolint:nilerr // git-root detection failure only skips an optional check, not fatal.
 	}
 
 	absGitRoot, absErr := filepath.Abs(gitRoot)
 	absDirPath, dirErr := filepath.Abs(dirPath)
 	if absErr != nil || dirErr != nil {
-		return
+		// Same as above: path resolution failure only skips the optional check.
+		return nil //nolint:nilerr // path resolution failure only skips an optional check, not fatal.
 	}
 
 	// Check if git root is the same as config directory.
@@ -1482,29 +1494,32 @@ func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) {
 		pathsEqual = strings.EqualFold(absGitRoot, absDirPath)
 	}
 	if pathsEqual {
-		return
+		return nil
 	}
 
 	// Skip if excluded for testing.
 	if shouldExcludePathForTesting(absGitRoot) {
-		return
+		return nil
 	}
 
 	log.Trace("Checking for .atmos.d in git root", "path", absGitRoot)
-	loadAtmosDFromDirectory(absGitRoot, dst)
+	return loadAtmosDFromDirectory(absGitRoot, dst)
 }
 
 // loadAtmosDFromDirectory searches for atmos.d/ and .atmos.d/ in the given directory
 // and loads their configurations into the destination viper instance.
-func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
+// Returns an error (wrapping errUtils.ErrParseFile) if a file in either
+// directory fails to parse. Stat/permission errors on the directories
+// themselves remain non-fatal and are only logged.
+func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) error {
+	var atmosDErr, dotAtmosDErr error
+
 	// Search for `atmos.d/` configurations.
 	atmosDPath := filepath.Join(filepath.FromSlash(dirPath), "atmos.d")
 	if stat, err := os.Stat(atmosDPath); err == nil && stat.IsDir() {
 		log.Debug("Found atmos.d directory, loading configurations", "path", atmosDPath)
 		searchPattern := filepath.Join(atmosDPath, "**", "*")
-		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-			log.Debug("Failed to load atmos.d configs", "error", err, "path", atmosDPath)
-		}
+		atmosDErr = loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d")
 	} else if err != nil && !os.IsNotExist(err) {
 		log.Debug("Failed to stat atmos.d directory", "path", atmosDPath, "error", err)
 	} else {
@@ -1516,14 +1531,14 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 	if stat, err := os.Stat(dotAtmosDPath); err == nil && stat.IsDir() {
 		log.Debug("Found .atmos.d directory, loading configurations", "path", dotAtmosDPath)
 		searchPattern := filepath.Join(dotAtmosDPath, "**", "*")
-		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-			log.Debug("Failed to load .atmos.d configs", "error", err, "path", dotAtmosDPath)
-		}
+		dotAtmosDErr = loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d")
 	} else if err != nil && !os.IsNotExist(err) {
 		log.Debug("Failed to stat .atmos.d directory", "path", dotAtmosDPath, "error", err)
 	} else {
 		log.Trace("No .atmos.d directory found", "path", dotAtmosDPath)
 	}
+
+	return errors.Join(atmosDErr, dotAtmosDErr)
 }
 
 func importBasePathDeclaration(content []byte) (bool, string, error) {

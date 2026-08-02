@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -954,7 +955,12 @@ func CreateStyledTableWithOptions(header []string, rows [][]string, options Tabl
 
 	// Add blank lines before and after the table for visual separation.
 	lineEnding := utils.GetLineEnding()
-	return lineEnding + t.String() + lineEnding + lineEnding
+
+	// Column padding (padHeadersToWidths/constrainCellsToWidths) pads every column,
+	// including the last, to a fixed width; trim that trailing padding so plain-text/
+	// piped output and snapshots don't carry invisible trailing whitespace.
+	rendered := atmosansi.TrimLinesRightSpaces(t.String())
+	return lineEnding + rendered + lineEnding + lineEnding
 }
 
 // renderDescriptionCells renders markdown inline in the Description column, if present.
