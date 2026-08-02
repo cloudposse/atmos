@@ -1,4 +1,4 @@
-{{- if .Values.hooks.requiredConfigMap }}
+{{- if and .Values.hooks.requiredConfigMap .Values.hooks.validateDependency }}
 {{- $required := lookup "v1" "ConfigMap" .Release.Namespace .Values.hooks.requiredConfigMap }}
 {{- if not $required }}
 {{- fail (printf "required dependency marker ConfigMap %q is not ready" .Values.hooks.requiredConfigMap) }}
