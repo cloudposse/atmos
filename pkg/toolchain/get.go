@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -9,14 +10,48 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+// ToolVersionInfo is the --format=json output shape for a single resolved tool version
+// (i.e. `atmos toolchain get <tool> --format=json`, without --all).
+type ToolVersionInfo struct {
+	Tool      string `json:"tool" yaml:"tool"`
+	Version   string `json:"version" yaml:"version"`
+	Installed bool   `json:"installed" yaml:"installed"`
+}
+
+// ToolVersionListEntry is one entry in ToolVersionList.Versions.
+type ToolVersionListEntry struct {
+	Version   string `json:"version" yaml:"version"`
+	Installed bool   `json:"installed" yaml:"installed"`
+	Default   bool   `json:"default" yaml:"default"`
+}
+
+// ToolVersionList is the --format=json output shape for `atmos toolchain get <tool> --all --format=json`.
+type ToolVersionList struct {
+	Tool           string                 `json:"tool" yaml:"tool"`
+	DefaultVersion string                 `json:"default_version,omitempty" yaml:"default_version,omitempty"`
+	Versions       []ToolVersionListEntry `json:"versions" yaml:"versions"`
+}
+
+// supportedListFormats are the values ListToolVersions accepts for format.
+var supportedListFormats = []string{"table", "plain", "json"}
+
 // ListToolVersions handles the logic for listing tool versions.
-func ListToolVersions(showAll bool, limit int, toolName string) error {
+func ListToolVersions(showAll bool, limit int, toolName, format string) error {
 	defer perf.Track(nil, "toolchain.ListToolVersions")()
+
+	if !slices.Contains(supportedListFormats, format) {
+		return fmt.Errorf("%w: %q (supported: %v)", errUtils.ErrInvalidFlagValue, format, supportedListFormats)
+	}
+	if format == "plain" && showAll {
+		return errUtils.ErrToolchainPlainFormatWithAllFlag
+	}
 
 	filePath := GetToolVersionsFilePath()
 	installer := NewInstaller()
@@ -34,10 +69,17 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 
 	versions = dedupeAndSort(versions)
 	installed := markInstalled(installer, owner, repo, versions)
-	installedStyle, notInstalledStyle := selectStyles()
 
-	printVersions(versions, defaultVersion, installed, &installedStyle, &notInstalledStyle)
-	return nil
+	switch format {
+	case "plain":
+		return printVersionsPlain(defaultVersion)
+	case "json":
+		return printVersionsJSON(resolvedKey, showAll, versions, defaultVersion, installed)
+	default:
+		installedStyle, notInstalledStyle := selectStyles()
+		printVersionsTable(versions, defaultVersion, installed, &installedStyle, &notInstalledStyle)
+		return nil
+	}
 }
 
 type versionOptions struct {
@@ -124,7 +166,7 @@ func selectStyles() (lipgloss.Style, lipgloss.Style) {
 	return lipgloss.NewStyle().Bold(true), lipgloss.NewStyle()
 }
 
-func printVersions(versions []string, defaultVersion string, installed map[string]bool, installedStyle, notInstalledStyle *lipgloss.Style) {
+func printVersionsTable(versions []string, defaultVersion string, installed map[string]bool, installedStyle, notInstalledStyle *lipgloss.Style) {
 	for _, v := range versions {
 		indicator := " "
 		if v == defaultVersion {
@@ -136,6 +178,37 @@ func printVersions(versions []string, defaultVersion string, installed map[strin
 			ui.Writef("%s %s", indicator, notInstalledStyle.Render(v))
 		}
 	}
+}
+
+// printVersionsPlain writes just the bare resolved version string to the data channel (stdout),
+// with no styling — intended for shell substitution in scripts/CI.
+func printVersionsPlain(defaultVersion string) error {
+	return data.Writeln(defaultVersion)
+}
+
+// printVersionsJSON writes structured tool-version data to the data channel (stdout).
+func printVersionsJSON(resolvedKey string, showAll bool, versions []string, defaultVersion string, installed map[string]bool) error {
+	if showAll {
+		entries := make([]ToolVersionListEntry, 0, len(versions))
+		for _, v := range versions {
+			entries = append(entries, ToolVersionListEntry{
+				Version:   v,
+				Installed: installed[v],
+				Default:   v == defaultVersion,
+			})
+		}
+		return data.WriteJSON(ToolVersionList{
+			Tool:           resolvedKey,
+			DefaultVersion: defaultVersion,
+			Versions:       entries,
+		})
+	}
+
+	return data.WriteJSON(ToolVersionInfo{
+		Tool:      resolvedKey,
+		Version:   defaultVersion,
+		Installed: installed[defaultVersion],
+	})
 }
 
 // sortVersionsSemver sorts versions in semantic version order.
