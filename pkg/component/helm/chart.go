@@ -75,6 +75,9 @@ func renderManifest(ctx context.Context, spec *chartSpec) (string, error) {
 
 	manifest, err := runInstall(ctx, client, settings, spec)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
 			return "", err
 		}
@@ -196,6 +199,9 @@ func loadChartForAction(
 			loaded, err = loader.Load(chartPath)
 			if err != nil {
 				return nil, fmt.Errorf("%w: failed to reload Helm chart %q after dependency update: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+			}
+			if depErr := action.CheckDependencies(loaded, dependencies); depErr != nil {
+				return nil, fmt.Errorf("%w: Helm chart %q is still missing dependencies after 'helm dependency update': %w", errUtils.ErrHelmRenderFailed, chartPath, depErr)
 			}
 		}
 	}

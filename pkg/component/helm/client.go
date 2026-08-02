@@ -137,6 +137,9 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 
 	rel, err := client.RunWithContext(ctx, spec.ReleaseName, loaded, spec.Values)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
 			return "", fmt.Errorf("failed to upgrade Helm release %q: %w", spec.ReleaseName, err)
 		}

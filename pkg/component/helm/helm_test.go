@@ -278,6 +278,19 @@ func TestRenderManifestReportsMissingDependenciesOnce(t *testing.T) {
 	assert.Contains(t, err.Error(), "--dependency-update")
 }
 
+func TestRenderManifestPreservesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := renderManifest(ctx, &chartSpec{
+		Chart:       filepath.Join("testdata", "chart"),
+		ReleaseName: "unit",
+		Namespace:   "testns",
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+}
+
 func TestLoadChartUpdatesMissingDependenciesWhenRequested(t *testing.T) {
 	testdataRoot := t.TempDir()
 	require.NoError(t, os.CopyFS(testdataRoot, os.DirFS("testdata")))
