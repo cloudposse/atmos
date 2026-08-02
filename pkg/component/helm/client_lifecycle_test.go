@@ -223,13 +223,11 @@ func TestUpgradeReleaseHistoryRetention(t *testing.T) {
 		maxHistory    int
 		override      bool
 		expectedCount int
-		expected      []int
 	}{
 		{
 			name:          "default bounded history",
 			releaseName:   "history",
 			expectedCount: cfg.HelmDefaultMaxHistory,
-			expected:      []int{4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
 		},
 		{
 			name:          "explicit unlimited history",
@@ -237,7 +235,6 @@ func TestUpgradeReleaseHistoryRetention(t *testing.T) {
 			maxHistory:    0,
 			override:      true,
 			expectedCount: revisions,
-			expected:      []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
 		},
 	}
 
@@ -259,7 +256,12 @@ func TestUpgradeReleaseHistoryRetention(t *testing.T) {
 			history, err := actx.cfg.Releases.History(spec.ReleaseName)
 			require.NoError(t, err)
 			assert.Len(t, history, tt.expectedCount)
-			assert.Equal(t, tt.expected, releaseVersions(t, history))
+			expected := make([]int, tt.expectedCount)
+			firstRevision := revisions - tt.expectedCount + 1
+			for i := range expected {
+				expected[i] = firstRevision + i
+			}
+			assert.Equal(t, expected, releaseVersions(t, history))
 		})
 	}
 }
