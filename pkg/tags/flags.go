@@ -26,7 +26,7 @@ func ParseTagsFlag(input string) []string {
 	return result
 }
 
-// ParseLabelsFlag parses a comma-separated key=value list into a map[string]string.
+// ParseLabelsFlag parses a comma-separated key=value (or key:value) list into a map[string]string.
 func ParseLabelsFlag(input string) (map[string]string, error) {
 	defer perf.Track(nil, "tags.ParseLabelsFlag")()
 
@@ -40,12 +40,28 @@ func ParseLabelsFlag(input string) (map[string]string, error) {
 		if pair == "" {
 			continue
 		}
-		key, value, found := strings.Cut(pair, "=")
-		key = strings.TrimSpace(key)
-		if !found || key == "" {
-			return nil, fmt.Errorf("%w: invalid label %q, expected key=value", errUtils.ErrInvalidFlag, pair)
+		key, value, err := splitLabelPair(pair)
+		if err != nil {
+			return nil, err
 		}
-		result[key] = strings.TrimSpace(value)
+		result[key] = value
 	}
 	return result, nil
+}
+
+// splitLabelPair splits a single "key=value" or "key:value" pair on whichever
+// separator (= or :) occurs first in the string, so a value that itself
+// contains the other separator is preserved verbatim (e.g. "key:val=ue" ->
+// {"key": "val=ue"}; "key=val:ue" -> {"key": "val:ue"}).
+func splitLabelPair(pair string) (string, string, error) {
+	sepIdx := strings.IndexAny(pair, "=:")
+	if sepIdx == -1 {
+		return "", "", fmt.Errorf("%w: invalid label %q, expected key=value or key:value", errUtils.ErrInvalidFlag, pair)
+	}
+
+	key := strings.TrimSpace(pair[:sepIdx])
+	if key == "" {
+		return "", "", fmt.Errorf("%w: invalid label %q, expected key=value or key:value", errUtils.ErrInvalidFlag, pair)
+	}
+	return key, strings.TrimSpace(pair[sepIdx+1:]), nil
 }

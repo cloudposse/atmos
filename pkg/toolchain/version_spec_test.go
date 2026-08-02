@@ -85,6 +85,20 @@ func TestParseVersionSpec(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name:      "semver release candidate (issue #2839)",
+			input:     "1.225.0-rc.3",
+			wantType:  VersionTypeSemver,
+			wantValue: "1.225.0-rc.3",
+			wantErr:   false,
+		},
+		{
+			name:      "semver release candidate with v prefix",
+			input:     "v1.225.0-rc.3",
+			wantType:  VersionTypeSemver,
+			wantValue: "v1.225.0-rc.3",
+			wantErr:   false,
+		},
+		{
 			name:      "latest keyword",
 			input:     "latest",
 			wantType:  VersionTypeSemver,
@@ -655,9 +669,18 @@ func TestIsValidSemver(t *testing.T) {
 		{"1.", false},
 		{".1", false},
 		{"1..2", false},
-		{"1.2.3.4.5", true}, // Valid - multiple parts allowed.
-		{"1.2.a", false},    // Non-numeric part.
-		{"1.2-beta", false}, // Pre-release suffix not supported in simple check.
+		{"1.2.3.4.5", false}, // Not valid semver - more than major.minor.patch.
+		{"1.2.a", false},     // Non-numeric part.
+		{"1.2-beta", true},   // Two-part version with pre-release suffix.
+
+		// Release-candidate / pre-release / build-metadata suffixes (issue #2839).
+		{"1.225.0-rc.3", true},
+		{"v1.225.0-rc.3", true},
+		{"1.2.3-alpha.1", true},
+		{"1.2.3+build.5", true},
+		{"1.2.3-rc.1+build.5", true},
+		{"1.2.3-01", false}, // Leading-zero numeric pre-release identifier is invalid.
+		{"1.2.3-", false},   // Empty pre-release identifier.
 	}
 
 	for _, tt := range tests {

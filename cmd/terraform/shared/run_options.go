@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
@@ -52,6 +53,10 @@ type RunOptions struct {
 	Labels     map[string]string
 	All        bool
 	Affected   bool
+	// IncludeDependencies/IncludeDependents expand the selection with the
+	// dependency closure: 0 = off, -1 = unlimited depth, N>0 = N levels.
+	IncludeDependencies int
+	IncludeDependents   int
 
 	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
@@ -107,6 +112,13 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		return nil, err
 	}
 	opts.Labels = labels
+
+	if opts.IncludeDependencies, err = flags.ParseClosureDepth("include-dependencies", v.GetString("include-dependencies")); err != nil {
+		return nil, err
+	}
+	if opts.IncludeDependents, err = flags.ParseClosureDepth("include-dependents", v.GetString("include-dependents")); err != nil {
+		return nil, err
+	}
 
 	if err := ValidateRunOptions(opts); err != nil {
 		return nil, err
@@ -164,6 +176,8 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 	info.UploadStatus = opts.UploadStatus
 	info.All = opts.All
 	info.Affected = opts.Affected
+	info.IncludeDependencies = opts.IncludeDependencies
+	info.IncludeDependents = opts.IncludeDependents
 	info.Query = opts.Query
 	info.MaxConcurrency = opts.MaxConcurrency
 	info.TerraformFailureMode = opts.FailureMode

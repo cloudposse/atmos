@@ -211,9 +211,11 @@ func buildMetadataMap(instance *schema.Instance, metadata *instanceMetadata) map
 		"component_base":   metadata.componentVal,
 		"inherits":         metadata.inherits,
 		"description":      metadata.description,
-		"metadata":         instance.Metadata, // Full metadata for advanced filtering.
-		"vars":             instance.Vars,     // Expose vars for template access.
-		"settings":         instance.Settings, // Expose settings for template access.
-		"env":              instance.Env,      // Expose env for template access.
+		"tags":             getStringSliceFromMetadata(instance.Metadata, fieldTags), // Flattened for --tags filtering.
+		"labels":           getStringMapFromMetadata(instance.Metadata, fieldLabels), // Flattened for --labels filtering.
+		"metadata":         instance.Metadata,                                        // Full metadata for advanced filtering.
+		"vars":             instance.Vars,                                            // Expose vars for template access.
+		"settings":         instance.Settings,                                        // Expose settings for template access.
+		"env":              instance.Env,                                             // Expose env for template access.
 	}
 }

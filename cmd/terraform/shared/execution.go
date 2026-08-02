@@ -14,6 +14,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var resolveComponentFromPath = e.ResolveComponentFromPath
@@ -53,6 +54,20 @@ func CheckTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 	if HasSingleComponentFlags(info) && HasMultiComponentFlags(info) {
 		return errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
 	}
+
+	// The dependency-closure flags expand a multi-component selection, so they
+	// require one (--all, --components, --query, -s, --tags, --labels, or --affected).
+	if (info.IncludeDependencies != 0 || info.IncludeDependents != 0) &&
+		!info.Affected && !IsMultiComponentExecution(info) {
+		return errUtils.ErrClosureFlagsRequireMultiComponent
+	}
+
+	// Destroying the dependencies of a selection tears down shared prerequisites
+	// that other components may still rely on — allowed, but worth a warning.
+	if info.SubCommand == "destroy" && info.IncludeDependencies != 0 {
+		ui.Warning("--include-dependencies with destroy also destroys shared prerequisites of the selected components")
+	}
+
 	return nil
 }
 

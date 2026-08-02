@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/Masterminds/semver/v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -196,7 +198,8 @@ func isAllDigits(s string) bool {
 }
 
 // isValidSemver checks if a string looks like a semantic version.
-// Accepts patterns like: "1.2.3", "v1.2.3", "1.0.0", "v0.1.0".
+// Accepts patterns like: "1.2.3", "v1.2.3", "1.0.0", "v0.1.0", and
+// pre-release/build-metadata suffixes like "1.2.3-rc.3", "1.2.3+build.5".
 // Also accepts "latest" as a special keyword.
 func isValidSemver(s string) bool {
 	// Special case: "latest" is a valid version keyword.
@@ -204,31 +207,18 @@ func isValidSemver(s string) bool {
 		return true
 	}
 
-	// Strip optional 'v' prefix.
-	version := strings.TrimPrefix(s, "v")
-
-	// Must contain at least one dot.
-	if !strings.Contains(version, ".") {
+	// Require at least one dot so bare numbers (PR numbers) and bare "v1"
+	// are rejected here and left to the other classifiers.
+	if !strings.Contains(s, ".") {
 		return false
 	}
 
-	// Split by dots and validate each part is numeric.
-	parts := strings.Split(version, ".")
-	if len(parts) < 2 {
-		return false
-	}
-
-	for _, part := range parts {
-		if len(part) == 0 {
-			return false
-		}
-		for _, r := range part {
-			if r < '0' || r > '9' {
-				return false
-			}
-		}
-	}
-	return true
+	// Delegate to the vendored semver library (already used elsewhere in this
+	// package, e.g. get.go, list.go) instead of hand-rolling semver grammar:
+	// a naive dot-split can't distinguish version-core dots from the dots
+	// inside a pre-release identifier (e.g. "rc.3" in "1.2.3-rc.3").
+	_, err := semver.NewVersion(s)
+	return err == nil
 }
 
 // isValidRef checks if a string is a plausible git ref name (branch or tag).

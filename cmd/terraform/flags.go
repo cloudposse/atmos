@@ -139,7 +139,7 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Name:        "labels",
 		Shorthand:   "",
 		Default:     "",
-		Description: "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		Description: "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox",
 		EnvVars:     []string{"ATMOS_LABELS"},
 	})
 }
@@ -199,14 +199,27 @@ func registerSSHFlags(registry *flags.FlagRegistry) {
 	})
 }
 
-// registerAffectedBehaviorFlags adds flags for affected command behavior.
+// registerAffectedBehaviorFlags adds the dependency-closure flags (usable
+// with every multi-component selection: --all, --components, --query, -s,
+// --tags, --labels, and --affected) plus affected-specific behavior flags.
+// The closure flags carry an optional depth: bare means unlimited,
+// --include-dependencies=N bounds the expansion to N levels.
 func registerAffectedBehaviorFlags(registry *flags.FlagRegistry) {
-	registry.Register(&flags.BoolFlag{
+	registry.Register(&flags.StringFlag{
 		Name:        "include-dependents",
 		Shorthand:   "",
-		Default:     false,
-		Description: "For each affected component, detect the dependent components and process them in the dependency order",
+		Default:     "",
+		Description: "Also process everything that depends on the selected components, in dependency order (reversed for destroy). Optionally bound the expansion: --include-dependents=N",
 		EnvVars:     []string{"ATMOS_INCLUDE_DEPENDENTS"},
+		NoOptDefVal: flags.ClosureDepthUnlimited,
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "include-dependencies",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Also process everything the selected components depend on (their prerequisites), in dependency order (reversed for destroy). Optionally bound the expansion: --include-dependencies=N",
+		EnvVars:     []string{"ATMOS_INCLUDE_DEPENDENCIES"},
+		NoOptDefVal: flags.ClosureDepthUnlimited,
 	})
 	registry.Register(&flags.BoolFlag{
 		Name:        "clone-target-ref",
