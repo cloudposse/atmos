@@ -96,7 +96,7 @@ var (
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
-	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' (or the deprecated 'stacks.name_pattern') needs to be specified in 'atmos.yaml'")
 	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
@@ -178,6 +178,7 @@ var (
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+	ErrClosureFlagsRequireMultiComponent                     = errors.New("the `--include-dependencies` and `--include-dependents` flags expand a multi-component selection and require one of `--all`, `--components`, `--query`, `-s`, `--tags`, `--labels`, or `--affected`")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
@@ -330,6 +331,12 @@ var (
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
+
+	// ErrForbiddenSelectorFunction enforces the selector purity contract:
+	// metadata.tags/metadata.labels drive scoping decisions before evaluation,
+	// so by design they may not contain constructs that require authentication
+	// or process execution (e.g. !terraform.state, !store, !exec, atmos.Component).
+	ErrForbiddenSelectorFunction = errors.New("forbidden function in labels/tags selector")
 
 	// Dependency management errors.
 	ErrDependencyConstraint = errors.New("dependency constraint validation failed")

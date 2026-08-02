@@ -8,6 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestSourcesCommand tests that the sources command has the correct structure.
@@ -57,6 +61,96 @@ func TestSourcesOptions(t *testing.T) {
 	assert.Equal(t, "json", opts.Format)
 	assert.Equal(t, "dev", opts.Stack)
 	assert.Equal(t, "vpc", opts.Component)
+}
+
+// TestFetchAndFilterSources_InvalidLabelsFlag proves a malformed LabelsRaw
+// surfaces as an error from fetchAndFilterSources' tags.ParseLabelsFlag call,
+// rather than being silently ignored.
+func TestFetchAndFilterSources_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	opts := &SourcesOptions{
+		AtmosConfig: &atmosConfig,
+		LabelsRaw:   "not-a-valid-label",
+	}
+
+	_, err = fetchAndFilterSources(opts)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag,
+		"the failure must come from label parsing, not an unrelated config/describe error")
+	assert.Contains(t, err.Error(), "not-a-valid-label")
+}
+
+// TestFetchAndFilterSources_TagsLabelsFilter proves a valid --tags/--labels
+// filter reaches filterSourcesByTagsLabels: since the complete fixture's
+// components carry no metadata.tags/metadata.labels, a filter that requires
+// one must exclude every source.
+func TestFetchAndFilterSources_TagsLabelsFilter(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	opts := &SourcesOptions{
+		AtmosConfig: &atmosConfig,
+		Tags:        []string{"nonexistent-tag"},
+	}
+
+	sources, err := fetchAndFilterSources(opts)
+	require.NoError(t, err)
+	assert.Empty(t, sources, "a tag no component carries must exclude every source")
+}
+
+// TestFetchAndFilterSources_ScopesDescribeCall proves --tags/--labels reach
+// executeDescribeStacksForSources as scoping selectors (not nil, nil),
+// matching the scope-before-evaluate pattern used by the sibling list
+// commands: out-of-scope components must never reach auth/template/
+// YAML-function evaluation. See
+// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
+func TestFetchAndFilterSources_ScopesDescribeCall(t *testing.T) {
+	orig := executeDescribeStacksForSources
+	defer func() { executeDescribeStacksForSources = orig }()
+
+	var gotTagsFilter []string
+	var gotLabelsFilter map[string]string
+	executeDescribeStacksForSources = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ []string, _ []string, _ []string,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ auth.AuthManager,
+		_ bool,
+		tagsFilter []string,
+		labelsFilter map[string]string,
+		_ e.DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		gotTagsFilter = tagsFilter
+		gotLabelsFilter = labelsFilter
+		return map[string]any{}, nil
+	}
+
+	opts := &SourcesOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Tags:        []string{"prod"},
+		LabelsRaw:   "team=platform",
+	}
+
+	sources, err := fetchAndFilterSources(opts)
+	require.NoError(t, err)
+	assert.Empty(t, sources)
+	assert.Equal(t, []string{"prod"}, gotTagsFilter, "--tags must scope the describe pass, not just post-filter results")
+	assert.Equal(t, map[string]string{"team": "platform"}, gotLabelsFilter, "--labels must scope the describe pass, not just post-filter results")
 }
 
 // TestGetSourcesListColumnsForContext tests dynamic column configuration.
@@ -737,6 +831,102 @@ func TestExtractSourceEntry(t *testing.T) {
 	}
 	entry = extractSourceEntry("dev", "terraform", "vpc", componentData)
 	assert.Nil(t, entry)
+}
+
+// TestExtractSourceEntry_TagsLabels tests that metadata tags/labels flow onto
+// the source entry.
+func TestExtractSourceEntry_TagsLabels(t *testing.T) {
+	componentData := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/vpc",
+			"version": "1.0.0",
+		},
+		"metadata": map[string]any{
+			"tags":   []any{"network", "tier-1"},
+			"labels": map[string]any{"team": "platform"},
+		},
+	}
+
+	entry := extractSourceEntry("dev", "terraform", "vpc", componentData)
+	require.NotNil(t, entry)
+	assert.Equal(t, []string{"network", "tier-1"}, entry["tags"])
+	assert.Equal(t, map[string]string{"team": "platform"}, entry["labels"])
+
+	// No metadata section: nil tags/labels (filter treats them as no match).
+	componentData = map[string]any{
+		"source": map[string]any{
+			"uri": "github.com/example/vpc",
+		},
+	}
+	entry = extractSourceEntry("dev", "terraform", "vpc", componentData)
+	require.NotNil(t, entry)
+	assert.Nil(t, entry["tags"])
+	assert.Nil(t, entry["labels"])
+}
+
+// sourceNamesOf returns the "component" field of each row, for order-preserving assertions.
+func sourceNamesOf(rows []map[string]any) []string {
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r["component"].(string))
+	}
+	return names
+}
+
+// TestFilterSourcesByTagsLabels tests the tags/labels source filter.
+func TestFilterSourcesByTagsLabels(t *testing.T) {
+	sources := []map[string]any{
+		{"component": "vpc", "tags": []string{"network", "tier-1"}, "labels": map[string]string{"team": "platform", "env": "dev"}},
+		{"component": "rds", "tags": []string{"database"}, "labels": map[string]string{"team": "data"}},
+		{"component": "bare", "tags": []string(nil), "labels": map[string]string(nil)},
+	}
+
+	t.Run("no filters is passthrough", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, nil, nil)
+		require.Len(t, result, 3)
+		assert.Equal(t, []string{"vpc", "rds", "bare"}, sourceNamesOf(result))
+	})
+
+	t.Run("tags only, any-match", func(t *testing.T) {
+		// Neither tag alone appears on more than one row, but requesting both
+		// as an any-match still returns each row exactly once (not duplicated).
+		result := filterSourcesByTagsLabels(sources, []string{"network", "database"}, nil)
+		require.Len(t, result, 2)
+		assert.Equal(t, []string{"vpc", "rds"}, sourceNamesOf(result))
+	})
+
+	t.Run("tags only, single tag", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, []string{"network"}, nil)
+		require.Len(t, result, 1)
+		assert.Equal(t, "vpc", result[0]["component"])
+	})
+
+	t.Run("labels only, single label", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, nil, map[string]string{"team": "data"})
+		require.Len(t, result, 1)
+		assert.Equal(t, "rds", result[0]["component"])
+	})
+
+	t.Run("labels only, all-match requires every requested label", func(t *testing.T) {
+		// vpc has both team=platform and env=dev.
+		result := filterSourcesByTagsLabels(sources, nil, map[string]string{"team": "platform", "env": "dev"})
+		require.Len(t, result, 1)
+		assert.Equal(t, "vpc", result[0]["component"])
+
+		// rds has team=data but no env label at all: a multi-label all-match must exclude it.
+		result = filterSourcesByTagsLabels(sources, nil, map[string]string{"team": "data", "env": "dev"})
+		assert.Empty(t, result, "all-match must require every requested label, not just one")
+	})
+
+	t.Run("tags and labels must match the same row", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, []string{"network"}, map[string]string{"team": "data"})
+		assert.Empty(t, result)
+	})
+
+	t.Run("rows without metadata never match active filters", func(t *testing.T) {
+		result := filterSourcesByTagsLabels(sources, []string{"anything"}, nil)
+		assert.Empty(t, result)
+	})
 }
 
 // TestExtractSourcesFromStackData tests extraction from a single stack's data.
