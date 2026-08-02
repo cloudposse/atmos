@@ -1537,6 +1537,7 @@ var (
 	ErrHelmLifecycleFlagInapplicable = errors.New("helm release lifecycle flag does not apply to selected operation")
 	ErrHelmLifecycleExternalTarget   = errors.New("helm release lifecycle flags require a Kubernetes target")
 	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
+	ErrHelmReleaseUpgrade            = errors.New("failed to upgrade helm release")
 	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
 )
 

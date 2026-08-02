@@ -123,7 +123,7 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 
 	chartPath, err := client.LocateChart(chartRef, settings)
 	if err != nil {
-		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
+		return "", fmt.Errorf("%w: failed to locate Helm chart %q: %w", errUtils.ErrHelmRenderFailed, spec.Chart, err)
 	}
 
 	loaded, err := loadChartForAction(ctx, chartPath, settings, client.GetRegistryClient(), spec.DependencyUpdate)

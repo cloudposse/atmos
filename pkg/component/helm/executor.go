@@ -181,6 +181,9 @@ func runWithHooks(
 		}
 		emitLifecycleWarnings(spec.Lifecycle.Warnings)
 	}
+	if err := ctx.GoContext().Err(); err != nil {
+		return err
+	}
 	if operation != OperationDelete {
 		if err := setupRepositories(spec.Repositories); err != nil {
 			return err

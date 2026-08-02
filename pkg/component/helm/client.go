@@ -140,7 +140,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
 			return "", fmt.Errorf("failed to upgrade Helm release %q: %w", spec.ReleaseName, err)
 		}
-		return "", err
+		return "", fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUpgrade, spec.ReleaseName, err)
 	}
 	rendered, ok := rel.(*release.Release)
 	if !ok {

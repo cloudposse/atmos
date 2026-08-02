@@ -241,6 +241,39 @@ func TestRunWithHooks_CanceledContextSkipsHooksAndRepositories(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+func TestRunWithHooks_CanceledDuringPreparationSkipsRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		setupRepositories = originalSetup
+	})
+
+	goContext, cancel := context.WithCancel(context.Background())
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		cancel()
+		return &hooks.Hooks{}, nil
+	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("canceled operation must not set up repositories")
+		return nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "apps/app",
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{"chart": "bitnami/nginx", "name": "app"},
+	}
+	err := runWithHooks(
+		&component.ExecutionContext{Context: goContext, Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationApply,
+		"",
+	)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestRunWithHooks_GetHooksError(t *testing.T) {
 	originalHooks := getHooks
 	t.Cleanup(func() { getHooks = originalHooks })
