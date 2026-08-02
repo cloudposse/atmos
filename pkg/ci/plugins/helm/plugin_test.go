@@ -279,7 +279,12 @@ func TestTemplateRendering(t *testing.T) {
 			lifecycle: map[string]any{
 				"applied": false, "target_kind": "git", "reason": "external_target",
 			},
-			contains:    []string{"Helm Apply Summary", "external_target"},
+			contains: []string{
+				"Helm Apply Summary",
+				"| Applied | `false` |",
+				"| Target kind | `git` |",
+				"| Reason | `external_target` |",
+			},
 			notContains: []string{"Wait strategy", "Timeout"},
 		},
 		{
@@ -292,7 +297,10 @@ func TestTemplateRendering(t *testing.T) {
 				"chart_hooks_enabled": false,
 			},
 			contains: []string{
-				"Helm Delete Summary", "Release lifecycle", "Wait strategy", "legacy", "10m0s",
+				"Helm Delete Summary", "Release lifecycle",
+				"| Wait strategy | `legacy` |",
+				"| Timeout | `10m0s` |",
+				"| Chart hooks enabled | `false` |",
 			},
 		},
 		{
@@ -301,7 +309,12 @@ func TestTemplateRendering(t *testing.T) {
 			lifecycle: map[string]any{
 				"deleted": false, "target_kind": "git", "reason": "external_target",
 			},
-			contains:    []string{"Helm Delete Summary", "external_target"},
+			contains: []string{
+				"Helm Delete Summary",
+				"| Deleted | `false` |",
+				"| Target kind | `git` |",
+				"| Reason | `external_target` |",
+			},
 			notContains: []string{"Wait strategy", "Timeout"},
 		},
 	}
