@@ -120,7 +120,7 @@ Authentication Configuration
 │        └─ Principal
 │           └─ arn: arn:aws:iam::123456789012:role/DeveloperRole
 └─ okta (okta)
-   └─ URL: https://example.okta.com
+    └─ URL: https://example.okta.com
 ```
 
 The tree format shows the hierarchical relationship between providers and identities. Identities that authenticate through a provider appear as children under that provider's "Identities" section. Identity chains (where one identity assumes another) are shown as nested children - notice how `ops` appears as a child of `admin` since it authenticates via the `admin` identity.

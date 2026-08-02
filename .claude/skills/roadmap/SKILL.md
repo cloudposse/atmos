@@ -14,10 +14,10 @@ development progress.
 ## Core Responsibilities
 
 1. **Update milestone statuses inside `initiatives[].milestones[]`** when features ship — never promote a
-   milestone into `featured[]`.
+  milestone into `featured[]`.
 2. **Link milestones to changelog entries** when announcements are published — but only for user-visible
-   changes (see "No Changelog Posts for Internal-Only Refactors" below). For the post itself, use the
-   `changelog` skill; this skill only owns the `roadmap.js` link.
+  changes (see "No Changelog Posts for Internal-Only Refactors" below). For the post itself, use the
+  `changelog` skill; this skill only owns the `roadmap.js` link.
 3. **Add new milestones** as development plans evolve.
 4. **Update progress percentages** based on milestone completion.
 5. **Add new quarters** as time progresses.
@@ -229,25 +229,25 @@ When adding a new strategic initiative:
 ## Workflow for Updates
 
 1. **Identify what changed**
-   - New feature shipped? → Update milestone status
-   - New changelog published? → Link milestone to changelog
-   - New quarter started? → Update quarter statuses
-   - New work planned? → Add milestones
+  - New feature shipped? → Update milestone status
+  - New changelog published? → Link milestone to changelog
+  - New quarter started? → Update quarter statuses
+  - New work planned? → Add milestones
 
 2. **Edit `website/src/data/roadmap.js`**
-   - Make targeted changes
-   - Recalculate progress percentages
+  - Make targeted changes
+  - Recalculate progress percentages
 
 3. **Verify the build**
-   ```bash
-   cd website && npm run build
-   ```
+  ```bash
+    cd website && npm run build
+  ```
 
 4. **Preview if needed**
-   ```bash
-   cd website && npm run start
-   # Visit http://localhost:3000/roadmap
-   ```
+  ```bash
+    cd website && npm run start
+    # Visit http://localhost:3000/roadmap
+  ```
 
 ## Auditing Roadmap Accuracy
 

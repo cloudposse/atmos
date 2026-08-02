@@ -56,8 +56,8 @@ Removing credentials...
 Successfully logged out from 3 identities
 
 ⚠️  Note: This only removes local credentials. Your browser session
-   may still be active. Visit your identity provider to end your
-   browser session.
+    may still be active. Visit your identity provider to end your
+    browser session.
 ```
 
 ### Pick from a list
@@ -125,7 +125,7 @@ Logging out of one identity is rarely enough, because that identity was reached 
 
 ```shell
 aws-sso → dev-org-admin → dev-admin
-   ↓           ↓              ↓
+    ↓           ↓              ↓
 Removed     Removed        Removed
 ```
 

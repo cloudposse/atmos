@@ -305,16 +305,16 @@ atmos terraform apply my-component -s prod --identity azure-prod
 Matching `az login` means matching every token scope it issues, not just the first one. Atmos requests all three:
 
 1. **Management Token** (`https://management.azure.com/.default`)
-   - Used by: azurerm, azapi providers
-   - Purpose: Azure Resource Manager operations (VMs, networks, storage, etc.)
+    - Used by: azurerm, azapi providers
+    - Purpose: Azure Resource Manager operations (VMs, networks, storage, etc.)
 
 2. **Graph API Token** (`https://graph.microsoft.com/.default`)
-   - Used by: azuread provider
-   - Purpose: Azure Active Directory operations (users, groups, service principals)
+    - Used by: azuread provider
+    - Purpose: Azure Active Directory operations (users, groups, service principals)
 
 3. **KeyVault Token** (`https://vault.azure.net/.default`)
-   - Used by: azurerm provider for KeyVault operations
-   - Purpose: Azure KeyVault secrets, keys, and certificates management
+    - Used by: azurerm provider for KeyVault operations
+    - Purpose: Azure KeyVault secrets, keys, and certificates management
 
 That is what makes Key Vault certificate contacts, secret management, and AD group resources work rather than fail at apply time. Each scope gets its own entry in the MSAL cache, written in the same format the Azure CLI writes, which is why the Terraform providers accept it.
 

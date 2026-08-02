@@ -6,21 +6,27 @@ tags: [feature]
 date: 2026-01-01T12:00:00.000Z
 ---
 
-Two engineers run the same deployment against the same stack and get two different plans. One has Terraform 1.5.7
-on their PATH, the other has 1.9.8, and nothing in the output says which. Tool managers like asdf, Aqua, and tfenv
-exist to fix exactly this, and they work — but each one is another binary to install, another config file to keep
-in sync with the repo, and another thing CI has to bootstrap before it can do anything useful. Atmos now installs
-and pins those tools itself, reading the same `.tool-versions` file asdf already uses and pulling package
-definitions from the Aqua registry.
+Anyone can run Terraform. Installing it everywhere you operate is the part that scales badly — your
+workstation, every other developer's workstation, and every CI runner, on machines that are rarely the same
+distribution. Pinning a different version per environment makes it harder still, because most package
+managers install one version of a package system-wide and have no notion of concurrent versions. Atmos now
+installs and pins those tools itself, reading the same `.tool-versions` file asdf already uses and pulling
+package definitions from the Aqua registry.
 
 <!--truncate-->
 
 ## The Problem
 
-Tool drift is quiet. Terraform, kubectl, helm, and a dozen other CLIs all keep moving, everyone upgrades on their
-own schedule, and the first sign of trouble is usually a diff that only one person can reproduce.
+Terraform and OpenTofu have to be present everywhere infrastructure gets run. That is a workstation, someone
+else's workstation running a different distribution, and a CI runner that starts from nothing every time. The
+install step is different in each place, and keeping the three in agreement is manual work that nobody owns.
 
-The usual fix is a dedicated tool manager, which comes with its own costs:
+Pinning versions per environment is the second half. Holding dev on one version and production on another,
+and moving each deliberately rather than whenever a package manager decides, is ordinary operational
+practice. Most package managers cannot express it: they install one version system-wide, so running two
+concurrently means working around the package manager rather than with it.
+
+The usual answer is a dedicated tool manager, which comes with its own costs:
 
 - Another binary every contributor and every CI job has to install first
 - Another config file, separate from the stack configuration that actually describes the deployment
@@ -215,10 +221,13 @@ atmos toolchain get terraform --all --limit 10
 
 ## Declaring Tools Alongside Components
 
-Tool requirements can live in stack configuration, at three levels, with the usual inheritance:
+Tool requirements can live in stack configuration, at three levels, with the usual inheritance. This is where
+per-environment pinning comes from: a stack already describes one environment, so a tool version declared in
+it applies to that environment and nothing else. Dev can sit on one version and production on another, and
+each moves when you change its stack rather than when a package manager decides.
 
 ```yaml
-# Global dependencies (applies to all components)
+# Global dependencies (applies to every component in this stack)
 dependencies:
   tools:
     aws-cli: "2.0.0"
