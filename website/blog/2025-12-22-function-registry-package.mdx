@@ -18,7 +18,7 @@ Function execution was tangled up with YAML parsing. A function was not really a
 
 Every Atmos function now resolves through one registry that knows nothing about the format the function was written in. The registry handles lookup by name or by alias, is safe to use concurrently, and groups functions by the phase in which they are evaluated. Adding a function no longer means changing how configuration is parsed, which is also the groundwork for supporting functions in configuration formats beyond YAML, and eventually for functions supplied by plugins rather than built in.
 
-The `!aws.*` functions also share a single identity cache now, rather than each one caching separately.
+The `!aws.*` functions also resolve your identity once per run and reuse it, so a stack with many `!aws.*` calls no longer repeats that lookup for every function.
 
 ## How to Use It
 

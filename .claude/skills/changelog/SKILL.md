@@ -152,11 +152,17 @@ implementation structure — describe behavior only in CLI/config/output terms.
 **The title is in scope.** It is the highest-impact place internals leak, and retitling is safe — the URL
 comes from `slug`, not the title.
 
-- **Violation** — a post titled "New pkg/function Package for Format-Agnostic Function Registry", whose body
-  named `pkg/function/`, `pkg/yaml/`, and `pkg/aws/identity/`. A business reader does not care about Go
-  package paths. Retitled to "One Registry Behind Every Atmos Function", with the body re-expressed as
-  behavior: "every Atmos function now resolves through one registry that knows nothing about the format the
-  function was written in."
+There are three rungs here, and stopping on the middle one is the common mistake:
+
+- **Worst, Go paths.** A post titled "New pkg/function Package for Format-Agnostic Function Registry",
+  naming `pkg/function/`, `pkg/yaml/`, and `pkg/aws/identity/`. A business reader does not care.
+- **Better, but still not it: an architecture noun.** "Every Atmos function now resolves through one
+  registry." The Go path is gone, but "registry" is still internal structure. The reader learns what we
+  built, not what changed for them. Swapping a package path for an abstraction is not the goal.
+- **The target, observable behavior.** What can the reader now see, run, or rely on? Here it was: every
+  function keeps its name and behavior, nothing in your stacks changes, and each function's evaluation
+  phase is now stated so you know which configuration it sees.
+
 - **Correct** — posts that describe mechanisms only in terms of commands, flags, and observable output.
 
 **If removing the internals leaves nothing to say**, the change was genuinely internal and the honest move is

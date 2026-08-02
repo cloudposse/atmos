@@ -5,11 +5,15 @@ documentation (`website/docs/`). It does not apply to `website/blog/`
 (changelog posts), which use the narrative style owned by the `changelog`
 skill.
 
-The style is **ASD-STE100** (Simplified Technical English), the
-controlled-language standard the aerospace industry uses for maintenance
-manuals, adapted for software documentation. ASD-STE100 exists to remove
-ambiguity: one sentence, one meaning, readable by people who do not speak
-English as a first language.
+Atmos uses a writing style **inspired by ASD-STE100** (Simplified Technical
+English), the controlled-language standard the aerospace industry uses for
+maintenance manuals. ASD-STE100 exists to remove ambiguity: one sentence, one
+meaning, readable by people who do not speak English as a first language.
+
+The Atmos style is our own work, adapted for software documentation. Calling a
+document "ASD-STE100" would claim conformance to a published specification that
+we neither reproduce nor verify against, so this guide does not make that claim.
+It borrows the principles and says where it departs from them.
 
 ## About ASD-STE100
 

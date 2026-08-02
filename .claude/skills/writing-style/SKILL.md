@@ -1,6 +1,6 @@
 ---
 name: writing-style
-description: "Atmos writing style for PRDs and website docs, based on ASD-STE100 (Simplified Technical English): active voice, one idea per sentence, plain words, no contractions, and the atmos lint docs vale check. Invoke when writing or reviewing a PRD (docs/prd/) or a website/docs page, or when a docs-lint (vale) finding needs interpreting. Not for website/blog posts — use the changelog skill instead."
+description: "Atmos writing style for PRDs and website docs, inspired by ASD-STE100 (Simplified Technical English): active voice, one idea per sentence, plain words, no contractions, and the atmos lint docs vale check. Invoke when writing or reviewing a PRD (docs/prd/) or a website/docs page, or when a docs-lint (vale) finding needs interpreting. Not for website/blog posts — use the changelog skill instead."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "2.0.0"
@@ -8,14 +8,16 @@ metadata:
 
 # Writing Style
 
-Atmos PRDs (`docs/prd/`) and website documentation (`website/docs/`) are written in
-**ASD-STE100 (Simplified Technical English)**, adapted for software documentation.
-This skill does not apply to `website/blog/` — blog posts are narrative content owned by
-the `changelog` skill.
+Atmos PRDs (`docs/prd/`) and website documentation (`website/docs/`) follow a writing
+style **inspired by ASD-STE100 (Simplified Technical English)**, adapted for software
+documentation. The style is Atmos's own; calling a document "ASD-STE100" would claim
+conformance to a specification we neither reproduce nor verify against. This skill does
+not apply to `website/blog/` — blog posts are narrative content owned by the `changelog`
+skill.
 
-Apply the standard the way a technical writer would: as a way of thinking about clarity,
-not as a checklist to run against each sentence. You already know what Simplified
-Technical English asks for. What follows is only where Atmos differs from it, or where a
+Apply those principles the way a technical writer would: as a way of thinking about
+clarity, not as a checklist to run against each sentence. You already know what Simplified
+Technical English asks for. What follows is only where Atmos departs from it, or where a
 naive reading of it goes wrong.
 
 This is deliberate. An earlier version of this skill enumerated six rules instead, and a
