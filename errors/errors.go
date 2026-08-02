@@ -96,7 +96,7 @@ var (
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
-	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' (or the deprecated 'stacks.name_pattern') needs to be specified in 'atmos.yaml'")
 	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
@@ -178,6 +178,7 @@ var (
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+	ErrClosureFlagsRequireMultiComponent                     = errors.New("the `--include-dependencies` and `--include-dependents` flags expand a multi-component selection and require one of `--all`, `--components`, `--query`, `-s`, `--tags`, `--labels`, or `--affected`")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
@@ -331,6 +332,12 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// ErrForbiddenSelectorFunction enforces the selector purity contract:
+	// metadata.tags/metadata.labels drive scoping decisions before evaluation,
+	// so by design they may not contain constructs that require authentication
+	// or process execution (e.g. !terraform.state, !store, !exec, atmos.Component).
+	ErrForbiddenSelectorFunction = errors.New("forbidden function in labels/tags selector")
+
 	// Dependency management errors.
 	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
 	ErrDependencyResolution = errors.New("dependency resolution failed")
@@ -342,28 +349,29 @@ var (
 	ErrHelmBinaryNotFound    = errors.New("helm binary not found")
 
 	// Toolchain errors.
-	ErrToolNotFound                 = errors.New("tool not found")
-	ErrInvalidToolSpec              = errors.New("invalid tool specification")
-	ErrToolAlreadyInstalled         = errors.New("tool already installed")
-	ErrDownloadFailed               = errors.New("download failed")
-	ErrDownloadRetryable            = errors.New("retryable download error")
-	ErrSignatureRetryable           = errors.New("retryable signature verification error")
-	ErrExtractionFailed             = errors.New("extraction failed")
-	ErrChecksumMismatch             = errors.New("checksum mismatch")
-	ErrNoVersionsInstalled          = errors.New("no versions installed")
-	ErrLatestFileNotFound           = errors.New("latest version file not found")
-	ErrRegistryNotReachable         = errors.New("registry not reachable")
-	ErrToolNotInRegistry            = errors.New("tool not in registry")
-	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
-	ErrAliasNotFound                = errors.New("alias not found")
-	ErrBinaryNotExecutable          = errors.New("binary not executable")
-	ErrBinaryNotFound               = errors.New("binary not found")
-	ErrLockfileVersionMismatch      = errors.New("lockfile version mismatch")
-	ErrNoAssetTemplate              = errors.New("no asset template defined")
-	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
-	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
-	ErrNoToolsConfigured            = errors.New("no tools configured")
-	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
+	ErrToolNotFound                    = errors.New("tool not found")
+	ErrInvalidToolSpec                 = errors.New("invalid tool specification")
+	ErrToolAlreadyInstalled            = errors.New("tool already installed")
+	ErrDownloadFailed                  = errors.New("download failed")
+	ErrDownloadRetryable               = errors.New("retryable download error")
+	ErrSignatureRetryable              = errors.New("retryable signature verification error")
+	ErrExtractionFailed                = errors.New("extraction failed")
+	ErrChecksumMismatch                = errors.New("checksum mismatch")
+	ErrNoVersionsInstalled             = errors.New("no versions installed")
+	ErrLatestFileNotFound              = errors.New("latest version file not found")
+	ErrRegistryNotReachable            = errors.New("registry not reachable")
+	ErrToolNotInRegistry               = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported        = errors.New("tool does not support this platform")
+	ErrAliasNotFound                   = errors.New("alias not found")
+	ErrBinaryNotExecutable             = errors.New("binary not executable")
+	ErrBinaryNotFound                  = errors.New("binary not found")
+	ErrLockfileVersionMismatch         = errors.New("lockfile version mismatch")
+	ErrNoAssetTemplate                 = errors.New("no asset template defined")
+	ErrAssetTemplateInvalid            = errors.New("asset template invalid")
+	ErrToolVersionsFileOperation       = errors.New("tool-versions file operation failed")
+	ErrNoToolsConfigured               = errors.New("no tools configured")
+	ErrUnsupportedVersionConstraint    = errors.New("unsupported version constraint format")
+	ErrToolchainPlainFormatWithAllFlag = errors.New("--format=plain can't be used with --all")
 
 	// Flag validation errors.
 	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
