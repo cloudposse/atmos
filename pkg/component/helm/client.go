@@ -180,6 +180,9 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 		}
 	}
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
 			return "", fmt.Errorf("failed to upgrade Helm release %q: %w", spec.ReleaseName, err)
 		}
