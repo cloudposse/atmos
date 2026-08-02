@@ -50,8 +50,14 @@ achievements (complexity reduction, test coverage improvements, function decompo
 etc.).
 
 **Test:** If a user upgrading Atmos would see no change in behavior, output, errors, performance, or available
-commands/flags, do not write a changelog post. Refactors are visible in PR descriptions and `git log`; that is
-sufficient.
+commands/flags, do not write a *user-facing* changelog post. Refactors are visible in PR descriptions and
+`git log`; that is usually sufficient.
+
+**The one exception is a `core` post.** `core` is contributor-facing: an architectural change a contributor
+needs in order to navigate the codebase can be published as a `core`-tagged post even with no user-visible
+effect. That is not a loophole for the refactors above — a coverage bump or a complexity reduction still gets
+no post. The question is whether a contributor would be worse off without it. The `changelog` skill owns that
+decision; see its "Which audience, which rules" table.
 
 Engineering wins like "function refactored to 100% coverage" or "complexity reduced 247→10" can still be
 milestones inside the `quality` initiative on the roadmap — but **without** a `changelog:` field, and without

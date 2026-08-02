@@ -1,15 +1,15 @@
 ---
 slug: introducing-atmos-init-and-scaffold
-title: "Introducing atmos init and atmos scaffold: Get Started in Seconds"
-authors: [atmos]
+title: "Project Setup Without the Boilerplate: atmos init and atmos scaffold"
+authors: [osterman]
 tags: [feature, dx]
 ---
 
-We're excited to announce two new commands that dramatically simplify getting started with Atmos: `atmos init` and `atmos scaffold`. These commands eliminate the manual setup process and help you bootstrap new Atmos projects or generate infrastructure code in seconds.
+A new infrastructure repository starts as an empty directory plus a page of conventions somebody has to remember: which directories exist, what belongs in the configuration file, how stacks and components are meant to line up. The first time you assemble that by hand, you spend as long reading documentation as writing files. Every time after that, you copy the last project and inherit whatever was wrong with it. The `atmos init` and `atmos scaffold` commands generate the structure for you, from built-in templates or your own.
 
 <!--truncate-->
 
-## The Problem: Setup Friction
+## The Problem
 
 Setting up a new Atmos project has traditionally required several manual steps:
 
@@ -20,7 +20,7 @@ Setting up a new Atmos project has traditionally required several manual steps:
 
 For new users, this process could take hours and required deep knowledge of Atmos conventions. Even experienced users found themselves repeatedly creating similar boilerplate for new projects or infrastructure components.
 
-## The Solution: Instant Project Creation
+## The Fix
 
 ### `atmos init`: Bootstrap New Projects
 
@@ -97,9 +97,9 @@ rds-instance      github.com/acme/rds.git   1.5.0      RDS database template
 
 ### Built-in Templates
 
-The `atmos init` command includes two carefully crafted templates:
+The `atmos init` command includes two templates:
 
-**simple**: Perfect for getting started quickly
+**simple**: the smallest thing that works
 - Minimal `atmos.yaml` configuration
 - Basic directory structure
 - Essential `.gitkeep` files
@@ -110,7 +110,7 @@ The `atmos init` command includes two carefully crafted templates:
 - Configured for multiple environments
 - Backend configuration examples
 
-### Powerful Templating
+### Templating
 
 Both commands use Go templates with Gomplate functions, supporting:
 
@@ -121,17 +121,9 @@ Both commands use Go templates with Gomplate functions, supporting:
 
 ### Interactive and Automated Workflows
 
-**Interactive Mode** (default):
-- Guided prompts for template selection
-- User-friendly questions for configuration values
-- Preview of what will be created
-- Safe defaults for all values
+Run either command with no values and it prompts you: first for the template, then one question per configuration value, each carrying a default, and a preview of the files it is about to create before it writes anything.
 
-**Non-Interactive Mode** (automation):
-- Pass all values via `--set` flags
-- Perfect for CI/CD pipelines
-- Reproducible project creation
-- Scriptable workflows
+Pass every value up front with `--set` and add `--no-interactive`, and the same run happens with no prompts at all. That is the mode you want in a CI/CD pipeline or a shell script, where the same inputs have to produce the same project every time.
 
 ### Extensible Scaffold System
 
@@ -246,37 +238,9 @@ module "vpc" {
 }
 ```
 
-## Technical Highlights
+## How to Use It
 
-### For Atmos Contributors
-
-These commands represent significant architectural improvements:
-
-1. **Command Registry Pattern**: Both commands use the new command registry pattern, making them independently testable and maintainable
-
-2. **Shared Core Packages**:
-   - `pkg/init/ui` - Interactive UI components and prompts
-   - `pkg/scaffold/templating` - Template processing engine
-   - `pkg/init/config` - Scaffold configuration parsing
-
-3. **Embedded Templates**: Built-in templates are embedded in the Atmos binary, ensuring version compatibility and eliminating external dependencies
-
-4. **Comprehensive Testing**: Over 80% test coverage with unit and integration tests for all template processing logic
-
-See the [PRD documents](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-init.md) for complete technical details.
-
-## What's Next
-
-These commands lay the foundation for future enhancements:
-
-- **Template Marketplace**: Central registry of community scaffold templates
-- **Git Integration**: Clone templates directly from GitHub/GitLab repositories
-- **Template Validation**: Schema validation for scaffold.yaml files
-- **Template Composition**: Combine multiple templates into complex projects
-
-## Get Started Today
-
-The `atmos init` and `atmos scaffold` commands are available in Atmos v1.97.0. Try them out:
+The `atmos init` and `atmos scaffold` commands are available in Atmos v1.97.0.
 
 ```bash
 # Install or upgrade Atmos
@@ -289,7 +253,14 @@ atmos init
 atmos scaffold list
 ```
 
-We'd love to hear your feedback! Join the discussion in our [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or share your custom scaffold templates with the community.
+## What's Next
+
+These commands lay the foundation for future enhancements:
+
+- **Template Marketplace**: Central registry of community scaffold templates
+- **Git Integration**: Clone templates directly from GitHub/GitLab repositories
+- **Template Validation**: Schema validation for scaffold.yaml files
+- **Template Composition**: Combine multiple templates into complex projects
 
 ## Documentation
 
@@ -299,4 +270,6 @@ We'd love to hear your feedback! Join the discussion in our [GitHub Discussions]
 - [PRD: Init Command](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-init.md)
 - [PRD: Scaffold Command](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-scaffold.md)
 
-🚀 Generated with [Atmos](https://atmos.tools)
+## Get Involved
+
+Tell us what your team's project layout looks like, or share a scaffold template you have built, by [opening an issue](https://github.com/cloudposse/atmos/issues).

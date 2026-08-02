@@ -1,6 +1,6 @@
 ---
 slug: introducing-auth-logout
-title: 'Introducing atmos auth logout: Secure Credential Cleanup'
+title: 'Why nobody logs out of their cloud identities'
 date: 2025-10-21T12:00:00.000Z
 sidebar_label: Introducing atmos auth logout
 authors:
@@ -11,13 +11,11 @@ tags:
 release: v1.196.0
 ---
 
-We're excited to announce a new authentication command: **`atmos auth logout`**. This command provides secure, comprehensive cleanup of locally cached credentials, making it easy to switch between identities, end work sessions, and maintain proper security hygiene.
+Most cloud practitioners never log out of their cloud provider identities. Not because they don't want to, but because the tooling doesn't make it easy. There is a command to get credentials and almost never a command to get rid of them, so they accumulate. The `atmos auth logout` command is the missing half: it removes the locally cached credentials for an identity, for a provider, or for everything.
 
 <!--truncate-->
 
-## Why This Matters
-
-Most cloud practitioners never log out of their cloud provider identities. Not because they don't want to, but because the tooling doesn't make it easy.
+## The Problem
 
 When you authenticate with cloud providers, credentials get scattered across your filesystem:
 
@@ -25,21 +23,17 @@ When you authenticate with cloud providers, credentials get scattered across you
 - **Azure**: `~/.azure/` directory with multiple authentication artifacts
 - **Google Cloud**: `~/.config/gcloud/` with various credential files
 
-Most cloud provider tools don't provide a simple, comprehensive logout command. You're left to:
-
-- Manually hunt down and delete credential files across different locations
-- Navigate through provider-specific web consoles to revoke tokens
-- Hope that session expiration handles cleanup for you
+Few cloud provider tools ship a single logout command that covers all of it. You are left to manually hunt down and delete credential files across different locations, navigate provider-specific web consoles to revoke tokens, or hope that session expiration handles cleanup for you.
 
 This leads to **credential sprawl**: old, forgotten credentials littering your system, many still valid and exploitable.
 
-The `atmos auth logout` command makes credential cleanup explicit, comprehensive, and easy.
+## The Fix
 
-## What's New
+The `atmos auth logout` command makes credential cleanup explicit and repeatable. It resolves the full authentication chain behind an identity, removes the cached credentials at every step of that chain, and tells you what it removed. It uses the identity and provider definitions you already have, so there is nothing new to configure.
 
-### Basic Usage
+## How to Use It
 
-Logout from a specific identity:
+### Log out of an identity
 
 ```shell
 atmos auth logout dev-admin
@@ -66,9 +60,9 @@ Successfully logged out from 3 identities
    browser session.
 ```
 
-### Interactive Mode
+### Pick from a list
 
-Run `atmos auth logout` without arguments for an interactive experience:
+Run the command without arguments and it asks what to remove:
 
 ```shell
 atmos auth logout
@@ -83,17 +77,15 @@ atmos auth logout
     All identities (complete logout)
 ```
 
-The interactive mode uses **Charmbracelet Huh** with Atmos theming for a polished experience.
+The picker is keyboard-driven and themed like the rest of the Atmos CLI.
 
-### Provider Logout
-
-Remove all credentials for a specific provider:
+### Log out of a provider
 
 ```shell
 atmos auth logout --provider aws-sso
 ```
 
-This removes the provider credentials and all identities that authenticate through it:
+This removes the provider credentials and every identity that authenticates through it:
 
 ```shell
 Logging out from provider: aws-sso
@@ -108,9 +100,7 @@ Removing all credentials for provider...
 Successfully logged out from 4 identities
 ```
 
-### Dry Run Mode
-
-Preview what would be removed without actually deleting anything:
+### Preview first
 
 ```shell
 atmos auth logout dev-admin --dry-run
@@ -129,11 +119,9 @@ Would remove from identity: dev-admin
 3 identities would be logged out
 ```
 
-## How It Works
+## What Gets Removed
 
-### Authentication Chain Resolution
-
-Atmos intelligently resolves the complete authentication chain for your identity and removes credentials at each step:
+Logging out of one identity is rarely enough, because that identity was reached through others. Atmos resolves the complete authentication chain and removes credentials at each step, so nothing orphaned is left behind:
 
 ```shell
 aws-sso → dev-org-admin → dev-admin
@@ -141,20 +129,9 @@ aws-sso → dev-org-admin → dev-admin
 Removed     Removed        Removed
 ```
 
-This ensures no orphaned credentials are left behind.
+At each step it clears the system keyring entry (Keychain on macOS, Secret Service on Linux, Credential Manager on Windows), the AWS credential file at `~/.aws/atmos/<provider>/credentials`, the AWS config file at `~/.aws/atmos/<provider>/config`, and the provider directory itself once it is empty.
 
-### Comprehensive Cleanup
-
-The logout command removes credentials from **all storage locations**:
-
-- ✅ **System keyring entries** - Credentials stored securely by your OS
-- ✅ **AWS credential files** - `~/.aws/atmos/<provider>/credentials`
-- ✅ **AWS config files** - `~/.aws/atmos/<provider>/config`
-- ✅ **Empty directories** - Cleans up provider directories after removal
-
-### Best-Effort Error Handling
-
-The logout command continues even if individual steps fail, ensuring maximum cleanup:
+Cleanup is best effort. If one step fails, the rest still run, and the failures are reported at the end:
 
 ```shell
 Logging out from identity: dev-admin
@@ -170,14 +147,12 @@ Errors encountered:
   • dev-admin: credential not found in keyring
 ```
 
-This best-effort approach means you always get as much cleanup as possible.
+That way a single missing entry never blocks the rest of the cleanup.
 
-## Security Best Practices
-
-### Browser Sessions
+## Browser Sessions
 
 :::warning Important
-`atmos auth logout` only removes **local credentials**. Your browser session with the identity provider (AWS SSO, Okta, etc.) remains active.
+The `atmos auth logout` command only removes **local credentials**. Your browser session with the identity provider (AWS SSO, Okta, etc.) remains active.
 :::
 
 To completely end your session:
@@ -187,24 +162,24 @@ To completely end your session:
 3. Sign out from the browser session
 4. Close all browser windows.
 
-The command displays this warning after every logout to ensure you don't forget.
+The command displays this warning after every logout so the second half does not get forgotten.
 
-### When to Logout
+## When to Log Out
 
-**Logout at the end of your work session:**
+At the end of a work session, clear the provider and everything under it:
 
 ```shell
 atmos auth logout --provider aws-sso
 ```
 
-**Logout when switching contexts:**
+When switching between environments, drop the old identity before taking the new one:
 
 ```shell
 atmos auth logout dev-admin
 atmos auth login prod-admin
 ```
 
-**Logout when troubleshooting authentication:**
+When authentication misbehaves, preview the cleanup, run it, then re-authenticate from a known-empty state:
 
 ```shell
 atmos auth logout dev-admin --dry-run  # Preview
@@ -212,50 +187,7 @@ atmos auth logout dev-admin            # Execute
 atmos auth login dev-admin             # Fresh login
 ```
 
-### Audit Trail
-
-All logout operations are logged for security auditing:
-
-```shell
-2025-10-17T10:15:30Z DEBUG Starting logout identity=dev-admin
-2025-10-17T10:15:30Z DEBUG Authentication chain built chain=[aws-sso dev-org-admin dev-admin]
-2025-10-17T10:15:30Z DEBUG Removing keyring entry alias=aws-sso
-2025-10-17T10:15:30Z INFO Logout completed identity=dev-admin removed=3
-```
-
-Enable debug logging with `ATMOS_LOGS_LEVEL=Debug` to see detailed audit information.
-
-## Use Cases
-
-### 1. Daily Workflow
-
-Start and end your day with clean credential state:
-
-```shell
-# Morning: Login for the day
-atmos auth login
-
-# Evening: Logout for security
-atmos auth logout
-```
-
-### 2. Multi-Identity Switching
-
-Switch between development and production environments:
-
-```shell
-# Switch from dev to prod
-atmos auth logout dev-admin
-atmos auth login prod-admin
-
-# Later: Switch back
-atmos auth logout prod-admin
-atmos auth login dev-admin
-```
-
-### 3. Troubleshooting
-
-Clear credential cache when debugging authentication issues:
+Check the result on either side with `atmos auth whoami`:
 
 ```shell
 # Check current status
@@ -269,21 +201,24 @@ atmos auth login dev-admin
 atmos auth whoami
 ```
 
-### 4. Compliance
+For an audit, the interactive picker doubles as a review step — choose "All identities" to clear everything, and the logs record what went.
 
-Demonstrate credential cleanup for security audits:
+## Audit Trail
+
+Logout operations are logged, so the cleanup is reviewable after the fact:
 
 ```shell
-# Interactive review of what to remove
-atmos auth logout
-
-# Select "All identities" to clear everything
-# Audit logs show complete cleanup
+2025-10-17T10:15:30Z DEBUG Starting logout identity=dev-admin
+2025-10-17T10:15:30Z DEBUG Authentication chain built chain=[aws-sso dev-org-admin dev-admin]
+2025-10-17T10:15:30Z DEBUG Removing keyring entry alias=aws-sso
+2025-10-17T10:15:30Z INFO Logout completed identity=dev-admin removed=3
 ```
+
+Set `ATMOS_LOGS_LEVEL=Debug` to see this detail.
 
 ## Configuration
 
-The logout command works with your existing `atmos.yaml` authentication configuration:
+Logout reads the same `atmos.yaml` authentication configuration that login does:
 
 ```yaml
 auth:
@@ -304,83 +239,19 @@ auth:
           name: "dev-account"
 ```
 
-No additional configuration required - logout uses the same identity and provider definitions as login.
-
-## Technical Details
-
-### Cross-Platform Support
-
-The logout command uses native Go libraries for maximum compatibility:
-
-- **File operations**: `os.RemoveAll()` for cross-platform directory removal
-- **Keyring access**: `go-keyring` library supporting macOS, Linux, and Windows
-- **Path handling**: `filepath` package for platform-specific path separators.
-
-### Error Handling
-
-Following Atmos error handling patterns:
-
-- Uses static error sentinels from `errors/errors.go`
-- Wraps errors with `errors.Join` for proper error chains
-- Continues cleanup on non-fatal errors
-- Reports all errors at completion.
-
-### Interface Extensions
-
-The logout feature extends the auth interfaces:
-
-```go
-// Provider interface
-type Provider interface {
-    // ... existing methods
-    Logout(ctx context.Context) error
-}
-
-// Identity interface
-type Identity interface {
-    // ... existing methods
-    Logout(ctx context.Context) error
-}
-
-// AuthManager interface
-type AuthManager interface {
-    // ... existing methods
-    Logout(ctx context.Context, identityName string) error
-    LogoutProvider(ctx context.Context, providerName string) error
-    LogoutAll(ctx context.Context) error
-}
-```
-
-### Telemetry
-
-Like all Atmos commands, logout automatically captures anonymous usage telemetry:
-
-- Command path: `auth logout`
-- Error state: Boolean only (no sensitive data)
-- No user data, credentials, or identity names captured
+No extra configuration is required.
 
 ## What's Next
 
-This initial release supports:
+This first release covers AWS provider logout (SSO, SAML, and user credentials), identity chain resolution, the interactive picker, and dry-run mode. Still to come:
 
-- ✅ AWS provider logout (SSO, SAML, user credentials)
-- ✅ Identity chain resolution
-- ✅ Interactive mode
-- ✅ Dry run mode
+- Azure Entra ID provider logout
+- GCP OIDC provider logout
+- GitHub Actions OIDC logout
+- Selective logout (keep the provider, remove the identity only)
+- Automatic cleanup of expired credentials
 
-Future enhancements:
-
-- 🔄 Azure Entra ID provider logout
-- 🔄 GCP OIDC provider logout
-- 🔄 GitHub Actions OIDC logout
-- 🔄 Selective logout (keep provider, remove identity only)
-- 🔄 Automatic cleanup of expired credentials
-
-## Get Started
-
-The `atmos auth logout` command is available in Atmos v1.x.x and later.
-
-**Try it now:**
+The command is available in Atmos v1.196.0 and later:
 
 ```shell
 # Interactive mode
@@ -393,22 +264,8 @@ atmos auth logout <identity-name>
 atmos auth logout --help
 ```
 
-**Learn more:**
+Further reading: the [CLI documentation](/cli/commands/auth/logout) for the complete command reference, the [PRD: Auth Logout](https://github.com/cloudposse/atmos/blob/main/docs/prd/auth-logout.md) for the design behind it, and the [authentication overview](/cli/commands/auth/usage) for how logout fits with the rest of the auth commands.
 
-- 📖 [CLI Documentation](/cli/commands/auth/logout) - Complete command reference
-- 📋 [PRD: Auth Logout](https://github.com/cloudposse/atmos/blob/main/docs/prd/auth-logout.md) - Technical design document
-- 🔐 [Authentication Overview](/cli/commands/auth/usage) - Complete authentication overview
+## Get Involved
 
-## Feedback Welcome
-
-We'd love to hear how you're using `atmos auth logout`:
-
-- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
-- 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
-- 🚀 **Contribute** - Submit PRs for improvements
-
-Secure credential management is critical for infrastructure automation. We're committed to making authentication with Atmos both powerful and secure.
-
----
-
-**Ready to try it?** Run `atmos auth logout` to get started!
+Tell us which credential locations we still miss on your machine, and which providers you want covered next. Open an issue at [github.com/cloudposse/atmos/issues](https://github.com/cloudposse/atmos/issues).

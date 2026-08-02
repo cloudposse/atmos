@@ -20,7 +20,17 @@ Every Atmos function now resolves through one registry that knows nothing about 
 
 The `!aws.*` functions also resolve your identity once per run and reuse it, so a stack with many `!aws.*` calls no longer repeats that lookup for every function.
 
-## How to Use It
+## Where the Code Lives
+
+Three packages carry this, and knowing which one to reach for is most of the work:
+
+- `pkg/function/` holds the registry itself and a handler for every function. This is where a new function goes.
+- `pkg/yaml/` keeps what is genuinely YAML-specific: position tracking, and the error reporting that points at a line and column.
+- `pkg/aws/identity/` holds the shared identity cache the `!aws.*` handlers use. It replaces the per-call caching that used to live in `internal/aws_utils`.
+
+The split is the point. If you are adding a function, you should not have to touch the parser; if you are fixing a YAML parse error, you should not have to read function code.
+
+## What Does Not Change
 
 Nothing changes in your stacks. Every function keeps the name, alias, and behavior it already had. What is worth knowing is the phase each function runs in, because that is what determines the configuration it sees:
 

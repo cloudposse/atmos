@@ -88,7 +88,7 @@ The registry pattern provides:
 - ✅ **Self-registering commands** - No manual wiring required
 - ✅ **Type-safe interfaces** - Compile-time guarantees
 - ✅ **Thread-safe operation** - Concurrent registration support
-- ✅ **Custom command compatibility** - Works seamlessly with existing `atmos.yaml` custom commands
+- ✅ **Custom command compatibility** - Works with existing `atmos.yaml` custom commands
 
 ## Impact on Users
 
@@ -128,7 +128,7 @@ This change is **internal to Atmos development** and has no impact on Atmos user
 - **[PRD: Command Registry Pattern](https://github.com/cloudposse/atmos/blob/main/docs/prd/command-registry-pattern.md)** - Complete architecture documentation
 - **[Developer Guide: Developing Atmos Commands](https://github.com/cloudposse/atmos/blob/main/docs/developing-atmos-commands.md)** - Step-by-step implementation guide
 
-The `about` command has been migrated as a proof-of-concept in this PR, demonstrating the pattern works in production.
+The `about` command was migrated first, as a proof of concept that the pattern holds up in production.
 
 ## Get Involved
 

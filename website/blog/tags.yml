@@ -50,4 +50,4 @@ atmos-pro:
 
 core:
   label: Core
-  description: Internal changes for Atmos contributors and core developers
+  description: Contributor-facing changes to the Atmos core, written for the people who work on it

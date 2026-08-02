@@ -33,9 +33,24 @@ label decision tree. CI enforces this via `.github/workflows/changelog-check.yml
 `website/blog/*.md` or `*.mdx` file (draft PRs, and PRs targeting a branch other than `main`, are exempt
 entirely). Write posts as `.mdx` regardless — Rule 3 below embeds `<CastPlayer>` as real JSX, which only
 `.mdx` renders; CI accepts `.md` but that's not this repo's convention.
-If a change is genuinely internal-only with zero user-visible effect, it doesn't get a post at all — that
-invariant belongs to the `roadmap` skill ("no changelog post for internal-only refactors"); don't work around
-it by writing an implementation-heavy post instead.
+### Which audience, which rules
+
+Ask who needs to know, and the rest follows:
+
+| Who needs to know | Tag | Rule 4 (no internals) |
+|---|---|---|
+| A user upgrading Atmos would see a difference | any user-facing tag | **Applies.** No Go paths, no internal layout. |
+| A contributor working on Atmos needs this to navigate the codebase | `core` | **Does not apply.** Name the packages. |
+| Neither | *no post* | — |
+
+`core` means contributor-facing: a post about the Atmos core, written for the people who work on it.
+Package paths, architecture, and internal structure are the *point* of a `core` post, not a leak. Rule 4
+exists to stop internals reaching an audience that did not ask for them, and a `core` reader did.
+
+The third row still holds, and it is the `roadmap` skill's invariant: a pure refactor with no user-visible
+change and nothing a contributor needs to navigate — a coverage bump, a complexity reduction — gets no post
+at all. `core` is not a way to publish one anyway. The test is whether a contributor would be worse off
+without the post, not whether the work was significant.
 
 ## File and frontmatter
 
@@ -146,13 +161,15 @@ import CastPlayer from '@site/src/components/CastPlayer'
 
 ## Rule 4 — No Go / implementation-detail leakage
 
-A blog post is for users, not contributors. Never name Go package paths, internal file layout, or
-implementation structure — describe behavior only in CLI/config/output terms.
+**This rule governs user-facing posts only.** A `core`-tagged post is written for contributors and is
+exempt: see "Which audience, which rules" above. For every other tag, never name Go package paths, internal
+file layout, or implementation structure — describe behavior only in CLI/config/output terms.
 
 **The title is in scope.** It is the highest-impact place internals leak, and retitling is safe — the URL
 comes from `slug`, not the title.
 
-There are three rungs here, and stopping on the middle one is the common mistake:
+There are three rungs here, and stopping on the middle one is the common mistake. (On a `core` post,
+rung 1 is simply correct — contributors want the paths.)
 
 - **Worst, Go paths.** A post titled "New pkg/function Package for Format-Agnostic Function Registry",
   naming `pkg/function/`, `pkg/yaml/`, and `pkg/aws/identity/`. A business reader does not care.

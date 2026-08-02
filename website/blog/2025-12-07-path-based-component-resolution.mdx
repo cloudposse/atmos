@@ -1,16 +1,20 @@
 ---
 slug: path-based-component-resolution
-title: "Path-Based Component Resolution for Terraform, Helmfile, Packer, Describe, and Validate Commands"
+title: "Use a Filesystem Path Where a Component Name Goes"
 authors: [osterman]
 tags: [feature, dx]
 date: 2025-12-07T12:00:00.000Z
 ---
 
-Atmos now supports using filesystem paths instead of component names for all component commands. Use `.` for the current directory, relative paths like `./vpc` or `../eks`, or absolute paths. This might feel more natural for users accustomed to running commands on folders rather than remembering specific component names.
+Almost every tool in your terminal acts on the directory you are standing in. You change into a Terraform module, run a plan, and it plans what is in front of you. Atmos was the exception: it wanted the component's name as written in your stack configuration, which is not always what the folder in front of you is called. Component commands now accept a filesystem path anywhere they accept a name.
 
 <!--truncate-->
 
-## What's New
+## The Problem
+
+A component's name lives in the stack configuration, and it does not have to resemble where the component sits on disk. The directory `components/terraform/infra/vpc` is the component `infra/vpc`. Two components named `station/1` and `station/2` can both point at `components/terraform/weather`, in which case neither name appears in the path at all. If you navigate the repository by directory, and most people do, every command began with translating a path you were already looking at into a name you had to recall or go look up.
+
+## The Fix
 
 You can now use filesystem paths with all component-related commands:
 
@@ -41,10 +45,9 @@ Atmos supports all standard ways of specifying paths to components, including:
 - **Stack validation** - Validates the component exists in the specified stack configuration
 - **Interactive selection** - When multiple components reference the same path, choose from an interactive menu (in terminals)
 - **Tab completion** - Shell completion works with both paths and component names
-- **Error handling** - Clear error messages when paths can't be resolved
-- **CI/CD friendly** - Gracefully handles non-interactive environments with appropriate errors
+- **Non-interactive environments** - When a path cannot be resolved, or Atmos cannot prompt you to disambiguate it, the command fails with the matching component names instead of guessing
 
-## Examples
+## How to Use It
 
 ### Terraform Commands
 
@@ -185,3 +188,7 @@ For more details, see:
 - [Terraform Commands](/cli/commands/terraform/usage)
 - [Describe Component](/cli/commands/describe/component)
 - [Validate Component](/cli/commands/validate/component)
+
+## Get Involved
+
+If a path you expected to work does not resolve, or the disambiguation prompt gets in your way, [open an issue](https://github.com/cloudposse/atmos/issues).
