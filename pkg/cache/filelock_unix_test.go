@@ -71,6 +71,14 @@ func TestNewFileLock_LockPathSuffix(t *testing.T) {
 	assert.Equal(t, "/some/path/cache.lock", flockLock.lockPath)
 }
 
+func TestNewFileLockAtPath_UsesExactPath(t *testing.T) {
+	lock := NewFileLockAtPath("/some/path/repositories.lock")
+
+	flockLock, ok := lock.(*flockFileLock)
+	require.True(t, ok, "should return a flockFileLock")
+	assert.Equal(t, "/some/path/repositories.lock", flockLock.lockPath)
+}
+
 func TestWithLock_Success(t *testing.T) {
 	tempDir := t.TempDir()
 	lockPath := filepath.Join(tempDir, "test-lock")
@@ -199,6 +207,26 @@ func TestWithRLock_FallbackWithoutLock(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, executed, "function should be executed without lock as fallback")
+}
+
+func TestTryWithRLock_SkipsContendedRead(t *testing.T) {
+	tempDir := t.TempDir()
+	lockPath := filepath.Join(tempDir, "contended.lock")
+
+	blocker := flock.New(lockPath)
+	locked, err := blocker.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked, "blocker should acquire lock")
+	defer func() { _ = blocker.Unlock() }()
+
+	executed := false
+	acquired, err := NewFileLockAtPath(lockPath).TryWithRLock(func() error {
+		executed = true
+		return nil
+	})
+	require.NoError(t, err)
+	assert.False(t, acquired)
+	assert.False(t, executed)
 }
 
 func TestWithLock_InvalidLockPath(t *testing.T) {

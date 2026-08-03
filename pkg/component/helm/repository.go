@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/flock"
 	"sigs.k8s.io/yaml"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/repo/v1"
 )
@@ -39,62 +40,50 @@ func setupHelmRepositories(repositories []chartRepository) error {
 	if repoFile == "" {
 		return nil
 	}
-
-	unlock, err := lockRepositoryFile(repoFile)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	repoConfig, err := loadRepositoryFile(repoFile)
-	if err != nil {
-		return err
-	}
-
-	for i := range repositories {
-		item := &repositories[i]
-		entry, err := repositoryEntry(item)
-		if err != nil {
-			return err
-		}
-
-		chartRepo, err := repo.NewChartRepository(entry, getter.All(settings, getter.WithTimeout(getter.DefaultHTTPTimeout*time.Second)))
-		if err != nil {
-			return err
-		}
-		if settings.RepositoryCache != "" {
-			chartRepo.CachePath = settings.RepositoryCache
-		}
-		if _, err := chartRepo.DownloadIndexFile(); err != nil {
-			return fmt.Errorf("looks like %q is not a valid chart repository or cannot be reached: %w", item.URL, err)
-		}
-
-		repoConfig.Update(entry)
-	}
-
-	return repoConfig.WriteFile(repoFile, repositoryFilePerm)
-}
-
-func lockRepositoryFile(repoFile string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(repoFile), os.ModePerm); err != nil && !os.IsExist(err) {
-		return nil, err
+		return err
 	}
 
-	lockPath := repositoryLockPath(repoFile)
-	fileLock := flock.New(lockPath)
 	ctx, cancel := context.WithTimeout(context.Background(), repositoryLockTimeout)
-	locked, err := fileLock.TryLockContext(ctx, time.Second)
-	cancel()
+	defer cancel()
+
+	err := cache.NewFileLockAtPath(repositoryLockPath(repoFile)).WithLockContext(ctx, func() error {
+		repoConfig, err := loadRepositoryFile(repoFile)
+		if err != nil {
+			return err
+		}
+
+		for i := range repositories {
+			item := &repositories[i]
+			entry, err := repositoryEntry(item)
+			if err != nil {
+				return err
+			}
+
+			chartRepo, err := repo.NewChartRepository(entry, getter.All(settings, getter.WithTimeout(getter.DefaultHTTPTimeout*time.Second)))
+			if err != nil {
+				return err
+			}
+			if settings.RepositoryCache != "" {
+				chartRepo.CachePath = settings.RepositoryCache
+			}
+			if _, err := chartRepo.DownloadIndexFile(); err != nil {
+				return fmt.Errorf("looks like %q is not a valid chart repository or cannot be reached: %w", item.URL, err)
+			}
+
+			repoConfig.Update(entry)
+		}
+
+		return repoConfig.WriteFile(repoFile, repositoryFilePerm)
+	})
 	if err != nil {
-		return nil, err
-	}
-	if !locked {
-		return nil, fmt.Errorf("%w: %q", errHelmRepositoryLockTimeout, lockPath)
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %q: %w", errHelmRepositoryLockTimeout, repositoryLockPath(repoFile), err)
+		}
+		return err
 	}
 
-	return func() {
-		_ = fileLock.Unlock()
-	}, nil
+	return nil
 }
 
 func repositoryLockPath(repoFile string) string {

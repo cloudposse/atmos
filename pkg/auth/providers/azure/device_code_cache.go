@@ -1,8 +1,10 @@
 package azure
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/cachepaths"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
+	"github.com/cloudposse/atmos/pkg/cache"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -528,20 +531,13 @@ func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 		return fmt.Errorf("failed to marshal Azure profile: %w", err)
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := profilePath + ".lock"
-	lock, err := azureCloud.AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock Azure profile file", "lock_file", lockPath, "error", unlockErr)
+	if err := withAzureFileLock(profilePath, func() error {
+		if err := os.WriteFile(profilePath, updatedData, azureCloud.FilePermissions); err != nil {
+			return fmt.Errorf("failed to write Azure profile: %w", err)
 		}
-	}()
-
-	if err := os.WriteFile(profilePath, updatedData, azureCloud.FilePermissions); err != nil {
-		return fmt.Errorf("failed to write Azure profile: %w", err)
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	log.Debug("Updated Azure profile", "path", profilePath, "subscription", p.subscriptionID)
@@ -558,25 +554,27 @@ func writeCacheFileWithLocking(cachePath string, data []byte, cacheType string) 
 		return false
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := cachePath + ".lock"
-	lock, err := azureCloud.AcquireFileLock(lockPath)
-	if err != nil {
+	if err := withAzureFileLock(cachePath, func() error {
+		return os.WriteFile(cachePath, data, azureCloud.FilePermissions)
+	}); err != nil {
 		log.Debug(fmt.Sprintf("Failed to acquire file lock for %s", cacheType), "error", err)
-		return false
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug(fmt.Sprintf("Failed to unlock %s file", cacheType), "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	if err := os.WriteFile(cachePath, data, azureCloud.FilePermissions); err != nil {
-		log.Debug(fmt.Sprintf("Failed to write %s", cacheType), "error", err)
 		return false
 	}
 
 	return true
+}
+
+func withAzureFileLock(path string, fn func() error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := cache.NewFileLock(path).WithLockContext(ctx, fn); err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %w", azureCloud.ErrFileLockTimeout, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // stripBOM removes UTF-8 BOM (Byte Order Mark) from the beginning of data.

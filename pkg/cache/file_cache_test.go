@@ -43,6 +43,13 @@ func (m *mockFileLock) WithRLock(fn func() error) error {
 	return fn()
 }
 
+func (m *mockFileLock) TryWithRLock(fn func() error) (bool, error) {
+	if m.withRLockErr != nil {
+		return false, m.withRLockErr
+	}
+	return true, fn()
+}
+
 // newTestCache creates a FileCache for testing with the given temp directory.
 func newTestCache(t *testing.T) *FileCache {
 	t.Helper()

@@ -86,7 +86,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	// Check for component-level location override from merged auth config.
 	if locationOverride := getComponentLocationOverride(params.StackInfo, params.IdentityName); locationOverride != "" {
 		location = locationOverride
-		log.Debug("Using component-level location override",
+		log.Debug(
+			"Using component-level location override",
 			"identity", params.IdentityName,
 			"location", location,
 		)
@@ -106,7 +107,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		TokenFilePath: azureCreds.TokenFilePath,
 	}
 
-	log.Debug("Set Azure auth context",
+	log.Debug(
+		"Set Azure auth context",
 		"profile", params.IdentityName,
 		"credentials", credentialsPath,
 		"subscription", azureCreds.SubscriptionID,
@@ -523,24 +525,13 @@ func writeMSALCacheToFile(msalCachePath string, data []byte) error {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := msalCachePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(msalCachePath, func() error {
+		if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}
-	}()
-
-	if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write MSAL cache: %w", err)
-	}
-
-	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
-	return nil
+		log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
+		return nil
+	})
 }
 
 // tokenCacheParams holds parameters for adding a token to MSAL cache.
@@ -634,24 +625,13 @@ func updateAzureProfile(home string, params ProfileUpdateParams) error {
 		return fmt.Errorf("failed to marshal Azure profile: %w", err)
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := profilePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock Azure profile file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(profilePath, func() error {
+		if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write Azure profile: %w", err)
 		}
-	}()
-
-	if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write Azure profile: %w", err)
-	}
-
-	log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
-	return nil
+		log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
+		return nil
+	})
 }
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
@@ -770,24 +750,13 @@ func updateServicePrincipalEntries(home, clientID, tenantID, federatedToken stri
 		return fmt.Errorf("failed to marshal service principal entries: %w", err)
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := entriesPath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock service principal entries file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(entriesPath, func() error {
+		if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write service principal entries: %w", err)
 		}
-	}()
-
-	if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write service principal entries: %w", err)
-	}
-
-	log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
-	return nil
+		log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
+		return nil
+	})
 }
 
 // createServicePrincipalEntry creates a service principal entry for OIDC authentication.

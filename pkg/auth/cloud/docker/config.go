@@ -1,16 +1,17 @@
 package docker
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/gofrs/flock"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -22,8 +23,6 @@ const (
 	dockerConfigFilePerm = 0o600
 	// Docker config file name.
 	configFileName = "config.json"
-	// Suffix for lock files.
-	lockFileSuffix = ".lock"
 )
 
 // ConfigManager manages Docker config.json for ECR authentication.
@@ -92,32 +91,24 @@ func (m *ConfigManager) WriteAuth(registry, username, password string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Acquire file lock.
-	lock := flock.New(m.configPath + lockFileSuffix)
-	if err := lock.Lock(); err != nil {
-		return fmt.Errorf("%w: failed to acquire lock: %w", errUtils.ErrDockerConfigWrite, err)
-	}
-	defer func() {
-		_ = lock.Unlock()
-	}()
+	return m.withConfigLock(func() error {
+		// Load existing config or create new one.
+		config, err := m.loadConfig()
+		if err != nil {
+			return err
+		}
 
-	// Load existing config or create new one.
-	config, err := m.loadConfig()
-	if err != nil {
-		return err
-	}
+		// Encode credentials as base64(username:password).
+		authValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 
-	// Encode credentials as base64(username:password).
-	authValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+		// Set auth for the registry.
+		if config.Auths == nil {
+			config.Auths = make(map[string]authEntry)
+		}
+		config.Auths[registry] = authEntry{Auth: authValue}
 
-	// Set auth for the registry.
-	if config.Auths == nil {
-		config.Auths = make(map[string]authEntry)
-	}
-	config.Auths[registry] = authEntry{Auth: authValue}
-
-	// Write config back.
-	return m.saveConfig(config)
+		return m.saveConfig(config)
+	})
 }
 
 // RemoveAuth removes ECR authorization from Docker config.
@@ -127,28 +118,30 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Acquire file lock.
-	lock := flock.New(m.configPath + lockFileSuffix)
-	if err := lock.Lock(); err != nil {
-		return fmt.Errorf("%w: failed to acquire lock: %w", errUtils.ErrDockerConfigWrite, err)
-	}
-	defer func() {
-		_ = lock.Unlock()
-	}()
+	return m.withConfigLock(func() error {
+		// Load existing config.
+		config, err := m.loadConfig()
+		if err != nil {
+			return err
+		}
 
-	// Load existing config.
-	config, err := m.loadConfig()
-	if err != nil {
+		// Remove auth entries for specified registries.
+		for _, registry := range registries {
+			delete(config.Auths, registry)
+		}
+
+		return m.saveConfig(config)
+	})
+}
+
+func (m *ConfigManager) withConfigLock(fn func() error) error {
+	if err := cache.NewFileLock(m.configPath).WithLockContext(context.Background(), fn); err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: failed to acquire lock: %w", errUtils.ErrDockerConfigWrite, err)
+		}
 		return err
 	}
-
-	// Remove auth entries for specified registries.
-	for _, registry := range registries {
-		delete(config.Auths, registry)
-	}
-
-	// Write config back.
-	return m.saveConfig(config)
+	return nil
 }
 
 // GetConfigDir returns the directory containing the Docker config.
