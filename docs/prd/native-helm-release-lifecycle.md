@@ -107,8 +107,6 @@ Helm 4 terminology is canonical for concepts and enum values, but its flat CLI f
 
 Flux is the relevant external precedent: [`HelmRelease`](https://fluxcd.io/flux/components/helm/helmreleases/) provides a global timeout and install, upgrade, rollback, and uninstall sections with per-action overrides. Atmos adopts the global-default plus operation-section model, but only exposes actions the R1 executor can control.
 
-Argo CD is not a Helm release-lifecycle precedent. Its [Helm integration](https://argo-cd.readthedocs.io/en/latest/user-guide/helm/) uses Helm only to render manifests and then applies Argo CD sync semantics; it cannot distinguish first install from upgrade and does not execute Helm release actions. Atmos invokes the Helm SDK and owns install-versus-upgrade selection, so operation-specific release policy is both meaningful and enforceable.
-
 R1 intentionally omits `release.rollback`. Helm's `Upgrade.RollbackOnFailure` performs recovery inside the upgrade action using the effective upgrade timeout and wait configuration. Publishing a separate rollback timeout would imply control that Atmos does not have. A rollback section can be added only when Atmos owns rollback as an explicit action with its own context, timeout, reporting, and failure handling.
 
 ### Positive Names and Operation-Specific Failure Enums
