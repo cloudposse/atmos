@@ -5,7 +5,9 @@ Generate an execution plan, which shows what actions Terraform will take to reac
 
 This command shows what Terraform will do when you run 'apply'. It helps you verify changes before making them to your infrastructure.
 
-For complete Terraform/OpenTofu documentation, see: https://developer.hashicorp.com/terraform/cli/commands/plan https://opentofu.org/docs/cli/commands/plan
+For complete Terraform/OpenTofu documentation, see:
+https://developer.hashicorp.com/terraform/cli/commands/plan
+https://opentofu.org/docs/cli/commands/plan
 
 USAGE
 
@@ -83,6 +85,8 @@ GLOBAL FLAGS
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
       --dry-run                              Perform dry run without making actual changes
+
+      --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
 
       --force-color                          Force color output even when not a TTY (useful for screenshots)
 
