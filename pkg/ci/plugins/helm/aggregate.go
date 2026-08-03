@@ -47,9 +47,27 @@ func (p *Plugin) onAfterAggregate(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "helmci.Plugin.onAfterAggregate")()
 
 	resultSet, ok := normalizeHelmAggregate(ctx.Aggregate)
-	if !ok || len(resultSet.Results) == 0 {
+	if !ok {
 		log.Debug("Skipping aggregate Helm CI hook: no results")
 		return nil
+	}
+	if len(resultSet.Results) == 0 {
+		if ctx.CommandError == nil && ctx.ExitCode == 0 {
+			log.Debug("Skipping aggregate Helm CI hook: no results")
+			return nil
+		}
+		if !isSummaryEnabled(ctx.Config) {
+			return nil
+		}
+		writer := ctx.Provider.OutputWriter()
+		if writer == nil {
+			return nil
+		}
+		command := resultSet.Command
+		if command == "" {
+			command = ctx.Command
+		}
+		return writer.WriteSummary(renderHelmAggregateFailureMarkdown(command, ctx.CommandError, ctx.ExitCode))
 	}
 	if !isSummaryEnabled(ctx.Config) {
 		return nil
@@ -60,6 +78,18 @@ func (p *Plugin) onAfterAggregate(ctx *plugin.HookContext) error {
 	}
 	aggregate := buildHelmAggregate(resultSet)
 	return writer.WriteSummary(renderHelmAggregateMarkdown(&aggregate))
+}
+
+func renderHelmAggregateFailureMarkdown(command string, commandErr error, exitCode int) string {
+	message := fmt.Sprintf("command exited with code %d", exitCode)
+	if commandErr != nil {
+		message = commandErr.Error()
+	}
+	return enforceHelmAggregateMarkdownLimit(fmt.Sprintf(
+		"## Helm %s Summary\n\nCommand failed before any components were processed.\n\n**Error:** %s\n",
+		helmAggregateCommandLabel(normalizeHelmAggregateCommand(command)),
+		helmMarkdownCell(message),
+	))
 }
 
 func normalizeHelmAggregate(value any) (schema.HelmCIResultSet, bool) {

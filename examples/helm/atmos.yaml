@@ -120,7 +120,7 @@ commands:
       # hookOnly returns after hooks without waiting for the Deployment's explicit readiness gate.
       - atmos helm apply demo-hook-only -s dev --identity local-k3s
       - command: >-
-          available=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only get deployment demo-hook-only -o jsonpath='{.status.conditions[?(@.type=="Available")].status}');
+          if ! available=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only get deployment demo-hook-only -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>&1); then echo "failed to query Deployment/demo-hook-only availability: $available"; exit 1; fi;
           if [ "$available" = "True" ]; then echo "hookOnly unexpectedly satisfied the Deployment readiness gate"; exit 1; fi
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only patch deployment demo-hook-only --type=json -p='[{"op":"remove","path":"/spec/template/spec/readinessGates"}]'
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=2m
@@ -145,11 +145,11 @@ commands:
       # A failed upgrade restores the successful demo release and cleanup removes
       # the resource introduced only by the failed revision.
       - command: >-
-          before=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}');
+          if ! before=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}' 2>&1); then echo "failed to capture Deployment/demo state before upgrade: $before"; exit 1; fi;
           if output=$(NO_COLOR=1 atmos helm apply demo-upgrade-fail -s dev --identity local-k3s 2>&1); then echo "failed upgrade unexpectedly succeeded"; exit 1; fi;
           case "$output" in *"helm release operation failed"*) ;; *) echo "failed upgrade stopped outside the Helm lifecycle operation: $output"; exit 1;; esac;
           case "$output" in *"job demo-failing-hook failed"*"BackoffLimitExceeded"*) ;; *) echo "failed upgrade did not report the expected post-upgrade hook failure: $output"; exit 1;; esac;
-          after=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}');
+          if ! after=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}' 2>&1); then echo "failed to capture Deployment/demo state after rollback: $after"; exit 1; fi;
           if [ "$before" != "$after" ]; then echo "rollback did not restore Deployment/demo: before=$before after=$after"; exit 1; fi
       - command: >-
           if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-upgrade-only 2>&1); then echo "cleanup_on_fail left the upgrade-only ConfigMap"; exit 1;
