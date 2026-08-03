@@ -290,6 +290,11 @@ func TestTemplateRendering(t *testing.T) {
 			contains: []string{
 				"Helm Apply Summary", "Release lifecycle",
 				"| Operation | `install` |",
+				"| Wait strategy | `hookOnly` |",
+				"| Timeout | `5m0s` |",
+				"| Chart hooks enabled | `true` |",
+				"| Wait for Jobs | `false` |",
+				"| Rollback on failure | `false` |",
 				"| Install CRDs | `true` |",
 			},
 			notContains: []string{"Cleanup on failure", "Maximum history"},
@@ -319,6 +324,7 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			contains: []string{
 				"Helm Delete Summary", "Release lifecycle",
+				"| Operation | `uninstall` |",
 				"| Wait strategy | `legacy` |",
 				"| Timeout | `10m0s` |",
 				"| Chart hooks enabled | `false` |",
