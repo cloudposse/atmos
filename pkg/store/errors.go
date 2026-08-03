@@ -62,6 +62,11 @@ var (
 	ErrStoreTypeNotFound          = errors.New("store type not found")
 	ErrSecretBackendNotEncrypted  = errors.New("store cannot be marked secret: backend does not encrypt values at rest")
 
+	// ErrStoreNotConfigured is returned when a named store is referenced (e.g. by the `atmos
+	// store` CLI or a `type: store` workflow step) but no store with that name is configured
+	// under `stores:` in atmos.yaml.
+	ErrStoreNotConfigured = errors.New("store not configured")
+
 	// AWS Secrets Manager specific errors.
 	ErrSetSecret    = errors.New("failed to set secret")
 	ErrGetSecret    = errors.New("failed to get secret")

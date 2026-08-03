@@ -1,0 +1,94 @@
+---
+title: atmos store set
+sidebar_label: set
+sidebar_class_name: command
+id: set
+description: Write a value to a store from an argument, standard input, or an interactive prompt.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Write a value to a configured store backend (create or update). The value can be supplied inline, piped in with `--stdin`, or entered through an interactive masked prompt when the command runs in a terminal with no `VALUE` given. No declaration is required — any `KEY` can be written to any configured store.
+</Intro>
+
+<CastPlayer title="atmos store set --help" src="/casts/screengrabs/atmos-store-set--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos store set STORE KEY [VALUE] [flags]
+```
+
+## Examples
+
+```shell
+# Set a value inline, scoped to a stack and component
+atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
+
+# Set a value interactively with a masked prompt
+atmos store set app-metadata image_tag --stack=prod --component=ecs-service
+
+# Read a multi-line value from standard input
+cat manifest.json | atmos store set app-metadata deploy_manifest --stdin --stack=prod --component=ecs-service
+
+# Store-global value (no --stack/--component)
+atmos store set app-metadata shared_config '{"region":"us-east-1"}'
+
+# Write to a store using a specific identity
+atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service --identity=aws/prod-metadata
+```
+
+## Arguments
+
+<dl>
+  <dt>`STORE`</dt>
+  <dd>
+    The name of the configured store backend to write to (a key under `stores:` in `atmos.yaml`).
+  </dd>
+
+  <dt>`KEY`</dt>
+  <dd>
+    The key to write.
+  </dd>
+
+  <dt>`VALUE`</dt>
+  <dd>
+    The value to write. Optional — when omitted, the value is read from `--stdin` or from an interactive masked prompt.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` <em>(alias `-s`)</em></dt>
+  <dd>
+    The Atmos stack to scope the key to. **Optional** — omit for a store-global key.
+
+    **Environment variable:** `ATMOS_STACK`
+  </dd>
+
+  <dt>`--component` <em>(alias `-c`)</em></dt>
+  <dd>
+    The Atmos component to scope the key to. **Optional** — omit for a store-global key.
+
+    **Environment variable:** `ATMOS_COMPONENT`
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    The identity to use when accessing the store backend.
+
+    **Environment variable:** `ATMOS_IDENTITY`
+  </dd>
+
+  <dt>`--stdin`</dt>
+  <dd>
+    Read the value from standard input. Useful for piping multi-line values such as JSON manifests.
+  </dd>
+</dl>
+
+## See Also
+
+- [atmos store](/cli/commands/store/usage) — Overview of the store command group
+- [`!store` YAML function](/functions/yaml/store) — Read a value back scoped to a stack and component

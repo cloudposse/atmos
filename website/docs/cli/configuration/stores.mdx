@@ -405,8 +405,32 @@ components:
 
 This writes Terraform outputs to the configured store after apply completes. The output values starting with `.` reference Terraform output names.
 
+## Using Stores from the CLI or a Workflow Step
+
+For raw CRUD access to any configured store -- not tied to a Terraform output -- use the
+[`atmos store`](/cli/commands/store/usage) CLI command group or a
+[`type: store`](/workflows/steps/type/store) workflow step:
+
+```shell
+atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service
+```
+
+```yaml
+steps:
+  - name: record-tag
+    type: store
+    action: write
+    with:
+      store: app-metadata
+      key: image_tag
+      value: "{{ .steps.push.metadata.digest }}"
+```
+
 ## Related
 
 - [External Stores](/stacks/sharing-state/stores) - Using `!store` function in stacks
 - [Hooks](/stacks/hooks) - Writing to stores with hooks
+- [`atmos store` CLI](/cli/commands/store/usage) - Read, write, delete, and list store values
+- [`type: store` workflow step](/workflows/steps/type/store) - Write a store value from a workflow, custom command, or hook
 - [Terraform State](/stacks/sharing-state/terraform-state) - Alternative data sharing method

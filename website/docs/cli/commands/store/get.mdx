@@ -1,0 +1,95 @@
+---
+title: atmos store get
+sidebar_label: get
+sidebar_class_name: command
+id: get
+description: Retrieve a value from a store, scoped to the same stack and component it was set with.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Retrieve a value from a configured store backend, scoped to `--stack`/`--component` the same way [`store set`](/cli/commands/store/set) writes it. An omitted `--stack`/`--component` reads back a value that was set without them.
+</Intro>
+
+<CastPlayer title="atmos store get --help" src="/casts/screengrabs/atmos-store-get--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos store get STORE KEY [flags]
+```
+
+## Examples
+
+```shell
+# Retrieve a value scoped to a stack and component
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service
+
+# Retrieve a store-global value (no --stack/--component)
+atmos store get app-metadata shared_config
+
+# Output as JSON
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --format=json
+
+# Output as a shell-sourceable env assignment
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --format=env
+
+# Copy the raw value to the clipboard with no trailing newline
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --raw | pbcopy
+```
+
+## Arguments
+
+<dl>
+  <dt>`STORE`</dt>
+  <dd>
+    The name of the configured store backend to read from.
+  </dd>
+
+  <dt>`KEY`</dt>
+  <dd>
+    The key to retrieve.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` <em>(alias `-s`)</em></dt>
+  <dd>
+    The Atmos stack the key was scoped to when set. **Optional** — must match what was used with `set`.
+
+    **Environment variable:** `ATMOS_STACK`
+  </dd>
+
+  <dt>`--component` <em>(alias `-c`)</em></dt>
+  <dd>
+    The Atmos component the key was scoped to when set. **Optional** — must match what was used with `set`.
+
+    **Environment variable:** `ATMOS_COMPONENT`
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    The identity to use when accessing the store backend.
+
+    **Environment variable:** `ATMOS_IDENTITY`
+  </dd>
+
+  <dt>`--format`</dt>
+  <dd>
+    The output format: `text`, `json`, or `env`. Defaults to `text`.
+  </dd>
+
+  <dt>`--raw` <em>(alias `-r`)</em></dt>
+  <dd>
+    Print the raw value with **no trailing newline** (text only). Ideal for piping into another command or the clipboard (for example, `--raw | pbcopy`). Cannot be combined with `--format=json` or `--format=env`.
+  </dd>
+</dl>
+
+## See Also
+
+- [atmos store](/cli/commands/store/usage) — Overview of the store command group
+- [`!store` YAML function](/functions/yaml/store) — Read a value in stack configuration
+- [`!store.get` YAML function](/functions/yaml/store.get) — Read a value directly by key in stack configuration

@@ -101,6 +101,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/scaffold"
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"
+	_ "github.com/cloudposse/atmos/cmd/store"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
