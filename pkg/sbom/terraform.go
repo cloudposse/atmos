@@ -83,8 +83,25 @@ func appendTerraform(ctx context.Context, graph *Graph, config *schema.AtmosConf
 	if len(locks) == 0 {
 		providerDetail, moduleDetail = "no Terraform lock files discovered", "no initialized Terraform configurations discovered"
 	}
-	graph.Coverage = append(graph.Coverage, Coverage{Adapter: "terraform-providers", Status: coverageStatus(providerComplete), Detail: providerDetail}, Coverage{Adapter: "terraform-modules", Status: coverageStatus(moduleComplete), Detail: moduleDetail}, Coverage{Adapter: "oci-artifacts", Status: "complete", Detail: "OCI artifacts are represented by Atmos source receipts"})
+	graph.Coverage = append(graph.Coverage, Coverage{Adapter: "terraform-providers", Status: coverageStatus(providerComplete), Detail: providerDetail}, Coverage{Adapter: "terraform-modules", Status: coverageStatus(moduleComplete), Detail: moduleDetail}, Coverage{Adapter: "oci-artifacts", Status: "complete", Detail: ociArtifactsDetail(graph)})
 	return nil
+}
+
+// ociArtifactsDetail reports whether any vendor-lock artifact is actually OCI-sourced (its
+// "atmos:kind" property, set by appendVendor -- which always runs before appendTerraform -- equals
+// "oci"), instead of unconditionally claiming OCI artifacts were represented regardless of whether
+// any exist in this project.
+func ociArtifactsDetail(graph *Graph) string {
+	count := 0
+	for _, component := range graph.Components {
+		if component.Properties["atmos:domain"] == "vendor" && component.Properties["atmos:kind"] == "oci" {
+			count++
+		}
+	}
+	if count == 0 {
+		return "no OCI artifacts found in the vendor lock"
+	}
+	return fmt.Sprintf("%d OCI artifact(s) represented by Atmos source receipts", count)
 }
 
 // linkConfigurationSource connects a local Terraform component to the vendor

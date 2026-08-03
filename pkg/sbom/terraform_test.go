@@ -44,8 +44,42 @@ func TestAppendTerraformSkipsWhenBaseDirectoryMissing(t *testing.T) {
 	require.NoError(t, appendTerraform(t.Context(), graph, config))
 	require.Empty(t, graph.Components)
 	for _, coverage := range graph.Coverage {
-		require.Contains(t, []string{"no Terraform lock files discovered", "no initialized Terraform configurations discovered", "OCI artifacts are represented by Atmos source receipts"}, coverage.Detail)
+		require.Contains(t, []string{"no Terraform lock files discovered", "no initialized Terraform configurations discovered", "no OCI artifacts found in the vendor lock"}, coverage.Detail)
 	}
+}
+
+// TestOCIArtifactsDetailReflectsActualPresence proves the oci-artifacts coverage detail is honest
+// about whether any OCI-sourced vendor artifact actually exists, rather than unconditionally
+// claiming OCI artifacts were represented -- confirmed by manual QA to previously always report
+// "OCI artifacts are represented by Atmos source receipts" even in a project with zero OCI
+// artifacts of any kind.
+func TestOCIArtifactsDetailReflectsActualPresence(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no OCI artifacts in the graph", func(t *testing.T) {
+		t.Parallel()
+		graph := &Graph{Components: []Component{
+			{ID: "vendor:a", Properties: map[string]string{"atmos:domain": "vendor", "atmos:kind": "remote"}},
+		}}
+		require.Equal(t, "no OCI artifacts found in the vendor lock", ociArtifactsDetail(graph))
+	})
+
+	t.Run("one OCI artifact in the graph", func(t *testing.T) {
+		t.Parallel()
+		graph := &Graph{Components: []Component{
+			{ID: "vendor:a", Properties: map[string]string{"atmos:domain": "vendor", "atmos:kind": "remote"}},
+			{ID: "vendor:b", Properties: map[string]string{"atmos:domain": "vendor", "atmos:kind": "oci"}},
+		}}
+		require.Equal(t, "1 OCI artifact(s) represented by Atmos source receipts", ociArtifactsDetail(graph))
+	})
+
+	t.Run("ignores non-vendor components with a coincidentally matching kind", func(t *testing.T) {
+		t.Parallel()
+		graph := &Graph{Components: []Component{
+			{ID: "terraform-provider:x", Properties: map[string]string{"atmos:domain": "terraform-provider", "atmos:kind": "oci"}},
+		}}
+		require.Equal(t, "no OCI artifacts found in the vendor lock", ociArtifactsDetail(graph))
+	})
 }
 
 func TestAppendTerraformMarksModulesIncompleteWhenLocalModuleUnresolvable(t *testing.T) {
