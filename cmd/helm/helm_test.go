@@ -3,6 +3,7 @@ package helm
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -121,6 +122,24 @@ func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 		cfg.HelmSkipCRDsSectionName,
 	} {
 		assert.NotContains(t, defaults, key)
+	}
+}
+
+func TestCanonicalRollbackFlagIsPreservedInBothAliasArgumentOrders(t *testing.T) {
+	orders := [][]string{
+		{"--atomic=true", "--rollback-on-failure=false"},
+		{"--rollback-on-failure=false", "--atomic=true"},
+	}
+
+	for _, args := range orders {
+		t.Run(strings.Join(args, "_then_"), func(t *testing.T) {
+			cmd := newOperationCommand("apply", "Apply")
+			require.NoError(t, cmd.ParseFlags(args))
+
+			actual := getOperationFlags(cmd)
+			assert.Equal(t, false, actual[cfg.HelmRollbackOnFailureSectionName])
+			assert.Equal(t, true, actual[cfg.HelmAtomicSectionName])
+		})
 	}
 }
 
