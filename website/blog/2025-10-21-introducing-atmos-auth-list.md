@@ -180,4 +180,4 @@ This command is part of a broader authentication effort. Also on the way:
 
 ## Get Involved
 
-Tell us which authentication configurations this command renders badly, and which output format you actually script against. Open an issue at [github.com/cloudposse/atmos/issues](https://github.com/cloudposse/atmos/issues).
+Tell us which authentication configurations this command renders badly, and which output format you actually script against. Open an issue at [github.com/cloudposse/atmos/issues](https://github.com/cloudposse/atmos/issues), or find us in [Slack](https://slack.cloudposse.com/).

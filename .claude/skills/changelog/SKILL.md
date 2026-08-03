@@ -33,6 +33,7 @@ label decision tree. CI enforces this via `.github/workflows/changelog-check.yml
 `website/blog/*.md` or `*.mdx` file (draft PRs, and PRs targeting a branch other than `main`, are exempt
 entirely). Write posts as `.mdx` regardless — Rule 3 below embeds `<CastPlayer>` as real JSX, which only
 `.mdx` renders; CI accepts `.md` but that's not this repo's convention.
+
 ### Which audience, which rules
 
 Ask who needs to know, and the rest follows:
@@ -67,12 +68,16 @@ date: YYYY-MM-DDT12:00:00.000Z
 Open on the PAIN the reader already feels — the broken/tedious/confusing thing they live with
 today — then name the change as the relief.
 <!--truncate-->
+
 ## The Problem
 ...
+
 ## The Fix
 ...
+
 ## How to Use It
 ...
+
 ## Get Involved
 ```
 
@@ -82,8 +87,11 @@ today — then name the change as the relief.
   post sets it. Docusaurus infers the date from the filename without it, but the explicit field is the
   convention and it keeps same-day posts from ordering arbitrarily.
 - Never open the body with `## What Changed` — lead with the problem (see Rule 1).
-- `## Get Involved` is one or two sentences ending in a link to
+- `## Get Involved` is one or two sentences pointing at
   `https://github.com/cloudposse/atmos/issues`. Keep it that short — it is a sign-off, not a section.
+  A [Slack](https://slack.cloudposse.com/) link alongside the issue tracker is fine and common in this
+  corpus. **Never drop an existing community link to satisfy the length rule** — a rewrite pass once
+  stripped Slack from six posts that way. Trim words, not destinations.
 
 ## Tags — read `website/blog/tags.yml`, never invent one
 
@@ -198,6 +206,13 @@ because the post already has readers and a URL:
   be present and in that order. An extra section between them is fine if it carries real content. When a
   post is missing one of the four, prefer moving existing prose into it over writing new prose to fill it —
   a thin invented "The Problem" section is worse than the heading being absent.
+- **Collapse hollow bullets, keep lookup lists.** Bold-label bullets (`- **Label**: text`) that carry no information beyond the label: convert to
+  prose or delete. **The test is the text, not the shape.** If each bullet carries a distinct specific fact —
+  a platform list, the columns a command prints, the states a feature can be in — it is a lookup list and
+  belongs as a list. Flattening it into one comma-spliced sentence makes it worse. A rewrite pass once turned
+  a 13-tool image manifest into a 55-word wall of commas, and a three-state behavior table into a garden-path
+  sentence. Collapse `- **Team consistency** - Everyone uses the same authentication approach`; keep
+  `- **Cross-platform** - Works on Linux, macOS, and Windows`.
 - **Do not trade away facts to satisfy a rule.** If Rule 4 forces you to drop implementation detail, keep
   every fact that has a user-observable analogue and drop only the internals themselves.
 

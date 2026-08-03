@@ -17,13 +17,22 @@ Containerizing that toolchain is the standard answer, and Geodesic is a containe
 
 The tools are the environment. When they are installed per-laptop, "works on my machine" is not a joke about carelessness — it is the predictable result of ten independent installs with no shared source of truth. CI ends up on a different set again.
 
-Containerized development environments — DevOps toolboxes — solved this before the Development Containers specification existed. CoreOS pioneered the pattern: package the tools into an image, and a contributor needs only Docker and a shell. Geodesic has implemented it since 2016.
+Containerized development environments — DevOps toolboxes — solved this before the [Development Containers specification](https://containers.dev/) existed. CoreOS pioneered the pattern: package the tools into an image, and a contributor needs only Docker and a shell. Geodesic has implemented it since 2016.
 
 ## The Fix
 
 [Geodesic](https://github.com/cloudposse/geodesic) is Cloud Posse's DevOps toolbox — a container image with the infrastructure toolchain pre-installed and pre-configured. It predates the devcontainer spec, but it is the same concept, and Atmos treats it as what it is: a devcontainer.
 
-The image carries Atmos, Terraform with all major providers, kubectl and the Kubernetes tools (helm, helmfile, k9s), the AWS, Azure, and Google Cloud CLIs, the data-processing set (jq, yq, gomplate), and the development essentials — git, make, vim. It is Debian-based, built for linux/amd64 and linux/arm64, and usable as a base image for your own toolbox.
+What is in the image:
+
+- **Atmos**
+- **Terraform**, with all major providers
+- **kubectl** and the Kubernetes tools — helm, helmfile, k9s, and more
+- **Cloud CLIs** — AWS CLI, Azure CLI, Google Cloud SDK
+- **Data processing** — jq, yq, gomplate
+- **Development essentials** — git, make, vim, and more
+
+It is Debian-based, built for linux/amd64 and linux/arm64, and usable as a base image for your own toolbox. Cloud Posse has shipped it since 2016.
 
 With [Atmos's native devcontainer support](/changelog/native-devcontainer-support), you declare it in `atmos.yaml`:
 
@@ -199,4 +208,4 @@ Full command reference: [devcontainer documentation](/cli/commands/devcontainer)
 
 ## Get Involved
 
-If your toolchain needs something the image does not carry, or the devcontainer integration gets in your way, open an issue at https://github.com/cloudposse/atmos/issues
+If the devcontainer integration gets in your way, open an issue at https://github.com/cloudposse/atmos/issues. For the image itself — a missing tool, a version you need — that belongs on [Geodesic](https://github.com/cloudposse/geodesic/issues), and either way you can find us in [Slack](https://slack.cloudposse.com/).

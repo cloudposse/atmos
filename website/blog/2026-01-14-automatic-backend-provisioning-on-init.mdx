@@ -82,7 +82,13 @@ components:
 
 Provisioning reports itself on a single line with a spinner, naming the backend type and the resource it created, instead of the several status messages it used to emit.
 
-Runs after the first say nothing at all: the backend already exists, so the step skips silently, and it stays safe after a `terraform import`. Leave `provision.backend.enabled: true` in your configuration permanently.
+What happens depends on the state it finds:
+
+- **First run** — the backend does not exist, so Atmos creates it, with a spinner and a single line naming the backend type and the resource
+- **Every run after** — the backend already exists, so the step skips silently
+- **After a `terraform import`** — still safe, with no conflicts
+
+Because it is idempotent, leave `provision.backend.enabled: true` in your configuration permanently.
 
 ## Explicit Command Still Available
 

@@ -99,7 +99,7 @@ Discovered identities appear in the tree alongside the ones you wrote yourself. 
 
 ### Override or extend a discovered identity
 
-Naming a discovered identity in your `atmos.yaml` does not replace it. Atmos deep merges the two, so the fields you write are added to the fields that were discovered:
+Naming a discovered identity in your `atmos.yaml` does not replace it. Atmos deep merges the two, so the fields you write are added to the fields that were discovered — and where both set the same field, yours wins:
 
 ```yaml
 # atmos.yaml

@@ -136,5 +136,5 @@ Read more in the [CLI Configuration](/cli/configuration) documentation (see `log
 ## Get Involved
 
 If Atmos guesses wrong about your terminal, your pipeline, or your CI runner — or if anything sensitive makes it
-through unmasked — that is worth reporting with the exact environment.
+through unmasked — that is worth reporting with the exact environment at [our issue tracker](https://github.com/cloudposse/atmos/issues), or raising in [Slack](https://slack.cloudposse.com/).
 [Open an issue on GitHub](https://github.com/cloudposse/atmos/issues).

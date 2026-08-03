@@ -45,7 +45,13 @@ The part that surprises people: authentication happens on your host machine, not
 
 ## Why Move Authentication Into Atmos
 
-Configuration lives in `atmos.yaml` next to the infrastructure it authenticates against, which means different components can use different identities, the same setup works on Linux, macOS, and Windows, and there is no separate credential app for a new teammate to install and configure.
+Compared with an external credential manager:
+
+- **Configuration as code** — authentication config lives in `atmos.yaml`, next to the infrastructure it authenticates against
+- **Per-component identities** — different components can use different AWS identities
+- **Nothing extra to run** — no separate credential app to install, launch, or keep in sync
+- **Cross-platform** — the same setup works on Linux, macOS, and Windows
+- **One approach per team** — everyone authenticates the same way, so a new teammate inherits a working setup rather than a description of one
 
 ## How to Use It
 

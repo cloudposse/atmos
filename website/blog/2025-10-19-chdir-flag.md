@@ -197,4 +197,4 @@ Both absolute and relative paths work as expected on all platforms, with proper 
 
 ## Get Involved
 
-Tell us how `-C` fits into your multi-repo setup, and open an issue at https://github.com/cloudposse/atmos/issues.
+Tell us how `-C` fits into your multi-repo setup, either at [our issue tracker](https://github.com/cloudposse/atmos/issues) or in [Slack](https://slack.cloudposse.com/).
