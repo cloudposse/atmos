@@ -2115,7 +2115,7 @@
               "type": "object"
             },
             "retry": {
-              "$ref": "#/definitions/workflow_retry"
+              "$ref": "#/definitions/retry"
             },
             "values": {
               "type": "object"
