@@ -83,6 +83,9 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 
 		// Settings overrides.
 		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
+
+		// Edition pin.
+		Edition: v.GetString("edition"),
 	}
 }
 
@@ -461,6 +464,14 @@ func registerSettingsFlags(registry *FlagRegistry) {
 		Default:     "",
 		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
 		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "edition",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)",
+		EnvVars:     []string{"ATMOS_EDITION"},
 	})
 }
 
