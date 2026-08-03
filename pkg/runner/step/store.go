@@ -7,6 +7,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	pstore "github.com/cloudposse/atmos/pkg/store"
@@ -144,10 +145,12 @@ func decodeStoreWith(with map[string]any) storeStepConfig {
 	}
 	data, err := yaml.Marshal(with)
 	if err != nil {
+		log.Debug("Failed to marshal store step with: block", "error", err)
 		return storeStepConfig{}
 	}
 	var cfg storeStepConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		log.Debug("Failed to unmarshal store step with: block", "error", err)
 		return storeStepConfig{}
 	}
 	return cfg

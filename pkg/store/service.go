@@ -51,7 +51,12 @@ func (s *Service) Set(name, stack, component, key string, value any) error {
 	return st.Set(stack, component, key, value)
 }
 
-// Get retrieves a value from the named store, scoped to a stack and component.
+// Get retrieves a value from the named store, scoped to a stack and component. Note: unlike
+// secrets.Service.Get, this does not register the value with the masker -- pkg/store sits below
+// pkg/io in the import graph (pkg/schema, which pkg/store's config types are part of, is imported
+// by pkg/io), so registering here would create an import cycle. Callers that surface a Get result
+// to a human (e.g. `atmos store get`, see cmd/store/get.go) are responsible for registering the
+// value with io.RegisterSecretValue themselves before writing it out.
 func (s *Service) Get(name, stack, component, key string) (any, error) {
 	st, err := s.lookup(name)
 	if err != nil {
@@ -60,7 +65,8 @@ func (s *Service) Get(name, stack, component, key string) (any, error) {
 	return st.Get(stack, component, key)
 }
 
-// GetKey retrieves a value directly by key, without stack or component scoping.
+// GetKey retrieves a value directly by key, without stack or component scoping. See the Get
+// doc comment for why masker registration is not done here.
 func (s *Service) GetKey(name, key string) (any, error) {
 	st, err := s.lookup(name)
 	if err != nil {

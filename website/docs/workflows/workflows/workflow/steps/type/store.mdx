@@ -98,7 +98,11 @@ Writing to a store marked `secret: true` is allowed — for example, a step that
 password and writes it straight to a secret backend. This differs from the read-side
 [`!store`](/functions/yaml/store)/[`!store.get`](/functions/yaml/store.get) functions, which refuse
 to read a `secret: true` store (use [`!secret`](/functions/yaml/secret) instead). A `store` step's
-write has no equivalent leak risk, so it is not restricted the same way — but it also bypasses
+write is not restricted the same way, but it is not risk-free: the written value is returned as
+[`{{ .steps.<name>.value }}`](#result) and is available to every later step in the workflow, which
+means it can be echoed, logged, or passed to a shell/output-producing step if a later step isn't
+careful with it. Treat that result as sensitive when the value is a secret, and avoid echoing,
+logging, or forwarding it to output-producing steps. Writing this way also bypasses
 [`atmos secret`](/cli/commands/secret/usage)'s declaration and scope tracking. Prefer declaring the
 value under `secrets.vars` and using `atmos secret set` when it should be tracked as a secret.
 

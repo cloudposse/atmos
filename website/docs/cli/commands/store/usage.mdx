@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos store` command group manages raw values in the store backends configured under `stores:` in `atmos.yaml` (AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, GitHub Actions). Unlike [`atmos secret`](/cli/commands/secret/usage), store values need no declaration in stack configuration — any key can be read, written, or deleted directly by name against a named store. Values written here are readable via the [`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) YAML functions, and by a [`type: store`](/workflows/steps/type/store) workflow step.
+The `atmos store` command group manages raw values in the store backends configured under `stores:` in `atmos.yaml` (AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, GitHub Actions). Unlike [`atmos secret`](/cli/commands/secret/usage), store values need no declaration in stack configuration — any key can be read or written directly by name against a named store. Deletion depends on the backend: Redis and Artifactory don't support it (see [`store delete`](/cli/commands/store/delete)). Values written here are readable via the [`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) YAML functions, and by a [`type: store`](/workflows/steps/type/store) workflow step.
 </Intro>
 
 <CastPlayer title="atmos store --help" src="/casts/screengrabs/atmos-store--help.cast" static chrome />

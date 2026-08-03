@@ -1,8 +1,6 @@
 package store
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -42,14 +40,18 @@ func parseStoreScope(cmd *cobra.Command) (storeScope, error) {
 
 // loadService initializes Atmos config, authenticates (if an identity is configured or
 // requested), wires the store auth-context resolver, and returns a *pstore.Service over the
-// resolved store registry.
+// resolved store registry. Unlike `atmos secret`, this never resolves a component's stack
+// config, so it skips stack processing (processStacks=false) -- atmosConfig.StoresConfig/
+// atmosConfig.Stores are populated earlier in InitCliConfig regardless of this flag; it only
+// gates full stack discovery and the stacks.base_path/included_paths validation, neither of
+// which `atmos store` needs.
 func loadService(scope storeScope) (*pstore.Service, error) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 		ComponentFromArg: scope.Component,
 		Stack:            scope.Stack,
-	}, true)
+	}, false)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+		return nil, errUtils.Build(errUtils.ErrFailedToInitConfig).WithCause(err).Err()
 	}
 
 	authManager, err := buildStoreAuthManager(&atmosConfig, scope)

@@ -82,35 +82,82 @@ func TestService_Delete_StoreNotConfigured(t *testing.T) {
 	assert.ErrorIs(t, err, ErrStoreNotConfigured)
 }
 
+// fakeLocalStore is a small hand-written fake (rather than a generated mock) implementing both
+// Store and LocalStore -- there is no generated MockLocalStore, and none of the generated mocks
+// in mock_store.go happen to implement IsLocal.
+type fakeLocalStore struct{}
+
+func (fakeLocalStore) Set(stack, component, key string, value any) error { return nil }
+func (fakeLocalStore) Get(stack, component, key string) (any, error)     { return nil, nil }
+func (fakeLocalStore) GetKey(key string) (any, error)                    { return nil, nil }
+func (fakeLocalStore) IsLocal() bool                                     { return true }
+
 func TestService_List(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	deletable := NewMockDeletableStore(ctrl)
 	plain := NewMockStore(ctrl)
+	statusStore := NewMockStatusStore(ctrl)
+	localStore := fakeLocalStore{}
 
 	svc := NewService(
 		StoresConfig{
 			"app-secrets": {Kind: KindAWSSSM, Secret: true},
 			"app-cache":   {Kind: KindRedis},
+			"app-status":  {Kind: KindHashicorpVault},
+			"app-local":   {Kind: KindKeychain},
+			"app-missing": {Kind: KindAWSSSM}, // Configured, but absent from the live registry.
 		},
 		StoreRegistry{
 			"app-secrets": deletable,
 			"app-cache":   plain,
+			"app-status":  statusStore,
+			"app-local":   localStore,
+			// "app-missing" intentionally omitted, simulating a store whose construction failed.
 		},
 	)
 
 	descriptors := svc.List()
-	require.Len(t, descriptors, 2)
+	require.Len(t, descriptors, 5)
 
-	// Sorted by name: "app-cache" before "app-secrets".
-	assert.Equal(t, "app-cache", descriptors[0].Name)
-	assert.Equal(t, KindRedis, descriptors[0].Kind)
-	assert.False(t, descriptors[0].Secret)
-	assert.False(t, descriptors[0].Deletable)
+	byName := make(map[string]Descriptor, len(descriptors))
+	for _, d := range descriptors {
+		byName[d.Name] = d
+	}
 
-	assert.Equal(t, "app-secrets", descriptors[1].Name)
-	assert.Equal(t, KindAWSSSM, descriptors[1].Kind)
-	assert.True(t, descriptors[1].Secret)
-	assert.True(t, descriptors[1].Deletable)
+	appCache := byName["app-cache"]
+	assert.Equal(t, KindRedis, appCache.Kind)
+	assert.False(t, appCache.Secret)
+	assert.False(t, appCache.Deletable)
+	assert.False(t, appCache.HasStatus)
+	assert.False(t, appCache.Local)
+
+	appSecrets := byName["app-secrets"]
+	assert.Equal(t, KindAWSSSM, appSecrets.Kind)
+	assert.True(t, appSecrets.Secret)
+	assert.True(t, appSecrets.Deletable)
+	assert.False(t, appSecrets.HasStatus)
+	assert.False(t, appSecrets.Local)
+
+	appStatus := byName["app-status"]
+	assert.Equal(t, KindHashicorpVault, appStatus.Kind)
+	assert.True(t, appStatus.HasStatus)
+	assert.False(t, appStatus.Deletable)
+	assert.False(t, appStatus.Local)
+
+	appLocal := byName["app-local"]
+	assert.Equal(t, KindKeychain, appLocal.Kind)
+	assert.True(t, appLocal.Local)
+	assert.False(t, appLocal.HasStatus)
+	assert.False(t, appLocal.Deletable)
+
+	// A store present in StoresConfig but missing from the live registry (construction failed)
+	// still gets a descriptor -- from config alone -- with every capability flag left false.
+	appMissing := byName["app-missing"]
+	assert.Equal(t, KindAWSSSM, appMissing.Kind)
+	assert.False(t, appMissing.Secret)
+	assert.False(t, appMissing.Deletable)
+	assert.False(t, appMissing.HasStatus)
+	assert.False(t, appMissing.Local)
 }
 
 func TestService_List_Empty(t *testing.T) {

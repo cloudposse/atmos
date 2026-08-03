@@ -407,9 +407,11 @@ This writes Terraform outputs to the configured store after apply completes. The
 
 ## Using Stores from the CLI or a Workflow Step
 
-For raw CRUD access to any configured store -- not tied to a Terraform output -- use the
+For raw read/write access to any configured store -- not tied to a Terraform output -- use the
 [`atmos store`](/cli/commands/store/usage) CLI command group or a
-[`type: store`](/workflows/steps/type/store) workflow step:
+[`type: store`](/workflows/steps/type/store) workflow step. Not every operation is available on
+every backend -- for example, `atmos store delete` returns an error for Redis and Artifactory,
+which don't support deletion:
 
 ```shell
 atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service

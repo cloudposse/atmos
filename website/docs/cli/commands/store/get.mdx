@@ -35,7 +35,10 @@ atmos store get app-metadata image_tag --stack=prod --component=ecs-service --fo
 # Output as a shell-sourceable env assignment
 atmos store get app-metadata image_tag --stack=prod --component=ecs-service --format=env
 
-# Copy the raw value to the clipboard with no trailing newline
+# Redirect the raw value to a file with no trailing newline
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --raw > image_tag.txt
+
+# macOS: copy the raw value to the clipboard with no trailing newline
 atmos store get app-metadata image_tag --stack=prod --component=ecs-service --raw | pbcopy
 ```
 
@@ -84,7 +87,7 @@ atmos store get app-metadata image_tag --stack=prod --component=ecs-service --ra
 
   <dt>`--raw` <em>(alias `-r`)</em></dt>
   <dd>
-    Print the raw value with **no trailing newline** (text only). Ideal for piping into another command or the clipboard (for example, `--raw | pbcopy`). Cannot be combined with `--format=json` or `--format=env`.
+    Print the raw value with **no trailing newline** (text only). Ideal for piping into another command or redirecting to a file (for example, `--raw > image_tag.txt`, or on macOS `--raw | pbcopy` for the clipboard). Cannot be combined with `--format=json` or `--format=env`.
   </dd>
 </dl>
 
