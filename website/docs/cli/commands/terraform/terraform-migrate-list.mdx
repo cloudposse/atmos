@@ -45,9 +45,6 @@ atmos terraform migrate list [component] [options]
   <dt>`--query`</dt>
   <dd>Filter component instances with a YQ expression.</dd>
 
-  <dt>`--all`</dt>
-  <dd>List all component instances in all stacks.</dd>
-
   <dt>`--format` / `-f`</dt>
   <dd>Output format. Supported values: `table`, `json`, `yaml`, `csv`, `tsv`.</dd>
 
@@ -81,10 +78,10 @@ Show history keys for matching components:
 atmos terraform migrate list --query '.settings.requires_migration == true' --columns component --columns stack --columns history_key
 ```
 
-Output JSON for automation:
+Output JSON for automation (no `[component]` argument lists every component in every stack):
 
 ```shell
-atmos terraform migrate list --all --format json
+atmos terraform migrate list --format json
 ```
 
 ## Output Columns

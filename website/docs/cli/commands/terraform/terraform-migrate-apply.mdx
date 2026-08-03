@@ -42,7 +42,7 @@ Atmos runs the same component preparation as `plan`: auth, source provisioning, 
   <dd>Identity to authenticate before resolving the component and running `tfmigrate apply`. Environment variable: `ATMOS_IDENTITY`.</dd>
 
   <dt>`--migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file. Omit this flag to let `tfmigrate` run history mode. Single-file reruns are not inherently idempotent.</dd>
+  <dd>Path to a single `tfmigrate` migration file, relative to `migration_dir` (defaults to `./migrations` when that directory exists in the component, otherwise the component root) - do not include that prefix. Omit this flag to let `tfmigrate` run history mode. Single-file reruns are not inherently idempotent.</dd>
 
   <dt>`--tfmigrate-config`</dt>
   <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>

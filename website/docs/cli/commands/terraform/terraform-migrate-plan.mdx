@@ -40,7 +40,7 @@ atmos terraform migrate plan [component] -s <stack> [options]
   <dd>Identity to authenticate before resolving the component and running `tfmigrate plan`. Environment variable: `ATMOS_IDENTITY`.</dd>
 
   <dt>`--migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file. Omit this flag to let `tfmigrate` run history mode.</dd>
+  <dd>Path to a single `tfmigrate` migration file, relative to `migration_dir` (defaults to `./migrations` when that directory exists in the component, otherwise the component root) - do not include that prefix. Omit this flag to let `tfmigrate` run history mode.</dd>
 
   <dt>`--tfmigrate-config`</dt>
   <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
