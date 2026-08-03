@@ -35,7 +35,7 @@
 | Timeout | `{{ index . "timeout" }}` |
 | Chart hooks enabled | `{{ index . "chart_hooks_enabled" }}` |
 | Wait for Jobs | `{{ index . "wait_for_jobs" }}` |
-| Rollback on failure | `{{ index . "rollback_on_failure" }}` |
+| On failure | `{{ range $i, $action := index . "on_failure" }}{{ if $i }}, {{ end }}{{ $action }}{{ end }}` |
 
 {{- if eq (index . "operation") "install" }}
 | Install CRDs | `{{ index . "install_crds" }}` |
@@ -43,7 +43,6 @@
 {{- end }}
 
 {{- if eq (index . "operation") "upgrade" }}
-| Cleanup on failure | `{{ index . "cleanup_on_fail" }}` |
 | Maximum history | `{{ index . "max_history" }}` |
 
 {{- end }}
