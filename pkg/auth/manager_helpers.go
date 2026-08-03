@@ -285,7 +285,7 @@ func CreateAndAuthenticateManagerWithAtmosConfigForStack(
 
 	// Validate auth is configured when we have an identity to use.
 	if !isAuthConfigured(authConfig) {
-		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
+		return nil, fmt.Errorf("authentication requires at least one identity configured in atmos.yaml: %w", errUtils.ErrAuthNotConfigured)
 	}
 
 	// Create AuthManager instance, seeding the target stack so stack-scoped identities
@@ -301,6 +301,32 @@ func CreateAndAuthenticateManagerWithAtmosConfigForStack(
 	}
 
 	return authManager, nil
+}
+
+// CreateManagerWithAtmosConfigForStack creates an AuthManager without authenticating an
+// identity. Callers that defer identity selection to a downstream consumer (for example,
+// an identity-backed store) can use the returned manager to authenticate the identity that
+// consumer actually requires.
+//
+// The target stack is seeded into the manager so stack-scoped identities can populate their
+// auth context when the downstream consumer authenticates them.
+func CreateManagerWithAtmosConfigForStack(
+	authConfig *schema.AuthConfig,
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+) (AuthManager, error) {
+	defer perf.Track(atmosConfig, "auth.CreateManagerWithAtmosConfigForStack")()
+
+	if !isAuthConfigured(authConfig) {
+		return nil, fmt.Errorf("authentication requires at least one identity configured in atmos.yaml: %w", errUtils.ErrAuthNotConfigured)
+	}
+
+	cliConfigPath := ""
+	if atmosConfig != nil {
+		cliConfigPath = atmosConfig.CliConfigPath
+	}
+
+	return createAuthManagerInstance(authConfig, cliConfigPath, stack)
 }
 
 // CreateAndAuthenticateManagerWithStackScan creates and authenticates an AuthManager, first running
