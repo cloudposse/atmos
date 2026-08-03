@@ -92,13 +92,11 @@ var nonManifestSections = map[string]struct{}{
 	"values_files":        {}, // Native Helm component sub-field (chart values file paths).
 	"repositories":        {}, // Native Helm component sub-field (chart repositories).
 	"plugins":             {}, // Helm/Helmfile component sub-field (Helm CLI plugins list).
-	"rollback_on_failure": {}, // Native Helm release-lifecycle field.
-	"atomic":              {}, // Native Helm deprecated rollback alias.
+	"on_failure":          {}, // Native Helm release-lifecycle failure actions.
 	"wait_strategy":       {}, // Native Helm release-lifecycle field.
 	"wait":                {}, // Native Helm wait-strategy convenience alias.
 	"wait_for_jobs":       {}, // Native Helm release-lifecycle field.
 	"timeout":             {}, // Native Helm release-lifecycle field.
-	"cleanup_on_fail":     {}, // Native Helm release-lifecycle field.
 	"max_history":         {}, // Native Helm release-lifecycle field.
 	"disable_chart_hooks": {}, // Native Helm release-lifecycle field.
 	"skip_crds":           {}, // Native Helm release-lifecycle field.

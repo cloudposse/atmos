@@ -154,13 +154,11 @@ func operationFlagOptions(name string) []flags.Option {
 		options = append(
 			options,
 			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
-			flags.WithBoolFlag("rollback-on-failure", "", false, "Roll back an upgrade or uninstall a failed install."),
-			flags.WithBoolFlag("atomic", "", false, "Deprecated alias for --rollback-on-failure."),
+			flags.WithStringSliceFlag("on-failure", "", nil, "Actions after a failed release: rollback, cleanup."),
 			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. A bare --wait selects watcher; deprecated true/false map to watcher/hookOnly."),
 			flags.WithNoOptDefVal(flagWait, "watcher"),
 			flags.WithBoolFlag("wait-for-jobs", "", false, "Wait for Jobs in the release manifest."),
 			flags.WithStringFlag("timeout", "", "", "Helm release-operation timeout (for example, 10m)."),
-			flags.WithBoolFlag("cleanup-on-fail", "", false, "Delete resources created by a failed upgrade."),
 			flags.WithIntFlag("history-max", "", cfg.HelmDefaultMaxHistory, "Maximum release revisions to retain; 0 means unlimited."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 			flags.WithBoolFlag("skip-crds", "", false, "Do not install chart CRDs on first install."),
@@ -304,12 +302,14 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 
 func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 	boolFlags := map[string]string{
-		"rollback-on-failure": cfg.HelmRollbackOnFailureSectionName,
-		"atomic":              cfg.HelmAtomicSectionName,
-		"wait-for-jobs":       cfg.HelmWaitForJobsSectionName,
-		"cleanup-on-fail":     cfg.HelmCleanupOnFailSectionName,
-		"no-hooks":            cfg.HelmDisableChartHooksSectionName,
-		"skip-crds":           cfg.HelmSkipCRDsSectionName,
+		"wait-for-jobs": cfg.HelmWaitForJobsSectionName,
+		"no-hooks":      cfg.HelmDisableChartHooksSectionName,
+		"skip-crds":     cfg.HelmSkipCRDsSectionName,
+	}
+	if flag := cmd.Flag("on-failure"); flag != nil && flag.Changed {
+		if values, err := cmd.Flags().GetStringSlice("on-failure"); err == nil {
+			result[cfg.HelmOnFailureSectionName] = values
+		}
 	}
 	for flagName, fieldName := range boolFlags {
 		if flag := cmd.Flag(flagName); flag != nil && flag.Changed {

@@ -878,13 +878,12 @@
             "generate": {
               "$ref": "#/definitions/generate"
             },
-            "rollback_on_failure": {
-              "type": "boolean"
-            },
-            "atomic": {
-              "type": "boolean",
-              "deprecated": true,
-              "x-atmos-replacement": "rollback_on_failure"
+            "on_failure": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["rollback", "cleanup"]
+              }
             },
             "wait_strategy": {
               "$ref": "#/definitions/helm_wait_strategy"
@@ -897,9 +896,6 @@
             },
             "timeout": {
               "type": "string"
-            },
-            "cleanup_on_fail": {
-              "type": "boolean"
             },
             "max_history": {
               "type": "integer",
@@ -1022,13 +1018,12 @@
             "overrides": {
               "$ref": "#/definitions/helm_overrides"
             },
-            "rollback_on_failure": {
-              "type": "boolean"
-            },
-            "atomic": {
-              "type": "boolean",
-              "deprecated": true,
-              "x-atmos-replacement": "rollback_on_failure"
+            "on_failure": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["rollback", "cleanup"]
+              }
             },
             "wait_strategy": {
               "$ref": "#/definitions/helm_wait_strategy"
@@ -1041,9 +1036,6 @@
             },
             "timeout": {
               "type": "string"
-            },
-            "cleanup_on_fail": {
-              "type": "boolean"
             },
             "max_history": {
               "type": "integer",

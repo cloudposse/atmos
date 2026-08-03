@@ -76,12 +76,11 @@ func lifecycleSummary(operation string, policy releaseLifecycle) map[string]any 
 	switch operation {
 	case releaseOperationInstall:
 		summary["wait_for_jobs"] = policy.WaitForJobs
-		summary["rollback_on_failure"] = policy.RollbackOnFailure
+		summary["on_failure"] = policy.failureActionStrings(operation)
 		summary["install_crds"] = !policy.SkipCRDs
 	case releaseOperationUpgrade:
 		summary["wait_for_jobs"] = policy.WaitForJobs
-		summary["rollback_on_failure"] = policy.RollbackOnFailure
-		summary["cleanup_on_fail"] = policy.CleanupOnFail
+		summary["on_failure"] = policy.failureActionStrings(operation)
 		summary["max_history"] = policy.MaxHistory
 	}
 	return summary

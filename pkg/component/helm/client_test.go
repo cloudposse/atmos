@@ -58,11 +58,10 @@ func TestResolveUpgradeChartRef(t *testing.T) {
 
 func TestConfigureReleaseLifecycleActions(t *testing.T) {
 	policy := releaseLifecycle{
-		RollbackOnFailure: true,
+		OnFailure:         []failureAction{failureActionRollback, failureActionCleanup},
 		WaitStrategy:      kube.LegacyStrategy,
 		WaitForJobs:       true,
 		Timeout:           12 * time.Minute,
-		CleanupOnFail:     true,
 		MaxHistory:        7,
 		DisableChartHooks: true,
 		SkipCRDs:          true,

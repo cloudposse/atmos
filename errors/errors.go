@@ -1529,6 +1529,7 @@ var (
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
 	ErrHelmLifecycleDecode           = errors.New("failed to decode helm release lifecycle")
+	ErrHelmFailureActionInvalid      = errors.New("invalid helm on_failure action")
 	ErrHelmWaitStrategyInvalid       = errors.New("invalid helm wait strategy")
 	ErrHelmTimeoutInvalid            = errors.New("invalid helm release timeout")
 	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")

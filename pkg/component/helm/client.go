@@ -194,7 +194,7 @@ func deleteRelease(spec *chartSpec, dryRun bool) error {
 }
 
 func configureInstallLifecycle(client *action.Install, policy releaseLifecycle) {
-	client.RollbackOnFailure = policy.RollbackOnFailure
+	client.RollbackOnFailure = policy.hasFailureAction(failureActionRollback)
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout
@@ -203,11 +203,11 @@ func configureInstallLifecycle(client *action.Install, policy releaseLifecycle) 
 }
 
 func configureUpgradeLifecycle(client *action.Upgrade, policy releaseLifecycle) {
-	client.RollbackOnFailure = policy.RollbackOnFailure
+	client.RollbackOnFailure = policy.hasFailureAction(failureActionRollback)
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout
-	client.CleanupOnFail = policy.CleanupOnFail
+	client.CleanupOnFail = policy.hasFailureAction(failureActionCleanup)
 	client.MaxHistory = policy.MaxHistory
 	client.DisableHooks = policy.DisableChartHooks
 }
