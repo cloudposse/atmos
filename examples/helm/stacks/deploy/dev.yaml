@@ -145,8 +145,6 @@ components:
       values:
         deployment:
           readinessDelaySeconds: 3
-        hooks:
-          readyMarker: true
 
     dag-dependent:
       metadata:
@@ -161,7 +159,7 @@ components:
       wait_strategy: legacy
       values:
         hooks:
-          requiredConfigMap: dag-foundation-ready
+          requiredDeployment: dag-foundation
           # The lifecycle DAG integration test explicitly opts into a live
           # cluster lookup; ordinary offline chart rendering leaves this off.
           validateDependency: true
