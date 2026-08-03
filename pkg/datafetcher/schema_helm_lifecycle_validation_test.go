@@ -40,7 +40,10 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 				"command": "helm",
 				"auth":    map[string]any{},
 				"secrets": map[string]any{},
-				"retry":   map[string]any{"max_attempts": 3},
+				"retry": map[string]any{
+					"max_attempts": 3,
+					"conditions":   []string{"timeout", "/connection reset/"},
+				},
 			},
 		},
 		"components": map[string]any{
@@ -56,7 +59,10 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 					"overrides": map[string]any{
 						"values": map[string]any{"replicaCount": 2},
 						"vars":   map[string]any{"region": "us-west-2"},
-						"retry":  map[string]any{"max_attempts": 2},
+						"retry": map[string]any{
+							"max_attempts": 2,
+							"conditions":   []string{"temporary failure"},
+						},
 					},
 				},
 			},
