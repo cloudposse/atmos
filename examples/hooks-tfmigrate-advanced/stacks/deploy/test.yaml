@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Each component below uses its OWN local backend/state file (unlike
+# examples/hooks-tfmigrate, where two components deliberately share one
+# state file). See each component's migrations/ directory and README.md
+# for the full manual test sequence, including a "seed" step that
+# temporarily swaps in a seed.main.tf.txt to create the pre-migration
+# resources.
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # --- rm action, via a hook with an intentionally MISMATCHED mode ---
+    # mode: apply is bound to before.terraform.plan. A user who runs only
+    # `atmos terraform plan` here (expecting a safe preview) will actually
+    # trigger a real `tfmigrate apply`, permanently mutating state.
+    rm-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/rm-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+          kind: tfmigrate
+          mode: apply
+
+    # --- import action, via a hook with an intentionally MISMATCHED mode ---
+    # mode: plan is bound to before.terraform.apply. A user who runs
+    # `atmos terraform apply` here (expecting the import to happen) will
+    # find the hook only PREVIEWS the import — the real `terraform apply`
+    # that follows never actually imports the file, and instead tries to
+    # create/overwrite it fresh from the resource's `content` value.
+    import-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/import-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: plan
+
+    # --- replace-provider action, via the one-off `--migration` CLI flag ---
+    # No hook wired here — exercised directly with
+    # `atmos terraform migrate plan/apply replace-provider-demo -s test --migration <file>`.
+    replace-provider-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/replace-provider-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+
+    # --- xmv action (count -> for_each), via the one-off `--migration` CLI flag ---
+    xmv-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/xmv-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+
+    # --- multi_state action: splits a resource across two components' states ---
+    multi-state-source:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/multi-state-source.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+
+    multi-state-target:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/multi-state-target.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic

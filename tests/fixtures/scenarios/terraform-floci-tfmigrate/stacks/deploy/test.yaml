@@ -21,6 +21,15 @@ terraform:
       skip_s3_checksum: true
 
 components:
+  # Manual-testing convenience: `atmos emulator up aws -s test` brings up a
+  # long-lived Floci AWS container for hand-driving the CLI (as opposed to
+  # the Go test in tests/terraform_floci_tfmigrate_test.go, which starts its
+  # own via testcontainers). Not used by the automated test.
+  emulator:
+    aws:
+      driver: floci/aws
+      region: us-east-1
+
   terraform:
     service-legacy:
       dependencies:
