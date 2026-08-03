@@ -79,6 +79,18 @@ func TestRenderInstancesTree_EmptyInput(t *testing.T) {
 	}
 }
 
+func TestRenderInstancesTree_AppendsTrailingNewlineForPromptSpacing(t *testing.T) {
+	output := RenderInstancesTree(map[string]map[string][]*listtree.ImportNode{
+		"stack-a": {
+			"component-a": {{Path: "imports/a"}},
+		},
+	}, false)
+
+	if !strings.HasSuffix(output, treeNewline) {
+		t.Error("expected renderer output with a trailing newline for prompt spacing")
+	}
+}
+
 func TestRenderInstancesTree_MultipleStacks(t *testing.T) {
 	stacksWithComponents := map[string]map[string][]*listtree.ImportNode{
 		"stack-a": {

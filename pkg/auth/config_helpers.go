@@ -175,17 +175,29 @@ func normalizeComponentIdentityDefaultMarkers(
 
 	normalizedIdentities := make(map[string]any, len(identities))
 	for identityName, rawIdentity := range identities {
-		canonicalName, value, keep, err := resolveComponentIdentityMarker(globalAuth, identityName, rawIdentity)
+		marker, err := resolveComponentIdentityMarker(globalAuth, identityName, rawIdentity)
 		if err != nil {
 			return nil, err
 		}
-		if keep {
-			normalizedIdentities[canonicalName] = value
+		if marker.keep {
+			normalizedIdentities[marker.canonicalName] = marker.value
 		}
 	}
 
 	normalized["identities"] = normalizedIdentities
 	return normalized, nil
+}
+
+// componentIdentityMarker is the classification of a single component
+// identity entry, returned by resolveComponentIdentityMarker.
+type componentIdentityMarker struct {
+	// canonicalName is the key to write value back under: the globally-configured
+	// casing when the entry resolves to a global identity, otherwise identityName unchanged.
+	canonicalName string
+	// value is what to store under canonicalName; nil when keep is false.
+	value any
+	// keep reports whether this entry should remain in the normalized identities map.
+	keep bool
 }
 
 // resolveComponentIdentityMarker classifies a single component identity entry: entries that
@@ -203,27 +215,26 @@ func resolveComponentIdentityMarker(
 	globalAuth *schema.AuthConfig,
 	identityName string,
 	rawIdentity any,
-) (canonicalName string, value any, keep bool, err error) {
-	canonicalName = identityName
+) (componentIdentityMarker, error) {
 	identity, isIdentityMap := rawIdentity.(map[string]any)
 	defaultValue, hasDefault := identity["default"]
 	isDefault, isBooleanDefault := defaultValue.(bool)
 
 	// Entries are markers only when they contain exactly one boolean `default` field.
 	if !isIdentityMap || len(identity) != 1 || !hasDefault || !isBooleanDefault {
-		return canonicalName, rawIdentity, true, nil
+		return componentIdentityMarker{canonicalName: identityName, value: rawIdentity, keep: true}, nil
 	}
 
 	if resolved, ok := resolveGlobalIdentityKey(globalAuth, identityName); ok {
-		return resolved, rawIdentity, true, nil
+		return componentIdentityMarker{canonicalName: resolved, value: rawIdentity, keep: true}, nil
 	}
 
 	if !isDefault {
 		// An undefined false-only marker has no identity to override and must not create one.
-		return canonicalName, nil, false, nil
+		return componentIdentityMarker{canonicalName: identityName, keep: false}, nil
 	}
 
-	return canonicalName, nil, false, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+	return componentIdentityMarker{}, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
 		WithExplanationf("Component default identity %q is not defined in the active global auth configuration", identityName).
 		WithHint("Define the identity in atmos.yaml or the active profile, or select an existing identity").
 		WithContext("identity", identityName).
