@@ -1576,3 +1576,29 @@ func TestStandardParser_SetPositionalArgs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "vpc", opts.Component, "positional arg should be mapped to Component field")
 }
+
+func TestConditionalPositionalPromptSkipsWhenPredicateIsFalse(t *testing.T) {
+	predicateCalled := false
+	argsBuilder := NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&PositionalArgSpec{Name: "component", Required: true, TargetField: "Component"})
+	specs, validator, usage := argsBuilder.Build()
+
+	parser := NewStandardFlagParser(WithConditionalPositionalArgPrompt(
+		"component",
+		"Choose a component",
+		func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+			return []string{"api"}, cobra.ShellCompDirectiveNoFileComp
+		},
+		func(*ParsedConfig) bool {
+			predicateCalled = true
+			return false
+		},
+	))
+	parser.SetPositionalArgs(specs, validator, usage)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	_, err := parser.Parse(context.Background(), nil)
+	require.Error(t, err, "the normal required-argument validator should run when prompting is skipped")
+	assert.True(t, predicateCalled)
+}

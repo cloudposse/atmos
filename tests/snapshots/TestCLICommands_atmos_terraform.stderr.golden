@@ -21,6 +21,7 @@ Valid subcommands are:
   • help
   • import
   • init
+  • lint
   • login
   • logout
   • metadata

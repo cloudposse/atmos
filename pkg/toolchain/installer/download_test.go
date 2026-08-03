@@ -86,6 +86,22 @@ func TestWriteResponseToCache(t *testing.T) {
 	})
 }
 
+func TestWriteResponseToCacheWithProgress(t *testing.T) {
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "cached-file.txt")
+	content := []byte("test content for progress")
+
+	var updates [][2]int64
+	_, err := writeResponseToCacheWithProgress(bytes.NewReader(content), cachePath, int64(len(content)), func(downloaded, total int64) {
+		updates = append(updates, [2]int64{downloaded, total})
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, updates)
+	assert.Equal(t, [2]int64{0, int64(len(content))}, updates[0])
+	assert.Equal(t, [2]int64{int64(len(content)), int64(len(content))}, updates[len(updates)-1])
+}
+
 func TestBuildDownloadError(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -201,13 +217,18 @@ func TestDownloadAsset_CacheBehavior(t *testing.T) {
 		url := "https://github.com/owner/repo/releases/download/v1.0.0/" + cachedFilename
 		require.NoError(t, os.WriteFile(cacheSourceURLPath(cachedPath), []byte(url+"\n"), 0o644))
 
+		var progress [][2]int64
 		installer := &Installer{
 			cacheDir: cacheDir,
+			downloadProgress: func(downloaded, total int64) {
+				progress = append(progress, [2]int64{downloaded, total})
+			},
 		}
 
 		result, err := installer.downloadAsset(url)
 		assert.NoError(t, err)
 		assert.Equal(t, cachedPath, result)
+		assert.Equal(t, [][2]int64{{int64(len("cached content")), int64(len("cached content"))}}, progress)
 
 		// Verify we got the cached content (not a download).
 		content, err := os.ReadFile(result)
@@ -458,13 +479,13 @@ func TestTryFallbackVersion_ReturnsEffectiveVersion(t *testing.T) {
 			Asset:     ts.URL + "/tool-{{.Version}}.tar.gz",
 		}
 
-		assetPath, effectiveURL, effectiveVersion, err := inst.tryFallbackVersion(
+		result, err := inst.tryFallbackVersion(
 			tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404,
 		)
 		require.NoError(t, err)
-		assert.NotEmpty(t, assetPath)
-		assert.Equal(t, ts.URL+"/tool-v1.0.0.tar.gz", effectiveURL)
-		assert.Equal(t, "v1.0.0", effectiveVersion,
+		assert.NotEmpty(t, result.assetPath)
+		assert.Equal(t, ts.URL+"/tool-v1.0.0.tar.gz", result.effectiveURL)
+		assert.Equal(t, "v1.0.0", result.effectiveVersion,
 			"effective version must carry the prefix that actually downloaded")
 	})
 }
@@ -599,12 +620,12 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		result, effectiveURL, effectiveVersion, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", url)
+		result, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", url)
 		assert.NoError(t, err)
-		assert.Equal(t, assetFile, result)
-		assert.Equal(t, url, effectiveURL)
+		assert.Equal(t, assetFile, result.assetPath)
+		assert.Equal(t, url, result.effectiveURL)
 		// First attempt succeeded, so the effective version is the requested one.
-		assert.Equal(t, "1.0.0", effectiveVersion)
+		assert.Equal(t, "1.0.0", result.effectiveVersion)
 	})
 
 	t.Run("returns non-404 errors without fallback", func(t *testing.T) {
@@ -629,7 +650,7 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		_, _, _, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/asset.tar.gz")
+		_, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/asset.tar.gz")
 		assert.Error(t, err)
 		// Non-404 error should be returned directly, not trigger fallback.
 		assert.NotErrorIs(t, err, ErrHTTP404)
@@ -660,7 +681,7 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		_, _, _, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz")
+		_, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz")
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, ErrHTTP404)
 		assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
@@ -693,7 +714,7 @@ func TestTryFallbackVersion(t *testing.T) {
 
 		// Version "1.0.0" without prefix → fallback adds "v" → "v1.0.0".
 		// BuildAssetURL with "v1.0.0" and prefix "v" → Version="v1.0.0" → /tool-v1.0.0.tar.gz.
-		_, _, _, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
+		_, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
 		// Verify the fallback URL was actually requested.
 		assert.Contains(t, requestedPaths, "/tool-v1.0.0.tar.gz",
@@ -724,7 +745,7 @@ func TestTryFallbackVersion(t *testing.T) {
 		// Version "v1.0.0" with prefix → fallback strips to "1.0.0".
 		// Both produce SemVer="1.0.0", but the fallback IS attempted because
 		// the version strings differ ("v1.0.0" != "1.0.0").
-		_, _, _, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
+		_, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
 		// Verify the fallback attempted the request (SemVer is "1.0.0" for both).
 		assert.Contains(t, requestedPaths, "/tool-1.0.0.tar.gz",

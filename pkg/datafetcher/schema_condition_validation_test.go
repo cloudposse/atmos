@@ -12,10 +12,9 @@ import (
 
 func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"website":  loadWebsiteSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
 	}
 
 	validConditions := map[string]any{
@@ -44,11 +43,10 @@ func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 
 func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
-		"stack-config":  loadStackConfigSchemaBytes(t),
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
 	}
 
 	validConditions := map[string]any{
@@ -78,11 +76,10 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 
 func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
-		"stack-config":  loadStackConfigSchemaBytes(t),
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
@@ -151,16 +148,39 @@ func TestManifestSchema_WorkflowStepCastSimulationFields(t *testing.T) {
 
 func TestManifestSchema_TerraformTestFixturesHookShape(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
-		"stack-config":  loadStackConfigSchemaBytes(t),
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
 		t.Run(schemaName, func(t *testing.T) {
 			assertSchemaValid(t, schemaData, terraformTestFixturesManifest())
+		})
+	}
+}
+
+func TestManifestSchema_TerraformComponentMocks(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts literal output map", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, terraformMocksManifest(map[string]any{
+				"id":       "vpc-local",
+				"subnets":  []any{"subnet-a", "subnet-b"},
+				"network":  map[string]any{"cidr": "10.0.0.0/16"},
+				"nullable": nil,
+			}))
+		})
+
+		t.Run(schemaName+"/rejects non-map mocks", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, terraformMocksManifest("not-a-map"))
 		})
 	}
 }
@@ -234,6 +254,18 @@ func terraformTestFixturesManifest() map[string]any {
 							"fixture_vpc_id": "vpc-123",
 						},
 					},
+				},
+			},
+		},
+	}
+}
+
+func terraformMocksManifest(mocks any) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"mocks": mocks,
 				},
 			},
 		},

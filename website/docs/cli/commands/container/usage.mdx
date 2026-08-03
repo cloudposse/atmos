@@ -209,8 +209,8 @@ The container runtime is auto-detected (Docker first, then Podman). Override it 
 ```yaml
 container:
   runtime:
-    provider: podman      # or docker, or empty for auto-detect
-    auto_start: true      # auto-init/start the Podman machine when needed
+    provider: auto        # or docker/podman; auto is also the default
+    # Auto-start is on by default. Set auto_start: false to opt out.
 ```
 
 It can also be set with the `ATMOS_CONTAINER_RUNTIME` environment variable.
@@ -360,7 +360,7 @@ compositions:
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all` to narrow the selected set further; cannot be combined with a `<component>` argument.</dd>
 
   <dt>`--labels` <em>(bulk verbs only)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--tags`; cannot be combined with a `<component>` argument.</dd>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--tags`; cannot be combined with a `<component>` argument.</dd>
 
   <dt>`--follow` / `-f` <em>(logs)</em></dt>
   <dd>Stream logs continuously. With multiple components the streams are interleaved and each line is

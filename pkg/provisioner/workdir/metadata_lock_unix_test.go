@@ -5,6 +5,7 @@ package workdir
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -118,6 +119,7 @@ func TestLoadMetadataWithReadLockUnix_InvalidJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, metadata)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
+	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrWorkdirMetadata.Error()))
 }
 
 func TestLoadMetadataWithReadLockUnix_ReadError(t *testing.T) {
@@ -131,6 +133,7 @@ func TestLoadMetadataWithReadLockUnix_ReadError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, metadata)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
+	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrWorkdirMetadata.Error()))
 }
 
 func TestLoadMetadataWithReadLockUnix_ConcurrentReads(t *testing.T) {

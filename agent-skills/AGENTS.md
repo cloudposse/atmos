@@ -16,6 +16,9 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **atmos.yaml** -- Project config: stack discovery paths, component paths, backend defaults, CLI settings.
 - **Vendoring** -- Copies external components into the repo via `vendor.yaml` manifests for version control and
   auditability.
+- **Scaffolding** -- Generate new projects (`atmos init`) or arbitrary boilerplate (`atmos scaffold generate`)
+  from templates, with conditional fields/files (`when:`), step-backed lifecycle hooks, and update-safe 3-way
+  merge (`--update`).
 - **Authentication** -- Multi-provider auth system with SSO, SAML, OIDC, identity chaining, and keyring storage.
 - **Atmos Pro** -- Control plane for affected-stack uploads, inventory, drift detection, workflow dispatch,
   stack locks, and GitHub App commits.
@@ -76,6 +79,8 @@ atmos mcp export                                 # Export MCP server config for 
 atmos list stacks                                # List all stacks
 atmos list components                            # List all components
 atmos devcontainer shell                         # Launch dev environment (experimental)
+atmos init <template> <dir>                      # Initialize a new Atmos project from a template (experimental)
+atmos scaffold generate <template> <dir>         # Generate code from a scaffold template (experimental)
 ```
 
 ## Skill Index
@@ -91,10 +96,13 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Local and remote stack imports, go-getter schemes, templated imports, private GitHub imports with STS                | `atmos-imports`         | `agent-skills/skills/atmos-imports/SKILL.md`         |
 | Terraform root modules, component source provisioning, abstract components, component inheritance, versioning, mixins | `atmos-components`      | `agent-skills/skills/atmos-components/SKILL.md`      |
 | vendor.yaml manifests, checked-in copies from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                     | `atmos-vendoring`       | `agent-skills/skills/atmos-vendoring/SKILL.md`       |
+| Scaffold templates: scaffold.yaml, form fields, conditional when: on fields/files, step-backed hooks, 3-way-merge update, atmos scaffold generate/list/validate | `atmos-scaffold`        | `agent-skills/skills/atmos-scaffold/SKILL.md`        |
+| atmos init: built-in project template catalog, differences from scaffold generate, project record                    | `atmos-init`            | `agent-skills/skills/atmos-init/SKILL.md`            |
 | Container components: Docker Compose migration, build/run/push/pull/up/down/logs/exec, stack-scoped containers        | `atmos-container`       | `agent-skills/skills/atmos-container/SKILL.md`       |
 | Emulator components: AWS/GCP/Azure/Kubernetes/Vault/OpenBao/registry local emulators                                  | `atmos-emulator`        | `agent-skills/skills/atmos-emulator/SKILL.md`        |
 | Compositions: named service groupings and `atmos composition validate`                                                | `atmos-compositions`    | `agent-skills/skills/atmos-compositions/SKILL.md`    |
 | terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `agent-skills/skills/atmos-terraform/SKILL.md`       |
+| Terraform/OpenTofu linting: `atmos terraform lint`, TFLint configuration and rules, component toolchain pins, lifecycle hooks, SARIF CI findings | `atmos-lint` | `agent-skills/skills/atmos-lint/SKILL.md` |
 | helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/skills/atmos-helmfile/SKILL.md`        |
 | Native Helm (experimental): Helm Go SDK template/diff/apply/delete, chart sources, values, repositories, provision targets | `atmos-helm`            | `agent-skills/skills/atmos-helm/SKILL.md`            |
 | Native Kubernetes (experimental): Go SDK render/plan/diff/apply/deploy/delete/validate, kubectl/kustomize providers, provision targets | `atmos-kubernetes`      | `agent-skills/skills/atmos-kubernetes/SKILL.md`      |
@@ -110,10 +118,10 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
 | Secrets: `secrets.vars`, `!secret`, backends, secret init/set/get/import/push/pull/shell/exec/validate                | `atmos-secrets`         | `agent-skills/skills/atmos-secrets/SKILL.md`         |
 | Hooks: lifecycle events, hook kinds, `kind: step`/`kind: steps`, `when:` conditions, scoping, `--skip-hooks`, toolchain-aware checks and uploads | `atmos-hooks`           | `agent-skills/skills/atmos-hooks/SKILL.md`           |
-| JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
+| JSON Schema for stack manifests and atmos.yaml, IDE auto-completion, validate stacks/schema/config, SchemaStore      | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
 | Atmos CI: Native CI, GitHub Actions containers, collapsible log groups, Atlantis, affected/all matrices, OIDC profiles, cache, Pro dispatch | `atmos-ci`              | `agent-skills/skills/atmos-ci/SKILL.md`              |
 | Cache: CI cache and Terraform registry cache                                                                         | `atmos-cache`           | `agent-skills/skills/atmos-cache/SKILL.md`           |
-| OPA/Rego policies, JSON Schema validation, `atmos validate component/stacks`, generic `atmos validate schema` for any file against any JSON Schema | `atmos-validation`      | `agent-skills/skills/atmos-validation/SKILL.md`      |
+| Aggregate/config/stack/component validation, OPA/Rego, JSON Schema for arbitrary files, EditorConfig, GitHub Actions/actionlint, affected selection, exclusions, and native CI reporting | `atmos-validation`      | `agent-skills/skills/atmos-validation/SKILL.md`      |
 | YAML functions: !terraform.state, !store, !secret, !emulator, !git.*, !include, !append, !unset, !aws.*, !literal    | `atmos-yaml-functions`  | `agent-skills/skills/atmos-yaml-functions/SKILL.md`  |
 | Go templates, Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, template configuration            | `atmos-templates`       | `agent-skills/skills/atmos-templates/SKILL.md`       |
 | Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/skills/atmos-design-patterns/SKILL.md` |

@@ -20,13 +20,14 @@ type Composition struct {
 	Services []string `yaml:"services,omitempty" json:"services,omitempty" mapstructure:"services"`
 }
 
-// ContainerRuntimeConfig configures the container runtime provider (docker/podman).
+// ContainerRuntimeConfig configures the container runtime provider (auto/docker/podman).
 type ContainerRuntimeConfig struct {
-	// Provider selects the container runtime: "docker" | "podman" | "" (auto-detect:
-	// docker, then podman). A global default for the per-step `provider:` field.
+	// Provider selects the container runtime: "auto" | "docker" | "podman" | "".
+	// "auto" and "" auto-detect Docker, then Podman. A global default for the
+	// per-step `provider:` field.
 	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	// AutoStart lets Atmos auto-init/start the Podman machine when no running runtime
-	// is found, instead of failing. A global default for the per-step
+	// is found, instead of failing. Enabled by default; a global default for the per-step
 	// `runtime_auto_start:` field; also settable via ATMOS_CONTAINER_RUNTIME_AUTO_START.
 	AutoStart bool `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
 	// Host grants the container access to the host container runtime (Docker-out-of-Docker):

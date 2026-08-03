@@ -62,15 +62,18 @@ func loadMetadataWithReadLockUnix(metadataFile string) (*WorkdirMetadata, error)
 		metadata = &value
 		return nil
 	})
-	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrWorkdirMetadata).
-			WithCause(err).
-			WithExplanation("Failed to acquire read lock for metadata").
-			WithContext("path", metadataFile+".lock").
-			Err()
-	}
 	if !acquired {
+		if err != nil {
+			return nil, errUtils.Build(errUtils.ErrWorkdirMetadata).
+				WithCause(err).
+				WithExplanation("Failed to acquire read lock for metadata").
+				WithContext("path", metadataFile+".lock").
+				Err()
+		}
 		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	return metadata, nil
 }

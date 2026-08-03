@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: reported-order
+
+components:
+  terraform:
+    platform-kms:
+      metadata:
+        component: mock
+
+    platform-efs:
+      metadata:
+        component: mock
+
+    uds-rds:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: platform-kms
+
+    cloudposse-irsa-dbeaver-external-secrets:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: platform-kms
+          - component: uds-rds
+
+    cloudposse-irsa-external-secrets:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: platform-kms
+          - component: uds-rds
+
+    platform-cluster-codepipeline-app:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: platform-efs
+          - component: platform-kms
+          - component: uds-rds
+
+    platform-datasync:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: platform-efs
+
+    platform-uds-pkg-dbeaver:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: cloudposse-irsa-dbeaver-external-secrets
+          - component: uds-rds

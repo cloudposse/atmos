@@ -5,34 +5,19 @@ package cache
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/gofrs/flock"
 )
 
-const (
-	// MaxLockRetries is the number of times to retry acquiring a lock. At
-	// lockRetryDelay between attempts, this gives a 2s total budget — enough
-	// slack for legitimate contention (e.g. several goroutines calling
-	// Set/Delete against the same cache directory's single lock file
-	// concurrently) on a loaded CI runner without hanging indefinitely on a
-	// genuinely stuck/orphaned lock.
-	maxLockRetries = 200
-	// LockRetryDelay is the delay between lock retry attempts.
-	lockRetryDelay = 10 * time.Millisecond
-)
+const cacheLockTimeout = 2 * time.Second
 
-// flockFileLock implements FileLock using flock on Unix systems.
-type flockFileLock struct {
-	lockPath string
-}
+type flockFileLock struct{ lockPath string }
 
-// NewFileLock creates a new FileLock for the given path.
-// The lock file is created at path + ".lock" to prevent lock loss during atomic renames.
+// NewFileLock preserves the cache package API while using a stable sibling
+// lock file that survives atomic cache-file replacement.
 func NewFileLock(path string) FileLock {
 	defer perf.Track(nil, "cache.NewFileLock")()
 
@@ -47,93 +32,39 @@ func NewFileLockAtPath(lockPath string) FileLock {
 	return &flockFileLock{lockPath: lockPath}
 }
 
-// WithLock executes fn while holding an exclusive lock.
-func (f *flockFileLock) WithLock(fn func() error) error {
+func (l *flockFileLock) WithLock(fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithLock")()
 
-	lock := flock.New(f.lockPath)
-
-	// Try to acquire lock with reasonable retries for concurrent access.
-	var locked bool
-	var err error
-
-	for i := 0; i < maxLockRetries; i++ {
-		locked, err = lock.TryLock()
-		if err != nil {
-			return errors.Join(errUtils.ErrCacheLocked, err)
-		}
-		if locked {
-			break
-		}
-		// Wait a short time before retrying.
-		time.Sleep(lockRetryDelay)
-	}
-
-	if !locked {
-		return fmt.Errorf("%w: cache file is locked by another process", errUtils.ErrCacheLocked)
-	}
-
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Trace("Failed to unlock cache file", "error", err, "path", f.lockPath)
-		}
-	}()
-
-	return fn()
+	ctx, cancel := context.WithTimeout(context.Background(), cacheLockTimeout)
+	defer cancel()
+	return cacheLockError(filelock.New(l.lockPath).WithExclusive(ctx, fn))
 }
 
-// WithLockContext executes fn while holding an exclusive lock, blocking until the
-// lock is acquired or ctx is done. Acquisition polls at lockRetryDelay intervals for
-// the full lifetime of ctx, so a healthy but slow holder (e.g. a multi-second
-// download) is waited out rather than failing on a fixed budget.
-func (f *flockFileLock) WithLockContext(ctx context.Context, fn func() error) error {
+func (l *flockFileLock) WithLockContext(ctx context.Context, fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithLockContext")()
 
-	lock := flock.New(f.lockPath)
-
-	locked, err := lock.TryLockContext(ctx, lockRetryDelay)
-	if err != nil {
-		return errors.Join(errUtils.ErrCacheLocked, err)
-	}
-	if !locked {
-		// ctx was canceled or its deadline passed before the lock was acquired.
-		return fmt.Errorf("%w: cache file is locked by another process", errUtils.ErrCacheLocked)
-	}
-
-	defer func() {
-		if uerr := lock.Unlock(); uerr != nil {
-			log.Trace("Failed to unlock cache file", "error", uerr, "path", f.lockPath)
-		}
-	}()
-
-	return fn()
+	return cacheLockError(filelock.New(l.lockPath).WithExclusive(ctx, fn))
 }
 
-// WithRLock executes fn while holding a shared read lock.
-func (f *flockFileLock) WithRLock(fn func() error) error {
+func (l *flockFileLock) WithRLock(fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithRLock")()
 
-	lock := flock.New(f.lockPath)
+	// Cache reads are deliberately best-effort. Preserve the old non-blocking
+	// behavior by reading without a lock when one is immediately unavailable.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	err := filelock.New(l.lockPath).WithShared(ctx, fn)
+	if errors.Is(err, filelock.ErrAcquire) && ctx.Err() != nil {
+		return fn()
+	}
+	return cacheLockError(err)
+}
 
-	// Use TryRLock to avoid blocking indefinitely which can cause deadlocks.
-	locked, err := lock.TryRLock()
-	if err != nil {
+func cacheLockError(err error) error {
+	if errors.Is(err, filelock.ErrAcquire) {
 		return errors.Join(errUtils.ErrCacheLocked, err)
 	}
-	if !locked {
-		// If we can't get the lock immediately, return without error.
-		// This prevents deadlocks during concurrent access.
-		// The caller should handle the case where fn wasn't executed.
-		return fn() // Execute without lock - cache is non-critical.
-	}
-
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Trace("Failed to unlock cache file during read", "error", err, "path", f.lockPath)
-		}
-	}()
-
-	return fn()
+	return err
 }
 
 // TryWithRLock executes fn only when a shared read lock can be acquired
@@ -141,19 +72,14 @@ func (f *flockFileLock) WithRLock(fn func() error) error {
 func (f *flockFileLock) TryWithRLock(fn func() error) (bool, error) {
 	defer perf.Track(nil, "cache.flockFileLock.TryWithRLock")()
 
-	lock := flock.New(f.lockPath)
-	locked, err := lock.TryRLock()
-	if err != nil {
-		return false, errors.Join(errUtils.ErrCacheLocked, err)
-	}
-	if !locked {
-		return false, nil
-	}
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Trace("Failed to unlock cache file during read", "error", err, "path", f.lockPath)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	err := filelock.New(f.lockPath).WithShared(ctx, fn)
+	if errors.Is(err, filelock.ErrAcquire) {
+		if ctx.Err() != nil {
+			return false, nil
 		}
-	}()
-
-	return true, fn()
+		return false, cacheLockError(err)
+	}
+	return true, err
 }

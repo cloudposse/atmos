@@ -494,44 +494,40 @@ func extractJWTClaims(token string) (map[string]interface{}, error) {
 func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
 
-	// Load existing profile or create new one.
-	var profile map[string]interface{}
-	data, err := os.ReadFile(profilePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read Azure profile: %w", err)
-		}
-		// Create new profile structure.
-		profile = map[string]interface{}{
-			"installationId": "",
-			"subscriptions":  []interface{}{},
-		}
-	} else {
-		// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
-		data = stripBOM(data)
-
-		if err := json.Unmarshal(data, &profile); err != nil {
-			return fmt.Errorf("failed to parse Azure profile: %w", err)
-		}
-	}
-
-	// Update subscriptions in profile.
-	// Device code flow is user authentication (not service principal).
-	profile["subscriptions"] = azureCloud.UpdateSubscriptionsInProfile(profile, azureCloud.ProfileUpdateParams{
-		Username:            username,
-		TenantID:            p.tenantID,
-		SubscriptionID:      p.subscriptionID,
-		IsServicePrincipal:  false,
-		AzureProfileEnvName: p.cloudEnv.AzureProfileEnvName,
-	})
-
-	// Write updated profile.
-	updatedData, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal Azure profile: %w", err)
-	}
-
 	if err := withAzureFileLock(profilePath, func() error {
+		// Load existing profile or create a new one.
+		var profile map[string]interface{}
+		data, err := os.ReadFile(profilePath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to read Azure profile: %w", err)
+			}
+			profile = map[string]interface{}{
+				"installationId": "",
+				"subscriptions":  []interface{}{},
+			}
+		} else {
+			// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
+			data = stripBOM(data)
+
+			if err := json.Unmarshal(data, &profile); err != nil {
+				return fmt.Errorf("failed to parse Azure profile: %w", err)
+			}
+		}
+
+		// Device code flow is user authentication (not service principal).
+		profile["subscriptions"] = azureCloud.UpdateSubscriptionsInProfile(profile, azureCloud.ProfileUpdateParams{
+			Username:            username,
+			TenantID:            p.tenantID,
+			SubscriptionID:      p.subscriptionID,
+			IsServicePrincipal:  false,
+			AzureProfileEnvName: p.cloudEnv.AzureProfileEnvName,
+		})
+		updatedData, err := json.MarshalIndent(profile, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal Azure profile: %w", err)
+		}
+
 		if err := os.WriteFile(profilePath, updatedData, azureCloud.FilePermissions); err != nil {
 			return fmt.Errorf("failed to write Azure profile: %w", err)
 		}
@@ -557,7 +553,7 @@ func writeCacheFileWithLocking(cachePath string, data []byte, cacheType string) 
 	if err := withAzureFileLock(cachePath, func() error {
 		return os.WriteFile(cachePath, data, azureCloud.FilePermissions)
 	}); err != nil {
-		log.Debug(fmt.Sprintf("Failed to acquire file lock for %s", cacheType), "error", err)
+		log.Debug(fmt.Sprintf("Failed to write %s", cacheType), "error", err)
 		return false
 	}
 

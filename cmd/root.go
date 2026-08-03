@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
@@ -91,12 +92,13 @@ import (
 	gitcmd "github.com/cloudposse/atmos/cmd/git"
 	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
-	"github.com/cloudposse/atmos/cmd/internal"
+	_ "github.com/cloudposse/atmos/cmd/init"
 	_ "github.com/cloudposse/atmos/cmd/kubernetes"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	_ "github.com/cloudposse/atmos/cmd/scaffold"
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
@@ -472,12 +474,21 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+				// The CI git-clone bootstrap clone runs in an empty workspace
+				// (e.g. replacing actions/checkout), where atmos.yaml cannot
+				// exist yet -- NotFound is the expected error for that flow.
+				if applyCIGitCloneBootstrap(cmd, args, &tmpConfig) {
+					log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
+				}
 			} else if isHelpRequested {
 				// Help screens should always render, even with invalid config.
 				log.Debug("CLI configuration error (continuing for help)", "error", err)
-			} else if isCIGitCloneBootstrapRequested() {
-				tmpConfig.CI.Enabled = true
+			} else if applyCIGitCloneBootstrap(cmd, args, &tmpConfig) {
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
+			} else if isBuiltinConfigValidationCommand(cmd, args) {
+				// The built-in config validation commands must run when config decoding
+				// fails; reporting that invalid configuration is their purpose.
+				log.Debug("CLI configuration error (continuing for config validation)", "error", err)
 			} else if isVersionCommand() {
 				// Version command should always work, even with invalid config.
 				// Log config error but allow version command to proceed.
@@ -490,6 +501,15 @@ var RootCmd = &cobra.Command{
 					WithExitCode(2). // Config/usage error
 					Err()
 				errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
+			}
+		}
+
+		// Proxy links are available to every child process launched by Atmos.
+		// Keep this at the shared command boundary so built-in commands,
+		// workflows, hooks, and custom commands inherit the same PATH/context.
+		if err == nil {
+			if proxyErr := toolchain.ApplyProxyEnvironment(&tmpConfig); proxyErr != nil {
+				errUtils.CheckErrorPrintAndExit(proxyErr, "Failed to prepare toolchain proxies", "")
 			}
 		}
 
@@ -609,9 +629,9 @@ var RootCmd = &cobra.Command{
 					"", "",
 				)
 			case "warn":
-				ui.Experimental(experimentalCmd)
+				showExperimentalCommandNotice(cmd, experimentalCmd)
 			case "error":
-				ui.Experimental(experimentalCmd)
+				showExperimentalCommandNotice(cmd, experimentalCmd)
 				errUtils.CheckErrorPrintAndExit(
 					errUtils.Build(errUtils.ErrExperimentalRequiresIn).
 						WithContext("command", experimentalCmd).
@@ -851,16 +871,22 @@ func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
 // This is called during init() before Boa styles are created, ensuring Cobra help
 // text rendering respects the forced color profile.
 func setupColorProfileFromEnv() {
-	defer perf.Track(nil, "cmd.setupColorProfileFromEnv")()
+	setupColorProfileFromEnvWithArgs(os.Args)
+}
 
-	// Check environment variable first using global viper.
-	// Note: ATMOS env prefix and AutomaticEnv are configured in init().
+// setupColorProfileFromEnvWithArgs checks for --force-color flag in the given args.
+// This is a testable version of setupColorProfileFromEnv that accepts args as a parameter.
+func setupColorProfileFromEnvWithArgs(args []string) {
+	defer perf.Track(nil, "cmd.setupColorProfileFromEnvWithArgs")()
+
+	// Check environment variables first using the bound viper key:
+	// init() maps both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to "force-color".
 	forceColor := viper.GetBool("force-color")
 
-	// Also check --force-color CLI flag by manually parsing os.Args.
+	// Also check --force-color CLI flag by manually parsing args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
 	if !forceColor {
-		for _, arg := range os.Args {
+		for _, arg := range args {
 			if arg == "--force-color" {
 				forceColor = true
 				break
@@ -1037,6 +1063,40 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+const (
+	experimentalNoticeAnnotation = "atmos.io/experimental-notice-emitted"
+	experimentalNoticeEmitted    = "true"
+)
+
+var writeExperimentalNotice = ui.Experimental
+
+// showExperimentalCommandNotice emits an experimental warning at most once for a command execution.
+// Cobra integrations can invoke a persistent pre-run more than once while setting up a command.
+func showExperimentalCommandNotice(cmd *cobra.Command, feature string) {
+	if cmd == nil {
+		return
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	if cmd.Annotations[experimentalNoticeAnnotation] == experimentalNoticeEmitted {
+		return
+	}
+
+	cmd.Annotations[experimentalNoticeAnnotation] = experimentalNoticeEmitted
+	writeExperimentalNotice(feature)
+}
+
+func resetExperimentalCommandNotices(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	delete(cmd.Annotations, experimentalNoticeAnnotation)
+	for _, child := range cmd.Commands() {
+		resetExperimentalCommandNotices(child)
+	}
 }
 
 // checkExperimentalSettings checks if any experimental settings are enabled in the config
@@ -1218,9 +1278,8 @@ func formatFlagName(f *pflag.Flag) string {
 // getTerminalWidth returns the width used to lay out help output.
 //
 // Precedence: the active --cast recording width (so recorded output matches the
-// recorded terminal), then the detected real terminal width, then the default.
-// Non-TTY output ignores COLUMNS so CI snapshots and piped output keep stable
-// wrapping unless cast recording provides an explicit width. The result is
+// recorded terminal), then the detected real terminal width or explicit COLUMNS
+// value, then the default. The result is
 // capped at the default for readability, or at Settings.Terminal.MaxWidth when
 // configured (config refines, but is never required — help must lay out
 // correctly with no atmos.yaml at all).
@@ -1550,21 +1609,27 @@ func ExecuteVersion() error {
 // handleConfigInitError processes config initialization errors and enriches them for display.
 // Returns nil if the error can be ignored (e.g., for version command), or an enriched error.
 func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration) error {
-	if isVersionCommand() {
+	return handleConfigInitErrorWithArgs(initErr, atmosConfig, os.Args)
+}
+
+// handleConfigInitErrorWithArgs processes config initialization errors with explicit args.
+// This is a testable version of handleConfigInitError that accepts args as a parameter.
+func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfiguration, args []string) error {
+	if isVersionCommandWithArgs(args) {
 		// Version command should always work, even with invalid config.
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
+		return nil
+	}
+	if isBuiltinConfigValidationArgs(args) {
+		// The built-in config validation commands must run when config decoding
+		// fails; reporting that invalid configuration is their purpose.
+		log.Debug("Warning: CLI configuration error (continuing for config validation)", "error", initErr)
 		return nil
 	}
 
 	if isHelpRequestedInArgs() {
 		// Help screens should always render, even with invalid config.
 		log.Debug("Warning: CLI configuration error (continuing for help)", "error", initErr)
-		return nil
-	}
-
-	if isCIGitCloneBootstrapRequested() {
-		atmosConfig.CI.Enabled = true
-		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
 		return nil
 	}
 
@@ -1597,115 +1662,87 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 	return initErr
 }
 
-func isCIGitCloneBootstrapRequested() bool {
-	return ci.Detect() != nil && argsRequestNoArgGitClone(os.Args[1:])
-}
-
-const (
-	rootFlagChdirShort       = "-C"
-	rootFlagChdirShortPrefix = "-C="
-)
-
-var (
-	gitCloneBootstrapValueFlags = map[string]struct{}{
-		"--repo-uri":       {},
-		"-r":               {},
-		"--branch":         {},
-		"-b":               {},
-		"--remote":         {},
-		"--workdir":        {},
-		"--filter":         {},
-		"--depth":          {},
-		rootFlagChdirShort: {},
-	}
-	rootBootstrapValueFlags = map[string]struct{}{
-		"--chdir":          {},
-		rootFlagChdirShort: {},
-		"--profile":        {},
-		"--config":         {},
-		"--config-path":    {},
-		"--base-path":      {},
-		"--logs-level":     {},
-		"--logs-file":      {},
-		"--use-version":    {},
-	}
-)
-
-func argsRequestNoArgGitClone(args []string) bool {
-	args = stripRootFlagsForBootstrapCheck(args)
-	if len(args) < 2 || args[0] != "git" || args[1] != "clone" {
+// isBuiltinConfigValidationArgs reports whether arguments invoke a built-in
+// command that validates the Atmos configuration itself.
+func isBuiltinConfigValidationArgs(args []string) bool {
+	if len(args) < 2 {
 		return false
 	}
-	return gitCloneArgsAllowBootstrap(args[2:])
-}
 
-type bootstrapArgAction int
-
-const (
-	bootstrapArgAllow bootstrapArgAction = iota
-	bootstrapArgConsumeNext
-	bootstrapArgReject
-)
-
-func gitCloneArgsAllowBootstrap(args []string) bool {
-	for i := 0; i < len(args); i++ {
-		switch gitCloneBootstrapArgAction(args[i]) {
-		case bootstrapArgReject:
-			return false
-		case bootstrapArgConsumeNext:
-			i++
-		}
-	}
-	return true
-}
-
-func gitCloneBootstrapArgAction(arg string) bootstrapArgAction {
-	switch {
-	case arg == "--" || arg == "--all":
-		return bootstrapArgReject
-	case flagTakesSeparateValue(arg, gitCloneBootstrapValueFlags):
-		return bootstrapArgConsumeNext
-	case flagHasInlineValue(arg, gitCloneBootstrapValueFlags), shortChdirHasInlineValue(arg), strings.HasPrefix(arg, "-"):
-		return bootstrapArgAllow
-	default:
-		return bootstrapArgReject
-	}
-}
-
-func stripRootFlagsForBootstrapCheck(args []string) []string {
+	// Skip only leading root flags. Once a command token is found, remaining
+	// arguments belong to that command and must not be interpreted as commands.
+	args = args[1:]
 	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case flagTakesSeparateValue(arg, rootBootstrapValueFlags):
+		if args[0] == "--" {
+			return false
+		}
+		skip, consumesValue := isSkippableRootFlag(args[0])
+		if !skip {
+			break
+		}
+		if consumesValue {
 			if len(args) < 2 {
-				return nil
+				return false
 			}
 			args = args[2:]
-		case flagHasInlineValue(arg, rootBootstrapValueFlags):
-			args = args[1:]
-		default:
-			return args
+			continue
 		}
+		args = args[1:]
 	}
-	return args
-}
 
-func flagTakesSeparateValue(arg string, flags map[string]struct{}) bool {
-	_, ok := flags[arg]
-	return ok
-}
-
-func flagHasInlineValue(arg string, flags map[string]struct{}) bool {
-	for flag := range flags {
-		if strings.HasPrefix(arg, flag+"=") {
-			return true
-		}
+	switch {
+	case len(args) >= 2 && args[0] == "config" && args[1] == "validate":
+		return true
+	case len(args) >= 2 && args[0] == "validate" && args[1] == "config":
+		return true
+	case len(args) >= 3 && args[0] == "validate" && args[1] == "schema" && args[2] == "config":
+		return true
+	default:
+		return false
 	}
-	return false
 }
 
-func shortChdirHasInlineValue(arg string) bool {
-	return strings.HasPrefix(arg, rootFlagChdirShort) && len(arg) > len(rootFlagChdirShort)
+func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
+	switch cmd.CommandPath() {
+	case "atmos config validate", "atmos validate config":
+		return true
+	case "atmos validate schema":
+		return len(args) > 0 && args[0] == "config"
+	default:
+		return false
+	}
+}
+
+// configForStartupLogger returns a safe logger configuration when the main
+// configuration failed to decode, so validation can report the original error.
+func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr error) *schema.AtmosConfiguration {
+	if initErr == nil {
+		return atmosConfig
+	}
+	return &schema.AtmosConfiguration{
+		Logs: schema.Logs{File: "/dev/stderr", Level: "Warning"},
+	}
+}
+
+// applyCIGitCloneBootstrap enables CI mode when the invoked command is a
+// no-argument CI git-clone bootstrap (see gitcmd.CICloneBootstrapRequested),
+// and reports whether it did so.
+//
+// It writes CI.Enabled to BOTH the package-level atmosConfig and the
+// PersistentPreRun-local tmpConfig. The global write is the load-bearing one:
+// cmd/git's RunE reads CI.Enabled off atmosConfigPtr, which Execute() points
+// at the package-level atmosConfig (gitcmd.SetAtmosConfig(&atmosConfig))
+// before PersistentPreRun ever runs. The tmpConfig parameter, by contrast, is
+// a separate cfg.InitCliConfig() result that PersistentPreRun uses locally
+// for the rest of this invocation and discards afterward -- writing only
+// tmpConfig would silently never reach the git-clone command that needs it.
+func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *schema.AtmosConfiguration) bool {
+	if !gitcmd.CICloneBootstrapRequested(cmd, args) {
+		return false
+	}
+	atmosConfig.CI.Enabled = true
+	tmpConfig.CI.Enabled = true
+	return true
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -1718,6 +1755,7 @@ func shortChdirHasInlineValue(arg string) bool {
 func Execute() error {
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
 	defer castcmd.FinalizeRecording()
+	resetExperimentalCommandNotices(RootCmd)
 
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
@@ -1782,7 +1820,7 @@ func Execute() error {
 	debugPromote := maybePromoteLogLevelForDebugMode(&atmosConfig, initErr == nil)
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
-	SetupLogger(&atmosConfig)
+	SetupLogger(configForStartupLogger(&atmosConfig, initErr))
 
 	if debugPromote.Promoted {
 		log.Info(
@@ -2290,8 +2328,7 @@ func renderFlagHelp(command *cobra.Command) {
 
 	if pagerExplicitlySet && pagerEnabled {
 		// User explicitly requested pager for flag help.
-		// Restore the original writer (which may carry the --cast tee, see
-		// rootHelpFunc) after buffering, so it isn't left pointed at a
+		// Restore the original writer after buffering so it isn't left pointed at a
 		// discarded buffer for any output written after this function returns.
 		originalOut := command.OutOrStdout()
 		defer command.SetOut(originalOut)
@@ -2312,8 +2349,7 @@ func renderFlagHelp(command *cobra.Command) {
 // renderInteractiveHelp renders help for interactive 'atmos help' invocations,
 // buffering into a pager when configured (via flag, env, or config).
 func renderInteractiveHelp(command *cobra.Command) {
-	// Restore the original writer (which may carry the --cast tee, see
-	// rootHelpFunc) after buffering, so it isn't left pointed at a discarded
+	// Restore the original writer after buffering so it isn't left pointed at a discarded
 	// buffer for any output written after this function returns.
 	originalOut := command.OutOrStdout()
 	defer command.SetOut(originalOut)
@@ -2373,10 +2409,9 @@ func rootHelpFunc(command *cobra.Command, args []string) {
 	}
 
 	// Cobra renders help before the persistent pre-run hooks fire, so an
-	// explicit --cast flag starts its recording here and tees the rendered
-	// help output into the cast (used by the docs screengrab pipeline).
-	if recordWriter := castcmd.StartHelpRecording(command, &atmosConfig); recordWriter != nil {
-		command.SetOut(io.MultiWriter(command.OutOrStdout(), recordWriter))
+	// explicit --cast flag starts its recording here. Cobra's output writer is
+	// already the masked I/O stream, which records the help output exactly once.
+	if castcmd.StartHelpRecording(command, &atmosConfig) {
 		defer castcmd.FinalizeRecording()
 	}
 

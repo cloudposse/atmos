@@ -47,6 +47,18 @@ The `atmos list instances` command displays all component instances defined acro
   <dt>`--stack` / `-s`</dt>
   <dd>Filter by stack pattern (supports glob patterns, e.g., `plat-*-prod`)</dd>
 
+  <dt>`--tags`</dt>
+  <dd>Filter by component tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Not supported with `--format=tree`, `--format=matrix`, or `--upload` (the Atmos Pro inventory upload is always unfiltered).<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Filter by component labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Not supported with `--format=tree`, `--format=matrix`, or `--upload` (the Atmos Pro inventory upload is always unfiltered).<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+
+  <dt>`--include-dependencies`</dt>
+  <dd>Expand the listing to the instance rows for everything the selected components depend on (their prerequisites) — previewing the exact set a terraform bulk command with the same selection flags would execute. The closure covers Terraform components (the dependency graph the scheduler executes) and is evaluated with this command's own `--process-templates`/`--process-functions` settings. Accepts an optional depth (for example, `--include-dependencies=1` for direct dependencies only). Not supported with `--upload`, `--format=matrix`, or `--format=tree`.<br/>`atmos list instances --labels=env=dev --include-dependencies`<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>Expand the listing to the instance rows for everything that depends on the selected components — previewing the exact set a terraform bulk command with the same selection flags would execute. Accepts an optional depth (for example, `--include-dependents=2` for two levels). Not supported with `--upload`, `--format=matrix`, or `--format=tree`.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
+
   <dt>`--filter`</dt>
   <dd>YQ predicate evaluated against each instance row. Rows where the expression is truthy are kept (e.g., `.vars.region == "us-east-1"`, `.component == "vpc"`). Not supported with `--format=tree` or `--format=matrix`.</dd>
 

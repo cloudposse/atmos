@@ -44,6 +44,13 @@ commands:
         content: "atmos fix --all complete."
 
     commands:
+      - name: symlinks
+        description: Verify that every Git-tracked symbolic link resolves
+        working_directory: !repo-root .
+        steps:
+          - type: shell
+            command: scripts/check-symlinks.sh
+
       - name: sync
         description: |
           Update the PR against origin/main if behind (GitHub-side, via `gh pr update-branch`),

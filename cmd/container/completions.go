@@ -1,10 +1,13 @@
 package container
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
@@ -64,7 +67,7 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	components, err := l.FilterAndListComponents(stack, stacksMap)
+	components, err := component.ListAllComponents(context.Background(), cfg.ContainerComponentType, stacksMap)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

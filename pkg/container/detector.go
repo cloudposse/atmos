@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	logKeyRuntime = "runtime"
+	logKeyRuntime          = "runtime"
+	logAutoDetectedRuntime = "Auto-detected container runtime"
 
-	// Env var that selects the container runtime (docker|podman).
+	// Env var that selects the container runtime (auto|docker|podman).
 	envContainerRuntime = "ATMOS_CONTAINER_RUNTIME"
 
 	// Env var feature flag (bridged from `container.runtime.auto_start`): when
@@ -51,10 +52,12 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 
 	// Check environment variable first.
 	_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
-	if envRuntime := viper.GetString(envContainerRuntime); envRuntime != "" {
+	if envRuntime := strings.TrimSpace(viper.GetString(envContainerRuntime)); envRuntime != "" {
 		log.Debug("Using container runtime from ATMOS_CONTAINER_RUNTIME", logKeyRuntime, envRuntime)
 
 		switch envRuntime {
+		case string(TypeAuto):
+			// Continue to availability-based detection below.
 		case string(TypeDocker):
 			if isAvailable(ctx, TypeDocker) {
 				return NewDockerRuntime(), nil
@@ -74,13 +77,13 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 
 	// Try Docker first
 	if isAvailable(ctx, TypeDocker) {
-		log.Debug("Auto-detected container runtime", logKeyRuntime, "docker")
+		log.Debug(logAutoDetectedRuntime, logKeyRuntime, "docker")
 		return NewDockerRuntime(), nil
 	}
 
 	// Try Podman
 	if isAvailable(ctx, TypePodman) {
-		log.Debug("Auto-detected container runtime", logKeyRuntime, "podman")
+		log.Debug(logAutoDetectedRuntime, logKeyRuntime, "podman")
 		return NewPodmanRuntime(), nil
 	}
 
@@ -91,8 +94,9 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 func DetectRuntimeWithPreference(ctx context.Context, preferred string) (Runtime, error) {
 	defer perf.Track(nil, "container.DetectRuntimeWithPreference")()
 
+	preferred = strings.TrimSpace(preferred)
 	switch preferred {
-	case "":
+	case "", string(TypeAuto):
 		return DetectRuntime(ctx)
 	case string(TypeDocker):
 		if isAvailable(ctx, TypeDocker) {
@@ -122,16 +126,39 @@ func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred strin
 	// Resolve the runtime that DetectRuntime will actually select so recovery
 	// matches the resolution order (preferred flag, then ATMOS_CONTAINER_RUNTIME,
 	// then Docker, then Podman). Reading the env here mirrors DetectRuntime above.
-	selected := preferred
+	selected := strings.TrimSpace(preferred)
 	if selected == "" {
 		_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
 		selected = strings.TrimSpace(viper.GetString(envContainerRuntime))
 	}
+	if selected == string(TypeAuto) {
+		selected = ""
+	}
 
-	// Recover Podman when it is the selected runtime, or when nothing is selected
-	// and Docker is unavailable (so detection falls through to Podman).
-	if autoStart && (selected == string(TypePodman) || (selected == "" && !isAvailable(ctx, TypeDocker))) {
-		_ = TryRecoverPodmanRuntime(ctx)
+	if autoStart {
+		switch selected {
+		case string(TypePodman):
+			// TryRecoverPodmanRuntime performs the availability check and, when
+			// needed, verifies the runtime after recovery. Reusing that result
+			// avoids a second `podman info` in DetectRuntimeWithPreference.
+			if TryRecoverPodmanRuntime(ctx) == RuntimeAvailable {
+				return NewPodmanRuntime(), nil
+			}
+			return nil, fmt.Errorf("%w: podman is not available or not running", errUtils.ErrRuntimeNotAvailable)
+		case "":
+			// Docker remains the preferred auto runtime. If it is unavailable,
+			// recover/check Podman directly rather than probing Docker again in
+			// the generic detection path.
+			if isAvailable(ctx, TypeDocker) {
+				log.Debug(logAutoDetectedRuntime, logKeyRuntime, "docker")
+				return NewDockerRuntime(), nil
+			}
+			if TryRecoverPodmanRuntime(ctx) == RuntimeAvailable {
+				log.Debug(logAutoDetectedRuntime, logKeyRuntime, "podman")
+				return NewPodmanRuntime(), nil
+			}
+			return nil, fmt.Errorf("%w: neither docker nor podman is available", errUtils.ErrRuntimeNotAvailable)
+		}
 	}
 
 	return DetectRuntimeWithPreference(ctx, preferred)

@@ -10,10 +10,6 @@ repos:
         args: [-w]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
 
-      - id: go-build-mod
-        name: Check Go build
-        description: Ensure code compiles before commit
-
       - id: go-mod-tidy
         name: Tidy go.mod
         description: Ensure go.mod and go.sum are clean
@@ -58,6 +54,25 @@ repos:
         language: system
         files: ^(CLAUDE\.md|\.conductor/.*/CLAUDE\.md)$
         pass_filenames: false
+
+      - id: tracked-symlinks-check
+        name: Verify tracked symlinks
+        description: Ensure every Git-tracked symbolic link resolves
+        entry: scripts/check-symlinks.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Keep local commits aligned with the affected-file validation job.
+      # Pre-commit must not compile Atmos: use an already installed binary.
+      # Exclude Go to match CI's raw-string limitation.
+      - id: atmos-validate-editorconfig
+        name: Validate EditorConfig
+        description: Validate affected non-Go files against EditorConfig rules
+        entry: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --format rich
+        language: system
+        pass_filenames: false
+        always_run: true
 
 
   # General file hygiene

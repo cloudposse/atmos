@@ -2,6 +2,7 @@ package step
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -22,15 +23,23 @@ const (
 // TemplateRenderer renders one template pass with the provided data.
 type TemplateRenderer func(name, input string, data any) (string, error)
 
+type ComponentInfoResolver func(ctx context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error)
+
 // Variables holds step outputs accessible via Go templates.
 type Variables struct {
 	// Steps maps step names to their results.
 	Steps map[string]*StepResult
 	// Env contains environment variables.
 	Env map[string]string
+	// templateEnv contains the environment variables exposed to Go templates.
+	// It is intentionally distinct from Env: an env step with export: false
+	// updates templateEnv without changing the environment of later processes.
+	templateEnv map[string]string
 	// Flags contains workflow command-line flags exposed to step templates.
 	Flags            map[string]string
 	AtmosConfig      *schema.AtmosConfiguration
+	ToolchainPATH    string
+	componentInfo    ComponentInfoResolver
 	templateRoots    map[string]any
 	templateRenderer TemplateRenderer
 	templatePasses   int
@@ -48,6 +57,7 @@ func NewVariables() *Variables {
 	v := &Variables{
 		Steps:          make(map[string]*StepResult),
 		Env:            make(map[string]string),
+		templateEnv:    make(map[string]string),
 		Flags:          make(map[string]string),
 		templateRoots:  make(map[string]any),
 		templatePasses: defaultTemplatePasses,
@@ -65,6 +75,7 @@ func (v *Variables) LoadOSEnv() {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) == 2 {
 			v.Env[parts[0]] = parts[1]
+			v.templateEnv[parts[0]] = parts[1]
 		}
 	}
 }
@@ -165,6 +176,35 @@ func (v *Variables) GetValues(stepName string) ([]string, bool) {
 func (v *Variables) SetEnv(key, value string) {
 	defer perf.Track(nil, "step.Variables.SetEnv")()
 
+	if v.Env == nil {
+		v.Env = make(map[string]string)
+	}
+	if v.templateEnv == nil {
+		v.templateEnv = make(map[string]string)
+	}
+	v.Env[key] = value
+	v.templateEnv[key] = value
+}
+
+// SetTemplateEnv stores an environment variable only for Go template
+// resolution. It does not modify the environment supplied to subprocesses.
+func (v *Variables) SetTemplateEnv(key, value string) {
+	defer perf.Track(nil, "step.Variables.SetTemplateEnv")()
+
+	if v.templateEnv == nil {
+		v.templateEnv = make(map[string]string)
+	}
+	v.templateEnv[key] = value
+}
+
+// SetProcessEnv stores an environment variable only for subprocess execution.
+// It does not modify the environment exposed to Go templates.
+func (v *Variables) SetProcessEnv(key, value string) {
+	defer perf.Track(nil, "step.Variables.SetProcessEnv")()
+
+	if v.Env == nil {
+		v.Env = make(map[string]string)
+	}
 	v.Env[key] = value
 }
 
@@ -184,6 +224,33 @@ func (v *Variables) SetAtmosConfig(config *schema.AtmosConfiguration) {
 	defer perf.Track(nil, "step.Variables.SetAtmosConfig")()
 
 	v.AtmosConfig = config
+}
+
+func (v *Variables) SetToolchainPATH(path string) {
+	defer perf.Track(nil, "step.Variables.SetToolchainPATH")()
+
+	v.ToolchainPATH = path
+}
+
+func (v *Variables) SetComponentInfoResolver(resolver ComponentInfoResolver) {
+	defer perf.Track(nil, "step.Variables.SetComponentInfoResolver")()
+
+	v.componentInfo = resolver
+}
+
+func (v *Variables) ResolveComponentInfo(ctx context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(nil, "step.Variables.ResolveComponentInfo")()
+
+	if v.componentInfo != nil {
+		return v.componentInfo(ctx, component, stack, componentType)
+	}
+	return &schema.ConfigAndStacksInfo{
+		Stack:            stack,
+		ComponentType:    componentType,
+		ComponentFromArg: component,
+		Component:        component,
+		FinalComponent:   component,
+	}, nil
 }
 
 // SetTemplateData sets extra root values exposed during template resolution.
@@ -272,8 +339,8 @@ func (v *Variables) templateData() map[string]any {
 	}
 	data := map[string]any{
 		"steps": steps,
-		"Env":   v.Env,
-		"env":   v.Env,
+		"Env":   v.templateEnv,
+		"env":   v.templateEnv,
 		"Flags": v.Flags,
 		"flags": v.Flags,
 	}
@@ -343,8 +410,8 @@ func (v *Variables) ResolveWith(input string, envOverlay map[string]string) (str
 	}
 	data := v.templateData()
 	if len(envOverlay) > 0 {
-		merged := make(map[string]string, len(v.Env)+len(envOverlay))
-		for key, value := range v.Env {
+		merged := make(map[string]string, len(v.templateEnv)+len(envOverlay))
+		for key, value := range v.templateEnv {
 			merged[key] = value
 		}
 		for key, value := range envOverlay {
@@ -352,6 +419,34 @@ func (v *Variables) ResolveWith(input string, envOverlay map[string]string) (str
 		}
 		// templateData() returns a fresh map, so replacing these keys does not
 		// affect v.Env.
+		data["Env"] = merged
+		data["env"] = merged
+	}
+	return v.resolveTemplate("step", input, data)
+}
+
+// ResolveWithFallback resolves templates using the current template environment
+// first, then supplies values from envFallback only for keys that are not
+// already present. This is useful for workflow-level environment rendering:
+// an earlier env step must win over the initial process environment while
+// global/base values remain available when no template value was assigned.
+func (v *Variables) ResolveWithFallback(input string, envFallback map[string]string) (string, error) {
+	defer perf.Track(nil, "step.Variables.ResolveWithFallback")()
+
+	if input == "" {
+		return "", nil
+	}
+	data := v.templateData()
+	if len(envFallback) > 0 {
+		merged := make(map[string]string, len(v.templateEnv)+len(envFallback))
+		for key, value := range v.templateEnv {
+			merged[key] = value
+		}
+		for key, value := range envFallback {
+			if _, exists := merged[key]; !exists {
+				merged[key] = value
+			}
+		}
 		data["Env"] = merged
 		data["env"] = merged
 	}

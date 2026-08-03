@@ -5,6 +5,9 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
+  # Released binary used by hooks that invoke Atmos. This must not build source
+  # during pre-commit, which runs in a worktree-sensitive lifecycle event.
+  ATMOS_BOOTSTRAP_VERSION: "1.224.1"
   # Ensure pre-commit uses the right Python version
   PYTHON_VERSION: "3.11"
   # Skip hooks that are already running in other CI jobs to avoid redundant work
@@ -12,6 +15,9 @@ env:
   # golangci-lint: Already runs in codeql.yml lint-golangci job
   # lintroller: Already runs in codeql.yml lint-golangci job (via custom-gcl binary)
   SKIP: go-build-mod,golangci-lint,lintroller
+  # Use pipe fallback so transient proxy.golang.org 5xx errors during
+  # `go mod download` fall back to direct module fetches.
+  GOPROXY: "https://proxy.golang.org|direct"
 
 jobs:
   pre-commit:
@@ -31,6 +37,11 @@ jobs:
           persist-credentials: false
           # Fetch full history for proper diff checking
           fetch-depth: 0
+
+      - name: Set up Atmos
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0

@@ -88,6 +88,7 @@ const config = {
                     // Redirects for integrations pages moved to cli/configuration
                     {from: '/integrations/atlantis', to: '/cli/configuration/integrations/atlantis'},
                     {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
+                    {from: '/cli/configuration/integrations/spacelift', to: '/deprecated/spacelift'},
                     // Legacy GitHub Actions redirected to native CI (deprecated)
                     {from: '/integrations/github-actions', to: '/ci'},
                     {from: '/integrations/github-actions/affected-stacks', to: '/ci'},
@@ -95,6 +96,8 @@ const config = {
                     {from: '/integrations/github-actions/atmos-terraform-apply', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
+                    // Vendored dependency management moved out of GitHub Actions integrations.
+                    {from: '/integrations/github-actions/component-updater', to: '/cli/commands/vendor/vendor-update'},
                     {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'

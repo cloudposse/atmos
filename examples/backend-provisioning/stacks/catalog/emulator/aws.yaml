@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
-# The emulator is a stack-scoped component. `atmos emulator up aws -s <stack>`
-# starts (or reuses) it; the `local-aws` identity in atmos.yaml resolves its live
-# endpoint, and both the Terraform provider-config contributor AND the
+# The `local` stack declares this emulator. `atmos emulator up aws -s local`
+# starts (or reuses) it; the `local-aws` identity resolves the `local/aws`
+# instance, and both the Terraform provider-config contributor AND the
 # `atmos terraform backend` provisioner read that same endpoint automatically.
 components:
   emulator:

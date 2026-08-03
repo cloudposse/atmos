@@ -56,7 +56,9 @@ var (
 	ErrMissingAgg                            = errors.New("missing required tool `agg`; install asciinema agg and retry")
 	ErrMissingFFmpeg                         = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
 	ErrMissingRenderOutput                   = errors.New("specify an output path with --output")
+	ErrRenderToolExecFailed                  = errors.New("managed renderer execution failed")
 	ErrUnknownSessionAction                  = errors.New("unknown cast session action type")
+	ErrSimulateActionMissingCallback         = errors.New("simulate session action has no callback")
 	ErrWaitTimeout                           = errors.New("timed out waiting for cast output")
 	ErrUnsupportedCastKey                    = errors.New("unsupported cast key")
 	ErrMissingExecCommand                    = errors.New("exec recording requires a command")
@@ -94,7 +96,7 @@ var (
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
-	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' (or the deprecated 'stacks.name_pattern') needs to be specified in 'atmos.yaml'")
 	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
@@ -142,8 +144,10 @@ var (
 	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
 
 	// Authentication and TTY errors.
-	ErrAuthConsole            = errors.New("auth console operation failed")
-	ErrProviderNotSupported   = errors.New("provider does not support this operation")
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	// ErrWebflowRequiresAWSUser indicates --webflow was used without a direct aws/user identity.
+	ErrWebflowRequiresAWSUser = errors.New("--webflow requires an aws/user identity")
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
 	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
@@ -174,6 +178,7 @@ var (
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+	ErrClosureFlagsRequireMultiComponent                     = errors.New("the `--include-dependencies` and `--include-dependents` flags expand a multi-component selection and require one of `--all`, `--components`, `--query`, `-s`, `--tags`, `--labels`, or `--affected`")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
@@ -201,6 +206,16 @@ var (
 	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
+
+	// Terraform lint errors.
+	ErrTerraformLint             = errors.New("terraform lint failed")
+	ErrTerraformLintAuth         = errors.New("failed to initialize authentication for terraform lint")
+	ErrTerraformLintAffected     = errors.New("failed to determine affected terraform lint targets")
+	ErrBuildTerraformLintTargets = errors.New("failed to build terraform lint targets")
+
+	// --use-mocks errors.
+	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
+	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
@@ -264,6 +279,7 @@ var (
 	ErrFailedToGetRepoInfo         = errors.New("failed to get repository info")
 	ErrLocalRepoFetch              = errors.New("local repo unavailable")
 	ErrGitRefNotFound              = errors.New("git reference not found on local filesystem")
+	ErrGitFileNotFound             = errors.New("file not found in git reference")
 	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
@@ -316,6 +332,12 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// ErrForbiddenSelectorFunction enforces the selector purity contract:
+	// metadata.tags/metadata.labels drive scoping decisions before evaluation,
+	// so by design they may not contain constructs that require authentication
+	// or process execution (e.g. !terraform.state, !store, !exec, atmos.Component).
+	ErrForbiddenSelectorFunction = errors.New("forbidden function in labels/tags selector")
+
 	// Dependency management errors.
 	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
 	ErrDependencyResolution = errors.New("dependency resolution failed")
@@ -327,28 +349,29 @@ var (
 	ErrHelmBinaryNotFound    = errors.New("helm binary not found")
 
 	// Toolchain errors.
-	ErrToolNotFound                 = errors.New("tool not found")
-	ErrInvalidToolSpec              = errors.New("invalid tool specification")
-	ErrToolAlreadyInstalled         = errors.New("tool already installed")
-	ErrDownloadFailed               = errors.New("download failed")
-	ErrDownloadRetryable            = errors.New("retryable download error")
-	ErrSignatureRetryable           = errors.New("retryable signature verification error")
-	ErrExtractionFailed             = errors.New("extraction failed")
-	ErrChecksumMismatch             = errors.New("checksum mismatch")
-	ErrNoVersionsInstalled          = errors.New("no versions installed")
-	ErrLatestFileNotFound           = errors.New("latest version file not found")
-	ErrRegistryNotReachable         = errors.New("registry not reachable")
-	ErrToolNotInRegistry            = errors.New("tool not in registry")
-	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
-	ErrAliasNotFound                = errors.New("alias not found")
-	ErrBinaryNotExecutable          = errors.New("binary not executable")
-	ErrBinaryNotFound               = errors.New("binary not found")
-	ErrLockfileVersionMismatch      = errors.New("lockfile version mismatch")
-	ErrNoAssetTemplate              = errors.New("no asset template defined")
-	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
-	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
-	ErrNoToolsConfigured            = errors.New("no tools configured")
-	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
+	ErrToolNotFound                    = errors.New("tool not found")
+	ErrInvalidToolSpec                 = errors.New("invalid tool specification")
+	ErrToolAlreadyInstalled            = errors.New("tool already installed")
+	ErrDownloadFailed                  = errors.New("download failed")
+	ErrDownloadRetryable               = errors.New("retryable download error")
+	ErrSignatureRetryable              = errors.New("retryable signature verification error")
+	ErrExtractionFailed                = errors.New("extraction failed")
+	ErrChecksumMismatch                = errors.New("checksum mismatch")
+	ErrNoVersionsInstalled             = errors.New("no versions installed")
+	ErrLatestFileNotFound              = errors.New("latest version file not found")
+	ErrRegistryNotReachable            = errors.New("registry not reachable")
+	ErrToolNotInRegistry               = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported        = errors.New("tool does not support this platform")
+	ErrAliasNotFound                   = errors.New("alias not found")
+	ErrBinaryNotExecutable             = errors.New("binary not executable")
+	ErrBinaryNotFound                  = errors.New("binary not found")
+	ErrLockfileVersionMismatch         = errors.New("lockfile version mismatch")
+	ErrNoAssetTemplate                 = errors.New("no asset template defined")
+	ErrAssetTemplateInvalid            = errors.New("asset template invalid")
+	ErrToolVersionsFileOperation       = errors.New("tool-versions file operation failed")
+	ErrNoToolsConfigured               = errors.New("no tools configured")
+	ErrUnsupportedVersionConstraint    = errors.New("unsupported version constraint format")
+	ErrToolchainPlainFormatWithAllFlag = errors.New("--format=plain can't be used with --all")
 
 	// Flag validation errors.
 	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
@@ -389,17 +412,18 @@ var (
 	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
 	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 
-	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrMissingComponent        = errors.New("component is required")
-	ErrNoStacksToSelect        = errors.New("no stacks are configured to choose from")
-	ErrNoComponentsToSelect    = errors.New("no components are configured to choose from")
-	ErrLoadSelectionOptions    = errors.New("failed to load options for interactive selection")
-	ErrMissingComponentType    = errors.New("component type is required")
-	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
-	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
-	ErrInvalidArguments        = errors.New("invalid arguments")
-	ErrUnknownSubcommand       = errors.New("unknown subcommand")
-	ErrInvalidComponent        = errors.New("invalid component")
+	ErrMissingStack             = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent         = errors.New("component is required")
+	ErrNoStacksToSelect         = errors.New("no stacks are configured to choose from")
+	ErrNoComponentsToSelect     = errors.New("no components are configured to choose from")
+	ErrLoadSelectionOptions     = errors.New("failed to load options for interactive selection")
+	ErrMissingComponentType     = errors.New("component type is required")
+	ErrRequiredFlagNotProvided  = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty        = errors.New("required flag cannot be empty")
+	ErrInvalidArguments         = errors.New("invalid arguments")
+	ErrUnknownSubcommand        = errors.New("unknown subcommand")
+	ErrInvalidComponent         = errors.New("invalid component")
+	ErrDuplicateComponentConfig = errors.New("duplicate component configuration")
 	// ErrInvalidStack indicates the user provided an identifier that doesn't match
 	// the stack's canonical name (e.g., using filename when explicit name is set).
 	// This differs from ErrStackNotFound which indicates the stack doesn't exist at all.
@@ -503,6 +527,9 @@ var (
 	// Emulator errors.
 	ErrUnknownEmulatorDriver       = errors.New("unknown emulator driver")
 	ErrEmulatorNotRunning          = errors.New("emulator is not running")
+	ErrEmulatorNotConfigured       = errors.New("emulator is not configured")
+	ErrEmulatorResolutionFailed    = errors.New("failed to resolve emulator")
+	ErrEmulatorAmbiguous           = errors.New("emulator identity is ambiguous")
 	ErrEmulatorTargetMismatch      = errors.New("emulator target does not match")
 	ErrEmulatorConfigInvalid       = errors.New("emulator configuration invalid")
 	ErrEmulatorResolverUnavailable = errors.New("emulator resolver is not available")
@@ -578,12 +605,18 @@ var (
 	ErrAtlantisConfigTemplateNotSpec = errors.New("atlantis config template is not specified")
 
 	// Validation errors.
-	ErrValidationFailed = errors.New("validation failed")
+	ErrValidationFailed              = errors.New("validation failed")
+	ErrUnsupportedValidationFormat   = errors.New("unsupported validation format: expected text or rich")
+	ErrUnsupportedCIValidationFormat = errors.New("unsupported CI validation format: expected text, rich, or sarif")
+	ErrWorkflowArgsWithWorkflowPath  = errors.New("workflow-file arguments cannot be used with --workflow-path")
+	ErrAffectedWithFileArgsOrPath    = errors.New("--affected cannot be used with workflow-file arguments or --workflow-path")
+	ErrCIValidatorNotRegistered      = errors.New("CI validator is not registered")
 
 	// EditorConfig validation errors.
 	ErrEditorConfigValidationFailed = errors.New("EditorConfig validation failed")
 	ErrEditorConfigVersionMismatch  = errors.New("EditorConfig version mismatch")
 	ErrEditorConfigGetFiles         = errors.New("failed to get files for EditorConfig validation")
+	ErrEditorConfigInvalidFormat    = errors.New("invalid EditorConfig output format")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
@@ -596,6 +629,8 @@ var (
 	ErrInvalidPackerSection             = errors.New("invalid packer section")
 	ErrInvalidComponentsSection         = errors.New("invalid components section")
 	ErrInvalidAuthSection               = errors.New("invalid auth section")
+	ErrInvalidGlobalMetadataSection     = errors.New("invalid metadata section")
+	ErrGlobalMetadataFieldNotAllowed    = errors.New("metadata field is not allowed at global (stack-wide) scope")
 	ErrInvalidImportSection             = errors.New("invalid import section")
 	ErrInvalidImport                    = errors.New("invalid import")
 	ErrInvalidRemoteImport              = errors.New("invalid remote import")
@@ -625,6 +660,7 @@ var (
 	ErrInvalidTerraformDependencies       = errors.New("invalid terraform dependencies section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
+	ErrUnresolvedComputedTerraformVar     = errors.New("terraform variable contains an unresolved computed value")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand      = errors.New("invalid helmfile command")
@@ -827,6 +863,7 @@ var (
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrCreateFile          = errors.New("failed to create file")
 	ErrOpenFile            = errors.New("failed to open file")
 	ErrWriteFile           = errors.New("failed to write to file")
 	ErrStatFile            = errors.New("failed to stat file")
@@ -1092,6 +1129,83 @@ var (
 	ErrLocalsDependencyExtract  = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution         = errors.New("failed to resolve local")
 	ErrLocalsYamlFunctionFailed = errors.New("failed to process YAML function in local")
+
+	// Init and scaffold errors.
+	ErrScaffoldNotFound        = errors.New("scaffold template not found")
+	ErrScaffoldValidation      = errors.New("scaffold validation failed")
+	ErrScaffoldGeneration      = errors.New("scaffold generation failed")
+	ErrInitialization          = errors.New("initialization failed")
+	ErrTemplateProcessing      = errors.New("template processing failed")
+	ErrInvalidScaffoldConfig   = errors.New("invalid scaffold configuration")
+	ErrTargetDirectoryExists   = errors.New("target directory already exists")
+	ErrTargetDirectoryNotEmpty = errors.New("target directory is not empty")
+	ErrScaffoldParseYAML       = errors.New("failed to parse scaffold YAML")
+	ErrPromptFailed            = errors.New("interactive prompt failed")
+
+	// Manifest registry errors (pkg/manifest).
+	ErrManifestKindUnknown    = errors.New("unknown manifest kind")
+	ErrManifestKindEmpty      = errors.New("manifest kind is empty")
+	ErrManifestKindMismatch   = errors.New("manifest kind mismatch")
+	ErrManifestAPIVersion     = errors.New("unsupported manifest apiVersion")
+	ErrManifestParse          = errors.New("failed to parse manifest")
+	ErrManifestPrototypeNil   = errors.New("manifest prototype is nil")
+	ErrManifestSchemaGenerate = errors.New("failed to generate manifest JSON schema")
+	ErrManifestValidation     = errors.New("manifest validation failed")
+
+	// Generator errors.
+	ErrReadTemplatesDirectory        = errors.New("failed to read templates directory")
+	ErrReadTemplateFiles             = errors.New("failed to read template files")
+	ErrReadTargetDirectory           = errors.New("failed to read target directory")
+	ErrInvalidBaseRef                = errors.New("invalid base reference")
+	ErrTemplateExecution             = errors.New("template execution failed")
+	ErrDirectoryCreation             = errors.New("directory creation failed")
+	ErrFileExists                    = errors.New("file already exists")
+	ErrFileWrite                     = errors.New("file write failed")
+	ErrUnprocessedTemplate           = errors.New("unprocessed template variable found")
+	ErrThreeWayMerge                 = errors.New("three-way merge failed")
+	ErrMergeConflict                 = errors.New("merge conflict detected")
+	ErrCreateIOContext               = errors.New("failed to create IO context")
+	ErrLoadScaffoldTemplates         = errors.New("failed to load scaffold templates")
+	ErrResolveTargetDirectory        = errors.New("failed to resolve target directory")
+	ErrScaffoldInvalidPrompt         = errors.New("invalid scaffold prompt configuration")
+	ErrCreateGeneratorContext        = errors.New("failed to create generator context")
+	ErrReadScaffoldConfig            = errors.New("failed to read scaffold configuration")
+	ErrTargetDirRequired             = errors.New("target directory is required")
+	ErrTemplateNameRequired          = errors.New("template name is required")
+	ErrScaffoldFileNotFound          = errors.New("scaffold file not found")
+	ErrInvalidScaffoldFile           = errors.New("invalid scaffold file")
+	ErrScaffoldDirectoryRead         = errors.New("failed to read scaffold directory")
+	ErrScaffoldReadFile              = errors.New("failed to read scaffold file")
+	ErrScaffoldMissingName           = errors.New("scaffold is missing required name field")
+	ErrScaffoldMergeTemplates        = errors.New("failed to merge scaffold templates")
+	ErrScaffoldLoadFromFS            = errors.New("failed to load scaffold from filesystem")
+	ErrScaffoldCreateFromPath        = errors.New("failed to create scaffold from path")
+	ErrScaffoldSelectTemplate        = errors.New("failed to select scaffold template")
+	ErrScaffoldDryRunValues          = errors.New("failed to load dry run values")
+	ErrScaffoldRenderFilePath        = errors.New("failed to render file path")
+	ErrScaffoldValidateSingleFile    = errors.New("scaffold file validation failed")
+	ErrScaffoldFilesNotUnique        = errors.New("scaffold files must be unique")
+	ErrScaffoldTemplatesNotAvailable = errors.New("scaffold templates not available")
+	ErrScaffoldLoadConfig            = errors.New("failed to load scaffold configuration")
+	ErrInvalidTemplateData           = errors.New("invalid template data")
+	ErrMergeThresholdExceeded        = errors.New("merge threshold exceeded")
+	ErrNoCommonAncestor              = errors.New("no common ancestor found")
+	ErrUnknownMergeStrategy          = errors.New("unknown merge strategy")
+	ErrGeneratorFieldRequired        = errors.New("field is required")
+	ErrDuplicateScaffoldFieldName    = errors.New("duplicate scaffold field name")
+	ErrScaffoldConfigMissing         = errors.New("scaffold configuration not found")
+	ErrInitializationPartialFailure  = errors.New("initialization partially failed")
+	ErrInitTemplateNotFound          = errors.New("init template not found")
+	ErrInvalidScaffoldSection        = errors.New("invalid scaffold section")
+	ErrScaffoldSourceUnsupported     = errors.New("scaffold source scheme not supported")
+	ErrScaffoldFetchSource           = errors.New("failed to fetch scaffold source")
+	ErrScaffoldCatalogLoad           = errors.New("failed to load scaffold catalog")
+	ErrTemplateConfigNameRequired    = errors.New("template config with metadata.name is required to write a project record")
+	ErrPathTraversal                 = errors.New("path traversal not allowed")
+	ErrSymlinkWrite                  = errors.New("refusing to write through a symlink")
+	ErrMetadataLoad                  = errors.New("failed to load init metadata")
+	ErrMetadataSave                  = errors.New("failed to save init metadata")
+	ErrScaffoldHookKindUnsupported   = errors.New("scaffold hook kind not supported")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

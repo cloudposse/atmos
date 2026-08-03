@@ -40,6 +40,7 @@ BUILT-IN COMMANDS
       help                              Show help for terraform command
       import                            Import existing infrastructure into Terraform state
       init                              Prepare your working directory for other commands
+      lint                              Lint Terraform components with TFLint
       login                             Obtain and save credentials for a remote host
       logout                            Remove locally-stored credentials for a remote host
       metadata                          Metadata related commands
@@ -68,58 +69,67 @@ CUSTOM COMMANDS
 
 FLAGS
 
-      --append-user-agent string  Customize User-Agent string in Terraform provider requests (sets
-                                  TF_APPEND_USER_AGENT)
+      --append-user-agent string     Customize User-Agent string in Terraform provider requests (sets
+                                     TF_APPEND_USER_AGENT)
 
-      --clone-target-ref          Clone the target reference with which to compare the current branch
+      --clone-target-ref             Clone the target reference with which to compare the current branch
 
-      --components strings        Filter by specific components
+      --components strings           Filter by specific components
 
-      --dry-run                   Perform dry run without making actual changes
+      --dry-run                      Perform dry run without making actual changes
 
-  -h, --help                      help for terraform
+  -h, --help                         help for terraform
 
-  -i, --identity string           Specify the identity to authenticate to before running Terraform commands. Use
-                                  without value to interactively select.
+  -i, --identity string              Specify the identity to authenticate to before running Terraform commands. Use
+                                     without value to interactively select.
 
-      --include-dependents        For each affected component, detect the dependent components and process them in the
-                                  dependency order
+      --include-dependencies string  Also process everything the selected components depend on (their prerequisites),
+                                     in dependency order (reversed for destroy). Optionally bound the expansion: --
+                                     include-dependencies=N
 
-      --init-pass-vars            Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)
+      --include-dependents string    Also process everything that depends on the selected components, in dependency
+                                     order (reversed for destroy). Optionally bound the expansion: --include-dependents=N
 
-      --labels string             Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-
-                                  center=platform,compliance=sox
+      --init-pass-vars               Pass the generated varfile to terraform init using --var-file flag (OpenTofu
+                                     feature)
 
-      --process-functions         Enable/disable YAML functions processing in Atmos stack manifests (default true)
+      --labels string                Filter by labels (comma-separated key=value or key:value pairs, matches all): --
+                                     labels=cost-center=platform,compliance=sox
 
-      --process-templates         Enable/disable Go template processing in Atmos stack manifests (default true)
+      --process-functions            Enable/disable YAML functions processing in Atmos stack manifests (default
+                                     true)
 
-  -q, --query string              Execute atmos terraform command on components filtered by a YQ expression
+      --process-templates            Enable/disable Go template processing in Atmos stack manifests (default true)
 
-      --ref string                Git reference with which to compare the current branch
+  -q, --query string                 Execute atmos terraform command on components filtered by a YQ expression
 
-      --repo-path string          Filesystem path to the already cloned target repository with which to compare the
-                                  current branch
+      --ref string                   Git reference with which to compare the current branch
 
-      --sha string                Git commit SHA with which to compare the current branch
+      --repo-path string             Filesystem path to the already cloned target repository with which to compare the
+                                     current branch
 
-      --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
+      --sha string                   Git commit SHA with which to compare the current branch
 
-      --skip-hooks string         Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
-                                  skip-hooks=name1,name2 to skip specific hooks by name
+      --skip strings                 Skip executing specific YAML functions in the Atmos stack manifests
 
-      --skip-init                 Skip terraform init before running command
+      --skip-hooks string            Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all,
+                                     or --skip-hooks=name1,name2 to skip specific hooks by name
 
-      --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH
+      --skip-init                    Skip terraform init before running command
 
-      --ssh-key-password string   Encryption password for the PEM-encoded private key if the key contains a password-
-                                  encrypted PEM block
+      --ssh-key string               Path to PEM-encoded private key to clone private repos using SSH
 
-  -s, --stack string              Stack name
+      --ssh-key-password string      Encryption password for the PEM-encoded private key if the key contains a password-
+                                     encrypted PEM block
 
-      --tags strings              Filter by tags (comma-separated, matches any): --tags=production,tier-1
+  -s, --stack string                 Stack name
 
-      --upload-status             Upload plan status to Atmos Pro
+      --tags strings                 Filter by tags (comma-separated, matches any): --tags=production,tier-1
+
+      --upload-status                Upload plan status to Atmos Pro
+
+      --use-mocks                    Resolve Terraform state/output YAML functions from component mocks instead of
+                                     remote state. Supported only by plan and describe commands
 
 
 GLOBAL FLAGS

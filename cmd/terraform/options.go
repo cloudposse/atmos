@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
@@ -24,6 +25,7 @@ type TerraformRunOptions struct {
 	// Processing flags.
 	ProcessTemplates bool
 	ProcessFunctions bool
+	UseMocks         bool
 	Skip             []string
 
 	// Execution flags.
@@ -47,6 +49,10 @@ type TerraformRunOptions struct {
 	Labels     map[string]string
 	All        bool
 	Affected   bool
+	// IncludeDependencies/IncludeDependents expand the selection with the
+	// dependency closure: 0 = off, -1 = unlimited depth, N>0 = N levels.
+	IncludeDependencies int
+	IncludeDependents   int
 
 	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
@@ -73,6 +79,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 	opts := &TerraformRunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
+		UseMocks:                v.GetBool("use-mocks"),
 		Skip:                    v.GetStringSlice("skip"),
 		DryRun:                  v.GetBool("dry-run"),
 		SkipInit:                v.GetBool("skip-init"),
@@ -100,6 +107,13 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		return nil, err
 	}
 	opts.Labels = labels
+
+	if opts.IncludeDependencies, err = flags.ParseClosureDepth("include-dependencies", v.GetString("include-dependencies")); err != nil {
+		return nil, err
+	}
+	if opts.IncludeDependents, err = flags.ParseClosureDepth("include-dependents", v.GetString("include-dependents")); err != nil {
+		return nil, err
+	}
 
 	if err := validateTerraformRunOptions(opts); err != nil {
 		return nil, err

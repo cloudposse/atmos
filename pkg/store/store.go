@@ -1,7 +1,5 @@
 package store
 
-import "strings"
-
 // Store defines the common interface for all store implementations.
 //
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_store.go -package=store
@@ -55,33 +53,4 @@ type SecretAwareStore interface {
 	Store
 	// SetSecret marks the store as a secret backend so writes use the sensitive at-rest variant.
 	SetSecret(secret bool)
-}
-
-// StoreFactory is a function type to initialize a new store.
-type StoreFactory func(options map[string]any) (Store, error)
-
-// nolint
-// getKey generates a key for the store. First it splits the stack by the stack delimiter (from atmos.yaml),
-// then it splits the component if it contains a "/",
-// then it appends the key to the parts,
-// then it joins the parts with the final delimiter.
-//
-// Empty segments are omitted entirely — independent of the final delimiter — so scoped secret
-// coordinates collapse cleanly: an empty component (a stack-scoped secret) yields
-// `prefix<delim>stack<delim>key`, and an empty stack and component (a global secret) yields
-// `prefix<delim>key`.
-func getKey(prefix string, stackDelimiter string, stack string, component string, key string, finalDelimiter string) (string, error) { //nolint
-	parts := []string{prefix}
-	if stack != "" {
-		parts = append(parts, strings.Split(stack, stackDelimiter)...)
-	}
-	if component != "" {
-		parts = append(parts, strings.Split(component, "/")...)
-	}
-	parts = append(parts, key)
-
-	joinedKey := strings.Join(parts, finalDelimiter)
-	finalKey := strings.ReplaceAll(joinedKey, "//", "/")
-
-	return finalKey, nil
 }

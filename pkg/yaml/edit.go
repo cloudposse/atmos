@@ -3,7 +3,6 @@ package yaml
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,16 +10,11 @@ import (
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
+	atmosyq "github.com/cloudposse/atmos/internal/yq"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-// yqEditSilentLevel sits above any real slog level so yq's internal logger
-// rejects every message during editing. Mirrors pkg/utils.yqSilentLevel; the
-// editor keeps its own copy so it never depends on whatever level the query
-// path last set process-wide.
-const yqEditSilentLevel = slog.Level(1000)
 
 // errWrapFmt is the format string for wrapping a sentinel error with an
 // underlying error.
@@ -69,14 +63,21 @@ func evaluateWithOptions(content []byte, expr string, opts editOptions) (string,
 		return "", err
 	}
 
-	// Silence yq's internal diagnostics for the duration of the evaluation.
-	yqlib.GetLogger().SetLevel(yqEditSilentLevel)
+	atmosyq.InitExpressionParser()
 
 	pref := editPreferences(opts.indent)
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
-	result, err := yqlib.NewStringEvaluator().Evaluate(expr, string(content), encoder, decoder)
+	// The YAML editor always wants yq's internal diagnostics silenced,
+	// regardless of Atmos's configured log level. WithEvaluationLevel keeps
+	// that level fixed for this whole call, so a concurrent Trace-configured
+	// evaluation elsewhere can't flip verbosity on mid-evaluation.
+	var result string
+	var err error
+	atmosyq.WithEvaluationLevel(atmosyq.SilentLevel, func() {
+		result, err = yqlib.NewStringEvaluator().Evaluate(expr, string(content), encoder, decoder)
+	})
 	if err != nil {
 		return "", fmt.Errorf("%w: %q: %w", ErrInvalidYAMLExpression, expr, err)
 	}

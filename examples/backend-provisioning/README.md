@@ -18,8 +18,9 @@ CRUD subcommands, against a **local AWS sandbox** (no AWS account or credentials
 The sandbox is an [Atmos emulator component](https://atmos.tools/cli/commands/emulator/usage),
 the same one used by the [`emulator-aws`](/examples/emulator-aws) example.
 
-The emulator is declared as a component (`components.emulator.aws`, driver `floci/aws`) and a
-single `aws/emulator` identity in `atmos.yaml` binds every component to it. Both the Terraform
+The emulator is declared once in the `local` stack (`components.emulator.aws`, driver `floci/aws`)
+and a single `aws/emulator` identity in `atmos.yaml` binds every component to the `local/aws`
+instance. Both the Terraform
 provider-config contributor (used by `atmos terraform apply`) *and* the `atmos terraform
 backend` provisioner independently resolve that same identity's live endpoint, so `atmos
 terraform backend create/update/delete --stack <stage>` works against the sandbox with no
@@ -34,13 +35,13 @@ type-specific settings under the backend type key (`backend.s3.*`, not a flat `b
 Start the sandbox, then exercise the backend lifecycle for a stack:
 
 ```shell
-atmos emulator up aws -s dev                        # start the local sandbox for the `dev` stack
+atmos emulator up aws -s local                      # start the shared local sandbox
 
 atmos terraform backend create demo -s dev           # provision the S3 bucket backing `demo`'s state
 atmos terraform backend update demo -s dev           # re-apply secure defaults (idempotent)
 atmos terraform backend delete demo -s dev --force   # remove the bucket
 
-atmos emulator down aws -s dev                       # stop and remove the sandbox container
+atmos emulator down aws -s local                     # stop and remove the sandbox container
 ```
 
 Every subcommand takes `--stack`/`-s` to target a specific stack — `atmos terraform backend
