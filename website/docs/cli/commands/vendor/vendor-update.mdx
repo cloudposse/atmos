@@ -69,6 +69,8 @@ atmos vendor update --group platform --pull-request
 
 See <a href="/changelog/component-updater-pull-requests">Native Pull Requests for Vendored Component Updates</a> for the full `--pull-request` workflow, including CI wiring.
 
+`--pull-request` authenticates to GitHub using `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`, in that order. A PR opened with the default `GITHUB_TOKEN` won't trigger downstream `on: pull_request`/`on: push` Actions workflows, since GitHub excludes its own default token from re-triggering workflows. To get a token that does, pair the Component Updater with the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro) auth integration (see also <a href="/changelog/atmos-pro-github-sts">Just-in-time GitHub tokens for CI with Atmos Pro STS</a>): `atmos auth exec --identity <github-sts-identity> -- atmos vendor update --pull-request` mints a real GitHub App installation token and exports it as `ATMOS_PRO_GITHUB_TOKEN`, which the Component Updater picks up automatically.
+
 ## Version constraints
 
 Per-source constraints control which upstream versions are eligible:

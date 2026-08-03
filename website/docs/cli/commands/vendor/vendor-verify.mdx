@@ -49,5 +49,6 @@ atmos vendor verify --format json
 :::note
 `atmos vendor verify` reports drift; it never fixes it. Re-run `atmos vendor pull --refresh-lock`
 (or `atmos vendor pull --component <name> --refresh-lock` for a single component) to re-fetch and
-reconcile drifted sources.
+reconcile drifted sources, or <a href="/cli/commands/vendor/vendor-clean">`atmos vendor clean`</a>
+to remove lock-owned files outright.
 :::

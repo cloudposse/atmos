@@ -85,6 +85,26 @@ job depend on an unmodified checkout while the update runs. In GitHub Actions, e
 appends a summary showing scope, counts, and the resulting PR link, independent of whether an
 update was found.
 
+## Triggering Downstream Workflows
+
+The example above uses the default `GITHUB_TOKEN`, which is fine for opening the PR — but GitHub
+deliberately excludes its own default Actions token from re-triggering `on: pull_request`/`on: push`
+workflows, so a plan/validate workflow that's supposed to run against the new PR won't fire.
+
+Pair the Component Updater with the
+[`github/sts`](/cli/configuration/auth#github-sts-atmos-pro) auth integration to get a token that
+does trigger downstream Actions — a just-in-time GitHub App installation token, minted through
+[Atmos Pro STS](/changelog/atmos-pro-github-sts) and exported as `ATMOS_PRO_GITHUB_TOKEN`, which
+`--pull-request` already prefers over `GITHUB_TOKEN`:
+
+```shell
+atmos auth exec --identity github-sts -- atmos vendor update --pull-request
+```
+
+No other flags or config changes are required: `atmos auth exec` mints and exports the token for
+the wrapped command's environment, and the Component Updater's GitHub client picks it up
+automatically.
+
 ## Get Involved
 
 Questions about scopes, groups, or CI publishing are welcome in the

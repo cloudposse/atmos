@@ -27,9 +27,9 @@ Do not retain a third-party action for updating, committing, pushing, or opening
 | individual component selection | repeat `--component <name>` |
 | update-and-pull behavior | `--pull-request` implies `--pull` |
 | branch, title, body, labels, draft | `vendor.ci.pull_request` |
-| GitHub token input | `ATMOS_CI_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` |
+| GitHub token input | `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` |
 | action summary | Native GitHub step summary |
 
-Stage the rollout: first run `atmos vendor update --check --group <name>` on a non-production group; then enable `--pull-request` manually; finally schedule it and retire the legacy action. Grant only `contents: write`, `pull-requests: write`, and `issues: write` where labels/assignees are used. Use a PAT or GitHub App token if downstream push workflows must run; the default `GITHUB_TOKEN` suppresses them.
+Stage the rollout: first run `atmos vendor update --check --group <name>` on a non-production group; then enable `--pull-request` manually; finally schedule it and retire the legacy action. Grant only `contents: write`, `pull-requests: write`, and `issues: write` where labels/assignees are used. The default `GITHUB_TOKEN` suppresses downstream push workflows; instead of a long-lived PAT or manually-managed GitHub App token, pair the Component Updater with the `github/sts` auth integration: `atmos auth exec --identity <github-sts-identity> -- atmos vendor update --pull-request` mints a real GitHub App installation token and exports it as `ATMOS_PRO_GITHUB_TOKEN`, which the Component Updater already prefers over `GITHUB_TOKEN`.
 
 See the vendoring [Component Updater reference](../../atmos-vendoring/references/component-updater.md) for the native operating model.

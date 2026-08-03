@@ -1,0 +1,58 @@
+---
+title: atmos vendor clean
+sidebar_label: clean
+sidebar_class_name: command
+id: vendor-clean
+description: Remove lock-owned vendored files, refusing to delete files modified since they were vendored.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Remove every vendored file recorded in `vendor.lock.yaml`. Only deletes files the lock actually
+owns — never files another still-selected artifact owns, and never files outside the lock
+entirely.
+</Intro>
+
+## Usage
+
+```shell
+atmos vendor clean [--component <name>] [--force] [--dry-run]
+```
+
+By default, `vendor clean` preserves any lock-owned file whose on-disk content no longer matches
+its recorded checksum (a locally modified file), refusing to run and naming every such file. Pass
+`--force` to delete them anyway. After a successful clean, the removed artifacts are dropped from
+`vendor.lock.yaml`.
+
+## Examples
+
+```shell
+# Preview what would be removed, without deleting anything.
+atmos vendor clean --dry-run
+
+# Remove every vendored artifact recorded in the lock.
+atmos vendor clean
+
+# Remove only one component's vendored files.
+atmos vendor clean --component vpc
+
+# Delete lock-owned files even if they were modified since vendoring.
+atmos vendor clean --force
+```
+
+## Flags
+
+<dl>
+  <dt>`--component` / `-c` (string)</dt>
+  <dd>Clean only this component. Omit to clean every artifact recorded in the lock file.</dd>
+  <dt>`--force` (boolean)</dt>
+  <dd>Delete modified lock-owned files instead of refusing to run.</dd>
+  <dt>`--dry-run` (boolean)</dt>
+  <dd>Show which files would be removed without deleting anything.</dd>
+</dl>
+
+:::note
+A single modified file blocks the entire run when `--force` is not set — no files are deleted for
+that invocation, even unmodified ones, until the conflict is resolved or `--force` is passed. Scope
+with `--component` to clean only the artifacts you're sure about.
+:::

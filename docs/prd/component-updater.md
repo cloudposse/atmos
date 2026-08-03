@@ -21,7 +21,8 @@ vendor:
       base_branch: main # otherwise the remote default branch
       branch_prefix: atmos/component-updater
       title: "chore(components): update {{ .scope.name }}"
-      body: "{{ .updates | markdownTable }}"
+      # body left unset here to use the default: the Atmos CI badge, a one-line explanation, and
+      # {{ .updates | markdownTable }} -- set your own template to replace it entirely.
       labels: [component-update]
       draft: false
       reviewers: []
