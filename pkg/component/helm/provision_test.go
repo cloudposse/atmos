@@ -173,11 +173,10 @@ func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
 
 func TestLifecycleSummary(t *testing.T) {
 	policy := releaseLifecycle{
-		RollbackOnFailure: true,
+		OnFailure:         []failureAction{failureActionRollback, failureActionCleanup},
 		WaitStrategy:      kube.StatusWatcherStrategy,
 		WaitForJobs:       true,
 		Timeout:           5 * time.Minute,
-		CleanupOnFail:     true,
 		MaxHistory:        7,
 		DisableChartHooks: true,
 		SkipCRDs:          true,
@@ -189,18 +188,17 @@ func TestLifecycleSummary(t *testing.T) {
 	assert.Equal(t, "5m0s", install["timeout"])
 	assert.Equal(t, false, install["chart_hooks_enabled"])
 	assert.Equal(t, true, install["wait_for_jobs"])
-	assert.Equal(t, true, install["rollback_on_failure"])
+	assert.Equal(t, []string{"rollback"}, install["on_failure"])
 	assert.Equal(t, false, install["install_crds"])
 
 	upgrade := lifecycleSummary(releaseOperationUpgrade, policy)
 	assert.Equal(t, true, upgrade["wait_for_jobs"])
-	assert.Equal(t, true, upgrade["rollback_on_failure"])
-	assert.Equal(t, true, upgrade["cleanup_on_fail"])
+	assert.Equal(t, []string{"rollback", "cleanup"}, upgrade["on_failure"])
 	assert.Equal(t, 7, upgrade["max_history"])
 
 	deleted := lifecycleSummary("delete", policy)
 	assert.NotContains(t, deleted, "wait_for_jobs")
-	assert.NotContains(t, deleted, "rollback_on_failure")
+	assert.NotContains(t, deleted, "on_failure")
 }
 
 func TestDeliverApply_SelectTargetError(t *testing.T) {

@@ -3,7 +3,6 @@ package helm
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -43,7 +42,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	}
 
 	applyCmd := newOperationCommand("apply", "Apply")
-	for _, name := range []string{"target", "rollback-on-failure", "atomic", "wait", "wait-for-jobs", "timeout", "cleanup-on-fail", "history-max", "no-hooks", "skip-crds"} {
+	for _, name := range []string{"target", "on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds"} {
 		assert.NotNil(t, applyCmd.Flag(name), "expected apply flag %q", name)
 	}
 	assert.Equal(t, "watcher", applyCmd.Flag("wait").NoOptDefVal)
@@ -61,7 +60,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	for _, name := range []string{"wait", "timeout", "no-hooks"} {
 		assert.NotNil(t, deleteCmd.Flag(name), "expected delete flag %q", name)
 	}
-	assert.Nil(t, deleteCmd.Flag("rollback-on-failure"))
+	assert.Nil(t, deleteCmd.Flag("on-failure"))
 
 	// diff/plan get the baseline-selection flags; other operations do not.
 	for _, opName := range []string{"diff", "plan"} {
@@ -87,36 +86,30 @@ func TestBareWaitDoesNotConsumeComponentArgument(t *testing.T) {
 
 func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 	cmd := configuredOperationCommand(t, "apply", map[string]string{
-		"rollback-on-failure": "true",
-		"atomic":              "false",
-		"wait":                "legacy",
-		"wait-for-jobs":       "true",
-		"timeout":             "15m",
-		"cleanup-on-fail":     "true",
-		"history-max":         "0",
-		"no-hooks":            "true",
-		"skip-crds":           "true",
+		"on-failure":    "rollback,cleanup",
+		"wait":          "legacy",
+		"wait-for-jobs": "true",
+		"timeout":       "15m",
+		"history-max":   "0",
+		"no-hooks":      "true",
+		"skip-crds":     "true",
 	})
 
 	actual := getOperationFlags(cmd)
-	assert.Equal(t, true, actual[cfg.HelmRollbackOnFailureSectionName])
-	assert.Equal(t, false, actual[cfg.HelmAtomicSectionName])
+	assert.Equal(t, []string{"rollback", "cleanup"}, actual[cfg.HelmOnFailureSectionName])
 	assert.Equal(t, "legacy", actual[cfg.HelmWaitStrategySectionName])
 	assert.Equal(t, true, actual[cfg.HelmWaitForJobsSectionName])
 	assert.Equal(t, "15m", actual[cfg.HelmTimeoutSectionName])
-	assert.Equal(t, true, actual[cfg.HelmCleanupOnFailSectionName])
 	assert.Equal(t, 0, actual[cfg.HelmMaxHistorySectionName])
 	assert.Equal(t, true, actual[cfg.HelmDisableChartHooksSectionName])
 	assert.Equal(t, true, actual[cfg.HelmSkipCRDsSectionName])
 
 	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
 	for _, key := range []string{
-		cfg.HelmRollbackOnFailureSectionName,
-		cfg.HelmAtomicSectionName,
+		cfg.HelmOnFailureSectionName,
 		cfg.HelmWaitStrategySectionName,
 		cfg.HelmWaitForJobsSectionName,
 		cfg.HelmTimeoutSectionName,
-		cfg.HelmCleanupOnFailSectionName,
 		cfg.HelmMaxHistorySectionName,
 		cfg.HelmDisableChartHooksSectionName,
 		cfg.HelmSkipCRDsSectionName,
@@ -125,22 +118,14 @@ func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 	}
 }
 
-func TestCanonicalRollbackFlagIsPreservedInBothAliasArgumentOrders(t *testing.T) {
-	orders := [][]string{
-		{"--atomic=true", "--rollback-on-failure=false"},
-		{"--rollback-on-failure=false", "--atomic=true"},
-	}
+func TestOnFailureFlagAccumulatesAndCanClear(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.ParseFlags([]string{"--on-failure=cleanup", "--on-failure=rollback,cleanup"}))
+	assert.Equal(t, []string{"cleanup", "rollback", "cleanup"}, getOperationFlags(cmd)[cfg.HelmOnFailureSectionName])
 
-	for _, args := range orders {
-		t.Run(strings.Join(args, "_then_"), func(t *testing.T) {
-			cmd := newOperationCommand("apply", "Apply")
-			require.NoError(t, cmd.ParseFlags(args))
-
-			actual := getOperationFlags(cmd)
-			assert.Equal(t, false, actual[cfg.HelmRollbackOnFailureSectionName])
-			assert.Equal(t, true, actual[cfg.HelmAtomicSectionName])
-		})
-	}
+	cleared := newOperationCommand("apply", "Apply")
+	require.NoError(t, cleared.ParseFlags([]string{"--on-failure="}))
+	assert.Empty(t, getOperationFlags(cleared)[cfg.HelmOnFailureSectionName])
 }
 
 func TestSelectionFlagsAndComponentCompletion(t *testing.T) {

@@ -522,24 +522,22 @@ func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
 		Component:     "demo-release",
 		AtmosConfig:   atmosCfg,
 		GlobalHelmLifecycle: map[string]any{
-			cfg.HelmRollbackOnFailureSectionName: true,
-			cfg.HelmWaitStrategySectionName:      "watcher",
-			cfg.HelmTimeoutSectionName:           "10m",
-			cfg.HelmMaxHistorySectionName:        10,
+			cfg.HelmOnFailureSectionName:    []any{"rollback"},
+			cfg.HelmWaitStrategySectionName: "watcher",
+			cfg.HelmTimeoutSectionName:      "10m",
+			cfg.HelmMaxHistorySectionName:   10,
 		},
 	}
 	result := minimalComponentResult()
 	result.BaseComponentHelm = map[string]any{
-		cfg.ValuesSectionName:            map[string]any{"source": "base"},
-		cfg.HelmAtomicSectionName:        true,
-		cfg.HelmTimeoutSectionName:       "20m",
-		cfg.HelmCleanupOnFailSectionName: true,
+		cfg.ValuesSectionName:        map[string]any{"source": "base"},
+		cfg.HelmOnFailureSectionName: []any{"rollback", "cleanup"},
+		cfg.HelmTimeoutSectionName:   "20m",
 	}
 	result.ComponentHelm = map[string]any{
-		cfg.ValuesSectionName:                map[string]any{"source": "component"},
-		cfg.HelmRollbackOnFailureSectionName: false,
-		cfg.HelmTimeoutSectionName:           "30m",
-		cfg.HelmCleanupOnFailSectionName:     false,
+		cfg.ValuesSectionName:        map[string]any{"source": "component"},
+		cfg.HelmOnFailureSectionName: []any{},
+		cfg.HelmTimeoutSectionName:   "30m",
 	}
 	result.ComponentOverridesHelm = map[string]any{
 		cfg.ValuesSectionName: map[string]any{"source": "override"},
@@ -548,13 +546,34 @@ func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
 	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
 	require.NoError(t, err)
 
-	assert.Equal(t, false, component[cfg.HelmRollbackOnFailureSectionName])
-	assert.Equal(t, true, component[cfg.HelmAtomicSectionName])
+	assert.Empty(t, component[cfg.HelmOnFailureSectionName])
 	assert.Equal(t, "watcher", component[cfg.HelmWaitStrategySectionName])
 	assert.Equal(t, "30m", component[cfg.HelmTimeoutSectionName])
 	assert.Equal(t, 10, component[cfg.HelmMaxHistorySectionName])
-	assert.Equal(t, false, component[cfg.HelmCleanupOnFailSectionName])
 	assert.Equal(t, map[string]any{"source": "override"}, component[cfg.ValuesSectionName])
+}
+
+func TestMergeComponentConfigurations_HelmOnFailureAppend(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{ListMergeStrategy: "append"}}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.HelmComponentType,
+		Component:     "demo-release",
+		AtmosConfig:   atmosCfg,
+		GlobalHelmLifecycle: map[string]any{
+			cfg.HelmOnFailureSectionName: []any{"rollback"},
+		},
+	}
+	result := minimalComponentResult()
+	result.BaseComponentHelm = map[string]any{
+		cfg.HelmOnFailureSectionName: []any{"cleanup"},
+	}
+	result.ComponentHelm = map[string]any{
+		cfg.HelmOnFailureSectionName: []any{"rollback"},
+	}
+
+	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	require.NoError(t, err)
+	assert.Equal(t, []any{"rollback", "cleanup", "rollback"}, component[cfg.HelmOnFailureSectionName])
 }
 
 func TestMergeComponentConfigurations_EmptyHelmValuesDoNotEraseInheritedDefaults(t *testing.T) {

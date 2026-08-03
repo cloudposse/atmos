@@ -19,17 +19,17 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 
 	valid := map[string]any{
 		"helm": map[string]any{
-			"command":             "helm",
-			"auth":                map[string]any{},
-			"secrets":             map[string]any{},
-			"dependencies":        map[string]any{},
-			"source":              map[string]any{"uri": "github.com/cloudposse/atmos"},
-			"provision":           map[string]any{},
-			"rollback_on_failure": true,
-			"wait_strategy":       "watcher",
-			"timeout":             "10m",
-			"max_history":         10,
-			"values":              map[string]any{"cluster": "shared"},
+			"command":       "helm",
+			"auth":          map[string]any{},
+			"secrets":       map[string]any{},
+			"dependencies":  map[string]any{},
+			"source":        map[string]any{"uri": "github.com/cloudposse/atmos"},
+			"provision":     map[string]any{},
+			"on_failure":    []string{"rollback"},
+			"wait_strategy": "watcher",
+			"timeout":       "10m",
+			"max_history":   10,
+			"values":        map[string]any{"cluster": "shared"},
 			"overrides": map[string]any{
 				"values": map[string]any{"environment": "test"},
 				"vars":   map[string]any{"region": "us-east-1"},
@@ -53,7 +53,7 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 					"namespace":           "demo",
 					"secrets":             map[string]any{},
 					"wait_for_jobs":       true,
-					"cleanup_on_fail":     false,
+					"on_failure":          []string{"cleanup"},
 					"disable_chart_hooks": false,
 					"skip_crds":           false,
 					"overrides": map[string]any{
@@ -104,10 +104,17 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 			},
 		},
 		{
-			name:  "non-boolean rollback",
-			field: "helm.rollback_on_failure",
+			name:  "unknown failure action",
+			field: "helm.on_failure.0",
 			manifest: map[string]any{
-				"helm": map[string]any{"rollback_on_failure": "true"},
+				"helm": map[string]any{"on_failure": []string{"notify"}},
+			},
+		},
+		{
+			name:  "non-list failure policy",
+			field: "helm.on_failure",
+			manifest: map[string]any{
+				"helm": map[string]any{"on_failure": "rollback"},
 			},
 		},
 		{
