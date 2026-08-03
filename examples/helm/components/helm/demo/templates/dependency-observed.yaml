@@ -1,7 +1,14 @@
-{{- if and .Values.hooks.requiredConfigMap .Values.hooks.validateDependency }}
-{{- $required := lookup "v1" "ConfigMap" .Release.Namespace .Values.hooks.requiredConfigMap }}
+{{- if and .Values.hooks.requiredDeployment .Values.hooks.validateDependency }}
+{{- $required := lookup "apps/v1" "Deployment" .Release.Namespace .Values.hooks.requiredDeployment }}
 {{- if not $required }}
-{{- fail (printf "required dependency marker ConfigMap %q is not ready" .Values.hooks.requiredConfigMap) }}
+{{- fail (printf "required dependency Deployment %q is not ready" .Values.hooks.requiredDeployment) }}
+{{- end }}
+{{- $desired := int (dig "spec" "replicas" 1 $required) }}
+{{- $available := int (dig "status" "availableReplicas" 0 $required) }}
+{{- $generation := int64 (dig "metadata" "generation" 0 $required) }}
+{{- $observedGeneration := int64 (dig "status" "observedGeneration" 0 $required) }}
+{{- if or (lt $available $desired) (lt $observedGeneration $generation) }}
+{{- fail (printf "required dependency Deployment %q is not ready: available=%d desired=%d observedGeneration=%d generation=%d" .Values.hooks.requiredDeployment $available $desired $observedGeneration $generation) }}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap
@@ -9,6 +16,7 @@ metadata:
   name: {{ .Release.Name }}-dependency-observed
   namespace: {{ .Release.Namespace }}
 data:
-  requiredConfigMap: {{ .Values.hooks.requiredConfigMap | quote }}
-  ready: {{ index $required.data "ready" | quote }}
+  requiredDeployment: {{ .Values.hooks.requiredDeployment | quote }}
+  ready: "true"
+  availableReplicas: {{ $available | quote }}
 {{- end }}
