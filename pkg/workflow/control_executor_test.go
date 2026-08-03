@@ -211,6 +211,8 @@ func TestControlCommandExecutorExecuteAtmosAddsStackBeforeTerminator(t *testing.
 
 	executor := &ControlCommandExecutor{
 		WorkflowDefinition: &schema.WorkflowDefinition{Stack: "workflow-stack"},
+		CommandLineTags:    []string{"networking"},
+		CommandLineLabels:  "deployment:dev",
 		PrepareEnv: func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error) {
 			return baseEnv, nil
 		},
@@ -231,7 +233,11 @@ func TestControlCommandExecutorExecuteAtmosAddsStackBeforeTerminator(t *testing.
 
 	require.NoError(t, err)
 	assert.Equal(t, "atmos", gotProgram)
-	assert.Equal(t, []string{"terraform", "plan", "-s", "step-stack", "--", "-target=module.example"}, gotArgs)
+	assert.Equal(t, []string{
+		"terraform", "plan", "-s", "step-stack",
+		"--tags=networking", "--labels=deployment:dev",
+		"--", "-target=module.example",
+	}, gotArgs)
 	assert.Equal(t, "plan ok", result.Stdout)
 }
 
@@ -312,10 +318,16 @@ func TestControlCommandExecutorSleep(t *testing.T) {
 	})
 }
 
-func TestAppendControlStack(t *testing.T) {
-	assert.Equal(t, []string{"plan"}, appendControlStack([]string{"plan"}, ""))
-	assert.Equal(t, []string{"plan", "-s", "dev"}, appendControlStack([]string{"plan"}, "dev"))
-	assert.Equal(t, []string{"plan", "-s", "dev", "--", "-flag"}, appendControlStack([]string{"plan", "--", "-flag"}, "dev"))
+func TestAppendAtmosStepFlags(t *testing.T) {
+	assert.Equal(t, []string{"plan"}, AppendAtmosStepFlags([]string{"plan"}, AtmosStepFlags{}))
+	assert.Equal(t, []string{"plan", "-s", "dev"}, AppendAtmosStepFlags([]string{"plan"}, AtmosStepFlags{Stack: "dev"}))
+	assert.Equal(t,
+		[]string{"terraform", "apply", "-s", "tenant1-dev", "--tags=networking", "--labels=deployment:dev", "--", "-auto-approve"},
+		AppendAtmosStepFlags(
+			[]string{"terraform", "apply", "--", "-auto-approve"},
+			AtmosStepFlags{Stack: "tenant1-dev", Tags: []string{"networking"}, Labels: "deployment:dev"},
+		),
+	)
 	assert.Equal(t, 1, indexOfControlArg([]string{"a", "b"}, "b"))
 	assert.Equal(t, -1, indexOfControlArg([]string{"a", "b"}, "c"))
 }

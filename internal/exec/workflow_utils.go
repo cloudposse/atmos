@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -319,6 +318,11 @@ func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
 	return false
 }
 
+type workflowCommandFilters struct {
+	tags   []string
+	labels string
+}
+
 // ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
@@ -329,8 +333,13 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 	commandLineIdentity string,
+	commandLineFilters ...workflowCommandFilters,
 ) (retErr error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+	commandFilters := workflowCommandFilters{}
+	if len(commandLineFilters) > 0 {
+		commandFilters = commandLineFilters[0]
+	}
 	var activeContainer *workflowPkg.ContainerSession
 	defer func() {
 		if activeContainer == nil {
@@ -707,6 +716,8 @@ func ExecuteWorkflow(
 					workflowDefinition:  workflowDefinition,
 					dryRun:              dryRun,
 					commandLineStack:    commandLineStack,
+					commandLineTags:     commandFilters.tags,
+					commandLineLabels:   commandFilters.labels,
 					commandLineIdentity: stepIdentity,
 					baseEnv:             baseEnv,
 					persistentEnv:       persistentEnv,
@@ -811,16 +822,12 @@ func ExecuteWorkflow(
 					args = strings.Fields(command)
 				}
 
+				args = workflowPkg.AppendAtmosStepFlags(args, workflowPkg.AtmosStepFlags{
+					Stack:  finalStack,
+					Tags:   commandFilters.tags,
+					Labels: commandFilters.labels,
+				})
 				if finalStack != "" {
-					if idx := slices.Index(args, "--"); idx != -1 {
-						// Insert before the "--"
-						// Take everything up to idx, then add "-s", finalStack, then tack on the rest
-						args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
-					} else {
-						// just append at the end
-						args = append(args, []string{"-s", finalStack}...)
-					}
-
 					log.Debug("Using stack", "stack", finalStack)
 				}
 
