@@ -27,6 +27,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -158,6 +159,10 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 
 	maxConcurrency := effectiveTerraformMaxConcurrency(opts.Info)
+	if maxConcurrency > 1 {
+		restoreSpinners := tfoutput.SuppressSpinners()
+		defer restoreSpinners()
+	}
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
 		return err
 	}
@@ -1235,9 +1240,9 @@ type terraformOutput struct {
 	logOrder      string
 	hideNoChanges bool
 	logDir        string
-	stdoutMu      sync.Mutex
-	stderrMu      sync.Mutex
-	groupMu       sync.Mutex
+	// outputMu serializes both streams because stdout and stderr share the terminal.
+	outputMu sync.Mutex
+	groupMu  sync.Mutex
 }
 
 // newTerraformOutput configures concurrent Terraform output streaming or grouping.
@@ -1288,8 +1293,8 @@ func (o *terraformOutput) nodeWriters(node *dependency.Node) (io.Writer, io.Writ
 		return stdout, stderr, closeTerraformLogFiles(stdoutFile, stderrFile), logFiles
 	}
 	label := terraformNodeLabel(node)
-	stdout := ioLayer.NewLinePrefixWriter(label, os.Stdout, &o.stdoutMu)
-	stderr := ioLayer.NewLinePrefixWriter(label, os.Stderr, &o.stderrMu)
+	stdout := ioLayer.NewLinePrefixWriter(label, os.Stdout, &o.outputMu)
+	stderr := ioLayer.NewLinePrefixWriter(label, os.Stderr, &o.outputMu)
 	return combineWriters(stdout, stdoutFile), combineWriters(stderr, stderrFile), func() error {
 		if err := stdout.Flush(); err != nil {
 			return err

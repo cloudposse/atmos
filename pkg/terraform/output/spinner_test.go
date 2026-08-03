@@ -16,6 +16,20 @@ func TestNewSpinner(t *testing.T) {
 	require.NotNil(t, p)
 }
 
+func TestSuppressSpinnersRestoresNestedScopes(t *testing.T) {
+	restoreOuter := SuppressSpinners()
+	require.True(t, spinnersSuppressed())
+
+	restoreInner := SuppressSpinners()
+	require.True(t, spinnersSuppressed())
+
+	restoreOuter()
+	require.True(t, spinnersSuppressed())
+
+	restoreInner()
+	require.False(t, spinnersSuppressed())
+}
+
 func TestModelSpinner_Init(t *testing.T) {
 	s := spinner.New()
 	model := modelSpinner{

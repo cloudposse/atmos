@@ -90,6 +90,9 @@ func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ str
 		log.Debug(message)
 		return func() {}
 	}
+	if spinnersSuppressed() {
+		return func() {}
+	}
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
 	RunSpinner(p, spinnerDone, message)
