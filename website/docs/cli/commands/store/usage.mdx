@@ -87,21 +87,28 @@ as a secret, use `atmos secret` instead.
 
 ## Stack and Component Scope
 
-The `--stack` and `--component` flags are optional for every `atmos store` subcommand. If you
-set both flags, Atmos scopes the value the same way [`atmos secret`](/cli/commands/secret/usage)
-does. If you set neither flag, Atmos stores a global value:
+The `--stack` and `--component` flags are optional for every `atmos store` subcommand, and they
+are independent of each other. You can set both flags, only `--stack`, or neither flag. Atmos
+uses whichever flags you set to build the key. If you set both flags, Atmos scopes the value the
+same way [`atmos secret`](/cli/commands/secret/usage) does. If you set only `--stack`, Atmos
+scopes the value to the stack and leaves the component out of the key. If you set neither flag,
+Atmos stores a global value:
 
 ```shell
-# Scoped to a stack and component
+# Scoped to a stack and a component
 atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
+
+# Scoped to a stack only (no component)
+atmos store set app-metadata region us-east-1 --stack=prod
 
 # Store-global (no stack or component)
 atmos store set app-metadata shared_config '{"region":"us-east-1"}'
 ```
 
-`atmos store get` and `atmos store delete` must use the same `--stack` and `--component` flags
-as the `set` command that wrote the value. If `set` used no flags, `get` and `delete` must also
-use no flags. Atmos uses the stack and component to build the underlying key.
+`atmos store get` and `atmos store delete` must use the exact same `--stack` and `--component`
+combination as the `set` command that wrote the value. For example, if `set` used only
+`--stack`, `get` and `delete` must also use only `--stack`, with no `--component` flag. Atmos
+uses the stack and component together to build the underlying key.
 
 ## See Also
 
