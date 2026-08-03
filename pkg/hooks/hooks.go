@@ -229,8 +229,7 @@ func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) err
 
 	kind, ok := GetKind(hook.Kind)
 	if !ok {
-		log.Debug("Unknown hook kind", "kind", hook.Kind)
-		return nil
+		return unknownHookKindError(name, hook.Kind)
 	}
 
 	executionHook, err := h.resolveHookForExecution(name, hook, ctx.atmosConfig, ctx.info, ctx.outcome)
@@ -765,17 +764,21 @@ func (h *Hooks) verifyAllBinaries(filter hookFilter) error {
 	return nil
 }
 
-// verifyHookBinary verifies a single hook's runtime requirement: step-kind
-// hooks need a registered step type; command-backed kinds need their command on
-// PATH. Returns nil for hooks with nothing to verify (deprecated CI kinds,
-// unknown kinds, no command).
+// verifyHookBinary verifies a single hook's configuration and runtime
+// requirement: the hook's own on_failure literal (if set) must be a valid
+// value; step-kind hooks need a registered step type; command-backed kinds
+// need their command on PATH. Returns nil for hooks with nothing further to
+// verify (deprecated CI kinds, no command).
 func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
+	if err := verifyOnFailureValue(name, hook); err != nil {
+		return err
+	}
 	if isDeprecatedCIKind(hook.Kind) {
 		return nil
 	}
 	kind, ok := GetKind(hook.Kind)
 	if !ok {
-		return nil
+		return unknownHookKindError(name, hook.Kind)
 	}
 	// Step-kind hooks have no Command to resolve on PATH; instead verify the
 	// named step type is registered so a typo fails before terraform runs
@@ -815,6 +818,40 @@ func verifyCommandAvailable(name, toolchainPATH string) error {
 	}
 	_, err := resolveBinaryOnPath(name, toolchainPATH)
 	return err
+}
+
+// unknownHookKindError builds the hard error for a hook whose kind is not
+// registered. There is no reasonable "skip and continue" behavior for a kind
+// Atmos has never heard of: the hook's author almost certainly made a typo,
+// and silently no-op'ing it would let a state-affecting hook (e.g.
+// kind: tfmigrate) simply never run with no signal to the user.
+func unknownHookKindError(name, kind string) error {
+	return errUtils.Build(errUtils.ErrUnknownHookKind).
+		WithExplanationf("Hook %q uses kind %q, which is not registered", name, kind).
+		WithHintf("Valid kinds: %s", strings.Join(ListKinds(), ", ")).
+		WithContext("hook", name).
+		WithContext("kind", kind).
+		Err()
+}
+
+// verifyOnFailureValue checks a hook's own on_failure literal, if set, is one
+// of the values the stack manifest schema allows. Empty is valid (falls back
+// to the kind's default, then "warn"). Checked here at preflight - before any
+// terraform operation runs - rather than only inside applyOnFailure's runtime
+// switch, so a typo (e.g. "waarn") is caught immediately instead of silently
+// behaving like "warn" only if and when the hook happens to fail.
+func verifyOnFailureValue(name string, hook *Hook) error {
+	switch hook.OnFailure {
+	case "", OnFailureWarn, OnFailureFail, OnFailureIgnore:
+		return nil
+	default:
+		return errUtils.Build(errUtils.ErrInvalidHookOnFailure).
+			WithExplanationf("Hook %q has on_failure: %q, which is not a valid value", name, hook.OnFailure).
+			WithHintf("Use one of: %s, %s, %s", OnFailureWarn, OnFailureFail, OnFailureIgnore).
+			WithContext("hook", name).
+			WithContext("on_failure", hook.OnFailure).
+			Err()
+	}
 }
 
 // isDeprecatedCIKind reports whether the given kind name was one of the

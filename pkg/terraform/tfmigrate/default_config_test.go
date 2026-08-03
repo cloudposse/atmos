@@ -210,3 +210,45 @@ func TestStripMigrationDirPrefix_NoMigrationsDirLeavesPathUnchanged(t *testing.T
 	componentDir := t.TempDir()
 	assert.Equal(t, "migrations/foo.hcl", StripMigrationDirPrefix("migrations/foo.hcl", componentDir))
 }
+
+func TestHasMigrationsDir(t *testing.T) {
+	t.Run("true when migrations/ subdirectory exists", func(t *testing.T) {
+		componentDir := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(componentDir, "migrations"), 0o755))
+		assert.True(t, HasMigrationsDir(componentDir))
+	})
+
+	t.Run("false when there is no migrations/ subdirectory", func(t *testing.T) {
+		assert.False(t, HasMigrationsDir(t.TempDir()))
+	})
+
+	t.Run("false when migrations is a file, not a directory", func(t *testing.T) {
+		componentDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(componentDir, "migrations"), []byte("not a dir"), 0o644))
+		assert.False(t, HasMigrationsDir(componentDir))
+	})
+}
+
+func TestNoMigrationsToRun(t *testing.T) {
+	withMigrationsDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(withMigrationsDir, "migrations"), 0o755))
+	withoutMigrationsDir := t.TempDir()
+
+	tests := []struct {
+		name         string
+		migration    string
+		componentDir string
+		want         bool
+	}{
+		{name: "history mode, no migrations dir: nothing to run", migration: "", componentDir: withoutMigrationsDir, want: true},
+		{name: "history mode, migrations dir exists: has something to run", migration: "", componentDir: withMigrationsDir, want: false},
+		{name: "explicit --migration, no migrations dir: still has something to run", migration: "foo.hcl", componentDir: withoutMigrationsDir, want: false},
+		{name: "explicit --migration, migrations dir exists: has something to run", migration: "migrations/foo.hcl", componentDir: withMigrationsDir, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, NoMigrationsToRun(tt.migration, tt.componentDir))
+		})
+	}
+}

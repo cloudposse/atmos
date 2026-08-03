@@ -11,6 +11,11 @@ example or by any automated test in this repository:
 | `replace-provider-demo`                       | `replace-provider`                | one-off `atmos terraform migrate --migration <file>` CLI flag |
 | `xmv-demo`                                    | `xmv` (count → `for_each`, quoted/bracketed addresses) | one-off `--migration` CLI flag |
 | `multi-state-source` / `multi-state-target`   | `migration "multi_state"` (`from_dir`/`to_dir`) | `kind: tfmigrate` hook, `mode: dynamic` (standard) |
+| `multi-state-diffvars-source` / `-target`     | `multi_state` with mismatched required variables between `from_dir`/`to_dir`, no `from_skip_plan`/`to_skip_plan` | `kind: tfmigrate` hook - demonstrates the documented residual limitation |
+| `mode-apply-mismatch-demo`                    | `mode: apply` bound to `before.terraform.plan` (mismatched) | `kind: tfmigrate` hook - must hard-error |
+| `mode-plan-mismatch-demo`                     | `mode: plan` bound to `before.terraform.apply` (mismatched) | `kind: tfmigrate` hook - must warn and preview-only |
+| `history-nodir-demo`                          | zero-config history mode with no `migrations/` directory yet | `kind: tfmigrate` hook - must report "nothing to do", not crash |
+| `onfailure-ignore-demo`                       | a genuinely-failing migration with `on_failure: ignore` | `kind: tfmigrate` hook - underlying apply must still succeed |
 
 > [!NOTE]
 > An explicit `mode: apply`/`mode: plan` bound to a mismatched lifecycle event (e.g.
@@ -18,9 +23,11 @@ example or by any automated test in this repository:
 > outright when it isn't bound to `before.terraform.apply`/`before.terraform.deploy`
 > (it would otherwise mutate state on what looks like a read-only `plan`), and warns
 > when `mode: plan` is bound to an apply/deploy event (the migration will only ever
-> be previewed, never applied). See `pkg/terraform/tfmigrate/tfmigrate_test.go`'s
-> `TestActionForMode_RejectsModeApplyOnNonApplyEvent` for the guardrail itself; this
-> example uses `mode: dynamic` throughout so each action demonstrates succeeding.
+> be previewed, never applied). `mode-apply-mismatch-demo` and `mode-plan-mismatch-demo`
+> exercise this guardrail end-to-end through the real hook path (previously this was
+> only unit-tested directly against `pkg/terraform/tfmigrate/tfmigrate_test.go`'s
+> `TestActionForMode_RejectsModeApplyOnNonApplyEvent`); every other component in this
+> example uses `mode: dynamic` so each action demonstrates succeeding.
 
 All backends are local state (no cloud credentials needed), and each component uses
 its **own** state file (unlike `hooks-tfmigrate`, which shares one file between two

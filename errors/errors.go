@@ -480,6 +480,8 @@ var (
 	ErrInvalidComponentRequiredProviders          = errors.New("invalid component required_providers section")
 	ErrInvalidComponentRequiredVersion            = errors.New("invalid component required_version attribute")
 	ErrInvalidComponentHooks                      = errors.New("invalid component hooks section")
+	ErrUnknownHookKind                            = errors.New("unknown hook kind")
+	ErrInvalidHookOnFailure                       = errors.New("invalid hook on_failure value")
 	ErrInvalidComponentSecrets                    = errors.New("invalid component secrets section")
 	ErrStoreIsSecret                              = errors.New("store is a secret store; use !secret instead of !store")
 	ErrInvalidComponentGenerate                   = errors.New("invalid component generate section")

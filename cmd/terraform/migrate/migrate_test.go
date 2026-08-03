@@ -637,6 +637,30 @@ func TestRunTerraformMigratePlanDryRunFixture(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly(t *testing.T) {
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("dry-run", false)
+	viper.GetViper().Set("skip-init", true)
+	// The fixture has no migrations/ directory and no --migration flag, so
+	// this exercises history mode with nothing authored yet. It must succeed
+	// without ever needing a real tfmigrate/opentofu binary, proving tfmigrate
+	// is skipped entirely (not merely dry-run-suppressed) — before this fix,
+	// zero-config history mode with no migrations/ dir made tfmigrate scan the
+	// component root and fail trying to parse Atmos's own generated
+	// backend.tf.json/tfvars.json as migration files.
+	configPath := filepath.Join("testdata", "nomigrations")
+
+	err := runTerraformMigrate(cmd, []string{
+		"service",
+		"--stack", "deploy/test",
+		"--config-path", configPath,
+		"--identity=false",
+	}, tfmigrate.ActionPlan)
+
+	require.NoError(t, err)
+}
+
 func TestRunTerraformMigrate_SelectWorkspaceErrorPropagates(t *testing.T) {
 	// With dry-run disabled (and skip-init true, so initTfmigrateComponent
 	// stays a no-op and never spawns a real terraform/tofu init),

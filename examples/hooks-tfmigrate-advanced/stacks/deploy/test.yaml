@@ -100,3 +100,141 @@ components:
             - before.terraform.apply
           kind: tfmigrate
           mode: dynamic
+
+    # --- mode/event mismatch guardrail (manual field-test addition) ---
+    # These two components deliberately misconfigure an explicit `mode:` against
+    # a mismatched lifecycle event, exercising the guardrail this README's NOTE
+    # above describes as "validated" but never run end-to-end by this example or
+    # any automated test (only unit-tested directly against ActionForMode).
+    #
+    # mode-apply-mismatch-demo: `mode: apply` bound to `before.terraform.plan`.
+    # Expect: `atmos terraform plan mode-apply-mismatch-demo -s test` hard-errors
+    # instead of silently running `tfmigrate apply` during a read-only plan.
+    mode-apply-mismatch-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/mode-apply-mismatch-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+          kind: tfmigrate
+          mode: apply
+
+    # mode-plan-mismatch-demo: `mode: plan` bound to `before.terraform.apply`.
+    # Expect: a warning is logged and `atmos terraform apply` still succeeds,
+    # but the migration is only ever previewed, never actually applied.
+    mode-plan-mismatch-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/mode-plan-mismatch-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: plan
+
+    # REGRESSION FIXTURE (manual field-test finding, since fixed): plain
+    # `mode: dynamic` hook, zero-config history mode (no `migration:` field,
+    # no `.tfmigrate.hcl`), and NO migrations/ subdirectory - i.e. the state
+    # every component starts in before its first migration file is ever
+    # written. This used to crash: with no migrations/ dir, Atmos's generated
+    # .tfmigrate.hcl set migration_dir = "." (component root), and
+    # tfmigrate's history-mode file scan of "." picked up Atmos's own
+    # generated backend.tf.json/tfvars.json as migration candidates and
+    # failed to decode them. Atmos now detects "history mode with no
+    # migrations/ dir" up front (tfmigrate.NoMigrationsToRun) and skips
+    # invoking tfmigrate with a friendly info message instead.
+    # `atmos terraform plan history-nodir-demo -s test` should now print:
+    #   No tfmigrate migrations found for history-nodir-demo in stack test -
+    #   nothing to do. ...
+    # and the underlying terraform plan should proceed normally.
+    history-nodir-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/history-nodir-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic
+
+    # --- on_failure testing (manual field-test addition) ---
+    # Migration references a state address that does not exist, so tfmigrate
+    # genuinely fails. on_failure: ignore should let the underlying terraform
+    # apply proceed as if the hook never ran.
+    onfailure-ignore-demo:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/onfailure-ignore-demo.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic
+          on_failure: ignore
+
+    # --- multi_state differing-variables edge case (manual field-test addition) ---
+    # Reproduces the documented residual limitation: from_dir requires a
+    # variable the triggering (to_dir) component's varfile doesn't define,
+    # and neither from_skip_plan nor to_skip_plan is set.
+    multi-state-diffvars-source:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/multi-state-diffvars-source.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+      vars:
+        required_source_only: "seed-value"
+
+    multi-state-diffvars-target:
+      backend_type: local
+      backend:
+        local:
+          path: "../../../state/multi-state-diffvars-target.tfstate"
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic

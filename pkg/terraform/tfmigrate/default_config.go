@@ -101,10 +101,36 @@ func DefaultConfigHCL(input *DefaultConfigInput) string {
 func MigrationDirFor(componentDir string) string {
 	defer perf.Track(nil, "tfmigrate.MigrationDirFor")()
 
-	if info, err := os.Stat(filepath.Join(componentDir, "migrations")); err == nil && info.IsDir() {
+	if HasMigrationsDir(componentDir) {
 		return defaultMigrationDir
 	}
 	return "."
+}
+
+// HasMigrationsDir reports whether the component has a conventional
+// migrations/ subdirectory. Exported so callers can tell "no migrations
+// authored yet" apart from "migrations exist but none are unapplied" before
+// invoking tfmigrate in zero-config history mode: without a migrations/ dir,
+// MigrationDirFor falls back to the component root, which also holds Atmos's
+// generated backend.tf.json/tfvars.json - letting tfmigrate's history-mode
+// file scan run there makes it try (and fail) to parse those as migrations.
+func HasMigrationsDir(componentDir string) bool {
+	defer perf.Track(nil, "tfmigrate.HasMigrationsDir")()
+
+	info, err := os.Stat(filepath.Join(componentDir, "migrations"))
+	return err == nil && info.IsDir()
+}
+
+// NoMigrationsToRun reports whether zero-config history mode has nothing to
+// run for this component: no explicit single-file migration was requested,
+// and no migrations/ directory exists yet to hold any. Callers should skip
+// invoking tfmigrate entirely in this case and report it, rather than let
+// MigrationDirFor's component-root fallback make tfmigrate's history-mode
+// file scan try (and fail) to parse Atmos's own generated files as migrations.
+func NoMigrationsToRun(migration, componentDir string) bool {
+	defer perf.Track(nil, "tfmigrate.NoMigrationsToRun")()
+
+	return migration == "" && !HasMigrationsDir(componentDir)
 }
 
 // StripMigrationDirPrefix removes a leading migration_dir-matching prefix

@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -167,31 +168,17 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		return err
 	}
 
-	// With no user-provided tfmigrate config, generate one that inherits the
-	// component's Terraform backend as history storage, so history mode works
-	// with zero configuration.
-	if opts.Config == "" {
-		generated, cleanupGenerated, err := tfmigrate.EnsureDefaultConfig(&tfmigrate.DefaultConfigInput{
-			ComponentDir: execCtx.ComponentDir,
-			BackendType:  execCtx.Info.ComponentBackendType,
-			Backend:      execCtx.Info.ComponentBackendSection,
-			History:      tfmigrate.HistoryNames(execCtx.Info.Stack, tfmigrateComponentName(&execCtx.Info), execCtx.Info.TerraformWorkspace),
-		})
-		if err != nil {
-			return err
-		}
-		if generated != "" {
-			defer cleanupGenerated()
-			opts.Config = generated
-			// Atmos (not the user) controls migration_dir in the config it
-			// just generated - strip a redundant migration_dir-matching
-			// prefix from a natural-looking --migration path (e.g.
-			// "migrations/foo.hcl") before it reaches tfmigrate, which
-			// resolves --migration relative to migration_dir itself and
-			// would otherwise double-prefix into "migrations/migrations/foo.hcl".
-			opts.Migration = tfmigrate.StripMigrationDirPrefix(opts.Migration, execCtx.ComponentDir)
-		}
+	resolved, err := resolveTfmigrateDefaultConfig(execCtx, opts)
+	if resolved.Cleanup != nil {
+		defer resolved.Cleanup()
 	}
+	if err != nil {
+		return err
+	}
+	if resolved.Skip {
+		return nil
+	}
+	opts = resolved.Options
 
 	args, err := tfmigrate.BuildArgs(opts)
 	if err != nil {
@@ -222,6 +209,66 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		execCtx.Info.RedirectStdErr,
 		e.WithEnvironment(execCtx.Info.SanitizedEnv),
 	)
+}
+
+// tfmigrateDefaultConfigResolution is resolveTfmigrateDefaultConfig's result:
+// the (possibly updated) options, an optional cleanup for a generated config
+// file, and whether the caller should skip invoking tfmigrate entirely.
+type tfmigrateDefaultConfigResolution struct {
+	Options tfmigrate.Options
+	Cleanup func()
+	Skip    bool
+}
+
+// resolveTfmigrateDefaultConfig applies Atmos's zero-config tfmigrate default
+// when the user has not supplied their own config: it generates one that
+// inherits the component's Terraform backend as history storage (so history
+// mode works with zero configuration), strips a redundant migration_dir-
+// matching prefix from opts.Migration, and reports Skip=true when there is
+// nothing to migrate yet (history mode with no migrations/ directory), so the
+// caller can return early instead of invoking tfmigrate. The returned cleanup
+// func is non-nil only when a config was generated and must be deferred by
+// the caller for the lifetime of the tfmigrate invocation, not called here.
+func resolveTfmigrateDefaultConfig(execCtx *tfmigrateExecutionContext, opts tfmigrate.Options) (tfmigrateDefaultConfigResolution, error) {
+	if opts.Config != "" {
+		return tfmigrateDefaultConfigResolution{Options: opts}, nil
+	}
+
+	generated, cleanup, err := tfmigrate.EnsureDefaultConfig(&tfmigrate.DefaultConfigInput{
+		ComponentDir: execCtx.ComponentDir,
+		BackendType:  execCtx.Info.ComponentBackendType,
+		Backend:      execCtx.Info.ComponentBackendSection,
+		History:      tfmigrate.HistoryNames(execCtx.Info.Stack, tfmigrateComponentName(&execCtx.Info), execCtx.Info.TerraformWorkspace),
+	})
+	if err != nil {
+		return tfmigrateDefaultConfigResolution{}, err
+	}
+	if generated == "" {
+		return tfmigrateDefaultConfigResolution{Options: opts}, nil
+	}
+
+	opts.Config = generated
+	// Atmos (not the user) controls migration_dir in the config it just
+	// generated - strip a redundant migration_dir-matching prefix from a
+	// natural-looking --migration path (e.g. "migrations/foo.hcl") before it
+	// reaches tfmigrate, which resolves --migration relative to migration_dir
+	// itself and would otherwise double-prefix into "migrations/migrations/foo.hcl".
+	opts.Migration = tfmigrate.StripMigrationDirPrefix(opts.Migration, execCtx.ComponentDir)
+
+	// History mode (no explicit --migration) with no migrations/ directory
+	// means nothing has been authored yet - there is no migration to run.
+	// Report that cleanly instead of letting MigrationDirFor's component-root
+	// fallback make tfmigrate scan (and fail to parse) Atmos's own generated
+	// backend/varfile JSON.
+	if tfmigrate.NoMigrationsToRun(opts.Migration, execCtx.ComponentDir) {
+		ui.Info(fmt.Sprintf(
+			"No tfmigrate migrations found for %s in stack %s - nothing to do. Add a migrations/ directory with a migration file, or pass --migration to run one directly.",
+			tfmigrateComponentName(&execCtx.Info), execCtx.Info.Stack,
+		))
+		return tfmigrateDefaultConfigResolution{Options: opts, Cleanup: cleanup, Skip: true}, nil
+	}
+
+	return tfmigrateDefaultConfigResolution{Options: opts, Cleanup: cleanup}, nil
 }
 
 func prepareTfmigrateExecution(info *schema.ConfigAndStacksInfo) (*tfmigrateExecutionContext, error) {
