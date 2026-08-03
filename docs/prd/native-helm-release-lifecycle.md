@@ -205,17 +205,17 @@ atmos helm delete demo-api -s example-prod \
 | `wait_strategy` | Enum | `hookOnly` | Preserves current Atmos behavior | `kube.WaitStrategy` | Install, upgrade, delete |
 | `wait` | Boolean | Unset | Convenience alias | `true` = `watcher`, `false` = `hookOnly` | Install, upgrade, delete |
 | `wait_for_jobs` | Boolean | `false` | Preserves current Atmos behavior | `Install.WaitForJobs`, `Upgrade.WaitForJobs` | Install, upgrade |
-| `timeout` | Duration string | `0s` during the migration release; `5m` afterward | Staged change to the Helm CLI default | Helm action `Timeout` | Install, upgrade, delete |
+| `timeout` | Duration string | `0s` in v1.225.x; `5m` from v1.226.0 | Staged change to the Helm CLI default | Helm action `Timeout` | Install, upgrade, delete |
 | `cleanup_on_fail` | Boolean | `false` | Preserves current Atmos behavior | `Upgrade.CleanupOnFail` | Upgrade only |
 | `max_history` | Non-negative integer | `10` | New Helm CLI-compatible limit | `Upgrade.MaxHistory` | Upgrade only |
 | `disable_chart_hooks` | Boolean | `false` | Preserves current Atmos behavior | Helm action `DisableHooks` | Install, upgrade, delete |
 | `skip_crds` | Boolean | `false` | Preserves current Atmos behavior | `Install.SkipCRDs` | Install only |
 
-The target timeout default is five minutes, matching the Helm CLI. R1 introduces that default through a one-minor migration window instead of silently changing existing executions:
+The target timeout default is five minutes, matching the Helm CLI. R1 introduces that default through one explicit minor-release migration window instead of silently changing existing executions:
 
-1. In the migration release, an omitted `timeout` preserves the current SDK zero value and emits one warning that the default will become `5m` in the next minor release.
+1. Atmos v1.225.x is the migration release line. An omitted `timeout` preserves the current SDK zero value and emits one warning per selected Helm component per invocation, including direct and bulk operations, that the default will become `5m` in v1.226.0.
 2. An explicit `timeout`, including `timeout: 0s`, suppresses the migration warning.
-3. In the following minor release, an omitted `timeout` resolves to `5m`.
+3. Starting with Atmos v1.226.0, an omitted `timeout` resolves to `5m` and the migration warning is removed.
 
 An explicit `timeout: 0s` disables the Helm action timeout. Negative durations are invalid. Documentation MUST warn that a zero timeout can leave hook or resource waits unbounded. This is especially important for delete: Helm 4's uninstall request does not accept the caller context, so `timeout: 0s` can leave an uninstall wait unbounded after the caller stops waiting. Timeout errors MUST include the effective duration and identify the `timeout` component field so users can correct long-running releases without inspecting debug logs.
 
@@ -249,6 +249,8 @@ Aliases must work with inheritance. A type default may still use an alias while 
 1. `rollback_on_failure` wins when both it and `atomic` are present; Atmos emits one deprecation warning for `atomic`.
 2. `wait_strategy` wins when both it and `wait` are present; Atmos emits one warning that the convenience value was ignored.
 3. If only the alias is present, Atmos normalizes it to the canonical field before validation and execution.
+
+The same canonical precedence applies when both names are supplied in one CLI invocation. `--rollback-on-failure` wins over `--atomic` regardless of argument order, and Atmos emits one `--atomic` deprecation warning. The parser does not use last-flag-wins behavior for two names representing the same setting.
 
 For example, a concrete canonical field overrides an inherited alias even when it explicitly disables the inherited safety policy:
 
@@ -403,13 +405,15 @@ Tests MUST exercise the complete command-to-provider path and prove that `Config
 
 ## Failure and Recovery Semantics
 
-R1 uses Helm 4's built-in `RollbackOnFailure` behavior:
+When `rollback_on_failure` is enabled, R1 uses Helm 4's built-in `RollbackOnFailure` behavior:
 
-- Failed install: Helm uninstalls the newly created release.
-- Failed upgrade: Helm rolls back to the most recent successful release.
+- Failed install with rollback enabled: Helm uninstalls the newly created release.
+- Failed upgrade with rollback enabled: Helm rolls back to the most recent successful release.
 - `cleanup_on_fail`: Helm removes resources newly created during a failed upgrade whenever configured, whether or not `rollback_on_failure` is enabled. When rollback is enabled, cleanup occurs as part of handling the failure before recovery completes.
 - Failure after successful recovery: Atmos returns a failed node with an error explaining that recovery completed.
 - Failed recovery: Atmos returns both the original action failure and the rollback/uninstall failure using error wrapping or `errors.Join` without losing either cause.
+
+When `rollback_on_failure` is disabled, Atmos returns the install or upgrade failure without requesting Helm rollback or uninstall. Any partial release state is left for the operator unless the independent upgrade-only `cleanup_on_fail` policy applies.
 
 Atmos does not attempt to collect Kubernetes diagnostics before recovery in this phase. Helm performs built-in recovery before returning control to Atmos, so implementing diagnostics later may require Atmos-managed recovery or an upstream Helm callback. The public `rollback_on_failure` contract remains valid in either implementation.
 
@@ -554,7 +558,7 @@ Errors must use static Atmos sentinel errors where callers need classification a
 Native Helm remains experimental, but existing manifests must remain structurally valid.
 
 - Omitted lifecycle fields retain `hookOnly`, no rollback, no Job waiting, hooks enabled, CRDs enabled, and no failed-upgrade cleanup.
-- During the one-minor migration release, an omitted timeout preserves the current SDK zero value and emits a migration warning. In the following minor release, the default becomes the documented Helm CLI value of five minutes.
+- During v1.225.x, an omitted timeout preserves the current SDK zero value and emits a migration warning once per selected component per invocation. Starting with v1.226.0, the default becomes the documented Helm CLI value of five minutes and the warning is removed.
 - `timeout: 0s` explicitly preserves unbounded timeout behavior without a migration warning.
 - An omitted `max_history` changes from the SDK zero value to the Helm CLI default of `10`; `max_history: 0` explicitly preserves unlimited history.
 - Direct single-component commands and bulk commands resolve the same lifecycle configuration.
@@ -578,9 +582,11 @@ The release notes must call out the timeout migration schedule and the new ten-r
 
 - Decode every lifecycle field from a processed Helm component.
 - Verify built-in defaults, including `max_history: 10` and the staged timeout default.
-- Verify that an omitted timeout warns during the migration release, while explicit `timeout: 0s` remains unbounded without warning.
+- Verify the v1.225.x phase: an omitted timeout remains unbounded and warns once per selected component per invocation, while explicit `timeout: 0s` remains unbounded without warning.
+- Verify the v1.226.0 phase: an omitted timeout resolves to `5m` without a migration warning.
 - Verify stack-level Helm defaults, abstract inheritance, concrete overrides, and explicit `false` values.
 - Verify alias normalization and warnings, including an inherited `atomic: true` overridden by concrete `rollback_on_failure: false`.
+- Verify that explicit `--rollback-on-failure` wins over `--atomic` in both CLI argument orders and emits one deprecation warning.
 - Validate all wait strategies and reject unknown values.
 - Validate negative timeout and history values.
 - Validate `wait_for_jobs` against the effective strategy.
@@ -710,7 +716,7 @@ The phases below are independently mergeable implementation slices, not a requir
 
 - All lifecycle fields resolve through type defaults, inheritance, concrete components, and explicit CLI overrides.
 - `atmos helm apply --dry-run` and `delete --dry-run` do not mutate release state.
-- An omitted timeout follows the documented one-minor migration schedule, while explicit `timeout: 0s` remains unbounded without a warning.
+- An omitted timeout remains unbounded with one warning per selected component per invocation in v1.225.x and resolves to `5m` without that warning from v1.226.0, while explicit `timeout: 0s` remains unbounded without a warning in both phases.
 - An omitted `max_history` prunes to ten revisions and explicit `max_history: 0` remains unlimited.
 - Watcher readiness prevents dependent DAG nodes from starting before the prerequisite release is ready.
 - Failed or rolled-back releases block dependents and return actionable errors.
@@ -722,7 +728,7 @@ The phases below are independently mergeable implementation slices, not a requir
 ## Future Work
 
 1. Configurable chart acquisition, client-side render, and external delivery timeouts.
-2. Helm chart hooks in template, diff, deployed baselines, and external artifacts.
+2. Deployed-baseline and external-artifact lifecycle semantics for Helm chart hooks beyond the template and diff visibility required by this PRD.
 3. Pre-rollback Pod state, Warning Event, and bounded container-log diagnostics.
 4. Additional Helm 4 release controls after production feedback, including uninstall `keep_history` and cascade behavior.
 5. Mixed-kind DAG execution using the same Helm completion contract.
