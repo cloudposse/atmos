@@ -641,6 +641,40 @@ func TestProcessFile_RejectsSymlinkedDirectoryEscape(t *testing.T) {
 	}
 }
 
+// TestProcessFile_RelativeTargetPath verifies ProcessFile succeeds when
+// targetPath is relative (e.g. the CLI's default "./my-project"), not just
+// when it's absolute. Regression test for #2851: validateWriteTarget used to
+// compare an absolutized realBase against a still-relative realDir, so the
+// containment check never matched and every relative-target write was
+// rejected as a false-positive path traversal.
+func TestProcessFile_RelativeTargetPath(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+
+	processor := NewProcessor()
+
+	file := File{
+		Path:        "README.md",
+		Content:     "Hello, World!",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := processor.ProcessFile(file, "./my-project", false, false, nil, nil)
+	if err != nil {
+		t.Fatalf("expected no error for relative target path, got: %v", err)
+	}
+
+	filePath := filepath.Join(root, "my-project", "README.md")
+	content, readErr := os.ReadFile(filePath)
+	if readErr != nil {
+		t.Fatalf("expected file to be created at %s: %v", filePath, readErr)
+	}
+	if string(content) != "Hello, World!" {
+		t.Errorf("expected content 'Hello, World!', got '%s'", string(content))
+	}
+}
+
 // TestWriteFileSecure_NonForceRejectsExistingFile verifies exclusive creation
 // (O_EXCL) fails rather than silently overwriting when the destination
 // already exists — closing the TOCTOU gap between an earlier existence
