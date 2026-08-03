@@ -171,12 +171,17 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 			publication := updater.Publication{Scope: scope, Branch: result.Branch, Base: baseBranch, Report: report}
 			prConfig := vendorPullRequestConfig(v)
 			pr, commit, pErr := updater.PublishComponentUpdate(cmd.Context(), workdir, "origin", publication, &prConfig, gitHubRepository)
-			if pErr != nil {
-				result.Status, result.Failure = "failed", pErr.Error()
-				return pErr
-			}
+			// commit/pr may be partially populated even when pErr != nil (e.g. the pull request
+			// itself was created but a later label/assignee/reviewer step failed) -- record
+			// whatever succeeded so the user isn't left with no way to find it.
 			result.Commit = commit
 			result.PullRequest = pr
+			if pErr != nil {
+				result.Status, result.Failure = "failed", pErr.Error()
+				renderPullRequestResult(&result, format)
+				return errors.Join(pErr, renderComponentUpdaterJSON(&result, format))
+			}
+			renderPullRequestResult(&result, format)
 		}
 		if err := renderComponentUpdaterJSON(&result, format); err != nil {
 			result.Status, result.Failure = "failed", err.Error()

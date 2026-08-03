@@ -9,6 +9,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
+// atmosCIBadge is the same responsive light/dark "Atmos CI" badge used in native CI plan/apply
+// summary comments (pkg/ci/plugins/terraform), reused here so an automated component-update pull
+// request is recognizable as Atmos-generated at a glance, not just a bare, unexplained diff.
+const atmosCIBadge = `<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" height="32" align="right">
+</picture></a>
+`
+
+// defaultPRBody is the fallback `vendor.ci.pull_request.body` template: the Atmos CI badge, a
+// one-line explanation of what generated this PR, and the update table -- not just the bare table
+// on its own, which reads as an unexplained, unbranded diff to a reviewer seeing it for the first
+// time (confirmed by manual review of a real generated pull request).
+const defaultPRBody = atmosCIBadge + "\nAutomated by `atmos vendor update --pull-request`.\n\n{{ .updates | markdownTable }}\n"
+
 // TemplateFunctions returns the Go template function map available to pull-request
 // title/body templates.
 func TemplateFunctions() template.FuncMap {
@@ -46,6 +62,6 @@ func RenderPRTemplates(templates PRTemplates, scope string, report *vendoring.Up
 	if err != nil {
 		return "", "", err
 	}
-	body, err := render("vendor.ci.pull_request.body", templates.Body, "{{ .updates | markdownTable }}")
+	body, err := render("vendor.ci.pull_request.body", templates.Body, defaultPRBody)
 	return title, body, err
 }

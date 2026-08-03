@@ -37,7 +37,9 @@ func PublishComponentUpdate(ctx context.Context, workdir, remote string, publica
 	}
 	pr, err := ReconcileComponentUpdatePullRequest(ctx, workdir, remote, publication, prConfig, githubRepository)
 	if err != nil {
-		return nil, "", err
+		// commit already succeeded (checked above) and pr may be partially populated -- return
+		// both alongside the error so the caller can still report what actually happened.
+		return pr, commit, err
 	}
 	return pr, commit, nil
 }
@@ -106,8 +108,11 @@ func ReconcileComponentUpdatePullRequest(ctx context.Context, workdir, remote st
 		labels = []string{"component-update"}
 	}
 	pr, err := publisher.Reconcile(ctx, &atmosgit.PullRequestOptions{Owner: owner, Repository: repository, Base: publication.Base, Head: publication.Branch, Title: title, Body: body, Labels: labels, Draft: prConfig.Draft, Reviewers: prConfig.Reviewers, Assignees: prConfig.Assignees})
-	if err != nil {
+	if pr == nil {
 		return nil, err
 	}
-	return &PullRequest{Number: pr.Number, URL: pr.URL}, nil
+	// The pull request itself may already exist even when err is set (e.g. it was created but a
+	// later label/assignee/reviewer step failed) -- surface it either way so the caller isn't left
+	// with no way to find a pull request that was, in fact, created.
+	return &PullRequest{Number: pr.Number, URL: pr.URL}, err
 }

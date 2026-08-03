@@ -446,6 +446,36 @@ func TestDiscoverAllComponentManifests_ScansConfiguredBasePath(t *testing.T) {
 	require.Len(t, all, 1, "non-terraform base paths point at empty directories")
 }
 
+// TestDiscoverAllComponentManifests_SkipsTypesWithNoConfiguredBasePath reproduces the bug found by
+// manual end-to-end testing against the real cloudposse/infra-live repo: a repo that vendors
+// exclusively via component.yaml (no vendor.yaml) and never configures components.packer (or
+// components.helmfile) triggered the repo-wide "--all" sweep to rediscover every terraform
+// component a second time under the unconfigured type, since GetComponentBasePath silently fell
+// back to the bare atmos base_path (the repo root) instead of skipping. That produced double the
+// reported updates, each duplicate mislabeled with the wrong ComponentType and a repo-root-relative
+// Component name (e.g. "components/terraform/waf" with ComponentType "packer", alongside the
+// correct "waf" with ComponentType "terraform"). Deliberately does NOT set
+// ATMOS_COMPONENTS_HELMFILE_BASE_PATH/ATMOS_COMPONENTS_PACKER_BASE_PATH -- the gap that let the
+// original bug ship undetected in TestDiscoverAllComponentManifests_ScansConfiguredBasePath above,
+// which always points every type at a real (if empty) directory.
+func TestDiscoverAllComponentManifests_SkipsTypesWithNoConfiguredBasePath(t *testing.T) {
+	base := t.TempDir()
+	wafDir := filepath.Join(base, "waf")
+	require.NoError(t, os.MkdirAll(wafDir, 0o755))
+	writeFile(t, wafDir, "component.yaml", componentManifestFixture)
+
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", base)
+	t.Setenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH", "")
+	t.Setenv("ATMOS_COMPONENTS_PACKER_BASE_PATH", "")
+
+	all, err := DiscoverAllComponentManifests("terraform", false)
+
+	require.NoError(t, err)
+	require.Len(t, all, 1, "waf must be discovered exactly once, not once per unconfigured component type")
+	assert.Equal(t, "waf", all[0].Source.Component)
+	assert.Equal(t, "terraform", all[0].ComponentType)
+}
+
 // TestDiscoverAllComponentManifests_UnsupportedTypePropagatesError proves an unsupported
 // --type (only reachable with onlyType=true, i.e. a "vendor update --type <type>
 // --component-manifests" run) surfaces GetComponentBasePath's error rather than silently

@@ -551,6 +551,16 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
 	}
 
+	// Sync vendor.update.* and vendor.ci.* from the loaded atmos.yaml into the global viper for
+	// the same reason as the profiles.base_path sync above: cmd/vendor's Component Updater code
+	// (cmd/vendor/update.go, cmd/vendor/component_updater.go, pkg/vendoring/updater) reads these
+	// as plain dotted viper.GetViper() keys, since none of them have a corresponding CLI flag to
+	// bind through pkg/flags. Without this sync, every atmos.yaml-only setting here (update
+	// groups, execution/batching mode, PR title/body/labels/draft/reviewers/assignees, summary
+	// enablement) is silently ignored and the command always falls back to its hardcoded
+	// defaults, regardless of what atmos.yaml declares.
+	bridgeVendorUpdaterConfig(&atmosConfig)
+
 	// Bridge the first-class `container.runtime.auto_start` YAML setting to the env
 	// var that container runtime detection reads (pkg/container). PromoteAtmosEnv
 	// respects precedence: an explicitly-set ATMOS_CONTAINER_RUNTIME_AUTO_START
@@ -560,6 +570,60 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 
 	return atmosConfig, nil
+}
+
+// bridgeVendorUpdaterConfig mirrors atmosConfig.Vendor.Update and atmosConfig.Vendor.CI into the
+// global viper singleton at the exact dotted keys the Component Updater reads (see the call site
+// above for why this is needed). Each leaf is set individually -- rather than Set-ing an entire
+// struct/map at a parent key -- because viper's dotted-path Get only reliably resolves through
+// values it previously stored itself as nested maps, not arbitrary Go structs.
+func bridgeVendorUpdaterConfig(atmosConfig *schema.AtmosConfiguration) {
+	v := viper.GetViper()
+	update := atmosConfig.Vendor.Update
+	if update.Execution.Mode != "" {
+		v.Set("vendor.update.execution.mode", update.Execution.Mode)
+	}
+	if update.Batching.Mode != "" {
+		v.Set("vendor.update.batching.mode", update.Batching.Mode)
+	}
+	for name, group := range update.Groups {
+		prefix := "vendor.update.groups." + name
+		v.Set(prefix+".include", group.Include)
+		v.Set(prefix+".exclude", group.Exclude)
+	}
+
+	pr := atmosConfig.Vendor.CI.PullRequest
+	if pr.Provider != "" {
+		v.Set("vendor.ci.pull_request.provider", pr.Provider)
+	}
+	if pr.BaseBranch != "" {
+		v.Set("vendor.ci.pull_request.base_branch", pr.BaseBranch)
+	}
+	if pr.BranchPrefix != "" {
+		v.Set("vendor.ci.pull_request.branch_prefix", pr.BranchPrefix)
+	}
+	if pr.Title != "" {
+		v.Set("vendor.ci.pull_request.title", pr.Title)
+	}
+	if pr.Body != "" {
+		v.Set("vendor.ci.pull_request.body", pr.Body)
+	}
+	if len(pr.Labels) > 0 {
+		v.Set("vendor.ci.pull_request.labels", pr.Labels)
+	}
+	if pr.Draft {
+		v.Set("vendor.ci.pull_request.draft", pr.Draft)
+	}
+	if len(pr.Reviewers) > 0 {
+		v.Set("vendor.ci.pull_request.reviewers", pr.Reviewers)
+	}
+	if len(pr.Assignees) > 0 {
+		v.Set("vendor.ci.pull_request.assignees", pr.Assignees)
+	}
+
+	if atmosConfig.Vendor.CI.Summary.Enabled != nil {
+		v.Set("vendor.ci.summary.enabled", *atmosConfig.Vendor.CI.Summary.Enabled)
+	}
 }
 
 func setEnv(v *viper.Viper) {

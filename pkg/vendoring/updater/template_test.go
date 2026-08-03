@@ -27,6 +27,17 @@ func TestRenderPRTemplates(t *testing.T) {
 		assert.Contains(t, body, "| vpc | 1 | 2 |")
 	})
 
+	// TestRenderPRTemplates/default_body_is_not_just_a_bare_table proves the default body isn't
+	// just an unexplained table -- confirmed by manual review of a real generated pull request
+	// that a bare table with no branding or context reads as broken/unhelpful to a reviewer.
+	t.Run("default body is not just a bare table", func(t *testing.T) {
+		_, body, err := RenderPRTemplates(PRTemplates{}, "all", report)
+		require.NoError(t, err)
+		assert.Contains(t, body, `<a href="https://atmos.tools/ci">`, "default body must carry the Atmos CI badge")
+		assert.Contains(t, body, "atmos vendor update --pull-request", "default body must explain what generated this PR")
+		assert.Contains(t, body, "| vpc | 1 | 2 |")
+	})
+
 	t.Run("invalid title template errors", func(t *testing.T) {
 		_, _, err := RenderPRTemplates(PRTemplates{Title: "{{"}, "all", report)
 		require.Error(t, err)

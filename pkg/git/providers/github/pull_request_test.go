@@ -197,15 +197,16 @@ func writePullRequestResponse(w http.ResponseWriter, requestPath string, created
 
 func TestReconcileWrapsGitHubMutationErrors(t *testing.T) {
 	tests := []struct {
-		name    string
-		options *atmosgit.PullRequestOptions
-		path    string
+		name             string
+		options          *atmosgit.PullRequestOptions
+		path             string
+		prAlreadyExisted bool // whether the PR itself was already created/edited before this step fails
 	}{
 		{name: "edit", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "updates"}, path: "/repos/acme/repo/pulls/7"},
 		{name: "create", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "new"}, path: "/repos/acme/repo/pulls"},
-		{name: "labels", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "updates", Labels: []string{"label"}}, path: "/repos/acme/repo/issues/7/labels"},
-		{name: "assignees", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "updates", Assignees: []string{"maintainer"}}, path: "/repos/acme/repo/issues/7/assignees"},
-		{name: "reviewers", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "updates", Reviewers: []string{"reviewer"}}, path: "/repos/acme/repo/pulls/7/requested_reviewers"},
+		{name: "labels", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "updates", Labels: []string{"label"}}, path: "/repos/acme/repo/issues/7/labels", prAlreadyExisted: true},
+		{name: "assignees", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "updates", Assignees: []string{"maintainer"}}, path: "/repos/acme/repo/issues/7/assignees", prAlreadyExisted: true},
+		{name: "reviewers", options: &atmosgit.PullRequestOptions{Owner: "acme", Repository: "repo", Base: "main", Head: "updates", Reviewers: []string{"reviewer"}}, path: "/repos/acme/repo/pulls/7/requested_reviewers", prAlreadyExisted: true},
 	}
 
 	for _, tt := range tests {
@@ -233,8 +234,18 @@ func TestReconcileWrapsGitHubMutationErrors(t *testing.T) {
 				c.GitHub().BaseURL, _ = c.GitHub().BaseURL.Parse(server.URL + "/")
 				return c, nil
 			})
-			_, err := p.Reconcile(context.Background(), tt.options)
+			result, err := p.Reconcile(context.Background(), tt.options)
 			assert.ErrorIs(t, err, errUtils.ErrPullRequestReconciliation)
+
+			if tt.prAlreadyExisted {
+				// A pull request was already created/edited before this step failed -- its
+				// number/URL must still be reported, not discarded alongside the error.
+				require.NotNil(t, result, "the already-created pull request must still be reported")
+				assert.Equal(t, 7, result.Number)
+				assert.Equal(t, "https://example.test/pr/7", result.URL)
+			} else {
+				assert.Nil(t, result, "no pull request exists yet when create/edit itself fails")
+			}
 		})
 	}
 }

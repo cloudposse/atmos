@@ -19,12 +19,15 @@ import (
 type fakePullRequestPublisher struct {
 	options *atmosgit.PullRequestOptions
 	err     error
+	// partialResult is returned alongside err when set, simulating a pull request that was
+	// created but whose labels/assignees/reviewers step then failed.
+	partialResult *atmosgit.PullRequestResult
 }
 
 func (p *fakePullRequestPublisher) Reconcile(_ context.Context, options *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
 	p.options = options
 	if p.err != nil {
-		return nil, p.err
+		return p.partialResult, p.err
 	}
 	return &atmosgit.PullRequestResult{Number: 42, URL: "https://github.com/acme/repo/pull/42", Created: true}, nil
 }
@@ -155,6 +158,38 @@ func TestPublishComponentUpdateReconcileError(t *testing.T) {
 	publication := Publication{Scope: "all", Branch: branch, Base: base, Report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
 	_, _, err = PublishComponentUpdate(context.Background(), workdir, "origin", publication, &prConfig, fakeGitHubRepository)
 	assert.ErrorIs(t, err, assert.AnError)
+}
+
+// TestPublishComponentUpdatePartialReconcileErrorStillReturnsPullRequest proves that when the
+// underlying publisher creates a pull request but then fails a later step (a real example: GitHub
+// rejects requesting a review from the PR's own author), PublishComponentUpdate still returns the
+// pull request's number/URL alongside the error, rather than discarding it -- confirmed against a
+// real end-to-end run against cloudposse/infra-live, where this previously left the user with an
+// opaque "reconciliation failed" error and no way to find the pull request that was, in fact,
+// created.
+func TestPublishComponentUpdatePartialReconcileErrorStillReturnsPullRequest(t *testing.T) {
+	_, workdir := newGitFixture(t)
+
+	publisher := &fakePullRequestPublisher{
+		err:           assert.AnError,
+		partialResult: &atmosgit.PullRequestResult{Number: 99, URL: "https://github.com/acme/repo/pull/99", Created: true},
+	}
+	publisherName := t.Name()
+	atmosgit.RegisterPullRequestPublisher(publisherName, func() (atmosgit.PullRequestPublisher, error) { return publisher, nil })
+
+	branch, base, err := PrepareBranch(context.Background(), workdir, "origin", "main", "", "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	prConfig := schema.VendorPullRequestConfig{Provider: publisherName}
+	publication := Publication{Scope: "all", Branch: branch, Base: base, Report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	pr, commit, err := PublishComponentUpdate(context.Background(), workdir, "origin", publication, &prConfig, fakeGitHubRepository)
+
+	assert.ErrorIs(t, err, assert.AnError)
+	assert.NotEmpty(t, commit, "the commit already succeeded and must still be reported")
+	require.NotNil(t, pr, "the already-created pull request must still be reported")
+	assert.Equal(t, 99, pr.Number)
+	assert.Equal(t, "https://github.com/acme/repo/pull/99", pr.URL)
 }
 
 func TestPublishComponentUpdateInvalidTemplateError(t *testing.T) {

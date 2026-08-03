@@ -289,6 +289,15 @@ func DiscoverAllComponentManifests(componentType string, onlyType bool) ([]*Reso
 
 	var all []*ResolvedSource
 	for _, t := range types {
+		// A type with no configured base_path has no dedicated components directory to sweep --
+		// GetComponentBasePath would otherwise silently fall back to the atmos base_path itself
+		// (the repo root), causing the sweep to re-walk the whole repository under this type's
+		// label and rediscover every other type's components a second time, mislabeled. Only skip
+		// this for the multi-type default sweep (len(types) > 1); an explicit single --type stays
+		// as-is, matching every other single-type command's existing fallback behavior.
+		if len(types) > 1 && !componentTypeBasePathConfigured(&atmosConfig, t) {
+			continue
+		}
 		basePath, err := u.GetComponentBasePath(&atmosConfig, t)
 		if err != nil {
 			return nil, err
@@ -300,4 +309,24 @@ func DiscoverAllComponentManifests(componentType string, onlyType bool) ([]*Reso
 		all = append(all, found...)
 	}
 	return all, nil
+}
+
+// componentTypeBasePathConfigured reports whether componentType has a base_path configured, via
+// atmos.yaml or its per-type env var override, so DiscoverAllComponentManifests's multi-type sweep
+// can skip types that have neither (see the call site above). Mirrors the same two sources
+// getBasePathForComponentType itself resolves from (pkg/utils/component_path_utils.go), so a type
+// configured only via env var is not incorrectly treated as unconfigured.
+func componentTypeBasePathConfigured(atmosConfig *schema.AtmosConfiguration, componentType string) bool {
+	var configBasePath, envVarName string
+	switch componentType {
+	case cfg.TerraformComponentType:
+		configBasePath, envVarName = atmosConfig.Components.Terraform.BasePath, "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH"
+	case cfg.HelmfileComponentType:
+		configBasePath, envVarName = atmosConfig.Components.Helmfile.BasePath, "ATMOS_COMPONENTS_HELMFILE_BASE_PATH"
+	case cfg.PackerComponentType:
+		configBasePath, envVarName = atmosConfig.Components.Packer.BasePath, "ATMOS_COMPONENTS_PACKER_BASE_PATH"
+	default:
+		return true
+	}
+	return configBasePath != "" || os.Getenv(envVarName) != "" //nolint:forbidigo // Mirrors getBasePathForComponentType's own env-var precedence check.
 }

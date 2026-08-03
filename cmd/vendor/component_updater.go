@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 )
@@ -129,6 +130,15 @@ func renderVendorUpdateResult(report *vendoring.UpdateReport, check bool, v *vip
 		return
 	}
 	renderUpdateReport(report, check, v.GetBool("outdated"), v.GetBool("archived"))
+}
+
+// renderPullRequestResult prints the created/reused pull request's URL for human-readable
+// formats. JSON already carries pull_request.url via renderComponentUpdaterJSON.
+func renderPullRequestResult(result *updater.Result, format string) {
+	if format == "json" || result.PullRequest == nil {
+		return
+	}
+	ui.Successf("Pull request #%d: %s", result.PullRequest.Number, result.PullRequest.URL)
 }
 
 func renderComponentUpdaterJSON(result *updater.Result, format string) error {

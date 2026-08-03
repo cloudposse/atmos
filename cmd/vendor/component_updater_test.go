@@ -480,3 +480,30 @@ func TestRenderComponentUpdaterJSON(t *testing.T) {
 		assert.EqualError(t, renderComponentUpdaterJSON(&updater.Result{}, "json"), "broken pipe")
 	})
 }
+
+func TestRenderPullRequestResult(t *testing.T) {
+	t.Run("prints the pull request URL for table format", func(t *testing.T) {
+		stderr := setupVendorUICapture(t)
+
+		renderPullRequestResult(&updater.Result{PullRequest: &updater.PullRequest{Number: 7, URL: "https://github.com/o/r/pull/7"}}, "table")
+
+		assert.Contains(t, stderr.String(), "https://github.com/o/r/pull/7")
+		assert.Contains(t, stderr.String(), "#7")
+	})
+
+	t.Run("stays silent for json format, since the JSON payload already carries the URL", func(t *testing.T) {
+		stderr := setupVendorUICapture(t)
+
+		renderPullRequestResult(&updater.Result{PullRequest: &updater.PullRequest{Number: 7, URL: "https://github.com/o/r/pull/7"}}, "json")
+
+		assert.Empty(t, stderr.String())
+	})
+
+	t.Run("stays silent when no pull request was created or reused", func(t *testing.T) {
+		stderr := setupVendorUICapture(t)
+
+		renderPullRequestResult(&updater.Result{}, "table")
+
+		assert.Empty(t, stderr.String())
+	})
+}

@@ -58,7 +58,7 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 	}
 	c, err := p.newClient()
 	if err != nil {
-		return nil, fmt.Errorf("%w: configure ATMOS_CI_GITHUB_TOKEN, GITHUB_TOKEN, or GH_TOKEN: %w", errUtils.ErrGitHubAuthorization, err)
+		return nil, fmt.Errorf("%w: configure ATMOS_CI_GITHUB_TOKEN, ATMOS_PRO_GITHUB_TOKEN (via github/sts), GITHUB_TOKEN, or GH_TOKEN: %w", errUtils.ErrGitHubAuthorization, err)
 	}
 	api := c.GitHub()
 	head := options.Owner + ":" + options.Head
@@ -89,23 +89,28 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 		created = true
 	}
 
+	result := &atmosgit.PullRequestResult{Number: pr.GetNumber(), URL: pr.GetHTMLURL(), Created: created}
+
 	if len(options.Labels) > 0 {
 		if _, response, err = api.Issues.AddLabelsToIssue(ctx, options.Owner, options.Repository, pr.GetNumber(), options.Labels); err != nil {
-			return nil, githubError(err, response)
+			// The PR itself already exists at this point; surface it alongside the error so the
+			// caller (and the user) aren't left with no way to find a pull request that was, in
+			// fact, created -- only its labels/assignees/reviewers didn't fully apply.
+			return result, githubError(err, response)
 		}
 	}
 	if len(options.Assignees) > 0 {
 		if _, response, err = api.Issues.AddAssignees(ctx, options.Owner, options.Repository, pr.GetNumber(), options.Assignees); err != nil {
-			return nil, githubError(err, response)
+			return result, githubError(err, response)
 		}
 	}
 	if len(options.Reviewers) > 0 {
 		if _, response, err = api.PullRequests.RequestReviewers(ctx, options.Owner, options.Repository, pr.GetNumber(), gh.ReviewersRequest{Reviewers: options.Reviewers}); err != nil {
-			return nil, githubError(err, response)
+			return result, githubError(err, response)
 		}
 	}
 
-	return &atmosgit.PullRequestResult{Number: pr.GetNumber(), URL: pr.GetHTMLURL(), Created: created}, nil
+	return result, nil
 }
 
 func githubError(err error, response *gh.Response) error {
