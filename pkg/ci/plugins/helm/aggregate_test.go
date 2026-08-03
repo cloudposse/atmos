@@ -97,6 +97,20 @@ func TestOnAfterAggregateSkipsInvalidOrDisabledAndReturnsWriterError(t *testing.
 	require.ErrorIs(t, err, sentinel)
 }
 
+func TestOnAfterAggregateRendersFailureWithoutResults(t *testing.T) {
+	writer := &fakeWriter{}
+	err := (&Plugin{}).onAfterAggregate(&plugin.HookContext{
+		Provider:     fakeProvider{writer: writer},
+		Aggregate:    schema.HelmCIResultSet{Command: "apply"},
+		CommandError: errors.New("dependency graph contains a cycle"),
+		ExitCode:     1,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, writer.summary, "## Helm Apply Summary")
+	assert.Contains(t, writer.summary, "Command failed before any components were processed.")
+	assert.Contains(t, writer.summary, "dependency graph contains a cycle")
+}
+
 func TestHelmAggregateHelpers(t *testing.T) {
 	resultSet := schema.HelmCIResultSet{Command: "diff"}
 	assert.Equal(t, resultSet, mustNormalizeHelmAggregate(t, resultSet))
