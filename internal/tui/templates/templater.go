@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -316,16 +317,34 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	return nil
 }
 
+// terminalWidthLimit holds the user-configured settings.terminal.max_width
+// (0 = unset, unlimited). It is registered once at startup via
+// SetTerminalWidthLimit so every width consumer respects the setting uniformly.
+var terminalWidthLimit atomic.Int64
+
+// SetTerminalWidthLimit registers settings.terminal.max_width as a ceiling for
+// GetTerminalWidth. Zero or negative clears the limit (the default).
+func SetTerminalWidthLimit(limit int) {
+	terminalWidthLimit.Store(int64(limit))
+}
+
 // GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined.
 // It honors an explicit COLUMNS value through the shared terminal resolver when
 // no physical terminal size is available.
 func GetTerminalWidth() int {
 	defaultWidth := 80
-	width := terminal.New().Width(terminal.Stdout)
-	if width <= 0 {
-		return defaultWidth
+	screenWidth := defaultWidth
+	if width := terminal.New().Width(terminal.Stdout); width > 0 {
+		screenWidth = width - 2
 	}
-	return width - 2
+
+	// An explicitly-set settings.terminal.max_width is a user preference and
+	// acts as a ceiling only; by default the detected width is used as-is.
+	if limit := int(terminalWidthLimit.Load()); limit > 0 && screenWidth > limit {
+		screenWidth = limit
+	}
+
+	return screenWidth
 }
 
 // WrappedFlagUsages formats the flag usage string to fit within the terminal width
