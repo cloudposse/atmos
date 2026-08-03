@@ -4,10 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -121,6 +123,73 @@ func TestProviderMirror_VersionListsAllPlatforms(t *testing.T) {
 	require.Contains(t, ver.Archives, "darwin_arm64")
 	assert.Equal(t, "terraform-provider-aws_5.95.0_linux_amd64.zip", ver.Archives["linux_amd64"].URL)
 	assert.Equal(t, []string{"zh:" + fr.zipSum}, ver.Archives["linux_amd64"].Hashes)
+}
+
+// TestProviderMirror_VersionResolvesPlatformsConcurrently guards against a
+// regression to serial per-platform resolution (the root cause of a CI
+// screengrab failure: OpenTofu's own mirror-request deadline was exceeded
+// because a cold-cache version fetch resolved a dozen-plus platforms one
+// upstream round-trip at a time). With N platforms each taking `delay` to
+// resolve, a serial implementation takes at least N*delay; a concurrent one
+// takes roughly one delay regardless of N.
+func TestProviderMirror_VersionResolvesPlatformsConcurrently(t *testing.T) {
+	const (
+		platformCount = 10
+		delay         = 150 * time.Millisecond
+	)
+
+	platforms := make([]struct {
+		OS   string `json:"os"`
+		Arch string `json:"arch"`
+	}, platformCount)
+	for i := range platforms {
+		platforms[i].OS = fmt.Sprintf("os%d", i)
+		platforms[i].Arch = "amd64"
+	}
+	platformsJSON, err := json.Marshal(platforms)
+	require.NoError(t, err)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/terraform.json", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"providers.v1":"/v1/providers/","modules.v1":"/v1/modules/"}`))
+	})
+	mux.HandleFunc("/v1/providers/hashicorp/aws/versions", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"versions":[{"version":"5.95.0","platforms":%s}]}`, platformsJSON)
+	})
+	mux.HandleFunc("/v1/providers/hashicorp/aws/5.95.0/download/", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(delay)
+		seg := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/providers/hashicorp/aws/5.95.0/download/"), "/")
+		osName, arch := seg[0], seg[1]
+		resp := registryDownload{
+			Filename: "terraform-provider-aws_5.95.0_" + osName + "_" + arch + ".zip",
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := &hostRewriteClient{target: server.URL, host: "registry.terraform.io"}
+	srv := proxy.NewServer(proxy.Options{
+		Mirrors: []proxy.Mirror{NewProviderMirror(client)},
+		Store:   proxy.NewFileStore(t.TempDir()),
+		Client:  client,
+	})
+	_, err = srv.Start(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = srv.Shutdown(t.Context()) })
+
+	start := time.Now()
+	body := mustGet(t, srv.BaseURL()+"providers/registry.terraform.io/hashicorp/aws/5.95.0.json")
+	elapsed := time.Since(start)
+
+	var ver mirrorVersion
+	require.NoError(t, json.Unmarshal(body, &ver))
+	assert.Len(t, ver.Archives, platformCount, "all platforms should resolve")
+
+	serialFloor := time.Duration(platformCount) * delay
+	assert.Less(t, elapsed, serialFloor/2,
+		"resolving %d platforms took %s - expected well under the %s serial floor, indicating platforms are fetched concurrently, not one at a time",
+		platformCount, elapsed, serialFloor)
 }
 
 func TestProviderMirror_ArchiveDownloadAndVerify(t *testing.T) {

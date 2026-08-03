@@ -7,11 +7,11 @@
 Three fixes surfaced by a manual field-test pass of `atmos terraform migrate`:
 
 1. Zero-config `tfmigrate` history mode no longer crashes for a component with no `migrations/`
-   directory yet — it now prints a friendly informational message and skips invoking `tfmigrate`.
+  directory yet — it now prints a friendly informational message and skips invoking `tfmigrate`.
 2. A `kind: tfmigrate` (or any other) hook whose `kind:` value is not registered now fails hard
-   with an actionable error, instead of silently no-opping.
+  with an actionable error, instead of silently no-opping.
 3. A hook's `on_failure:` value that is not `warn`, `fail`, or `ignore` now fails hard at
-   preflight, instead of silently behaving like `warn`.
+  preflight, instead of silently behaving like `warn`.
 
 ## Context
 
