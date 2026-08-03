@@ -3,8 +3,7 @@
 
 [EXPERIMENTAL]
 
-Validate the authentication configuration in atmos.yaml for syntax and logical
-errors.
+Validate the authentication configuration in atmos.yaml for syntax and logical errors.
 
 USAGE
 

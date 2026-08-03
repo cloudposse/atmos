@@ -23,12 +23,24 @@ const rendererLineEnding = "\n"
 // Renderer orchestrates the complete list rendering pipeline.
 // Pipeline: data → filter → column selection → sort → format → output.
 type Renderer struct {
-	filters   []filter.Filter
-	selector  *column.Selector
-	sorters   []*sort.Sorter
-	format    format.Format
-	delimiter string
-	output    *output.Manager
+	filters      []filter.Filter
+	selector     *column.Selector
+	sorters      []*sort.Sorter
+	format       format.Format
+	delimiter    string
+	output       *output.Manager
+	tableOptions *format.TableOptions
+}
+
+// Option customizes optional renderer behavior.
+type Option func(*Renderer)
+
+// WithTableOptions overrides styled-table behavior (e.g. disabling semantic
+// cell coloring for tables whose values are plain data rather than statuses).
+func WithTableOptions(tableOptions format.TableOptions) Option {
+	return func(r *Renderer) {
+		r.tableOptions = &tableOptions
+	}
 }
 
 // New creates a renderer with optional components.
@@ -38,8 +50,9 @@ func New(
 	sorters []*sort.Sorter,
 	fmt format.Format,
 	delimiter string,
+	opts ...Option,
 ) *Renderer {
-	return &Renderer{
+	r := &Renderer{
 		filters:   filters,
 		selector:  selector,
 		sorters:   sorters,
@@ -47,6 +60,10 @@ func New(
 		delimiter: delimiter,
 		output:    output.New(fmt),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // RenderToString executes the full pipeline and returns formatted output.
@@ -138,7 +155,7 @@ func (r *Renderer) formatTable(headers []string, rows [][]string) (string, error
 		}
 		return formatDelimited(headers, rows, delim)
 	case format.FormatTable:
-		return formatStyledTableOrPlain(headers, rows), nil
+		return r.formatStyledTableOrPlain(headers, rows), nil
 	default:
 		return "", fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidConfig, f)
 	}
@@ -382,7 +399,7 @@ func formatDelimited(headers []string, rows [][]string, delimiter string) (strin
 // formatStyledTableOrPlain formats output as a styled table for TTY or plain list when piped.
 // When stdout is not a TTY (piped/redirected), outputs plain format without headers for backward compatibility.
 // This maintains compatibility with scripts that expect simple line-by-line output.
-func formatStyledTableOrPlain(headers []string, rows [][]string) string {
+func (r *Renderer) formatStyledTableOrPlain(headers []string, rows [][]string) string {
 	// Check if stdout is a TTY
 	term := terminal.New()
 	isTTY := term.IsTTY(terminal.Stdout)
@@ -394,6 +411,9 @@ func formatStyledTableOrPlain(headers []string, rows [][]string) string {
 	}
 
 	// Interactive terminal - use styled table
+	if r.tableOptions != nil {
+		return format.CreateStyledTableWithOptions(headers, rows, *r.tableOptions)
+	}
 	return format.CreateStyledTable(headers, rows)
 }
 
