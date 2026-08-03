@@ -83,7 +83,7 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
 				WithExplanationf("Path points to the stacks configuration directory, not a component:  \n%s\n\nStacks directory:  \n%s",
 					absPath, stacksBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)  \nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("stacks_base", stacksBasePath).
 				WithExitCode(2).
@@ -98,7 +98,7 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
 				WithExplanationf("Path points to the workflows directory, not a component:  \n%s\n\nWorkflows directory:  \n%s",
 					absPath, workflowsBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)  \nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("workflows_base", workflowsBasePath).
 				WithExitCode(2).
