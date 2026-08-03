@@ -33,7 +33,7 @@ The `atmos list instances` command displays all component instances defined acro
 
 <dl>
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`, `matrix` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`, `matrix`. Overrides `list.instances.format` configuration in atmos.yaml (default: `table`).</dd>
 
   <dt>`--delimiter`</dt>
   <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
@@ -86,9 +86,14 @@ The `atmos list instances` command displays all component instances defined acro
 
 ## Examples
 
-List all instances in table format:
+List all instances (rendered as a table by default):
 ```shell
 atmos list instances
+```
+
+List all instances as a tree:
+```shell
+atmos list instances --format=tree
 ```
 
 Filter instances by stack pattern:
