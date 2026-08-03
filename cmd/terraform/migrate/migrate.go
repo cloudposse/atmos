@@ -3,6 +3,7 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -181,6 +183,13 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		if generated != "" {
 			defer cleanupGenerated()
 			opts.Config = generated
+			// Atmos (not the user) controls migration_dir in the config it
+			// just generated - strip a redundant migration_dir-matching
+			// prefix from a natural-looking --migration path (e.g.
+			// "migrations/foo.hcl") before it reaches tfmigrate, which
+			// resolves --migration relative to migration_dir itself and
+			// would otherwise double-prefix into "migrations/migrations/foo.hcl".
+			opts.Migration = tfmigrate.StripMigrationDirPrefix(opts.Migration, execCtx.ComponentDir)
 		}
 	}
 
@@ -283,7 +292,32 @@ func initTfmigrateComponent(info *schema.ConfigAndStacksInfo) error {
 	}
 	initInfo := *info
 	initInfo.SubCommand = "init"
-	return e.ExecuteTerraform(initInfo)
+	if err := e.ExecuteTerraform(initInfo); err != nil {
+		return wrapTfmigrateInitError(err)
+	}
+	return nil
+}
+
+// wrapTfmigrateInitError adds a hint to any failure of Atmos's own
+// pre-flight `terraform init` step in the migrate path. The init subprocess
+// streams its own stdout/stderr directly to the terminal (already visible to
+// the user above this error), so the returned Go error carries no reusable
+// text to pattern-match against - a hardcoded substring check against
+// OpenTofu/Terraform's exact wording would also be fragile across versions.
+// Instead, always point at --skip-init as a next step: it is the fix for the
+// specific scenario that motivated this hint (a legacy/unqualified provider
+// address in state, which is what `replace-provider` migrations exist to
+// fix, and which tfmigrate's own internal init handles gracefully - the
+// friction is entirely from this pre-flight step, not tfmigrate itself), and
+// is a safe suggestion for other init failures too, since --skip-init is
+// specifically designed to let tfmigrate run without Atmos's own init
+// succeeding first.
+func wrapTfmigrateInitError(err error) error {
+	return errUtils.Build(errUtils.ErrInvalidConfig).
+		WithCause(err).
+		WithExplanation("terraform init failed before tfmigrate could run").
+		WithHint("If the state has a legacy/unqualified provider address, add --skip-init - tfmigrate handles Terraform's 0.13 upgrade check internally and ignores that error; Atmos's own pre-flight init does not. A replace-provider migration is typically what fixes the underlying address").
+		Err()
 }
 
 func selectTfmigrateWorkspace(execCtx *tfmigrateExecutionContext) error {
@@ -346,8 +380,26 @@ func buildTfmigrateEnv(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	env = tfmigrate.AppendExecPath(env, terraformCommand)
 	// Tfmigrate verifies migrations by running `terraform plan` itself; pass the
 	// Atmos-generated varfile through TF_CLI_ARGS_plan so components with
-	// required variables plan cleanly.
-	env = tfmigrate.AppendPlanVarFile(env, e.ConstructTerraformComponentVarfileName(info))
+	// required variables plan cleanly. Use an absolute path (not a bare
+	// filename) so this still resolves for `migration "multi_state"`, where
+	// tfmigrate additionally runs its convergence-check plan from a *second*
+	// directory (from_dir), not just this component's own working directory.
+	//
+	// Only inject -var-file when that file actually exists: --skip-init skips
+	// the normal init path (initTfmigrateComponent), which is what generates
+	// it, so with --skip-init the file never exists on disk. Terraform's
+	// -var-file flag requires the referenced path to exist, so an
+	// unconditional injection would fail every --skip-init run with "Given
+	// variables file ... does not exist" even for components with no
+	// required variables (the exact --skip-init + legacy-provider-address
+	// scenario replace-provider migrations need).
+	varfilePath, err := e.ConstructTerraformComponentVarfilePath(atmosConfig, info)
+	if err != nil {
+		return nil, err
+	}
+	if _, statErr := os.Stat(varfilePath); statErr == nil {
+		env = tfmigrate.AppendPlanVarFile(env, varfilePath)
+	}
 	// Secret-bearing and declared-sensitive variables are kept out of the
 	// generated varfile; inject them as TF_VAR_* just like the terraform path.
 	secretEnv, err := e.ComputeTerraformSecretVarEnv(info)
@@ -375,7 +427,7 @@ func init() {
 
 	migrateParser = flags.NewStandardParser(
 		shared.WithBackendExecutionFlags(),
-		flags.WithStringFlag("migration", "", "", "Path to a single tfmigrate migration file. Omit to let tfmigrate run history mode"),
+		flags.WithStringFlag("migration", "", "", "Path to a single tfmigrate migration file, relative to migration_dir (default: ./migrations if present, else the component root) - do not include that prefix. Omit to let tfmigrate run history mode"),
 		flags.WithStringFlag("tfmigrate-config", "", "", "Override tfmigrate config path. Defaults to tfmigrate discovery"),
 		flags.WithStringSliceFlag("backend-config", "", nil, "Backend configuration passed to tfmigrate; may be specified multiple times"),
 		flags.WithBoolFlag("affected", "", false, "Run migrations for the affected components in dependency order"),
@@ -391,17 +443,19 @@ func init() {
 		panic(err)
 	}
 
+	// No --all flag here: list already shows every component in every stack
+	// when no positional [component] arg is given, so --all would have no
+	// effect to add - unlike migrate plan/apply, where --all really does
+	// select a different (bulk) execution path.
 	migrateListParser = flags.NewStandardParser(
 		flags.WithStringFlag(migrateListFlagFormat, "f", "table", "Output format: table, json, yaml, csv, tsv"),
 		flags.WithStringSliceFlag(migrateListFlagColumns, "", nil, "Columns to display"),
 		flags.WithStringFlag(migrateListFlagSort, "", "", "Sort by column:order (for example, stack:asc,component:desc)"),
 		flags.WithStringFlag(migrateListFlagDelimiter, "", "", "Delimiter for CSV/TSV output"),
-		flags.WithBoolFlag("all", "", false, "List tfmigrate context for all components in all stacks"),
 		flags.WithEnvVars(migrateListFlagFormat, "ATMOS_LIST_FORMAT"),
 		flags.WithEnvVars(migrateListFlagColumns, "ATMOS_LIST_COLUMNS"),
 		flags.WithEnvVars(migrateListFlagSort, "ATMOS_LIST_SORT"),
 		flags.WithEnvVars(migrateListFlagDelimiter, "ATMOS_LIST_DELIMITER"),
-		flags.WithEnvVars("all", "ATMOS_ALL"),
 	)
 	migrateListParser.RegisterFlags(migrateListCmd)
 	if err := migrateListParser.BindToViper(viper.GetViper()); err != nil {

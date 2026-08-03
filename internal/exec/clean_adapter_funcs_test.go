@@ -151,6 +151,26 @@ func TestConstructTerraformComponentVarfileName(t *testing.T) {
 		"the tfmigrate-facing export and the clean-facing export must construct identical names")
 }
 
+// TestConstructTerraformComponentVarfilePath verifies the path-returning export
+// (used by tfmigrate's buildTfmigrateEnv, see cmd/terraform/migrate/migrate.go)
+// always returns an absolute path, since it is injected via TF_CLI_ARGS_plan into
+// tfmigrate subprocesses that may run `terraform plan` from a directory other than
+// the component's own (multi_state migrations' from_dir) - a relative/bare path
+// would silently resolve to the wrong (or a nonexistent) file there.
+func TestConstructTerraformComponentVarfilePath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Component:     "vpc",
+		ContextPrefix: "ue1-dev",
+	}
+
+	result, err := ConstructTerraformComponentVarfilePath(atmosConfig, info)
+
+	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(result), "varfile path must be absolute, got %q", result)
+	assert.Equal(t, "ue1-dev-vpc.terraform.tfvars.json", filepath.Base(result))
+}
+
 // TestComputeTerraformSecretVarEnv exercises the exported tfmigrate-facing wrapper
 // end-to-end: it must both flag secret-bearing keys on info (the same side effect
 // computeTerraformSecretVarKeys has directly) and return the matching TF_VAR_ env

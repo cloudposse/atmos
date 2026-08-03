@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
@@ -77,7 +78,7 @@ func DefaultConfigHCL(input *DefaultConfigInput) string {
 
 	f := hclwrite.NewEmptyFile()
 	root := f.Body().AppendNewBlock("tfmigrate", nil).Body()
-	root.SetAttributeValue("migration_dir", cty.StringVal(migrationDirFor(input.ComponentDir)))
+	root.SetAttributeValue("migration_dir", cty.StringVal(MigrationDirFor(input.ComponentDir)))
 	history := root.AppendNewBlock("history", nil).Body()
 
 	switch input.BackendType {
@@ -91,13 +92,46 @@ func DefaultConfigHCL(input *DefaultConfigInput) string {
 	return string(f.Bytes())
 }
 
-// migrationDirFor points tfmigrate at the conventional migrations/ directory
-// when the component has one; otherwise the component root.
-func migrationDirFor(componentDir string) string {
+// MigrationDirFor points tfmigrate at the conventional migrations/ directory
+// when the component has one; otherwise the component root. Exported so
+// callers building a `--migration <path>` value can strip a redundant
+// migration_dir-matching prefix before handing it to tfmigrate, which
+// resolves --migration relative to migration_dir itself (see
+// StripMigrationDirPrefix).
+func MigrationDirFor(componentDir string) string {
+	defer perf.Track(nil, "tfmigrate.MigrationDirFor")()
+
 	if info, err := os.Stat(filepath.Join(componentDir, "migrations")); err == nil && info.IsDir() {
 		return defaultMigrationDir
 	}
 	return "."
+}
+
+// StripMigrationDirPrefix removes a leading migration_dir-matching prefix
+// from a user-supplied --migration path, when the zero-config default
+// migration_dir applies (i.e. Atmos generated the tfmigrate config, so Atmos
+// - not the user - controls migration_dir). Without this, a natural-looking
+// path like "migrations/foo.hcl" (which really is the migration file's path
+// relative to the component dir) silently double-prefixes into
+// "migrations/migrations/foo.hcl" once tfmigrate resolves it relative to
+// migration_dir itself, producing a confusing "no such file" error.
+func StripMigrationDirPrefix(migration, componentDir string) string {
+	defer perf.Track(nil, "tfmigrate.StripMigrationDirPrefix")()
+
+	if migration == "" {
+		return migration
+	}
+	migrationDir := filepath.ToSlash(MigrationDirFor(componentDir))
+	if migrationDir == "." {
+		return migration
+	}
+	prefix := strings.TrimPrefix(migrationDir, "./") + "/"
+	normalizedMigration := strings.TrimPrefix(filepath.ToSlash(migration), "./")
+	trimmed := strings.TrimPrefix(normalizedMigration, prefix)
+	if trimmed == normalizedMigration {
+		return migration
+	}
+	return trimmed
 }
 
 func writeS3HistoryStorage(history *hclwrite.Body, input *DefaultConfigInput) {

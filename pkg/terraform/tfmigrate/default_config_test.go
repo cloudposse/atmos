@@ -180,3 +180,33 @@ func TestDefaultConfigHCL_GCSBackendNestedBlock(t *testing.T) {
 	assert.Contains(t, hcl, `storage "gcs"`)
 	assert.Contains(t, hcl, `bucket = "nested-bucket"`)
 }
+
+func TestStripMigrationDirPrefix(t *testing.T) {
+	componentDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(componentDir, "migrations"), 0o755))
+
+	tests := []struct {
+		name      string
+		migration string
+		want      string
+	}{
+		{name: "strips matching migrations/ prefix", migration: "migrations/foo.hcl", want: "foo.hcl"},
+		{name: "strips matching ./migrations/ prefix", migration: "./migrations/foo.hcl", want: "foo.hcl"},
+		{name: "bare filename unchanged", migration: "foo.hcl", want: "foo.hcl"},
+		{name: "unrelated prefix unchanged", migration: "other/foo.hcl", want: "other/foo.hcl"},
+		{name: "empty stays empty", migration: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, StripMigrationDirPrefix(tt.migration, componentDir))
+		})
+	}
+}
+
+func TestStripMigrationDirPrefix_NoMigrationsDirLeavesPathUnchanged(t *testing.T) {
+	// migrationDirFor falls back to "." (the component root) when there's no
+	// migrations/ subdirectory - nothing to strip in that case.
+	componentDir := t.TempDir()
+	assert.Equal(t, "migrations/foo.hcl", StripMigrationDirPrefix("migrations/foo.hcl", componentDir))
+}

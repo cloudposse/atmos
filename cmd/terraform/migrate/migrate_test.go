@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
@@ -448,7 +449,10 @@ func TestMigrateListParserFlags(t *testing.T) {
 	assert.True(t, registry.Has("columns"))
 	assert.True(t, registry.Has("sort"))
 	assert.True(t, registry.Has("delimiter"))
-	assert.True(t, registry.Has("all"))
+	// --all is deliberately NOT registered on list: with no positional
+	// [component] arg, list already shows every component in every stack, so
+	// --all would add no behavior (confirmed dead before removal).
+	assert.False(t, registry.Has("all"))
 }
 
 func TestTfmigrateListRow(t *testing.T) {
@@ -486,13 +490,60 @@ func TestTfmigrateListRow(t *testing.T) {
 	assert.Equal(t, true, row["tfmigrate_enabled"])
 }
 
+func TestTfmigrateListRow_NoHookLeavesModeBlank(t *testing.T) {
+	// A component with zero kind: tfmigrate hooks must not show Mode: dynamic
+	// - that implies a configured hook exists when none does.
+	row := tfmigrateListRow("plat-ue2-dev", "service-legacy", map[string]any{
+		cfg.WorkspaceSectionName:   "prod",
+		cfg.BackendTypeSectionName: cfg.BackendTypeS3,
+		cfg.BackendSectionName:     map[string]any{"bucket": "tfstate-bucket"},
+	})
+
+	assert.Empty(t, row["hook"])
+	assert.Empty(t, row["mode"])
+	assert.Equal(t, false, row["tfmigrate_enabled"])
+}
+
+func TestTfmigrateListRow_LocalBackendReportsHistoryStorage(t *testing.T) {
+	// Local (and any other non-s3/gcs) backend history is real - written
+	// next to the local state file, see default_config.go's
+	// writeLocalHistoryStorage - so History Storage must report it, not
+	// render blank the way only s3/gcs used to.
+	row := tfmigrateListRow("plat-ue2-dev", "vpc", map[string]any{
+		cfg.BackendTypeSectionName: "local",
+		cfg.BackendSectionName:     map[string]any{"path": "state.tfstate"},
+	})
+
+	assert.Equal(t, "local", row["history_storage"])
+}
+
 func TestTfmigrateListColumns(t *testing.T) {
-	columns := tfmigrateListColumns([]string{"component", "History Key=history_key"})
+	columns, err := tfmigrateListColumns([]string{"component", "History Key=history_key"})
+	require.NoError(t, err)
 	require.Len(t, columns, 2)
 	assert.Equal(t, "Component", columns[0].Name)
 	assert.Equal(t, "{{ .component }}", columns[0].Value)
 	assert.Equal(t, "History Key", columns[1].Name)
 	assert.Equal(t, "{{ .history_key }}", columns[1].Value)
+}
+
+func TestTfmigrateListColumns_UnknownBareColumnErrors(t *testing.T) {
+	_, err := tfmigrateListColumns([]string{"component", "totally_bogus_column"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestTfmigrateListColumns_KindAndNameAreNotValidBareColumns(t *testing.T) {
+	// "kind" and "name" are tfmigrateListKey* constants, but they're used
+	// internally (reading a hook's own kind field, and the intermediate
+	// hook-lookup result map) - never populated as row keys, so accepting
+	// them as --columns values would render Go template's "<no value>"
+	// placeholder instead of erroring.
+	for _, spec := range []string{"kind", "name"} {
+		_, err := tfmigrateListColumns([]string{spec})
+		require.Error(t, err, "spec %q should be rejected", spec)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	}
 }
 
 func TestBuildTfmigrateEnvAddsHistoryNamespace(t *testing.T) {
@@ -521,6 +572,48 @@ func TestBuildTfmigrateEnvAddsHistoryNamespace(t *testing.T) {
 	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_BUCKET=tfstate-bucket")
 	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_REGION=us-east-1")
 	assert.Contains(t, env, "TFMIGRATE_EXEC_PATH=tofu")
+
+	// Regression test: --skip-init skips the normal init path that generates
+	// the varfile, so it never exists on disk in this scenario. Injecting a
+	// -var-file reference to a nonexistent file would make tfmigrate's
+	// internal `terraform plan` fail outright ("Given variables file ...
+	// does not exist"), even for components with no required variables -
+	// exactly the --skip-init + legacy-provider-address combination
+	// replace-provider migrations need.
+	for _, entry := range env {
+		assert.NotContains(t, entry, "TF_CLI_ARGS_plan", "must not reference a var-file that was never generated: %s", entry)
+	}
+}
+
+func TestBuildTfmigrateEnv_InjectsVarfileWhenItExists(t *testing.T) {
+	componentDir := t.TempDir()
+	varfileName := "plat-ue2-dev-s3-bucket.terraform.tfvars.json"
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, varfileName), []byte("{}"), 0o600))
+
+	env, err := buildTfmigrateEnv(&schema.AtmosConfiguration{
+		BasePath:                 ".",
+		TerraformDirAbsolutePath: componentDir,
+	}, &schema.ConfigAndStacksInfo{
+		Command:              "tofu",
+		Stack:                "plat-ue2-dev",
+		ContextPrefix:        "plat-ue2-dev",
+		Component:            "s3-bucket",
+		FinalComponent:       "s3-bucket",
+		ComponentBackendType: cfg.BackendTypeS3,
+		ComponentSection: map[string]any{
+			"_workdir_path": componentDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	found := false
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "TF_CLI_ARGS_plan=") {
+			found = true
+			assert.Contains(t, entry, varfileName)
+		}
+	}
+	assert.True(t, found, "expected TF_CLI_ARGS_plan to be set when the varfile exists")
 }
 
 func TestRunTerraformMigratePlanDryRunFixture(t *testing.T) {
@@ -1081,8 +1174,12 @@ func TestDescribeAffectedForTfmigrateSelectsTargetStrategy(t *testing.T) {
 }
 
 func TestFirstTfmigrateHookDefaultsAndInvalidValues(t *testing.T) {
-	assert.Equal(t, map[string]string{tfmigrateListKeyMode: tfmigrate.ModeDynamic}, firstTfmigrateHook(map[string]any{}))
-	assert.Equal(t, map[string]string{tfmigrateListKeyMode: tfmigrate.ModeDynamic}, firstTfmigrateHook(map[string]any{
+	// No hooks section, or a malformed one, at all: Mode must stay unset
+	// (not default to "dynamic") since there's no hook to report a mode
+	// for - migrate list must render this as blank, not a misleading
+	// "dynamic" that implies a configured hook exists.
+	assert.Empty(t, firstTfmigrateHook(map[string]any{}))
+	assert.Empty(t, firstTfmigrateHook(map[string]any{
 		cfg.HooksSectionName: "not-a-map",
 	}))
 
@@ -1106,29 +1203,74 @@ func TestFirstTfmigrateHookDefaultsAndInvalidValues(t *testing.T) {
 func TestFirstTfmigrateHook_HooksSectionWithNoTfmigrateKindFallsThrough(t *testing.T) {
 	// A component with a real, non-empty hooks section where none of the hooks
 	// is kind: tfmigrate must exhaust the loop and fall through to the same
-	// dynamic-mode default as having no hooks section at all.
+	// empty result as having no hooks section at all - Mode stays unset.
 	hook := firstTfmigrateHook(map[string]any{
 		cfg.HooksSectionName: map[string]any{
 			"not-tfmigrate":      map[string]any{"kind": "store"},
 			"also-not-tfmigrate": map[string]any{"kind": "step"},
 		},
 	})
-	assert.Equal(t, map[string]string{tfmigrateListKeyMode: tfmigrate.ModeDynamic}, hook)
+	assert.Empty(t, hook)
 	assert.Empty(t, hook[tfmigrateListKeyName])
 }
 
+func TestFirstTfmigrateHook_MultipleMatchingHooksAreDeterministic(t *testing.T) {
+	// With 2+ kind: tfmigrate hooks on one component, the alphabetically
+	// first hook NAME wins, every time - regression test for the previous
+	// Go-map-iteration-order nondeterminism.
+	componentSection := map[string]any{
+		cfg.HooksSectionName: map[string]any{
+			"zzz-hook": map[string]any{"kind": tfmigrate.Command, "mode": tfmigrate.ModePlan},
+			"aaa-hook": map[string]any{"kind": tfmigrate.Command, "mode": tfmigrate.ModeApply},
+		},
+	}
+	for range 10 {
+		hook := firstTfmigrateHook(componentSection)
+		assert.Equal(t, "aaa-hook", hook[tfmigrateListKeyName])
+		assert.Equal(t, tfmigrate.ModeApply, hook[tfmigrateListKeyMode])
+	}
+}
+
 func TestTfmigrateListColumnDefaultsAndInvalidRender(t *testing.T) {
-	defaults := tfmigrateListColumns(nil)
+	defaults, err := tfmigrateListColumns(nil)
+	require.NoError(t, err)
 	require.NotEmpty(t, defaults)
 	assert.Equal(t, "Component", defaults[0].Name)
 
-	columns := tfmigrateListColumns([]string{" ", "component"})
+	columns, err := tfmigrateListColumns([]string{" ", "component"})
+	require.NoError(t, err)
 	require.Len(t, columns, 1)
 	assert.Equal(t, "Component", columns[0].Name)
 
-	err := renderTfmigrateList(nil, migrateListRenderOptions{Format: "bogus"})
+	err = renderTfmigrateList(nil, migrateListRenderOptions{Format: "bogus"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported format")
+}
+
+func TestRenderTfmigrateList_ColumnsExcludingStackDoNotCrash(t *testing.T) {
+	// Regression test: --columns selections that omit "Stack" (whether by
+	// deliberate choice, like --columns=component,mode, or because the user
+	// only wants a subset) must not crash the default sorter, which used to
+	// unconditionally sort by "Stack" even when that column wasn't selected.
+	output := captureDataOutput(t, func() {
+		err := renderTfmigrateList([]map[string]any{
+			{"component": "vpc", "mode": "dynamic"},
+		}, migrateListRenderOptions{
+			Format:  "csv",
+			Columns: []string{"component", "mode"},
+		})
+		require.NoError(t, err)
+	})
+	assert.Equal(t, "Component,Mode\nvpc,dynamic\n", output)
+}
+
+func TestRenderTfmigrateList_UnknownColumnErrors(t *testing.T) {
+	err := renderTfmigrateList(nil, migrateListRenderOptions{
+		Format:  "csv",
+		Columns: []string{"component", "totally_bogus_column"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
 }
 
 func TestRenderTfmigrateList_InvalidColumnTemplateErrors(t *testing.T) {
@@ -1445,4 +1587,12 @@ func newMigrateActionTestCommand(parent *cobra.Command, action string) *cobra.Co
 	migrateParser.RegisterFlags(cmd)
 	parent.AddCommand(cmd)
 	return cmd
+}
+
+func TestWrapTfmigrateInitError(t *testing.T) {
+	original := errors.New("subcommand exited with code 1")
+	wrapped := wrapTfmigrateInitError(original)
+	require.Error(t, wrapped)
+	assert.ErrorIs(t, wrapped, errUtils.ErrInvalidConfig)
+	assert.ErrorIs(t, wrapped, original)
 }

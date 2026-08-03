@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"path/filepath"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
@@ -52,6 +54,24 @@ func ConstructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) st
 	defer perf.Track(nil, "exec.ConstructTerraformComponentVarfileName")()
 
 	return constructTerraformComponentVarfileName(info)
+}
+
+// ConstructTerraformComponentVarfilePath exports the varfile path constructor
+// (bare name joined with the component's working directory, then resolved to
+// an absolute path) for use by other packages that need the varfile to resolve
+// correctly regardless of a subprocess's own working directory - e.g. tfmigrate,
+// which for `migration "multi_state"` runs its internal convergence-check
+// `terraform plan` from a *second* directory (`from_dir`), where a bare
+// filename good only in the component's own directory would not exist.
+func ConstructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+	defer perf.Track(nil, "exec.ConstructTerraformComponentVarfilePath")()
+
+	path := constructTerraformComponentVarfilePath(atmosConfig, info)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return absPath, nil
 }
 
 // ComputeTerraformSecretVarEnv partitions the component's variables exactly like

@@ -54,8 +54,13 @@ func TestActionForMode(t *testing.T) {
 		{name: "default dynamic plan", event: "before.terraform.plan", want: ActionPlan},
 		{name: "dynamic apply", mode: ModeDynamic, event: "before.terraform.apply", want: ActionApply},
 		{name: "dynamic deploy", mode: ModeDynamic, event: "before-terraform-deploy", want: ActionApply},
-		{name: "static plan", mode: ModePlan, event: "before.terraform.apply", want: ActionPlan},
-		{name: "static apply", mode: ModeApply, event: "before.terraform.plan", want: ActionApply},
+		{name: "static plan on plan event", mode: ModePlan, event: "before.terraform.plan", want: ActionPlan},
+		// mode: plan bound to an apply/deploy event is unusual but legitimate
+		// (preview-only forever) - it warns, but must not error.
+		{name: "static plan on apply event warns but succeeds", mode: ModePlan, event: "before.terraform.apply", want: ActionPlan},
+		{name: "static plan on deploy event warns but succeeds", mode: ModePlan, event: "before-terraform-deploy", want: ActionPlan},
+		{name: "static apply on apply event", mode: ModeApply, event: "before.terraform.apply", want: ActionApply},
+		{name: "static apply on deploy event", mode: ModeApply, event: "before-terraform-deploy", want: ActionApply},
 	}
 
 	for _, tt := range tests {
@@ -70,6 +75,27 @@ func TestActionForMode(t *testing.T) {
 func TestActionForMode_RejectsUnsupportedDynamicEvent(t *testing.T) {
 	_, err := ActionForMode(ModeDynamic, "after.terraform.plan")
 	require.Error(t, err)
+}
+
+func TestActionForMode_RejectsModeApplyOnNonApplyEvent(t *testing.T) {
+	// mode: apply bound to a plan (or any other non-apply/deploy) event would
+	// otherwise silently mutate real state on what looks like a read-only
+	// operation - this must be a hard error, unlike the mode: plan direction.
+	tests := []struct {
+		name  string
+		event string
+	}{
+		{name: "plan event", event: "before.terraform.plan"},
+		{name: "unrelated after-event", event: "after.terraform.apply"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ActionForMode(ModeApply, tt.event)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		})
+	}
 }
 
 func TestAppendExecPath(t *testing.T) {
@@ -205,8 +231,22 @@ func TestBackendHistoryValues_EmptyBackendReturnsNil(t *testing.T) {
 	assert.Nil(t, BackendHistoryValues("s3", map[string]any{}))
 }
 
-func TestBackendHistoryValues_UnsupportedBackendTypeReturnsNil(t *testing.T) {
-	assert.Nil(t, BackendHistoryValues("azurerm", map[string]any{"storage_account_name": "acct"}))
+// TestBackendHistoryValues_UnsupportedBackendTypeReportsStorageOnly covers
+// backend types other than s3/gcs (which fall back to local-workdir tfmigrate
+// history storage, see default_config.go's writeLocalHistoryStorage): they
+// still report EnvHistoryStorage = the real backend type (so `migrate list`'s
+// History Storage column isn't misleadingly blank for the most common,
+// zero-config case, "local", or any other backend), just with no bucket/
+// region/etc. extras, since only s3/gcs have those to surface.
+func TestBackendHistoryValues_UnsupportedBackendTypeReportsStorageOnly(t *testing.T) {
+	values := BackendHistoryValues("azurerm", map[string]any{"storage_account_name": "acct"})
+	require.NotNil(t, values)
+	assert.Equal(t, "azurerm", values[EnvHistoryStorage])
+	assert.NotContains(t, values, EnvHistoryBucket)
+
+	values = BackendHistoryValues("local", map[string]any{"path": "state.tfstate"})
+	require.NotNil(t, values)
+	assert.Equal(t, "local", values[EnvHistoryStorage])
 }
 
 func TestBackendHistoryValues_GCSNestedBackendBlock(t *testing.T) {

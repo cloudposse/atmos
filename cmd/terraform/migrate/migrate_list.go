@@ -1,12 +1,14 @@
 package migrate
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -46,6 +48,35 @@ const (
 	tfmigrateListKeyTfmigrateEnabled = "tfmigrate_enabled"
 	tfmigrateListKeyWorkspace        = "workspace"
 )
+
+// tfmigrateListRowKeys are exactly the keys tfmigrateListRow populates on
+// every row - the valid set for a bare (non "Name=template") --columns entry.
+// Deliberately NOT built from every tfmigrateListKey* constant above:
+// tfmigrateListKeyKind and tfmigrateListKeyName are used internally (reading
+// a hook's own "kind" field, and the intermediate hook-lookup result map in
+// firstTfmigrateHook) but are never row keys, so accepting them here would
+// silently accept a bare --columns=kind or --columns=name and render the
+// Go template engine's "<no value>" placeholder instead of real data.
+var tfmigrateListRowKeys = map[string]bool{
+	tfmigrateListKeyComponent:        true,
+	tfmigrateListKeyStack:            true,
+	tfmigrateListKeyWorkspace:        true,
+	tfmigrateListKeyHook:             true,
+	tfmigrateListKeyMode:             true,
+	tfmigrateListKeyMigration:        true,
+	tfmigrateListKeyConfig:           true,
+	tfmigrateListKeyHistoryStorage:   true,
+	tfmigrateListKeyHistoryBucket:    true,
+	tfmigrateListKeyHistoryKey:       true,
+	tfmigrateListKeyHistoryRoleARN:   true,
+	tfmigrateListKeyTerraformBackend: true,
+	tfmigrateListKeyTfmigrateEnabled: true,
+	tfmigrateListKeyHistoryNamespace: true,
+	tfmigrateListKeyHistoryRegion:    true,
+	tfmigrateListKeyHistoryProfile:   true,
+	tfmigrateListKeyHistoryEndpoint:  true,
+	tfmigrateListKeyHistoryKMSKeyID:  true,
+}
 
 type migrateListRenderOptions struct {
 	Format    string
@@ -178,14 +209,33 @@ func tfmigrateListRow(stackName, componentName string, componentSection map[stri
 	}
 }
 
+// firstTfmigrateHook returns the alphabetically-first (by hook name) kind:
+// tfmigrate hook on a component, or an empty result if none is configured.
+// "Mode" is only ever set when a matching hook is actually found - callers
+// must check "name" (== the Hook column) rather than assume a default mode
+// applies when no hook exists.
+//
+// Sorting hook names before picking one makes the result deterministic: with
+// 2+ kind: tfmigrate hooks on one component, iterating componentSection's
+// underlying map in Go's randomized order previously picked a different hook
+// on every run. Only one hook is ever shown even now - a real limitation for
+// multi-hook components, but a documented, stable one instead of a silent
+// coin-flip.
 func firstTfmigrateHook(componentSection map[string]any) map[string]string {
-	result := map[string]string{tfmigrateListKeyMode: tfmigrate.ModeDynamic}
+	result := map[string]string{}
 	hooksSection, ok := componentSection[cfg.HooksSectionName].(map[string]any)
 	if !ok {
 		return result
 	}
-	for name, rawHook := range hooksSection {
-		hookConfig, ok := rawHook.(map[string]any)
+
+	names := make([]string, 0, len(hooksSection))
+	for name := range hooksSection {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		hookConfig, ok := hooksSection[name].(map[string]any)
 		if !ok || hookString(hookConfig, tfmigrateListKeyKind) != tfmigrate.Command {
 			continue
 		}
@@ -213,7 +263,11 @@ func hookString(hookConfig map[string]any, key string) string {
 }
 
 func renderTfmigrateList(rows []map[string]any, opts migrateListRenderOptions) error {
-	selector, err := column.NewSelector(tfmigrateListColumns(opts.Columns), column.BuildColumnFuncMap())
+	columns, err := tfmigrateListColumns(opts.Columns)
+	if err != nil {
+		return err
+	}
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
 	if err != nil {
 		return err
 	}
@@ -222,25 +276,48 @@ func renderTfmigrateList(rows []map[string]any, opts migrateListRenderOptions) e
 		return err
 	}
 	if len(sorters) == 0 {
-		sorters = []*listSort.Sorter{
-			listSort.NewSorter("Stack", listSort.Ascending),
-			listSort.NewSorter("Component", listSort.Ascending),
-		}
+		sorters = defaultTfmigrateListSorters(columns)
 	}
 	r := renderer.New([]listFilter.Filter{}, selector, sorters, listFormat.Format(opts.Format), opts.Delimiter)
 	return r.Render(rows)
 }
 
-func tfmigrateListColumns(columns []string) []column.Config {
+// defaultTfmigrateListSorters mirrors buildInstanceSorters in
+// pkg/list/list_instances.go: only apply the default Stack+Component sort
+// when both columns are actually present in the selected column set;
+// otherwise skip sorting (natural/insertion order) rather than handing the
+// renderer a sorter referencing a column that isn't selected, which the
+// renderer's own column-presence check would reject outright ("column
+// \"Stack\" not found") even for a perfectly reasonable --columns choice
+// like --columns=component,mode.
+func defaultTfmigrateListSorters(columns []column.Config) []*listSort.Sorter {
+	names := make(map[string]bool, len(columns))
+	for _, c := range columns {
+		names[c.Name] = true
+	}
+	if !names["Stack"] || !names["Component"] {
+		return nil
+	}
+	return []*listSort.Sorter{
+		listSort.NewSorter("Stack", listSort.Ascending),
+		listSort.NewSorter("Component", listSort.Ascending),
+	}
+}
+
+func tfmigrateListColumns(columns []string) ([]column.Config, error) {
 	if len(columns) > 0 {
 		configs := make([]column.Config, 0, len(columns))
 		for _, spec := range columns {
-			if cfg := tfmigrateListColumnSpec(spec); cfg.Name != "" {
+			cfg, err := tfmigrateListColumnSpec(spec)
+			if err != nil {
+				return nil, err
+			}
+			if cfg.Name != "" {
 				configs = append(configs, cfg)
 			}
 		}
 		if len(configs) > 0 {
-			return configs
+			return configs, nil
 		}
 	}
 	return []column.Config{
@@ -255,13 +332,13 @@ func tfmigrateListColumns(columns []string) []column.Config {
 		{Name: "History Bucket", Value: "{{ .history_bucket }}"},
 		{Name: "History Key", Value: "{{ .history_key }}"},
 		{Name: "History Role ARN", Value: "{{ .history_role_arn }}"},
-	}
+	}, nil
 }
 
-func tfmigrateListColumnSpec(spec string) column.Config {
+func tfmigrateListColumnSpec(spec string) (column.Config, error) {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
-		return column.Config{}
+		return column.Config{}, nil
 	}
 	if idx := strings.Index(spec, "="); idx > 0 {
 		name := strings.TrimSpace(spec[:idx])
@@ -269,11 +346,28 @@ func tfmigrateListColumnSpec(spec string) column.Config {
 		if !strings.Contains(value, "{{") {
 			value = "{{ ." + value + " }}"
 		}
-		return column.Config{Name: name, Value: value}
+		return column.Config{Name: name, Value: value}, nil
+	}
+
+	if !tfmigrateListRowKeys[spec] {
+		return column.Config{}, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanationf("unknown --columns value %q", spec).
+			WithContext("column", spec).
+			WithHintf("Valid columns: %s", strings.Join(sortedTfmigrateListRowKeys(), ", ")).
+			Err()
 	}
 
 	return column.Config{
 		Name:  strings.Title(spec), //nolint:staticcheck // ASCII CLI column names only.
 		Value: "{{ ." + spec + " }}",
+	}, nil
+}
+
+func sortedTfmigrateListRowKeys() []string {
+	keys := make([]string, 0, len(tfmigrateListRowKeys))
+	for key := range tfmigrateListRowKeys {
+		keys = append(keys, key)
 	}
+	sort.Strings(keys)
+	return keys
 }

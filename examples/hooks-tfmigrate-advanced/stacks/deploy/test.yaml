@@ -12,10 +12,7 @@ vars:
 
 components:
   terraform:
-    # --- rm action, via a hook with an intentionally MISMATCHED mode ---
-    # mode: apply is bound to before.terraform.plan. A user who runs only
-    # `atmos terraform plan` here (expecting a safe preview) will actually
-    # trigger a real `tfmigrate apply`, permanently mutating state.
+    # --- rm action ---
     rm-demo:
       backend_type: local
       backend:
@@ -31,15 +28,11 @@ components:
         state-migration:
           events:
             - before.terraform.plan
+            - before.terraform.apply
           kind: tfmigrate
-          mode: apply
+          mode: dynamic
 
-    # --- import action, via a hook with an intentionally MISMATCHED mode ---
-    # mode: plan is bound to before.terraform.apply. A user who runs
-    # `atmos terraform apply` here (expecting the import to happen) will
-    # find the hook only PREVIEWS the import — the real `terraform apply`
-    # that follows never actually imports the file, and instead tries to
-    # create/overwrite it fresh from the resource's `content` value.
+    # --- import action ---
     import-demo:
       backend_type: local
       backend:
@@ -52,9 +45,10 @@ components:
       hooks:
         state-migration:
           events:
+            - before.terraform.plan
             - before.terraform.apply
           kind: tfmigrate
-          mode: plan
+          mode: dynamic
 
     # --- replace-provider action, via the one-off `--migration` CLI flag ---
     # No hook wired here — exercised directly with

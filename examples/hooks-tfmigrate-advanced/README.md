@@ -6,24 +6,21 @@ example or by any automated test in this repository:
 
 | Component                                    | Action(s) covered                | Path exercised                                  |
 | --------------------------------------------- | --------------------------------- | ------------------------------------------------ |
-| `rm-demo`                                     | `rm`                              | `kind: tfmigrate` hook, `mode: apply` bound to `before.terraform.plan` |
-| `import-demo`                                 | `import`                          | `kind: tfmigrate` hook, `mode: plan` bound to `before.terraform.apply` |
+| `rm-demo`                                     | `rm`                              | `kind: tfmigrate` hook, `mode: dynamic` |
+| `import-demo`                                 | `import`                          | `kind: tfmigrate` hook, `mode: dynamic` |
 | `replace-provider-demo`                       | `replace-provider`                | one-off `atmos terraform migrate --migration <file>` CLI flag |
 | `xmv-demo`                                    | `xmv` (count → `for_each`, quoted/bracketed addresses) | one-off `--migration` CLI flag |
 | `multi-state-source` / `multi-state-target`   | `migration "multi_state"` (`from_dir`/`to_dir`) | `kind: tfmigrate` hook, `mode: dynamic` (standard) |
 
-`rm-demo` and `import-demo` deliberately bind an explicit `mode:` to the *other*
-lifecycle event than you'd expect, to make a real, easy-to-hit misunderstanding
-concrete:
-
-- **`rm-demo`**: `mode: apply` on `before.terraform.plan`. Running only `atmos
-  terraform plan rm-demo -s test` — which looks like a safe, read-only preview —
-  actually runs a real `tfmigrate apply` first and permanently mutates state.
-- **`import-demo`**: `mode: plan` on `before.terraform.apply`. Running `atmos
-  terraform apply import-demo -s test` looks like it performs the import, but the
-  hook only previews it; the Terraform apply that follows never actually imports the
-  pre-existing file, and instead creates/overwrites it fresh from the resource's
-  `content` value.
+> [!NOTE]
+> An explicit `mode: apply`/`mode: plan` bound to a mismatched lifecycle event (e.g.
+> `mode: apply` on `before.terraform.plan`) is validated: Atmos rejects `mode: apply`
+> outright when it isn't bound to `before.terraform.apply`/`before.terraform.deploy`
+> (it would otherwise mutate state on what looks like a read-only `plan`), and warns
+> when `mode: plan` is bound to an apply/deploy event (the migration will only ever
+> be previewed, never applied). See `pkg/terraform/tfmigrate/tfmigrate_test.go`'s
+> `TestActionForMode_RejectsModeApplyOnNonApplyEvent` for the guardrail itself; this
+> example uses `mode: dynamic` throughout so each action demonstrates succeeding.
 
 All backends are local state (no cloud credentials needed), and each component uses
 its **own** state file (unlike `hooks-tfmigrate`, which shares one file between two
@@ -39,14 +36,16 @@ Nothing needs to be pre-installed — `opentofu` and `tfmigrate` are declared in
 ```bash
 cd examples/hooks-tfmigrate-advanced
 
-# Seed: temporarily swap in the "before" config and apply for real.
+# Seed: temporarily swap in the "before" config and apply for real. Skip
+# hooks for this bootstrap apply - the migration removes random_pet.temp,
+# which doesn't exist yet until this very apply creates it.
 cp components/terraform/rm-demo/seed.main.tf.txt components/terraform/rm-demo/main.tf
-atmos terraform apply rm-demo -s test -auto-approve
+atmos terraform apply rm-demo -s test -auto-approve --skip-hooks
 git checkout -- components/terraform/rm-demo/main.tf   # restore the real (post-rm) config
 
-# This LOOKS like a read-only preview, but the mode: apply hook on
-# before.terraform.plan means it actually runs `tfmigrate apply` for real.
+# before.terraform.plan previews the rm; apply commits it.
 atmos terraform plan rm-demo -s test
+atmos terraform apply rm-demo -s test -auto-approve
 # Confirm: random_pet.temp is gone from state, random_pet.keep is untouched.
 atmos terraform state list rm-demo -s test
 ```
@@ -60,14 +59,9 @@ regenerated. The migration imports ID `prexist1` (8 chars, matching `length = 8`
 ```bash
 cd examples/hooks-tfmigrate-advanced
 
-# This LOOKS like it will import the pre-existing value, but the mode: plan
-# hook on before.terraform.apply only previews — it never actually imports.
-# The terraform apply that follows creates a NEW random_string instead of
-# adopting "prexist1".
 atmos terraform apply import-demo -s test -auto-approve
 atmos terraform state show random_string.imported import-demo -s test
-# Compare the "result" attribute against "prexist1" — if the hook had actually
-# imported, they'd match; instead a freshly generated value shows up.
+# "result" matches "prexist1" — the pre-existing value was adopted, not regenerated.
 ```
 
 ## `replace-provider` — `replace-provider-demo`

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -110,6 +111,17 @@ func BuildArgs(opts Options) ([]string, error) {
 // component with required variables fails tfmigrate's convergence plan with
 // "No value for required variable". Existing TF_CLI_ARGS_plan values (from the
 // component env or the process environment) are preserved and extended.
+//
+// Varfile must be an absolute path: TF_CLI_ARGS_plan is a single, global env
+// var applied to every `terraform plan` tfmigrate runs internally, and for
+// `migration "multi_state"` that includes a convergence-check plan in a
+// *second* directory (from_dir) as well as the triggering component's own
+// directory (to_dir). An absolute path resolves correctly regardless of which
+// of the two tfmigrate's cwd is. This does not make multi_state fully correct
+// when from_dir/to_dir have materially different variables (the same varfile
+// is applied to both plans, since tfmigrate exposes no way to give the two a
+// different -var-file) - callers with that setup should still set
+// from_skip_plan/to_skip_plan on the migration block.
 func AppendPlanVarFile(env []string, varfile string) []string {
 	defer perf.Track(nil, "tfmigrate.AppendPlanVarFile")()
 
@@ -163,13 +175,37 @@ func ActionForMode(mode, event string) (string, error) {
 		mode = ModeDynamic
 	}
 
+	normalizedEvent := strings.ReplaceAll(event, "-", ".")
+
 	switch mode {
 	case ModePlan:
+		if isApplyLikeEvent(normalizedEvent) {
+			// Legitimate (if unusual) - preview-only forever, even on real
+			// applies - but easy to hit by mistake (e.g. mode: plan copied
+			// onto a before.terraform.apply hook), so warn loudly: the
+			// migration will never actually be applied by this hook.
+			log.Warn(
+				"tfmigrate hook mode is \"plan\" on an apply/deploy event; the migration will only be previewed, never applied",
+				"event", event,
+			)
+		}
 		return ActionPlan, nil
 	case ModeApply:
+		if !isApplyLikeEvent(normalizedEvent) {
+			// Unlike mode: plan on an apply event, this direction has no safe
+			// reading: it silently mutates real state on what looks like a
+			// read-only operation (plan, or --dry-run), so it must not be
+			// allowed to pass silently.
+			return "", errUtils.Build(errUtils.ErrInvalidConfig).
+				WithExplanation("tfmigrate hook mode \"apply\" is bound to an event that is not before.terraform.apply or before.terraform.deploy").
+				WithContext("mode", mode).
+				WithContext("event", event).
+				WithHint("Use mode: dynamic (the default) so the action always matches the triggering event, or bind this hook to before.terraform.apply/before.terraform.deploy").
+				Err()
+		}
 		return ActionApply, nil
 	case ModeDynamic:
-		switch strings.ReplaceAll(event, "-", ".") {
+		switch normalizedEvent {
 		case "before.terraform.plan":
 			return ActionPlan, nil
 		case "before.terraform.apply", "before.terraform.deploy":
@@ -187,6 +223,12 @@ func ActionForMode(mode, event string) (string, error) {
 			WithHint("Use dynamic, plan, or apply").
 			Err()
 	}
+}
+
+// isApplyLikeEvent reports whether a normalized lifecycle event triggers a
+// real terraform apply (as opposed to a read-only plan/preview).
+func isApplyLikeEvent(normalizedEvent string) bool {
+	return normalizedEvent == "before.terraform.apply" || normalizedEvent == "before.terraform.deploy"
 }
 
 // AppendExecPath adds TFMIGRATE_EXEC_PATH unless it is already configured.
@@ -287,9 +329,13 @@ func BackendHistoryValues(backendType string, backend map[string]any) map[string
 		if value := backendString(gcsBackend, "bucket"); value != "" {
 			values[EnvHistoryBucket] = value
 		}
-	default:
-		return nil
 	}
+	// Any other backend type (local, azurerm, consul, remote, ...) still
+	// reports EnvHistoryStorage = backendType (set above) with no extra
+	// fields - only s3/gcs have bucket/region/etc. to add. Falling through
+	// here (rather than returning nil) is what makes `migrate list`'s
+	// History Storage column show the real backend type instead of a blank
+	// cell for every backend that isn't s3/gcs.
 
 	return values
 }

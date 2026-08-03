@@ -57,7 +57,10 @@ func (e *Engine) Run(ctx *hooks.ExecContext) (*hooks.Output, error) {
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(), "ATMOS_SKIP_HOOKS=*")
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("tfmigrate hook failed: %w", err)
+		// ApplyOnFailure resolves ctx.Hook.OnFailure ("warn"/"ignore"/"fail",
+		// same as the command/tflint/checkov kinds honor via CommandEngine)
+		// instead of always hard-failing regardless of what the hook config says.
+		return nil, hooks.ApplyOnFailure(ctx, fmt.Errorf("tfmigrate hook failed: %w", err))
 	}
 	return nil, nil
 }
@@ -72,6 +75,13 @@ func atmosArgs(ctx *hooks.ExecContext, action string) []string {
 	args = appendFlagValue(args, "--tfmigrate-config", ctx.Hook.Config)
 	for _, backendConfig := range ctx.Hook.BackendConfig {
 		args = appendFlagValue(args, "--backend-config", backendConfig)
+	}
+	if ctx.Info.DryRun {
+		// The nested `atmos terraform migrate` invocation already no-ops
+		// correctly under --dry-run (skips EnsureResolved/EnsureLocalHistoryDir
+		// and prints instead of executing) - forward the flag rather than
+		// letting a dry-run outer command silently run a real migration.
+		args = append(args, "--dry-run")
 	}
 	return args
 }

@@ -133,6 +133,22 @@ migration "multi_state" "move_all_dns_resources" {
 }
 ```
 
+**Variables:** Atmos passes its generated varfile to tfmigrate's internal
+convergence-check plans in both `from_dir` and `to_dir`. This works correctly when
+both components share the same effective variables (the common case: one
+component's state relocating). When `from_dir`/`to_dir` have materially different
+variables, set `from_skip_plan = true`/`to_skip_plan = true` on the migration block
+instead of relying on the shared varfile, since tfmigrate has no way to apply a
+different `-var-file` to each side's plan.
+
+**Output-only diffs:** removing a resource from one component's config (the usual
+multi-state pattern - `from_dir` no longer declares what moved out) also removes any
+output that referenced it, which tfmigrate's convergence check flags as an
+"unexpected diff" even though no resource attribute changed. Set `force = true` on
+the migration block when this is the only diff (verify via the error output, which
+shows only `Changes to Outputs`, no resource changes) - the same gotcha applies to
+any migration that changes an output's shape (e.g. `count` → `for_each`).
+
 ## History Configuration
 
 History mode applies unapplied files from `migration_dir` in filename order and records applied migrations in durable

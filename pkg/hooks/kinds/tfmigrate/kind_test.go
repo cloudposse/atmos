@@ -60,6 +60,34 @@ func TestAtmosArgs(t *testing.T) {
 	}, args)
 }
 
+func TestAtmosArgsForwardsDryRun(t *testing.T) {
+	args := atmosArgs(&hooks.ExecContext{
+		Hook: &hooks.Hook{},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "plat-ue2-dev",
+			DryRun:           true,
+		},
+	}, tfmigrate.ActionApply)
+	assert.Equal(t, []string{
+		"terraform", "migrate", "apply",
+		"vpc",
+		"--stack", "plat-ue2-dev",
+		"--dry-run",
+	}, args)
+}
+
+func TestAtmosArgsOmitsDryRunWhenFalse(t *testing.T) {
+	args := atmosArgs(&hooks.ExecContext{
+		Hook: &hooks.Hook{},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "plat-ue2-dev",
+		},
+	}, tfmigrate.ActionApply)
+	assert.NotContains(t, args, "--dry-run")
+}
+
 func TestAtmosArgsIdentityCases(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -216,14 +244,47 @@ func TestEngineRunExecutesCurrentBinaryWrapper(t *testing.T) {
 func TestEngineRunWrapsSubprocessFailure(t *testing.T) {
 	useHelperProcess(t, "failure")
 
+	// In production, runResolvedHook resolves Hook.OnFailure from the kind's
+	// default (hooks.OnFailureFail for tfmigrate, see kind.go's init())
+	// before Engine.Run ever sees it - set it explicitly here since this
+	// test constructs ExecContext directly, bypassing that resolution step.
 	_, err := (&Engine{}).Run(&hooks.ExecContext{
-		Hook:  &hooks.Hook{Mode: tfmigrate.ModePlan},
+		Hook:  &hooks.Hook{Mode: tfmigrate.ModePlan, OnFailure: hooks.OnFailureFail},
 		Event: hooks.BeforeTerraformPlan,
 		Info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "plat-ue2-dev"},
 	})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tfmigrate hook failed")
+}
+
+func TestEngineRunHonorsOnFailureWarn(t *testing.T) {
+	useHelperProcess(t, "failure")
+
+	// on_failure: warn must swallow the subprocess failure (nil error,
+	// matching command_engine.go's ApplyOnFailure semantics for the
+	// command/tflint/checkov kinds) instead of always hard-failing.
+	output, err := (&Engine{}).Run(&hooks.ExecContext{
+		Hook:  &hooks.Hook{Mode: tfmigrate.ModePlan, OnFailure: hooks.OnFailureWarn},
+		Event: hooks.BeforeTerraformPlan,
+		Info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "plat-ue2-dev"},
+	})
+
+	require.NoError(t, err)
+	assert.Nil(t, output)
+}
+
+func TestEngineRunHonorsOnFailureIgnore(t *testing.T) {
+	useHelperProcess(t, "failure")
+
+	output, err := (&Engine{}).Run(&hooks.ExecContext{
+		Hook:  &hooks.Hook{Mode: tfmigrate.ModePlan, OnFailure: hooks.OnFailureIgnore},
+		Event: hooks.BeforeTerraformPlan,
+		Info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "plat-ue2-dev"},
+	})
+
+	require.NoError(t, err)
+	assert.Nil(t, output)
 }
 
 func useHelperProcess(t *testing.T, action string) {
