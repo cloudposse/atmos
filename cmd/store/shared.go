@@ -63,6 +63,24 @@ func loadService(scope storeScope) (*pstore.Service, error) {
 	return pstore.NewService(atmosConfig.StoresConfig, atmosConfig.Stores), nil
 }
 
+// loadServiceForList initializes Atmos config and returns a *pstore.Service, with no
+// authentication attempt. `atmos store list` only reads store configuration and capability
+// metadata (see pstore.Service.List) -- it never contacts a backend, so it does not need an
+// identity. Skipping auth also avoids an unwanted interactive identity prompt when a config
+// declares multiple identities with no default (loadService, used by set/get/delete, does need
+// auth: those commands read or write a specific store's value).
+func loadServiceForList(scope storeScope) (*pstore.Service, error) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ComponentFromArg: scope.Component,
+		Stack:            scope.Stack,
+	}, false)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrFailedToInitConfig).WithCause(err).Err()
+	}
+
+	return pstore.NewService(atmosConfig.StoresConfig, atmosConfig.Stores), nil
+}
+
 // buildStoreAuthManager authenticates using the root-level auth config. Unlike `atmos secret`,
 // this does not merge a specific component's auth overrides (buildAuthManager in
 // cmd/secret/shared.go): store commands may run with no component in scope at all, so there is

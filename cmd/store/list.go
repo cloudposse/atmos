@@ -57,7 +57,7 @@ func runStoreList(cmd *cobra.Command, args []string) error {
 	}
 	outputFormat := format.Format(v.GetString(flagFormat))
 
-	svc, err := loadServiceFn(scope)
+	svc, err := loadServiceForListFn(scope)
 	if err != nil {
 		return err
 	}

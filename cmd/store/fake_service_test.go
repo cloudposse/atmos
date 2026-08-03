@@ -81,6 +81,17 @@ func installService(t *testing.T, svc storeService, loadErr error) {
 		return svc, nil
 	}
 	t.Cleanup(func() { loadServiceFn = orig })
+
+	// `store list` loads via loadServiceForListFn; override it too so list tests use the same
+	// fake.
+	origList := loadServiceForListFn
+	loadServiceForListFn = func(_ storeScope) (storeService, error) {
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		return svc, nil
+	}
+	t.Cleanup(func() { loadServiceForListFn = origList })
 }
 
 // overridePromptForValue overrides promptForValueFn and restores it via t.Cleanup.

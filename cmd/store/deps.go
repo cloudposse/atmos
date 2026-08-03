@@ -27,6 +27,15 @@ var (
 		return svc, nil
 	}
 
+	// Loads a store service for `store list`, with no authentication attempt.
+	loadServiceForListFn = func(scope storeScope) (storeService, error) {
+		svc, err := loadServiceForList(scope)
+		if err != nil {
+			return nil, err
+		}
+		return svc, nil
+	}
+
 	// Interactively reads a value (masked input).
 	promptForValueFn = promptForStoreValue
 

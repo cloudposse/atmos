@@ -39,6 +39,15 @@ commands:
             duration: 450ms
             interval: 750ms
             command: *stores_cmd
+          - type: simulate
+            text: "# atmos store gives raw CRUD access to any of these stores"
+          - type: simulate
+            text: &store_list_cmd atmos store list
+          - type: shell
+            name: store-list
+            duration: 450ms
+            interval: 750ms
+            command: *store_list_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples auth-stores identity-backed-stores
@@ -56,7 +65,7 @@ commands:
           plain = strip_ansi(text)
           assert_no_experimental(text)
           assert_body_color(text)
-          for needle in ["atmos auth list", "prod-admin", "azure-prod", "gcp-prod", "prod/ssm", "identity: prod-admin", "prod/keyvault", "prod/gsm"]:
+          for needle in ["atmos auth list", "prod-admin", "azure-prod", "gcp-prod", "prod/ssm", "identity: prod-admin", "prod/keyvault", "prod/gsm", "atmos store list", "aws/ssm", "azure/keyvault", "gcp/secretmanager"]:
               if needle not in plain:
                   raise SystemExit(f"auth-stores cast missing {needle!r}")
           assert_no_error_output(text)
