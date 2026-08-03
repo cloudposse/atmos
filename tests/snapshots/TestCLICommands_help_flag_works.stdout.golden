@@ -1,8 +1,7 @@
 
 👽 test darwin/arm64
 
-Atmos is a framework for orchestrating and operating infrastructure workflows
-across multiple cloud and DevOps toolchains.
+Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.
 
 USAGE
 
@@ -56,6 +55,7 @@ BUILT-IN COMMANDS
       scaffold [command] [EXPERIMENTAL]      Generate code from scaffold templates
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
       stack [command]                        Read and edit stack manifests for a component
+      store [command] [EXPERIMENTAL]         Manage raw values in configured store backends.
       support                                Show Atmos support options
       terraform [command]                    Execute Terraform commands using Atmos stack configurations
       theme [command]                        Manage terminal themes for Atmos CLI

@@ -37,6 +37,7 @@ Valid subcommands are:
   • scaffold
   • secret
   • stack
+  • store
   • support
   • terraform
   • theme
