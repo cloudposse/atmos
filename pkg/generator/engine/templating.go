@@ -246,7 +246,7 @@ func validateWriteTarget(fullPath, targetPath string) error {
 			Err()
 	}
 
-	realDir, err := filepath.EvalSymlinks(filepath.Dir(fullPath))
+	realDir, err := u.ResolveAndCleanBasePath(filepath.Dir(fullPath))
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPathTraversal).
 			WithCause(err).
