@@ -10,24 +10,22 @@ date: 2026-07-16T12:00:00.000Z
 release: v1.196.0
 ---
 
-Atmos now supports Azure Blob Storage backends in the `!terraform.state` YAML function. Read Terraform outputs directly from Azure-backed state files without initializing Terraform—bringing the same blazing-fast performance to Azure that S3 users already enjoy.
+Feeding one component's outputs into another component's inputs is routine work, and the cost of it is almost never the lookup itself. It is everything that has to happen first: initializing the upstream component, downloading its providers, generating a backend config and varfiles, and only then reading a single value out the other end. Teams whose state lives in Azure Blob Storage now have a shorter path — read the state file directly.
 
 <!--truncate-->
 
-## What's New
+## The Problem
 
-The `!terraform.state` YAML function now supports **Azure Blob Storage (azurerm)** backends, joining existing support for S3 and local backends. This means you can retrieve Terraform outputs from Azure-backed state files at lightning speed—without the overhead of Terraform initialization.
+If you used Azure Blob Storage as your Terraform backend, you had two options for reading remote state, and both cost you something:
 
-### Why This Matters
+1. **`!terraform.output`** - Reliable, but slow. Requires full Terraform initialization, provider downloads, and varfile generation for every component you read from.
+2. **`!store`** - Fast, but requires extra setup. You had to stand up and maintain an external secret store, and keep values in it up to date.
 
-Before this feature, if you were using Azure Blob Storage as your Terraform backend, you had two options for reading remote state:
+## The Fix
 
-1. **`!terraform.output`** - Slow but reliable. Requires full Terraform initialization, provider downloads, and varfile generation.
-2. **`!store`** - Fast but requires extra setup. You had to manually configure external secret stores.
+The `!terraform.state` YAML function now supports **Azure Blob Storage (azurerm)** backends, joining existing support for S3 and local backends. Atmos reads the state file out of blob storage and pulls the output straight from it, so none of the Terraform setup work happens at all.
 
-Now you can use **`!terraform.state`** with Azure backends—getting **10-100x faster performance** compared to `!terraform.output` by reading directly from blob storage.
-
-## How It Works
+## How to Use It
 
 ### Backend Configuration
 
@@ -109,37 +107,19 @@ If you have:
 
 Atmos will look for: `apimanagement.terraform.tfstateenv:dev-wus3-apimanagement-be`
 
-## Performance Benefits
+## Why It Is Faster
 
-### Before: Using `!terraform.output`
+The difference is not a tuning win, it is work that no longer happens. Reading an output with `!terraform.output` puts Terraform in the path for every dependency:
 
-```bash
-$ time atmos terraform plan eks-cluster -s plat-ue2-dev
+- Initialize the upstream component
+- Download its providers
+- Generate its backend config
+- Generate its varfiles
+- Refresh and read the outputs
 
-# Must initialize Terraform for each dependency
-Initializing vpc component...
-Downloading providers...
-Generating backend config...
-Generating varfiles...
-Reading outputs...
+Reading the same output with `!terraform.state` is a single request for the state file in blob storage. No Terraform process starts, and nothing is downloaded. Expect it to be much faster, and expect the gap to widen the more dependencies a component has, since each one of them previously paid the full setup cost.
 
-real    2m34.521s
-```
-
-### After: Using `!terraform.state`
-
-```bash
-$ time atmos terraform plan eks-cluster -s plat-ue2-dev
-
-# Direct blob storage access
-Reading state from Azure Blob Storage...
-
-real    0m3.142s
-```
-
-**~50x faster** in this example—and the speedup grows with infrastructure complexity.
-
-## Advanced Features
+## Expressions, Caching, and Errors
 
 ### YQ Expressions
 
@@ -177,18 +157,7 @@ The first call reads from Azure; subsequent calls return cached data instantly.
 - **Permission denied (403)**: Returns clear error message
 - **Network errors**: Automatically retries up to 2 times with exponential backoff
 
-## Technical Details
-
-### Implementation Highlights
-
-- **Azure SDK for Go** - Uses official `github.com/Azure/azure-sdk-for-go/sdk/storage/azblob` package
-- **Client caching** - Azure Blob clients are cached per storage account/container
-- **Retry logic** - Automatic retry with exponential backoff for transient failures
-- **Nil safety** - Robust error handling prevents panics
-- **Test coverage** - Comprehensive unit tests with mocked Azure SDK
-- **Cross-platform** - Works on Linux, macOS, and Windows
-
-### Backend Configuration Options
+## Backend Configuration Options
 
 All standard Azure backend options are supported:
 
@@ -301,12 +270,4 @@ atmos describe component vpc -s plat-ue2-dev
 
 ## Get Involved
 
-We're building Atmos in the open and welcome your feedback:
-
-- 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions).
-- 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues).
-- 🚀 **Contribute** - Want to add features? Review our [contribution guide](https://atmos.tools/community/contributing).
-
----
-
-**Next up**: Google Cloud Storage (GCS) backend support for `!terraform.state`. Stay tuned!
+Tell us which backends you need next, or what tripped you up moving off `!terraform.output`. Open an issue at https://github.com/cloudposse/atmos/issues

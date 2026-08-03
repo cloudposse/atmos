@@ -1,9 +1,7 @@
 ---
 slug: aws-sso-verification-code-display
-title: >-
-  Enhanced AWS SSO Authentication: Better UX with Styled Dialogs and Graceful
-  Cancellation
-sidebar_label: Enhanced AWS SSO Authentication
+title: "See Your AWS SSO Verification Code in the Terminal"
+sidebar_label: AWS SSO Verification Code Display
 authors:
   - osterman
 tags:
@@ -13,77 +11,52 @@ date: 2025-10-20T12:00:00.000Z
 release: v1.196.0
 ---
 
-We've significantly improved the AWS SSO authentication experience with styled verification code dialogs, animated status indicators, and proper Ctrl+C handling.
+A device-flow login shows you a short verification code and expects you to confirm it in a browser. That only works if you can see the code. Atmos used to open the browser without printing the code anywhere, so there was nothing in the terminal to compare against — and pressing Ctrl+C to back out left the login still waiting in the background. Both are fixed.
 
 <!--truncate-->
 
-## What Changed
+## The Problem
 
-When authenticating with AWS IAM Identity Center (SSO), Atmos now displays the verification code in a styled dialog box with clear visual feedback during the authentication process.
+When you run an Atmos command that needs AWS IAM Identity Center (SSO) credentials, Atmos starts a device authorization flow and opens your browser. The browser page asks you to confirm a verification code.
 
-### New Features
+Previously the verification code was never displayed in the terminal at all. You had to trust that the page you landed on was the one Atmos opened, because there was nothing to check it against. If the browser opened to the wrong profile, or you switched away and lost the tab, the code was gone. And Ctrl+C during the wait cancelled the command you had typed, not the login behind it, which kept polling.
 
-**1. Styled Verification Dialog**
+## The Fix
 
-The verification code is now displayed in a bordered dialog box with color-coded elements for better visibility:
+The verification code is now displayed in a bordered dialog before the browser opens:
 
 ```
-╭───────────────────────────────────────────────╮
+╭──────────────────────────────────────────────╮
 │  🔐 AWS SSO Authentication Required          │
-│                                               │
+│                                              │
 │  Verification Code:  WDDD-HRQV               │
-│                                               │
+│                                              │
 │  https://company.awsapps.com/start/#/device  │
-│                                               │
+│                                              │
 │  Opening browser... If it doesn't open,      │
 │  visit the URL above.                        │
-╰───────────────────────────────────────────────╯
+╰──────────────────────────────────────────────╯
 ```
 
-**2. Animated Spinner**
-
-While waiting for authentication, an animated spinner shows real-time status with success/failure feedback:
+While Atmos waits for you to finish in the browser, a spinner reports status and then resolves to success or failure:
 
 ```
 ⠋ Waiting for authentication...
 ```
 
-**3. Proper Ctrl+C Handling**
+Pressing Ctrl+C during that wait now cancels the login itself. Atmos stops waiting immediately, returns an "authentication cancelled" error, and leaves nothing polling in the background.
 
-Pressing Ctrl+C during authentication now properly cancels the entire authentication process:
-- Immediately stops the polling goroutine
-- Closes all channels cleanly
-- Returns a clear "authentication cancelled" error
-- No resource leaks or hanging processes
+The output adapts to where it runs. In a terminal you get the styled dialog with colors and the animated spinner. In CI, and anywhere else without a TTY, you get the same code and URL as plain text that reads cleanly in a log.
 
-**4. Graceful Degradation**
+## How to Use It
 
-The enhancement automatically adapts to your environment:
-- **Terminal environments**: Beautiful styled dialog with colors and animations
-- **CI/CD pipelines**: Simple text output optimized for logs
-- **Non-TTY environments**: Plain text fallback
-
-## Why This Matters
-
-### Better User Experience
-
-Previously, the verification code was not displayed in the terminal at all. Now you can:
-
-- **See the verification code directly in your terminal** without having to find it in the browser
-- **Quickly locate the code** when switching between browser and terminal
-- **Verify the code matches** what AWS displays in the browser
-- **Monitor authentication progress** with real-time feedback
-- **Cancel authentication cleanly** with Ctrl+C without leaving background processes running
-
-### Consistent Across All Commands
-
-This enhancement applies to **all** Atmos authentication commands that trigger AWS SSO login:
+There is nothing to enable. Any command that triggers an AWS SSO login shows the dialog, including:
 
 - `atmos auth login` - Interactive authentication
 - `atmos auth env` - Get credentials as environment variables
 - `atmos auth exec` - Execute commands with authenticated credentials
 
-Any command that requires AWS SSO authentication will now show the styled verification dialog.
+With the code on screen you can confirm it matches what the browser shows, find it again after switching windows, and watch the login progress without leaving the terminal.
 
 ## Important Note
 
@@ -91,36 +64,12 @@ The verification code displayed is a **device authorization user code** (e.g., "
 
 Any MFA prompts (such as authenticator app codes or SMS codes) will appear in your browser during the authentication flow, not in the terminal.
 
-## Technical Details
-
-### Implementation
-
-The enhancement uses the [Charm Bracelet](https://charm.sh/) ecosystem for beautiful terminal UIs:
-
-- **Lipgloss** - Styling and layout for the verification dialog
-- **Bubbletea** - Terminal UI framework for the interactive spinner
-- **Bubbles** - Pre-built spinner component
-
-The implementation includes:
-
-- TTY detection to automatically choose between styled dialogs and plain text
-- Context-based cancellation for clean shutdown on Ctrl+C
-- Proper goroutine management to prevent resource leaks
-- Full test coverage with unit tests for all code paths
-
-### Test Coverage
-
-We've added comprehensive tests covering:
-
-- Styled dialog rendering with various inputs
-- Plain text fallback for non-TTY environments
-- Context cancellation behavior
-- Spinner state management
-
 ## Related Documentation
 
 - [atmos auth login](/cli/commands/auth/login) - Authentication command reference
 - [atmos auth env](/cli/commands/auth/env) - Environment variables command
 - [atmos auth exec](/cli/commands/auth/exec) - Execute with credentials command
 
-This enhancement makes AWS SSO authentication more user-friendly while maintaining full backward compatibility with existing workflows.
+## Get Involved
+
+If your SSO login still leaves you guessing about what Atmos is waiting on, tell us at https://github.com/cloudposse/atmos/issues.

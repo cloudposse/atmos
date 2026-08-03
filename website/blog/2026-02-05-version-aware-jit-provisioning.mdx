@@ -6,28 +6,19 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Atmos now supports intelligent version-aware JIT (Just-In-Time) source provisioning with automatic re-provisioning on version changes and TTL-based cleanup for stale workdirs.
+Bumping a dependency's version should be a one-line change. When a component pulls its source from a remote repository, it often is not, because the version your configuration asks for and the copy already sitting on disk are two different things. Previously, if you updated a component's source version in your stack configuration, you had to manually clean the workdir before the change would take effect.
 
 <!--truncate-->
 
-## What Changed
+## The Problem
 
-The workdir provisioning system has been enhanced with version tracking and intelligent re-provisioning:
+A workdir is a checkout of a component's source, kept on disk so that repeated runs do not re-fetch it. That copy had no record of where it came from. Nothing compared what was on disk against what your stack configuration asked for, so a workdir provisioned from `0.24.0` went on serving `0.24.0` after you wrote `0.25.0`, and the same was true if you pointed the component at a different source URI entirely. The remedy was to remember to clean the workdir yourself, and the cost of forgetting was a plan built from source you thought you had already replaced.
 
-- **Version-aware re-provisioning** - When a remote source version changes in your configuration, Atmos automatically re-provisions the workdir with the new version
-- **URI change detection** - Changing the source URI triggers re-provisioning to ensure you always have the correct source
-- **Incremental local sync** - Local component changes are synced using per-file checksums, copying only modified files
-- **TTL-based cleanup** - Stale workdirs can be cleaned up automatically based on last-accessed time
-- **Enhanced metadata** - Workdirs now track `source_uri`, `source_version`, and `last_accessed` timestamps
+## The Fix
 
-## Why This Matters
+Atmos now records the source URI and version that produced each workdir, along with when it was last used. Before a run, it compares that record against what your stack configuration asks for. If either the version or the URI has changed, the workdir is re-provisioned and Atmos prints the transition it detected, so a version bump is once again a one-line change.
 
-Previously, if you updated a component's source version in your stack configuration, you had to manually clean the workdir before the change would take effect. Now Atmos handles this automatically:
-
-- **Seamless version upgrades** - Change `version: "0.24.0"` to `version: "0.25.0"` and run `terraform plan` - Atmos detects the mismatch and re-provisions automatically
-- **Reduced disk usage** - The `--expired` cleanup option removes workdirs that haven't been accessed within a configurable TTL
-- **Faster local iteration** - Only modified files are synced to workdirs, making local development faster
-- **Full visibility** - The `workdir list` and `workdir show` commands now display version and access information
+Two more things follow from keeping that record. Local components sync per file by checksum, so only the files you actually changed get copied into the workdir. And because every workdir carries a last-accessed time, `atmos terraform workdir clean --expired` can remove the ones you stopped using, with the cutoff set by a TTL you choose. The `workdir list` and `workdir show` commands report both the version and the access time.
 
 ## How to Use It
 

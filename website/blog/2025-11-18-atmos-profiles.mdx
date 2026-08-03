@@ -45,7 +45,7 @@ Either way, you're juggling a complex combination of overrides that aren't versi
 
 How do you codify these contexts so they're consistent, version-controlled, and easy to switch between?
 
-## The Solution: Atmos Profiles
+## The Fix
 
 Profiles let you codify what it means to have a certain context and change all the settings of Atmos to match that context. No flags to remember. No environment variables to export. Just set it once and forget it.
 
@@ -57,30 +57,36 @@ atmos terraform plan vpc -s dev --profile developer
 export ATMOS_PROFILE=ci
 atmos terraform apply vpc -s prod
 
-# Platform Engineer: One flag, consistent settings
-atmos terraform plan vpc -s prod --profile platform-admin
+# Production: One flag, consistent settings
+atmos terraform plan vpc -s prod --profile production
 ```
 
 Same command, same component, same stack—but the profile handles your identity, logging, terminal settings, error reporting, and everything else. It's all version-controlled configuration, not scattered flags and environment variables.
 
 ## How It Works
 
-Profiles are simply directories containing YAML configuration files that override your base `atmos.yaml` settings. Atmos discovers profiles from multiple locations with clear precedence rules:
+Profiles are directories containing YAML configuration files that override your base `atmos.yaml` settings. Atmos discovers profiles from multiple locations with clear precedence rules:
 
 1. **Configurable location** (set in `profiles.base_path`)
 2. **Project-hidden** (`.atmos/profiles/`)
 3. **User directory** (`~/.config/atmos/profiles/`)
 4. **Project directory** (`profiles/`)
 
+## How to Use It
+
 ### Example: Developer Profile
 
 Create a profile for local development with a sandbox identity:
 
-```bash
+```yaml
 # profiles/developer/auth.yaml
 auth:
-  defaults:
-    identity: developer-sandbox  # Set default identity for this profile
+  providers:
+    aws-sso:
+      kind: aws/sso
+      region: us-east-2
+      start_url: https://my-company.awsapps.com/start
+
   identities:
     developer-sandbox:
       kind: aws/permission-set
@@ -89,9 +95,10 @@ auth:
       principal:
         account_id: "123456789012"
         permission_set: DeveloperAccess
+      default: true  # Preselected identity for this profile
 ```
 
-```bash
+```yaml
 # profiles/developer/settings.yaml
 logs:
   level: Debug
@@ -118,22 +125,29 @@ atmos terraform plan vpc -s dev
 
 Create a profile for GitHub Actions with OIDC authentication, Sentry error tracking, and CI-friendly output:
 
-```bash
+```yaml
 # profiles/ci/auth.yaml
 auth:
-  defaults:
-    identity: github-oidc  # Set default identity for CI
-  identities:
+  providers:
     github-oidc:
-      kind: aws/role
+      kind: github/oidc
+      region: us-east-1
+
+  identities:
+    ci-deployer:
+      kind: aws/assume-role
       via:
-        provider: aws-oidc
-        audience: sts.amazonaws.com
+        provider: github-oidc
       principal:
-        role_arn: arn:aws:iam::123456789012:role/GitHubActionsRole
+        assume_role: "arn:aws:iam::123456789012:role/GitHubActionsDeployRole"
+        # Tie the session back to the CI run that opened it
+        role_session_name: '{{ env "GITHUB_RUN_ID" }}'
+      session:
+        duration: "1h"  # Short-lived sessions
+      default: true  # Deterministic, non-interactive selection in CI
 ```
 
-```bash
+```yaml
 # profiles/ci/settings.yaml
 logs:
   level: Info
@@ -175,7 +189,7 @@ Need to layer multiple contexts? Stack profiles from left to right, with rightmo
 atmos terraform plan vpc -s dev --profile security-baseline --profile developer
 ```
 
-This is powerful for composing shared policies with role-specific settings.
+That lets you compose a shared baseline with role-specific settings instead of duplicating both.
 
 ## Managing Profiles
 
@@ -199,69 +213,39 @@ See it in action — listing available profiles and inspecting one in detail:
 
 [View the full example](/examples/config-profiles)
 
-## Why This Matters
-
-Before profiles, you had environment variables and config scattered everywhere:
-
-- `.bashrc` for developers with `ATMOS_IDENTITY`, `ATMOS_LOGS_LEVEL`, etc.
-- GitHub Actions secrets for CI with different values
-- GitLab CI variables for other pipelines
-- Different dotfiles for different team members
-- `atmos.yaml` overrides that vary by machine
-- No version control, no consistency
-
-This approach meant:
-- ❌ **Settings aren't codified** - Tribal knowledge about which flags to use
-- ❌ **Easy to get wrong** - Forget one flag, wrong behavior
-- ❌ **Can't share configurations** - Everyone maintains their own setup
-- ❌ **Onboarding is painful** - New team members reinvent the wheel
-- ❌ **Drift over time** - CI uses different settings than developers
-
-With profiles, you:
-
-- ✅ **Codify each context once** - Developer, CI, platform engineer profiles all version-controlled
-- ✅ **Set it and forget it** - `export ATMOS_PROFILE=ci` or `--profile developer`, done
-- ✅ **No flag juggling** - One profile replaces dozens of configuration overrides
-- ✅ **Version-controlled consistency** - Commit profiles, share with the team
-- ✅ **Compose when needed** - Layer profiles for complex scenarios (security baseline + role overrides)
-- ✅ **Onboard instantly** - New team members use proven profiles, no setup required
-
 ## Real-World Example
 
-Here's what a complete profile setup looks like for a team:
+Here's what a profile setup looks like across the contexts one team actually runs in:
 
 ```
 profiles/
-├── developer/          # Local development
-│   ├── auth.yaml      # Sandbox identity via AWS SSO
-│   └── settings.yaml  # Debug logs, wide terminal
+├── developer/         # Local development
+│   ├── auth.yaml      # AWS SSO identities for the dev and staging accounts
+│   └── settings.yaml  # Debug logs, wide terminal, syntax highlighting
 ├── ci/                # GitHub Actions
-│   ├── auth.yaml      # OIDC identity for automation
-│   └── settings.yaml  # Plain output, no color
-├── platform-admin/    # Platform engineers
-│   ├── auth.yaml      # Admin identity via AWS SSO
-│   └── settings.yaml  # Warning-level logs only
-└── audit/             # Security reviews
-    ├── auth.yaml      # Read-only identity
-    └── settings.yaml  # Full audit logging
+│   ├── auth.yaml      # GitHub OIDC identity for automation
+│   └── settings.yaml  # Plain ASCII output, no color, narrow width
+├── eks/               # Running inside a cluster
+│   └── auth.yaml      # Ambient IRSA credentials, chained to a deploy role
+└── production/        # Production changes
+    ├── auth.yaml      # Read-only identity by default, SSO for deploys
+    └── settings.yaml  # Warning-level logs, auto-approve disabled
 ```
 
-Each team member activates the profile that matches their role:
+Each context activates the profile that matches it:
 
-- **Developers** use the `developer` profile → get sandbox identity with debug logging
-- **CI workflows** use the `ci` profile → get OIDC identity with plain text output
-- **Platform engineers** use the `platform-admin` profile → get admin identity with minimal logs
-- **Security audits** use the `audit` profile → get read-only identity with comprehensive logging
+- **Developers** use the `developer` profile → SSO identity with debug logging
+- **CI workflows** use the `ci` profile → OIDC identity with plain text output
+- **Workloads in EKS** use the `eks` profile → the pod's own IRSA credentials, chained into a cross-account deploy role
+- **Production changes** use the `production` profile → read-only by default, and `terraform apply` never auto-approves
 
 No duplicated configuration. No environment variable sprawl. No confusion about which identity to use. Just clear, version-controlled contexts that do exactly what they say.
 
 ## Learn More
 
-- **Example Configuration**: See the complete working example in `examples/config-profiles/` with developer, CI, and production profiles
+- **Example Configuration**: See the working example in `examples/config-profiles/` with `ci`, `developer`, `eks`, and `production` profiles
 - **Profile Commands**: Use `atmos profile list` and `atmos profile show <name>` to discover and inspect profiles
-- **PRD Documentation**: See `docs/prd/atmos-profiles.md` for complete technical specification
 
 ## Get Involved
 
-- [GitHub Pull Request](https://github.com/cloudposse/atmos/pull/1766)
-- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
+Profiles are new, and what belongs in one is still settling — if a context you run in doesn't fit cleanly, we want to hear about it. Share feedback in the [Atmos Community Slack](https://cloudposse.com/slack) or [open an issue](https://github.com/cloudposse/atmos/issues).
