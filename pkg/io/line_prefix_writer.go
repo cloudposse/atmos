@@ -1,15 +1,15 @@
 package io
 
 import (
+	"bytes"
 	stdio "io"
-	"strings"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // LinePrefixWriter prefixes complete lines and serializes writes through a
-// shared output lock. Partial lines are buffered until Flush or a newline.
+// shared output lock. Partial lines are buffered until Flush or a line ending.
 type LinePrefixWriter struct {
 	mu      sync.Mutex
 	writeMu *sync.Mutex
@@ -68,6 +68,12 @@ func (w *LinePrefixWriter) Flush() error {
 	if len(w.buffer) == 0 {
 		return nil
 	}
+	if err := w.flushCompleteLinesLocked(); err != nil {
+		return err
+	}
+	if len(w.buffer) == 0 {
+		return nil
+	}
 	line := append([]byte(nil), w.buffer...)
 	if err := w.writeLine(line); err != nil {
 		return err
@@ -79,15 +85,19 @@ func (w *LinePrefixWriter) Flush() error {
 // flushCompleteLinesLocked writes buffered complete lines while w.mu is held.
 func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	for {
-		idx := newlineIndex(w.buffer)
+		idx := lineEndIndex(w.buffer)
 		if idx < 0 {
 			return nil
 		}
-		line := append([]byte(nil), w.buffer[:idx+1]...)
+		end := idx + 1
+		if w.buffer[idx] == '\r' && end < len(w.buffer) && w.buffer[end] == '\n' {
+			end++
+		}
+		line := append([]byte(nil), w.buffer[:end]...)
 		if err := w.writeLine(line); err != nil {
 			return err
 		}
-		w.buffer = w.buffer[idx+1:]
+		w.buffer = w.buffer[end:]
 	}
 }
 
@@ -104,25 +114,16 @@ func (w *LinePrefixWriter) writeLine(line []byte) error {
 		return err
 	}
 
-	var b strings.Builder
-	b.Grow(len(line) + len(w.prefix))
-	for i, part := range strings.SplitAfter(string(line), "\r") {
-		if part == "" {
-			continue
-		}
-		if i == 0 || part != "\n" {
-			b.WriteString(w.prefix)
-		}
-		b.WriteString(part)
-	}
-	_, err := stdio.WriteString(w.w, b.String())
+	line = bytes.ReplaceAll(line, []byte("\r\n"), []byte("\n"))
+	line = bytes.ReplaceAll(line, []byte("\r"), []byte("\n"))
+	_, err := stdio.WriteString(w.w, w.prefix+string(line))
 	return err
 }
 
-// newlineIndex returns the first newline byte position or -1 when absent.
-func newlineIndex(p []byte) int {
+// lineEndIndex returns the first complete line-ending byte position or -1 when absent.
+func lineEndIndex(p []byte) int {
 	for i, c := range p {
-		if c == '\n' {
+		if c == '\n' || (c == '\r' && i+1 < len(p)) {
 			return i
 		}
 	}
