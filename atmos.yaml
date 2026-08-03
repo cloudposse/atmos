@@ -91,8 +91,19 @@ validate:
     # source, and flags the former as a tab-indentation violation. gofumpt (via
     # `atmos lint`) already fully owns real Go source formatting, so editorconfig
     # checking .go files is both redundant and produces false positives.
+    #
+    # tests/snapshots/**/*.golden captures exact CLI output (lipgloss padding,
+    # trailing whitespace, and no-final-newline are all deliberate parts of
+    # what's being asserted -- see CLAUDE.md's Golden Snapshots section).
+    # .editorconfig has its own override block for this same path, but this
+    # exclude list is the one that actually takes effect here: touching
+    # .editorconfig itself is treated as a rule change that forces a full
+    # non-affected-scoped repo scan (see affectedEditorConfigFiles in
+    # cmd/validate_affected.go), which would surface unrelated pre-existing
+    # violations far outside any single PR's scope.
     exclude:
       - "**/*.go"
+      - "tests/snapshots/**/*.golden"
     # If set to true, the default ignore patterns (like .git/*) will not be applied.
     ignore_defaults: false
     # Runs the checker without making any changes or producing output, useful for testing configuration.
@@ -232,7 +243,8 @@ settings:
   list_merge_strategy: replace
   # Terminal settings for displaying content
   terminal:
-    max_width: 120 # Maximum width for terminal output
+    # max_width is unlimited by default (0): output uses the full detected
+    # terminal width. Set a positive value only to force narrower wrapping.
     pager: false # Pager setting for all terminal output
     unicode: true # Use unicode characters
     syntax_highlighting:

@@ -66,6 +66,7 @@ linters:
           files:
             - "$all"
             - "!**/pkg/auth/providers/**"
+            - "!**/pkg/store/providers/**"
             - "!**/pkg/auth/identities/**"
             - "!**/pkg/auth/cloud/**"
             - "!**/pkg/auth/factory/**"
