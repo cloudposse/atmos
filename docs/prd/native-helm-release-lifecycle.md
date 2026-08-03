@@ -2,13 +2,13 @@
 
 **Status:** Draft
 
-**Last Updated:** 2026-07-31
+**Last Updated:** 2026-08-03
 
 **Related:** [DAG-Based Concurrent Execution](./dag-concurrent-execution.md), [Component Dependencies](./component-dependencies.md), [PR #2667](https://github.com/cloudposse/atmos/pull/2667)
 
 ## Summary
 
-Add configurable release lifecycle behavior to native Helm components. Atmos will expose Helm 4 wait strategies, release timeouts, rollback-on-failure, Job waiting, failed-upgrade cleanup, release history limits, chart-hook suppression, and CRD installation control through normal Helm component configuration and command-line overrides.
+Add configurable release lifecycle behavior to native Helm components. Atmos will expose Helm 4 wait strategies, release timeouts, failure-recovery actions, Job waiting, release history limits, chart-hook suppression, and CRD installation control through normal Helm component configuration and command-line overrides.
 
 The feature makes native Helm suitable for ordered production rollouts in which a successful component must mean more than "resources were submitted to Kubernetes." A Helm component participating in a dependency DAG completes successfully only after its configured release lifecycle and readiness policy succeeds. Dependents remain blocked when the release fails, times out, or is rolled back.
 
@@ -80,11 +80,10 @@ components:
       version: 1.2.3
       namespace: demo
 
-      rollback_on_failure: true
+      on_failure: [rollback, cleanup]
       wait_strategy: watcher
       wait_for_jobs: true
       timeout: 60m
-      cleanup_on_fail: true
       max_history: 10
       disable_chart_hooks: false
       skip_crds: false
@@ -92,11 +91,11 @@ components:
 
 `disable_chart_hooks` deliberately names Helm chart hooks. Atmos components already have a `hooks:` section and a global `--skip-hooks` behavior for Atmos lifecycle hooks. Calling the new field only `disable_hooks` would make these unrelated mechanisms ambiguous.
 
-### Helm 4 Terminology Is Canonical
+### Failure Policy Is Extensible
 
-Helm 4 names the safety behavior `rollback-on-failure`; `atomic` is a deprecated CLI alias. Atmos uses `rollback_on_failure` as the canonical configuration field and `--rollback-on-failure` as the canonical flag.
+Atmos exposes failure behavior as one ordered-set field, `on_failure`, rather than separate Booleans. The initial actions are `rollback` and `cleanup`; adding a future action does not require another top-level component field or flag. The list order does not control execution order because Helm owns recovery sequencing. Atmos removes duplicates and reports actions in canonical order.
 
-Atmos accepts `atomic` and `--atomic` as deprecated migration aliases. The aliases do not create a separate behavior.
+The equivalent invocation flag is `--on-failure=rollback,cleanup`. Because native Helm lifecycle configuration is still experimental and none of the earlier proposed names shipped, R1 does not introduce `rollback_on_failure`, `cleanup_on_fail`, `atomic`, or their CLI forms as compatibility aliases.
 
 Canonical terminology applies where it does not collide with an existing Atmos concept. The `disable_chart_hooks` field intentionally remains more explicit than Helm's `DisableHooks` SDK field and `--no-hooks` flag because Atmos lifecycle hooks are a separate mechanism. R1 does not add a `disable_hooks` alias.
 
@@ -114,7 +113,7 @@ Stack-level `helm` fields provide defaults for every native Helm component in th
 helm:
   wait_strategy: watcher
   timeout: 10m
-  rollback_on_failure: true
+  on_failure: [rollback]
   max_history: 10
 
 components:
@@ -134,7 +133,7 @@ components:
           - name: foundation-release
 ```
 
-After normal stack processing, `foundation-release` uses a 20-minute timeout and `dependent-release` uses a 60-minute timeout. Both inherit watcher readiness, rollback-on-failure, and a ten-revision history limit.
+After normal stack processing, `foundation-release` uses a 20-minute timeout and `dependent-release` uses a 60-minute timeout. Both inherit watcher readiness, the `rollback` failure action, and a ten-revision history limit.
 
 Abstract Helm components can also define lifecycle fields:
 
@@ -145,8 +144,7 @@ components:
       metadata:
         type: abstract
       wait_strategy: watcher
-      rollback_on_failure: true
-      cleanup_on_fail: true
+      on_failure: [rollback, cleanup]
       max_history: 10
 
     demo-release:
@@ -158,7 +156,7 @@ components:
       timeout: 30m
 ```
 
-Lifecycle fields are scalar values and therefore follow normal Atmos override precedence. No special list merge behavior is required.
+Lifecycle fields follow normal Atmos override precedence. `on_failure` follows the configured Atmos list merge strategy: the default `replace` strategy lets a concrete component replace or clear an inherited policy with `[]`, while `append` can add actions across inheritance layers. Atmos normalizes duplicates after stack processing.
 
 ### Command-Line Overrides
 
@@ -166,11 +164,10 @@ The cluster-backed `apply` and `deploy` commands support:
 
 ```shell
 atmos helm apply demo-api -s example-prod \
-  --rollback-on-failure \
+  --on-failure=rollback,cleanup \
   --wait=watcher \
   --wait-for-jobs \
   --timeout=60m \
-  --cleanup-on-fail \
   --history-max=10
 ```
 
@@ -200,13 +197,11 @@ atmos helm delete demo-api -s example-prod \
 
 | Field | Type | Default | Default status | Helm 4 mapping | Applies to |
 | --- | --- | --- | --- | --- | --- |
-| `rollback_on_failure` | Boolean | `false` | Preserves current Atmos behavior | `Install.RollbackOnFailure`, `Upgrade.RollbackOnFailure` | Install, upgrade |
-| `atomic` | Boolean | Unset | Deprecated alias | Deprecated alias for `rollback_on_failure` | Install, upgrade |
+| `on_failure` | List of enums: `rollback`, `cleanup` | `[]` | Preserves current Atmos behavior | `rollback` sets `Install.RollbackOnFailure` and `Upgrade.RollbackOnFailure`; `cleanup` sets `Upgrade.CleanupOnFail` | Install, upgrade |
 | `wait_strategy` | Enum | `hookOnly` | Preserves current Atmos behavior | `kube.WaitStrategy` | Install, upgrade, delete |
 | `wait` | Boolean | Unset | Convenience alias | `true` = `watcher`, `false` = `hookOnly` | Install, upgrade, delete |
 | `wait_for_jobs` | Boolean | `false` | Preserves current Atmos behavior | `Install.WaitForJobs`, `Upgrade.WaitForJobs` | Install, upgrade |
 | `timeout` | Duration string | `0s` in v1.225.x; `5m` from v1.226.0 | Staged change to the Helm CLI default | Helm action `Timeout` | Install, upgrade, delete |
-| `cleanup_on_fail` | Boolean | `false` | Preserves current Atmos behavior | `Upgrade.CleanupOnFail` | Upgrade only |
 | `max_history` | Non-negative integer | `10` | New Helm CLI-compatible limit | `Upgrade.MaxHistory` | Upgrade only |
 | `disable_chart_hooks` | Boolean | `false` | Preserves current Atmos behavior | Helm action `DisableHooks` | Install, upgrade, delete |
 | `skip_crds` | Boolean | `false` | Preserves current Atmos behavior | `Install.SkipCRDs` | Install only |
@@ -233,26 +228,20 @@ Atmos exposes the exact Helm 4 strategy values:
 
 `wait_for_jobs` controls Jobs in the ordinary release manifest. Helm chart hook Jobs are already waited on when hooks are enabled. `wait_for_jobs: true` requires an effective `watcher` or `legacy` strategy.
 
-Helm 4 automatically promotes `hookOnly` to `watcher` when `rollback_on_failure` is enabled. Atmos resolves and reports the effective strategy before invoking Helm, rather than relying on an invisible SDK mutation. Therefore this is valid:
+Helm 4 automatically promotes `hookOnly` to `watcher` when `on_failure` contains `rollback`. Atmos resolves and reports the effective strategy before invoking Helm, rather than relying on an invisible SDK mutation. Therefore this is valid:
 
 ```yaml
-rollback_on_failure: true
+on_failure: [rollback]
 wait_for_jobs: true
 ```
 
 Its effective wait strategy is `watcher`.
 
-### Alias Resolution
+### List and Alias Resolution
 
-Aliases must work with inheritance. A type default may still use an alias while a concrete component adopts the canonical field. For that reason, aliases do not produce a hard conflict after stack merging:
+`on_failure` is decoded after normal stack merging. Values must be strings, unknown values are rejected, and duplicates are removed. Canonical output order is `rollback`, then `cleanup`, regardless of input or inheritance order. An empty list is valid and requests no recovery action.
 
-1. `rollback_on_failure` wins when both it and `atomic` are present; Atmos emits one deprecation warning for `atomic`.
-2. `wait_strategy` wins when both it and `wait` are present; Atmos emits one warning that the convenience value was ignored.
-3. If only the alias is present, Atmos normalizes it to the canonical field before validation and execution.
-
-The same canonical precedence applies when both names are supplied in one CLI invocation. `--rollback-on-failure` wins over `--atomic` regardless of argument order, and Atmos emits one `--atomic` deprecation warning. The parser does not use last-flag-wins behavior for two names representing the same setting.
-
-For example, a concrete canonical field overrides an inherited alias even when it explicitly disables the inherited safety policy:
+For example, the default `replace` list strategy lets a concrete component disable an inherited safety policy:
 
 ```yaml
 components:
@@ -260,7 +249,7 @@ components:
     base-release-policy:
       metadata:
         type: abstract
-      atomic: true
+      on_failure: [rollback, cleanup]
 
     demo-release:
       metadata:
@@ -268,10 +257,12 @@ components:
           - base-release-policy
       chart: charts/demo-release
       namespace: demo
-      rollback_on_failure: false
+      on_failure: []
 ```
 
-The effective `rollback_on_failure` value for `demo-release` is `false`, and Atmos emits one deprecation warning for the inherited `atomic` alias. Stack-processing tests MUST cover this precedence case.
+The effective `on_failure` value for `demo-release` is `[]`. Stack-processing tests MUST cover replacement, clearing, append-mode accumulation, and duplicate normalization.
+
+`wait_strategy` remains canonical over the existing `wait` convenience alias. If both are present, Atmos uses `wait_strategy` and emits one warning that `wait` was ignored.
 
 Resolved summaries and logs use only canonical names.
 
@@ -285,7 +276,7 @@ Lifecycle values resolve from lowest to highest priority:
 4. The concrete `components.helm.<name>` instance.
 5. Explicit command-line flags.
 
-Only flags explicitly present on the command line override component configuration. A Cobra Boolean default of `false` MUST NOT overwrite `true` from the stack. Every lifecycle Boolean flag accepts an explicit `=false` value, such as `--rollback-on-failure=false`, `--wait-for-jobs=false`, `--cleanup-on-fail=false`, `--no-hooks=false`, and `--skip-crds=false`, so command-line input can disable a stack-level `true` value. Bare Boolean flags mean `true`.
+Only flags explicitly present on the command line override component configuration. `--on-failure` replaces the resolved component list for that invocation; `--on-failure=` supplies an empty list and disables inherited actions. A Cobra Boolean default of `false` MUST NOT overwrite `true` from the stack. Every lifecycle Boolean flag accepts an explicit `=false` value, such as `--wait-for-jobs=false`, `--no-hooks=false`, and `--skip-crds=false`, so command-line input can disable a stack-level `true` value. Bare Boolean flags mean `true`.
 
 Lifecycle fields are not added to `atmos.yaml` global `components.helm` configuration. That structure remains responsible for process-wide native Helm settings such as `base_path`, source behavior, repositories, and plugin management. Release policy belongs to processed stack configuration where inheritance and per-environment overrides are available.
 
@@ -293,16 +284,16 @@ Lifecycle fields are not added to `atmos.yaml` global `components.helm` configur
 
 | Setting | New install | Existing release upgrade | Delete | Template/diff | External provision target |
 | --- | --- | --- | --- | --- | --- |
-| `rollback_on_failure` | Uninstall failed release | Roll back to last successful release | Not applicable | Not applicable | Not applicable |
+| `on_failure: [rollback]` | Uninstall failed release | Roll back to last successful release | Not applicable | Not applicable | Not applicable |
+| `on_failure: [cleanup]` | Ignored | Remove resources newly created by the failed upgrade | Not applicable | Not applicable | Not applicable |
 | `wait_strategy` | Applied | Applied | Applied | Not applicable | Not applicable |
 | `wait_for_jobs` | Applied | Applied | Not applicable | Not applicable | Not applicable |
 | `timeout` | Applied | Applied | Applied | Not applicable | Not applicable |
-| `cleanup_on_fail` | Ignored | Applied on upgrade failure independently of rollback | Not applicable | Not applicable | Not applicable |
 | `max_history` | Ignored | Applied | Not applicable | Not applicable | Not applicable |
 | `disable_chart_hooks` | Applied | Applied | Applied | Not part of this PRD | Not applicable |
 | `skip_crds` | Applied | Ignored | Not applicable | Not applicable | Not applicable |
 
-Install-only and upgrade-only fields are valid in persistent component configuration because the same `apply` command transitions from first install to later upgrades. Atmos MUST NOT fail a first install because `cleanup_on_fail` or `max_history` is configured, and MUST NOT fail an upgrade because `skip_crds` remains configured. Inapplicable fields are omitted from the action and visible only at debug level.
+Install-only and upgrade-only fields are valid in persistent component configuration because the same `apply` command transitions from first install to later upgrades. Atmos MUST NOT fail a first install because `on_failure` contains `cleanup` or `max_history` is configured, and MUST NOT fail an upgrade because `skip_crds` remains configured. Inapplicable fields are omitted from the action and visible only at debug level.
 
 Lifecycle configuration is allowed on a component that also defines an external provision target, but it is applied only when the selected target kind is `kubernetes`. Explicit lifecycle flags combined with a non-Kubernetes target are an invocation error because the user requested behavior that cannot occur. Stored component defaults are ignored for the external target so one component can support both cluster and GitOps delivery. This bypass is reported in the normal execution summary, not only in debug logs.
 
@@ -316,10 +307,10 @@ processed component
         ▼
 extract lifecycle input
         │
-        ├── normalize deprecated aliases
+        ├── normalize on_failure actions and the wait alias
         ├── apply explicit CLI overrides
         ├── validate enum, duration, and integer values
-        ├── derive watcher when rollback-on-failure requires it
+        ├── derive watcher when rollback requires it
         └── validate cross-field constraints
         │
         ▼
@@ -405,17 +396,17 @@ Tests MUST exercise the complete command-to-provider path and prove that `Config
 
 ## Failure and Recovery Semantics
 
-When `rollback_on_failure` is enabled, R1 uses Helm 4's built-in `RollbackOnFailure` behavior:
+When `on_failure` contains `rollback`, R1 uses Helm 4's built-in `RollbackOnFailure` behavior:
 
 - Failed install with rollback enabled: Helm uninstalls the newly created release.
 - Failed upgrade with rollback enabled: Helm rolls back to the most recent successful release.
-- `cleanup_on_fail`: Helm removes resources newly created during a failed upgrade whenever configured, whether or not `rollback_on_failure` is enabled. When rollback is enabled, cleanup occurs as part of handling the failure before recovery completes.
+- `cleanup`: Helm removes resources newly created during a failed upgrade whenever the action is present, whether or not `rollback` is also present. When both are present, Helm owns the cleanup and recovery sequencing.
 - Failure after successful recovery: Atmos returns a failed node with an error explaining that recovery completed.
 - Failed recovery: Atmos returns both the original action failure and the rollback/uninstall failure using error wrapping or `errors.Join` without losing either cause.
 
-When `rollback_on_failure` is disabled, Atmos returns the install or upgrade failure without requesting Helm rollback or uninstall. Any partial release state is left for the operator unless the independent upgrade-only `cleanup_on_fail` policy applies.
+When `on_failure` does not contain `rollback`, Atmos returns the install or upgrade failure without requesting Helm rollback or uninstall. Any partial release state is left for the operator unless the independent upgrade-only `cleanup` action applies.
 
-Atmos does not attempt to collect Kubernetes diagnostics before recovery in this phase. Helm performs built-in recovery before returning control to Atmos, so implementing diagnostics later may require Atmos-managed recovery or an upstream Helm callback. The public `rollback_on_failure` contract remains valid in either implementation.
+Atmos does not attempt to collect Kubernetes diagnostics before recovery in this phase. Helm performs built-in recovery before returning control to Atmos, so implementing diagnostics later may require Atmos-managed recovery or an upstream Helm callback. The public `on_failure` contract can add a future diagnostics action without another top-level field.
 
 ## Architecture
 
@@ -425,11 +416,10 @@ The processed map and flag inputs normalize into one internal value before actio
 
 ```go
 type releaseLifecycle struct {
-  RollbackOnFailure bool
+  OnFailure        []failureAction
   WaitStrategy      kube.WaitStrategy
   WaitForJobs       bool
   Timeout           time.Duration
-  CleanupOnFail     bool
   MaxHistory        int
   DisableChartHooks bool
   SkipCRDs          bool
@@ -441,7 +431,7 @@ type releaseLifecycleResolution struct {
 }
 ```
 
-Input decoding MUST use presence-aware fields so omitted Boolean flags and aliases can be distinguished from explicit `false`, and an omitted timeout can be distinguished from explicit `timeout: 0s` during the migration window. Resolution metadata is used for migration warnings and observability but is not passed into Helm actions. `chartSpec` contains the canonical `releaseLifecycle`; install, upgrade, and delete functions do not re-read raw component maps or flags.
+`failureAction` is a closed string enum in R1 with `rollback` and `cleanup`. Input decoding MUST distinguish an omitted list from an explicitly empty list when applying command-line overrides, distinguish omitted Boolean flags from explicit `false`, and distinguish an omitted timeout from explicit `timeout: 0s` during the migration window. Resolution metadata is used for migration warnings and observability but is not passed into Helm actions. `chartSpec` contains the canonical `releaseLifecycle`; install, upgrade, and delete functions do not re-read raw component maps or flags.
 
 ### Stack Processing
 
@@ -451,9 +441,9 @@ Required processing changes include:
 
 - Add lifecycle keys to the recognized native Helm component field set.
 - Merge stack-level `helm` lifecycle defaults into every native Helm component at the lowest component-specific precedence.
-- Preserve base-component and concrete-component scalar overrides.
+- Preserve base-component and concrete-component overrides, including the configured list merge strategy for `on_failure`.
 - Keep lifecycle fields out of `settings`.
-- Add processing tests covering type defaults, multi-level inheritance, explicit `false`, deprecated aliases, and concrete overrides.
+- Add processing tests covering type defaults, multi-level inheritance, explicit `false`, list replacement and clearing, append-mode accumulation, duplicate normalization, and concrete overrides.
 
 ### Schema Surfaces
 
@@ -466,6 +456,7 @@ Update all generated and source schema surfaces used by Atmos:
 
 Enums and constraints must be schema-visible:
 
+- `on_failure`: an array whose items are `rollback` or `cleanup`.
 - `wait_strategy`: `watcher`, `hookOnly`, or `legacy`.
 - `timeout`: duration string; runtime validation supplies the authoritative parser.
 - `max_history`: integer greater than or equal to zero.
@@ -474,13 +465,13 @@ During the timeout migration release, schema generation and stack processing MUS
 
 ### Helm Action Mapping
 
-| Canonical field | Install action | Upgrade action | Uninstall action |
+| Canonical policy | Install action | Upgrade action | Uninstall action |
 | --- | --- | --- | --- |
-| `RollbackOnFailure` | Set | Set | — |
+| `on_failure` contains `rollback` | Set `RollbackOnFailure` | Set `RollbackOnFailure` | — |
+| `on_failure` contains `cleanup` | — | Set `CleanupOnFail` | — |
 | `WaitStrategy` | Set | Set | Set |
 | `WaitForJobs` | Set | Set | — |
 | `Timeout` | Set | Set | Set |
-| `CleanupOnFail` | — | Set | — |
 | `MaxHistory` | — | Set | — |
 | `DisableChartHooks` | `DisableHooks` | `DisableHooks` | `DisableHooks` |
 | `SkipCRDs` | Set | — | — |
@@ -502,17 +493,15 @@ Use the standard Atmos parser and command registry. Mirror Helm names when the m
 
 | Atmos flag | Configuration field | Commands |
 | --- | --- | --- |
-| `--rollback-on-failure[=bool]` | `rollback_on_failure` | apply, deploy |
-| `--atomic[=bool]` | Deprecated alias | apply, deploy |
+| `--on-failure=<actions>` | `on_failure` | apply, deploy |
 | `--wait[=strategy]` | `wait_strategy` | apply, deploy, delete |
 | `--wait-for-jobs[=bool]` | `wait_for_jobs` | apply, deploy |
 | `--timeout` | `timeout` | apply, deploy, delete |
-| `--cleanup-on-fail[=bool]` | `cleanup_on_fail` | apply, deploy |
 | `--history-max` | `max_history` | apply, deploy |
 | `--no-hooks[=bool]` | `disable_chart_hooks` | apply, deploy, delete |
 | `--skip-crds[=bool]` | `skip_crds` | apply, deploy |
 
-Flags must be represented in execution summaries using canonical field names. Deprecated aliases emit warnings through Atmos UI/logging primitives, not direct standard-output writes.
+`--on-failure` is a comma-separated string-slice flag. Repeating the flag accumulates values within that invocation, while the resulting CLI list replaces stack configuration. An explicit empty value clears the policy. Unknown actions fail before chart acquisition or cluster access. Flags must be represented in execution summaries using canonical field names. Alias warnings use Atmos UI/logging primitives, not direct standard-output writes.
 
 ## Observability
 
@@ -524,13 +513,14 @@ lifecycle:
   wait_strategy: watcher
   wait_for_jobs: true
   timeout: 1h0m0s
-  rollback_on_failure: true
-  cleanup_on_fail: true
+  on_failure:
+    - rollback
+    - cleanup
   max_history: 10
   disable_chart_hooks: false
 ```
 
-The summary reports effective values after alias normalization and CLI overrides. It does not report inapplicable settings as if Helm used them.
+The summary reports effective values after list normalization, alias normalization, and CLI overrides. It does not report inapplicable settings as if Helm used them.
 
 For an external provision target, the normal execution summary reports the bypass without presenting stored lifecycle values as active policy:
 
@@ -548,7 +538,7 @@ At debug level, Atmos logs:
 - Whether the action selected install or upgrade.
 - The effective wait strategy and why it changed.
 - Which operation-specific fields were ignored.
-- Whether rollback or cleanup was requested.
+- Which failure actions were requested.
 - Additional diagnostic detail when the selected target bypasses release lifecycle behavior.
 
 Errors must use static Atmos sentinel errors where callers need classification and wrap the underlying Helm or Kubernetes cause.
@@ -557,7 +547,7 @@ Errors must use static Atmos sentinel errors where callers need classification a
 
 Native Helm remains experimental, but existing manifests must remain structurally valid.
 
-- Omitted lifecycle fields retain `hookOnly`, no rollback, no Job waiting, hooks enabled, CRDs enabled, and no failed-upgrade cleanup.
+- Omitted lifecycle fields retain `hookOnly`, no failure actions, no Job waiting, hooks enabled, and CRDs enabled.
 - During v1.225.x, an omitted timeout preserves the current SDK zero value and emits a migration warning once per selected component per invocation. Starting with v1.226.0, the default becomes the documented Helm CLI value of five minutes and the warning is removed.
 - `timeout: 0s` explicitly preserves unbounded timeout behavior without a migration warning.
 - An omitted `max_history` changes from the SDK zero value to the Helm CLI default of `10`; `max_history: 0` explicitly preserves unlimited history.
@@ -584,13 +574,14 @@ The release notes must call out the timeout migration schedule and the new ten-r
 - Verify built-in defaults, including `max_history: 10` and the staged timeout default.
 - Verify the v1.225.x phase: an omitted timeout remains unbounded and warns once per selected component per invocation, while explicit `timeout: 0s` remains unbounded without warning.
 - Verify the v1.226.0 phase: an omitted timeout resolves to `5m` without a migration warning.
-- Verify stack-level Helm defaults, abstract inheritance, concrete overrides, and explicit `false` values.
-- Verify alias normalization and warnings, including an inherited `atomic: true` overridden by concrete `rollback_on_failure: false`.
-- Verify that explicit `--rollback-on-failure` wins over `--atomic` in both CLI argument orders and emits one deprecation warning.
+- Verify stack-level Helm defaults, abstract inheritance, concrete overrides, explicit `false` values, and an explicitly empty `on_failure` list.
+- Verify `on_failure` replacement, clearing, append-mode accumulation, duplicate normalization, and canonical summary order.
+- Verify `--on-failure` replaces stack configuration, repeated flags accumulate invocation values, and `--on-failure=` clears inherited actions.
+- Reject non-list configuration, non-string list items, and unknown failure actions before chart acquisition.
 - Validate all wait strategies and reject unknown values.
 - Validate negative timeout and history values.
 - Validate `wait_for_jobs` against the effective strategy.
-- Verify rollback promotes `hookOnly` to `watcher` before action mapping.
+- Verify a `rollback` action promotes `hookOnly` to `watcher` before action mapping.
 - Verify every install, upgrade, and delete action field mapping.
 - Verify operation-inapplicable fields are omitted.
 - Verify only explicitly changed flags override stack configuration.
@@ -604,11 +595,11 @@ The release notes must call out the timeout migration schedule and the new ten-r
 
 - Stack-level `helm` lifecycle defaults reach every concrete Helm component.
 - Base-component lifecycle fields inherit through multiple levels.
-- Concrete scalar values override inherited values.
+- Concrete values override inherited values under the default `replace` list strategy.
+- `on_failure` honors `replace` and `append` list merge strategies and normalizes duplicates.
 - Timeout presence survives stack processing so omitted and explicit `0s` remain distinguishable.
-- Canonical fields override deprecated aliases after merging.
 - Lifecycle fields survive `describe component` and `describe stacks` processing.
-- JSON schema accepts valid fields and rejects unknown strategies or negative history values.
+- JSON schema accepts valid fields and rejects unknown failure actions, unknown wait strategies, or negative history values.
 
 ### Helm SDK Tests
 
@@ -666,7 +657,7 @@ The phases below are independently mergeable implementation slices, not a requir
 
 1. Add static errors for lifecycle decoding and validation.
 2. Add presence-aware input decoding and canonical `releaseLifecycle` resolution.
-3. Add wait strategy, staged timeout, history default, alias, and cross-field tests.
+3. Add failure-action, wait strategy, staged timeout, history default, wait-alias, and cross-field tests.
 
 ### Phase 2: Stack Processing and Schemas
 
@@ -694,7 +685,7 @@ The phases below are independently mergeable implementation slices, not a requir
 
 1. Add deterministic k3s lifecycle fixtures and tests.
 2. Update native Helm component and command documentation.
-3. Add migration notes for the staged five-minute timeout, ten-revision history default, and deprecated aliases.
+3. Add migration notes for the staged five-minute timeout and ten-revision history default.
 4. Document the DAG completion contract.
 
 ## Risks and Mitigations
