@@ -18,9 +18,8 @@ job:
 hooks:
   enabled: true
   fail: false
-  requiredConfigMap: ""
+  requiredDeployment: ""
   validateDependency: false
-  readyMarker: false
 extraConfigMap:
   enabled: false
 tpl:

@@ -154,13 +154,13 @@ commands:
       - command: >-
           if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-upgrade-only 2>&1); then echo "cleanup_on_fail left the upgrade-only ConfigMap"; exit 1;
           else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify cleanup_on_fail removal: $output"; exit 1;; esac; fi
-      # Dependency execution gates the dependent's pre-install hook on the
-      # foundation's post-readiness marker.
+      # Dependency execution gates the dependent render on the foundation's
+      # release-managed Deployment readiness state.
       - atmos helm apply --all -s dev --identity local-k3s --tags lifecycle-dag
       - atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get deployment dag-dependent
       - command: >-
           observed=$(atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get configmap dag-dependent-dependency-observed -o jsonpath='{.data.ready}');
-          if [ "$observed" != "true" ]; then echo "dependent did not observe the ready foundation marker: ready=$observed"; exit 1; fi
+          if [ "$observed" != "true" ]; then echo "dependent did not observe the ready foundation Deployment: ready=$observed"; exit 1; fi
       # Delete dry-run must leave the deployed release and resources intact.
       - atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
