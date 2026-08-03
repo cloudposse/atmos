@@ -35,7 +35,7 @@ this same lifecycle.
 ## Render (no cluster, no credentials)
 
 ```shell
-atmos helm template demo -s dev
+atmos helm template demo -s dev --dependency-update
 
 # Render the same chart through a declarative Helm repository.
 HELM_DEMO_REPO_URL=http://127.0.0.1:8080 atmos helm template demo-repo -s dev
