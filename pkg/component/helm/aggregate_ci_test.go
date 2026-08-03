@@ -39,6 +39,24 @@ func TestHelmBulkCICollectorRecordsAndSortsResults(t *testing.T) {
 	assert.Equal(t, "+ change", collector.resultSet().Results[1].Summary["diff"])
 }
 
+func TestHelmBulkCICollectorUsesProcessedComponentIdentity(t *testing.T) {
+	collector := newHelmBulkCICollector("plan")
+	info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "apps/app"}
+	collector.setSummary(&info, map[string]any{"diff": "+ change"}, nil)
+	collector.finish(&component.ExecutionContext{
+		Stack:               "dev",
+		Component:           "app",
+		ConfigAndStacksInfo: info,
+	}, time.Unix(1, 0), time.Unix(1, int64(time.Millisecond)), nil)
+
+	results := collector.resultSet().Results
+	require.Len(t, results, 1)
+	assert.Equal(t, "apps/app", results[0].Component)
+	assert.True(t, results[0].Processed)
+	assert.Equal(t, int64(1), results[0].DurationMS)
+	assert.Equal(t, "+ change", results[0].Summary["diff"])
+}
+
 func TestRunWithHooksBulkCollectorSuppressesPerComponentCI(t *testing.T) {
 	originalHooks := getHooks
 	originalApply := applyHelmRelease

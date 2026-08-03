@@ -71,7 +71,11 @@ func (c *helmBulkCICollector) finish(ctx *component.ExecutionContext, startedAt,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	result := c.ensure(ctx.Stack, ctx.Component)
+	componentName := ctx.ConfigAndStacksInfo.ComponentFromArg
+	if componentName == "" {
+		componentName = ctx.Component
+	}
+	result := c.ensure(ctx.Stack, componentName)
 	result.StartedAt = startedAt
 	result.FinishedAt = finishedAt
 	result.DurationMS = finishedAt.Sub(startedAt).Milliseconds()
