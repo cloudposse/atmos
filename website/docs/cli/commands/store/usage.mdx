@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos store` command group manages raw values in the store backends configured under `stores:` in `atmos.yaml` (AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, GitHub Actions). Unlike [`atmos secret`](/cli/commands/secret/usage), store values need no declaration in stack configuration — any key can be read or written directly by name against a named store. Deletion depends on the backend: Redis and Artifactory don't support it (see [`store delete`](/cli/commands/store/delete)). Values written here are readable via the [`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) YAML functions, and by a [`type: store`](/workflows/steps/type/store) workflow step.
+The `atmos store` command group manages raw values in store backends. You configure these backends under `stores:` in `atmos.yaml`. Supported backends are AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, and GitHub Actions. Unlike [`atmos secret`](/cli/commands/secret/usage), store values need no declaration in stack configuration. You can read or write any key directly by name against a named store. Deletion support depends on the backend. Redis and Artifactory do not support deletion (see [`store delete`](/cli/commands/store/delete)). You can read values written here with the [`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) YAML functions. You can also write values with a [`type: store`](/workflows/steps/type/store) workflow step.
 </Intro>
 
 <CastPlayer title="atmos store --help" src="/casts/screengrabs/atmos-store--help.cast" static chrome />
@@ -49,14 +49,14 @@ atmos store <subcommand> [flags]
          prefix: /atmos/app-metadata
    ```
 
-2. **Write and read values** with the CLI, scoped to a stack and component (or left global by omitting them):
+2. **Write and read values** with the CLI. Scope a value to a stack and a component, or omit them to make the value global:
 
    ```shell
    atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
    atmos store get app-metadata image_tag --stack=prod --component=ecs-service
    ```
 
-3. **Read a value back in stack configuration** with the [`!store`](/functions/yaml/store) YAML function, without going through the CLI at all:
+3. **Read a value in stack configuration** with the [`!store`](/functions/yaml/store) YAML function. This step does not use the CLI:
 
    ```yaml
    components:
@@ -66,41 +66,42 @@ atmos store <subcommand> [flags]
            image_tag: !store app-metadata prod ecs-service image_tag
    ```
 
-## Store CRUD vs. declared secrets
+## atmos store and atmos secret
 
-`atmos store` and [`atmos secret`](/cli/commands/secret/usage) both read and write values in store
-backends, but they solve different problems:
+Both `atmos store` and [`atmos secret`](/cli/commands/secret/usage) read and write values in
+store backends. But they solve different problems:
 
-- **`atmos store`** operates on **any** configured store, with no declaration required. It is a
-  direct CRUD interface to the backend: useful for pipeline metadata (an image tag, a build
-  number, a deployment marker) that doesn't belong in stack configuration as a formal secret.
-- **`atmos secret`** requires a secret to be **declared** under a component's `secrets.vars` before
-  it can be set or read, and only operates on stores marked `secret: true`. Use it for values that
-  should be tracked, scoped (`instance`/`stack`/`global`), and resolved via the `!secret` YAML
-  function.
+- **`atmos store`** works on any configured store. It needs no declaration. It gives you a
+  direct CRUD interface to the backend. Use it for pipeline metadata, such as an image tag, a
+  build number, or a deployment marker. This kind of data does not belong in stack configuration
+  as a formal secret.
+- **`atmos secret`** needs a declared secret. You must declare the secret under a component's
+  `secrets.vars` before you can set or read it. `atmos secret` only works on stores marked
+  `secret: true`. Use it for values that you must track and scope (`instance`, `stack`, or
+  `global`). `atmos secret` resolves these values with the `!secret` YAML function.
 
-Writing to a `secret: true` store with `atmos store set` (or the `type: store` workflow step) is
-allowed — for example, to write a generated password — but it bypasses `atmos secret`'s
-declaration and scope tracking. Prefer `atmos secret` when a value should be declared and tracked
-as a secret.
+You can write to a `secret: true` store with `atmos store set` or the `type: store` workflow
+step. Atmos allows this on purpose, for example to write a generated password. But this write
+skips `atmos secret`'s declaration and scope tracking. When a value must be declared and tracked
+as a secret, use `atmos secret` instead.
 
-## Stack and component scoping
+## Stack and Component Scope
 
-`--stack` and `--component` are **optional** for every `atmos store` subcommand. A key set with
-both scopes a value the same way [`atmos secret`](/cli/commands/secret/usage) does; a key set with
-neither is a store-global value:
+The `--stack` and `--component` flags are optional for every `atmos store` subcommand. If you
+set both flags, Atmos scopes the value the same way [`atmos secret`](/cli/commands/secret/usage)
+does. If you set neither flag, Atmos stores a global value:
 
 ```shell
 # Scoped to a stack and component
 atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
 
-# Store-global (no stack/component)
+# Store-global (no stack or component)
 atmos store set app-metadata shared_config '{"region":"us-east-1"}'
 ```
 
-`atmos store get`/`delete` must use the **same** `--stack`/`--component` (or lack thereof) as the
-`set` that wrote the value — the stack/component pair is part of how the underlying key is
-composed.
+`atmos store get` and `atmos store delete` must use the same `--stack` and `--component` flags
+as the `set` command that wrote the value. If `set` used no flags, `get` and `delete` must also
+use no flags. Atmos uses the stack and component to build the underlying key.
 
 ## See Also
 

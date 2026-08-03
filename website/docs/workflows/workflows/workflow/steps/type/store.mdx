@@ -7,7 +7,7 @@ slug: /workflows/steps/type/store
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `store` step type writes a value to a configured [store](/cli/configuration/stores) backend from a workflow, custom command, or hook — for example, build and push a Docker image, then write the resulting tag to a store so a later step, a different workflow, or another component entirely can read it back with the [`!store`](/functions/yaml/store)/[`!store.get`](/functions/yaml/store.get) YAML functions.
+The `store` step type writes a value to a configured [store](/cli/configuration/stores) backend. You can use this step in a workflow, a custom command, or a hook. For example, a workflow can build and push a Docker image, then write the resulting tag to a store. Later, a different step, a different workflow, or another component can read the tag back with the [`!store`](/functions/yaml/store) or [`!store.get`](/functions/yaml/store.get) YAML function.
 </Intro>
 
 ```yaml
@@ -40,7 +40,7 @@ workflows:
           component: ecs-service
 ```
 
-A later, unrelated component reads the value back in its stack configuration with no CLI or workflow step involved:
+A later, unrelated component can read the value back in its own stack configuration. This step needs no CLI command and no workflow step:
 
 ```yaml
 components:
@@ -50,7 +50,7 @@ components:
         image_tag: !store app-metadata prod ecs-service image_tag
 ```
 
-The step has no dedicated hook kind of its own — use the generic [`kind: step` hook bridge](/stacks/hooks) to run it after a component applies, for example:
+The `store` step has no dedicated hook kind of its own. Use the generic [`kind: step` hook bridge](/stacks/hooks) to run it after a component applies. For example:
 
 ```yaml
 hooks:
@@ -65,7 +65,7 @@ hooks:
 ```
 
 :::note
-Atmos also has an older, Terraform-output-specific `kind: store` hook (see [Manage lifecycle events with hooks](/stacks/hooks)) that predates this step type. They are unrelated — `kind:` selects the hook engine, `type:` (used here via the generic `kind: step` bridge) selects a workflow step — and both remain available.
+Atmos also has an older `kind: store` hook (see [Manage lifecycle events with hooks](/stacks/hooks)). That hook predates this step type and works only with Terraform output. The two features are unrelated. The `kind:` field selects the hook engine. The `type:` field selects a workflow step through the generic `kind: step` bridge. Atmos keeps both features available.
 :::
 
 ## Fields
@@ -74,37 +74,37 @@ All fields are read from `with:`.
 
 <dl>
   <dt>`store`</dt>
-  <dd>Required. The name of the configured store backend to write to (a key under `stores:` in `atmos.yaml`). Supports Go templates.</dd>
+  <dd>Required. The name of the configured store backend to write to. This name is a key under `stores:` in `atmos.yaml`. This field supports Go templates.</dd>
 
   <dt>`key`</dt>
-  <dd>Required. The key to write. Supports Go templates.</dd>
+  <dd>Required. The key to write. This field supports Go templates.</dd>
 
   <dt>`value`</dt>
-  <dd>Required. The value to write. Supports Go templates — this is how a step typically threads a prior step's result (e.g. `{{ .steps.push.metadata.digest }}`) into the store.</dd>
+  <dd>Required. The value to write. This field supports Go templates. Use a template to pass a prior step's result into the store, for example `{{ .steps.push.metadata.digest }}`.</dd>
 
   <dt>`stack`</dt>
-  <dd>Optional. The stack to scope the key to. Falls back to the workflow's `--stack` flag or `ATMOS_STACK`, then to empty (a store-global key). Supports Go templates.</dd>
+  <dd>Optional. The stack to scope the key to. If you omit this field, Atmos uses the workflow's `--stack` flag or the `ATMOS_STACK` variable. If neither is set, Atmos stores a global key. This field supports Go templates.</dd>
 
   <dt>`component`</dt>
-  <dd>Optional. The component to scope the key to. Falls back to the workflow's `--component` flag or `ATMOS_COMPONENT`, then to empty (a store-global key). Supports Go templates.</dd>
+  <dd>Optional. The component to scope the key to. If you omit this field, Atmos uses the workflow's `--component` flag or the `ATMOS_COMPONENT` variable. If neither is set, Atmos stores a global key. This field supports Go templates.</dd>
 
   <dt>`action`</dt>
-  <dd>`write` (default — may also be omitted). No other action is supported today.</dd>
+  <dd>The action to run. The only supported action is `write`, which is also the default. You can omit this field.</dd>
 </dl>
 
-## Writing to a secret store
+## Write to a Secret Store
 
-Writing to a store marked `secret: true` is allowed — for example, a step that generates a
-password and writes it straight to a secret backend. This differs from the read-side
-[`!store`](/functions/yaml/store)/[`!store.get`](/functions/yaml/store.get) functions, which refuse
-to read a `secret: true` store (use [`!secret`](/functions/yaml/secret) instead). A `store` step's
-write is not restricted the same way, but it is not risk-free: the written value is returned as
-[`{{ .steps.<name>.value }}`](#result) and is available to every later step in the workflow, which
-means it can be echoed, logged, or passed to a shell/output-producing step if a later step isn't
-careful with it. Treat that result as sensitive when the value is a secret, and avoid echoing,
-logging, or forwarding it to output-producing steps. Writing this way also bypasses
-[`atmos secret`](/cli/commands/secret/usage)'s declaration and scope tracking. Prefer declaring the
-value under `secrets.vars` and using `atmos secret set` when it should be tracked as a secret.
+You can write to a store marked `secret: true`. For example, a step can generate a password and
+write it straight to a secret backend. This behavior differs from the read-side
+[`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) functions. Those
+functions refuse to read a `secret: true` store; use [`!secret`](/functions/yaml/secret) instead.
+Atmos does not restrict a `store` step's write the same way. But this write is not risk-free.
+Atmos returns the written value as [`{{ .steps.<name>.value }}`](#result). Every later step in the
+workflow can access this value. A careless later step could echo it, log it, or pass it to a shell
+command or another output step. Treat this result as sensitive when the value is a secret. Do not
+echo, log, or forward it to an output step. Writing this way also skips
+[`atmos secret`](/cli/commands/secret/usage)'s declaration and scope tracking. When a value must be
+tracked as a secret, declare it under `secrets.vars` and use `atmos secret set` instead.
 
 ## Result
 

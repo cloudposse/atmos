@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-List the store backends configured under `stores:` in `atmos.yaml`, showing each one's kind, whether it is a secret backend, and which optional capabilities it supports (deletion, a local existence check). `list` shows configured backends, not the keys stored inside them — most backends don't support key enumeration.
+List the store backends configured under `stores:` in `atmos.yaml`. For each backend, this command shows its kind. It also shows whether the backend is a secret backend. It also shows which optional capabilities the backend supports, such as deletion or a local existence check. This command lists configured backends only. It does not list the keys stored inside them. Most backends do not support key enumeration.
 </Intro>
 
 <CastPlayer title="atmos store list --help" src="/casts/screengrabs/atmos-store-list--help.cast" static chrome />
@@ -42,7 +42,7 @@ atmos store list --format=json
 <dl>
   <dt>`--format` <em>(alias `-f`)</em></dt>
   <dd>
-    The output format: `table`, `json`, `yaml`, `csv`, or `tsv`. Defaults to a styled table on a TTY and plain/delimited output when piped.
+    The output format. Choices are `table`, `json`, `yaml`, `csv`, or `tsv`. On a terminal, the default is a styled table. When piped, the default is plain, delimited output.
   </dd>
 </dl>
 

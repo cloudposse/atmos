@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Remove a value from a configured store backend. Atmos prompts for confirmation before deleting unless you pass `--force`. Returns an error if the backend does not support deletion (for example, Redis or Artifactory). This command is also available under the `rm` and `unset` aliases.
+Remove a value from a configured store backend. Atmos asks you to confirm before it deletes the value. To skip this prompt, pass `--force`. If the backend does not support deletion, this command returns an error. Examples of backends that do not support deletion are Redis and Artifactory. You can also run this command with the `rm` or `unset` alias.
 </Intro>
 
 <CastPlayer title="atmos store delete --help" src="/casts/screengrabs/atmos-store-delete--help.cast" static chrome />
@@ -55,28 +55,28 @@ atmos store unset app-metadata image_tag --stack=prod --component=ecs-service
 <dl>
   <dt>`--stack` <em>(alias `-s`)</em></dt>
   <dd>
-    The Atmos stack the key was scoped to when set. **Optional** — must match what was used with `set`.
+    The Atmos stack used to scope the key when set. This flag is optional. It must match the value used with `set`.
 
     **Environment variable:** `ATMOS_STACK`
   </dd>
 
   <dt>`--component` <em>(alias `-c`)</em></dt>
   <dd>
-    The Atmos component the key was scoped to when set. **Optional** — must match what was used with `set`.
+    The Atmos component used to scope the key when set. This flag is optional. It must match the value used with `set`.
 
     **Environment variable:** `ATMOS_COMPONENT`
   </dd>
 
   <dt>`--identity` <em>(alias `-i`)</em></dt>
   <dd>
-    The identity to use when accessing the store backend.
+    The identity Atmos uses to access the store backend.
 
     **Environment variable:** `ATMOS_IDENTITY`
   </dd>
 
   <dt>`--force` <em>(alias `-f`)</em></dt>
   <dd>
-    Delete the value without prompting for confirmation.
+    Delete the value. Do not ask for confirmation.
   </dd>
 </dl>
 

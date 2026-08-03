@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Write a value to a configured store backend (create or update). The value can be supplied inline, piped in with `--stdin`, or entered through an interactive masked prompt when the command runs in a terminal with no `VALUE` given. No declaration is required — any `KEY` can be written to any configured store.
+Write a value to a configured store backend. This command creates a new value or updates an existing one. You can supply the value inline. You can also pipe the value in with `--stdin`. Or, if you run the command in a terminal with no `VALUE` argument, Atmos prompts you for the value and masks your input. You do not need to declare a key first. You can write any `KEY` to any configured store.
 </Intro>
 
 <CastPlayer title="atmos store set --help" src="/casts/screengrabs/atmos-store-set--help.cast" static chrome />
@@ -44,7 +44,7 @@ atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ec
 <dl>
   <dt>`STORE`</dt>
   <dd>
-    The name of the configured store backend to write to (a key under `stores:` in `atmos.yaml`).
+    The name of the configured store backend. This name is a key under `stores:` in `atmos.yaml`.
   </dd>
 
   <dt>`KEY`</dt>
@@ -54,7 +54,7 @@ atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ec
 
   <dt>`VALUE`</dt>
   <dd>
-    The value to write. Optional — when omitted, the value is read from `--stdin` or from an interactive masked prompt.
+    The value to write. This argument is optional. If you omit it, Atmos reads the value from `--stdin` or from an interactive masked prompt.
   </dd>
 </dl>
 
@@ -63,28 +63,28 @@ atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ec
 <dl>
   <dt>`--stack` <em>(alias `-s`)</em></dt>
   <dd>
-    The Atmos stack to scope the key to. **Optional** — omit for a store-global key.
+    The Atmos stack to scope the key to. This flag is optional. Omit it to store a global key.
 
     **Environment variable:** `ATMOS_STACK`
   </dd>
 
   <dt>`--component` <em>(alias `-c`)</em></dt>
   <dd>
-    The Atmos component to scope the key to. **Optional** — omit for a store-global key.
+    The Atmos component to scope the key to. This flag is optional. Omit it to store a global key.
 
     **Environment variable:** `ATMOS_COMPONENT`
   </dd>
 
   <dt>`--identity` <em>(alias `-i`)</em></dt>
   <dd>
-    The identity to use when accessing the store backend.
+    The identity Atmos uses to access the store backend.
 
     **Environment variable:** `ATMOS_IDENTITY`
   </dd>
 
   <dt>`--stdin`</dt>
   <dd>
-    Read the value from standard input. Useful for piping multi-line values such as JSON manifests.
+    Read the value from standard input. Use this flag to pipe multi-line values, such as JSON manifests.
   </dd>
 </dl>
 

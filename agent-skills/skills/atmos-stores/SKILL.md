@@ -324,21 +324,22 @@ components:
 
 Atmos merges these into a complete hook definition at resolution time.
 
-## Writing to Stores with the CLI or a Workflow Step
+## Write to Stores with the CLI or a Workflow Step
 
-For raw CRUD access to any configured store -- not just Terraform outputs -- use the `atmos store`
-CLI command family or the `type: store` workflow step. Neither requires a declaration; they operate
-directly on any store configured under `stores:` by name.
+For raw CRUD access to any configured store, use the `atmos store` CLI command family or the
+`type: store` workflow step. This access works for any store, not only Terraform outputs. Neither
+method requires a declaration. Both operate directly on any store configured under `stores:`, by
+name.
 
 ```shell
-# CLI: set/get/delete/list, scoped to a stack and component (or global if omitted)
+# CLI: set, get, delete, list -- scope to a stack and component, or omit for a global value
 atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
 atmos store get app-metadata image_tag --stack=prod --component=ecs-service
 atmos store list
 ```
 
 ```yaml
-# Workflow/custom-command/hook step: write a value (e.g. an image tag from a build step)
+# Workflow, custom-command, or hook step: write a value, for example an image tag from a build step
 - name: record-tag
   type: store
   action: write
@@ -350,10 +351,11 @@ atmos store list
     component: ecs-service
 ```
 
-Writing to a `secret: true` store this way is allowed (e.g. writing a generated password), but it
-bypasses the `atmos secret` declaration/scope system -- prefer `secrets.vars` + `atmos secret set`
-when a value should be tracked as a formal secret. See `atmos-secrets` for that system, and the
-`atmos-steps` skill / `/workflows/steps/type/store` docs for the step type.
+Atmos allows you to write to a `secret: true` store this way, for example to write a generated
+password. But this write skips the `atmos secret` declaration and scope system. When a value must
+be tracked as a formal secret, use `secrets.vars` and `atmos secret set` instead. See the
+`atmos-secrets` skill for that system. See the `atmos-steps` skill and the
+`/workflows/steps/type/store` docs for the step type.
 
 ## Cross-Account and Cross-Region Access
 

@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Retrieve a value from a configured store backend, scoped to `--stack`/`--component` the same way [`store set`](/cli/commands/store/set) writes it. An omitted `--stack`/`--component` reads back a value that was set without them.
+Retrieve a value from a configured store backend. Scope the value with `--stack` and `--component`, the same way [`store set`](/cli/commands/store/set) writes it. If you omit `--stack` and `--component`, Atmos reads back a value that was set without them.
 </Intro>
 
 <CastPlayer title="atmos store get --help" src="/casts/screengrabs/atmos-store-get--help.cast" static chrome />
@@ -61,33 +61,33 @@ atmos store get app-metadata image_tag --stack=prod --component=ecs-service --ra
 <dl>
   <dt>`--stack` <em>(alias `-s`)</em></dt>
   <dd>
-    The Atmos stack the key was scoped to when set. **Optional** — must match what was used with `set`.
+    The Atmos stack used to scope the key when set. This flag is optional. It must match the value used with `set`.
 
     **Environment variable:** `ATMOS_STACK`
   </dd>
 
   <dt>`--component` <em>(alias `-c`)</em></dt>
   <dd>
-    The Atmos component the key was scoped to when set. **Optional** — must match what was used with `set`.
+    The Atmos component used to scope the key when set. This flag is optional. It must match the value used with `set`.
 
     **Environment variable:** `ATMOS_COMPONENT`
   </dd>
 
   <dt>`--identity` <em>(alias `-i`)</em></dt>
   <dd>
-    The identity to use when accessing the store backend.
+    The identity Atmos uses to access the store backend.
 
     **Environment variable:** `ATMOS_IDENTITY`
   </dd>
 
   <dt>`--format`</dt>
   <dd>
-    The output format: `text`, `json`, or `env`. Defaults to `text`.
+    The output format. Choices are `text`, `json`, or `env`. The default is `text`.
   </dd>
 
   <dt>`--raw` <em>(alias `-r`)</em></dt>
   <dd>
-    Print the raw value with **no trailing newline** (text only). Ideal for piping into another command or redirecting to a file (for example, `--raw > image_tag.txt`, or on macOS `--raw | pbcopy` for the clipboard). Cannot be combined with `--format=json` or `--format=env`.
+    Print the raw value with no trailing newline. This flag works only with the `text` format. Use it to pipe the value into another command. You can also redirect it to a file, for example `--raw > image_tag.txt`. On macOS, you can pipe it to the clipboard with `--raw | pbcopy`. You cannot combine this flag with `--format=json` or `--format=env`.
   </dd>
 </dl>
 
