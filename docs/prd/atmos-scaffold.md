@@ -51,10 +51,10 @@ and `pkg/generator/` for the source of truth on current behavior.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
-- 🚧 `spec.files[].for_each:` — dynamic file generation over an unbounded/unknown
+- 🚧 `spec.files[].matrix:` — dynamic file generation over an unbounded/unknown
   answer set (static per-file `when:`, above, covers a fixed/enumerable option
   set). Proposed design below, not yet implemented or reviewed/approved — see
-  "Dynamic File Generation (`for_each`)" for the current proposal.
+  "Dynamic File Generation (`matrix`)" for the current proposal.
 - ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
   threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
 
@@ -427,27 +427,24 @@ supports the same `when:` mechanism to gate whether a specific auto-discovered f
 generated. Compound conditions use CEL's `&&`/`||`/`!` (the `{all:/any:/not:}` map form
 pkg/condition also parses is not accepted by the scaffold JSON Schema).
 
-### Dynamic File Generation (`for_each`) — Proposal
+### Dynamic File Generation (`matrix`) — Proposal
 
 **Status**: Proposed design, not yet implemented or approved (🚧, see the status
 summary at the top of this document). One possible shape for closing the gap tracked
 in "Future Enhancements" below — a starting point for discussion, not a committed
-plan.
+plan. It reuses the exact axis shape the workflow `matrix:` step already has
+(`pkg/schema.WorkflowStep.Matrix`, see the `atmos-workflows` skill /
+`website/docs/workflows/workflows/workflow/steps/type/matrix.mdx`), so template
+authors reuse a shape they already know, and CEL `when:` stays the only place any
+filtering logic lives.
 
 `spec.files[].when:` only gates a *statically discovered, fixed-count* file — it can
-skip a file, never multiply one. Two gaps follow from that:
-
-1. **Unbounded answers.** The only list-producing prompt type, `multiselect`, requires
-   a static, template-author-declared `options:` list. There's no way to say "one file
-   per item the user typed freely."
-2. **Nested/structured answers.** Answers aren't always flat. Some templates need one
-   file per element of a *nested* structured answer — e.g. one file per environment
-   within each region of a pre-seeded region-to-environments mapping — which is a
-   cross-product, not a flat list. A common workaround for this today is an
-   `after.scaffold.generate` shell hook that substitutes tokens into copies of static
-   template files, iterating the structured answer inside the hook's own script. This
-   proposal aims to let that kind of hook be replaced by a declarative `for_each:`
-   instead.
+skip a file, never multiply one. The only list-producing prompt type, `multiselect`,
+requires a static, template-author-declared `options:` list, so there's no way to say
+"one file per item the user selected." A common workaround today is an
+`after.scaffold.generate` shell hook that substitutes tokens into copies of static
+template files, iterating some answer inside the hook's own script. This proposal
+aims to let that kind of hook be replaced by a declarative `matrix:` instead.
 
 **Proposed shape**: everything stays under the existing `spec.files[]` overlay, no new
 top-level `spec` key. `path:` keeps meaning exactly what it means today (the file's
@@ -455,97 +452,99 @@ on-disk discovered path); two new, optional keys change what happens once an ent
 matched:
 
 - **`target:`** — a Go-template string overriding the rendered output path. Without
-  `for_each:`, it's optional and rendered once, exactly like `path:` is rendered
+  `matrix:`, it's optional and rendered once, exactly like `path:` is rendered
   today — a cleaner way to do dynamic naming than embedding template syntax in a
-  physical filename. With `for_each:`, it's required (a single fixed `path:` can't
+  physical filename. With `matrix:`, it's required (a single fixed `path:` can't
   serve as the output for more than one generated file) and rendered once per
-  resolved item.
-- **`for_each:`** — a list of steps, each with:
-  - `as:` — the name this step's bound item is reachable under.
-  - `in:` — a dot-path to the value to iterate, not an expression. The **first**
-    step reads `answers.<path>` — a root reference into the same answers map
-    `when:` reads (e.g. `when: "answers.enable_monitoring == true"`). Any **later,
-    chained** step instead reads directly off the *previous* step's `as:` binding,
-    unprefixed (e.g. `in: region.value.environments`), since that binding is a loop
-    variable `for_each` itself introduces, not part of `answers`.
-  - `split:` (optional) — a delimiter, only consulted when the resolved value is a
-    plain string (free text). A value that's already a list or a map (a
-    `multiselect` answer, or a structured value supplied through `--set` or a
-    template-declared preset) needs no `split:` at all — `in:` is a single generic
-    key for all three source shapes, so a template author never has to know in
-    advance whether the referenced answer happens to be a list or a map.
+  resolved combination.
+- **`matrix:`** — a map of axis name to a list of values, the same shape the workflow
+  `matrix:` step already uses. Declaring more than one axis produces their full
+  Cartesian product, expanded in a sorted, deterministic order per axis — the same
+  behavior the workflow step's own expansion has. Each axis's list of values is
+  either a literal YAML list, author-declared directly in `scaffold.yaml` (e.g.
+  `region: [us-east-1, us-west-2]`), or a dot-path into `answers.*` referencing an
+  already list-shaped answer (e.g. `environment: answers.environments`, where
+  `environments` is a `multiselect` field, or a structured value supplied through
+  `--set` or a template-declared preset).
 
-  Each step's bound item is available directly on the template root as `.<as>.key`
-  / `.<as>.value` / `.<as>.index` — e.g. `.region.key`, `.environment.value` — in
-  both `target:` and the file's own content.
+  Invalid combinations (an axis pairing that doesn't apply, e.g. a region a given
+  environment doesn't use) are pruned the same way a single file is skipped today —
+  with the entry's own `when:`, evaluated once per resolved combination.
 
-Flat, unbounded free-text field:
+**Context availability**: a resolved combination is exposed as `.matrix.<axis>`
+(matching the workflow step's own `{{ .matrix.os }}` namespacing) everywhere a
+`spec.files[]` entry can use it, not just `target:`:
+- **`target:`** — Go template.
+- **`when:`** — the same CEL engine `spec.files[].when:` already uses to gate a
+  single file gets a `matrix` variable alongside the existing `answers` one,
+  referenced unprefixed the same way `answers.<field>` is (e.g.
+  `when: "matrix.region in answers.regions_by_env[matrix.environment]"`).
+  Concretely, this means adding `matrix` to `conditionCELEnv()`/`condition.Context`
+  (`pkg/condition/cel.go`) the same way `answers` was added for scaffold — no
+  CEL-visible `matrix` fact exists in the engine today.
+- **The file's own content** — the template body being rendered receives
+  `.matrix.<axis>` on the same root data map as `.Config.*`/`answers.*`, so a
+  generated file can read and branch on its own combination's values, not just be
+  named by them.
+
+Single axis, sourced from an already list-shaped answer:
 
 ```yaml
 spec:
   fields:
     - name: environments
-      type: input
-      required: true
+      type: multiselect
+      options: [dev, staging, production]
   files:
     - path: stacks/deploy/environment.yaml
-      target: "stacks/deploy/{{ .env.value }}.yaml"
-      for_each:
-        - as: env
-          in: answers.environments
-          split: ","        # only needed because `environments` is plain text
+      target: "stacks/deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.environments
 ```
 
-Nested, structured answer (illustrative — one file per environment within each
-region):
+Multiple axes, with `when:` pruning combinations that don't apply — three
+environments, only `production` spanning more than one region:
 
 ```yaml
 spec:
   files:
     - path: templates/deploy.yaml
-      target: "deploy/{{ .region.key }}/{{ .environment.key }}.yaml"
-      for_each:
-        - as: region
-          in: answers.regions                 # map: region name -> { environments: [...] }
-        - as: environment
-          in: region.value.environments       # unprefixed: resolves against the `region` binding
+      target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
+      matrix:
+        environment: [dev, staging, production]
+        region: [us-east-1, us-west-2]
+      when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
-A structured answer like `regions` above can't be declared under `spec.fields:`
-(only free text is prompt-able) — it would reach `answers` through a
-template-declared preset or a non-interactive `--set`-adjacent channel instead.
-`for_each` doesn't care how a value got into the answers map, only what type it
-resolves to.
-
 **Behavior**:
-- Iterating a map source is stable and deterministic (sorted by key), so
+- Expanding the Cartesian product is stable and deterministic (sorted per axis), so
   regenerating the same answers produces the same file set, in the same order,
   every time.
-- A source with zero items generates zero files for that entry, silently — not an
-  error, the same as an unmatched `when:` today.
+- A `when:` that prunes every combination for an entry generates zero files for
+  that entry, silently — not an error, the same as an unmatched `when:` today.
 - Everything that already works for a single generated file — `--dry-run` labels,
   `--update`'s 3-way merge, and path-traversal/symlink protection — applies per
-  iteration too, since under the hood each iteration is still just one generated
-  file.
-- Two files — iterated or not — rendering to the same output path is a hard error,
-  never a silent overwrite. (A `for_each` entry whose `target:` doesn't actually vary
-  per item, e.g. forgetting to reference `.<as>.value`, would trip this immediately.)
+  combination too, since under the hood each combination is still just one
+  generated file.
+- Two files — matrixed or not — rendering to the same output path is a hard error,
+  never a silent overwrite. (A `matrix` entry whose `target:` doesn't actually vary
+  per combination, e.g. forgetting to reference one of its axes, would trip this
+  immediately.)
 
 **Validation**: checkable at load time, without needing real answers, so
-`atmos scaffold validate` would catch these before `generate` ever runs: `target:` is
-required whenever `for_each:` is set; each step's `as:`/`in:` must be non-empty; `as:`
-names must be unique within one `for_each:` list.
+`atmos scaffold validate` would catch these before `generate` ever runs: `target:`
+is required whenever `matrix:` is set; every axis needs a non-empty name and a
+non-empty value list (mirroring `validateControlMatrix`'s checks on the workflow
+step).
 
 **Open questions / non-goals for a first cut**:
-- No expressions in `for_each` sources — `in:` stays a plain dot-path. Filtering or
-  transforming a source before iterating (e.g. "exclude prod") could be an additive
-  follow-up, not a first-cut requirement.
-- No directory-level `for_each` (stamping a whole per-item subtree from one entry).
-  The `path`/`target` split this proposal is built around should generalize to that
-  later, but isn't part of the first cut.
-- No changes to field types or the interactive prompt form. Free-text fields already
-  yield a plain string answer for `split:` to read; structured (list/map) answers
-  already reach the merged-answers map through non-interactive channels.
+- Turning a plain, delimited free-text answer into a list-shaped axis source (e.g.
+  via a `splitList`-style Sprig/Gomplate function applied ahead of the matrix) is
+  not part of this draft — axis sources here are already list-shaped.
+- No directory-level `matrix` (stamping a whole per-combination subtree from one
+  entry). The `path`/`target` split this proposal is built around should generalize
+  to that later, but isn't part of the first cut.
+- No changes to field types or the interactive prompt form.
 
 ### Update Flow (with 3-Way Merge)
 
@@ -964,8 +963,8 @@ Location: `website/docs/cli/commands/scaffold.mdx`
   (`spec.fields[].when:`, see "Template Structure" above)
 - ✅ **Shipped**: regex validation (`spec.fields[].validation.pattern`/`message`)
 - Dynamic default values (computed from other inputs) — still future
-- 🚧 `spec.files[].for_each:` — proposed, not yet implemented; see "Dynamic File
-  Generation (`for_each`)" above for the current design proposal
+- 🚧 `spec.files[].matrix:` — proposed, not yet implemented; see "Dynamic File
+  Generation (`matrix`)" above for the current design proposal
 
 ### IDE Integration
 
