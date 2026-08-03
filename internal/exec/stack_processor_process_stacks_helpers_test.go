@@ -679,19 +679,19 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 
 func TestExtractHelmLifecycleSections(t *testing.T) {
 	section := map[string]any{
-		cfg.ChartSectionName:                 "charts/demo-release",
-		cfg.ValuesSectionName:                map[string]any{"cluster": "shared"},
-		cfg.RepositoriesSectionName:          []any{map[string]any{"name": "internal"}},
-		cfg.HelmRollbackOnFailureSectionName: true,
-		cfg.HelmWaitStrategySectionName:      "watcher",
-		cfg.HelmTimeoutSectionName:           "30m",
-		cfg.HelmMaxHistorySectionName:        10,
-		"unrecognized":                       "ignored",
+		cfg.ChartSectionName:            "charts/demo-release",
+		cfg.ValuesSectionName:           map[string]any{"cluster": "shared"},
+		cfg.RepositoriesSectionName:     []any{map[string]any{"name": "internal"}},
+		cfg.HelmOnFailureSectionName:    []any{"rollback"},
+		cfg.HelmWaitStrategySectionName: "watcher",
+		cfg.HelmTimeoutSectionName:      "30m",
+		cfg.HelmMaxHistorySectionName:   10,
+		"unrecognized":                  "ignored",
 	}
 
 	component := extractHelmComponentSection(section)
 	assert.Equal(t, "charts/demo-release", component[cfg.ChartSectionName])
-	assert.Equal(t, true, component[cfg.HelmRollbackOnFailureSectionName])
+	assert.Equal(t, []any{"rollback"}, component[cfg.HelmOnFailureSectionName])
 	assert.Equal(t, "watcher", component[cfg.HelmWaitStrategySectionName])
 	assert.Equal(t, "30m", component[cfg.HelmTimeoutSectionName])
 	assert.Equal(t, 10, component[cfg.HelmMaxHistorySectionName])
@@ -701,7 +701,7 @@ func TestExtractHelmLifecycleSections(t *testing.T) {
 	assert.NotContains(t, defaults, cfg.ChartSectionName)
 	assert.Equal(t, map[string]any{"cluster": "shared"}, defaults[cfg.ValuesSectionName])
 	assert.Equal(t, []any{map[string]any{"name": "internal"}}, defaults[cfg.RepositoriesSectionName])
-	assert.Equal(t, true, defaults[cfg.HelmRollbackOnFailureSectionName])
+	assert.Equal(t, []any{"rollback"}, defaults[cfg.HelmOnFailureSectionName])
 	assert.Equal(t, "watcher", defaults[cfg.HelmWaitStrategySectionName])
 	assert.Equal(t, "30m", defaults[cfg.HelmTimeoutSectionName])
 	assert.Equal(t, 10, defaults[cfg.HelmMaxHistorySectionName])
