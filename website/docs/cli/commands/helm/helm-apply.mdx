@@ -30,11 +30,10 @@ Apply an explicit production readiness and recovery policy:
 
 ```shell
 atmos helm apply monitoring -s plat-ue2-dev \
-  --rollback-on-failure \
+  --on-failure=rollback,cleanup \
   --wait=watcher \
   --wait-for-jobs \
   --timeout=30m \
-  --cleanup-on-fail \
   --history-max=10
 ```
 
@@ -77,8 +76,8 @@ stack/component order and includes details for failures.
   <dt>`--dry-run` <em>(optional)</em></dt>
   <dd>Preview the install or upgrade without persisting release state or creating Kubernetes resources.</dd>
 
-  <dt>`--rollback-on-failure` <em>(optional)</em></dt>
-  <dd>Uninstall a failed first install or roll a failed upgrade back. Enabling it promotes the default wait strategy to `watcher`. The deprecated alias is `--atomic`.</dd>
+  <dt>`--on-failure` <em>(optional)</em></dt>
+  <dd>Comma-separated failure actions: `rollback`, `cleanup`, or both. The flag replaces the component policy for this invocation; `--on-failure=` clears inherited actions.</dd>
 
   <dt>`--wait[=strategy]` <em>(optional)</em></dt>
   <dd>Use `watcher`, `hookOnly`, or `legacy`. Passing `--wait` without a value selects `watcher`. Boolean values remain accepted temporarily but are deprecated.</dd>
@@ -88,9 +87,6 @@ stack/component order and includes details for failures.
 
   <dt>`--timeout` <em>(optional)</em></dt>
   <dd>Helm release-operation timeout, such as `10m` or `1h`. `0s` is explicitly unbounded.</dd>
-
-  <dt>`--cleanup-on-fail` <em>(optional)</em></dt>
-  <dd>Delete resources newly created by a failed upgrade.</dd>
 
   <dt>`--history-max` <em>(optional)</em></dt>
   <dd>Maximum retained release revisions. Defaults to `10`; `0` means unlimited.</dd>

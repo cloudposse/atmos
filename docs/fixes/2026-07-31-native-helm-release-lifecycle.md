@@ -16,7 +16,7 @@ Helm 4 does not expose a context-aware uninstall request.
   `timeout: 0s` explicitly to keep unbounded behavior without the warning.
 - An omitted `max_history` now retains ten upgrade revisions, matching the Helm
   CLI. Configure `max_history: 0` to retain unlimited history.
-- `atomic` is deprecated in favor of `rollback_on_failure`.
+- Failure recovery uses `on_failure: [rollback, cleanup]` and the matching `--on-failure` list flag.
 - Boolean `--wait=true` and `--wait=false` remain accepted temporarily; use
   `--wait=watcher` and `--wait=hookOnly`.
 - Explicit lifecycle flags cannot be combined with a non-Kubernetes provision

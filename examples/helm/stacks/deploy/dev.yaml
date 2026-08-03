@@ -26,8 +26,7 @@ components:
       chart: "."
       namespace: demo
       wait_strategy: legacy
-      rollback_on_failure: true
-      cleanup_on_fail: true
+      on_failure: [rollback, cleanup]
       # Atmos `values:` are the Helm chart values, merged via Atmos inheritance.
       values:
         replicaCount: 2
@@ -96,7 +95,7 @@ components:
       namespace: demo-timeout
       wait_strategy: watcher
       timeout: 2s
-      rollback_on_failure: true
+      on_failure: [rollback]
       values:
         deployment:
           readinessDelaySeconds: 20
@@ -110,7 +109,7 @@ components:
       name: demo-install-fail
       namespace: demo-install-fail
       wait_strategy: legacy
-      rollback_on_failure: true
+      on_failure: [rollback]
       values:
         hooks:
           fail: true
@@ -126,8 +125,7 @@ components:
       name: demo
       namespace: demo
       wait_strategy: legacy
-      rollback_on_failure: true
-      cleanup_on_fail: true
+      on_failure: [rollback, cleanup]
       values:
         hooks:
           fail: true
