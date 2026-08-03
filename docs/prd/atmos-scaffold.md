@@ -441,10 +441,8 @@ filtering logic lives.
 `spec.files[].when:` only gates a *statically discovered, fixed-count* file — it can
 skip a file, never multiply one. The only list-producing prompt type, `multiselect`,
 requires a static, template-author-declared `options:` list, so there's no way to say
-"one file per item the user selected." A common workaround today is an
-`after.scaffold.generate` shell hook that substitutes tokens into copies of static
-template files, iterating some answer inside the hook's own script. This proposal
-aims to let that kind of hook be replaced by a declarative `matrix:` instead.
+"one file per item the user selected." This proposal introduces a declarative
+`matrix:` to close that gap.
 
 **Proposed shape**: everything stays under the existing `spec.files[]` overlay, no new
 top-level `spec` key. `path:` keeps meaning exactly what it means today (the file's
