@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/google/go-cmp/cmp"
@@ -74,6 +75,18 @@ func (m *MockGSMClient) DeleteSecret(ctx context.Context, req *secretmanagerpb.D
 func (m *MockGSMClient) Close() error {
 	args := m.Called()
 	return args.Error(0)
+}
+
+// ListSecrets satisfies GSMClient for compilation. The secretmanager.SecretIterator's paging
+// state is unexported and can only be built by the real SDK client, so this cannot return a
+// working iterator from a test double -- see gsmSecretNames (tested directly) for the
+// unit-testable half of GSMStore.Keys.
+func (m *MockGSMClient) ListSecrets(ctx context.Context, req *secretmanagerpb.ListSecretsRequest, opts ...gax.CallOption) *secretmanager.SecretIterator {
+	args := m.Called(mock.Anything, req)
+	if args.Get(0) == nil {
+		return nil
+	}
+	return args.Get(0).(*secretmanager.SecretIterator)
 }
 
 // newGSMStoreWithClient creates a new GSMStore with a provided client (test helper).
@@ -1116,4 +1129,50 @@ func TestBuildGSMStore_ParseError(t *testing.T) {
 		Options: map[string]interface{}{"project_id": []string{"x"}},
 	})
 	assert.ErrorIs(t, err, storepkg.ErrParseGSMOptions)
+}
+
+// TestGsmSecretNames covers the unit-testable half of GSMStore.Keys: secretmanager.SecretIterator
+// cannot be constructed outside its own package (its paging state is unexported), so the
+// prefix-verification and stripping logic lives in this pure function instead.
+func TestGsmSecretNames(t *testing.T) {
+	tests := []struct {
+		name       string
+		secretName string
+		prefix     string
+		want       []string
+	}{
+		{
+			name:       "matches prefix",
+			secretName: "projects/p/secrets/atmos_prod_vpc_image_tag",
+			prefix:     "atmos_prod_vpc",
+			want:       []string{"image_tag"},
+		},
+		{
+			name:       "does not match prefix",
+			secretName: "projects/p/secrets/atmos_dev_vpc_image_tag",
+			prefix:     "atmos_prod_vpc",
+			want:       nil,
+		},
+		{
+			name:       "empty prefix matches everything",
+			secretName: "projects/p/secrets/anything",
+			prefix:     "",
+			want:       []string{"anything"},
+		},
+		{
+			name: "GSM filter is substring, not prefix -- verified client-side",
+			// "atmos_prod_vpc" is a substring of this name but not a real prefix match.
+			secretName: "projects/p/secrets/not_atmos_prod_vpc_image_tag",
+			prefix:     "atmos_prod_vpc",
+			want:       nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			secret := &secretmanagerpb.Secret{Name: tt.secretName}
+			got := gsmSecretNames(secret, tt.prefix)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

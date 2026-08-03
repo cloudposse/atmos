@@ -49,6 +49,7 @@ func init() {
 	storeCmd.AddCommand(getCmd)
 	storeCmd.AddCommand(deleteCmd)
 	storeCmd.AddCommand(listCmd)
+	storeCmd.AddCommand(keysCmd)
 
 	internal.Register(&StoreCommandProvider{})
 }

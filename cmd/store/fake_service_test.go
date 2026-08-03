@@ -22,6 +22,11 @@ type deleteCall struct {
 	name, stack, component, key string
 }
 
+// keysCall records a single Keys invocation on the fake service.
+type keysCall struct {
+	name, stack, component string
+}
+
 // fakeStoreService is a configurable, call-recording implementation of storeService used to drive
 // the store command handlers without constructing real config/auth/backends.
 type fakeStoreService struct {
@@ -29,15 +34,18 @@ type fakeStoreService struct {
 	getValues map[string]any
 	getErrs   map[string]error
 	descs     []pstore.Descriptor
+	keys      []string
 
 	// Configurable errors.
 	setErr    error
 	deleteErr error
+	keysErr   error
 
 	// Recorded calls.
 	setCalls    []setCall
 	getCalls    []getCall
 	deleteCalls []deleteCall
+	keysCalls   []keysCall
 }
 
 // newFakeStoreService returns a fake with empty maps ready for configuration.
@@ -64,6 +72,14 @@ func (f *fakeStoreService) Get(name, stack, component, key string) (any, error) 
 func (f *fakeStoreService) Delete(name, stack, component, key string) error {
 	f.deleteCalls = append(f.deleteCalls, deleteCall{name: name, stack: stack, component: component, key: key})
 	return f.deleteErr
+}
+
+func (f *fakeStoreService) Keys(name, stack, component string) ([]string, error) {
+	f.keysCalls = append(f.keysCalls, keysCall{name: name, stack: stack, component: component})
+	if f.keysErr != nil {
+		return nil, f.keysErr
+	}
+	return f.keys, nil
 }
 
 func (f *fakeStoreService) List() []pstore.Descriptor { return f.descs }

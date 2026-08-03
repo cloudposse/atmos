@@ -1,0 +1,88 @@
+---
+title: atmos store keys
+sidebar_label: keys
+sidebar_class_name: command
+id: keys
+description: List the keys stored under a stack/component scope in a store.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+List the keys in a configured store backend. Scope the listing with `--stack` and `--component`, the same way [`store set`](/cli/commands/store/set) writes a key. If you omit `--stack` and `--component`, this command lists a store-global scope. Only backends that support key enumeration can run this command. Run [`atmos store list`](/cli/commands/store/list) to check the `Listable` column for each configured store.
+</Intro>
+
+<CastPlayer title="atmos store keys --help" src="/casts/screengrabs/atmos-store-keys--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos store keys STORE [flags]
+```
+
+## Examples
+
+```shell
+# List the keys scoped to a stack and component
+atmos store keys app-metadata --stack=prod --component=ecs-service
+
+# List store-global keys (no --stack/--component)
+atmos store keys app-metadata
+
+# Output as JSON
+atmos store keys app-metadata --stack=prod --component=ecs-service --format=json
+```
+
+## Arguments
+
+<dl>
+  <dt>`STORE`</dt>
+  <dd>
+    The name of the configured store backend to list keys from.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` <em>(alias `-s`)</em></dt>
+  <dd>
+    The Atmos stack used to scope the listing. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_STACK`
+  </dd>
+
+  <dt>`--component` <em>(alias `-c`)</em></dt>
+  <dd>
+    The Atmos component used to scope the listing. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_COMPONENT`
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    The identity Atmos uses to access the store backend.
+
+    **Environment variable:** `ATMOS_IDENTITY`
+  </dd>
+
+  <dt>`--format`</dt>
+  <dd>
+    The output format. Choices are `text` or `json`. The default is `text`, one key per line.
+  </dd>
+</dl>
+
+## Backend Support
+
+Not every store backend can enumerate its keys. 1Password cannot list keys, because its references
+are opaque and do not follow a predictable naming pattern. The default system keychain backend
+cannot list keys either, because the underlying OS keychain APIs do not support enumeration. The
+file and memory keychain backends do support it.
+
+Every other supported backend supports key enumeration: AWS SSM, AWS Secrets Manager, HashiCorp
+Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, and GitHub Actions.
+
+## See Also
+
+- [atmos store](/cli/commands/store/usage) — Overview of the store command group
+- [`atmos store list`](/cli/commands/store/list) — Check the `Listable` column for a store

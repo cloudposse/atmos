@@ -11,6 +11,7 @@ type storeService interface {
 	Set(name, stack, component, key string, value any) error
 	Get(name, stack, component, key string) (any, error)
 	Delete(name, stack, component, key string) error
+	Keys(name, stack, component string) ([]string, error)
 	List() []pstore.Descriptor
 }
 

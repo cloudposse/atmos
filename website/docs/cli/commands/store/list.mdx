@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-List the store backends configured under `stores:` in `atmos.yaml`. For each backend, this command shows its kind. It also shows whether the backend is a secret backend. It also shows which optional capabilities the backend supports, such as deletion or a local existence check. This command lists configured backends only. It does not list the keys stored inside them. Most backends do not support key enumeration.
+List the store backends configured under `stores:` in `atmos.yaml`. For each backend, this command shows its kind. It also shows whether the backend is a secret backend. It also shows which optional capabilities the backend supports, such as deletion, key enumeration, or a local existence check. This command lists configured backends only. To list the keys stored inside a backend, run [`atmos store keys`](/cli/commands/store/keys) — check the `Listable` column here first, because not every backend supports key enumeration.
 </Intro>
 
 <CastPlayer title="atmos store list --help" src="/casts/screengrabs/atmos-store-list--help.cast" static chrome />
@@ -49,4 +49,5 @@ atmos store list --format=json
 ## See Also
 
 - [atmos store](/cli/commands/store/usage) — Overview of the store command group
+- [`atmos store keys`](/cli/commands/store/keys) — List the keys stored inside a backend
 - [Stores configuration](/cli/configuration/stores)

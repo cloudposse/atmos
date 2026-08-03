@@ -15,6 +15,7 @@ type Descriptor struct {
 	Deletable bool
 	HasStatus bool
 	Local     bool
+	Listable  bool
 }
 
 // Service is a thin CRUD facade over a StoreRegistry, used by the `atmos store` command family
@@ -89,6 +90,21 @@ func (s *Service) Delete(name, stack, component, key string) error {
 	return ds.Delete(stack, component, key)
 }
 
+// Keys lists the keys under a stack/component scope (or globally when both are empty) in the
+// named store. It returns ErrListNotSupported if the store's backend does not implement
+// ListableStore.
+func (s *Service) Keys(name, stack, component string) ([]string, error) {
+	st, err := s.lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	ls, ok := st.(ListableStore)
+	if !ok {
+		return nil, fmt.Errorf("%w: store %q (kind %s)", ErrListNotSupported, name, resolveKind(s.config[name]))
+	}
+	return ls.Keys(stack, component)
+}
+
 // List returns a Descriptor for every configured store, sorted by name.
 func (s *Service) List() []Descriptor {
 	names := make([]string, 0, len(s.config))
@@ -108,6 +124,7 @@ func (s *Service) List() []Descriptor {
 		if st, ok := s.registry[name]; ok {
 			_, d.Deletable = st.(DeletableStore)
 			_, d.HasStatus = st.(StatusStore)
+			_, d.Listable = st.(ListableStore)
 			if ls, ok := st.(LocalStore); ok {
 				d.Local = ls.IsLocal()
 			}

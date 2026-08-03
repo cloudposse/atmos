@@ -50,6 +50,14 @@ func (m *MockSSMClient) DeleteParameter(ctx context.Context, params *ssm.DeleteP
 	return args.Get(0).(*ssm.DeleteParameterOutput), args.Error(1)
 }
 
+func (m *MockSSMClient) GetParametersByPath(ctx context.Context, params *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.GetParametersByPathOutput), args.Error(1)
+}
+
 // MockSTSClient is a mock implementation of the STSClient interface.
 type MockSTSClient struct {
 	mock.Mock
@@ -1606,4 +1614,47 @@ func TestBuildSSMStore_ParseError(t *testing.T) {
 		Options: map[string]interface{}{"region": []string{"x"}},
 	})
 	assert.ErrorIs(t, err, storepkg.ErrParseSSMOptions)
+}
+
+// TestSSMStore_Keys proves Keys paginates via GetParametersByPath (WithDecryption=false, no
+// kms:Decrypt needed) and strips the queried path from each returned parameter name.
+func TestSSMStore_Keys(t *testing.T) {
+	stackDelimiter := "-"
+	mockSSM := new(MockSSMClient)
+	store := &SSMStore{client: mockSSM, prefix: "/atmos", stackDelimiter: &stackDelimiter, awsConfig: &aws.Config{Region: "us-east-1"}}
+
+	mockSSM.On("GetParametersByPath", mock.Anything, &ssm.GetParametersByPathInput{
+		Path:           aws.String("/atmos/prod/vpc"),
+		Recursive:      aws.Bool(true),
+		WithDecryption: aws.Bool(false),
+		NextToken:      (*string)(nil),
+	}).Return(&ssm.GetParametersByPathOutput{
+		Parameters: []types.Parameter{{Name: aws.String("/atmos/prod/vpc/image_tag")}},
+		NextToken:  aws.String("page2"),
+	}, nil)
+	mockSSM.On("GetParametersByPath", mock.Anything, &ssm.GetParametersByPathInput{
+		Path:           aws.String("/atmos/prod/vpc"),
+		Recursive:      aws.Bool(true),
+		WithDecryption: aws.Bool(false),
+		NextToken:      aws.String("page2"),
+	}).Return(&ssm.GetParametersByPathOutput{
+		Parameters: []types.Parameter{{Name: aws.String("/atmos/prod/vpc/region")}},
+	}, nil)
+
+	keys, err := store.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+	mockSSM.AssertExpectations(t)
+}
+
+func TestSSMStore_Keys_Error(t *testing.T) {
+	stackDelimiter := "-"
+	mockSSM := new(MockSSMClient)
+	store := &SSMStore{client: mockSSM, prefix: "/atmos", stackDelimiter: &stackDelimiter, awsConfig: &aws.Config{Region: "us-east-1"}}
+
+	mockSSM.On("GetParametersByPath", mock.Anything, mock.Anything).Return((*ssm.GetParametersByPathOutput)(nil), assert.AnError)
+
+	_, err := store.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, storepkg.ErrListParameters)
 }

@@ -78,6 +78,7 @@ func descriptorsToRows(descriptors []pstore.Descriptor) []map[string]any {
 			"deletable": d.Deletable,
 			"hasStatus": d.HasStatus,
 			"local":     d.Local,
+			"listable":  d.Listable,
 		})
 	}
 	return rows
@@ -99,6 +100,7 @@ func renderStoreRows(rows []map[string]any, outputFormat format.Format) error {
 		{Name: "Secret", Value: "{{ .secret }}"},
 		{Name: "Deletable", Value: "{{ .deletable }}"},
 		{Name: "Local", Value: "{{ .local }}"},
+		{Name: "Listable", Value: "{{ .listable }}"},
 	}
 
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())

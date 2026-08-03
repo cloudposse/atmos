@@ -11,12 +11,13 @@ import (
 
 func TestDescriptorsToRows(t *testing.T) {
 	rows := descriptorsToRows([]pstore.Descriptor{
-		{Name: "app-metadata", Kind: pstore.KindAWSSSM, Secret: false, Deletable: true, HasStatus: true, Local: false},
+		{Name: "app-metadata", Kind: pstore.KindAWSSSM, Secret: false, Deletable: true, HasStatus: true, Local: false, Listable: true},
 	})
 	require.Len(t, rows, 1)
 	assert.Equal(t, "app-metadata", rows[0]["name"])
 	assert.Equal(t, pstore.KindAWSSSM, rows[0]["kind"])
 	assert.Equal(t, true, rows[0]["deletable"])
+	assert.Equal(t, true, rows[0]["listable"])
 }
 
 func TestRunStoreList(t *testing.T) {

@@ -54,3 +54,16 @@ type SecretAwareStore interface {
 	// SetSecret marks the store as a secret backend so writes use the sensitive at-rest variant.
 	SetSecret(secret bool)
 }
+
+// ListableStore is implemented by stores that can enumerate the keys stored under a
+// stack/component scope (or globally when both are empty). Not every backend can enumerate keys
+// cheaply or safely (see each provider's Keys implementation for details) — 1Password never
+// implements this (its addressing is opaque op:// reference templates, not the getKey() scheme
+// every other backend shares), and the keychain store's default (system/OS) backend returns
+// ErrListNotSupported at runtime even though it implements the interface. Keys returns key names
+// only; fetch a value with Get/GetKey.
+type ListableStore interface {
+	Store
+	// Keys lists the keys under a stack/component scope (or globally when both are empty).
+	Keys(stack, component string) ([]string, error)
+}

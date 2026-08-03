@@ -30,6 +30,20 @@ func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}
 	return cmd
 }
 
+// Scan mock returns (keys []string, nextCursor uint64, err error), in that order, via .Return().
+func (m *MockRedisClient) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd {
+	args := m.Called(ctx, cursor, match, count)
+	cmd := redis.NewScanCmd(ctx, nil)
+	if err := args.Error(2); err != nil {
+		cmd.SetErr(err)
+		return cmd
+	}
+	keys, _ := args.Get(0).([]string)
+	nextCursor, _ := args.Get(1).(uint64)
+	cmd.SetVal(keys, nextCursor)
+	return cmd
+}
+
 func ptr(s string) *string {
 	return &s
 }
@@ -568,4 +582,33 @@ func TestBuildRedisStore_ParseError(t *testing.T) {
 		Options: map[string]interface{}{"prefix": []string{"x"}},
 	})
 	assert.ErrorIs(t, err, storepkg.ErrParseRedisOptions)
+}
+
+// TestRedisStore_Keys proves Keys pages through SCAN (never KEYS) until the cursor returns to 0,
+// matching on the composed prefix, and strips that prefix from each returned key.
+func TestRedisStore_Keys(t *testing.T) {
+	mockClient := new(MockRedisClient)
+	s := &RedisStore{redisClient: mockClient, prefix: "p", stackDelimiter: ptr("-")}
+
+	mockClient.On("Scan", context.Background(), uint64(0), "p/prod/vpc*", int64(0)).
+		Return([]string{"p/prod/vpc/image_tag"}, uint64(7), nil)
+	mockClient.On("Scan", context.Background(), uint64(7), "p/prod/vpc*", int64(0)).
+		Return([]string{"p/prod/vpc/region"}, uint64(0), nil)
+
+	keys, err := s.Keys("prod", "vpc")
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+	mockClient.AssertExpectations(t)
+}
+
+func TestRedisStore_Keys_Error(t *testing.T) {
+	mockClient := new(MockRedisClient)
+	s := &RedisStore{redisClient: mockClient, prefix: "p", stackDelimiter: ptr("-")}
+
+	mockClient.On("Scan", context.Background(), uint64(0), "p/prod/vpc*", int64(0)).
+		Return([]string(nil), uint64(0), fmt.Errorf("scan boom"))
+
+	_, err := s.Keys("prod", "vpc")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, storepkg.ErrScanRedisKeys)
 }

@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
+	rtutils "github.com/jfrog/jfrog-client-go/artifactory/services/utils"
+	"github.com/jfrog/jfrog-client-go/utils/io/content"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -76,6 +79,29 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 func (m *MockArtifactoryClient) UploadFiles(options artifactory.UploadServiceOptions, params ...services.UploadParams) (int, int, error) {
 	args := m.Called(options, params[0])
 	return args.Int(0), args.Int(1), args.Error(2)
+}
+
+func (m *MockArtifactoryClient) SearchFiles(params services.SearchParams) (*content.ContentReader, error) {
+	args := m.Called(params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*content.ContentReader), args.Error(1)
+}
+
+// newTestContentReader writes items to a temp "results" JSON file (the JFrog search response
+// shape) and returns a ContentReader over it, since content.ContentReader has no in-memory
+// constructor from a slice.
+func newTestContentReader(t *testing.T, items []rtutils.ResultItem) *content.ContentReader {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "artifactory-search-*.json")
+	require.NoError(t, err)
+	data, err := json.Marshal(map[string]any{"results": items})
+	require.NoError(t, err)
+	_, err = f.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return content.NewContentReader(f.Name(), "results")
 }
 
 func TestNewArtifactoryStore(t *testing.T) {
@@ -670,4 +696,38 @@ func TestBuildArtifactoryStore_ParseError(t *testing.T) {
 		Options: map[string]interface{}{"prefix": []string{"x"}},
 	})
 	assert.ErrorIs(t, err, storepkg.ErrParseArtifactoryOptions)
+}
+
+// TestArtifactoryStore_Keys proves Keys searches with a recursive Ant-style pattern and strips
+// the store's repo+prefix segment from each match's repo-relative path.
+func TestArtifactoryStore_Keys(t *testing.T) {
+	delimiter := "-"
+	mc := new(MockArtifactoryClient)
+	s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}
+
+	reader := newTestContentReader(t, []rtutils.ResultItem{
+		{Repo: "r", Path: "p/prod/vpc", Name: "image_tag"},
+		{Repo: "r", Path: "p/prod/vpc", Name: "region"},
+		{Repo: "r", Path: "p/dev/vpc", Name: "image_tag"}, // Different stack: excluded.
+	})
+	mc.On("SearchFiles", mock.MatchedBy(func(params services.SearchParams) bool {
+		return params.Pattern == "r/p/prod/vpc/**" && params.Recursive
+	})).Return(reader, nil)
+
+	keys, err := s.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+	mc.AssertExpectations(t)
+}
+
+func TestArtifactoryStore_Keys_Error(t *testing.T) {
+	delimiter := "-"
+	mc := new(MockArtifactoryClient)
+	s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}
+
+	mc.On("SearchFiles", mock.Anything).Return((*content.ContentReader)(nil), assert.AnError)
+
+	_, err := s.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, storepkg.ErrListArtifacts)
 }

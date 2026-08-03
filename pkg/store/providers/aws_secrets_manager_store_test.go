@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -23,6 +24,7 @@ type fakeSecretsManager struct {
 	getErr      error // returned by GetSecretValue when set.
 	describeErr error // returned by DescribeSecret when set.
 	delErr      error // returned by DeleteSecret when set.
+	listErr     error // returned by ListSecrets when set.
 
 	// nilStringOnGet makes GetSecretValue return an output with a nil SecretString.
 	nilStringOnGet bool
@@ -89,6 +91,24 @@ func (f *fakeSecretsManager) DeleteSecret(_ context.Context, in *secretsmanager.
 	}
 	delete(f.data, aws.ToString(in.SecretId))
 	return &secretsmanager.DeleteSecretOutput{}, nil
+}
+
+// ListSecrets emulates the real API's server-side, case-sensitive "name" prefix filter.
+func (f *fakeSecretsManager) ListSecrets(_ context.Context, in *secretsmanager.ListSecretsInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	var prefix string
+	if len(in.Filters) > 0 && len(in.Filters[0].Values) > 0 {
+		prefix = in.Filters[0].Values[0]
+	}
+	var entries []smtypes.SecretListEntry
+	for name := range f.data {
+		if prefix == "" || strings.HasPrefix(name, prefix) {
+			entries = append(entries, smtypes.SecretListEntry{Name: aws.String(name)})
+		}
+	}
+	return &secretsmanager.ListSecretsOutput{SecretList: entries}, nil
 }
 
 func newTestASMStore(client SecretsManagerClient) *SecretsManagerStore {
@@ -376,4 +396,29 @@ func TestSecretsManagerStore_GetKey_StackDelimiterNotSet(t *testing.T) {
 	s := &SecretsManagerStore{client: newFakeSecretsManager(), region: "us-east-1", stackDelimiter: nil}
 	_, err := s.Get("prod", "api", "k")
 	assert.ErrorIs(t, err, store.ErrGetKey)
+}
+
+// TestSecretsManagerStore_Keys proves Keys uses ListSecrets' server-side "name" prefix filter
+// and strips the queried prefix (plus its separator) from each returned secret name.
+func TestSecretsManagerStore_Keys(t *testing.T) {
+	fake := newFakeSecretsManager()
+	s := newTestASMStore(fake)
+
+	require.NoError(t, s.Set("prod", "api", "API_KEY", "v1"))
+	require.NoError(t, s.Set("prod", "api", "DB_PASSWORD", "v2"))
+	require.NoError(t, s.Set("dev", "api", "API_KEY", "v3")) // Different stack: excluded.
+
+	keys, err := s.Keys("prod", "api")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"API_KEY", "DB_PASSWORD"}, keys)
+}
+
+func TestSecretsManagerStore_Keys_Error(t *testing.T) {
+	fake := newFakeSecretsManager()
+	fake.listErr = assert.AnError
+	s := newTestASMStore(fake)
+
+	_, err := s.Keys("prod", "api")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, store.ErrListSecrets)
 }

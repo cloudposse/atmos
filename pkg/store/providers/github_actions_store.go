@@ -73,6 +73,7 @@ var (
 	_ store.Store          = (*GitHubActionsStore)(nil)
 	_ store.StatusStore    = (*GitHubActionsStore)(nil)
 	_ store.DeletableStore = (*GitHubActionsStore)(nil)
+	_ store.ListableStore  = (*GitHubActionsStore)(nil)
 )
 
 func init() {
@@ -257,6 +258,30 @@ func (s *GitHubActionsStore) Delete(_ string, _ string, key string) error {
 		return err
 	}
 	return s.getClient().DeleteSecret(context.TODO(), name)
+}
+
+// Keys lists the secret names in this store's scope (repository or environment), via the
+// GitHub API. GitHub Actions secrets are a flat, repo-global namespace (see the type doc): stack
+// and component are accepted for interface conformance but do not affect the result. Every
+// secret name is uppercase with underscores (see toEnvIdentifier) — that transform is lossy, so
+// a returned name may not exactly match the original key's casing/characters.
+func (s *GitHubActionsStore) Keys(_ string, _ string) ([]string, error) {
+	names, err := s.getClient().ListSecrets(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+	if s.prefix == "" {
+		return names, nil
+	}
+
+	prefixName := toEnvIdentifier(s.prefix) + "_"
+	filtered := make([]string, 0, len(names))
+	for _, name := range names {
+		if trimmed, ok := strings.CutPrefix(name, prefixName); ok {
+			filtered = append(filtered, trimmed)
+		}
+	}
+	return filtered, nil
 }
 
 // lookupGitHubSecretEnv reads a GitHub-injected secret from the process environment. The secret

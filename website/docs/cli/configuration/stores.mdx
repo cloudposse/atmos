@@ -418,6 +418,15 @@ atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ec
 atmos store get app-metadata image_tag --stack=prod --component=ecs-service
 ```
 
+To list the keys stored inside a backend, run [`atmos store keys`](/cli/commands/store/keys).
+Most backends support this. 1Password and the default system keychain backend do not, because
+their underlying APIs do not support enumeration. Run [`atmos store list`](/cli/commands/store/list)
+to check the `Listable` column for a given store:
+
+```shell
+atmos store keys app-metadata --stack=prod --component=ecs-service
+```
+
 ```yaml
 steps:
   - name: record-tag

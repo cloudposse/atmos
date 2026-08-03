@@ -30,10 +30,16 @@ type RedisStoreOptions struct {
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	// Scan iterates the keyspace with a cursor, matching a MATCH glob pattern. Used by Keys
+	// instead of the KEYS command, which blocks the server on a large keyspace.
+	Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd
 }
 
-// Ensure RedisStore implements the store.Store interface.
-var _ store.Store = (*RedisStore)(nil)
+// Ensure RedisStore implements the store.Store and store.ListableStore interfaces.
+var (
+	_ store.Store         = (*RedisStore)(nil)
+	_ store.ListableStore = (*RedisStore)(nil)
+)
 
 func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 	if options.URL != nil {
@@ -197,6 +203,44 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 		return value, nil
 	}
 	return result, nil
+}
+
+// Keys lists the keys under a stack/component scope (or globally when both are empty), via
+// Redis SCAN with a MATCH glob pattern. SCAN is used instead of KEYS, which blocks the server on
+// a large keyspace; it gives no strong consistency guarantee (keys added/removed mid-scan may or
+// may not appear), which is acceptable for a "list what's roughly there" result.
+func (s *RedisStore) Keys(stack string, component string) ([]string, error) {
+	if s.stackDelimiter == nil {
+		return nil, store.ErrStackDelimiterNotSet
+	}
+
+	prefix := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, "/")
+	pattern := prefix + "*"
+	trimPrefix := prefix
+	if trimPrefix != "" {
+		trimPrefix += "/"
+	}
+
+	ctx := context.Background()
+	var names []string
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.redisClient.Scan(ctx, cursor, pattern, 0).Result()
+		if err != nil {
+			return nil, fmt.Errorf(errFormat, store.ErrScanRedisKeys, err)
+		}
+		for _, k := range keys {
+			if name := strings.TrimPrefix(k, trimPrefix); name != "" {
+				names = append(names, name)
+			}
+		}
+		if nextCursor == 0 {
+			break
+		}
+		cursor = nextCursor
+	}
+
+	return names, nil
 }
 
 // RedisClient returns the underlying Redis client for testing purposes.

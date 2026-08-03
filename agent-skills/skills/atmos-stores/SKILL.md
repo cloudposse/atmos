@@ -332,11 +332,17 @@ method requires a declaration. Both operate directly on any store configured und
 name.
 
 ```shell
-# CLI: set, get, delete, list -- scope to a stack and component, or omit for a global value
+# CLI: set, get, delete, list, keys -- scope to a stack and component, or omit for a global value
 atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
 atmos store get app-metadata image_tag --stack=prod --component=ecs-service
 atmos store list
+atmos store keys app-metadata --stack=prod --component=ecs-service
 ```
+
+`atmos store keys` lists the keys stored under a scope, for backends that support key
+enumeration. Most backends support it. 1Password and the default system keychain backend do not,
+because their underlying APIs do not support enumeration. Check the `Listable` column in
+`atmos store list` before relying on it for a given store.
 
 ```yaml
 # Workflow, custom-command, or hook step: write a value, for example an image tag from a build step
