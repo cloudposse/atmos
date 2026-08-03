@@ -831,11 +831,8 @@ func ExecuteWorkflow(
 					log.Debug("Using stack", "stack", finalStack)
 				}
 
-				// Build display command for RenderCommand.
-				displayCmd := "atmos " + command
-				if finalStack != "" {
-					displayCmd = fmt.Sprintf("atmos %s -s %s", command, finalStack)
-				}
+				// Build display command from the final arguments so it matches execution.
+				displayCmd := "atmos " + strings.Join(args, " ")
 				// Render command before execution if show.command is enabled.
 				stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
 

@@ -322,6 +322,17 @@ func TestAppendAtmosStepFlags(t *testing.T) {
 	assert.Equal(t, []string{"plan"}, AppendAtmosStepFlags([]string{"plan"}, AtmosStepFlags{}))
 	assert.Equal(t, []string{"plan", "-s", "dev"}, AppendAtmosStepFlags([]string{"plan"}, AtmosStepFlags{Stack: "dev"}))
 	assert.Equal(t,
+		[]string{"terraform", "plan", "--tags=networking"},
+		AppendAtmosStepFlags([]string{"terraform", "plan"}, AtmosStepFlags{Tags: []string{"networking"}}),
+	)
+	assert.Equal(t,
+		[]string{"terraform", "apply", "--labels=deployment:dev", "--", "-auto-approve"},
+		AppendAtmosStepFlags(
+			[]string{"terraform", "apply", "--", "-auto-approve"},
+			AtmosStepFlags{Labels: "deployment:dev"},
+		),
+	)
+	assert.Equal(t,
 		[]string{"terraform", "apply", "-s", "tenant1-dev", "--tags=networking", "--labels=deployment:dev", "--", "-auto-approve"},
 		AppendAtmosStepFlags(
 			[]string{"terraform", "apply", "--", "-auto-approve"},
