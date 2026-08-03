@@ -21,9 +21,8 @@ func TestResolveReleaseLifecycle_Defaults(t *testing.T) {
 	assert.Equal(t, cfg.HelmDefaultMaxHistory, resolution.Policy.MaxHistory)
 	assert.Zero(t, resolution.Policy.Timeout)
 	assert.False(t, resolution.TimeoutExplicit)
-	assert.False(t, resolution.Policy.RollbackOnFailure)
+	assert.Empty(t, resolution.Policy.OnFailure)
 	assert.False(t, resolution.Policy.WaitForJobs)
-	assert.False(t, resolution.Policy.CleanupOnFail)
 	assert.False(t, resolution.Policy.DisableChartHooks)
 	assert.False(t, resolution.Policy.SkipCRDs)
 	assert.True(t, hasLifecycleWarning(resolution.Warnings, warningTimeoutMigration))
@@ -31,54 +30,28 @@ func TestResolveReleaseLifecycle_Defaults(t *testing.T) {
 
 func TestResolveReleaseLifecycle_CanonicalFields(t *testing.T) {
 	resolution, err := resolveReleaseLifecycle(map[string]any{
-		cfg.HelmRollbackOnFailureSectionName: true,
+		cfg.HelmOnFailureSectionName:         []any{"cleanup", "rollback", "cleanup"},
 		cfg.HelmWaitStrategySectionName:      "legacy",
 		cfg.HelmWaitForJobsSectionName:       true,
 		cfg.HelmTimeoutSectionName:           "1h",
-		cfg.HelmCleanupOnFailSectionName:     true,
 		cfg.HelmMaxHistorySectionName:        0,
 		cfg.HelmDisableChartHooksSectionName: true,
 		cfg.HelmSkipCRDsSectionName:          true,
 	})
 	require.NoError(t, err)
 
-	assert.True(t, resolution.Policy.RollbackOnFailure)
+	assert.Equal(t, []failureAction{failureActionRollback, failureActionCleanup}, resolution.Policy.OnFailure)
 	assert.Equal(t, kube.LegacyStrategy, resolution.Policy.WaitStrategy)
 	assert.True(t, resolution.Policy.WaitForJobs)
 	assert.Equal(t, time.Hour, resolution.Policy.Timeout)
 	assert.True(t, resolution.TimeoutExplicit)
-	assert.True(t, resolution.Policy.CleanupOnFail)
 	assert.Zero(t, resolution.Policy.MaxHistory)
 	assert.True(t, resolution.Policy.DisableChartHooks)
 	assert.True(t, resolution.Policy.SkipCRDs)
 	assert.Empty(t, resolution.Warnings)
 }
 
-func TestResolveReleaseLifecycle_AliasesAndPrecedence(t *testing.T) {
-	t.Run("aliases normalize", func(t *testing.T) {
-		resolution, err := resolveReleaseLifecycle(map[string]any{
-			cfg.HelmAtomicSectionName:  true,
-			cfg.HelmWaitSectionName:    true,
-			cfg.HelmTimeoutSectionName: "0s",
-		})
-		require.NoError(t, err)
-		assert.True(t, resolution.Policy.RollbackOnFailure)
-		assert.Equal(t, kube.StatusWatcherStrategy, resolution.Policy.WaitStrategy)
-		assert.True(t, hasLifecycleWarning(resolution.Warnings, warningAtomicDeprecated))
-		assert.False(t, hasLifecycleWarning(resolution.Warnings, warningTimeoutMigration))
-	})
-
-	t.Run("canonical rollback overrides inherited alias", func(t *testing.T) {
-		resolution, err := resolveReleaseLifecycle(map[string]any{
-			cfg.HelmAtomicSectionName:            true,
-			cfg.HelmRollbackOnFailureSectionName: false,
-			cfg.HelmTimeoutSectionName:           "0s",
-		})
-		require.NoError(t, err)
-		assert.False(t, resolution.Policy.RollbackOnFailure)
-		assert.True(t, hasLifecycleWarning(resolution.Warnings, warningAtomicDeprecated))
-	})
-
+func TestResolveReleaseLifecycle_AliasPrecedence(t *testing.T) {
 	t.Run("canonical wait strategy overrides convenience alias", func(t *testing.T) {
 		resolution, err := resolveReleaseLifecycle(map[string]any{
 			cfg.HelmWaitSectionName:         false,
@@ -93,9 +66,9 @@ func TestResolveReleaseLifecycle_AliasesAndPrecedence(t *testing.T) {
 
 func TestResolveReleaseLifecycle_DerivedWaitStrategy(t *testing.T) {
 	resolution, err := resolveReleaseLifecycle(map[string]any{
-		cfg.HelmRollbackOnFailureSectionName: true,
-		cfg.HelmWaitForJobsSectionName:       true,
-		cfg.HelmTimeoutSectionName:           "5m",
+		cfg.HelmOnFailureSectionName:   []any{"rollback"},
+		cfg.HelmWaitForJobsSectionName: true,
+		cfg.HelmTimeoutSectionName:     "5m",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, kube.StatusWatcherStrategy, resolution.Policy.WaitStrategy)
@@ -103,34 +76,32 @@ func TestResolveReleaseLifecycle_DerivedWaitStrategy(t *testing.T) {
 	assert.Contains(t, resolution.Warnings, lifecycleWarning{
 		Code:    warningWaitDerived,
 		Field:   cfg.HelmWaitStrategySectionName,
-		Message: "helm wait strategy was derived as 'watcher' because 'rollback_on_failure' is enabled",
+		Message: "helm wait strategy was derived as 'watcher' because on_failure includes 'rollback'",
 	})
 }
 
 func TestApplyLifecycleFlagOverrides(t *testing.T) {
 	section := map[string]any{
-		cfg.HelmRollbackOnFailureSectionName: true,
-		cfg.HelmWaitStrategySectionName:      "watcher",
+		cfg.HelmOnFailureSectionName:    []any{"rollback"},
+		cfg.HelmWaitStrategySectionName: "watcher",
 	}
 
 	resolution, err := resolveReleaseLifecycleWithFlags(section, map[string]any{
-		cfg.HelmRollbackOnFailureSectionName: false,
+		cfg.HelmOnFailureSectionName:         []string{"cleanup"},
 		cfg.HelmWaitStrategySectionName:      "legacy",
 		cfg.HelmWaitForJobsSectionName:       true,
 		cfg.HelmTimeoutSectionName:           "30m",
-		cfg.HelmCleanupOnFailSectionName:     true,
 		cfg.HelmMaxHistorySectionName:        0,
 		cfg.HelmDisableChartHooksSectionName: true,
 		cfg.HelmSkipCRDsSectionName:          true,
 	})
 	require.NoError(t, err)
-	assert.False(t, resolution.Policy.RollbackOnFailure)
+	assert.Equal(t, []failureAction{failureActionCleanup}, resolution.Policy.OnFailure)
 	assert.Equal(t, kube.LegacyStrategy, resolution.Policy.WaitStrategy)
 	assert.True(t, resolution.Policy.WaitForJobs)
 	assert.Equal(t, 30*time.Minute, resolution.Policy.Timeout)
 	assert.True(t, resolution.TimeoutExplicit)
 	assert.False(t, hasLifecycleWarning(resolution.Warnings, warningTimeoutMigration))
-	assert.True(t, resolution.Policy.CleanupOnFail)
 	assert.Zero(t, resolution.Policy.MaxHistory)
 	assert.True(t, resolution.Policy.DisableChartHooks)
 	assert.True(t, resolution.Policy.SkipCRDs)
@@ -154,35 +125,14 @@ func TestApplyLifecycleFlagOverridesWaitCompatibility(t *testing.T) {
 
 func TestResolveReleaseLifecycleWithFlagsRecomputesDerivedWait(t *testing.T) {
 	resolution, err := resolveReleaseLifecycleWithFlags(map[string]any{
-		cfg.HelmRollbackOnFailureSectionName: true,
-		cfg.HelmTimeoutSectionName:           "0s",
+		cfg.HelmOnFailureSectionName: []any{"rollback"},
+		cfg.HelmTimeoutSectionName:   "0s",
 	}, map[string]any{
-		cfg.HelmRollbackOnFailureSectionName: false,
+		cfg.HelmOnFailureSectionName: []string{},
 	})
 	require.NoError(t, err)
-	assert.False(t, resolution.Policy.RollbackOnFailure)
+	assert.Empty(t, resolution.Policy.OnFailure)
 	assert.Equal(t, kube.HookOnlyStrategy, resolution.Policy.WaitStrategy)
-}
-
-func TestResolveReleaseLifecycleWithFlagsAliasPrecedence(t *testing.T) {
-	section := map[string]any{
-		cfg.HelmRollbackOnFailureSectionName: false,
-		cfg.HelmTimeoutSectionName:           "0s",
-	}
-
-	resolution, err := resolveReleaseLifecycleWithFlags(section, map[string]any{
-		cfg.HelmAtomicSectionName: true,
-	})
-	require.NoError(t, err)
-	assert.True(t, resolution.Policy.RollbackOnFailure)
-	assert.True(t, hasLifecycleWarning(resolution.Warnings, warningAtomicDeprecated))
-
-	resolution, err = resolveReleaseLifecycleWithFlags(section, map[string]any{
-		cfg.HelmAtomicSectionName:            true,
-		cfg.HelmRollbackOnFailureSectionName: false,
-	})
-	require.NoError(t, err)
-	assert.False(t, resolution.Policy.RollbackOnFailure)
 }
 
 func TestResolveReleaseLifecycle_Validation(t *testing.T) {
@@ -192,9 +142,19 @@ func TestResolveReleaseLifecycle_Validation(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:    "boolean type",
-			section: map[string]any{cfg.HelmRollbackOnFailureSectionName: "true"},
+			name:    "failure actions type",
+			section: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
 			wantErr: errUtils.ErrHelmLifecycleDecode,
+		},
+		{
+			name:    "failure action item type",
+			section: map[string]any{cfg.HelmOnFailureSectionName: []any{"rollback", true}},
+			wantErr: errUtils.ErrHelmLifecycleDecode,
+		},
+		{
+			name:    "unknown failure action",
+			section: map[string]any{cfg.HelmOnFailureSectionName: []any{"notify"}},
+			wantErr: errUtils.ErrHelmFailureActionInvalid,
 		},
 		{
 			name:    "wait strategy",
