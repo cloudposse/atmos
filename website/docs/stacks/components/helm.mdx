@@ -124,18 +124,19 @@ values.
 
 | Field | Default | Operations | Behavior |
 | --- | --- | --- | --- |
-| `rollback_on_failure` | `false` | install, upgrade | Uninstall a failed first install or roll a failed upgrade back. Enabling it promotes the default wait strategy to `watcher`. |
+| `on_failure` | `[]` | install, upgrade | Failure actions: `rollback` uninstalls a failed first install or rolls a failed upgrade back; `cleanup` removes resources newly created by a failed upgrade. |
 | `wait_strategy` | `hookOnly` | install, upgrade, delete | `hookOnly`, `watcher`, or Helm 3-compatible `legacy`. |
 | `wait_for_jobs` | `false` | install, upgrade | Wait for ordinary Jobs. Requires `watcher` or `legacy`; hook Jobs are already handled by Helm hooks. |
 | `timeout` | `0s` during migration | install, upgrade, delete | Helm operation timeout. Explicit `0s` remains unbounded. |
-| `cleanup_on_fail` | `false` | upgrade | Remove resources newly created by a failed upgrade. |
 | `max_history` | `10` | upgrade | Revisions retained. Set `0` for unlimited history. |
 | `disable_chart_hooks` | `false` | install, upgrade, delete | Disable Helm chart hooks. This does not disable Atmos `hooks:`. |
 | `skip_crds` | `false` | install | Do not install CRDs from the chart on first install. |
 
-`atomic` is a deprecated alias for `rollback_on_failure`; `wait: true` and
-`wait: false` are convenience aliases for `watcher` and `hookOnly`. Canonical
-fields win when both forms are inherited or configured.
+`on_failure` follows Atmos list merge behavior. With the default `replace`
+strategy, a component can clear inherited actions with `on_failure: []`;
+`append` can add actions across inheritance layers. Duplicate actions are
+normalized. `wait: true` and `wait: false` remain convenience aliases for
+`watcher` and `hookOnly`.
 
 :::warning Timeout and history migration
 For one minor release, omitting `timeout` preserves the previous unbounded `0s`
@@ -157,8 +158,7 @@ components:
     release-policy:
       metadata:
         type: abstract
-      rollback_on_failure: true
-      cleanup_on_fail: true
+      on_failure: [rollback, cleanup]
 
     demo-release:
       metadata:
@@ -209,7 +209,7 @@ components:
       wait_strategy: watcher
       wait_for_jobs: true
       timeout: 20m
-      rollback_on_failure: true
+      on_failure: [rollback]
       max_history: 10
       values:
         grafana:
