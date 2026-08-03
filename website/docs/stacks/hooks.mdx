@@ -102,16 +102,22 @@ atmos terraform migrate plan <component> -s <stack>
 atmos terraform migrate apply <component> -s <stack>
 ```
 
-This means Atmos authenticates the component identity, provisions source and
-workdir directories, generates backend and var files, runs Terraform init,
-selects the workspace, resolves `tfmigrate` from the toolchain or PATH, and
-sets `TFMIGRATE_EXEC_PATH` before the migration runs.
+This means Atmos performs its normal Terraform setup before the migration runs:
+
+- Authenticates the component identity.
+- Provisions source and workdir directories.
+- Generates backend and var files.
+- Runs Terraform init.
+- Selects the workspace.
+- Resolves `tfmigrate` from the toolchain or PATH.
+- Sets `TFMIGRATE_EXEC_PATH`.
 
 The hook reuses the identity already resolved for the Terraform command. If the
 command used `--identity aws-prod`, `ATMOS_IDENTITY=aws-prod`, or a component
 default identity, the hook passes that identity to the nested
 `atmos terraform migrate` invocation. The nested command also sets
-`ATMOS_SKIP_HOOKS=*` so the migration hook does not recursively trigger itself.
+`ATMOS_SKIP_HOOKS=*`. This stops the migration hook from recursively
+triggering itself.
 
 ```yaml
 components:
@@ -135,24 +141,27 @@ components:
   <dd>Path to a single `tfmigrate` migration file. Omit this field to let `tfmigrate` run history mode.</dd>
 
   <dt>`config`</dt>
-  <dd>Optional override for the `tfmigrate` config path (passed through as `--tfmigrate-config` to the nested `atmos terraform migrate` invocation). When omitted (and neither `--tfmigrate-config`/`ATMOS_TFMIGRATE_CONFIG` nor the `tfmigrate`-native `TFMIGRATE_CONFIG` env var is set), Atmos uses the component's `.tfmigrate.hcl` if present; otherwise it generates a default config that reuses the component's Terraform backend as history storage.</dd>
+  <dd>Optional override for the `tfmigrate` config path. Atmos passes this through as `--tfmigrate-config` to the nested `atmos terraform migrate` invocation. When you omit `config`, and `--tfmigrate-config`/`ATMOS_TFMIGRATE_CONFIG` and `TFMIGRATE_CONFIG` are also unset, Atmos uses the component's `.tfmigrate.hcl` file if one exists. Otherwise, Atmos generates a default config that reuses the component's Terraform backend as history storage.</dd>
 
   <dt>`backend_config`</dt>
-  <dd>List of entries passed through as repeated `tfmigrate --backend-config` arguments. This configures the Terraform state backend used by `tfmigrate`; it is not the `tfmigrate` history backend.</dd>
+  <dd>List of entries passed through as repeated `tfmigrate --backend-config` arguments. This configures the Terraform state backend that `tfmigrate` uses. It is not the `tfmigrate` history backend.</dd>
 
   <dt>`mode`</dt>
   <dd>`dynamic` (default), `plan`, or `apply`. Dynamic mode runs `tfmigrate plan` for `before.terraform.plan` and `tfmigrate apply` for `before.terraform.apply` / `before.terraform.deploy`.</dd>
 </dl>
 
-**Requirements:** the `tfmigrate` binary on PATH. Declare it in `dependencies.tools` (e.g. `tfmigrate: "^0.4.5"`) to have Atmos auto-install through the toolchain before the hook runs.
+**Requirements:** the `tfmigrate` binary on PATH. Declare it in
+`dependencies.tools`, for example `tfmigrate: "^0.4.5"`. Atmos then installs
+it automatically through the toolchain before the hook runs.
 
-History mode is enabled by omitting `migration`, and needs no `tfmigrate`
-configuration at all: as long as none of the hook's `config` field,
-`--tfmigrate-config`/`ATMOS_TFMIGRATE_CONFIG`, `TFMIGRATE_CONFIG`, or a
-`.tfmigrate.hcl` in the component is present, Atmos generates a config that
-stores history in the component's own Terraform backend (same S3/GCS bucket
-under a stack/component/workspace-namespaced key; a local file beside
-local-backend state):
+Omit `migration` to enable history mode. History mode needs no `tfmigrate`
+configuration by default. Atmos looks for a config in four places: the hook's
+`config` field, `--tfmigrate-config` / `ATMOS_TFMIGRATE_CONFIG`,
+`TFMIGRATE_CONFIG`, and a `.tfmigrate.hcl` file in the component. If none of
+these exist, Atmos generates a config that stores history in the component's
+own Terraform backend. For an S3 or GCS backend, Atmos stores history in the
+same bucket, under a key namespaced by stack, component, and workspace. For a
+local backend, Atmos stores history in a local file beside the state:
 
 ```yaml
 hooks:
@@ -164,10 +173,11 @@ hooks:
     mode: dynamic
 ```
 
-Add a `.tfmigrate.hcl` to the component, set the hook's `config` field, or pass
-`--tfmigrate-config`/`ATMOS_TFMIGRATE_CONFIG`/`TFMIGRATE_CONFIG` to take over.
-For custom configs, Atmos exposes helper variables so the file can still reuse
-the component's Terraform backend bucket and stack-specific history key:
+To take control, add a `.tfmigrate.hcl` file to the component, set the hook's
+`config` field, or pass `--tfmigrate-config` / `ATMOS_TFMIGRATE_CONFIG` /
+`TFMIGRATE_CONFIG`. For a custom config, Atmos exposes helper variables. Your
+file can then reuse the component's Terraform backend bucket and
+stack-specific history key:
 
 ```hcl
 tfmigrate {
@@ -184,10 +194,10 @@ tfmigrate {
 }
 ```
 
-The history key is `tfmigrate/<stack>/<component>/<workspace>/history.json`,
-so components sharing a Terraform backend bucket do not collide. Atmos v1
-does not persist `tfmigrate` history itself; durable `tfmigrate` history
-storage is required for rerun-safe automation.
+The history key is `tfmigrate/<stack>/<component>/<workspace>/history.json`.
+This keeps components that share a Terraform backend bucket from colliding.
+Atmos v1 does not persist `tfmigrate` history itself. Rerun-safe automation
+needs durable `tfmigrate` history storage.
 
 ### `kind: infracost`
 

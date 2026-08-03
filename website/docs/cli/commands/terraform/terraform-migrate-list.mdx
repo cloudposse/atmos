@@ -88,7 +88,7 @@ atmos terraform migrate list --format json
 
 Default columns include component, stack, workspace, hook, mode, migration, config, history storage, history bucket, history key, and history role ARN.
 
-The `history_key` value is stack/component/workspace scoped:
+Atmos scopes the `history_key` value by stack, component, and workspace:
 
 ```text
 tfmigrate/<stack>/<component>/<workspace>/history.json

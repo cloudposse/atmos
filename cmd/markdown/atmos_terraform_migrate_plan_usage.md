@@ -4,7 +4,7 @@
   $ atmos terraform migrate plan vpc -s prod-ue2
 ```
 
-- Preview a single migration file (relative to `migration_dir`, default `./migrations` when that directory exists - do not include that prefix)
+- Preview a single migration file (relative to `migration_dir`, default `./migrations` when that directory exists; omit that prefix)
 
 ```shell
   $ atmos terraform migrate plan vpc -s prod-ue2 --migration rename_bucket.hcl

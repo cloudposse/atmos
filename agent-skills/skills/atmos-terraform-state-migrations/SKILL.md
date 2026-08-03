@@ -11,9 +11,9 @@ references:
 # Atmos Terraform State Migrations
 
 Use this skill when creating or reviewing Terraform state migrations for Atmos components. Atmos delegates state
-migrations to `tfmigrate`, but runs it in the same component context as `atmos terraform plan` and `apply`: auth
-identity setup, source/workdir provisioning, backend and varfile generation, Terraform init, workspace selection,
-toolchain resolution, and `TFMIGRATE_EXEC_PATH` setup happen before `tfmigrate` runs.
+migrations to `tfmigrate`. It runs `tfmigrate` in the same component context as `atmos terraform plan` and `apply`.
+Before `tfmigrate` runs, Atmos performs auth identity setup, source and workdir provisioning, backend and varfile
+generation, Terraform init, workspace selection, toolchain resolution, and `TFMIGRATE_EXEC_PATH` setup.
 
 For migration HCL syntax and examples, load
 [references/tfmigrate-migration-patterns.md](references/tfmigrate-migration-patterns.md).
@@ -43,8 +43,8 @@ specifically needs `tfmigrate` automation or multi-state moves.
 ## One-Off CLI Workflow
 
 Create a migration file in a project-owned migrations directory, then preview it before applying. `tfmigrate`
-resolves `--migration` relative to the `migration_dir` in its config, and the Atmos-generated default config points
-`migration_dir` at the component's `migrations/` directory when one exists — so pass just the filename, not a
+resolves `--migration` relative to the `migration_dir` in its config. The Atmos-generated default config points
+`migration_dir` at the component's `migrations/` directory when one exists. Pass just the filename, not a
 `migrations/`-prefixed path.
 
 ```bash
@@ -110,7 +110,7 @@ components:
           mode: dynamic
 ```
 
-`mode: dynamic` is the default: `before.terraform.plan` runs `tfmigrate plan`, while `before.terraform.apply` and
+`mode: dynamic` is the default. `before.terraform.plan` runs `tfmigrate plan`. `before.terraform.apply` and
 `before.terraform.deploy` run `tfmigrate apply`. Use `mode: plan` or `mode: apply` only when the hook must always run
 one action.
 
@@ -123,8 +123,8 @@ Hook fields:
 
 ## History Mode
 
-Single-file `tfmigrate apply path.hcl` is not idempotent. A rerun can fail after a source address has already moved or
-an address has already been removed. For CI-safe reruns, use `tfmigrate` history mode with durable storage.
+Single-file `tfmigrate apply path.hcl` is not idempotent. A rerun can fail if a source address already moved, or an
+address was already removed. For CI-safe reruns, use `tfmigrate` history mode with durable storage.
 
 ```yaml
 hooks:
@@ -155,7 +155,7 @@ tfmigrate {
 ```
 
 The default history key is `tfmigrate/<stack>/<component>/<workspace>/history.json`. Atmos passes history settings to
-`tfmigrate`, but does not persist or repair history itself; configure durable S3, GCS, or CI-persisted local storage.
+`tfmigrate`, but does not persist or repair history itself. Configure durable S3, GCS, or CI-persisted local storage.
 
 ## Safety Checklist
 

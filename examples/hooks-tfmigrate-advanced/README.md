@@ -1,8 +1,8 @@
 # `hooks-tfmigrate-advanced`
 
 Extends [`hooks-tfmigrate`](../hooks-tfmigrate/) to cover the rest of tfmigrate's
-migration actions and both explicit hook modes, none of which are exercised by that
-example or by any automated test in this repository:
+migration actions and both explicit hook modes. That example, and this repository's
+automated tests, do not exercise any of these:
 
 | Component                                    | Action(s) covered                | Path exercised                                  |
 | --------------------------------------------- | --------------------------------- | ------------------------------------------------ |
@@ -18,25 +18,27 @@ example or by any automated test in this repository:
 | `onfailure-ignore-demo`                       | a genuinely-failing migration with `on_failure: ignore` | `kind: tfmigrate` hook - underlying apply must still succeed |
 
 > [!NOTE]
-> An explicit `mode: apply`/`mode: plan` bound to a mismatched lifecycle event (e.g.
-> `mode: apply` on `before.terraform.plan`) is validated: Atmos rejects `mode: apply`
-> outright when it isn't bound to `before.terraform.apply`/`before.terraform.deploy`
-> (it would otherwise mutate state on what looks like a read-only `plan`), and warns
-> when `mode: plan` is bound to an apply/deploy event (the migration will only ever
-> be previewed, never applied). `mode-apply-mismatch-demo` and `mode-plan-mismatch-demo`
-> exercise this guardrail end-to-end through the real hook path (previously this was
-> only unit-tested directly against `pkg/terraform/tfmigrate/tfmigrate_test.go`'s
-> `TestActionForMode_RejectsModeApplyOnNonApplyEvent`); every other component in this
-> example uses `mode: dynamic` so each action demonstrates succeeding.
+> Atmos validates an explicit `mode: apply`/`mode: plan` when it's bound to a
+> mismatched lifecycle event, for example `mode: apply` on `before.terraform.plan`.
+> Atmos rejects `mode: apply` outright unless it's bound to `before.terraform.apply`
+> or `before.terraform.deploy`. Otherwise, `mode: apply` could mutate state during
+> what looks like a read-only `plan`. Atmos warns instead when `mode: plan` is bound
+> to an apply/deploy event, because the migration would then only ever preview, and
+> never apply. `mode-apply-mismatch-demo` and `mode-plan-mismatch-demo` exercise this
+> guardrail end-to-end, through the real hook path. Previously, only a unit test
+> covered this directly, against `pkg/terraform/tfmigrate/tfmigrate_test.go`'s
+> `TestActionForMode_RejectsModeApplyOnNonApplyEvent`. Every other component in this
+> example uses `mode: dynamic`, so each action demonstrates success.
 
-All backends are local state (no cloud credentials needed), and each component uses
-its **own** state file (unlike `hooks-tfmigrate`, which shares one file between two
-components).
+All backends use local state, so no cloud credentials are needed. Each component
+uses its **own** state file. This differs from `hooks-tfmigrate`, which shares one
+state file between two components.
 
 ## Requirements
 
-Nothing needs to be pre-installed — `opentofu` and `tfmigrate` are declared in
-`dependencies.tools` and auto-installed by the Atmos toolchain on first use.
+Nothing needs to be pre-installed. The components declare `opentofu` and
+`tfmigrate` in `dependencies.tools`. The Atmos toolchain installs both
+automatically on first use.
 
 ## `rm` — `rm-demo`
 
@@ -59,9 +61,10 @@ atmos terraform state list rm-demo -s test
 
 ## `import` — `import-demo`
 
-`random_string.imported` simulates a value minted outside Terraform (e.g. a token
-from another system) that needs to be brought under management without being
-regenerated. The migration imports ID `prexist1` (8 chars, matching `length = 8`).
+`random_string.imported` simulates a value minted outside Terraform, for example
+a token from another system. It needs Terraform management, but must keep its
+original value instead of being regenerated. The migration imports ID
+`prexist1`, 8 characters long, matching `length = 8`.
 
 ```bash
 cd examples/hooks-tfmigrate-advanced

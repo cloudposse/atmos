@@ -42,7 +42,7 @@ Atmos runs the same component preparation as `plan`: auth, source provisioning, 
   <dd>Identity to authenticate before resolving the component and running `tfmigrate apply`. Environment variable: `ATMOS_IDENTITY`.</dd>
 
   <dt>`--migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file, relative to `migration_dir` (defaults to `./migrations` when that directory exists in the component, otherwise the component root) - do not include that prefix. Omit this flag to let `tfmigrate` run history mode. Single-file reruns are not inherently idempotent.</dd>
+  <dd>Path to a single `tfmigrate` migration file, relative to `migration_dir`. Do not include the `migration_dir` prefix. `migration_dir` defaults to `./migrations` when that directory exists in the component, otherwise it defaults to the component root. Omit this flag to let `tfmigrate` run history mode. Single-file reruns are not inherently idempotent.</dd>
 
   <dt>`--tfmigrate-config`</dt>
   <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
@@ -86,7 +86,7 @@ Apply a single-file migration:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev --migration 001_remove_template_provider.hcl
 ```
 
-The value is resolved by `tfmigrate` relative to the `migration_dir` in its config, so pass just the filename when `migration_dir` already points at your migrations directory.
+`tfmigrate` resolves the value relative to the `migration_dir` in its config. Pass just the filename when `migration_dir` already points at your migrations directory.
 
 Override the default `tfmigrate` config path:
 
@@ -94,7 +94,7 @@ Override the default `tfmigrate` config path:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
 ```
 
-Components with an S3 or GCS backend get durable history automatically: with no `.tfmigrate.hcl`, Atmos generates a config that stores history in the same bucket as the state. Provide your own `.tfmigrate.hcl` only to customize it, for example:
+Components with an S3 or GCS backend get durable history automatically. When the component has no `.tfmigrate.hcl`, Atmos generates a config that stores history in the same bucket as the state. Provide your own `.tfmigrate.hcl` file only to customize this behavior, for example:
 
 ```hcl
 tfmigrate {
@@ -111,11 +111,11 @@ tfmigrate {
 }
 ```
 
-Atmos authenticates the component identity before `tfmigrate` runs, so the history storage client inherits the same environment used by the Terraform backend.
+Atmos authenticates the component identity before `tfmigrate` runs. The history storage client then inherits the same environment as the Terraform backend.
 
 ## Rerun Safety
 
-Use history mode for automation. Single-file `tfmigrate apply path.hcl` can fail on rerun after state addresses have already moved or been removed.
+Use history mode for automation. Single-file `tfmigrate apply path.hcl` can fail on rerun if state addresses already moved or were removed.
 
 ## Related
 

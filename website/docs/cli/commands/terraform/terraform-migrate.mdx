@@ -58,7 +58,7 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   <dd>Identity to authenticate before resolving the component and running `tfmigrate`. Environment variable: `ATMOS_IDENTITY`.</dd>
 
   <dt>`--migration`</dt>
-  <dd>A single `tfmigrate` migration file for `plan` or `apply`. `tfmigrate` resolves the value relative to the `migration_dir` set in its config (default `.`), so pass just the filename when `migration_dir` already points at your migrations directory. Omit this flag to let `tfmigrate` run history mode.</dd>
+  <dd>A single `tfmigrate` migration file for `plan` or `apply`. `tfmigrate` resolves the value relative to the `migration_dir` set in its config (default `.`). Pass just the filename when `migration_dir` already points at your migrations directory. Omit this flag to let `tfmigrate` run history mode.</dd>
 
   <dt>`--tfmigrate-config`</dt>
   <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
@@ -67,7 +67,7 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
 
   <dt>`--all`, `--components`, `--query`, `--affected`</dt>
-  <dd>Select multiple Terraform component instances instead of passing one component argument. `--affected` applies to `plan` and `apply` only; `list` supports the others.</dd>
+  <dd>Select multiple Terraform component instances instead of passing one component argument. `--affected` applies to `plan` and `apply` only. `list` supports `--all`, `--components`, and `--query`.</dd>
 
   <dt>`--skip-init`</dt>
   <dd>Skip the normal Terraform init path before `tfmigrate` runs.</dd>
@@ -127,9 +127,9 @@ For every selected component instance, Atmos:
 - Selects the configured Terraform workspace.
 - Resolves `tfmigrate` and Terraform/OpenTofu through the Atmos toolchain or PATH.
 - Sets `TFMIGRATE_EXEC_PATH` to the resolved Terraform/OpenTofu binary unless already set.
-- Routes the generated varfile to the Terraform plans `tfmigrate` runs internally (via `TF_CLI_ARGS_plan`), so components with required variables plan cleanly.
-- Generates a default `tfmigrate` config when you have not provided one, reusing the component's Terraform backend as history storage.
-- Pre-creates the parent directory of a `storage "local"` history path from the `tfmigrate` config, so the first history save cannot fail on a missing directory.
+- Routes the generated varfile into `tfmigrate`'s internal Terraform plans via `TF_CLI_ARGS_plan`. This lets components with required variables plan cleanly.
+- Generates a default `tfmigrate` config when you have not provided one. The default reuses the component's Terraform backend as history storage.
+- Pre-creates the parent directory of a `storage "local"` history path from the `tfmigrate` config. This prevents the first history save from failing on a missing directory.
 - Exports per-instance history helper variables for the `tfmigrate` config.
 
 ## History Mode
@@ -140,15 +140,15 @@ Enable `tfmigrate` history mode by omitting `--migration`:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
-History storage works with zero configuration: when the component has no `.tfmigrate.hcl` (and no `--tfmigrate-config` or `TFMIGRATE_CONFIG`), Atmos generates a `tfmigrate` config that reuses the component's Terraform backend:
+History storage works with zero configuration. When the component has no `.tfmigrate.hcl`, and no `--tfmigrate-config` or `TFMIGRATE_CONFIG`, Atmos generates a `tfmigrate` config that reuses the component's Terraform backend:
 
-- **S3 backend** — history is stored in the same bucket under `tfmigrate/<stack>/<component>/<workspace>/history.json`, inheriting the region, profile, assume-role ARN, KMS key, and custom endpoint.
-- **GCS backend** — history is stored in the same bucket under the same namespaced object name.
-- **Local or other backends** — history is stored as a local file next to a local-backend state file (or under the component working directory), and the directory is created automatically.
+- **S3 backend** — Atmos stores history in the same bucket, under `tfmigrate/<stack>/<component>/<workspace>/history.json`. It inherits the region, profile, assume-role ARN, KMS key, and custom endpoint.
+- **GCS backend** — Atmos stores history in the same bucket, under the same namespaced object name.
+- **Local or other backends** — Atmos stores history as a local file next to the local-backend state file, or under the component working directory. Atmos creates the directory automatically.
 
 The generated config points `migration_dir` at the component's `migrations/` directory when one exists, the component root otherwise.
 
-To take control, add a `.tfmigrate.hcl` to the component (discovered automatically) or point at one explicitly — the generated default is then skipped entirely:
+To take control, add a `.tfmigrate.hcl` file to the component, or point at one explicitly. Atmos discovers a component-local file automatically, and skips the generated default entirely:
 
 ```shell
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
@@ -181,11 +181,11 @@ Atmos sets these variables for use from the `tfmigrate` config via `env`:
   <dd>Copied from supported S3 backend settings.</dd>
 </dl>
 
-The history key is namespaced by stack, component, and workspace to avoid collisions when multiple Atmos component instances share the same Terraform backend bucket.
+Atmos namespaces the history key by stack, component, and workspace. This avoids collisions when multiple Atmos component instances share the same Terraform backend bucket.
 
 ## Rerun Safety
 
-Single-file `tfmigrate apply path.hcl` is not inherently idempotent. A rerun can fail if a `state mv` source or `state rm` address has already been changed.
+Single-file `tfmigrate apply path.hcl` is not inherently idempotent. A rerun can fail if a `state mv` source or `state rm` address already changed.
 
 For CI, use `tfmigrate` history mode with durable storage such as S3, GCS, or a local file persisted by the workflow runner.
 

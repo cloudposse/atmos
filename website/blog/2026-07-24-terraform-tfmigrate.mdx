@@ -8,7 +8,9 @@ tags: [feature, dx]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Refactoring Terraform code leaves state behind: rename a resource or move it between root modules, and every plan shows destroy-and-recreate for infrastructure that never changed. Hand-run `terraform state mv` commands fix one workspace at a time, are easy to get wrong, and are impossible to review. [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) turns those state surgeries into declarative, version-controlled migration files — and Atmos runs them for you, manually from the CLI or automatically from Terraform lifecycle hooks, in the same component context as `atmos terraform plan` and `apply`.
+Refactoring Terraform code leaves state behind. Rename a resource, or move it between root modules, and every plan shows a destroy-and-recreate for infrastructure that never changed. You can fix this by hand with `terraform state mv`, but that command only fixes one workspace at a time. It is easy to get wrong, and no one can review it before it runs.
+
+[`tfmigrate`](https://github.com/minamijoyo/tfmigrate) turns these state changes into migration files that you store under version control. Atmos runs these files for you — manually from the CLI, or automatically from Terraform lifecycle hooks — in the same component context as `atmos terraform plan` and `apply`.
 
 ```shell
 atmos terraform migrate plan s3-bucket -s plat-ue2-dev
@@ -29,9 +31,10 @@ The new `atmos terraform migrate` command family adds:
 - `kind: tfmigrate` hooks for running migrations from Terraform lifecycle events.
 - Zero-config history storage that reuses the component's Terraform backend.
 
-Before `tfmigrate` runs, Atmos performs the normal Terraform component setup:
-auth identity resolution, source provisioning, workdir provisioning, generated
-backend files, generated varfiles, Terraform init, and workspace selection.
+Before `tfmigrate` runs, Atmos performs the normal Terraform component setup.
+This includes auth identity resolution, source provisioning, workdir
+provisioning, generated backend and varfiles, Terraform init, and workspace
+selection.
 
 ## Dynamic Hooks
 
@@ -48,9 +51,9 @@ hooks:
     mode: dynamic
 ```
 
-`before.terraform.plan` runs `tfmigrate plan`; `before.terraform.apply` and
-`before.terraform.deploy` run `tfmigrate apply`. Static `mode: plan` and
-`mode: apply` are available when a hook must always run one action.
+`before.terraform.plan` runs `tfmigrate plan`. `before.terraform.apply` and
+`before.terraform.deploy` run `tfmigrate apply`. Use static `mode: plan` or
+`mode: apply` when a hook must always run one action.
 
 Hooks run through Atmos, so they use the same identity as the Terraform
 operation. If the Terraform command or component selects an Atmos auth
@@ -60,7 +63,7 @@ identity, the migration gets that same authenticated environment.
 
 Provider removals are where this bites hardest. When a component release drops
 a provider configuration, every workspace that skips the intermediate release
-is wedged — the state still holds resources from the removed provider, and
+gets stuck. The state still holds resources from the removed provider, and
 Terraform refuses to plan:
 
 ```text
@@ -71,11 +74,11 @@ at provider["registry.opentofu.org/hashicorp/random"].legacy is required,
 but it has been removed.
 ```
 
-Until now the escape hatch was hand-restoring a temporary provider override,
-applying, and deleting it again — per workspace. With a migration shipped
-alongside the release, the hook prunes the stale state entries before
-Terraform ever loads provider configurations, and workspaces can jump straight
-to the newest release:
+Until now, the only fix was manual, and per workspace: restore a temporary
+provider override, apply, then delete the override again. Ship a migration
+alongside the release instead. The hook prunes the stale state entries before
+Terraform loads provider configurations, so workspaces can jump straight to
+the newest release:
 
 ```hcl
 migration "state" "drop_legacy_provider_state" {
@@ -85,10 +88,10 @@ migration "state" "drop_legacy_provider_state" {
 }
 ```
 
-Note that `state rm` abandons the remote object rather than destroying it.
-That is usually the intent for provider-cleanup migrations; when the object
-must actually be destroyed, destroy it before upgrading, or temporarily
-restore the provider configuration.
+Note: `state rm` abandons the remote object. It does not destroy it. This is
+usually what you want for provider-cleanup migrations. If you need to destroy
+the object, destroy it before you upgrade, or temporarily restore the
+provider configuration.
 
 ## History Mode
 
@@ -98,21 +101,27 @@ For idempotent migrations in automation, use `tfmigrate` history mode:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
-You don't have to configure it. As long as no custom `tfmigrate` config is
-supplied or discovered — no hook `config` field, no `--tfmigrate-config` /
-`ATMOS_TFMIGRATE_CONFIG`, no `TFMIGRATE_CONFIG`, and no `.tfmigrate.hcl` in the
-component — Atmos generates one on the fly that stores migration history in
-the component's own Terraform backend — the same S3 or GCS bucket as the
-state, under a stack/component/workspace-namespaced key, inheriting the
-region, role ARN, and endpoint; local backends get a history file beside the
-state. Applied migrations are recorded and never rerun, with nothing to set
-up.
+History mode needs no configuration by default. Atmos looks for a custom
+`tfmigrate` config in four places: the hook's `config` field, the
+`--tfmigrate-config` / `ATMOS_TFMIGRATE_CONFIG` flag or environment variable,
+the `TFMIGRATE_CONFIG` environment variable, and a `.tfmigrate.hcl` file in
+the component. If none of these exist, Atmos generates a config on the fly.
 
-To take control, drop a `.tfmigrate.hcl` in the component (or set the hook's
-`config` field, or pass `--tfmigrate-config`/`ATMOS_TFMIGRATE_CONFIG`). Atmos
-exports stack/component/workspace-scoped history variables and copies
-supported Terraform backend settings so a custom config can still reuse the
-same bucket and identity setup:
+The generated config stores migration history in the component's own
+Terraform backend. For an S3 or GCS backend, Atmos reuses the same bucket as
+the state. It stores history under a key namespaced by stack, component, and
+workspace, and it inherits the region, role ARN, and endpoint. For a local
+backend, Atmos stores the history file beside the state file.
+
+Atmos records every applied migration and never reruns it. You don't need to
+set anything up.
+
+To take control, provide your own config. Drop a `.tfmigrate.hcl` file in the
+component, set the hook's `config` field, or pass `--tfmigrate-config` /
+`ATMOS_TFMIGRATE_CONFIG`. Atmos exports stack, component, and
+workspace-scoped history variables, and copies the supported Terraform
+backend settings. Your custom config can then reuse the same bucket and
+identity setup:
 
 ```hcl
 tfmigrate {
@@ -140,12 +149,12 @@ Terraform backend bucket.
 
 ## Important Limitation
 
-Single-file `tfmigrate apply path.hcl` is not inherently idempotent. A rerun
-can fail after a state address has already moved or been removed. Prefer
-history mode, where the generated default already gives you durable storage
-whenever the component's backend is S3 or GCS; with a purely local backend,
-make sure the local history file survives between runs (for example, persisted
-by the CI workflow).
+Single-file `tfmigrate apply path.hcl` is not idempotent by itself. A rerun
+can fail if a state address already moved or was removed. Prefer history mode
+instead. When the component's backend is S3 or GCS, the generated default
+gives you durable storage automatically. With a purely local backend, make
+sure the local history file survives between runs — for example, have your CI
+workflow persist it.
 
 ## Learn More
 

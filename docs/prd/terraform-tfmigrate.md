@@ -16,10 +16,10 @@ The integration has two surfaces:
 
 - Resolves the stack and component with the standard flag handler.
 - Authenticates using the component identity.
-- Runs the normal Terraform init path first, so source provisioning, workdir provisioning, backend generation, varfile generation, and workspace setup happen before `tfmigrate`.
+- Runs the normal Terraform init path first. This means source provisioning, workdir provisioning, backend generation, varfile generation, and workspace setup all happen before `tfmigrate`.
 - Resolves `tfmigrate` and Terraform/OpenTofu through `dependencies.tools` or PATH.
 - Sets `TFMIGRATE_EXEC_PATH` to the resolved Terraform/OpenTofu binary unless the user already set it.
-- Exposes per-instance history variables, including stack/component/workspace names and supported Terraform backend values, so `tfmigrate` history storage can reuse the Terraform backend bucket and identity configuration without duplicating stack YAML.
+- Exposes per-instance history variables, including stack, component, and workspace names, and supported Terraform backend values. `tfmigrate` history storage can then reuse the Terraform backend bucket and identity configuration, without duplicating stack YAML.
 - Lists the same per-instance history values through `atmos terraform migrate list` for review and automation.
 
 Example:
@@ -29,7 +29,7 @@ atmos terraform migrate plan vpc -s plat-ue2-dev
 atmos terraform migrate apply vpc -s plat-ue2-dev
 ```
 
-History mode is enabled by omitting `--migration`. Atmos does not require a config flag; `tfmigrate` discovers `.tfmigrate.hcl` by default. Use `--tfmigrate-config` only to override that path:
+Omit `--migration` to enable history mode. Atmos does not require a config flag. `tfmigrate` discovers `.tfmigrate.hcl` by default. Use `--tfmigrate-config` only to override that path:
 
 ```shell
 atmos terraform migrate apply vpc -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
@@ -52,7 +52,7 @@ tfmigrate {
 }
 ```
 
-Atmos runs component auth before `tfmigrate`, so the storage client also inherits the same auth identity environment used for Terraform.
+Atmos runs component auth before `tfmigrate`. The storage client then inherits the same auth identity environment as Terraform.
 
 ## List Command
 
@@ -88,7 +88,7 @@ components:
 
 Hook `mode` values:
 
-- `dynamic`: `before.terraform.plan` runs `tfmigrate plan`; `before.terraform.apply` and `before.terraform.deploy` run `tfmigrate apply`.
+- `dynamic`: `before.terraform.plan` runs `tfmigrate plan`. `before.terraform.apply` and `before.terraform.deploy` run `tfmigrate apply`.
 - `plan`: always runs `tfmigrate plan`.
 - `apply`: always runs `tfmigrate apply`.
 

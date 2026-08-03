@@ -1,4 +1,4 @@
-- Preview a migration for a component in history mode (no `.tfmigrate.hcl` needed - Atmos generates one that reuses the component's Terraform backend for history storage)
+- Preview a migration for a component in history mode (no `.tfmigrate.hcl` needed: Atmos generates one that reuses the component's Terraform backend for history storage)
 
 ```shell
   $ atmos terraform migrate plan vpc -s prod-ue2
