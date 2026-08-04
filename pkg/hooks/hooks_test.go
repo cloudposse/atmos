@@ -972,6 +972,41 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		data := getStore(h).GetData()
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
 	})
+
+	// Issue #1055: store-write hooks bound to `after.terraform.output` let users
+	// backfill a store from already-deployed infrastructure without re-running
+	// apply. Pin the same event-matching contract for the new output/refresh events.
+	t.Run("after-output hook runs on after-output event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.output"})
+		err := h.RunAll(AfterTerraformOutput, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-output hook must fire on after-output event")
+	})
+
+	t.Run("after-output hook does not run on after-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.output"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "a hook scoped to after-output must not fire on after-apply")
+	})
+
+	t.Run("after-apply hook does not run on after-output event", func(t *testing.T) {
+		// The converse of the above: existing hooks scoped to apply/plan/etc.
+		// must not suddenly start firing just because output now fires hooks.
+		h := makeHooks([]string{"after.terraform.apply"})
+		err := h.RunAll(AfterTerraformOutput, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "a hook scoped to after-apply must not fire on after-output")
+	})
+
+	t.Run("after-refresh hook runs on after-refresh event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.refresh"})
+		err := h.RunAll(AfterTerraformRefresh, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-refresh hook must fire on after-refresh event")
+	})
 }
 
 // TestRunAll_SkipHooksFromCobraFlag is the regression guard for the before-event

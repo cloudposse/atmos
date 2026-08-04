@@ -1,0 +1,89 @@
+---
+slug: hooks-on-terraform-output-and-refresh
+title: "Populate a Store From Infrastructure You Already Deployed"
+authors: [osterman]
+tags: [feature]
+---
+
+Reference architectures live for years. By the time you wire up a store hook, most of what
+it should cover was already deployed — some of it before hooks existed, some of it by a
+process outside Atmos entirely. Store hooks only ran after `apply`. To get an existing VPC ID
+or subnet list into a store, you had to force a fresh `apply`, or fall back to a manual write
+with a cloud CLI.
+
+<!--truncate-->
+
+## The Problem
+
+A `kind: store` hook reads a Terraform output and writes it to a configured store, so other
+components can read it back later with `!store` or `!store.get`. This only ever fired on
+Terraform's write-path commands — `plan`, `apply`, `deploy`, and `test`. Nothing fired when
+you just wanted to *read* a value from infrastructure that already exists.
+
+That gap matters most for the infrastructure you're least likely to touch again soon: a
+production VPC someone applied by hand two years ago, or a reference architecture deployed
+before your organization adopted hooks at all. Backfilling a store from that infrastructure
+meant either re-running `apply` against something that didn't need to change, or writing the
+value into the store yourself, outside Atmos.
+
+## The Fix
+
+Atmos now fires lifecycle hooks around `atmos terraform output` and `atmos terraform
+refresh`, the same way it already does for `plan`, `apply`, and `test`. A `kind: store` hook
+(or a `type: store` step run through the `kind: step` bridge) can bind to
+`after.terraform.output` instead of, or alongside, `after.terraform.apply`:
+
+```yaml
+hooks:
+  backfill:
+    events: [after.terraform.output]
+    kind: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+```
+
+Running `atmos terraform output vpc -s prod` now reads the current state and writes `vpc_id`
+into the store — no `apply` required. `before`/`after.terraform.refresh` events fire the same
+way around `atmos terraform refresh`, for hooks that care about reconciling state with the
+real infrastructure rather than just reading it.
+
+## How to Use It
+
+Scope a store hook to `after.terraform.output` to backfill values from infrastructure that's
+already running:
+
+```yaml
+hooks:
+  outputs:
+    events: [after.terraform.output]
+    kind: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+      private_subnet_ids: .private_subnet_ids
+```
+
+```shell
+atmos terraform output vpc -s prod
+```
+
+Keep an existing `after.terraform.apply` hook untouched, or list both events on the same hook
+so it fires on either command:
+
+```yaml
+hooks:
+  outputs:
+    events: [after.terraform.apply, after.terraform.output]
+    kind: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+```
+
+## Get Involved
+
+Try binding a store hook to `after.terraform.output` against infrastructure you didn't apply
+through Atmos. Tell us what's missing — an aggregate event for `--affected`/`--all` output
+runs, or another lifecycle command entirely. Open an issue or start a discussion at
+[github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).

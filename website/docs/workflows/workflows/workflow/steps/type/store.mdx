@@ -52,6 +52,10 @@ components:
 
 The `store` step has no dedicated hook kind of its own. Use the generic [`kind: step` hook bridge](/stacks/hooks) to run it after a component applies. For example:
 
+You can also bind a `type: store` step to `after.terraform.output` instead of (or alongside)
+`after.terraform.apply`. This backfills a store from infrastructure that's already deployed —
+running `atmos terraform output` populates the store without requiring an `apply`.
+
 ```yaml
 hooks:
   record-tag:
