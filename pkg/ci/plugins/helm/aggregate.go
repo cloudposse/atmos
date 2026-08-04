@@ -277,13 +277,9 @@ func writeHelmAggregateDetails(builder *strings.Builder, command string, compone
 		detail.WriteString(helmMarkdownCell(component.Result.Stack + "/" + component.Result.Component + ": " + component.Status))
 		detail.WriteString("</summary>\n\n")
 		if component.Status == "failed" {
-			detail.WriteString("```text\n")
-			detail.WriteString(plugin.TruncateDetail(component.Result.Error))
-			detail.WriteString("\n```\n")
+			detail.WriteString(helmMarkdownCodeBlock("text", plugin.TruncateDetail(component.Result.Error)))
 		} else {
-			detail.WriteString("```diff\n")
-			detail.WriteString(plugin.TruncateDetail(component.Summary.Diff))
-			detail.WriteString("\n```\n")
+			detail.WriteString(helmMarkdownCodeBlock("diff", plugin.TruncateDetail(component.Summary.Diff)))
 		}
 		detail.WriteString("\n</details>\n\n")
 		if builder.Len()+detail.Len() > helmAggregateMarkdownMaxBytes {
@@ -292,6 +288,14 @@ func writeHelmAggregateDetails(builder *strings.Builder, command string, compone
 		}
 		builder.WriteString(detail.String())
 	}
+}
+
+func helmMarkdownCodeBlock(language, value string) string {
+	fence := "```"
+	for strings.Contains(value, fence) {
+		fence += "`"
+	}
+	return fence + language + "\n" + value + "\n" + fence + "\n"
 }
 
 func formatHelmAggregateDuration(milliseconds int64) string {

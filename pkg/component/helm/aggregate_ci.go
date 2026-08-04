@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -32,7 +33,7 @@ func newHelmBulkCICollector(command string) *helmBulkCICollector {
 // bulkCollectingProvider wraps the native Helm provider and records failures
 // that happen before an operation produces its structured summary.
 type bulkCollectingProvider struct {
-	*ComponentProvider
+	component.ComponentProvider
 	collector *helmBulkCICollector
 }
 
@@ -41,6 +42,13 @@ func (p *bulkCollectingProvider) Execute(ctx *component.ExecutionContext) error 
 	err := p.ComponentProvider.Execute(ctx)
 	p.collector.finish(ctx, startedAt, time.Now(), err)
 	return err
+}
+
+func (p *bulkCollectingProvider) OnGraphNodeSkipped(node *dependency.Node) {
+	if p == nil || p.collector == nil || node == nil {
+		return
+	}
+	p.collector.markSkipped(node.Stack, node.Component)
 }
 
 func helmBulkCollector(ctx *component.ExecutionContext) *helmBulkCICollector {
@@ -80,6 +88,17 @@ func (c *helmBulkCICollector) finish(ctx *component.ExecutionContext, startedAt,
 	result.FinishedAt = finishedAt
 	result.DurationMS = finishedAt.Sub(startedAt).Milliseconds()
 	applyHelmResultError(result, execErr)
+}
+
+func (c *helmBulkCICollector) markSkipped(stack, componentName string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	result := c.ensure(stack, componentName)
+	result.Status = "skipped"
 }
 
 func (c *helmBulkCICollector) ensure(stack, componentName string) *schema.HelmCIResult {
@@ -137,9 +156,26 @@ func cloneHelmSummary(summary map[string]any) map[string]any {
 	}
 	cloned := make(map[string]any, len(summary))
 	for key, value := range summary {
-		cloned[key] = value
+		cloned[key] = cloneHelmSummaryValue(value)
 	}
 	return cloned
+}
+
+func cloneHelmSummaryValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneHelmSummary(typed)
+	case []any:
+		cloned := make([]any, len(typed))
+		for i := range typed {
+			cloned[i] = cloneHelmSummaryValue(typed[i])
+		}
+		return cloned
+	case []string:
+		return append([]string(nil), typed...)
+	default:
+		return value
+	}
 }
 
 func supportsHelmAggregateCI(command string) bool {
