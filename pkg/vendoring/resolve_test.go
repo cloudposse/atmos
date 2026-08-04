@@ -3,7 +3,6 @@ package vendoring
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -340,14 +339,69 @@ func TestDiscoverComponentManifests_MissingBasePathReturnsEmpty(t *testing.T) {
 	assert.Empty(t, sources)
 }
 
-// TestDiscoverComponentManifests_BasePathIsAFile proves a non-ENOENT os.ReadDir failure (basePath
-// exists but isn't a directory) is surfaced as an error, unlike the missing-basePath case above
-// (a legitimate "nothing vendored this way yet" state) which returns an empty result instead.
-func TestDiscoverComponentManifests_BasePathIsAFile(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("os.ReadDir on a regular file path doesn't return an error on Windows (unlike ENOTDIR on Unix)")
-	}
+// TestDiscoverComponentManifests_NestedComponent mirrors the real cloudposse/infra-live layout
+// that surfaced the original bug: a component.yaml nested under a subdirectory
+// (<basePath>/eks/cluster/component.yaml), not directly under <basePath>. The component's
+// identity must be the slash-joined relative path ("eks/cluster"), matching the existing
+// convention that component names are already path-like, and the component's own subtree
+// (here, "modules") must never be treated as containing further components.
+func TestDiscoverComponentManifests_NestedComponent(t *testing.T) {
+	base := t.TempDir()
+	clusterDir := filepath.Join(base, "eks", "cluster")
+	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	writeFile(t, clusterDir, "component.yaml", componentManifestFixture)
 
+	// A modules/ subdirectory inside the component, containing something that could otherwise be
+	// mistaken for a nested component if discovery didn't stop descending once a manifest is found.
+	modulesDir := filepath.Join(clusterDir, "modules", "network")
+	require.NoError(t, os.MkdirAll(modulesDir, 0o755))
+	writeFile(t, modulesDir, "component.yaml", componentManifestFixture)
+
+	sources, err := DiscoverComponentManifests(base, "terraform")
+
+	require.NoError(t, err)
+	require.Len(t, sources, 1, "the nested modules/network component.yaml must not be discovered as a second component")
+	assert.Equal(t, "eks/cluster", sources[0].Source.Component)
+	assert.True(t, sources[0].FromComponentManifest)
+}
+
+// TestDiscoverComponentManifests_SkipsGitAndTerraformDirs proves .git and .terraform are never
+// descended into, matching the exclusion any real --everything sweep needs for performance and
+// correctness on a large repo (both directories are common, can be large, and never contain a
+// real component). Both are placed as siblings of a real component directory - not nested inside
+// it - so this exercises the skip-list itself, independent from the separate "a component's own
+// subtree stops being descended into" behavior TestDiscoverComponentManifests_NestedComponent
+// already covers (nesting .terraform inside a component dir would never reach the skip-list check
+// at all, since discovery already stops there once that component's own manifest is found).
+func TestDiscoverComponentManifests_SkipsGitAndTerraformDirs(t *testing.T) {
+	base := t.TempDir()
+	vpcDir := filepath.Join(base, "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	writeFile(t, vpcDir, "component.yaml", componentManifestFixture)
+
+	// A component.yaml planted inside .git/ and .terraform/ (both siblings of vpcDir) must never
+	// be discovered - if it were, it would prove the walk incorrectly descended into directories
+	// that should always be skipped.
+	gitDir := filepath.Join(base, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	writeFile(t, gitDir, "component.yaml", componentManifestFixture)
+
+	terraformDir := filepath.Join(base, ".terraform", "modules")
+	require.NoError(t, os.MkdirAll(terraformDir, 0o755))
+	writeFile(t, terraformDir, "component.yaml", componentManifestFixture)
+
+	sources, err := DiscoverComponentManifests(base, "terraform")
+
+	require.NoError(t, err)
+	require.Len(t, sources, 1, ".git and .terraform must never be descended into")
+	assert.Equal(t, "vpc", sources[0].Source.Component)
+}
+
+// TestDiscoverComponentManifests_BasePathIsAFile proves basePath existing but not being a
+// directory is surfaced as an error, unlike the missing-basePath case above (a legitimate "nothing
+// vendored this way yet" state) which returns an empty result instead. Checked via os.Stat's
+// portable Info.IsDir(), not a platform-specific os.ReadDir failure mode, so this holds on every OS.
+func TestDiscoverComponentManifests_BasePathIsAFile(t *testing.T) {
 	basePath := writeFile(t, t.TempDir(), "not-a-dir", "oops")
 
 	_, err := DiscoverComponentManifests(basePath, "terraform")
@@ -390,6 +444,36 @@ func TestDiscoverAllComponentManifests_ScansConfiguredBasePath(t *testing.T) {
 	all, err = DiscoverAllComponentManifests("terraform", false)
 	require.NoError(t, err)
 	require.Len(t, all, 1, "non-terraform base paths point at empty directories")
+}
+
+// TestDiscoverAllComponentManifests_SkipsTypesWithNoConfiguredBasePath reproduces the bug found by
+// manual end-to-end testing against the real cloudposse/infra-live repo: a repo that vendors
+// exclusively via component.yaml (no vendor.yaml) and never configures components.packer (or
+// components.helmfile) triggered the repo-wide "--all" sweep to rediscover every terraform
+// component a second time under the unconfigured type, since GetComponentBasePath silently fell
+// back to the bare atmos base_path (the repo root) instead of skipping. That produced double the
+// reported updates, each duplicate mislabeled with the wrong ComponentType and a repo-root-relative
+// Component name (e.g. "components/terraform/waf" with ComponentType "packer", alongside the
+// correct "waf" with ComponentType "terraform"). Deliberately does NOT set
+// ATMOS_COMPONENTS_HELMFILE_BASE_PATH/ATMOS_COMPONENTS_PACKER_BASE_PATH -- the gap that let the
+// original bug ship undetected in TestDiscoverAllComponentManifests_ScansConfiguredBasePath above,
+// which always points every type at a real (if empty) directory.
+func TestDiscoverAllComponentManifests_SkipsTypesWithNoConfiguredBasePath(t *testing.T) {
+	base := t.TempDir()
+	wafDir := filepath.Join(base, "waf")
+	require.NoError(t, os.MkdirAll(wafDir, 0o755))
+	writeFile(t, wafDir, "component.yaml", componentManifestFixture)
+
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", base)
+	t.Setenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH", "")
+	t.Setenv("ATMOS_COMPONENTS_PACKER_BASE_PATH", "")
+
+	all, err := DiscoverAllComponentManifests("terraform", false)
+
+	require.NoError(t, err)
+	require.Len(t, all, 1, "waf must be discovered exactly once, not once per unconfigured component type")
+	assert.Equal(t, "waf", all[0].Source.Component)
+	assert.Equal(t, "terraform", all[0].ComponentType)
 }
 
 // TestDiscoverAllComponentManifests_UnsupportedTypePropagatesError proves an unsupported
