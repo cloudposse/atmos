@@ -3,7 +3,9 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,7 +17,9 @@ import (
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/auth"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
+	rtutils "github.com/jfrog/jfrog-client-go/artifactory/services/utils"
 	"github.com/jfrog/jfrog-client-go/config"
+	"github.com/jfrog/jfrog-client-go/utils/io/content"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
 )
 
@@ -35,13 +39,21 @@ type ArtifactoryStoreOptions struct {
 }
 
 // ArtifactoryClient interface allows us to mock the Artifactory Services Manager in test with only the methods we are using in the ArtifactoryStore.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_artifactory_store.go -package=providers
 type ArtifactoryClient interface {
 	DownloadFiles(...services.DownloadParams) (int, int, error)
 	UploadFiles(artifactory.UploadServiceOptions, ...services.UploadParams) (int, int, error)
+	// SearchFiles lists files matching an Ant-style pattern (metadata only, no content). Used by
+	// Keys to enumerate keys under a stack/component scope.
+	SearchFiles(services.SearchParams) (*content.ContentReader, error)
 }
 
-// Ensure ArtifactoryStore implements the store.Store interface.
-var _ store.Store = (*ArtifactoryStore)(nil)
+// Ensure ArtifactoryStore implements the store.Store and store.ListableStore interfaces.
+var (
+	_ store.Store         = (*ArtifactoryStore)(nil)
+	_ store.ListableStore = (*ArtifactoryStore)(nil)
+)
 
 func getAccessKey(options *ArtifactoryStoreOptions) (string, error) {
 	if options.AccessToken != nil {
@@ -362,6 +374,72 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 		return string(data), nil
 	}
 	return result, nil
+}
+
+// artifactItemName returns the item's repo-relative path (repo + path + name) with the store's
+// repo+prefix segment stripped, or "" if it does not fall under prefix.
+func artifactItemName(item *rtutils.ResultItem, prefix string) string {
+	fullPath := item.Repo
+	if item.Path != "" && item.Path != "." {
+		fullPath += "/" + item.Path
+	}
+	fullPath += "/" + item.Name
+
+	if name := strings.TrimPrefix(fullPath, prefix+"/"); name != fullPath {
+		return name
+	}
+	return ""
+}
+
+// collectArtifactNames drains reader, collecting each result's listed name under prefix. Factored
+// out of Keys to keep its cyclomatic complexity within the linter's limit.
+func collectArtifactNames(reader *content.ContentReader, prefix string) ([]string, error) {
+	var names []string
+	for {
+		var item rtutils.ResultItem
+		readErr := reader.NextRecord(&item)
+		if readErr != nil {
+			if !errors.Is(readErr, io.EOF) {
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrListArtifacts, prefix, readErr)
+			}
+			break
+		}
+		if name := artifactItemName(&item, prefix); name != "" {
+			names = append(names, name)
+		}
+	}
+	if getErr := reader.GetError(); getErr != nil {
+		return nil, fmt.Errorf(errWrapFormatWithID, store.ErrListArtifacts, prefix, getErr)
+	}
+	return names, nil
+}
+
+// Keys lists the keys under a stack/component scope (or globally when both are empty), via
+// Artifactory's file search API with a recursive Ant-style pattern. Each match's repo-relative
+// path (repo + path + name) has the store's repo+prefix segment stripped to recover the key.
+func (s *ArtifactoryStore) Keys(stack string, component string) ([]string, error) {
+	if s.stackDelimiter == nil {
+		return nil, store.ErrStackDelimiterNotSet
+	}
+
+	basePrefix := strings.Join([]string{s.repoName, s.prefix}, "/")
+	prefix := getKeyPrefix(basePrefix, *s.stackDelimiter, stack, component, "/")
+
+	searchParams := services.NewSearchParams()
+	searchParams.Pattern = prefix + "/**"
+	searchParams.Recursive = true
+
+	reader, err := s.rtManager.SearchFiles(searchParams)
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormatWithID, store.ErrListArtifacts, prefix, err)
+	}
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			log.Trace("Failed to close Artifactory search reader", "error", closeErr, "prefix", prefix)
+		}
+	}()
+
+	return collectArtifactNames(reader, prefix)
 }
 
 func init() {

@@ -146,8 +146,8 @@ func TestSetAuthContext_IdentityOverrideClearsDefaultClients(t *testing.T) {
 	assert.Equal(t, "terraform-ci", azureStore.identityName)
 	assert.Nil(t, azureStore.client)
 
-	mockGSMClient := new(MockGSMClient)
-	mockGSMClient.On("Close").Return(nil).Once()
+	mockGSMClient := NewMockGSMClient(ctrl)
+	mockGSMClient.EXPECT().Close().Return(nil)
 	gsmStore := &GSMStore{
 		client:       mockGSMClient,
 		identityName: "",
@@ -155,7 +155,6 @@ func TestSetAuthContext_IdentityOverrideClearsDefaultClients(t *testing.T) {
 	gsmStore.SetAuthContext(resolver, "terraform-ci")
 	assert.Equal(t, "terraform-ci", gsmStore.identityName)
 	assert.Nil(t, gsmStore.client)
-	mockGSMClient.AssertExpectations(t)
 
 	asmStore := &SecretsManagerStore{
 		client:       newFakeSecretsManager(),
@@ -427,8 +426,9 @@ func TestAzureKeyVaultStore_EnsureClient_AlreadyInitialized(t *testing.T) {
 }
 
 func TestGSMStore_EnsureClient_AlreadyInitialized(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	store := &GSMStore{
-		client:    new(MockGSMClient),
+		client:    NewMockGSMClient(ctrl),
 		projectID: "test-project",
 	}
 
