@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +12,12 @@ import (
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
+	rtutils "github.com/jfrog/jfrog-client-go/artifactory/services/utils"
+	"github.com/jfrog/jfrog-client-go/utils/io/content"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 // Define log levels for testing using atmos logger constants.
@@ -25,57 +28,39 @@ var (
 	traceLogLevel = log.TraceLevel
 )
 
-type MockArtifactoryClient struct {
-	mock.Mock
-	// downloadData, when non-nil, overrides the bytes written for a successful
-	// download (default is `{"test":"value"}`). Used to exercise GetKey's
-	// empty-data and non-JSON fallback branches.
-	downloadData *[]byte
-}
-
-func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams) (int, int, error) {
-	args := m.Called(params[0])
-	totalDownloaded := args.Int(0)
-	totalFailed := args.Int(1)
-	err := args.Error(2)
-	// First check: if there's an error, return immediately.
-	if err != nil {
-		return totalDownloaded, totalFailed, err
-	}
-
-	// Second check: if there are failures, return without creating files.
-	if totalFailed > 0 {
-		return totalDownloaded, totalFailed, nil
-	}
-
-	// Third check: if no downloads, return without creating files.
-	if totalDownloaded == 0 {
-		return totalDownloaded, totalFailed, nil
-	}
-
-	// Only proceed with file creation for successful cases
-	targetDir := params[0].Target
-	filename := filepath.Base(params[0].Pattern)
+// writeMockDownloadedFile replicates the download side effect that a real Artifactory download
+// would produce: it writes data to <target>/<filepath.Base(pattern)>. Wired up via DoAndReturn on
+// the generated MockArtifactoryClient's DownloadFiles expectation, since a plain gomock Return
+// value cannot also perform file I/O as a side effect.
+func writeMockDownloadedFile(target, pattern string, data []byte) (int, int, error) {
+	targetDir := target
+	filename := filepath.Base(pattern)
 
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return 0, 0, err
 	}
 
-	data := []byte(`{"test":"value"}`)
-	if m.downloadData != nil {
-		data = *m.downloadData
-	}
 	fullPath := filepath.Join(targetDir, filename)
 	if err := os.WriteFile(fullPath, data, 0o600); err != nil {
 		return 0, 0, err
 	}
 
-	return totalDownloaded, totalFailed, nil
+	return 1, 0, nil
 }
 
-func (m *MockArtifactoryClient) UploadFiles(options artifactory.UploadServiceOptions, params ...services.UploadParams) (int, int, error) {
-	args := m.Called(options, params[0])
-	return args.Int(0), args.Int(1), args.Error(2)
+// newTestContentReader writes items to a temp "results" JSON file (the JFrog search response
+// shape) and returns a ContentReader over it, since content.ContentReader has no in-memory
+// constructor from a slice.
+func newTestContentReader(t *testing.T, items []rtutils.ResultItem) *content.ContentReader {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "artifactory-search-*.json")
+	require.NoError(t, err)
+	data, err := json.Marshal(map[string]any{"results": items})
+	require.NoError(t, err)
+	_, err = f.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return content.NewContentReader(f.Name(), "results")
 }
 
 func TestNewArtifactoryStore(t *testing.T) {
@@ -250,7 +235,8 @@ func TestArtifactoryStore_Set(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := new(MockArtifactoryClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockArtifactoryClient(ctrl)
 			delimiter := "/"
 			store := &ArtifactoryStore{
 				prefix:         "prefix",
@@ -259,37 +245,30 @@ func TestArtifactoryStore_Set(t *testing.T) {
 				stackDelimiter: &delimiter,
 			}
 
-			mockClient.On("UploadFiles",
-				mock.MatchedBy(func(options artifactory.UploadServiceOptions) bool {
+			mockClient.EXPECT().UploadFiles(
+				gomock.Cond(func(options artifactory.UploadServiceOptions) bool {
 					return options.FailFast == true
 				}),
-				mock.MatchedBy(func(params services.UploadParams) bool {
+				gomock.Cond(func(params services.UploadParams) bool {
 					return params.Target == tt.expected && params.Flat == true
-				})).Return(1, 0, nil)
+				}),
+			).Return(1, 0, nil)
 
 			err := store.Set(tt.stack, tt.component, tt.key, []byte("test data"))
 			assert.NoError(t, err)
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
 
 func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
-	mockClient := new(MockArtifactoryClient)
 	delimiter := "/"
-	store := &ArtifactoryStore{
-		prefix:         "prefix",
-		repoName:       "repo",
-		rtManager:      mockClient,
-		stackDelimiter: &delimiter,
-	}
 
 	tests := []struct {
 		name        string
 		stack       string
 		component   string
 		key         string
-		mockSetup   func()
+		mockSetup   func(mockClient *MockArtifactoryClient)
 		expectError bool
 		errorMsg    string
 	}{
@@ -298,8 +277,8 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 			stack:     "dev",
 			component: "app",
 			key:       "config.json",
-			mockSetup: func() {
-				mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Cond(func(params services.DownloadParams) bool {
 					return params.Pattern == "repo/prefix/dev/app/config.json"
 				})).Return(0, 1, fmt.Errorf("download failed")) //nolint
 			},
@@ -311,8 +290,8 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 			stack:     "dev",
 			component: "app",
 			key:       "config.json",
-			mockSetup: func() {
-				mockClient.On("DownloadFiles", mock.Anything).Return(0, 0, nil)
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Any()).Return(0, 0, nil)
 			},
 			expectError: true,
 			errorMsg:    "no files downloaded",
@@ -322,8 +301,12 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 			stack:     "dev",
 			component: "app",
 			key:       "config.json",
-			mockSetup: func() {
-				mockClient.On("DownloadFiles", mock.Anything).Return(1, 0, nil)
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Any()).DoAndReturn(
+					func(params ...services.DownloadParams) (int, int, error) {
+						return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte(`{"test":"value"}`))
+					},
+				)
 			},
 			expectError: false,
 		},
@@ -331,11 +314,18 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear any previous mock expectations
-			mockClient.ExpectedCalls = nil
-			mockClient.Calls = nil
+			// Fresh controller + mock per subtest: gomock has no "reset expectations" API like
+			// testify's ExpectedCalls/Calls reset, so each subtest gets its own isolated mock.
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockArtifactoryClient(ctrl)
+			store := &ArtifactoryStore{
+				prefix:         "prefix",
+				repoName:       "repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
 
-			tt.mockSetup()
+			tt.mockSetup(mockClient)
 			result, err := store.Get(tt.stack, tt.component, tt.key)
 
 			if tt.expectError {
@@ -346,25 +336,17 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
 			}
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
 
 func TestArtifactoryStore_GetKey(t *testing.T) {
-	mockClient := new(MockArtifactoryClient)
 	delimiter := "/"
-	store := &ArtifactoryStore{
-		prefix:         "prefix",
-		repoName:       "repo",
-		rtManager:      mockClient,
-		stackDelimiter: &delimiter,
-	}
 
 	tests := []struct {
 		name        string
 		key         string
-		mockSetup   func()
+		mockSetup   func(mockClient *MockArtifactoryClient)
 		expectError bool
 		// errIs, when non-nil, is matched against the returned error with errors.Is.
 		errIs error
@@ -375,15 +357,15 @@ func TestArtifactoryStore_GetKey(t *testing.T) {
 		{
 			name:        "empty key",
 			key:         "",
-			mockSetup:   func() {},
+			mockSetup:   func(mockClient *MockArtifactoryClient) {},
 			expectError: true,
 			errIs:       storepkg.ErrEmptyKey,
 		},
 		{
 			name: "download error",
 			key:  "config.json",
-			mockSetup: func() {
-				mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Cond(func(params services.DownloadParams) bool {
 					return params.Pattern == "repo/prefix/config.json"
 				})).Return(0, 1, fmt.Errorf("download failed"))
 			},
@@ -394,24 +376,35 @@ func TestArtifactoryStore_GetKey(t *testing.T) {
 			name: "successful download appends json extension and parses JSON",
 			// No ".json" suffix; GetKey appends it before building the repo path.
 			key: "config",
-			mockSetup: func() {
-				mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Cond(func(params services.DownloadParams) bool {
 					return params.Pattern == "repo/prefix/config.json"
-				})).Return(1, 0, nil)
+				})).DoAndReturn(
+					func(params ...services.DownloadParams) (int, int, error) {
+						return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte(`{"test":"value"}`))
+					},
+				)
 			},
 			expectError: false,
-			// MockArtifactoryClient writes `{"test":"value"}` on a successful download.
+			// A successful download writes `{"test":"value"}`.
 			expected: map[string]interface{}{"test": "value"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear any previous mock expectations.
-			mockClient.ExpectedCalls = nil
-			mockClient.Calls = nil
+			// Fresh controller + mock per subtest: gomock has no "reset expectations" API like
+			// testify's ExpectedCalls/Calls reset, so each subtest gets its own isolated mock.
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockArtifactoryClient(ctrl)
+			store := &ArtifactoryStore{
+				prefix:         "prefix",
+				repoName:       "repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
 
-			tt.mockSetup()
+			tt.mockSetup(mockClient)
 			result, err := store.GetKey(tt.key)
 
 			if tt.expectError {
@@ -427,7 +420,6 @@ func TestArtifactoryStore_GetKey(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
@@ -587,50 +579,51 @@ func TestArtifactoryStore_processDownloadedFile(t *testing.T) {
 
 func TestArtifactoryStore_Set_Errors(t *testing.T) {
 	delimiter := "/"
-	newStore := func() (*ArtifactoryStore, *MockArtifactoryClient) {
-		mc := new(MockArtifactoryClient)
+	newStore := func(t *testing.T) (*ArtifactoryStore, *MockArtifactoryClient) {
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
 		return &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}, mc
 	}
 
 	t.Run("empty stack", func(t *testing.T) {
-		s, _ := newStore()
+		s, _ := newStore(t)
 		assert.ErrorIs(t, s.Set("", "app", "k", "v"), storepkg.ErrEmptyStack)
 	})
 
 	t.Run("empty component", func(t *testing.T) {
-		s, _ := newStore()
+		s, _ := newStore(t)
 		assert.ErrorIs(t, s.Set("dev", "", "k", "v"), storepkg.ErrEmptyComponent)
 	})
 
 	t.Run("empty key", func(t *testing.T) {
-		s, _ := newStore()
+		s, _ := newStore(t)
 		assert.ErrorIs(t, s.Set("dev", "app", "", "v"), storepkg.ErrEmptyKey)
 	})
 
 	t.Run("nil value", func(t *testing.T) {
-		s, _ := newStore()
+		s, _ := newStore(t)
 		assert.ErrorIs(t, s.Set("dev", "app", "k", nil), storepkg.ErrNilValue)
 	})
 
 	t.Run("getKey error on nil delimiter", func(t *testing.T) {
-		mc := new(MockArtifactoryClient)
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
 		s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc} // nil delimiter.
 		assert.ErrorIs(t, s.Set("dev", "app", "k", "v"), storepkg.ErrGetKey)
 	})
 
 	t.Run("marshal error", func(t *testing.T) {
-		s, _ := newStore()
+		s, _ := newStore(t)
 		// A channel cannot be marshaled to JSON.
 		assert.ErrorIs(t, s.Set("dev", "app", "k", make(chan int)), storepkg.ErrMarshalValue)
 	})
 
 	t.Run("upload error", func(t *testing.T) {
-		s, mc := newStore()
+		s, mc := newStore(t)
 		// A non-[]byte value exercises the json.Marshal branch before upload.
-		mc.On("UploadFiles", mock.Anything, mock.Anything).Return(0, 1, fmt.Errorf("upload boom"))
+		mc.EXPECT().UploadFiles(gomock.Any(), gomock.Any()).Return(0, 1, fmt.Errorf("upload boom"))
 		err := s.Set("dev", "app", "k", "string-value")
 		assert.ErrorIs(t, err, storepkg.ErrUploadFile)
-		mc.AssertExpectations(t)
 	})
 }
 
@@ -638,29 +631,33 @@ func TestArtifactoryStore_GetKey_DataVariants(t *testing.T) {
 	delimiter := "/"
 
 	t.Run("empty data returns empty string", func(t *testing.T) {
-		mc := new(MockArtifactoryClient)
-		empty := []byte{}
-		mc.downloadData = &empty
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
 		s := &ArtifactoryStore{prefix: "prefix", repoName: "repo", rtManager: mc, stackDelimiter: &delimiter}
-		mc.On("DownloadFiles", mock.Anything).Return(1, 0, nil)
+		mc.EXPECT().DownloadFiles(gomock.Any()).DoAndReturn(
+			func(params ...services.DownloadParams) (int, int, error) {
+				return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte{})
+			},
+		)
 
 		v, err := s.GetKey("config")
 		assert.NoError(t, err)
 		assert.Equal(t, "", v)
-		mc.AssertExpectations(t)
 	})
 
 	t.Run("non-JSON data returns string", func(t *testing.T) {
-		mc := new(MockArtifactoryClient)
-		raw := []byte("plain text")
-		mc.downloadData = &raw
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
 		s := &ArtifactoryStore{prefix: "prefix", repoName: "repo", rtManager: mc, stackDelimiter: &delimiter}
-		mc.On("DownloadFiles", mock.Anything).Return(1, 0, nil)
+		mc.EXPECT().DownloadFiles(gomock.Any()).DoAndReturn(
+			func(params ...services.DownloadParams) (int, int, error) {
+				return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte("plain text"))
+			},
+		)
 
 		v, err := s.GetKey("config")
 		assert.NoError(t, err)
 		assert.Equal(t, "plain text", v)
-		mc.AssertExpectations(t)
 	})
 }
 
@@ -670,4 +667,39 @@ func TestBuildArtifactoryStore_ParseError(t *testing.T) {
 		Options: map[string]interface{}{"prefix": []string{"x"}},
 	})
 	assert.ErrorIs(t, err, storepkg.ErrParseArtifactoryOptions)
+}
+
+// TestArtifactoryStore_Keys proves Keys searches with a recursive Ant-style pattern and strips
+// the store's repo+prefix segment from each match's repo-relative path.
+func TestArtifactoryStore_Keys(t *testing.T) {
+	delimiter := "-"
+	ctrl := gomock.NewController(t)
+	mc := NewMockArtifactoryClient(ctrl)
+	s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}
+
+	reader := newTestContentReader(t, []rtutils.ResultItem{
+		{Repo: "r", Path: "p/prod/vpc", Name: "image_tag"},
+		{Repo: "r", Path: "p/prod/vpc", Name: "region"},
+		{Repo: "r", Path: "p/dev/vpc", Name: "image_tag"}, // Different stack: excluded.
+	})
+	mc.EXPECT().SearchFiles(gomock.Cond(func(params services.SearchParams) bool {
+		return params.Pattern == "r/p/prod/vpc/**" && params.Recursive
+	})).Return(reader, nil)
+
+	keys, err := s.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+}
+
+func TestArtifactoryStore_Keys_Error(t *testing.T) {
+	delimiter := "-"
+	ctrl := gomock.NewController(t)
+	mc := NewMockArtifactoryClient(ctrl)
+	s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}
+
+	mc.EXPECT().SearchFiles(gomock.Any()).Return((*content.ContentReader)(nil), assert.AnError)
+
+	_, err := s.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, storepkg.ErrListArtifacts)
 }
