@@ -59,6 +59,41 @@ func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
 	require.Equal(t, 1, closes)
 }
 
+func TestExecuteTerraformSuppressesSpinnersDuringConcurrentRun(t *testing.T) {
+	originalSuppressSpinners := suppressTerraformSpinners
+	t.Cleanup(func() { suppressTerraformSpinners = originalSuppressSpinners })
+
+	var active atomic.Bool
+	var restored atomic.Bool
+	suppressTerraformSpinners = func() func() {
+		active.Store(true)
+		return func() {
+			active.Store(false)
+			restored.Store(true)
+		}
+	}
+
+	var observedActive atomic.Bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     terraformSubCommandPlan,
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+			observedActive.Store(active.Load())
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, observedActive.Load())
+	require.True(t, restored.Load())
+	require.False(t, active.Load())
+}
+
 func TestStartSharedTerraformCache(t *testing.T) {
 	originalStart := startTerraformCacheForExecution
 	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })

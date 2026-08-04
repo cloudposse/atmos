@@ -46,6 +46,9 @@ const (
 // lifecycle without binding a real loopback proxy.
 var startTerraformCacheForExecution = tfcache.StartForExecution
 
+// suppressTerraformSpinners is a seam for testing concurrent Terraform execution.
+var suppressTerraformSpinners = tfoutput.SuppressSpinners
+
 const (
 	terraformFailureModeFailFast  = "fail-fast"
 	terraformFailureModeKeepGoing = "keep-going"
@@ -160,7 +163,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 
 	maxConcurrency := effectiveTerraformMaxConcurrency(opts.Info)
 	if maxConcurrency > 1 {
-		restoreSpinners := tfoutput.SuppressSpinners()
+		restoreSpinners := suppressTerraformSpinners()
 		defer restoreSpinners()
 	}
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
