@@ -301,11 +301,7 @@ Helm 4 automatically promotes `hookOnly` to `watcher` when install uninstall-on-
 
 Lifecycle resolution occurs in two configuration stages followed by invocation overrides:
 
-1. Deep-merge the complete `release` tree using normal Atmos precedence:
-   1. Built-in Atmos defaults.
-   2. Stack-level native Helm defaults under `helm.release`.
-   3. Inherited abstract/base Helm components in inheritance order.
-   4. The concrete `components.helm.<name>.release` instance.
+1. Deep-merge the complete `release` tree using normal Atmos precedence, from lowest to highest: built-in Atmos defaults, stack-level native Helm defaults under `helm.release`, inherited abstract/base Helm components in inheritance order, and the concrete `components.helm.<name>.release` instance.
 2. Select install, upgrade, or delete from release state and overlay that operation section on the merged release-wide defaults.
 3. Apply explicitly supplied command-line flags last.
 
