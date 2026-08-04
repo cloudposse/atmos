@@ -253,6 +253,8 @@ func ExecuteDescribeStacks(
 // before auth/template/YAML-function evaluation (see
 // describeStacksProcessor.scopeDecision) instead of only being filtered after the
 // fact by pkg/scheduler/adapters/terraform.go's post-filter.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with compatibility parameters.
 func ExecuteDescribeStacksWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
@@ -269,6 +271,8 @@ func ExecuteDescribeStacksWithMocks(
 	tagsFilter []string,
 	labelsFilter map[string]string,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithMocks")()
+
 	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, true, tagsFilter, labelsFilter, DescribeStacksErrorOptions{})
 }
 
@@ -296,6 +300,8 @@ func ExecuteDescribeStacksWithAuthDisabled(
 
 // ExecuteDescribeStacksWithAuthDisabledAndMocks is the auth-disabled variant used
 // by affected Terraform plan execution when --use-mocks is selected.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacksWithAuthDisabled with one compatibility parameter.
 func ExecuteDescribeStacksWithAuthDisabledAndMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
@@ -311,6 +317,8 @@ func ExecuteDescribeStacksWithAuthDisabledAndMocks(
 	authDisabled bool,
 	useMocks bool,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithAuthDisabledAndMocks")()
+
 	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, useMocks, true, nil, nil, DescribeStacksErrorOptions{})
 }
 

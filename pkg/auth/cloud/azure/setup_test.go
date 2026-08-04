@@ -1615,6 +1615,78 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 		err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "")
 		assert.NoError(t, err)
 	})
+
+	t.Run("CLI-sourced credentials skip write-back", func(t *testing.T) {
+		// Credentials minted BY az must not be written back into az's own cache:
+		// the derived home_account_id duplicates az's Account entry for guest
+		// users and breaks az (azure-cli#20168).
+		subHome := t.TempDir()
+		t.Setenv("HOME", subHome)
+		t.Setenv("USERPROFILE", subHome)
+
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "cli-oid-123",
+			"upn": "cli-user@contoso.com",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "cli-tenant",
+			SubscriptionID: "cli-sub",
+			AuthMethod:     types.AzureAuthMethodCLI,
+		}
+
+		err := UpdateAzureCLIFiles(creds, "cli-tenant", "cli-sub", "")
+		assert.NoError(t, err)
+
+		_, msalErr := os.Stat(filepath.Join(subHome, ".azure", "msal_token_cache.json"))
+		_, profileErr := os.Stat(filepath.Join(subHome, ".azure", "azureProfile.json"))
+		assert.True(t, os.IsNotExist(msalErr), "MSAL cache must not be written for CLI-sourced credentials")
+		assert.True(t, os.IsNotExist(profileErr), "Azure profile must not be written for CLI-sourced credentials")
+	})
+
+	t.Run("guest user home account id from MSAL is used", func(t *testing.T) {
+		// For guest (B2B) users the MSAL home account ID ("{home-oid}.{home-tenant}")
+		// differs from "{oid}.{target-tenant}"; the cache entry must carry the former.
+		subHome := t.TempDir()
+		t.Setenv("HOME", subHome)
+		t.Setenv("USERPROFILE", subHome)
+
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "guest-oid-in-target",
+			"upn": "guest@hometenant.com",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "target-tenant",
+			SubscriptionID: "target-sub",
+			AuthMethod:     types.AzureAuthMethodDeviceCode,
+			HomeAccountID:  "home-oid.home-tenant",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "target-tenant", "target-sub", "")
+		assert.NoError(t, err)
+
+		data, readErr := os.ReadFile(filepath.Join(subHome, ".azure", "msal_token_cache.json"))
+		require.NoError(t, readErr)
+
+		var cache map[string]map[string]map[string]interface{}
+		require.NoError(t, json.Unmarshal(data, &cache))
+
+		accounts := cache["Account"]
+		require.Len(t, accounts, 1, "exactly one Account entry expected")
+		for key, entry := range accounts {
+			assert.Contains(t, key, "home-oid.home-tenant", "cache key must use the MSAL home account ID")
+			assert.Equal(t, "home-oid.home-tenant", entry[FieldHomeAccountID])
+			assert.Equal(t, "guest-oid-in-target", entry["local_account_id"], "local account id stays the target-tenant OID")
+			assert.Equal(t, "target-tenant", entry[FieldRealm], "realm stays the target tenant")
+		}
+	})
 }
 
 // TestLoadMSALCache_ParseFailure verifies that a corrupted (non-JSON) MSAL
