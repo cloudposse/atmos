@@ -218,6 +218,44 @@ func TestVendorConfigListCmd_MissingFile(t *testing.T) {
 	require.Error(t, err)
 }
 
+// --- independent per-subcommand flags ------------------------------------------
+
+// TestVendorConfigSubcommands_FlagsIndependent proves each vendor config subcommand's flags
+// (--file, --type, --format, --delimiter) are backed by fully independent per-command
+// StandardParsers, not the shared package-level vars this migrated from: setting one
+// subcommand's flag must not leak into another subcommand's default value, and a flag that only
+// exists on one subcommand must not be registered on the others at all.
+func TestVendorConfigSubcommands_FlagsIndependent(t *testing.T) {
+	resetCommandFlags(t, vendorConfigGetCmd)
+	resetCommandFlags(t, vendorConfigSetCmd)
+	resetCommandFlags(t, vendorConfigDeleteCmd)
+	resetCommandFlags(t, vendorConfigFormatCmd)
+	resetCommandFlags(t, vendorConfigListCmd)
+
+	require.NoError(t, vendorConfigGetCmd.Flags().Set("file", "get-only.yaml"))
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", "set-only.yaml"))
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("type", atmosyaml.TypeInt))
+	require.NoError(t, vendorConfigListCmd.Flags().Set("format", "json"))
+	require.NoError(t, vendorConfigListCmd.Flags().Set("delimiter", ";"))
+
+	// Each command's own flag holds exactly the value set on it.
+	assert.Equal(t, "get-only.yaml", vendorConfigGetCmd.Flags().Lookup("file").Value.String())
+	assert.Equal(t, "set-only.yaml", vendorConfigSetCmd.Flags().Lookup("file").Value.String())
+	assert.Equal(t, atmosyaml.TypeInt, vendorConfigSetCmd.Flags().Lookup("type").Value.String())
+	assert.Equal(t, "json", vendorConfigListCmd.Flags().Lookup("format").Value.String())
+	assert.Equal(t, ";", vendorConfigListCmd.Flags().Lookup("delimiter").Value.String())
+
+	// Unrelated commands' --file remain at their own untouched defaults.
+	assert.Equal(t, "", vendorConfigDeleteCmd.Flags().Lookup("file").Value.String(), "delete's --file must not pick up get's or set's value")
+	assert.Equal(t, "", vendorConfigFormatCmd.Flags().Lookup("file").Value.String(), "format's --file must not pick up get's or set's value")
+	assert.Equal(t, "", vendorConfigListCmd.Flags().Lookup("file").Value.String(), "list's --file must not pick up get's or set's value")
+
+	// Flags that only exist on one subcommand must not be registered on the others at all.
+	assert.Nil(t, vendorConfigGetCmd.Flags().Lookup("type"), "get must not register set's --type flag")
+	assert.Nil(t, vendorConfigDeleteCmd.Flags().Lookup("format"), "delete must not register list's --format flag")
+	assert.Nil(t, vendorConfigFormatCmd.Flags().Lookup("delimiter"), "format must not register list's --delimiter flag")
+}
+
 // --- buildVendorConfigPathRows error paths ------------------------------------
 
 func TestBuildVendorConfigPathRows_BadRootFile(t *testing.T) {
