@@ -3,13 +3,17 @@ vars:
 
 # Native Helm lifecycle defaults for every Helm component in this stack.
 helm:
-  wait_strategy: watcher
-  # Leave enough headroom for nested k3s workloads on resource-constrained
-  # macOS/Colima runners. Components that exercise timeout behavior override
-  # this value explicitly below.
-  timeout: 4m
-  max_history: 10
-  skip_crds: true
+  release:
+    wait:
+      strategy: watcher
+    # Leave enough headroom for nested k3s workloads on resource-constrained
+    # macOS/Colima runners. Components that exercise timeout behavior override
+    # this value explicitly below.
+    timeout: 4m
+    history:
+      max: 10
+    install:
+      crds: skip
 
 components:
   emulator:
@@ -25,8 +29,14 @@ components:
       # (components/helm/demo), which contains Chart.yaml.
       chart: "."
       namespace: demo
-      wait_strategy: legacy
-      on_failure: [rollback, cleanup]
+      release:
+        wait:
+          strategy: legacy
+        install:
+          on_failure: uninstall
+        upgrade:
+          on_failure: rollback
+          cleanup_on_failure: true
       # Atmos `values:` are the Helm chart values, merged via Atmos inheritance.
       values:
         replicaCount: 2
@@ -60,7 +70,9 @@ components:
       chart: "."
       name: demo-jobs
       namespace: demo-jobs
-      wait_for_jobs: true
+      release:
+        wait:
+          jobs: true
       values:
         hooks:
           enabled: false
@@ -74,7 +86,8 @@ components:
       chart: "."
       name: demo-no-hooks
       namespace: demo-no-hooks
-      disable_chart_hooks: true
+      release:
+        chart_hooks: false
 
     demo-hook-only:
       metadata:
@@ -82,7 +95,9 @@ components:
       chart: "."
       name: demo-hook-only
       namespace: demo-hook-only
-      wait_strategy: hookOnly
+      release:
+        wait:
+          strategy: hookOnly
       values:
         deployment:
           readinessGate: true
@@ -93,9 +108,14 @@ components:
       chart: "."
       name: demo-timeout
       namespace: demo-timeout
-      wait_strategy: watcher
-      timeout: 2s
-      on_failure: [rollback]
+      release:
+        timeout: 2s
+        wait:
+          strategy: watcher
+        install:
+          on_failure: uninstall
+        upgrade:
+          on_failure: rollback
       values:
         deployment:
           readinessDelaySeconds: 20
@@ -108,8 +128,11 @@ components:
       chart: "."
       name: demo-install-fail
       namespace: demo-install-fail
-      wait_strategy: legacy
-      on_failure: [rollback]
+      release:
+        wait:
+          strategy: legacy
+        install:
+          on_failure: uninstall
       values:
         hooks:
           fail: true
@@ -124,8 +147,12 @@ components:
       # Intentionally targets the already-installed demo release.
       name: demo
       namespace: demo
-      wait_strategy: legacy
-      on_failure: [rollback, cleanup]
+      release:
+        upgrade:
+          wait:
+            strategy: legacy
+          on_failure: rollback
+          cleanup_on_failure: true
       values:
         hooks:
           fail: true
@@ -139,7 +166,9 @@ components:
       chart: "."
       name: dag-foundation
       namespace: lifecycle-dag
-      wait_strategy: legacy
+      release:
+        wait:
+          strategy: legacy
       values:
         deployment:
           readinessDelaySeconds: 3
@@ -154,7 +183,9 @@ components:
       chart: "."
       name: dag-dependent
       namespace: lifecycle-dag
-      wait_strategy: legacy
+      release:
+        wait:
+          strategy: legacy
       values:
         hooks:
           requiredDeployment: dag-foundation
