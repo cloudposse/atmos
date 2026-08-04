@@ -13,6 +13,12 @@ import (
 )
 
 func TestNewMSALCache(t *testing.T) {
+	// Redirect HOME/USERPROFILE so the default-path case creates its cache
+	// directory under a temp home instead of the real ~/.azure.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
 	tests := []struct {
 		name          string
 		cachePath     string
