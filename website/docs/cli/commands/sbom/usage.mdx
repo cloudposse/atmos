@@ -108,14 +108,27 @@ Passing `--scope dependencies` inventories `.tools/toolchain.lock.yaml` (install
 
 ## Output and Scope
 
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--format` | `cyclonedx-json` | `cyclonedx-json` or `spdx-json`. |
-| `--output` | stdout | File to receive the rendered document. |
-| `--upload` | `false` | Publish the rendered document through the detected native CI provider. GitHub Actions publishes a workflow artifact. |
-| `--scope` | `terraform` | `terraform` (provider and module evidence) or `dependencies` (toolchain and version-track evidence). |
-| `--mode` | `provenance` | `provenance` includes coverage diagnostics; `ntia` validates complete selected-scope evidence. |
-| `--include-files` | `false` | Include lock-owned vendor files and containment relationships. |
-| `--subject-name`, `--subject-version`, `--subject-supplier` | empty | Required together by `--mode ntia`. |
+<dl>
+  <dt>`--format` (string, default `cyclonedx-json`)</dt>
+  <dd>`cyclonedx-json` or `spdx-json`.</dd>
+
+  <dt>`--output` (string, default stdout)</dt>
+  <dd>File to receive the rendered document.</dd>
+
+  <dt>`--upload` (default `false`)</dt>
+  <dd>Publish the rendered document through the detected native CI provider. GitHub Actions publishes a workflow artifact.</dd>
+
+  <dt>`--scope` (string, default `terraform`)</dt>
+  <dd>`terraform` (provider and module evidence) or `dependencies` (toolchain and version-track evidence).</dd>
+
+  <dt>`--mode` (string, default `provenance`)</dt>
+  <dd>`provenance` includes coverage diagnostics; `ntia` validates complete selected-scope evidence.</dd>
+
+  <dt>`--include-files` (default `false`)</dt>
+  <dd>Include lock-owned vendor files and containment relationships.</dd>
+
+  <dt>`--subject-name` / `--subject-version` / `--subject-supplier` (string)</dt>
+  <dd>Required together by `--mode ntia`.</dd>
+</dl>
 
 See the [SBOM provenance PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/sbom-provenance.md) for the evidence model and adapter roadmap.
