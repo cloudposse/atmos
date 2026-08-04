@@ -9,8 +9,32 @@ import (
 )
 
 func TestAccountSourceForAuthMethod(t *testing.T) {
-	// Mirrors what az itself records per flow.
-	assert.Equal(t, "authorization_code", accountSourceForAuthMethod(types.AzureAuthMethodInteractive))
-	assert.Equal(t, "device_code", accountSourceForAuthMethod(types.AzureAuthMethodDeviceCode))
-	assert.Equal(t, "device_code", accountSourceForAuthMethod(""))
+	// The label mirrors what az itself records per flow.
+	tests := []struct {
+		name       string
+		authMethod string
+		want       string
+	}{
+		{
+			name:       "interactive maps to authorization_code",
+			authMethod: types.AzureAuthMethodInteractive,
+			want:       "authorization_code",
+		},
+		{
+			name:       "device code keeps device_code",
+			authMethod: types.AzureAuthMethodDeviceCode,
+			want:       "device_code",
+		},
+		{
+			name:       "unset defaults to device_code",
+			authMethod: "",
+			want:       "device_code",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, accountSourceForAuthMethod(tt.authMethod))
+		})
+	}
 }

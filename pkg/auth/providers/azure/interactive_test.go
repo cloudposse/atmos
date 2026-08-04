@@ -1,7 +1,9 @@
 package azure
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -11,7 +13,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestNewInteractiveProvider(t *testing.T) {
@@ -191,9 +195,42 @@ func TestDeviceCodeProvider_CredentialsAuthMethod_DefaultsWhenUnset(t *testing.T
 	assert.Equal(t, "device_code", p.accountSource())
 }
 
+// promptStreams implements iolib.Streams over in-memory buffers so UI output
+// can be asserted.
+type promptStreams struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (s *promptStreams) Input() io.Reader     { return s.stdin }
+func (s *promptStreams) Output() io.Writer    { return s.stdout }
+func (s *promptStreams) Error() io.Writer     { return s.stderr }
+func (s *promptStreams) RawOutput() io.Writer { return s.stdout }
+func (s *promptStreams) RawError() io.Writer  { return s.stderr }
+
 func TestDisplayBrowserPrompt(t *testing.T) {
-	// Smoke test: renders without panicking in a non-TTY environment.
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(&promptStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: stderr,
+	}))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(func() {
+		// Restore a formatter bound to the real streams for subsequent tests.
+		realCtx, initErr := iolib.NewContext()
+		require.NoError(t, initErr)
+		ui.InitFormatter(realCtx)
+	})
+
 	displayBrowserPrompt()
+
+	out := stderr.String()
+	assert.Contains(t, out, "Azure Authentication Required")
+	assert.Contains(t, out, "Opening your browser to complete sign-in")
+	assert.Empty(t, stdout.String(), "human prompts go to the UI channel (stderr), not stdout")
 }
 
 func TestInteractiveProvider_DefaultClientID(t *testing.T) {

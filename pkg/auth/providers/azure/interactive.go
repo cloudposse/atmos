@@ -142,7 +142,7 @@ func (p *interactiveProvider) acquireTokensInteractively(ctx context.Context, cl
 	// The flow needs a browser and a local redirect listener; refuse in
 	// headless environments where neither can work.
 	if !p.checkInteractive() {
-		return result, fmt.Errorf("%w: Azure interactive browser authentication requires an interactive session (no TTY detected). Use OIDC/workload identity federation in headless environments", errUtils.ErrAuthenticationFailed)
+		return result, fmt.Errorf("%w: Azure interactive browser authentication requires an interactive session (no TTY detected). Use azure/oidc in CI/CD, or azure/device-code for browser-less sessions where tenant policy allows it", errUtils.ErrAuthenticationFailed)
 	}
 
 	authCtx, cancel := context.WithTimeout(ctx, deviceCodeTimeout)

@@ -223,7 +223,7 @@ auth:
 4. Tokens are cached in `~/.azure/msal_token_cache.json` and `~/.azure/azureProfile.json`, so the `az` CLI and Terraform work without ever running `az login`
 
 :::note
-`azure/interactive` requires an interactive terminal and a browser. For headless environments and CI/CD, use `azure/oidc`.
+`azure/interactive` requires an interactive terminal and a browser. For CI/CD, use `azure/oidc`. For browser-less human sessions (e.g., SSH), use `azure/device-code` where tenant policy allows it.
 :::
 
 ## Device Code

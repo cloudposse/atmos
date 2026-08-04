@@ -40,7 +40,8 @@ Two contributing design gaps:
 ## Changes
 
 - `pkg/auth/types/azure_credentials.go`: `AzureCredentials` gains `AuthMethod` (which provider
-  kind minted the credentials: `cli` / `device_code` / `oidc`) and `HomeAccountID` (MSAL's
+  kind minted the credentials: `cli` / `device_code` / `oidc`, joined by `interactive` when
+  the `azure/interactive` provider was added) and `HomeAccountID` (MSAL's
   `{home-oid}.{home-tenant-id}`).
 - `pkg/auth/cloud/azure/setup.go`: `UpdateAzureCLIFiles` skips the write-back entirely for
   CLI-sourced credentials; `addUserAccountAndTokens` prefers the MSAL home account ID over the

@@ -71,7 +71,8 @@ Authentication order:
 1. Silent acquisition from the persisted MSAL cache (refresh tokens survive restarts — no
     browser on repeat logins within the refresh window).
 2. Interactive browser flow, guarded by a TTY check (headless environments get an error
-    directing them to `azure/oidc`).
+    directing CI/CD to `azure/oidc` and browser-less human sessions to `azure/device-code`
+    where tenant policy allows it).
 
 Guest (B2B) users are handled correctly: the MSAL `AuthResult` supplies the real
 `{home-oid}.{home-tenant}` home account ID, which flows into both cache writers (see the
@@ -101,7 +102,8 @@ failure, and headless refusal against a sandboxed `HOME`.
 - Repeat logins are silent via the MSAL refresh token.
 - After login, `az account show` works without `az login`, and the az MSAL cache contains a
   single, correctly-keyed Account entry.
-- Headless environments fail fast with guidance toward `azure/oidc`.
+- Headless environments fail fast with guidance toward `azure/oidc` (CI/CD) or
+  `azure/device-code` (browser-less human sessions).
 
 ### Verification (manual, 2026-08-04)
 
