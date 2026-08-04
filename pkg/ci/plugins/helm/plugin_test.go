@@ -52,7 +52,7 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 		Command: "deploy",
 		Info: &schema.ConfigAndStacksInfo{
 			ComponentFromArg: "nginx",
-			Stack:            "plat-ue2-dev",
+			Stack:            "dev",
 		},
 		Aggregate: map[string]any{
 			"chart":          "bitnami/nginx",
@@ -62,15 +62,15 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 			"object_count":   2,
 			"object_kinds":   []any{"Service", "Deployment"},
 			"manifest_bytes": 1234,
-			"lifecycle": map[string]any{
-				"operation":     "upgrade",
-				"wait_strategy": "watcher",
+			"release": map[string]any{
+				"operation": "upgrade",
+				"wait":      map[string]any{"strategy": "watcher"},
 			},
 		},
 	})
 
 	assert.Equal(t, "nginx", ctx.Component)
-	assert.Equal(t, "plat-ue2-dev", ctx.Stack)
+	assert.Equal(t, "dev", ctx.Stack)
 	assert.Equal(t, "deploy", ctx.Command)
 	assert.Equal(t, "bitnami/nginx", ctx.Chart)
 	assert.Equal(t, "nginx", ctx.ReleaseName)
@@ -80,7 +80,7 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	assert.Equal(t, 1234, ctx.ManifestBytes)
 	assert.Equal(t, []string{"Deployment", "Service"}, ctx.ObjectKinds)
 	assert.Equal(t, "upgrade", ctx.Lifecycle["operation"])
-	assert.Equal(t, "watcher", ctx.Lifecycle["wait_strategy"])
+	assert.Equal(t, "watcher", ctx.Lifecycle["wait"].(map[string]any)["strategy"])
 }
 
 func TestNormalizeSummary(t *testing.T) {
@@ -103,7 +103,7 @@ func TestNormalizeSummary(t *testing.T) {
 		"manifest_bytes": float64(123),
 		"message":        42,
 		"diff":           "diff text",
-		"lifecycle":      lifecycle,
+		"release":        lifecycle,
 	})
 	assert.Equal(t, "app", got.Component)
 	assert.Equal(t, "dev", got.Stack)
@@ -255,13 +255,13 @@ func TestTemplateRendering(t *testing.T) {
 			name:    "cluster apply",
 			command: "apply",
 			lifecycle: map[string]any{
-				"operation":           "upgrade",
-				"wait_strategy":       "watcher",
-				"timeout":             "30m0s",
-				"chart_hooks_enabled": true,
-				"wait_for_jobs":       true,
-				"on_failure":          []string{"rollback", "cleanup"},
-				"max_history":         10,
+				"operation":          "upgrade",
+				"wait":               map[string]any{"strategy": "watcher", "jobs": true},
+				"timeout":            "30m0s",
+				"chart_hooks":        true,
+				"on_failure":         "rollback",
+				"cleanup_on_failure": true,
+				"history":            map[string]any{"max": 10},
 			},
 			contains: []string{
 				"Helm Apply Summary", "bitnami/nginx", "Deployment", "Release lifecycle",
@@ -269,7 +269,8 @@ func TestTemplateRendering(t *testing.T) {
 				"| Timeout | `30m0s` |",
 				"| Chart hooks enabled | `true` |",
 				"| Wait for Jobs | `true` |",
-				"| On failure | `rollback, cleanup` |",
+				"| On failure | `rollback` |",
+				"| Cleanup on failure | `true` |",
 				"| Maximum history | `10` |",
 			},
 		},
@@ -277,13 +278,12 @@ func TestTemplateRendering(t *testing.T) {
 			name:    "cluster install",
 			command: "apply",
 			lifecycle: map[string]any{
-				"operation":           "install",
-				"wait_strategy":       "hookOnly",
-				"timeout":             "5m0s",
-				"chart_hooks_enabled": true,
-				"wait_for_jobs":       false,
-				"on_failure":          []string{},
-				"install_crds":        true,
+				"operation":   "install",
+				"wait":        map[string]any{"strategy": "hookOnly", "jobs": false},
+				"timeout":     "5m0s",
+				"chart_hooks": true,
+				"on_failure":  "keep",
+				"crds":        "create",
 			},
 			contains: []string{
 				"Helm Apply Summary", "Release lifecycle",
@@ -292,8 +292,8 @@ func TestTemplateRendering(t *testing.T) {
 				"| Timeout | `5m0s` |",
 				"| Chart hooks enabled | `true` |",
 				"| Wait for Jobs | `false` |",
-				"| On failure | `` |",
-				"| Install CRDs | `true` |",
+				"| On failure | `keep` |",
+				"| Install CRDs | `create` |",
 			},
 			notContains: []string{"Maximum history"},
 		},
@@ -315,14 +315,14 @@ func TestTemplateRendering(t *testing.T) {
 			name:    "cluster delete",
 			command: "delete",
 			lifecycle: map[string]any{
-				"operation":           "uninstall",
-				"wait_strategy":       "legacy",
-				"timeout":             "10m0s",
-				"chart_hooks_enabled": false,
+				"operation":   "delete",
+				"wait":        map[string]any{"strategy": "legacy"},
+				"timeout":     "10m0s",
+				"chart_hooks": false,
 			},
 			contains: []string{
 				"Helm Delete Summary", "Release lifecycle",
-				"| Operation | `uninstall` |",
+				"| Operation | `delete` |",
 				"| Wait strategy | `legacy` |",
 				"| Timeout | `10m0s` |",
 				"| Chart hooks enabled | `false` |",
@@ -350,7 +350,7 @@ func TestTemplateRendering(t *testing.T) {
 				Command: tt.command,
 				Info: &schema.ConfigAndStacksInfo{
 					ComponentFromArg: "nginx",
-					Stack:            "plat-ue2-dev",
+					Stack:            "dev",
 				},
 				Aggregate: Summary{
 					Chart:         "bitnami/nginx",

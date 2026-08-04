@@ -30,7 +30,8 @@ Apply an explicit production readiness and recovery policy:
 
 ```shell
 atmos helm apply monitoring -s plat-ue2-dev \
-  --on-failure=rollback,cleanup \
+  --on-failure=rollback \
+  --cleanup-on-failure \
   --wait=watcher \
   --wait-for-jobs \
   --timeout=30m \
@@ -77,7 +78,10 @@ stack/component order and includes details for failures.
   <dd>Preview the install or upgrade without persisting release state or creating Kubernetes resources.</dd>
 
   <dt>`--on-failure` <em>(optional)</em></dt>
-  <dd>Comma-separated failure actions: `rollback`, `cleanup`, or both. The flag replaces the component policy for this invocation; `--on-failure=` clears inherited actions.</dd>
+  <dd>Failure action for the selected operation: `uninstall` or `keep` for install; `rollback` or `keep` for upgrade. The explicit flag overrides stack configuration for this invocation.</dd>
+
+  <dt>`--cleanup-on-failure` <em>(optional)</em></dt>
+  <dd>Remove resources newly created during a failed upgrade, independently of rollback. Fails if the selected operation is install.</dd>
 
   <dt>`--wait[=strategy]` <em>(optional)</em></dt>
   <dd>Use `watcher`, `hookOnly`, or `legacy`. Passing `--wait` without a value selects `watcher`. Boolean values remain accepted temporarily but are deprecated.</dd>
@@ -89,13 +93,13 @@ stack/component order and includes details for failures.
   <dd>Helm release-operation timeout, such as `10m` or `1h`. `0s` is explicitly unbounded.</dd>
 
   <dt>`--history-max` <em>(optional)</em></dt>
-  <dd>Maximum retained release revisions. Defaults to `10`; `0` means unlimited.</dd>
+  <dd>Maximum retained release revisions for an upgrade. Defaults to `10`; `0` means unlimited. Fails if the selected operation is install.</dd>
 
   <dt>`--no-hooks` <em>(optional)</em></dt>
   <dd>Disable Helm chart hooks. Atmos lifecycle hooks are unaffected.</dd>
 
   <dt>`--skip-crds` <em>(optional)</em></dt>
-  <dd>Skip CRD installation on a first install.</dd>
+  <dd>Skip CRD installation on a first install. Fails if the selected operation is upgrade.</dd>
 
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Apply all Helm components in dependency order.</dd>

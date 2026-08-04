@@ -190,7 +190,7 @@ func summaryFromMap(m map[string]any) Summary {
 		ObjectCount:   intValue(m["object_count"]),
 		ObjectKinds:   stringSliceValue(m["object_kinds"]),
 		ManifestBytes: intValue(m["manifest_bytes"]),
-		Lifecycle:     mapValue(m["lifecycle"]),
+		Lifecycle:     mapValue(m["release"]),
 		Message:       stringValue(m["message"]),
 		Diff:          stringValue(m["diff"]),
 	}

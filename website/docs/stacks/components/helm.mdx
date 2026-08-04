@@ -117,48 +117,56 @@ inheritance and component overrides are merged.
 ## Release Lifecycle
 
 Cluster-backed `apply`, `deploy`, and `delete` operations can use Helm 4 release
-lifecycle controls. Configure them at the top-level `helm` section as defaults,
-on an abstract component for inheritance, or on a concrete component. Normal
-Atmos precedence applies; concrete components override inherited and type-level
-values.
+lifecycle controls under `release`. Configure the tree at the top-level
+`helm.release` section as defaults, on an abstract component for inheritance, or
+on a concrete component. Atmos first deep-merges that complete tree, then
+overlays the selected `install`, `upgrade`, or `delete` section. Explicit command
+flags have the highest precedence.
 
 | Field | Default | Operations | Behavior |
 | --- | --- | --- | --- |
-| `on_failure` | `[]` | install, upgrade | Failure actions: `rollback` uninstalls a failed first install or rolls a failed upgrade back; `cleanup` removes resources newly created by a failed upgrade. |
-| `wait_strategy` | `hookOnly` | install, upgrade, delete | `hookOnly`, `watcher`, or Helm 3-compatible `legacy`. |
-| `wait_for_jobs` | `false` | install, upgrade | Wait for ordinary Jobs. Requires `watcher` or `legacy`; hook Jobs are already handled by Helm hooks. |
-| `timeout` | `0s` during migration | install, upgrade, delete | Helm operation timeout. Explicit `0s` remains unbounded. |
-| `max_history` | `10` | upgrade | Revisions retained. Set `0` for unlimited history. |
-| `disable_chart_hooks` | `false` | install, upgrade, delete | Disable Helm chart hooks. This does not disable Atmos `hooks:`. |
-| `skip_crds` | `false` | install | Do not install CRDs from the chart on first install. |
+| `release.wait.strategy` | `hookOnly` | install, upgrade, delete | `hookOnly`, `watcher`, or Helm 3-compatible `legacy`. |
+| `release.wait.jobs` | `false` | install, upgrade | Wait for ordinary Jobs. Requires `watcher` or `legacy`; hook Jobs are already handled by Helm hooks. |
+| `release.timeout` | `0s` during migration | install, upgrade, delete | Release-wide operation timeout. Each operation can override it. Explicit `0s` remains unbounded. |
+| `release.history.max` | `10` | upgrade | Revisions retained. Set `0` for unlimited history. |
+| `release.chart_hooks` | `true` | install, upgrade, delete | Enable Helm chart hooks. This does not control Atmos `hooks:`. |
+| `release.install.crds` | `create` | install | Create or skip CRDs from the chart on first install. |
+| `release.install.on_failure` | `keep` | install | `uninstall` removes a failed first install; `keep` preserves partial state. |
+| `release.upgrade.on_failure` | `keep` | upgrade | `rollback` restores the prior release; `keep` preserves failed state. |
+| `release.upgrade.cleanup_on_failure` | `false` | upgrade | Independently remove resources newly created by a failed upgrade. |
 
-`on_failure` follows Atmos list merge behavior. With the default `replace`
-strategy, a component can clear inherited actions with `on_failure: []`;
-`append` can add actions across inheritance layers. Duplicate actions are
-normalized. `wait: true` and `wait: false` remain convenience aliases for
-`watcher` and `hookOnly`.
+`release.install.timeout`, `release.upgrade.timeout`, and
+`release.delete.timeout` override the release-wide timeout only for that action.
+The same operation sections can override `chart_hooks` and `wait`.
 
 :::warning Timeout and history migration
-For one minor release, omitting `timeout` preserves the previous unbounded `0s`
+For one minor release, omitting `release.timeout` and the selected operation
+timeout preserves the previous unbounded `0s`
 behavior and emits a warning. The following minor changes the omitted default to
-`5m`. Set `timeout: 0s` explicitly to remain unbounded, or set a duration such as
-`30m`. An omitted `max_history` now retains ten revisions; set
-`max_history: 0` if unlimited release history is required.
+`5m`. Set `release.timeout: 0s` explicitly to remain unbounded, or set a duration
+such as `30m`. An omitted `release.history.max` retains ten revisions; set it to
+`0` if unlimited release history is required.
 :::
 
 <File title="stacks/catalog/demo-release.yaml">
 ```yaml
 helm:
-  wait_strategy: watcher
-  timeout: 10m
-  max_history: 10
+  release:
+    wait:
+      strategy: watcher
+    timeout: 10m
+    history:
+      max: 10
 
 components:
   helm:
     release-policy:
       metadata:
         type: abstract
-      on_failure: [rollback, cleanup]
+      release:
+        upgrade:
+          on_failure: rollback
+          cleanup_on_failure: true
 
     demo-release:
       metadata:
@@ -166,7 +174,12 @@ components:
           - release-policy
       chart: ./charts/demo-release
       namespace: demo
-      timeout: 30m
+      release:
+        install:
+          timeout: 60m
+          on_failure: uninstall
+        upgrade:
+          timeout: 30m
 ```
 </File>
 
@@ -206,11 +219,17 @@ components:
         - name: prometheus-community
           url: https://prometheus-community.github.io/helm-charts
       namespace: monitoring
-      wait_strategy: watcher
-      wait_for_jobs: true
-      timeout: 20m
-      on_failure: [rollback]
-      max_history: 10
+      release:
+        timeout: 20m
+        wait:
+          strategy: watcher
+          jobs: true
+        history:
+          max: 10
+        install:
+          on_failure: uninstall
+        upgrade:
+          on_failure: rollback
       values:
         grafana:
           enabled: true

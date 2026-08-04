@@ -31,19 +31,20 @@
 | Field | Value |
 | --- | --- |
 | Operation | `{{ index . "operation" }}` |
-| Wait strategy | `{{ index . "wait_strategy" }}` |
+| Wait strategy | `{{ index (index . "wait") "strategy" }}` |
 | Timeout | `{{ index . "timeout" }}` |
-| Chart hooks enabled | `{{ index . "chart_hooks_enabled" }}` |
-| Wait for Jobs | `{{ index . "wait_for_jobs" }}` |
-| On failure | `{{ range $i, $action := index . "on_failure" }}{{ if $i }}, {{ end }}{{ $action }}{{ end }}` |
+| Chart hooks enabled | `{{ index . "chart_hooks" }}` |
+| Wait for Jobs | `{{ index (index . "wait") "jobs" }}` |
+| On failure | `{{ index . "on_failure" }}` |
 
 {{- if eq (index . "operation") "install" }}
-| Install CRDs | `{{ index . "install_crds" }}` |
+| Install CRDs | `{{ index . "crds" }}` |
 
 {{- end }}
 
 {{- if eq (index . "operation") "upgrade" }}
-| Maximum history | `{{ index . "max_history" }}` |
+| Cleanup on failure | `{{ index . "cleanup_on_failure" }}` |
+| Maximum history | `{{ index (index . "history") "max" }}` |
 
 {{- end }}
 

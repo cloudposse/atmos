@@ -133,8 +133,8 @@ components include their error details. The same aggregate behavior applies to t
 `deploy` aliases and composes with tag and label filters.
 
 For a single cluster-backed apply/deploy/delete operation, the component summary also includes an
-operation-specific `lifecycle` block with the effective wait strategy, timeout, chart-hook state,
-and applicable rollback, Job-wait, CRD, cleanup, and history values. For external delivery,
+operation-specific `release` block with the effective wait strategy, timeout, chart-hook state,
+and applicable recovery, Job-wait, CRD, cleanup, and history values. For external delivery,
 apply/deploy reports `applied: false` while delete reports `deleted: false`; both include the
 selected target kind and `reason: external_target` instead of presenting stored release policy as
 active.

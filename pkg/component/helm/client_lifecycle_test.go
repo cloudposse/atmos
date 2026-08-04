@@ -245,7 +245,8 @@ func TestUpgradeReleaseHistoryRetention(t *testing.T) {
 			stubActionContext(t, actx)
 			spec := testdataChartSpec(t, tt.releaseName)
 			if tt.override {
-				spec.Lifecycle.Policy.MaxHistory = tt.maxHistory
+				maxHistory := tt.maxHistory
+				spec.Release.History.Max = &maxHistory
 			}
 
 			for revision := 0; revision < revisions; revision++ {

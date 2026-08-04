@@ -90,7 +90,7 @@ commands:
           backoff_strategy: constant
       # The -2 ConfigMap must exist before the -1 hook Job can mount it.
       - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
-      # skip_crds is a stack-level lifecycle default.
+      # release.install.crds is a stack-level release default.
       - command: >-
           if output=$(atmos emulator exec kubernetes -s dev -- kubectl get crd widgets.lifecycle.atmos.test 2>&1); then echo "skip_crds unexpectedly installed widgets.lifecycle.atmos.test"; exit 1;
           else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify widgets.lifecycle.atmos.test absence: $output"; exit 1;; esac; fi
@@ -104,7 +104,7 @@ commands:
           max_attempts: 3
           initial_delay: 10s
           backoff_strategy: constant
-      # watcher + wait_for_jobs returns only after the ordinary Job completes.
+      # watcher + release.wait.jobs returns only after the ordinary Job completes.
       - atmos helm apply demo-jobs -s dev --identity local-k3s
       - command: >-
           completed=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-jobs get job demo-jobs-job -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}');

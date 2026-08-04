@@ -21,7 +21,7 @@ atmos helm template demo -s dev --dependency-update
 atmos emulator up kubernetes -s dev
 atmos helm diff demo -s dev --identity local-k3s
 atmos helm apply demo -s dev --identity local-k3s --dry-run
-atmos helm apply demo -s dev --identity local-k3s --on-failure=rollback --wait=watcher --timeout=2m
+atmos helm apply demo -s dev --identity local-k3s --on-failure=uninstall --wait=watcher --timeout=2m
 atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
 atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
 atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
@@ -71,10 +71,11 @@ atmos emulator up kubernetes -s dev
 atmos helm apply demo -s dev --identity local-k3s
 ```
 
-The stack sets `wait_strategy: watcher`, `timeout: 4m`, `max_history: 10`, and
-`skip_crds: true` as native Helm type defaults. The `demo` component overrides
-the wait strategy to `legacy`, and enables the `rollback` and `cleanup`
-failure actions. The `atmos test` workflow
+The stack sets `release.wait.strategy: watcher`, `release.timeout: 4m`,
+`release.history.max: 10`, and `release.install.crds: skip` as native Helm type
+defaults. The `demo` component overrides the wait strategy to `legacy`, uses
+install uninstall-on-failure, and enables upgrade rollback with independent
+failed-upgrade cleanup. The `atmos test` workflow
 covers non-mutating apply and delete dry runs, ordinary Job waiting, chart-hook
 suppression, CRD skipping, weighted hook ordering, retained hook resources,
 install and upgrade rollback, failed-upgrade cleanup, timeout handling, and
