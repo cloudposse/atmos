@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -25,6 +26,7 @@ import (
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -1714,6 +1716,97 @@ func TestExecuteWorkflow_DryRunAtmosStepStackBeforeSeparator(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-atmos-stack-before-separator", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
 	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ForwardsCommandLineFilters(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	tests := []struct {
+		name           string
+		step           schema.WorkflowStep
+		expectedStarts int
+	}{
+		{
+			name: "atmos step",
+			step: schema.WorkflowStep{
+				Name:    "apply",
+				Type:    schema.TaskTypeAtmos,
+				Command: "terraform apply -- -auto-approve",
+			},
+			expectedStarts: 1,
+		},
+		{
+			name: "parallel atmos step",
+			step: schema.WorkflowStep{
+				Name: "parallel",
+				Type: schema.TaskTypeParallel,
+				Steps: []schema.WorkflowStep{{
+					Name:    "apply",
+					Type:    schema.TaskTypeAtmos,
+					Command: "terraform apply -- -auto-approve",
+				}},
+			},
+			expectedStarts: 1,
+		},
+		{
+			name: "matrix atmos step",
+			step: schema.WorkflowStep{
+				Name:   "matrix",
+				Type:   schema.TaskTypeMatrix,
+				Matrix: map[string][]string{"region": {"us-east-1", "us-west-2"}},
+				Steps: []schema.WorkflowStep{{
+					Name:    "apply",
+					Type:    schema.TaskTypeAtmos,
+					Command: "terraform apply -- -auto-approve",
+				}},
+			},
+			expectedStarts: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			require.NoError(t, err)
+			diagnosticsPath := filepath.Join(t.TempDir(), "events.jsonl")
+			atmosConfig.Diagnostics = schema.Diagnostics{Enabled: true, File: diagnosticsPath}
+
+			err = ExecuteWorkflow(
+				atmosConfig,
+				"selector-forwarding",
+				"/path/to/workflow.yaml",
+				&schema.WorkflowDefinition{Steps: []schema.WorkflowStep{tt.step}},
+				true,
+				"tenant1-ue2-dev",
+				"",
+				"",
+				workflowCommandFilters{tags: []string{"networking"}, labels: "deployment:dev"},
+			)
+			require.NoError(t, err)
+
+			data, err := os.ReadFile(diagnosticsPath)
+			require.NoError(t, err)
+			var starts []diagnostics.Event
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				var event diagnostics.Event
+				require.NoError(t, json.Unmarshal([]byte(line), &event))
+				if event.Type == "process.start" && event.Command == "atmos" {
+					starts = append(starts, event)
+				}
+			}
+
+			require.Len(t, starts, tt.expectedStarts)
+			for _, start := range starts {
+				assert.Equal(t, []string{
+					"terraform", "apply", "-s", "tenant1-ue2-dev",
+					"--tags=networking", "--labels=deployment:dev",
+					"--", "-auto-approve",
+				}, start.Args)
+			}
+		})
+	}
 }
 
 type workflowRecordingGitHubProvider struct {
