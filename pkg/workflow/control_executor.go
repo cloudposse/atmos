@@ -15,6 +15,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -56,6 +57,8 @@ type ControlCommandExecutor struct {
 	BasePath            string
 	BaseEnv             []string
 	CommandLineStack    string
+	CommandLineTags     []string
+	CommandLineLabels   string
 	CommandLineIdentity string
 	PrepareEnv          ControlEnvironmentFunc
 	RunCommand          ControlCommandRunner
@@ -191,7 +194,11 @@ func (executor *ControlCommandExecutor) executeAtmos(ctx context.Context, step *
 	if parseErr != nil {
 		args = strings.Fields(step.Command)
 	}
-	args = appendControlStack(args, executor.finalStack(step))
+	args = AppendAtmosStepFlags(args, AtmosStepFlags{
+		Stack:  executor.finalStack(step),
+		Tags:   executor.CommandLineTags,
+		Labels: executor.CommandLineLabels,
+	})
 	dir := executor.workingDirectory(step)
 
 	ioSpec := executor.commandStreams(output)
@@ -291,14 +298,34 @@ func executeControlSleep(ctx context.Context, step *schema.WorkflowStep) (*Contr
 	}
 }
 
-func appendControlStack(args []string, stack string) []string {
-	if stack == "" {
+// AtmosStepFlags are command-line flags applied to an Atmos workflow step.
+type AtmosStepFlags struct {
+	Stack  string
+	Tags   []string
+	Labels string
+}
+
+// AppendAtmosStepFlags inserts workflow command flags before a pass-through separator.
+func AppendAtmosStepFlags(args []string, flags AtmosStepFlags) []string {
+	defer perf.Track(nil, "workflow.AppendAtmosStepFlags")()
+
+	injected := make([]string, 0, 4)
+	if flags.Stack != "" {
+		injected = append(injected, "-s", flags.Stack)
+	}
+	if len(flags.Tags) > 0 {
+		injected = append(injected, "--tags="+strings.Join(flags.Tags, ","))
+	}
+	if flags.Labels != "" {
+		injected = append(injected, "--labels="+flags.Labels)
+	}
+	if len(injected) == 0 {
 		return args
 	}
 	if idx := indexOfControlArg(args, "--"); idx != -1 {
-		return append(args[:idx], append([]string{"-s", stack}, args[idx:]...)...)
+		return append(args[:idx], append(injected, args[idx:]...)...)
 	}
-	return append(args, "-s", stack)
+	return append(args, injected...)
 }
 
 func indexOfControlArg(values []string, needle string) int {

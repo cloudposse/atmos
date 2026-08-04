@@ -206,14 +206,18 @@ You can customize the default output format and columns displayed by `atmos list
 
 ### Default Format
 
+The default output format is `table`. To make `tree` the default instead, set `stacks.list.format` in your `atmos.yaml`:
+
 ```yaml
 # atmos.yaml
 stacks:
   list:
-    format: tree  # Default format: table, json, yaml, csv, tsv, tree
+    format: tree  # Supported formats: table, json, yaml, csv, tsv, tree
 ```
 
-**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+**Precedence**: CLI `--format` flag > Environment variable `ATMOS_LIST_FORMAT` > Config file > Default (`table`)
+
+Scripts that parse the output should always pass an explicit format (e.g., `--format=csv` or `--format=json`) rather than relying on the default.
 
 ### Custom Columns
 
