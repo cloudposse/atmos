@@ -106,12 +106,13 @@ func validSection() map[string]any { return map[string]any{"driver": "floci/aws"
 func stubPrepare(t *testing.T, section map[string]any, authErr error, mgr *fakeManager) {
 	t.Helper()
 
-	origInit, origAuth, origProc, origNew := initCliConfig, setupComponentAuthForCLI, processStacks, newManager
+	origInit, origAuth, origProc, origNew, origReadOnly := initCliConfig, setupComponentAuthForCLI, processStacks, newManager, newReadOnlyManager
 	t.Cleanup(func() {
 		initCliConfig = origInit
 		setupComponentAuthForCLI = origAuth
 		processStacks = origProc
 		newManager = origNew
+		newReadOnlyManager = origReadOnly
 	})
 
 	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
@@ -128,6 +129,7 @@ func stubPrepare(t *testing.T, section map[string]any, authErr error, mgr *fakeM
 		return info, nil
 	}
 	newManager = func(_ string, _ bool) emulatorManager { return mgr }
+	newReadOnlyManager = func(_ string) emulatorManager { return mgr }
 }
 
 func baseInfo() *schema.ConfigAndStacksInfo {
@@ -359,10 +361,11 @@ func TestExecutePs_Error(t *testing.T) {
 func stubListSeams(t *testing.T, mgr *fakeManager) {
 	t.Helper()
 
-	origInit, origNew := initCliConfig, newManager
+	origInit, origNew, origReadOnly := initCliConfig, newManager, newReadOnlyManager
 	t.Cleanup(func() {
 		initCliConfig = origInit
 		newManager = origNew
+		newReadOnlyManager = origReadOnly
 	})
 
 	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
@@ -371,6 +374,7 @@ func stubListSeams(t *testing.T, mgr *fakeManager) {
 		return cfg, nil
 	}
 	newManager = func(_ string, _ bool) emulatorManager { return mgr }
+	newReadOnlyManager = func(_ string) emulatorManager { return mgr }
 }
 
 func stubConfiguredListSeams(t *testing.T, mgr *fakeManager, stacks map[string]any) {
@@ -776,4 +780,21 @@ func TestIsAbstractSection(t *testing.T) {
 	assert.False(t, isAbstractSection(map[string]any{"metadata": map[string]any{"type": "real"}}))
 	assert.False(t, isAbstractSection(map[string]any{"driver": "floci/aws"}))
 	assert.False(t, isAbstractSection(map[string]any{}))
+}
+
+func TestNewReadOnlyManagerDefaultConstructsNoRecoveryManager(t *testing.T) {
+	// Exercise the production newReadOnlyManager seam itself (not a test
+	// override): it must build the manager via emu.NewManagerNoRecovery, which
+	// never attempts Podman auto-recovery. A generic Ps() error is not
+	// branch-specific: an invalid runtime preference fails identically whether
+	// or not recovery is enabled (container.DetectRuntimeWithPreference and
+	// DetectRuntimeWithPreferenceAndRecovery both reject an unknown preference
+	// before recovery would ever run), so assert directly on the constructed
+	// manager's no-recovery routing instead.
+	mgr := newReadOnlyManager("definitely-not-a-runtime")
+	require.NotNil(t, mgr)
+
+	realMgr, ok := mgr.(*emu.Manager)
+	require.True(t, ok, "newReadOnlyManager must construct a *emu.Manager")
+	assert.True(t, realMgr.NoRecoveryEnabled(), "newReadOnlyManager must disable Podman auto-recovery")
 }
