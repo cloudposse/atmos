@@ -23,6 +23,8 @@ type mockClient struct {
 	// listVersionsFunc returns the single page yielded by the versions pager, letting tests
 	// simulate existence (nil error) or not-found/permission errors without a secret value.
 	listVersionsFunc func(name string) (azsecrets.ListSecretPropertiesVersionsResponse, error)
+	// listPropertiesFunc returns the single page yielded by the all-secrets pager, used by Keys.
+	listPropertiesFunc func() (azsecrets.ListSecretPropertiesResponse, error)
 }
 
 func (m *mockClient) GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
@@ -46,6 +48,19 @@ func (m *mockClient) NewListSecretPropertiesVersionsPager(name string, _ *azsecr
 		},
 		Fetcher: func(_ context.Context, _ *azsecrets.ListSecretPropertiesVersionsResponse) (azsecrets.ListSecretPropertiesVersionsResponse, error) {
 			return m.listVersionsFunc(name)
+		},
+	})
+}
+
+// NewListSecretPropertiesPager builds a real runtime.Pager backed by listPropertiesFunc, mirroring
+// NewListSecretPropertiesVersionsPager above but for the all-secrets listing Keys uses.
+func (m *mockClient) NewListSecretPropertiesPager(_ *azsecrets.ListSecretPropertiesOptions) *runtime.Pager[azsecrets.ListSecretPropertiesResponse] {
+	return runtime.NewPager(runtime.PagingHandler[azsecrets.ListSecretPropertiesResponse]{
+		More: func(azsecrets.ListSecretPropertiesResponse) bool {
+			return false
+		},
+		Fetcher: func(_ context.Context, _ *azsecrets.ListSecretPropertiesResponse) (azsecrets.ListSecretPropertiesResponse, error) {
+			return m.listPropertiesFunc()
 		},
 	})
 }
@@ -718,4 +733,46 @@ func TestBuildAzureKeyVaultStore_ParseError(t *testing.T) {
 		Options: map[string]interface{}{"prefix": []string{"x"}},
 	})
 	assert.ErrorIs(t, err, storepkg.ErrParseAzureKeyVaultOptions)
+}
+
+func azSecretID(name string) *azsecrets.ID {
+	id := azsecrets.ID("https://test.vault.azure.net/secrets/" + name)
+	return &id
+}
+
+// TestAzureKeyVaultStore_Keys proves Keys lists every secret in the vault (there is no
+// server-side name-prefix filter) and filters client-side by the normalized prefix.
+func TestAzureKeyVaultStore_Keys(t *testing.T) {
+	client := &mockClient{
+		listPropertiesFunc: func() (azsecrets.ListSecretPropertiesResponse, error) {
+			return azsecrets.ListSecretPropertiesResponse{
+				SecretPropertiesListResult: azsecrets.SecretPropertiesListResult{
+					Value: []*azsecrets.SecretProperties{
+						{ID: azSecretID("atmos-prod-vpc-image-tag")},
+						{ID: azSecretID("atmos-prod-vpc-region")},
+						{ID: azSecretID("atmos-dev-vpc-image-tag")}, // Different stack: excluded.
+						{ID: azSecretID("unrelated-secret")},        // No prefix match: excluded.
+					},
+				},
+			}, nil
+		},
+	}
+	s := &AzureKeyVaultStore{client: client, vaultURL: "https://test.vault.azure.net", prefix: "atmos", stackDelimiter: stringPtr("-")}
+
+	keys, err := s.Keys("prod", "vpc")
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image-tag", "region"}, keys)
+}
+
+func TestAzureKeyVaultStore_Keys_Error(t *testing.T) {
+	client := &mockClient{
+		listPropertiesFunc: func() (azsecrets.ListSecretPropertiesResponse, error) {
+			return azsecrets.ListSecretPropertiesResponse{}, errTestBackend
+		},
+	}
+	s := &AzureKeyVaultStore{client: client, vaultURL: "https://test.vault.azure.net", stackDelimiter: stringPtr("-")}
+
+	_, err := s.Keys("prod", "vpc")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, storepkg.ErrListSecretProperties)
 }
