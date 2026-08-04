@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -260,7 +261,7 @@ func TestSubscriptionIdentity_PostAuthenticate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Credentials file was written under the sandboxed home.
-	credsPath := tmpHome + "/.azure/atmos/test-realm/azure-cli/credentials.json"
+	credsPath := filepath.Join(tmpHome, ".azure", "atmos", "test-realm", "azure-cli", "credentials.json")
 	_, statErr := os.Stat(credsPath)
 	assert.NoError(t, statErr, "credentials.json should be written by SetupFiles")
 
@@ -271,7 +272,7 @@ func TestSubscriptionIdentity_PostAuthenticate(t *testing.T) {
 	assert.Equal(t, "sub-123", stackInfo.ComponentEnvSection["ARM_SUBSCRIPTION_ID"])
 
 	// CLI-sourced credentials must not have created az CLI cache files.
-	_, msalErr := os.Stat(tmpHome + "/.azure/msal_token_cache.json")
+	_, msalErr := os.Stat(filepath.Join(tmpHome, ".azure", "msal_token_cache.json"))
 	assert.True(t, os.IsNotExist(msalErr), "az MSAL cache must not be written for CLI-sourced credentials")
 }
 

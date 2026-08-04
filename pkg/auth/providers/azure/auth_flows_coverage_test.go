@@ -20,14 +20,22 @@ import (
 )
 
 // stubAz puts a fake `az` executable on PATH that prints the given JSON.
+// The output is written to a data file so no shell quoting is needed, making
+// the same approach work for both the POSIX script and the Windows batch file
+// (exec.LookPath resolves az.bat via PATHEXT).
 func stubAz(t *testing.T, stdout string, exitCode int) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("PATH stub script not supported on Windows")
-	}
 	dir := t.TempDir()
-	script := fmt.Sprintf("#!/bin/sh\ncat <<'JSON'\n%s\nJSON\nexit %d\n", stdout, exitCode)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "az"), []byte(script), 0o755))
+	outFile := filepath.Join(dir, "az_output.txt")
+	require.NoError(t, os.WriteFile(outFile, []byte(stdout+"\n"), 0o644))
+
+	if runtime.GOOS == "windows" {
+		script := fmt.Sprintf("@echo off\r\ntype \"%s\"\r\nexit /b %d\r\n", outFile, exitCode)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "az.bat"), []byte(script), 0o755))
+	} else {
+		script := fmt.Sprintf("#!/bin/sh\ncat \"%s\"\nexit %d\n", outFile, exitCode)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "az"), []byte(script), 0o755))
+	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
@@ -143,34 +151,42 @@ func TestDeviceCodeProvider_TrySilentTokenAcquisition(t *testing.T) {
 	p := newTestDeviceCodeProvider(t)
 	client := newOfflineMSALClient(t)
 
-	t.Run("no cached accounts", func(t *testing.T) {
-		result := p.trySilentTokenAcquisition(context.Background(), &client, nil)
-		assert.Empty(t, result.accessToken)
-		assert.Empty(t, result.homeAccountID)
-	})
+	tests := []struct {
+		name     string
+		accounts []public.Account
+	}{
+		{
+			name:     "no cached accounts",
+			accounts: nil,
+		},
+		{
+			name: "no account for tenant",
+			accounts: []public.Account{{
+				HomeAccountID:     "oid.other-tenant",
+				Realm:             "other-tenant",
+				PreferredUsername: "user@example.com",
+			}},
+		},
+		{
+			// The account matches the tenant but is not in the MSAL cache, so
+			// the silent call fails locally and the flow falls through to
+			// device code.
+			name: "matching account but silent acquisition fails",
+			accounts: []public.Account{{
+				HomeAccountID:     "home-oid.home-tenant",
+				Realm:             "tenant-123",
+				PreferredUsername: "user@example.com",
+			}},
+		},
+	}
 
-	t.Run("no account for tenant", func(t *testing.T) {
-		accounts := []public.Account{{
-			HomeAccountID:     "oid.other-tenant",
-			Realm:             "other-tenant",
-			PreferredUsername: "user@example.com",
-		}}
-		result := p.trySilentTokenAcquisition(context.Background(), &client, accounts)
-		assert.Empty(t, result.accessToken)
-	})
-
-	t.Run("matching account but silent acquisition fails", func(t *testing.T) {
-		// The account matches the tenant but is not in the MSAL cache, so the
-		// silent call fails locally and the flow falls through to device code.
-		accounts := []public.Account{{
-			HomeAccountID:     "home-oid.home-tenant",
-			Realm:             "tenant-123",
-			PreferredUsername: "user@example.com",
-		}}
-		result := p.trySilentTokenAcquisition(context.Background(), &client, accounts)
-		assert.Empty(t, result.accessToken)
-		assert.Empty(t, result.homeAccountID, "home account id must not be set when silent acquisition fails")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := p.trySilentTokenAcquisition(context.Background(), &client, tt.accounts)
+			assert.Empty(t, result.accessToken)
+			assert.Empty(t, result.homeAccountID, "home account id must not be set when silent acquisition does not succeed")
+		})
+	}
 }
 
 func TestDeviceCodeProvider_AcquireAdditionalTokens_SilentFailures(t *testing.T) {
