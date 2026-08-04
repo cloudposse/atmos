@@ -69,9 +69,9 @@ shared machinery is parameterized by auth method: credentials persist
 
 Authentication order:
 1. Silent acquisition from the persisted MSAL cache (refresh tokens survive restarts — no
-   browser on repeat logins within the refresh window).
+    browser on repeat logins within the refresh window).
 2. Interactive browser flow, guarded by a TTY check (headless environments get an error
-   directing them to `azure/oidc`).
+    directing them to `azure/oidc`).
 
 Guest (B2B) users are handled correctly: the MSAL `AuthResult` supplies the real
 `{home-oid}.{home-tenant}` home account ID, which flows into both cache writers (see the
@@ -112,18 +112,18 @@ guest (B2B) user in that tenant. Starting from a fully clean state
 `~/.azure/azureProfile.json`):
 
 1. `atmos auth login` — opened the default browser, SSO completed, tokens minted (~1.5h
-   expiry). One command, no device code, no `az login`.
+    expiry). One command, no device code, no `az login`.
 2. `atmos auth login` again — succeeded **silently** (same token expiry, no browser),
-   confirming refresh-token persistence in the realm-scoped MSAL cache.
+    confirming refresh-token persistence in the realm-scoped MSAL cache.
 3. `atmos auth whoami` — reported provider, identity, subscription principal, tenant, and
-   expiry.
+    expiry.
 4. `az account show` — worked without ever running `az login`, confirming the drop-in
-   write-back.
+    write-back.
 5. Cache forensics: exactly one MSAL Account entry, `account_source: authorization_code`
-   (matching az's own label for this flow), with a home account ID whose tenant differs
-   from the target tenant (the guest case that previously produced the duplicate-account
-   corruption); persisted credentials carry `auth_method: interactive` and the home account
-   ID.
+    (matching az's own label for this flow), with a home account ID whose tenant differs
+    from the target tenant (the guest case that previously produced the duplicate-account
+    corruption); persisted credentials carry `auth_method: interactive` and the home account
+    ID.
 
 Known cosmetic limitation: the azureProfile written by the write-back records the
 subscription ID as the subscription's display name (atmos does not query ARM for the
