@@ -254,7 +254,7 @@ func ExecuteDescribeStacks(
 // describeStacksProcessor.scopeDecision) instead of only being filtered after the
 // fact by pkg/scheduler/adapters/terraform.go's post-filter.
 //
-//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with one compatibility parameter.
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with compatibility parameters.
 func ExecuteDescribeStacksWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
@@ -301,7 +301,7 @@ func ExecuteDescribeStacksWithAuthDisabled(
 // ExecuteDescribeStacksWithAuthDisabledAndMocks is the auth-disabled variant used
 // by affected Terraform plan execution when --use-mocks is selected.
 //
-//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with one compatibility parameter.
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacksWithAuthDisabled with one compatibility parameter.
 func ExecuteDescribeStacksWithAuthDisabledAndMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
