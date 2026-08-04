@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -58,13 +59,17 @@ var (
 	_ store.DeletableStore     = (*SSMStore)(nil)
 	_ store.StatusStore        = (*SSMStore)(nil)
 	_ store.SecretAwareStore   = (*SSMStore)(nil)
+	_ store.ListableStore      = (*SSMStore)(nil)
 )
 
 // SSMClient interface allows us to mock the AWS SSM client.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_aws_ssm_param_store.go -package=providers
 type SSMClient interface {
 	PutParameter(ctx context.Context, params *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 	DeleteParameter(ctx context.Context, params *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
+	GetParametersByPath(ctx context.Context, params *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
 }
 
 // STSClient interface allows us to mock the AWS STS client.
@@ -601,6 +606,76 @@ func (s *SSMStore) Has(stack string, component string, key string) (bool, error)
 		return false, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
 	}
 	return true, nil
+}
+
+// resolveReadClient assumes s.readRoleArn (if set) and returns the SSM client to read with,
+// factored out of Keys to keep its cyclomatic complexity within the linter's limit.
+func (s *SSMStore) resolveReadClient(ctx context.Context) (SSMClient, error) {
+	cfg, err := s.assumeRole(ctx, s.readRoleArn)
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
+	}
+
+	if s.readRoleArn == nil {
+		return s.client, nil
+	}
+	if s.newSSMClient != nil {
+		return s.newSSMClient(*cfg), nil
+	}
+	return ssm.NewFromConfig(*cfg), nil
+}
+
+// Keys lists the parameter names under a stack/component scope (or globally when both are
+// empty), via SSM's GetParametersByPath (recursive). WithDecryption is false: only names are
+// needed, so no kms:Decrypt permission is required.
+func (s *SSMStore) Keys(stack string, component string) ([]string, error) {
+	defer perf.Track(nil, "providers.SSMStore.Keys")()
+
+	if s.stackDelimiter == nil {
+		return nil, store.ErrStackDelimiterNotSet
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	ctx := context.TODO()
+
+	path := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, "/")
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	client, err := s.resolveReadClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var names []string
+	var nextToken *string
+	for {
+		output, err := client.GetParametersByPath(ctx, &ssm.GetParametersByPathInput{
+			Path:           aws.String(path),
+			Recursive:      aws.Bool(true),
+			WithDecryption: aws.Bool(false),
+			NextToken:      nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFormatWithID, store.ErrListParameters, path, err)
+		}
+		for _, p := range output.Parameters {
+			name := strings.TrimPrefix(strings.TrimPrefix(aws.ToString(p.Name), path), "/")
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return names, nil
 }
 
 // isParameterNotFound reports whether the error indicates a missing SSM parameter.
