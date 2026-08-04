@@ -154,7 +154,8 @@ func operationFlagOptions(name string) []flags.Option {
 		options = append(
 			options,
 			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
-			flags.WithStringSliceFlag("on-failure", "", nil, "Actions after a failed release: rollback, cleanup."),
+			flags.WithStringFlag("on-failure", "", "", "Failure action for the selected operation: uninstall or keep for install; rollback or keep for upgrade."),
+			flags.WithBoolFlag("cleanup-on-failure", "", false, "Remove resources newly created during a failed upgrade."),
 			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. A bare --wait selects watcher; deprecated true/false map to watcher/hookOnly."),
 			flags.WithNoOptDefVal(flagWait, "watcher"),
 			flags.WithBoolFlag("wait-for-jobs", "", false, "Wait for Jobs in the release manifest."),
@@ -302,18 +303,25 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 
 func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 	boolFlags := map[string]string{
-		"wait-for-jobs": cfg.HelmWaitForJobsSectionName,
-		"no-hooks":      cfg.HelmDisableChartHooksSectionName,
-		"skip-crds":     cfg.HelmSkipCRDsSectionName,
+		"wait-for-jobs":      cfg.HelmWaitJobsSectionName,
+		"cleanup-on-failure": cfg.HelmCleanupOnFailureSectionName,
 	}
 	if flag := cmd.Flag("on-failure"); flag != nil && flag.Changed {
-		if values, err := cmd.Flags().GetStringSlice("on-failure"); err == nil {
-			result[cfg.HelmOnFailureSectionName] = values
-		}
+		result[cfg.HelmOnFailureSectionName] = flag.Value.String()
 	}
 	for flagName, fieldName := range boolFlags {
 		if flag := cmd.Flag(flagName); flag != nil && flag.Changed {
 			result[fieldName] = flag.Value.String() == valueTrue
+		}
+	}
+	if flag := cmd.Flag("no-hooks"); flag != nil && flag.Changed {
+		result[cfg.HelmChartHooksSectionName] = flag.Value.String() != valueTrue
+	}
+	if flag := cmd.Flag("skip-crds"); flag != nil && flag.Changed {
+		if flag.Value.String() == valueTrue {
+			result[cfg.HelmCRDsSectionName] = "skip"
+		} else {
+			result[cfg.HelmCRDsSectionName] = "create"
 		}
 	}
 	stringFlags := map[string]string{
@@ -327,7 +335,7 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 	}
 	if flag := cmd.Flag("history-max"); flag != nil && flag.Changed {
 		if value, err := strconv.Atoi(flag.Value.String()); err == nil {
-			result[cfg.HelmMaxHistorySectionName] = value
+			result[cfg.HelmHistoryMaxSectionName] = value
 		}
 	}
 }
