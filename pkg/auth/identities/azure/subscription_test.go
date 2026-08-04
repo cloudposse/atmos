@@ -3,6 +3,7 @@ package azure
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -221,6 +222,57 @@ func TestSubscriptionIdentity_GetProviderName(t *testing.T) {
 			assert.Equal(t, tt.expectedName, providerName)
 		})
 	}
+}
+
+func TestSubscriptionIdentity_PostAuthenticate(t *testing.T) {
+	// Sandbox HOME so credential files land under a temp dir.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	identity := &subscriptionIdentity{
+		name:           "azure-test",
+		subscriptionID: "sub-123",
+		location:       "centralus",
+	}
+	identity.SetRealm("test-realm")
+
+	creds := &types.AzureCredentials{
+		AccessToken:    "access-token",
+		Expiration:     time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339),
+		TenantID:       "tenant-123",
+		SubscriptionID: "sub-123",
+		Location:       "centralus",
+		AuthMethod:     types.AzureAuthMethodCLI, // CLI-sourced: az cache write-back is skipped.
+	}
+
+	authContext := &schema.AuthContext{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	err := identity.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stackInfo,
+		ProviderName: "azure-cli",
+		IdentityName: "azure-test",
+		Credentials:  creds,
+		Realm:        "test-realm",
+	})
+	require.NoError(t, err)
+
+	// Credentials file was written under the sandboxed home.
+	credsPath := tmpHome + "/.azure/atmos/test-realm/azure-cli/credentials.json"
+	_, statErr := os.Stat(credsPath)
+	assert.NoError(t, statErr, "credentials.json should be written by SetupFiles")
+
+	// Auth context was populated and env vars derived into stack info.
+	require.NotNil(t, authContext.Azure)
+	assert.Equal(t, "sub-123", authContext.Azure.SubscriptionID)
+	assert.Equal(t, "tenant-123", authContext.Azure.TenantID)
+	assert.Equal(t, "sub-123", stackInfo.ComponentEnvSection["ARM_SUBSCRIPTION_ID"])
+
+	// CLI-sourced credentials must not have created az CLI cache files.
+	_, msalErr := os.Stat(tmpHome + "/.azure/msal_token_cache.json")
+	assert.True(t, os.IsNotExist(msalErr), "az MSAL cache must not be written for CLI-sourced credentials")
 }
 
 func TestSubscriptionIdentity_Authenticate_PreservesAllProviderFields(t *testing.T) {

@@ -376,11 +376,7 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 		return result, nil
 	}
 
-	// Record the MSAL home account ID for correct Azure CLI cache interop
-	// (guest users have a home tenant different from p.tenantID).
-	if account, findErr := p.findAccountForTenant(accounts); findErr == nil {
-		result.homeAccountID = account.HomeAccountID
-	}
+	p.captureHomeAccountID(accounts, &result)
 
 	// Acquire additional API tokens for azuread and azurerm providers.
 	p.acquireAdditionalTokens(ctx, client, accounts, &result)
@@ -431,6 +427,14 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 		log.Debug("Successfully obtained KeyVault token",
 			"expiresOn", result.keyVaultExpiresOn,
 			"tokenLength", len(result.keyVaultToken))
+	}
+}
+
+// captureHomeAccountID records the MSAL home account ID for correct Azure CLI
+// cache interop (guest users have a home tenant different from p.tenantID).
+func (p *deviceCodeProvider) captureHomeAccountID(accounts []public.Account, result *tokenAcquisitionResult) {
+	if account, err := p.findAccountForTenant(accounts); err == nil {
+		result.homeAccountID = account.HomeAccountID
 	}
 }
 
