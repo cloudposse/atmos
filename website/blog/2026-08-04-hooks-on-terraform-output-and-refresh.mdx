@@ -16,9 +16,9 @@ with a cloud CLI.
 ## The Problem
 
 A `kind: store` hook reads a Terraform output and writes it to a configured store, so other
-components can read it back later with `!store` or `!store.get`. This only ever fired on
-Terraform's write-path commands — `plan`, `apply`, `deploy`, and `test`. Nothing fired when
-you just wanted to *read* a value from infrastructure that already exists.
+components can read it back later with `!store` or `!store.get`. Before this change, the
+supported lifecycle events did not include `output` or `refresh`. Nothing fired when you just
+wanted to *read* a value from infrastructure that already exists.
 
 That gap matters most for the infrastructure you're least likely to touch again soon: a
 production VPC someone applied by hand two years ago, or a reference architecture deployed
