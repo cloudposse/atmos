@@ -1,6 +1,6 @@
 # PRD: Atmos Git (GitOps Enablement)
 
-**Status:** Proposed
+**Status:** Proposed (Component Updater PR publishing is implemented separately)
 **Version:** 0.4
 **Last Updated:** 2026-07-30
 **Author:** Atmos Team
@@ -11,6 +11,7 @@
 - [Source Provisioner](./source-provisioner.md)
 - [Custom Hooks](./custom-hooks.md)
 - [Native CI Integration](./native-ci-integration.md)
+- [Native Component Updater PR Workflow](./component-updater.md)
 - [Atmos Pro STS](./atmos-pro-sts.md)
 
 ---
@@ -37,7 +38,7 @@ The first concrete consumers are:
 3. Native CI workflows using `atmos git clone` as an Atmos-aware replacement for GitHub clone/checkout action patterns.
 4. Local Git hooks using Atmos-managed `.git/hooks/*` shims that delegate to workflows or custom commands.
 
-V1 ships a single `cli` provider that shells out to the Git CLI. A GitHub API provider is an intentional future extension point, not part of this implementation.
+V1 ships a single `cli` provider that shells out to the Git CLI. The Component Updater additionally registers a focused GitHub API pull-request publisher; its behavior is defined in the [Component Updater PRD](./component-updater.md), not as general provisioner PR support.
 
 ---
 
@@ -73,9 +74,9 @@ Atmos needs a reusable Git foundation that can be used consistently by CLI comma
 
 ## Non-Goals
 
-1. **GitHub API Provider in v1:** The `github` provider is a future extension point only.
+1. **General GitHub API Provider in v1:** Component Updater PR publishing is implemented separately. Managed repositories and lifecycle hooks do not gain API PR publishing from it.
 2. **Force Push:** Atmos will not perform force pushes in v1.
-3. **Pull Request Creation in v1:** Pushing a branch and opening a pull request is the headline capability of the future `github` provider (and the answer to protected deployment-repo branches), but it is out of scope for v1.
+3. **Provisioner/Hook Pull Request Creation in v1:** This remains out of scope. The Component Updater is the only PR-publishing consumer.
 4. **Managing `core.hooksPath`:** V1 writes local `.git/hooks/<hook>` shims and does not manage `core.hooksPath`.
 5. **Replacing Internal Lifecycle Hooks:** Local Git hooks are separate from Atmos lifecycle events such as `after.terraform.apply`.
 6. **General Git Porcelain Replacement:** Atmos Git is not intended to expose every Git command.
@@ -351,7 +352,7 @@ atmos git push <name-or-path> [--dry-run]
 2. **Go-getter style `git::` URIs**, consistent with the syntax users already write in vendoring and `source` configs:
 
     ```bash
-    atmos git clone git::https://github.com/acme/repo.git?ref=main&depth=1
+    atmos git clone 'git::https://github.com/acme/repo.git?ref=main&depth=1'
     ```
 
     The `git::` forcing prefix is stripped; `?ref=` maps to branch/ref and `?depth=` to clone depth. Precedence: explicit flags > query params > repository config > defaults. Honored query params are `ref` and `depth`; unknown params fail with a clear error. Implementation reuses the existing go-getter URI parsing from the vendoring/downloader code path — no new parser.
