@@ -440,3 +440,22 @@ func TestFlagRegistry_Validate(t *testing.T) {
 		})
 	}
 }
+
+// TestFlagRegistry_RegisterFlags_StringSliceShorthand proves slice flags register their declared
+// shorthand: registerFlagToSet must use StringSliceP, not the shorthand-dropping StringSlice
+// (regression: `atmos vendor update -c vpc` failed with "unknown shorthand flag: 'c'").
+func TestFlagRegistry_RegisterFlags_StringSliceShorthand(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{Name: "component", Shorthand: "c", Default: []string{}})
+
+	cmd := &cobra.Command{Use: "test"}
+	registry.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("component")
+	require.NotNil(t, flag)
+	assert.Equal(t, "c", flag.Shorthand)
+	require.NoError(t, cmd.Flags().Parse([]string{"-c", "vpc"}))
+	values, err := cmd.Flags().GetStringSlice("component")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, values)
+}

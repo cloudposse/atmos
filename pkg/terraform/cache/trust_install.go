@@ -72,12 +72,7 @@ func InstallTrust(certPath string) error {
 	case "darwin":
 		return installMacOSTrust(certPath)
 	case "windows":
-		if windowsUsesCertutilTrustCommand() {
-			return runTrustCommandFunc("certutil", "-addstore", "-enterprise", "-f", "Root", certPath)
-		}
-		return runTrustOperation("Windows trust store install", func() error {
-			return installWindowsTrustFunc(certPath)
-		})
+		return installWindowsTrustStore(certPath)
 	default:
 		return nil
 	}
@@ -92,15 +87,60 @@ func RemoveTrust(certPath string) error {
 	case "darwin":
 		return removeMacOSTrust(certPath)
 	case "windows":
-		if windowsUsesCertutilTrustCommand() {
-			return runTrustCommandFunc("certutil", "-delstore", "-enterprise", "Root", certCommonName)
-		}
-		return runTrustOperation("Windows trust store removal", func() error {
-			return removeWindowsTrustFunc(certPath)
-		})
+		return removeWindowsTrustStore(certPath)
 	default:
 		return nil
 	}
+}
+
+// installWindowsTrustStore installs the certificate on Windows. CI runners prefer
+// certutil's enterprise Root store (avoids the CurrentUser Root confirmation prompt),
+// but certutil occasionally hangs on hosted runners and gets killed at the command
+// timeout with no output — so any certutil failure falls back to the native crypt32
+// installer, which writes the LocalMachine Root store directly with no subprocess.
+// Mirrors installMacOSTrust's system-keychain → login-keychain fallback.
+func installWindowsTrustStore(certPath string) error {
+	if windowsUsesCertutilTrustCommand() {
+		err := runTrustCommandFunc("certutil", "-addstore", "-enterprise", "-f", "Root", certPath)
+		if err == nil {
+			return nil
+		}
+		if fallbackErr := nativeWindowsTrustInstall(certPath); fallbackErr != nil {
+			return fmt.Errorf("%w; native trust store fallback failed: %w", err, fallbackErr)
+		}
+		return nil
+	}
+	return nativeWindowsTrustInstall(certPath)
+}
+
+// removeWindowsTrustStore removes the certificate on Windows, trying certutil's
+// enterprise store first on CI and falling back to the native remover — which also
+// covers a certificate that a fallback install placed in the LocalMachine Root store
+// rather than the enterprise store.
+func removeWindowsTrustStore(certPath string) error {
+	if windowsUsesCertutilTrustCommand() {
+		err := runTrustCommandFunc("certutil", "-delstore", "-enterprise", "Root", certCommonName)
+		if err == nil {
+			return nil
+		}
+		if fallbackErr := nativeWindowsTrustRemove(certPath); fallbackErr != nil {
+			return fmt.Errorf("%w; native trust store fallback failed: %w", err, fallbackErr)
+		}
+		return nil
+	}
+	return nativeWindowsTrustRemove(certPath)
+}
+
+func nativeWindowsTrustInstall(certPath string) error {
+	return runTrustOperation("Windows trust store install", func() error {
+		return installWindowsTrustFunc(certPath)
+	})
+}
+
+func nativeWindowsTrustRemove(certPath string) error {
+	return runTrustOperation("Windows trust store removal", func() error {
+		return removeWindowsTrustFunc(certPath)
+	})
 }
 
 func installMacOSTrust(certPath string) error {
