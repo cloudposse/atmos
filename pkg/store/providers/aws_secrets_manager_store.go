@@ -49,6 +49,7 @@ type SecretsManagerClient interface {
 	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 	DescribeSecret(ctx context.Context, params *secretsmanager.DescribeSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.DescribeSecretOutput, error)
 	DeleteSecret(ctx context.Context, params *secretsmanager.DeleteSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.DeleteSecretOutput, error)
+	ListSecrets(ctx context.Context, params *secretsmanager.ListSecretsInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error)
 }
 
 // Ensure SecretsManagerStore implements the expected interfaces.
@@ -57,6 +58,7 @@ var (
 	_ store.IdentityAwareStore = (*SecretsManagerStore)(nil)
 	_ store.DeletableStore     = (*SecretsManagerStore)(nil)
 	_ store.StatusStore        = (*SecretsManagerStore)(nil)
+	_ store.ListableStore      = (*SecretsManagerStore)(nil)
 )
 
 func init() {
@@ -347,6 +349,63 @@ func (s *SecretsManagerStore) Delete(stack string, component string, key string)
 		return fmt.Errorf(errWrapFormatWithID, store.ErrDeleteSecret, secretID, err)
 	}
 	return nil
+}
+
+// Keys lists the secret names under a stack/component scope (or globally when both are empty),
+// via Secrets Manager's ListSecrets with a "name" filter. That filter is a server-side,
+// case-sensitive prefix match on raw characters, not on path segments, so it can return
+// same-level siblings (e.g. "prod/api-backup" when scoped to "prod/api"); each returned name is
+// re-checked client-side against the segment-bounded prefix (trimPrefix, which includes the
+// trailing separator) before it's trusted and trimmed.
+func (s *SecretsManagerStore) Keys(stack string, component string) ([]string, error) {
+	if s.stackDelimiter == nil {
+		return nil, store.ErrStackDelimiterNotSet
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	prefix := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, "/")
+	trimPrefix := prefix
+	if trimPrefix != "" {
+		trimPrefix += "/"
+	}
+
+	ctx := context.TODO()
+	var names []string
+	var nextToken *string
+	for {
+		input := &secretsmanager.ListSecretsInput{NextToken: nextToken}
+		if prefix != "" {
+			input.Filters = []smtypes.Filter{{Key: smtypes.FilterNameStringTypeName, Values: []string{prefix}}}
+		}
+		output, err := s.client.ListSecrets(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFormatWithID, store.ErrListSecrets, prefix, err)
+		}
+		names = appendSecretNames(names, output.SecretList, trimPrefix)
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return names, nil
+}
+
+// appendSecretNames appends each entry's name to names, stripped of trimPrefix, skipping any
+// entry that doesn't actually start with trimPrefix. ListSecrets' server-side "name" filter is a
+// raw character-prefix match, not path-segment-aware, so it can return same-level siblings (e.g.
+// "prod/api-backup" when scoped to "prod/api"); the boundary-aware strings.CutPrefix check here
+// re-verifies the match before trusting it.
+func appendSecretNames(names []string, entries []smtypes.SecretListEntry, trimPrefix string) []string {
+	for i := range entries {
+		if name, ok := strings.CutPrefix(aws.ToString(entries[i].Name), trimPrefix); ok && name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // Has reports whether a secret exists, treating ResourceNotFound as non-existent.
