@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -37,6 +38,87 @@ func TestHelmBulkCICollectorRecordsAndSortsResults(t *testing.T) {
 
 	resultSet.Results[1].Summary["diff"] = "mutated"
 	assert.Equal(t, "+ change", collector.resultSet().Results[1].Summary["diff"])
+}
+
+func TestHelmBulkCICollectorDeepCopiesNestedSummary(t *testing.T) {
+	collector := newHelmBulkCICollector("apply")
+	wait := map[string]any{"strategy": "watcher"}
+	kinds := []string{"Deployment", "Service"}
+	summary := map[string]any{
+		"release":      map[string]any{"wait": wait},
+		"object_kinds": kinds,
+	}
+	collector.setSummary(&schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "api"}, summary, nil)
+
+	wait["strategy"] = "legacy"
+	kinds[0] = "Job"
+	result := collector.resultSet().Results[0]
+	release := result.Summary["release"].(map[string]any)
+	assert.Equal(t, "watcher", release["wait"].(map[string]any)["strategy"])
+	assert.Equal(t, []string{"Deployment", "Service"}, result.Summary["object_kinds"])
+
+	release["wait"].(map[string]any)["strategy"] = "mutated"
+	result.Summary["object_kinds"].([]string)[1] = "ConfigMap"
+	retained := collector.resultSet().Results[0].Summary
+	assert.Equal(t, "watcher", retained["release"].(map[string]any)["wait"].(map[string]any)["strategy"])
+	assert.Equal(t, []string{"Deployment", "Service"}, retained["object_kinds"])
+}
+
+type helmBulkGraphTestProvider struct {
+	failComponent string
+}
+
+func (p *helmBulkGraphTestProvider) GetType() string                               { return cfg.HelmComponentType }
+func (p *helmBulkGraphTestProvider) GetGroup() string                              { return "test" }
+func (p *helmBulkGraphTestProvider) GetBasePath(*schema.AtmosConfiguration) string { return "" }
+func (p *helmBulkGraphTestProvider) ListComponents(context.Context, string, map[string]any) ([]string, error) {
+	return nil, nil
+}
+func (p *helmBulkGraphTestProvider) ValidateComponent(map[string]any) error { return nil }
+func (p *helmBulkGraphTestProvider) Execute(ctx *component.ExecutionContext) error {
+	if ctx.Component == p.failComponent {
+		return errors.New("operation failed")
+	}
+	return nil
+}
+func (p *helmBulkGraphTestProvider) GenerateArtifacts(*component.ExecutionContext) error { return nil }
+func (p *helmBulkGraphTestProvider) GetAvailableCommands() []string                      { return nil }
+
+func TestHelmBulkCICollectorRecordsDependencyBlockedComponents(t *testing.T) {
+	collector := newHelmBulkCICollector("apply")
+	provider := &bulkCollectingProvider{
+		ComponentProvider: &helmBulkGraphTestProvider{failComponent: "base"},
+		collector:         collector,
+	}
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.SettingsSectionName: map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}
+
+	err := component.ExecuteGraph(context.Background(), &component.GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        stacks,
+		ComponentType: cfg.HelmComponentType,
+		SubCommand:    "apply",
+	})
+	require.Error(t, err)
+
+	results := collector.resultSet().Results
+	require.Len(t, results, 2)
+	assert.Equal(t, "api", results[0].Component)
+	assert.Equal(t, "skipped", results[0].Status)
+	assert.False(t, results[0].Processed)
+	assert.Equal(t, "base", results[1].Component)
+	assert.Equal(t, "failed", results[1].Status)
 }
 
 func TestHelmBulkCICollectorUsesProcessedComponentIdentity(t *testing.T) {
