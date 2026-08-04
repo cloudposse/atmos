@@ -1,13 +1,29 @@
 package output
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+type blockingWriter struct {
+	started chan struct{}
+	release <-chan struct{}
+}
+
+func (w blockingWriter) Write(p []byte) (int, error) {
+	close(w.started)
+	<-w.release
+	return len(p), nil
+}
 
 func TestNewSpinner(t *testing.T) {
 	// Test that NewSpinner returns a valid tea.Program.
@@ -31,6 +47,56 @@ func TestSuppressSpinnersRestoresNestedScopes(t *testing.T) {
 
 	restoreInner()
 	require.False(t, spinnersSuppressed())
+}
+
+func TestClearSpinnerLineBlocksConcurrentSuppression(t *testing.T) {
+	clearStarted := make(chan struct{})
+	releaseClear := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseClear) }) }
+	t.Cleanup(release)
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	restoreUI := iolib.PushUIWriter(blockingWriter{started: clearStarted, release: releaseClear})
+	t.Cleanup(restoreUI)
+
+	clearDone := make(chan struct{})
+	go func() {
+		clearSpinnerLine()
+		close(clearDone)
+	}()
+	select {
+	case <-clearStarted:
+	case <-time.After(time.Second):
+		t.Fatal("ClearLine did not start")
+	}
+
+	suppressionDone := make(chan struct{})
+	go func() {
+		restore := SuppressSpinners()
+		restore()
+		close(suppressionDone)
+	}()
+	select {
+	case <-suppressionDone:
+		t.Fatal("Suppression interleaved with ClearLine")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	release()
+	select {
+	case <-clearDone:
+	case <-time.After(time.Second):
+		t.Fatal("ClearLine did not finish")
+	}
+	select {
+	case <-suppressionDone:
+	case <-time.After(time.Second):
+		t.Fatal("Suppression did not finish")
+	}
 }
 
 func TestModelSpinner_Init(t *testing.T) {

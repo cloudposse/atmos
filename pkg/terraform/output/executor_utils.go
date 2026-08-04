@@ -103,7 +103,10 @@ func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ str
 
 // clearSpinnerLine clears transient lookup output unless concurrent execution suppressed it.
 func clearSpinnerLine() {
-	if outputLookupVisible() {
+	spinnerSuppression.Lock()
+	defer spinnerSuppression.Unlock()
+
+	if spinnerSuppression.count == 0 {
 		ui.ClearLine()
 	}
 }
