@@ -122,7 +122,8 @@ func (p *cliProvider) IsAmbient() bool {
 func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.cliProvider.Authenticate")()
 
-	log.Debug("Authenticating with Azure CLI",
+	log.Debug(
+		"Authenticating with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 	)
@@ -158,9 +159,11 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		SubscriptionID:   subscriptionID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name,
+		AuthMethod:       authTypes.AzureAuthMethodCLI,
 	}
 
-	log.Debug("Successfully authenticated with Azure CLI",
+	log.Debug(
+		"Successfully authenticated with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"subscription", subscriptionID,
