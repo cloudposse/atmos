@@ -24,6 +24,7 @@ type fakeVaultKV struct {
 	getErr  error // returned by Get when set.
 	delErr  error // returned by Delete when set.
 	metaErr error // returned by HasMetadata when set.
+	listErr error // returned by List when set.
 
 	getCalls  int // number of secret-DATA reads (Get) performed.
 	metaCalls int // number of metadata reads (HasMetadata) performed.
@@ -64,6 +65,32 @@ func (f *fakeVaultKV) HasMetadata(_ context.Context, path string) error {
 		return vault.ErrSecretNotFound
 	}
 	return nil
+}
+
+// List mirrors Vault KV v2's LIST semantics: it returns only the immediate child names under
+// path (folders end in "/"), not a full recursive listing.
+func (f *fakeVaultKV) List(_ context.Context, path string) ([]string, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	prefix := strings.TrimSuffix(path, "/") + "/"
+	seen := map[string]bool{}
+	var keys []string
+	for k := range f.data {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(k, prefix)
+		entry := rest
+		if idx := strings.Index(rest, "/"); idx >= 0 {
+			entry = rest[:idx+1]
+		}
+		if !seen[entry] {
+			seen[entry] = true
+			keys = append(keys, entry)
+		}
+	}
+	return keys, nil
 }
 
 func (f *fakeVaultKV) Delete(_ context.Context, path string) error {
@@ -419,4 +446,29 @@ func TestFirstNonEmpty(t *testing.T) {
 	assert.Equal(t, "b", firstNonEmpty("", "b", "c"))
 	assert.Equal(t, "", firstNonEmpty("", ""))
 	assert.Equal(t, "a", firstNonEmpty("a"))
+}
+
+// TestVaultStore_Keys proves Keys lists the immediate children under a stack/component scope
+// and strips Vault's trailing "/" folder marker from deeper entries.
+func TestVaultStore_Keys(t *testing.T) {
+	fake := newFakeVaultKV()
+	s := newTestVaultStore(fake)
+
+	require.NoError(t, s.Set("prod", "vpc", "image_tag", "sha256:abc"))
+	require.NoError(t, s.Set("prod", "vpc", "region", "us-east-1"))
+	require.NoError(t, s.Set("prod", "ecs", "image_tag", "sha256:def")) // Different component: excluded.
+
+	keys, err := s.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+}
+
+func TestVaultStore_Keys_Error(t *testing.T) {
+	fake := newFakeVaultKV()
+	fake.listErr = assert.AnError
+	s := newTestVaultStore(fake)
+
+	_, err := s.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, store.ErrVaultList)
 }
