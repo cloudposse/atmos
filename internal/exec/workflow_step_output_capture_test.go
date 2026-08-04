@@ -279,7 +279,11 @@ func installWorkflowAtmosTestBinary(t *testing.T, source string) {
 		name += ".exe"
 	}
 	binDir := t.TempDir()
-	require.NoError(t, copyFile(source, filepath.Join(binDir, name)))
+	contents, err := os.ReadFile(source)
+	require.NoError(t, err)
+	sourceInfo, err := os.Stat(source)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, name), contents, sourceInfo.Mode()))
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 

@@ -1297,6 +1297,25 @@ func TestRunUserHooksSkipsProvisioningForInit(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "before.terraform.init must NOT trigger pre-provisioning")
 }
 
+// TestRunUserHooksLogsStatusForAfterEvents verifies the after-event branch of
+// runUserHooks' status log: on before.* events the terraform operation hasn't
+// run yet (status is misleading and omitted), but on after.* events the
+// outcome status must be included so it's visible in the log line. This
+// exercises the branch that was unreachable via before-only fixtures.
+func TestRunUserHooksLogsStatusForAfterEvents(t *testing.T) {
+	root, component := writeMinimalSourceFixture(t, true)
+	t.Chdir(root)
+	withoutCIDetection(t)
+
+	cmd := newHookTestCmd() // Use: "plan"
+	require.NoError(t, cmd.Flags().Set("stack", "test"))
+
+	// The fixture's hook only fires on before.terraform.plan/init, so RunAll
+	// no-ops for this after-event, but runUserHooks must still reach (and not
+	// panic on) the "status" log branch before calling RunAll.
+	require.NoError(t, runHooks(hooks.AfterTerraformPlan, cmd, []string{component}))
+}
+
 // TestPrepareHookContextSkipsComponentResolutionForMultiComponent verifies that
 // the global before/after hook context for multi-component invocations
 // (--all/--affected/--components/--query/--tags/--labels) does not fail with

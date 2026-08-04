@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	cockroachdberrors "github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1253,10 +1254,9 @@ func TestHooksPreflight_NoOpBranches(t *testing.T) {
 }
 
 func TestHooksVerifyAllBinaries(t *testing.T) {
-	t.Run("skips deprecated unknown skipped and no-command hooks", func(t *testing.T) {
+	t.Run("skips deprecated skipped and no-command hooks", func(t *testing.T) {
 		h := Hooks{items: map[string]Hook{
 			"deprecated": {Kind: "ci.summary", Command: "definitely-not-on-path-atmos-test"},
-			"unknown":    {Kind: "not-registered", Command: "definitely-not-on-path-atmos-test"},
 			"store":      {Kind: "store"},
 			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
@@ -1268,6 +1268,32 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			isCI:          false,
 		})
 		require.NoError(t, err)
+	})
+
+	t.Run("errors on an unregistered kind instead of silently skipping it", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"unknown": {Kind: "not-registered", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUnknownHookKind)
+		details := cockroachdberrors.GetAllDetails(err)
+		require.NotEmpty(t, details)
+		assert.Contains(t, details[0], "not-registered")
+	})
+
+	t.Run("errors on an invalid on_failure value instead of silently treating it as warn", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"typo": {Kind: "store", OnFailure: "waarn"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidHookOnFailure)
+		details := cockroachdberrors.GetAllDetails(err)
+		require.NotEmpty(t, details)
+		assert.Contains(t, details[0], "waarn")
 	})
 
 	t.Run("skips hooks for other events", func(t *testing.T) {
