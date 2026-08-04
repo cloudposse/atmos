@@ -203,11 +203,20 @@ type promptStreams struct {
 	stderr io.Writer
 }
 
-func (s *promptStreams) Input() io.Reader     { return s.stdin }
-func (s *promptStreams) Output() io.Writer    { return s.stdout }
-func (s *promptStreams) Error() io.Writer     { return s.stderr }
+// Input returns the test stdin reader.
+func (s *promptStreams) Input() io.Reader { return s.stdin }
+
+// Output returns the test stdout writer.
+func (s *promptStreams) Output() io.Writer { return s.stdout }
+
+// Error returns the test stderr writer.
+func (s *promptStreams) Error() io.Writer { return s.stderr }
+
+// RawOutput returns the test stdout writer without masking.
 func (s *promptStreams) RawOutput() io.Writer { return s.stdout }
-func (s *promptStreams) RawError() io.Writer  { return s.stderr }
+
+// RawError returns the test stderr writer without masking.
+func (s *promptStreams) RawError() io.Writer { return s.stderr }
 
 func TestDisplayBrowserPrompt(t *testing.T) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
