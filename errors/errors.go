@@ -1538,23 +1538,23 @@ var (
 var (
 	// ErrComponentUpdaterConfig indicates invalid component updater configuration.
 	ErrComponentUpdaterConfig = errors.New("invalid component updater configuration")
-	// ErrComponentUpdaterDirtyWorktree prevents a publisher from mixing unrelated changes into its commit.
+	// ErrComponentUpdaterDirtyWorktree indicates a publisher's Git worktree has uncommitted changes.
 	ErrComponentUpdaterDirtyWorktree = errors.New("component updater requires a clean Git worktree")
 	// ErrPullRequestPublisherUnavailable indicates the selected forge integration is not registered.
 	ErrPullRequestPublisherUnavailable = errors.New("pull request publisher is unavailable")
-	// ErrGitHubAuthorization identifies authentication or permission failures from the GitHub API.
+	// ErrGitHubAuthorization indicates an authentication or permission failure from the GitHub API.
 	ErrGitHubAuthorization = errors.New("GitHub authorization failed")
-	// ErrPullRequestReconciliation indicates an existing or new PR could not be reconciled.
+	// ErrPullRequestReconciliation indicates Atmos could not reconcile an existing or new PR.
 	ErrPullRequestReconciliation = errors.New("pull request reconciliation failed")
 	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
 	ErrGitFetchFailed = errors.New("git fetch failed")
 	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.
 	ErrGitCheckoutFailed = errors.New("git checkout failed")
-	// ErrGitLocalBranchDiverged prevents force-resetting a local feature branch that carries
-	// commits absent from both the remote feature branch and the base branch.
+	// ErrGitLocalBranchDiverged indicates a local feature branch has commits absent from both
+	// the remote feature branch and the base branch.
 	ErrGitLocalBranchDiverged = errors.New("local branch has unpushed commits")
 	// ErrGitDefaultBranchResolution indicates the remote's default branch could not be resolved.
-	ErrGitDefaultBranchResolution = errors.New("resolving remote default branch failed")
+	ErrGitDefaultBranchResolution = errors.New("remote default branch resolution failed")
 
 	// ErrGitLsRemoteFailed indicates listing refs from a remote Git repository failed.
 	ErrGitLsRemoteFailed = errors.New("failed to list refs from remote Git repository")
@@ -1565,10 +1565,10 @@ var (
 	// ErrInvalidSemverConstraint indicates a constraints.version value is not a valid semver constraint.
 	ErrInvalidSemverConstraint = errors.New("invalid semver constraint")
 	// ErrVersionRangeConflictsWithConstraints indicates a source declared both a semver-range
-	// version: and a constraints.version ceiling -- mutually exclusive, since constraints.version's
-	// entire purpose (bounding what `atmos vendor update` may bump an *exact* pin to) no longer
-	// applies once version: is itself already a range.
-	ErrVersionRangeConflictsWithConstraints = errors.New("version: is a semver range and constraints.version is also set -- these are mutually exclusive, remove one")
+	// version: and a constraints.version ceiling. These are mutually exclusive. constraints.version's
+	// entire purpose is to bound what `atmos vendor update` can bump an *exact* pin to; that purpose
+	// no longer applies once version: is itself already a range.
+	ErrVersionRangeConflictsWithConstraints = errors.New("version: is a semver range; constraints.version is also set. These are mutually exclusive; remove one")
 	// ErrVendorSourceNotFound indicates a requested component/source was not found in the vendor manifest.
 	ErrVendorSourceNotFound = errors.New("vendor source not found")
 	// ErrVendorSourceNotGit indicates a vendor source is not a Git repository (unsupported for update/diff).
@@ -1587,8 +1587,8 @@ var (
 	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
 	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
 	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
-	// ErrComponentFolderNotFound indicates a component's resolved base directory does not exist.
-	ErrComponentFolderNotFound = errors.New("component folder does not exist")
+	// ErrComponentDirNotFound indicates a component's resolved base directory does not exist.
+	ErrComponentDirNotFound = errors.New("component directory does not exist")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

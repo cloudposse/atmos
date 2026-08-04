@@ -112,7 +112,7 @@ spec:
 		// components/terraform/mock directory behind (it removes only the component.yaml
 		// it wrote, not the directory), so this exercises "directory exists, manifest file
 		// doesn't" (ErrComponentManifestNotFound), not "directory doesn't exist"
-		// (ErrComponentFolderNotFound) -- both are real, distinct failure modes this
+		// (ErrComponentDirNotFound) -- both are real, distinct failure modes this
 		// package's ResolveComponentPath/FindComponentManifestFile split covers.
 		_, _, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
 		assert.Error(t, err)

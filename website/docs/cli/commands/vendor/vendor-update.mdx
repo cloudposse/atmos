@@ -67,9 +67,9 @@ atmos vendor update --pull-request
 atmos vendor update --group platform --pull-request
 ```
 
-See <a href="/changelog/component-updater-pull-requests">Native Pull Requests for Vendored Component Updates</a> for the full `--pull-request` workflow, including CI wiring.
+See <a href="/changelog/component-updater-pull-requests">Native Pull Requests for Vendored Component Updates</a> for the full `--pull-request` workflow (the Component Updater), including CI wiring.
 
-`--pull-request` authenticates to GitHub using `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`, in that order. A PR opened with the default `GITHUB_TOKEN` won't trigger downstream `on: pull_request`/`on: push` Actions workflows, since GitHub excludes its own default token from re-triggering workflows. To get a token that does, pair the Component Updater with the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro) auth integration (see also <a href="/changelog/atmos-pro-github-sts">Just-in-time GitHub tokens for CI with Atmos Pro STS</a>): `atmos auth exec --identity <github-sts-identity> -- atmos vendor update --pull-request` mints a real GitHub App installation token and exports it as `ATMOS_PRO_GITHUB_TOKEN`, which the Component Updater picks up automatically.
+The `--pull-request` flag authenticates to GitHub using `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`, in that order. A PR opened with the default `GITHUB_TOKEN` won't trigger downstream `on: pull_request`/`on: push` Actions workflows. GitHub excludes its own default token from re-triggering workflows. To get a token that does trigger downstream workflows, pair the Component Updater with the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro) auth integration (see also <a href="/changelog/atmos-pro-github-sts">Just-in-time GitHub tokens for CI with Atmos Pro STS</a>). Run `atmos auth exec --identity <github-sts-identity> -- atmos vendor update --pull-request`. This mints a real GitHub App installation token and exports it as `ATMOS_PRO_GITHUB_TOKEN`. The Component Updater picks up this token automatically.
 
 ## Version constraints
 
@@ -96,7 +96,7 @@ sources:
   <dt>`--pull`</dt>
   <dd>After updating versions, run <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>.</dd>
   <dt>`--all`</dt>
-  <dd>Update all discoverable vendor sources. This is the default when no `--component`, `--tags`, or `--group` selector is given.</dd>
+  <dd>Update all discoverable vendor sources. This is the default when you give no `--component`, `--tags`, or `--group` selector.</dd>
   <dt>`--component` / `-c` (string, repeatable)</dt>
   <dd>Update only these components. Repeat the flag to select more than one (`--component vpc --component eks`).</dd>
   <dt>`--tags` (string)</dt>
@@ -119,7 +119,7 @@ sources:
   <dd>The vendor manifest to start from (imports are followed).</dd>
 </dl>
 
-The following flags apply only together with `--pull`, and are passed through to <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>:
+These flags apply only together with `--pull`. Atmos passes them through to <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>:
 
 <dl>
   <dt>`--everything`</dt>

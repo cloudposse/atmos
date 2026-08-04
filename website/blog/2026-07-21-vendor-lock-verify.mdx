@@ -8,10 +8,10 @@ date: 2026-07-21T12:00:00.000Z
 
 Vendoring pulls external code into your own repository so it's reviewable, diffable, and not
 subject to an upstream registry going away. But once those files land on disk, nothing has watched
-them since. A teammate edits a vendored file directly to work around a bug. A pull gets interrupted
-partway through. A CI runner's disk gets reused across jobs. Every one of these leaves your
-checkout silently out of sync with what was actually vendored, and the first sign of trouble is
-usually a broken `terraform plan` weeks later — not the moment the drift happened.
+them since. A teammate edits a vendored file directly to work around a bug. A pull can interrupt
+partway through. CI reuses a runner's disk across jobs. Every one of these leaves your checkout
+silently out of sync with what Atmos actually vendored. The first sign of trouble is usually a
+broken `terraform plan` weeks later — not the moment the drift happened.
 
 <!--truncate-->
 
@@ -21,8 +21,7 @@ The `atmos vendor pull` command always re-fetches everything, every time, whethe
 actually changed. That makes it slow to lean on as a drift check, so most teams just don't run it that
 way — they trust the checkout and find out otherwise the hard way. There was also no way to answer
 "does what's on disk still match what was vendored" without a network round trip, and no way to
-choose how loudly a stale checkout should complain before it gets quietly re-fetched out from under
-you.
+choose how loudly a stale checkout should complain before Atmos quietly re-fetches it.
 
 ## The Fix
 
@@ -52,10 +51,11 @@ vendor:
     enforcement: warn # silent | warn | strict
 ```
 
-- `silent` re-fetches with no reporting — the behavior every `vendor pull` had before this existed.
-- `warn` (the default) re-fetches and prints one line naming what drifted and why.
-- `strict` refuses to run at all until you pass `--refresh-lock`, so an unreviewed local edit can
-  never get silently overwritten — or silently kept — without someone noticing.
+- The `silent` mode re-fetches with no reporting — the behavior every `vendor pull` had before this
+  existed.
+- The `warn` mode (the default) re-fetches and prints one line naming what drifted and why.
+- The `strict` mode refuses to run at all until you pass `--refresh-lock`, so an unreviewed local
+  edit can never get silently overwritten — or silently kept — without someone noticing.
 
 ## How to Use It
 

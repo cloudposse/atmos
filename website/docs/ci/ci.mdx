@@ -94,7 +94,7 @@ There is no `comments: write` scope — PR comment writes use `pull-requests: wr
 
 ### SBOM Artifacts
 
-`atmos sbom generate --upload` uses the detected native CI provider to retain the generated SBOM with the CI run. In GitHub Actions, this is a workflow artifact, not a Dependency Graph import: GitHub's SBOM REST API can export or request a GitHub-generated SPDX report but does not accept an arbitrary submitted SBOM. Add `github-runtime` before the command so Atmos can access the Actions artifact runtime API.
+Running `atmos sbom generate --upload` uses the detected native CI provider to retain the generated SBOM with the CI run. In GitHub Actions, this is a workflow artifact, not a Dependency Graph import. GitHub's SBOM REST API can export or request a GitHub-generated SPDX report, but it does not accept an arbitrary submitted SBOM. Add `github-runtime` before the command so Atmos can access the runtime API for Actions artifacts.
 
 ```yaml
 - uses: cloudposse/atmos/actions/github-runtime@v1

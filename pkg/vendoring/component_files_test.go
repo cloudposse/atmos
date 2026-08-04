@@ -125,7 +125,7 @@ func TestSetComponentManifestVersion_PreservesFormatting(t *testing.T) {
 }
 
 // TestResolveComponentPath covers the resolution contract: an absolute path for an existing
-// component directory, ErrComponentFolderNotFound for a missing or non-directory path (the
+// component directory, ErrComponentDirNotFound for a missing or non-directory path (the
 // missing-path case flows through u.IsDirectory's os.Stat error, not the !dirExists branch),
 // and ErrUnsupportedComponentType for unknown component types.
 func TestResolveComponentPath(t *testing.T) {
@@ -142,14 +142,14 @@ func TestResolveComponentPath(t *testing.T) {
 		assert.Equal(t, filepath.Join(base, "components", "terraform", "vpc"), resolved)
 	})
 
-	t.Run("missing directory returns ErrComponentFolderNotFound", func(t *testing.T) {
+	t.Run("missing directory returns ErrComponentDirNotFound", func(t *testing.T) {
 		_, err := ResolveComponentPath(config, "missing", "terraform")
-		require.ErrorIs(t, err, errUtils.ErrComponentFolderNotFound)
+		require.ErrorIs(t, err, errUtils.ErrComponentDirNotFound)
 	})
 
-	t.Run("regular file returns ErrComponentFolderNotFound", func(t *testing.T) {
+	t.Run("regular file returns ErrComponentDirNotFound", func(t *testing.T) {
 		_, err := ResolveComponentPath(config, "file.txt", "terraform")
-		require.ErrorIs(t, err, errUtils.ErrComponentFolderNotFound)
+		require.ErrorIs(t, err, errUtils.ErrComponentDirNotFound)
 	})
 
 	t.Run("unsupported component type is rejected", func(t *testing.T) {

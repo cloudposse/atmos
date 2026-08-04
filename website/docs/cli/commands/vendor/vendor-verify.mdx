@@ -8,9 +8,9 @@ description: Verify vendored files match vendor.lock.yaml, reporting drift for C
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Compare every lock-owned file on disk against its recorded `vendor.lock.yaml` receipt and
-report drift — missing files, or files whose contents no longer match what was last vendored.
-Exits non-zero when any drift is found, for use in CI.
+Compare every lock-owned file on disk against its recorded `vendor.lock.yaml` receipt. Report
+drift — missing files, or files whose contents no longer match what was last vendored. Exits
+non-zero when any drift is found, for use in CI.
 </Intro>
 
 ## Usage
@@ -20,9 +20,9 @@ atmos vendor verify [--component <name>] [--format table|json]
 ```
 
 This never checks for a newer version upstream — see
-<a href="/cli/commands/vendor/update">`atmos vendor update --check`</a> for that. `vendor verify`
-is purely a read-only, on-disk integrity check against what's already recorded in the lock file:
-it never fetches, writes, or modifies anything.
+<a href="/cli/commands/vendor/update">`atmos vendor update --check`</a> for that. The `vendor
+verify` command is purely a read-only, on-disk integrity check against what's already recorded in
+the lock file: it never fetches, writes, or modifies anything.
 
 ## Examples
 
@@ -47,8 +47,9 @@ atmos vendor verify --format json
 </dl>
 
 :::note
-`atmos vendor verify` reports drift; it never fixes it. Re-run `atmos vendor pull --refresh-lock`
-(or `atmos vendor pull --component <name> --refresh-lock` for a single component) to re-fetch and
-reconcile drifted sources, or <a href="/cli/commands/vendor/vendor-clean">`atmos vendor clean`</a>
-to remove lock-owned files outright.
+The `atmos vendor verify` command reports drift; it never fixes it. Re-run
+`atmos vendor pull --refresh-lock` (or `atmos vendor pull --component <name> --refresh-lock` for a
+single component) to re-fetch and reconcile drifted sources. Or run
+<a href="/cli/commands/vendor/vendor-clean">`atmos vendor clean`</a> to remove lock-owned files
+outright.
 :::

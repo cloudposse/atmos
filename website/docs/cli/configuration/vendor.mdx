@@ -118,8 +118,8 @@ vendor:
 
   <dt>`lock_file`</dt>
   <dd>
-    Path to the vendor lock file, which records a per-file SHA-256 receipt for every artifact
-    vendored via `vendor.yaml` or `component.yaml`. <a href="/cli/commands/vendor/vendor-verify">`atmos vendor verify`</a> checks
+    The vendor lock file. It records a per-file SHA-256 receipt for every artifact vendored
+    through `vendor.yaml` or `component.yaml`. The <a href="/cli/commands/vendor/vendor-verify">`atmos vendor verify`</a> command checks
     this file for drift; <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a> and `atmos vendor update --pull`
     write to it.
 
@@ -146,7 +146,7 @@ vendor:
 
 ## Component Updater Configuration
 
-`vendor.update` and `vendor.ci` configure <a href="/cli/commands/vendor/vendor-update">`atmos vendor update --pull-request`</a> — see
+The `vendor.update` and `vendor.ci` sections configure <a href="/cli/commands/vendor/vendor-update">`atmos vendor update --pull-request`</a> — see
 <a href="/changelog/component-updater-pull-requests">Native Pull Requests for Vendored Component Updates</a>
 for the full workflow and a worked example.
 
@@ -182,12 +182,13 @@ vendor:
 <dl>
   <dt>`update.execution.mode`</dt>
   <dd>
-    `current` (default) runs the whole discover-branch-commit-push cycle in the invoking checkout.
-    `worktree` runs it in an isolated linked Git worktree instead, leaving the invoking checkout
-    untouched — useful when other steps in the same job depend on an unmodified checkout.
+    The default, `current`, runs the whole cycle — discover, branch, commit, push — in the
+    invoking checkout. The `worktree` mode runs it in an isolated linked Git worktree instead.
+    The invoking checkout stays untouched, which helps when other steps in the same job need an
+    unmodified checkout.
   </dd>
   <dt>`update.batching.mode`</dt>
-  <dd>`scope` is the only supported value: one branch/PR for the whole update run. Per-component batching (one PR per updated component) isn't implemented yet.</dd>
+  <dd>The only supported value is `scope`: one branch and one PR for the whole update run. Per-component batching (one PR per updated component) isn't implemented yet.</dd>
   <dt>`update.groups.<name>`</dt>
   <dd>
     Selects components for `--group <name>`. Each group has `include` and optional `exclude` glob
@@ -207,7 +208,7 @@ vendor:
     `{{ .updates | markdownTable }}` — not just the bare table on its own.
   </dd>
   <dt>`ci.pull_request.labels` / `.reviewers` / `.assignees`</dt>
-  <dd>Applied additively on every reconciliation. **Default label:** `[component-update]`.</dd>
+  <dd>Atmos applies these additively on every reconciliation. **Default label:** `[component-update]`.</dd>
   <dt>`ci.pull_request.draft`</dt>
   <dd>Create the pull request as a draft. **Default:** `false`.</dd>
   <dt>`ci.summary.enabled`</dt>
@@ -217,8 +218,8 @@ vendor:
 :::note
 A default `GITHUB_TOKEN` won't trigger downstream `on: pull_request`/`on: push` Actions workflows.
 Pair the Component Updater with the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro)
-auth integration for a token that does — see
-<a href="/cli/commands/vendor/vendor-update">`atmos vendor update`</a>'s token precedence notes.
+auth integration to get a token that does. See
+<a href="/cli/commands/vendor/vendor-update">`atmos vendor update`</a>'s token precedence notes for details.
 :::
 
 ## Vendor Manifest Structure

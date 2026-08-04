@@ -8,9 +8,9 @@ date: 2026-07-21T12:00:00.000Z
 
 Keeping vendored components current across dozens of repositories doesn't scale as a manual habit.
 Someone has to notice a new upstream release, edit the right `version:` field without breaking a
-comment or a template, commit, push, and open a pull request — for every component, on some kind of
-schedule, forever. Most teams either let it slip until something forces an update, or bolt on a
-third-party GitHub Action just to automate the commit-and-PR part.
+comment or a template, then commit, push, and open a pull request. That has to happen for every
+component, on some kind of schedule, forever. Most teams either let it slip until something forces
+an update, or bolt on a third-party GitHub Action just to automate the commit-and-PR part.
 
 <!--truncate-->
 
@@ -33,9 +33,9 @@ atmos vendor update --pull-request
 ```
 
 Nothing happens unless there's actually an update: no updates means no branch, no commit, no push,
-no PR. The base branch is fetched but never written to, and an existing feature branch for the same
-scope is reused and pushed fast-forward only — repeated runs update the same PR instead of piling
-up duplicates.
+no PR. Atmos fetches the base branch but never writes to it. It reuses an existing feature branch
+for the same scope and pushes it fast-forward only — repeated runs update the same PR instead of
+piling up duplicates.
 
 ## How to Use It
 
@@ -87,23 +87,23 @@ update was found.
 
 ## Triggering Downstream Workflows
 
-The example above uses the default `GITHUB_TOKEN`, which is fine for opening the PR — but GitHub
-deliberately excludes its own default Actions token from re-triggering `on: pull_request`/`on: push`
-workflows, so a plan/validate workflow that's supposed to run against the new PR won't fire.
+The example above uses the default `GITHUB_TOKEN`. This token is fine for opening the PR, but
+GitHub deliberately excludes its own default Actions token from re-triggering `on: pull_request`/
+`on: push` workflows. As a result, a plan/validate workflow that's supposed to run against the new
+PR won't fire.
 
 Pair the Component Updater with the
 [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro) auth integration to get a token that
 does trigger downstream Actions — a just-in-time GitHub App installation token, minted through
-[Atmos Pro STS](/changelog/atmos-pro-github-sts) and exported as `ATMOS_PRO_GITHUB_TOKEN`, which
-`--pull-request` already prefers over `GITHUB_TOKEN`:
+[Atmos Pro STS](/changelog/atmos-pro-github-sts) and exported as `ATMOS_PRO_GITHUB_TOKEN`. The
+`--pull-request` flag already prefers this token over `GITHUB_TOKEN`:
 
 ```shell
 atmos auth exec --identity github-sts -- atmos vendor update --pull-request
 ```
 
-No other flags or config changes are required: `atmos auth exec` mints and exports the token for
-the wrapped command's environment, and the Component Updater's GitHub client picks it up
-automatically.
+No other flags or config changes are required. `atmos auth exec` mints and exports the token for
+the wrapped command's environment. The Component Updater's GitHub client picks it up automatically.
 
 ## Get Involved
 

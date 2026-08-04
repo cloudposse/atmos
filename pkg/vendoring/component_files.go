@@ -87,15 +87,15 @@ func ResolveComponentPath(atmosConfig *schema.AtmosConfiguration, component, com
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {
 		// IsDirectory surfaces a non-nil error for a missing path, so a plain return here
-		// would make the ErrComponentFolderNotFound sentinel unreachable for the common
+		// would make the ErrComponentDirNotFound sentinel unreachable for the common
 		// "directory does not exist" case.
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("%w: %s", errUtils.ErrComponentFolderNotFound, componentPath)
+			return "", fmt.Errorf("%w: %s", errUtils.ErrComponentDirNotFound, componentPath)
 		}
 		return "", err
 	}
 	if !dirExists {
-		return "", fmt.Errorf("%w: %s", errUtils.ErrComponentFolderNotFound, componentPath)
+		return "", fmt.Errorf("%w: %s", errUtils.ErrComponentDirNotFound, componentPath)
 	}
 
 	return componentPath, nil
