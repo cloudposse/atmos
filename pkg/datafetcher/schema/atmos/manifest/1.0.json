@@ -3195,12 +3195,12 @@
         },
         "action": {
           "type": "string",
-          "description": "Container verb for the container step type: build, push, run, or inspect."
+          "description": "Step-type-specific verb: build, push, run, or inspect for type: container; create, extract, update, or replace for type: archive; write for type: store."
         },
         "with": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Container action parameters (GitHub-Actions uses/with style), decoded according to `action`."
+          "description": "Type-specific step parameters (GitHub-Actions uses/with style), decoded according to `action` where applicable (e.g. store, key, value, stack, component for type: store)."
         },
         "runtime_auto_start": {
           "type": "boolean",

@@ -31,6 +31,20 @@ stores:
 | `azure/keyvault` | Any Azure identity |
 | `gcp/secretmanager` | Any GCP identity |
 
+## Manage Store Values with the CLI
+
+Use the `atmos store` command group to read, write, delete, and list values in any of these
+stores. `set`, `get`, `delete`, and `list STORE` (listing the key/values inside a named store)
+authenticate using the identity configured on the target store. Bare `atmos store list` (no store
+name) is the exception: it only lists the configured store descriptors and never authenticates
+against a backend.
+
+```shell
+atmos store list
+atmos store set prod/ssm image_tag sha256:abc123 --stack=prod --component=ecs-service
+atmos store get prod/ssm image_tag --stack=prod --component=ecs-service
+```
+
 ## Learn More
 
 See [Stores documentation](https://atmos.tools/core-concepts/stacks/stores/).

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/keyring"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -25,6 +26,39 @@ func TestKeychainStore_ImplementsInterfaces(t *testing.T) {
 	assert.True(t, ok, "keychain store must be deletable")
 	_, ok = s.(store.StatusStore)
 	assert.True(t, ok, "keychain store must support Has")
+	_, ok = s.(store.ListableStore)
+	assert.True(t, ok, "keychain store must implement store.ListableStore")
+}
+
+// TestKeychainStore_Keys_MemoryBackend proves Keys works on the memory backend (which supports
+// enumeration) and scopes results to the requested stack/component.
+func TestKeychainStore_Keys_MemoryBackend(t *testing.T) {
+	s := newTestKeychainStore(t)
+
+	require.NoError(t, s.Set("prod", "vpc", "image_tag", "sha256:abc"))
+	require.NoError(t, s.Set("prod", "vpc", "region", "us-east-1"))
+	require.NoError(t, s.Set("dev", "vpc", "image_tag", "sha256:def")) // Different stack: excluded.
+
+	ls, ok := s.(store.ListableStore)
+	require.True(t, ok)
+	keys, err := ls.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+}
+
+// TestKeychainStore_Keys_SystemBackendNotSupported proves Keys surfaces
+// store.ErrListNotSupported when the underlying keyring backend cannot enumerate (the default,
+// system/OS backend, via zalando/go-keyring on all three platforms) instead of a raw,
+// backend-specific error.
+func TestKeychainStore_Keys_SystemBackendNotSupported(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	kr := keyring.NewMockKeyring(ctrl)
+	kr.EXPECT().List().Return(nil, keyring.ErrListNotSupported)
+
+	s := &KeychainStore{kr: kr, prefix: "atmos", stackDelimiter: "-"}
+	_, err := s.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, store.ErrListNotSupported)
 }
 
 // TestKeychainStore_IsLocal proves the OS keychain is reported as a local store, so

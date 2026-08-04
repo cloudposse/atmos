@@ -1,0 +1,90 @@
+---
+slug: store-crud-and-workflow-writes
+title: "Read, Write, and Delete Store Values from the CLI and Workflows"
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+A build step often creates a value that a different step needs later. Examples are an image tag, a build number, or a deployment marker. In the past, you had only bad ways to pass this value along. You could write it into Terraform state, where it does not belong. You could run a cloud CLI command by hand. You could also build a custom file-based handoff between steps. Atmos already had a fast way to read any value from a configured store. But Atmos had no supported way to write a value into a store. The only exception was one narrow hook. That hook works only with Terraform output. For every other value, you had to leave Atmos to write it.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos stores support many backends. Examples are AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, and GitHub Actions. The `!store` and `!store.get` YAML functions can read any value from these stores. But Atmos gave you only two ways to write a value into a store. You could declare the value as a formal secret with `atmos secret`. Or you could use the one existing store hook. That hook only copies a Terraform output into a store after `apply` runs. Atmos had no supported way to write other values, such as a Docker image tag from a `container` build step, a build number, or a deployment marker created mid-workflow. To write one of these values, you had to use the AWS CLI, `curl`, or a custom shell script in the workflow.
+
+## The Fix
+
+Atmos now has a new CLI command group named `atmos store`. This command group gives you raw CRUD access to any configured store. Atmos also has a new workflow step named `type: store`. This step writes a value from a workflow, a custom command, or a hook. Neither the CLI nor the step requires you to declare a value first. Both work directly on any backend listed under `stores:` in `atmos.yaml`. You can scope a value to a stack and a component. Or you can omit the stack and component to make the value global.
+
+```shell
+atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service
+atmos store list
+```
+
+The `store` step closes the loop with the existing read functions. First, a workflow builds an image and pushes it. Next, the workflow writes the resulting tag to a store. Later, a completely separate deploy run reads the tag back with `!store` or `!store.get`. This flow needs no shared Terraform state and no custom scripts.
+
+```yaml
+steps:
+  - name: push
+    type: container
+    action: push
+    with:
+      image: myapp:{{ .env.GIT_SHA }}
+
+  - name: record-tag
+    type: store
+    action: write
+    with:
+      store: app-metadata
+      key: image_tag
+      value: "{{ .steps.push.metadata.digest }}"
+      stack: prod
+      component: ecs-service
+```
+
+The `store` step is a normal registered step type. Because of this, it also runs as a hook through the existing `kind: step` bridge. You need no extra configuration to run it after `terraform apply`.
+
+Atmos allows you to write to a `secret: true` store on purpose. For example, a step can generate a password and write it straight to a secret backend. Both the CLI and the step support this case. But this write is only a shortcut. It is not a replacement for `atmos secret`. It skips declaration and scope tracking. When a value must be tracked as a formal secret, use `secrets.vars` and `atmos secret set` instead.
+
+## How to Use It
+
+Set and read a value scoped to a stack and a component:
+
+```shell
+atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --format=json
+```
+
+Delete the value. Then list the configured stores:
+
+```shell
+atmos store delete app-metadata image_tag --stack=prod --component=ecs-service
+atmos store list
+```
+
+Write a value from a workflow step. Then read the value back in stack configuration for a completely different component:
+
+```yaml
+# workflow
+- name: record-tag
+  type: store
+  action: write
+  with:
+    store: app-metadata
+    key: image_tag
+    value: "{{ .steps.push.metadata.digest }}"
+```
+
+```yaml
+# stacks/.../ecs-service.yaml
+vars:
+  image_tag: !store app-metadata prod ecs-service image_tag
+```
+
+Both the command group and the step type are experimental for now. We may change them as we get feedback from users.
+
+## Get Involved
+
+Try `atmos store` and the `store` step in your own build-to-deploy pipeline. Tell us what is missing. Examples are a matching read step, bulk import and export, or another feature. You can open an issue or start a discussion at [github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).
