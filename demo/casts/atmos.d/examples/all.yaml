@@ -112,6 +112,9 @@ commands:
         name: hooks-custom-command-hook-config
         command: atmos casts generate examples hooks-custom-command hook-config
       - type: shell
+        name: hooks-tfmigrate-tfmigrate-example
+        command: atmos casts generate examples hooks-tfmigrate tfmigrate-example
+      - type: shell
         name: hooks-checkov-security-scan
         command: atmos casts generate examples hooks-checkov security-scan
       - type: shell
@@ -291,6 +294,9 @@ commands:
       - type: shell
         name: hooks-custom-command-hook-config
         command: atmos casts validate examples hooks-custom-command hook-config
+      - type: shell
+        name: hooks-tfmigrate-tfmigrate-example
+        command: atmos casts validate examples hooks-tfmigrate tfmigrate-example
       - type: shell
         name: hooks-checkov-security-scan
         command: atmos casts validate examples hooks-checkov security-scan
