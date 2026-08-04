@@ -740,6 +740,55 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestDeviceCodeProvider_updateAzureCLICache_GuestHomeAccountID(t *testing.T) {
+	// For guest (B2B) users MSAL's home account ID ("{home-oid}.{home-tenant}")
+	// differs from "{oid}.{target-tenant}". The written Account entry must carry
+	// the MSAL value, or az fails with "Found multiple accounts with the same
+	// username" (azure-cli#20168).
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+	t.Setenv("AZURE_CONFIG_DIR", tmpHome)
+
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT","alg":"RS256"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"oid":"guest-oid-in-target","upn":"guest@hometenant.com"}`))
+	accessToken := header + "." + payload + ".testsignature"
+
+	provider := &deviceCodeProvider{
+		name:     "test-provider",
+		tenantID: "target-tenant",
+		cloudEnv: azureCloud.GetCloudEnvironment(""),
+		config: &schema.Provider{
+			Kind: "azure/device-code",
+			Spec: map[string]interface{}{
+				"tenant_id": "target-tenant",
+			},
+		},
+	}
+
+	err := provider.updateAzureCLICache(&tokenCacheUpdate{
+		AccessToken:   accessToken,
+		ExpiresAt:     time.Now().UTC().Add(1 * time.Hour),
+		HomeAccountID: "home-oid.home-tenant",
+	})
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(tmpHome, ".azure", "msal_token_cache.json"))
+	require.NoError(t, err)
+
+	var cache map[string]map[string]map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &cache))
+
+	accounts := cache["Account"]
+	require.Len(t, accounts, 1, "exactly one Account entry expected")
+	for key, entry := range accounts {
+		assert.Contains(t, key, "home-oid.home-tenant", "cache key must use the MSAL home account ID")
+		assert.Equal(t, "home-oid.home-tenant", entry[azureCloud.FieldHomeAccountID])
+		assert.Equal(t, "guest-oid-in-target", entry["local_account_id"], "local account id stays the target-tenant OID")
+		assert.Equal(t, "target-tenant", entry[azureCloud.FieldRealm], "realm stays the target tenant")
+	}
+}
+
 func TestLoadAndInitializeCLICache(t *testing.T) {
 	tmpDir := t.TempDir()
 
