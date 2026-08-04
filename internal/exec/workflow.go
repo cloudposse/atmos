@@ -38,6 +38,14 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	commandLineTags, err := flags.GetStringSlice("tags")
+	if err != nil {
+		return err
+	}
+	commandLineLabels, err := flags.GetString("labels")
+	if err != nil {
+		return err
+	}
 	processStacks := commandLineStack != ""
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
@@ -192,7 +200,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep, commandLineIdentity)
+	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep, commandLineIdentity,
+		workflowCommandFilters{tags: commandLineTags, labels: commandLineLabels})
 	if err != nil {
 		return err
 	}
