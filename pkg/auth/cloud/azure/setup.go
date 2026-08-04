@@ -86,7 +86,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	// Check for component-level location override from merged auth config.
 	if locationOverride := getComponentLocationOverride(params.StackInfo, params.IdentityName); locationOverride != "" {
 		location = locationOverride
-		log.Debug("Using component-level location override",
+		log.Debug(
+			"Using component-level location override",
 			"identity", params.IdentityName,
 			"location", location,
 		)
@@ -106,7 +107,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		TokenFilePath: azureCreds.TokenFilePath,
 	}
 
-	log.Debug("Set Azure auth context",
+	log.Debug(
+		"Set Azure auth context",
 		"profile", params.IdentityName,
 		"credentials", credentialsPath,
 		"subscription", azureCreds.SubscriptionID,
@@ -206,6 +208,16 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID, clo
 		return nil // Not Azure credentials, nothing to do.
 	}
 
+	// Credentials minted BY the Azure CLI must not be written back into the CLI's
+	// own cache: az already holds the authoritative entry for this account, and a
+	// second Account entry (with a home_account_id derived from the target tenant)
+	// makes az fail with "Found multiple accounts with the same username" for
+	// guest/B2B users (https://github.com/Azure/azure-cli/issues/20168).
+	if azureCreds.AuthMethod == types.AzureAuthMethodCLI {
+		log.Debug("Skipping Azure CLI file update; credentials originated from the Azure CLI")
+		return nil
+	}
+
 	// Extract user OID and username from token.
 	userOID, err := extractOIDFromToken(azureCreds.AccessToken)
 	if err != nil {
@@ -264,6 +276,7 @@ func updateMSALCacheFromCreds(home string, azureCreds *types.AzureCredentials, u
 		KeyVaultExpiration: azureCreds.KeyVaultExpiration,
 		UserOID:            userOID,
 		TenantID:           tenantID,
+		HomeAccountID:      azureCreds.HomeAccountID,
 		ClientID:           azureCreds.ClientID,
 		IsServicePrincipal: azureCreds.IsServicePrincipal,
 		LoginEndpoint:      cloudEnv.LoginEndpoint,
@@ -287,6 +300,11 @@ type msalCacheUpdate struct {
 	KeyVaultExpiration string
 	UserOID            string
 	TenantID           string
+	// HomeAccountID is MSAL's "{home-oid}.{home-tenant-id}" for the authenticated
+	// account, when the provider received it from MSAL. For guest (B2B) users this
+	// differs from "{UserOID}.{TenantID}" and MUST be used for the cache Account
+	// entry so az does not see two accounts with the same username.
+	HomeAccountID string
 	// ClientID is set for service principal authentication (OIDC).
 	ClientID string
 	// IsServicePrincipal indicates this is service principal auth.
@@ -381,9 +399,18 @@ type msalIdentifiers struct {
 
 // addUserAccountAndTokens adds account entry and tokens for user authentication.
 func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdate) {
+	// Prefer MSAL's own home account ID: for guest (B2B) users the home tenant
+	// differs from the target tenant, and deriving "{oid}.{target-tenant}" would
+	// create a second Account entry with the same username, breaking az
+	// (https://github.com/Azure/azure-cli/issues/20168).
+	homeAccountID := params.HomeAccountID
+	if homeAccountID == "" {
+		homeAccountID = fmt.Sprintf("%s.%s", params.UserOID, params.TenantID)
+	}
+
 	// Create common MSAL identifiers for user auth.
 	ids := msalIdentifiers{
-		homeAccountID: fmt.Sprintf("%s.%s", params.UserOID, params.TenantID),
+		homeAccountID: homeAccountID,
 		environment:   params.LoginEndpoint,
 		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
 		realm:         params.TenantID,

@@ -281,6 +281,7 @@ var (
 	ErrGitRefNotFound              = errors.New("git reference not found on local filesystem")
 	ErrGitFileNotFound             = errors.New("file not found in git reference")
 	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
+	ErrGitWorktreePruneIncomplete  = errors.New("git worktree prune completed but worktree path still exists")
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
 	ErrGitRepositoryNotFound       = errors.New("git repository not configured")
@@ -1538,6 +1539,26 @@ var (
 
 // Vendor update/diff errors.
 var (
+	// ErrComponentUpdaterConfig indicates invalid component updater configuration.
+	ErrComponentUpdaterConfig = errors.New("invalid component updater configuration")
+	// ErrComponentUpdaterDirtyWorktree indicates a publisher's Git worktree has uncommitted changes.
+	ErrComponentUpdaterDirtyWorktree = errors.New("component updater requires a clean Git worktree")
+	// ErrPullRequestPublisherUnavailable indicates the selected forge integration is not registered.
+	ErrPullRequestPublisherUnavailable = errors.New("pull request publisher is unavailable")
+	// ErrGitHubAuthorization indicates an authentication or permission failure from the GitHub API.
+	ErrGitHubAuthorization = errors.New("GitHub authorization failed")
+	// ErrPullRequestReconciliation indicates Atmos could not reconcile an existing or new PR.
+	ErrPullRequestReconciliation = errors.New("pull request reconciliation failed")
+	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
+	ErrGitFetchFailed = errors.New("git fetch failed")
+	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.
+	ErrGitCheckoutFailed = errors.New("git checkout failed")
+	// ErrGitLocalBranchDiverged indicates a local feature branch has commits absent from both
+	// the remote feature branch and the base branch.
+	ErrGitLocalBranchDiverged = errors.New("local branch has unpushed commits")
+	// ErrGitDefaultBranchResolution indicates the remote's default branch could not be resolved.
+	ErrGitDefaultBranchResolution = errors.New("remote default branch resolution failed")
+
 	// ErrGitLsRemoteFailed indicates listing refs from a remote Git repository failed.
 	ErrGitLsRemoteFailed = errors.New("failed to list refs from remote Git repository")
 	// ErrNoVersionsAvailable indicates no versions were found for a source.
@@ -1546,6 +1567,11 @@ var (
 	ErrNoVersionsMatchConstraints = errors.New("no versions match the configured constraints")
 	// ErrInvalidSemverConstraint indicates a constraints.version value is not a valid semver constraint.
 	ErrInvalidSemverConstraint = errors.New("invalid semver constraint")
+	// ErrVersionRangeConflictsWithConstraints indicates a source declared both a semver-range
+	// version: and a constraints.version ceiling. These are mutually exclusive. constraints.version's
+	// entire purpose is to bound what `atmos vendor update` can bump an *exact* pin to; that purpose
+	// no longer applies once version: is itself already a range.
+	ErrVersionRangeConflictsWithConstraints = errors.New("version: is a semver range; constraints.version is also set. These are mutually exclusive; remove one")
 	// ErrVendorSourceNotFound indicates a requested component/source was not found in the vendor manifest.
 	ErrVendorSourceNotFound = errors.New("vendor source not found")
 	// ErrVendorSourceNotGit indicates a vendor source is not a Git repository (unsupported for update/diff).
@@ -1564,6 +1590,8 @@ var (
 	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
 	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
 	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
+	// ErrComponentDirNotFound indicates a component's resolved base directory does not exist.
+	ErrComponentDirNotFound = errors.New("component directory does not exist")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
