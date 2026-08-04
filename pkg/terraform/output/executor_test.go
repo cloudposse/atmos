@@ -1069,8 +1069,9 @@ func TestStartSpinnerOrLog_DebugMode(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 	atmosConfig.Logs.Level = "debug"
 
-	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
+	stopFunc, clearsLine := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
 	require.NotNil(t, stopFunc)
+	require.False(t, clearsLine)
 
 	// Should be a no-op function.
 	stopFunc()
@@ -1081,11 +1082,33 @@ func TestStartSpinnerOrLog_TraceMode(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 	atmosConfig.Logs.Level = "trace"
 
-	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
+	stopFunc, clearsLine := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
 	require.NotNil(t, stopFunc)
+	require.False(t, clearsLine)
 
 	// Should be a no-op function.
 	stopFunc()
+}
+
+func TestStartSpinnerOrLog_Suppressed(t *testing.T) {
+	restore := SuppressSpinners()
+	defer restore()
+
+	stopFunc, clearsLine := startSpinnerOrLog(validAtmosConfig(), "test message", "component", "stack")
+	require.NotNil(t, stopFunc)
+	require.False(t, clearsLine)
+
+	stopFunc()
+}
+
+func TestFinishSpinnerDoesNotClearWhenNoSpinnerStarted(t *testing.T) {
+	stops := 0
+	finish := finishSpinner(func() { stops++ }, false)
+
+	finish()
+	finish()
+
+	require.Equal(t, 1, stops)
 }
 
 // TestExecutor_GetAllOutputs_StaticRemoteState tests GetAllOutputs with static remote state.

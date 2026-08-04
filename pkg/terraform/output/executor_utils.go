@@ -8,6 +8,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -84,17 +85,39 @@ func checkOutputsCache(stackSlug, component, stack string) map[string]any {
 	return nil
 }
 
-// startSpinnerOrLog starts a spinner in normal mode or logs in debug mode, returns a stop function.
-func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ string) func() {
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+// startSpinnerOrLog starts a spinner in normal mode or logs in debug mode.
+// The second result reports whether its caller must clear the spinner line.
+func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ string) (func(), bool) {
+	if strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelTrace)) ||
+		strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelDebug)) {
 		log.Debug(message)
-		return func() {}
+		return func() {}, false
 	}
 	if spinnersSuppressed() {
-		return func() {}
+		return func() {}, false
 	}
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
 	RunSpinner(p, spinnerDone, message)
-	return func() { StopSpinner(p, spinnerDone) }
+	return func() { StopSpinner(p, spinnerDone) }, true
+}
+
+// finishSpinner stops a lookup spinner once, then clears the line it rendered.
+func finishSpinner(stop func(), clearsLine bool) func() {
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			stop()
+			if clearsLine {
+				ui.ClearLine()
+			}
+		})
+	}
+}
+
+// clearSpinnerLine clears transient lookup output unless concurrent execution suppressed it.
+func clearSpinnerLine() {
+	if !spinnersSuppressed() {
+		ui.ClearLine()
+	}
 }
