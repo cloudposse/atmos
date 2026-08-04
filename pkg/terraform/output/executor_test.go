@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Helper function to create minimal valid sections.
@@ -1109,6 +1111,23 @@ func TestFinishSpinnerDoesNotClearWhenNoSpinnerStarted(t *testing.T) {
 	finish()
 
 	require.Equal(t, 1, stops)
+}
+
+func TestFinishSpinnerDoesNotClearWhenSuppressedAfterStart(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+
+	var rendered bytes.Buffer
+	restoreOutput := iolib.PushUIWriter(&rendered)
+	t.Cleanup(restoreOutput)
+	restoreSuppression := SuppressSpinners()
+	t.Cleanup(restoreSuppression)
+
+	finishSpinner(func() {}, true)()
+
+	require.Empty(t, rendered.String())
 }
 
 // TestExecutor_GetAllOutputs_StaticRemoteState tests GetAllOutputs with static remote state.

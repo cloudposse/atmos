@@ -109,7 +109,7 @@ func finishSpinner(stop func(), clearsLine bool) func() {
 		once.Do(func() {
 			stop()
 			if clearsLine {
-				ui.ClearLine()
+				clearSpinnerLine()
 			}
 		})
 	}

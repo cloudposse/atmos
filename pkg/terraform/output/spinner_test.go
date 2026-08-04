@@ -18,11 +18,14 @@ func TestNewSpinner(t *testing.T) {
 
 func TestSuppressSpinnersRestoresNestedScopes(t *testing.T) {
 	restoreOuter := SuppressSpinners()
+	t.Cleanup(restoreOuter)
 	require.True(t, spinnersSuppressed())
 
 	restoreInner := SuppressSpinners()
+	t.Cleanup(restoreInner)
 	require.True(t, spinnersSuppressed())
 
+	restoreOuter()
 	restoreOuter()
 	require.True(t, spinnersSuppressed())
 
