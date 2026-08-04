@@ -113,6 +113,45 @@ func TestService_Keys_StoreNotConfigured(t *testing.T) {
 	assert.ErrorIs(t, err, ErrStoreNotConfigured)
 }
 
+func TestService_ListKeyValues(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockStore := NewMockListableStore(ctrl)
+	mockStore.EXPECT().Keys("prod", "vpc").Return([]string{"region", "image_tag"}, nil)
+	mockStore.EXPECT().Get("prod", "vpc", "image_tag").Return("v1.2.3", nil)
+	mockStore.EXPECT().Get("prod", "vpc", "region").Return("us-east-1", nil)
+
+	svc := NewService(StoresConfig{"app": {Kind: KindAWSSSM}}, StoreRegistry{"app": mockStore})
+
+	kvs, err := svc.ListKeyValues("app", "prod", "vpc")
+	require.NoError(t, err)
+	require.Len(t, kvs, 2)
+	assert.Equal(t, KeyValue{Key: "image_tag", Value: "v1.2.3"}, kvs[0])
+	assert.Equal(t, KeyValue{Key: "region", Value: "us-east-1"}, kvs[1])
+}
+
+func TestService_ListKeyValues_NotSupported(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockStore := NewMockStore(ctrl) // Store only -- does not implement ListableStore.
+
+	svc := NewService(StoresConfig{"app": {Kind: KindOnePassword}}, StoreRegistry{"app": mockStore})
+
+	_, err := svc.ListKeyValues("app", "prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrListNotSupported)
+}
+
+func TestService_ListKeyValues_GetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockStore := NewMockListableStore(ctrl)
+	mockStore.EXPECT().Keys("prod", "vpc").Return([]string{"image_tag"}, nil)
+	mockStore.EXPECT().Get("prod", "vpc", "image_tag").Return(nil, assert.AnError)
+
+	svc := NewService(StoresConfig{"app": {Kind: KindAWSSSM}}, StoreRegistry{"app": mockStore})
+
+	_, err := svc.ListKeyValues("app", "prod", "vpc")
+	require.ErrorIs(t, err, assert.AnError)
+}
+
 // fakeLocalStore is a small hand-written fake (rather than a generated mock) implementing both
 // Store and LocalStore -- there is no generated MockLocalStore, and none of the generated mocks
 // in mock_store.go happen to implement IsLocal.
@@ -204,6 +243,17 @@ func TestService_List(t *testing.T) {
 	assert.False(t, appMissing.HasStatus)
 	assert.False(t, appMissing.Local)
 	assert.False(t, appMissing.Listable)
+}
+
+func TestService_IsSecret(t *testing.T) {
+	svc := NewService(StoresConfig{
+		"app-secrets": {Kind: KindAWSSSM, Secret: true},
+		"app-cache":   {Kind: KindRedis},
+	}, StoreRegistry{})
+
+	assert.True(t, svc.IsSecret("app-secrets"))
+	assert.False(t, svc.IsSecret("app-cache"))
+	assert.False(t, svc.IsSecret("missing"))
 }
 
 func TestService_List_Empty(t *testing.T) {

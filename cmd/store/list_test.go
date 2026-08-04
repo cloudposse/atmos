@@ -73,3 +73,89 @@ func TestRunStoreList_DoesNotUseAuthenticatedLoad(t *testing.T) {
 	err := runStoreSubcommand(t, "list")
 	require.NoError(t, err)
 }
+
+func TestRunStoreListKeyValues(t *testing.T) {
+	stdout := captureStdout(t)
+	svc := newFakeStoreService()
+	svc.keyValues = []pstore.KeyValue{
+		{Key: "image_tag", Value: "v1.2.3"},
+		{Key: "region", Value: "us-east-1"},
+	}
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "list", "app-metadata", "--stack", "dev", "--component", "vpc", "--format", "json")
+	require.NoError(t, err)
+
+	require.Len(t, svc.listKeyValuesCalls, 1)
+	assert.Equal(t, "app-metadata", svc.listKeyValuesCalls[0].name)
+	assert.Equal(t, "dev", svc.listKeyValuesCalls[0].stack)
+	assert.Equal(t, "vpc", svc.listKeyValuesCalls[0].component)
+	assert.Contains(t, stdout.String(), "image_tag")
+	assert.Contains(t, stdout.String(), "v1.2.3")
+}
+
+func TestRunStoreListKeyValues_SecretStoreRegistersMaskedValues(t *testing.T) {
+	setupIO(t)
+	registered := overrideRegisterSecretValue(t)
+	svc := newFakeStoreService()
+	svc.secret = true
+	svc.keyValues = []pstore.KeyValue{{Key: "password", Value: "hunter2"}}
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "list", "app-secrets", "--format", "json")
+	require.NoError(t, err)
+	assert.Equal(t, []any{"hunter2"}, *registered)
+}
+
+func TestRunStoreListKeyValues_NonSecretStoreDoesNotRegisterValues(t *testing.T) {
+	setupIO(t)
+	registered := overrideRegisterSecretValue(t)
+	svc := newFakeStoreService()
+	svc.keyValues = []pstore.KeyValue{{Key: "image_tag", Value: "v1.2.3"}}
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "list", "app-metadata", "--format", "json")
+	require.NoError(t, err)
+	assert.Empty(t, *registered)
+}
+
+func TestRunStoreListKeyValues_Empty(t *testing.T) {
+	setupIO(t)
+	svc := newFakeStoreService()
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "list", "app-metadata")
+	require.NoError(t, err)
+}
+
+func TestRunStoreListKeyValues_NotSupported(t *testing.T) {
+	setupIO(t)
+	svc := newFakeStoreService()
+	svc.listKeyValuesErr = assert.AnError
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "list", "app-metadata")
+	require.ErrorIs(t, err, assert.AnError)
+}
+
+// TestRunStoreListKeyValues_UsesAuthenticatedLoad proves `store list STORE` loads its service via
+// loadServiceFn (the authenticated loader), not loadServiceForListFn -- unlike the bare
+// `store list`, listing a store's contents needs real backend access.
+func TestRunStoreListKeyValues_UsesAuthenticatedLoad(t *testing.T) {
+	setupIO(t)
+
+	origList := loadServiceForListFn
+	loadServiceForListFn = func(_ storeScope) (storeService, error) {
+		t.Fatal("store list STORE must not call loadServiceForListFn (the credential-free loader)")
+		return nil, nil
+	}
+	t.Cleanup(func() { loadServiceForListFn = origList })
+
+	svc := newFakeStoreService()
+	origAuth := loadServiceFn
+	loadServiceFn = func(_ storeScope) (storeService, error) { return svc, nil }
+	t.Cleanup(func() { loadServiceFn = origAuth })
+
+	err := runStoreSubcommand(t, "list", "app-metadata")
+	require.NoError(t, err)
+}

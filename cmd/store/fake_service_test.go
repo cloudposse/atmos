@@ -22,8 +22,8 @@ type deleteCall struct {
 	name, stack, component, key string
 }
 
-// keysCall records a single Keys invocation on the fake service.
-type keysCall struct {
+// listKeyValuesCall records a single ListKeyValues invocation on the fake service.
+type listKeyValuesCall struct {
 	name, stack, component string
 }
 
@@ -34,18 +34,19 @@ type fakeStoreService struct {
 	getValues map[string]any
 	getErrs   map[string]error
 	descs     []pstore.Descriptor
-	keys      []string
+	keyValues []pstore.KeyValue
+	secret    bool
 
 	// Configurable errors.
-	setErr    error
-	deleteErr error
-	keysErr   error
+	setErr           error
+	deleteErr        error
+	listKeyValuesErr error
 
 	// Recorded calls.
-	setCalls    []setCall
-	getCalls    []getCall
-	deleteCalls []deleteCall
-	keysCalls   []keysCall
+	setCalls           []setCall
+	getCalls           []getCall
+	deleteCalls        []deleteCall
+	listKeyValuesCalls []listKeyValuesCall
 }
 
 // newFakeStoreService returns a fake with empty maps ready for configuration.
@@ -74,15 +75,17 @@ func (f *fakeStoreService) Delete(name, stack, component, key string) error {
 	return f.deleteErr
 }
 
-func (f *fakeStoreService) Keys(name, stack, component string) ([]string, error) {
-	f.keysCalls = append(f.keysCalls, keysCall{name: name, stack: stack, component: component})
-	if f.keysErr != nil {
-		return nil, f.keysErr
+func (f *fakeStoreService) ListKeyValues(name, stack, component string) ([]pstore.KeyValue, error) {
+	f.listKeyValuesCalls = append(f.listKeyValuesCalls, listKeyValuesCall{name: name, stack: stack, component: component})
+	if f.listKeyValuesErr != nil {
+		return nil, f.listKeyValuesErr
 	}
-	return f.keys, nil
+	return f.keyValues, nil
 }
 
 func (f *fakeStoreService) List() []pstore.Descriptor { return f.descs }
+
+func (f *fakeStoreService) IsSecret(name string) bool { return f.secret }
 
 // installService overrides loadServiceFn to return the given fake (or loadErr when set) and
 // restores the original via t.Cleanup.
@@ -132,4 +135,16 @@ func overrideConfirmAction(t *testing.T, confirmed bool, err error) *[]string {
 	}
 	t.Cleanup(func() { confirmActionFn = orig })
 	return titles
+}
+
+// overrideRegisterSecretValue overrides registerSecretValueFn and restores it via t.Cleanup. It
+// records every value it was asked to register in the returned slice pointer.
+func overrideRegisterSecretValue(t *testing.T) *[]any {
+	t.Helper()
+
+	values := &[]any{}
+	orig := registerSecretValueFn
+	registerSecretValueFn = func(v any) { *values = append(*values, v) }
+	t.Cleanup(func() { registerSecretValueFn = orig })
+	return values
 }

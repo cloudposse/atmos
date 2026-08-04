@@ -8,7 +8,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -58,10 +57,11 @@ func runStoreGet(cmd *cobra.Command, args []string) error {
 	}
 
 	// Register the value with the masker before writing it out, the same way secrets.Service.Get
-	// does for `atmos secret get`. Any store value -- not only one from a `secret: true` store --
-	// may incidentally hold a credential, so it is revealed only when masking is disabled
-	// (--mask=false).
-	io.RegisterSecretValue(value)
+	// does for `atmos secret get`, but only for a `secret: true` store -- a non-secret store's
+	// values are shown as-is.
+	if svc.IsSecret(storeName) {
+		registerSecretValueFn(value)
+	}
 
 	return writeStoreValue(key, value, format, raw)
 }

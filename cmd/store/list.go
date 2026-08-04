@@ -23,11 +23,14 @@ const flagFormat = "format"
 var listParser *flags.StandardParser
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List configured store backends.",
-	Long:  "List the store backends configured under `stores:` in atmos.yaml, showing each one's kind and capabilities.",
-	Args:  cobra.NoArgs,
-	RunE:  runStoreList,
+	Use:   "list [STORE]",
+	Short: "List configured store backends, or the key/value pairs stored inside one.",
+	Long: "List the store backends configured under `stores:` in atmos.yaml, showing each one's kind and " +
+		"capabilities. Pass a STORE name to list the key/value pairs stored inside that backend instead, " +
+		"scoped with --stack and --component the same way `atmos store set` writes a key. Only backends " +
+		"that support key enumeration can list their contents this way; check the Listable column first.",
+	Args: cobra.MaximumNArgs(1),
+	RunE: runStoreList,
 }
 
 func init() {
@@ -57,13 +60,52 @@ func runStoreList(cmd *cobra.Command, args []string) error {
 	}
 	outputFormat := format.Format(v.GetString(flagFormat))
 
+	if len(args) == 1 {
+		return runStoreListKeyValues(args[0], scope, outputFormat)
+	}
+
 	svc, err := loadServiceForListFn(scope)
 	if err != nil {
 		return err
 	}
 
 	rows := descriptorsToRows(svc.List())
-	return renderStoreRows(rows, outputFormat)
+	return renderRows(rows, storeColumns, "Name", "No stores configured.", outputFormat)
+}
+
+// runStoreListKeyValues lists the key/value pairs stored inside a single store -- the
+// `atmos store list STORE` form. Unlike the bare `store list`, this needs real backend access, so
+// it loads the service through the authenticated loader.
+func runStoreListKeyValues(storeName string, scope storeScope, outputFormat format.Format) error {
+	svc, err := loadServiceFn(scope)
+	if err != nil {
+		return err
+	}
+
+	kvs, err := svc.ListKeyValues(storeName, scope.Stack, scope.Component)
+	if err != nil {
+		return err
+	}
+
+	// Register every value with the masker before rendering, the same way `atmos store get`
+	// does, but only for a `secret: true` store -- a non-secret store's values are shown as-is.
+	secret := svc.IsSecret(storeName)
+
+	rows := make([]map[string]any, 0, len(kvs))
+	for _, kv := range kvs {
+		if secret {
+			registerSecretValueFn(kv.Value)
+		}
+		rows = append(rows, map[string]any{
+			"stack":     scope.Stack,
+			"component": scope.Component,
+			"key":       kv.Key,
+			"value":     kv.Value,
+		})
+	}
+
+	empty := fmt.Sprintf("No keys found in store %q.", storeName)
+	return renderRows(rows, keyValueColumns, "Key", empty, outputFormat)
 }
 
 // descriptorsToRows converts []pstore.Descriptor to renderer rows.
@@ -84,23 +126,32 @@ func descriptorsToRows(descriptors []pstore.Descriptor) []map[string]any {
 	return rows
 }
 
-// renderStoreRows renders store rows via the pkg/list rendering pipeline. It is TTY-aware:
-// styled table on TTY, plain/delimited when piped.
-func renderStoreRows(rows []map[string]any, outputFormat format.Format) error {
-	defer perf.Track(nil, "store.renderStoreRows")()
+// storeColumns is the column configuration for the bare `atmos store list` (configured backends).
+var storeColumns = []column.Config{
+	{Name: "Name", Value: "{{ .name }}"},
+	{Name: "Kind", Value: "{{ .kind }}"},
+	{Name: "Secret", Value: "{{ .secret }}"},
+	{Name: "Deletable", Value: "{{ .deletable }}"},
+	{Name: "Local", Value: "{{ .local }}"},
+	{Name: "Listable", Value: "{{ .listable }}"},
+}
+
+// keyValueColumns is the column configuration for `atmos store list STORE` (key/value contents).
+var keyValueColumns = []column.Config{
+	{Name: "Stack", Value: "{{ .stack }}"},
+	{Name: "Component", Value: "{{ .component }}"},
+	{Name: "Key", Value: "{{ .key }}"},
+	{Name: "Value", Value: "{{ .value }}"},
+}
+
+// renderRows renders rows via the pkg/list rendering pipeline, sorted by sortField. It is
+// TTY-aware: styled table on TTY, plain/delimited when piped.
+func renderRows(rows []map[string]any, columns []column.Config, sortField, emptyMessage string, outputFormat format.Format) error {
+	defer perf.Track(nil, "store.renderRows")()
 
 	if len(rows) == 0 {
-		ui.Info("No stores configured.")
+		ui.Info(emptyMessage)
 		return nil
-	}
-
-	columns := []column.Config{
-		{Name: "Name", Value: "{{ .name }}"},
-		{Name: "Kind", Value: "{{ .kind }}"},
-		{Name: "Secret", Value: "{{ .secret }}"},
-		{Name: "Deletable", Value: "{{ .deletable }}"},
-		{Name: "Local", Value: "{{ .local }}"},
-		{Name: "Listable", Value: "{{ .listable }}"},
 	}
 
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
@@ -108,7 +159,7 @@ func renderStoreRows(rows []map[string]any, outputFormat format.Format) error {
 		return fmt.Errorf("error creating column selector: %w", err)
 	}
 
-	sorters := []*listSort.Sorter{listSort.NewSorter("Name", listSort.Ascending)}
+	sorters := []*listSort.Sorter{listSort.NewSorter(sortField, listSort.Ascending)}
 	var filters []filter.Filter
 
 	r := renderer.New(filters, selector, sorters, outputFormat, "")

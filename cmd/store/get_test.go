@@ -66,6 +66,31 @@ func TestRunStoreGet(t *testing.T) {
 	assert.Equal(t, "v1.2.3\n", stdout.String())
 }
 
+func TestRunStoreGet_SecretStoreRegistersMaskedValue(t *testing.T) {
+	captureStdout(t)
+	registered := overrideRegisterSecretValue(t)
+	svc := newFakeStoreService()
+	svc.secret = true
+	svc.getValues["password"] = "hunter2"
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "get", "app-secrets", "password")
+	require.NoError(t, err)
+	assert.Equal(t, []any{"hunter2"}, *registered)
+}
+
+func TestRunStoreGet_NonSecretStoreDoesNotRegisterValue(t *testing.T) {
+	captureStdout(t)
+	registered := overrideRegisterSecretValue(t)
+	svc := newFakeStoreService()
+	svc.getValues["image_tag"] = "v1.2.3"
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "get", "app-metadata", "image_tag")
+	require.NoError(t, err)
+	assert.Empty(t, *registered)
+}
+
 func TestRunStoreGet_NotFound(t *testing.T) {
 	captureStdout(t)
 	svc := newFakeStoreService()

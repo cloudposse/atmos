@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/cloudposse/atmos/pkg/io"
 	pstore "github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -11,8 +12,9 @@ type storeService interface {
 	Set(name, stack, component, key string, value any) error
 	Get(name, stack, component, key string) (any, error)
 	Delete(name, stack, component, key string) error
-	Keys(name, stack, component string) ([]string, error)
+	ListKeyValues(name, stack, component string) ([]pstore.KeyValue, error)
 	List() []pstore.Descriptor
+	IsSecret(name string) bool
 }
 
 // Seam variables wrap the real implementations so tests can override behavior. Each defaults to
@@ -42,4 +44,9 @@ var (
 
 	// Interactively confirms a destructive action.
 	confirmActionFn = confirmAction
+
+	// Registers a value with the output masker. Overridden in tests to record calls, since the
+	// real masker lives on a package-global io.Context that these lightweight test harnesses
+	// (which construct their own iolib.Context for data/ui output) never wire up as global.
+	registerSecretValueFn = io.RegisterSecretValue
 )

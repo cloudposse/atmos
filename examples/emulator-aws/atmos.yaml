@@ -32,6 +32,16 @@ auth:
       emulator: local/aws
       default: true
 
+# atmos store set/get/list also work against the same emulator, through the same identity --
+# no real AWS account needed for the raw CRUD demo below either.
+stores:
+  local/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    options:
+      region: us-east-1
+      prefix: /atmos/demo
+
 # Custom CLI commands
 commands:
   - name: "sandbox"

@@ -76,6 +76,14 @@ func (s *Service) GetKey(name, key string) (any, error) {
 	return st.GetKey(key)
 }
 
+// IsSecret reports whether the named store is configured with `secret: true`. Callers that
+// surface a value to a human (e.g. `atmos store get`, `atmos store list STORE`) use this to
+// decide whether to register the value with the masker -- a non-secret store's values are shown
+// as-is.
+func (s *Service) IsSecret(name string) bool {
+	return s.config[name].Secret
+}
+
 // Delete removes a value from the named store. It returns ErrDeleteNotSupported if the store's
 // backend does not implement DeletableStore.
 func (s *Service) Delete(name, stack, component, key string) error {
@@ -103,6 +111,33 @@ func (s *Service) Keys(name, stack, component string) ([]string, error) {
 		return nil, fmt.Errorf("%w: store %q (kind %s)", ErrListNotSupported, name, resolveKind(s.config[name]))
 	}
 	return ls.Keys(stack, component)
+}
+
+// KeyValue pairs a key with its current value, as returned by ListKeyValues.
+type KeyValue struct {
+	Key   string
+	Value any
+}
+
+// ListKeyValues lists every key under a stack/component scope (or globally when both are empty)
+// in the named store, together with its current value, sorted by key. It returns
+// ErrListNotSupported if the store's backend does not implement ListableStore.
+func (s *Service) ListKeyValues(name, stack, component string) ([]KeyValue, error) {
+	keys, err := s.Keys(name, stack, component)
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(keys)
+
+	kvs := make([]KeyValue, 0, len(keys))
+	for _, key := range keys {
+		value, getErr := s.Get(name, stack, component, key)
+		if getErr != nil {
+			return nil, getErr
+		}
+		kvs = append(kvs, KeyValue{Key: key, Value: value})
+	}
+	return kvs, nil
 }
 
 // List returns a Descriptor for every configured store, sorted by name.

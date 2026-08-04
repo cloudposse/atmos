@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: stores
 description: Configure external stores for sharing data between components in atmos.yaml.
 ---
+import CastPlayer from '@site/src/components/CastPlayer'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
@@ -418,14 +419,21 @@ atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ec
 atmos store get app-metadata image_tag --stack=prod --component=ecs-service
 ```
 
-To list the keys stored inside a backend, run [`atmos store keys`](/cli/commands/store/keys).
-Most backends support this. 1Password and the default system keychain backend do not, because
-their underlying APIs do not support enumeration. Run [`atmos store list`](/cli/commands/store/list)
-to check the `Listable` column for a given store:
+To list the key/value pairs stored inside a backend, pass a store name to
+[`atmos store list`](/cli/commands/store/list). Most backends support this. 1Password and the
+default system keychain backend do not, because their underlying APIs do not support enumeration.
+Run `atmos store list` with no arguments to check the `Listable` column for a given store:
 
 ```shell
-atmos store keys app-metadata --stack=prod --component=ecs-service
+atmos store list app-metadata --stack=prod --component=ecs-service
 ```
+
+The recording below runs this raw CRUD sequence against a local AWS emulator, so it needs no real
+`AWS` account:
+
+<CastPlayer src="/casts/examples/emulator-aws/stores.cast" title="atmos store: raw CRUD against a local AWS emulator" chrome controls scrubber />
+
+[View the full example](/examples/emulator-aws)
 
 ```yaml
 steps:
