@@ -16,7 +16,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // String constants for logging.
@@ -171,21 +170,20 @@ func (e *Executor) GetAllOutputs(
 	}
 
 	message := fmt.Sprintf("Fetching all outputs from %s in %s", component, stack)
-	stopSpinner, clearsLine := startSpinnerOrLog(atmosConfig, message, component, stack)
-	finish := finishSpinner(stopSpinner, clearsLine)
-	defer finish()
+	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
+	defer stopSpinner()
 
 	// Use quiet mode to suppress terraform init/workspace output.
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, authContext, opts, authManager)
 	if err != nil {
-		finish()
-		ui.Error(message)
+		clearSpinnerLine()
+		outputLookupFailed(message)
 		return nil, err
 	}
 
-	finish()
-	ui.Success(message)
+	clearSpinnerLine()
+	outputLookupSucceeded(message)
 	return outputs, nil
 }
 
@@ -221,9 +219,8 @@ func (e *Executor) GetOutput(
 	}
 
 	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
-	stopSpinner, clearsLine := startSpinnerOrLog(atmosConfig, message, component, stack)
-	finish := finishSpinner(stopSpinner, clearsLine)
-	defer finish()
+	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
+	defer stopSpinner()
 
 	// Describe the component to get its configuration.
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
@@ -235,8 +232,8 @@ func (e *Executor) GetOutput(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		finish()
-		ui.Error(message)
+		clearSpinnerLine()
+		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -246,12 +243,12 @@ func (e *Executor) GetOutput(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				finish()
-				ui.Error(message)
+				clearSpinnerLine()
+				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			finish()
-			ui.Success(message)
+			clearSpinnerLine()
+			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
 	}
@@ -262,8 +259,8 @@ func (e *Executor) GetOutput(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
 	if err != nil {
-		finish()
-		ui.Error(message)
+		clearSpinnerLine()
+		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -275,13 +272,13 @@ func (e *Executor) GetOutput(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		finish()
-		ui.Error(message)
+		clearSpinnerLine()
+		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	finish()
-	ui.Success(message)
+	clearSpinnerLine()
+	outputLookupSucceeded(message)
 	return value, exists, nil
 }
 
@@ -320,9 +317,8 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
-	stopSpinner, clearsLine := startSpinnerOrLog(atmosConfig, message, component, stack)
-	finish := finishSpinner(stopSpinner, clearsLine)
-	defer finish()
+	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
+	defer stopSpinner()
 
 	// Describe the component to get its configuration.
 	// When SkipInit is set and no authManager is provided, skip YAML function
@@ -342,8 +338,8 @@ func (e *Executor) GetOutputWithOptions(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		finish()
-		ui.Error(message)
+		clearSpinnerLine()
+		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -353,12 +349,12 @@ func (e *Executor) GetOutputWithOptions(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				finish()
-				ui.Error(message)
+				clearSpinnerLine()
+				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			finish()
-			ui.Success(message)
+			clearSpinnerLine()
+			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
 	}
@@ -369,8 +365,8 @@ func (e *Executor) GetOutputWithOptions(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, processYamlFunctions)
 	if err != nil {
-		finish()
-		ui.Error(message)
+		clearSpinnerLine()
+		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -382,13 +378,13 @@ func (e *Executor) GetOutputWithOptions(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		finish()
-		ui.Error(message)
+		clearSpinnerLine()
+		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	finish()
-	ui.Success(message)
+	clearSpinnerLine()
+	outputLookupSucceeded(message)
 	return value, exists, nil
 }
 

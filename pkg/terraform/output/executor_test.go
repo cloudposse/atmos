@@ -1,7 +1,6 @@
 package output
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -26,7 +25,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Helper function to create minimal valid sections.
@@ -1071,9 +1069,8 @@ func TestStartSpinnerOrLog_DebugMode(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 	atmosConfig.Logs.Level = "debug"
 
-	stopFunc, clearsLine := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
+	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
 	require.NotNil(t, stopFunc)
-	require.False(t, clearsLine)
 
 	// Should be a no-op function.
 	stopFunc()
@@ -1084,50 +1081,18 @@ func TestStartSpinnerOrLog_TraceMode(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 	atmosConfig.Logs.Level = "trace"
 
-	stopFunc, clearsLine := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
+	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
 	require.NotNil(t, stopFunc)
-	require.False(t, clearsLine)
 
 	// Should be a no-op function.
 	stopFunc()
 }
 
-func TestStartSpinnerOrLog_Suppressed(t *testing.T) {
+func TestOutputLookupHiddenWhenSpinnersSuppressed(t *testing.T) {
 	restore := SuppressSpinners()
-	defer restore()
+	t.Cleanup(restore)
 
-	stopFunc, clearsLine := startSpinnerOrLog(validAtmosConfig(), "test message", "component", "stack")
-	require.NotNil(t, stopFunc)
-	require.False(t, clearsLine)
-
-	stopFunc()
-}
-
-func TestFinishSpinnerDoesNotClearWhenNoSpinnerStarted(t *testing.T) {
-	stops := 0
-	finish := finishSpinner(func() { stops++ }, false)
-
-	finish()
-	finish()
-
-	require.Equal(t, 1, stops)
-}
-
-func TestFinishSpinnerDoesNotClearWhenSuppressedAfterStart(t *testing.T) {
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	ui.InitFormatter(ioCtx)
-	t.Cleanup(ui.Reset)
-
-	var rendered bytes.Buffer
-	restoreOutput := iolib.PushUIWriter(&rendered)
-	t.Cleanup(restoreOutput)
-	restoreSuppression := SuppressSpinners()
-	t.Cleanup(restoreSuppression)
-
-	finishSpinner(func() {}, true)()
-
-	require.Empty(t, rendered.String())
+	require.False(t, outputLookupVisible())
 }
 
 // TestExecutor_GetAllOutputs_StaticRemoteState tests GetAllOutputs with static remote state.

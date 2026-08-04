@@ -86,38 +86,40 @@ func checkOutputsCache(stackSlug, component, stack string) map[string]any {
 }
 
 // startSpinnerOrLog starts a spinner in normal mode or logs in debug mode.
-// The second result reports whether its caller must clear the spinner line.
-func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ string) (func(), bool) {
+func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ string) func() {
 	if strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelTrace)) ||
 		strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelDebug)) {
 		log.Debug(message)
-		return func() {}, false
+		return func() {}
 	}
 	if spinnersSuppressed() {
-		return func() {}, false
+		return func() {}
 	}
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
 	RunSpinner(p, spinnerDone, message)
-	return func() { StopSpinner(p, spinnerDone) }, true
-}
-
-// finishSpinner stops a lookup spinner once, then clears the line it rendered.
-func finishSpinner(stop func(), clearsLine bool) func() {
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			stop()
-			if clearsLine {
-				clearSpinnerLine()
-			}
-		})
-	}
+	return func() { StopSpinner(p, spinnerDone) }
 }
 
 // clearSpinnerLine clears transient lookup output unless concurrent execution suppressed it.
 func clearSpinnerLine() {
-	if !spinnersSuppressed() {
+	if outputLookupVisible() {
 		ui.ClearLine()
 	}
+}
+
+func outputLookupSucceeded(message string) {
+	if outputLookupVisible() {
+		ui.Success(message)
+	}
+}
+
+func outputLookupFailed(message string) {
+	if outputLookupVisible() {
+		ui.Error(message)
+	}
+}
+
+func outputLookupVisible() bool {
+	return !spinnersSuppressed()
 }

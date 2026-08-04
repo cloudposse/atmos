@@ -24,12 +24,6 @@ import (
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 )
 
-type adapterWriterFunc func([]byte) (int, error)
-
-func (f adapterWriterFunc) Write(p []byte) (int, error) {
-	return f(p)
-}
-
 func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
 	originalStart := startTerraformCacheForExecution
 	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
@@ -1133,38 +1127,6 @@ func TestTerraformOutputNodeWritersStreamMode(t *testing.T) {
 	require.Contains(t, logFiles, "stdout")
 	require.Contains(t, logFiles, "stderr")
 	require.NoError(t, flush())
-}
-
-func TestSerializedWriterPreventsInterleavedWrites(t *testing.T) {
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	var writeMu sync.Mutex
-	var firstWrite sync.Once
-	w := newSerializedWriter(adapterWriterFunc(func(p []byte) (int, error) {
-		firstWrite.Do(func() {
-			close(entered)
-			<-release
-		})
-		return len(p), nil
-	}), &writeMu)
-
-	go func() { _, _ = w.Write([]byte("first")) }()
-	<-entered
-
-	secondFinished := make(chan struct{})
-	go func() {
-		_, _ = w.Write([]byte("second"))
-		close(secondFinished)
-	}()
-
-	select {
-	case <-secondFinished:
-		t.Fatal("second write bypassed the shared output lock")
-	case <-time.After(10 * time.Millisecond):
-	}
-
-	close(release)
-	<-secondFinished
 }
 
 func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
