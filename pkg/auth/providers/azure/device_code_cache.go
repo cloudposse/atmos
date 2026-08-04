@@ -210,6 +210,7 @@ type tokenCacheUpdate struct {
 	GraphExpiresAt    time.Time // Expiration time for graph token, zero value if not available
 	KeyVaultToken     string    // KeyVault API access token (for azurerm provider KeyVault operations), empty string if not available
 	KeyVaultExpiresAt time.Time // Expiration time for KeyVault token, zero value if not available
+	HomeAccountID     string    // MSAL "{home-oid}.{home-tenant-id}"; differs from "{oid}.{tenant}" for guest (B2B) users
 }
 
 // updateAzureCLICache updates the Azure CLI MSAL token cache so Terraform can use it.
@@ -289,9 +290,18 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 	userOID, username string,
 	update *tokenCacheUpdate,
 ) string {
+	// Prefer MSAL's own home account ID: for guest (B2B) users the home tenant
+	// differs from p.tenantID, and deriving "{oid}.{target-tenant}" creates a
+	// duplicate Account entry with the same username, which breaks az
+	// (https://github.com/Azure/azure-cli/issues/20168).
+	homeAccountID := update.HomeAccountID
+	if homeAccountID == "" {
+		homeAccountID = fmt.Sprintf("%s.%s", userOID, p.tenantID)
+	}
+
 	// Create common MSAL identifiers.
 	ids := msalIdentifiers{
-		homeAccountID: fmt.Sprintf("%s.%s", userOID, p.tenantID),
+		homeAccountID: homeAccountID,
 		environment:   p.cloudEnv.LoginEndpoint,
 		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
 		realm:         p.tenantID,
