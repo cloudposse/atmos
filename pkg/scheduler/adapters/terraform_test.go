@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -358,14 +359,19 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 // fail for specific nodes, so tests can assert the Dispatch-level wiring
 // added to fix component hooks.RunAll not firing under bulk dispatch.
 type testNodeHooks struct {
-	mu          sync.Mutex
-	beforeCalls []string
-	afterCalls  []string
-	beforeErr   map[string]error
-	afterErr    map[string]error
+	mu           sync.Mutex
+	beforeCalls  []string
+	afterCalls   []string
+	beforeErr    map[string]error
+	afterErr     map[string]error
+	beforeOutput string
 }
 
-func (n *testNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
+func (n *testNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	return n.BeforeWithWriters(ctx, info, schema.ComponentNodeHookWriters{})
+}
+
+func (n *testNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := info.Component + "@" + info.Stack
@@ -373,10 +379,20 @@ func (n *testNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksIn
 	if n.beforeErr != nil {
 		return n.beforeErr[key]
 	}
+	if n.beforeOutput != "" {
+		if writers.Stdout == nil {
+			writers.Stdout = os.Stdout
+		}
+		_, _ = fmt.Fprint(writers.Stdout, n.beforeOutput)
+	}
 	return nil
 }
 
-func (n *testNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, _ string, _ error) error {
+func (n *testNodeHooks) After(ctx context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	return n.AfterWithWriters(ctx, info, output, execErr, schema.ComponentNodeHookWriters{})
+}
+
+func (n *testNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, _ string, _ error, _ schema.ComponentNodeHookWriters) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := info.Component + "@" + info.Stack
@@ -418,6 +434,46 @@ func TestExecuteTerraformFiresNodeHooksBeforeAndAfter(t *testing.T) {
 	require.Equal(t, want, executed)
 	require.Equal(t, want, nodeHooks.beforeCalls, "Before must fire once per node with the executed order")
 	require.Equal(t, want, nodeHooks.afterCalls, "After must fire once per node with the executed order")
+}
+
+func TestExecuteTerraformConcurrentHooksUseNodeWriters(t *testing.T) {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	originalStdout := os.Stdout
+	os.Stdout = stdoutWriter
+	t.Cleanup(func() { os.Stdout = originalStdout })
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"db":  terraformAdapterComponentWithPath("selected", terraformAdapterPath("db")),
+				},
+			},
+		},
+	}
+
+	err = ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:               true,
+			SubCommand:        "plan",
+			MaxConcurrency:    2,
+			TerraformLogOrder: terraformLogOrderStream,
+			NodeHooks:         &testNodeHooks{beforeOutput: "hook progress\rhook complete\n"},
+		},
+		Stacks: stacks,
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, stdoutWriter.Close())
+	stdout, err := io.ReadAll(stdoutReader)
+	require.NoError(t, err)
+	require.Contains(t, string(stdout), "[dev/app] hook progress\n[dev/app] hook complete\n")
+	require.Contains(t, string(stdout), "[dev/db] hook progress\n[dev/db] hook complete\n")
 }
 
 func TestExecuteTerraformInitUsesForwardDependencyOrder(t *testing.T) {

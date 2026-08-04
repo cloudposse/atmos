@@ -15,13 +15,23 @@ import (
 )
 
 type blockingWriter struct {
-	started chan struct{}
-	release <-chan struct{}
+	started     chan struct{}
+	release     <-chan struct{}
+	blockOn     int
+	mu          sync.Mutex
+	writes      int
+	startedOnce sync.Once
 }
 
-func (w blockingWriter) Write(p []byte) (int, error) {
-	close(w.started)
-	<-w.release
+func (w *blockingWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	w.writes++
+	writes := w.writes
+	w.mu.Unlock()
+	if w.blockOn == 0 || writes == w.blockOn {
+		w.startedOnce.Do(func() { close(w.started) })
+		<-w.release
+	}
 	return len(p), nil
 }
 
@@ -60,7 +70,7 @@ func TestClearSpinnerLineBlocksConcurrentSuppression(t *testing.T) {
 	require.NoError(t, err)
 	ui.InitFormatter(ioCtx)
 	t.Cleanup(ui.Reset)
-	restoreUI := iolib.PushUIWriter(blockingWriter{started: clearStarted, release: releaseClear})
+	restoreUI := iolib.PushUIWriter(&blockingWriter{started: clearStarted, release: releaseClear})
 	t.Cleanup(restoreUI)
 
 	clearDone := make(chan struct{})
@@ -91,6 +101,56 @@ func TestClearSpinnerLineBlocksConcurrentSuppression(t *testing.T) {
 	case <-clearDone:
 	case <-time.After(time.Second):
 		t.Fatal("ClearLine did not finish")
+	}
+	select {
+	case <-suppressionDone:
+	case <-time.After(time.Second):
+		t.Fatal("Suppression did not finish")
+	}
+}
+
+func TestOutputLookupSucceededBlocksConcurrentSuppression(t *testing.T) {
+	statusStarted := make(chan struct{})
+	releaseStatus := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseStatus) }) }
+	t.Cleanup(release)
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	restoreUI := iolib.PushUIWriter(&blockingWriter{started: statusStarted, release: releaseStatus, blockOn: 2})
+	t.Cleanup(restoreUI)
+
+	statusDone := make(chan struct{})
+	go func() {
+		outputLookupSucceeded("lookup complete")
+		close(statusDone)
+	}()
+	select {
+	case <-statusStarted:
+	case <-time.After(time.Second):
+		t.Fatal("Lookup status did not start")
+	}
+
+	suppressionDone := make(chan struct{})
+	go func() {
+		restore := SuppressSpinners()
+		restore()
+		close(suppressionDone)
+	}()
+	select {
+	case <-suppressionDone:
+		t.Fatal("Suppression interleaved with lookup status")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	release()
+	select {
+	case <-statusDone:
+	case <-time.After(time.Second):
+		t.Fatal("Lookup status did not finish")
 	}
 	select {
 	case <-suppressionDone:

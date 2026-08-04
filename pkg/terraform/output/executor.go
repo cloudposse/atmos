@@ -177,12 +177,10 @@ func (e *Executor) GetAllOutputs(
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, authContext, opts, authManager)
 	if err != nil {
-		clearSpinnerLine()
 		outputLookupFailed(message)
 		return nil, err
 	}
 
-	clearSpinnerLine()
 	outputLookupSucceeded(message)
 	return outputs, nil
 }
@@ -232,7 +230,6 @@ func (e *Executor) GetOutput(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		clearSpinnerLine()
 		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
@@ -243,11 +240,9 @@ func (e *Executor) GetOutput(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				clearSpinnerLine()
 				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			clearSpinnerLine()
 			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
@@ -259,7 +254,6 @@ func (e *Executor) GetOutput(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
 	if err != nil {
-		clearSpinnerLine()
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -272,12 +266,10 @@ func (e *Executor) GetOutput(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		clearSpinnerLine()
 		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	clearSpinnerLine()
 	outputLookupSucceeded(message)
 	return value, exists, nil
 }
@@ -338,7 +330,6 @@ func (e *Executor) GetOutputWithOptions(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		clearSpinnerLine()
 		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
@@ -349,11 +340,9 @@ func (e *Executor) GetOutputWithOptions(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				clearSpinnerLine()
 				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			clearSpinnerLine()
 			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
@@ -365,7 +354,6 @@ func (e *Executor) GetOutputWithOptions(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, processYamlFunctions)
 	if err != nil {
-		clearSpinnerLine()
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -378,12 +366,10 @@ func (e *Executor) GetOutputWithOptions(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		clearSpinnerLine()
 		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	clearSpinnerLine()
 	outputLookupSucceeded(message)
 	return value, exists, nil
 }

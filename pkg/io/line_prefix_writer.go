@@ -8,6 +8,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	carriageReturnByte = '\r'
+	lineFeedByte       = '\n'
+)
+
+var (
+	crlfBytes = []byte{carriageReturnByte, lineFeedByte}
+	crBytes   = []byte{carriageReturnByte}
+	lfBytes   = []byte{lineFeedByte}
+)
+
 // LinePrefixWriter prefixes complete lines and serializes writes through a
 // shared output lock. Partial lines are buffered until Flush or a line ending.
 type LinePrefixWriter struct {
@@ -62,6 +73,8 @@ func (w *LinePrefixWriter) Write(p []byte) (int, error) {
 
 // Flush writes any trailing partial line.
 func (w *LinePrefixWriter) Flush() error {
+	defer perf.Track(nil, "io.LinePrefixWriter.Flush")()
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -90,7 +103,7 @@ func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 			return nil
 		}
 		end := idx + 1
-		if w.buffer[idx] == '\r' && end < len(w.buffer) && w.buffer[end] == '\n' {
+		if w.buffer[idx] == carriageReturnByte && end < len(w.buffer) && w.buffer[end] == lineFeedByte {
 			end++
 		}
 		line := append([]byte(nil), w.buffer[:end]...)
@@ -109,13 +122,14 @@ func (w *LinePrefixWriter) writeLine(line []byte) error {
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()
 
+	line = bytes.ReplaceAll(line, crlfBytes, lfBytes)
+	line = bytes.ReplaceAll(line, crBytes, lfBytes)
+
 	if w.prefix == "" {
 		_, err := w.w.Write(line)
 		return err
 	}
 
-	line = bytes.ReplaceAll(line, []byte("\r\n"), []byte("\n"))
-	line = bytes.ReplaceAll(line, []byte("\r"), []byte("\n"))
 	_, err := stdio.WriteString(w.w, w.prefix+string(line))
 	return err
 }
@@ -123,7 +137,7 @@ func (w *LinePrefixWriter) writeLine(line []byte) error {
 // lineEndIndex returns the first complete line-ending byte position or -1 when absent.
 func lineEndIndex(p []byte) int {
 	for i, c := range p {
-		if c == '\n' || (c == '\r' && i+1 < len(p)) {
+		if c == lineFeedByte || (c == carriageReturnByte && i+1 < len(p)) {
 			return i
 		}
 	}

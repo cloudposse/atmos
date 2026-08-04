@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -157,6 +158,8 @@ type subprocessPrep struct {
 	binary string
 	args   []string
 	env    []string
+	stdout io.Writer
+	stderr io.Writer
 	// dir is the component directory the hook runs from. It is deliberately
 	// separate from ATMOS_COMPONENT_PATH so tools that use relative paths also
 	// operate on the same component Terraform uses.
@@ -228,6 +231,8 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 		binary:            resolved,
 		args:              args,
 		env:               env,
+		stdout:            ctx.Stdout,
+		stderr:            ctx.Stderr,
 		dir:               existingComponentDir(ctx),
 		captureStdoutPath: captureStdoutPath,
 	}, nil
@@ -259,7 +264,10 @@ func existingComponentDir(ctx *ExecContext) string {
 func runSubprocess(p *subprocessPrep) error {
 	cmd := exec.Command(p.binary, p.args...) // #nosec G204 -- intentional: this is the whole point of a hook
 	cmd.Stdin = os.Stdin
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = p.stderr
+	if cmd.Stderr == nil {
+		cmd.Stderr = os.Stderr
+	}
 	cmd.Env = p.env
 	cmd.Dir = p.dir
 
@@ -271,7 +279,10 @@ func runSubprocess(p *subprocessPrep) error {
 		defer f.Close()
 		cmd.Stdout = f
 	} else {
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = p.stdout
+		if cmd.Stdout == nil {
+			cmd.Stdout = os.Stdout
+		}
 	}
 
 	return cmd.Run()

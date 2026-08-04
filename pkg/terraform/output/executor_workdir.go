@@ -163,11 +163,11 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// read freshlyProvisioned from the cache and set InitRunReconfigure correctly.
 		workdirProvisionCache.Store(cacheKey, freshlyProvisioned)
 
-		if outputLookupVisible() {
+		writeVisibleOutput(func() {
 			ui.ClearLine()
 			ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
 			ui.Hint("Tip: use `!terraform.state` instead of `!terraform.output` to read outputs without terraform init")
-		}
+		})
 
 		return freshlyProvisioned, nil
 	})

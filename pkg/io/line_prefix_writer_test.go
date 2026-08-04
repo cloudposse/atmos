@@ -104,6 +104,15 @@ func TestLinePrefixWriterWithoutPrefixWritesRawLines(t *testing.T) {
 	require.Equal(t, "raw\n", out.String())
 }
 
+func TestLinePrefixWriterWithoutPrefixNormalizesCarriageReturns(t *testing.T) {
+	var out bytes.Buffer
+	writer := NewLinePrefixWriter("", &out, nil)
+
+	_, err := writer.Write([]byte("first\rsecond\n"))
+	require.NoError(t, err)
+	require.Equal(t, "first\nsecond\n", out.String())
+}
+
 func TestLinePrefixWriterEmptyWriteAndFlushAreNoops(t *testing.T) {
 	var out bytes.Buffer
 	writer := NewLinePrefixWriter("node", &out, nil)

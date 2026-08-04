@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -185,6 +186,39 @@ func TestCommandEngine_NoCaptureStdoutLeavesOutputFileEmpty(t *testing.T) {
 	out, err := runEngineWithKind(t, kind, hook)
 	require.NoError(t, err)
 	assert.Nil(t, out.Artifact, "without CaptureStdout, stdout must not be written to the output file")
+}
+
+func TestCommandEngine_RoutesSubprocessOutputToContextWriters(t *testing.T) {
+	exe := testExePath(t)
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "test-component"), 0o755))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	kind := &Kind{Name: "command", OnFailure: OnFailureWarn, Engine: &CommandEngine{}}
+	ctx := &ExecContext{
+		Hook: kind.ResolveDefaults(&Hook{
+			Kind:    "command",
+			Command: exe,
+			Args:    []string{"-test.run", "^$"},
+			Env: map[string]string{
+				"_ATMOS_TEST_ECHO_STDOUT": "1",
+				"_ATMOS_TEST_STDOUT_BODY": "hook progress\rhook complete\n",
+			},
+		}),
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: terraformDir,
+		},
+		Info:   &schema.ConfigAndStacksInfo{Stack: "test-stack", ComponentFromArg: "test-component"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+
+	_, err := ctx.Kind.Engine.Run(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "hook progress\rhook complete\n", stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {
