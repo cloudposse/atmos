@@ -13,7 +13,6 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 func TestResolveUpgradeChartRef(t *testing.T) {
@@ -105,10 +104,10 @@ func TestReleaseOperationErrorIncludesEffectivePolicy(t *testing.T) {
 	err := releaseOperationError("upgrade", &chartSpec{
 		ReleaseName: "demo",
 		Namespace:   "apps",
-		Lifecycle: releaseLifecycleResolution{Policy: releaseLifecycle{
+		Lifecycle: releaseLifecycleResolution{Policy: effectiveReleasePolicy{
 			WaitStrategy: kube.StatusWatcherStrategy,
 			Timeout:      7 * time.Minute,
-		}},
+		}, TimeoutField: "release.upgrade.timeout"},
 	}, cause)
 
 	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
@@ -118,7 +117,7 @@ func TestReleaseOperationErrorIncludesEffectivePolicy(t *testing.T) {
 	assert.True(t, errUtils.HasContext(err, "namespace", "apps"))
 	assert.True(t, errUtils.HasContext(err, "wait_strategy", "watcher"))
 	assert.True(t, errUtils.HasContext(err, "timeout", "7m0s"))
-	assert.True(t, errUtils.HasContext(err, "timeout_field", cfg.HelmTimeoutSectionName))
+	assert.True(t, errUtils.HasContext(err, "timeout_field", "release.upgrade.timeout"))
 }
 
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
