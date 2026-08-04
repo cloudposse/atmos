@@ -39,6 +39,12 @@ type GraphExecutionOptions struct {
 	Selection     *GraphSelection
 }
 
+// GraphNodeSkipObserver is implemented by providers that need to record graph
+// nodes skipped after execution stops before reaching them.
+type GraphNodeSkipObserver interface {
+	OnGraphNodeSkipped(node *dependency.Node)
+}
+
 // ExecuteGraph runs selected components in dependency order and stops before
 // starting another component when the caller context is canceled.
 func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
@@ -63,22 +69,35 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 	for i := range order {
 		select {
 		case <-ctx.Done():
+			notifyGraphNodeSkips(opts.Provider, order[i:])
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctx.Err())
 		default:
 		}
 
 		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, errors.Join(ctxErr, err))
 			}
 			return err
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctxErr)
 		}
 	}
 
 	return nil
+}
+
+func notifyGraphNodeSkips(provider ComponentProvider, nodes dependency.ExecutionOrder) {
+	observer, ok := provider.(GraphNodeSkipObserver)
+	if !ok {
+		return
+	}
+	for i := range nodes {
+		observer.OnGraphNodeSkipped(&nodes[i])
+	}
 }
 
 // prepareExecutionOrder validates options, builds and filters the graph, and returns
