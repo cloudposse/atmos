@@ -1,6 +1,10 @@
 package exec
 
 import (
+	"fmt"
+	"path/filepath"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
@@ -29,7 +33,8 @@ func ExecuteDescribeStacksForClean(
 		atmosConfig,
 		filterByStack,
 		components,
-		nil, nil, false, false, false, false, nil, nil)
+		nil, nil, false, false, false, false, nil, nil,
+	)
 }
 
 // CollectComponentsDirectoryObjectsForClean delegates to pkg/terraform/clean.CollectComponentsDirectoryObjects.
@@ -44,6 +49,44 @@ func ConstructTerraformComponentVarfileNameForClean(info *schema.ConfigAndStacks
 	defer perf.Track(nil, "exec.ConstructTerraformComponentVarfileNameForClean")()
 
 	return constructTerraformComponentVarfileName(info)
+}
+
+// ConstructTerraformComponentVarfileName exports the varfile name constructor for use by other packages.
+func ConstructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "exec.ConstructTerraformComponentVarfileName")()
+
+	return constructTerraformComponentVarfileName(info)
+}
+
+// ConstructTerraformComponentVarfilePath exports the varfile path constructor
+// (bare name joined with the component's working directory, then resolved to
+// an absolute path) for use by other packages that need the varfile to resolve
+// correctly regardless of a subprocess's own working directory - e.g. tfmigrate,
+// which for `migration "multi_state"` runs its internal convergence-check
+// `terraform plan` from a *second* directory (`from_dir`), where a bare
+// filename good only in the component's own directory would not exist.
+func ConstructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ConstructTerraformComponentVarfilePath")()
+
+	path := constructTerraformComponentVarfilePath(atmosConfig, info)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPathResolution, err)
+	}
+	return absPath, nil
+}
+
+// ComputeTerraformSecretVarEnv partitions the component's variables exactly like
+// the terraform execution path (secret-bearing values plus declared-sensitive
+// inputs) and returns the TF_VAR_ environment entries for the excluded keys.
+// For use by other packages that spawn terraform-adjacent subprocesses (e.g.
+// tfmigrate), whose internal terraform runs would otherwise miss every variable
+// the generated varfile keeps off disk.
+func ComputeTerraformSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+	defer perf.Track(nil, "exec.ComputeTerraformSecretVarEnv")()
+
+	computeTerraformSecretVarKeys(info)
+	return secretVarEnv(info)
 }
 
 // ConstructTerraformComponentPlanfileNameForClean exports the planfile name constructor for clean.

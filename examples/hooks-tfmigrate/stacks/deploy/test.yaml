@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: "../../../state/service.tfstate"
+
+components:
+  terraform:
+    service-legacy:
+      # Atmos auto-installs OpenTofu via the toolchain (see atmos.yaml), so
+      # nothing needs to be pre-installed to run this example.
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+      vars:
+        environment: test
+
+    service:
+      # `tfmigrate` is auto-installed alongside OpenTofu, so the state
+      # migration hook below works out of the box.
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic
