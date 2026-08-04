@@ -52,6 +52,10 @@ type VaultKVClient interface {
 	// surface as a not-found error (vault.ErrSecretNotFound or a 404 ResponseError) so callers
 	// can map it to absence via isVaultNotFound.
 	HasMetadata(ctx context.Context, path string) error
+	// List returns the immediate child key/folder names under path, via the KV v2 metadata LIST
+	// operation (secret/metadata/<path>). Vault's LIST is directory-scoped: it returns only the
+	// entries directly under path, not a deep recursive listing.
+	List(ctx context.Context, path string) ([]string, error)
 }
 
 // Ensure VaultStore implements the expected interfaces.
@@ -60,11 +64,16 @@ var (
 	_ store.IdentityAwareStore = (*VaultStore)(nil)
 	_ store.DeletableStore     = (*VaultStore)(nil)
 	_ store.StatusStore        = (*VaultStore)(nil)
+	_ store.ListableStore      = (*VaultStore)(nil)
 )
 
-// vaultKVv2Client adapts the official Vault KV v2 helper to VaultKVClient.
+// vaultKVv2Client adapts the official Vault KV v2 helper to VaultKVClient. It also retains the
+// raw *vault.Client and mount: api.KVv2 has no List method, so List goes through
+// client.Logical().List(mount+"/metadata/"+path) directly.
 type vaultKVv2Client struct {
-	kv *vault.KVv2
+	kv     *vault.KVv2
+	client *vault.Client
+	mount  string
 }
 
 func (c *vaultKVv2Client) Put(ctx context.Context, path string, data map[string]any) error {
@@ -93,6 +102,30 @@ func (c *vaultKVv2Client) Delete(ctx context.Context, path string) error {
 func (c *vaultKVv2Client) HasMetadata(ctx context.Context, path string) error {
 	_, err := c.kv.GetMetadata(ctx, path)
 	return err
+}
+
+// List returns the immediate child key/folder names under path via the KV v2 metadata LIST
+// endpoint. A nil response (no entries at path) returns an empty, non-error result.
+func (c *vaultKVv2Client) List(ctx context.Context, path string) ([]string, error) {
+	fullPath := c.mount + "/metadata/" + strings.TrimPrefix(path, "/")
+	secret, err := c.client.Logical().ListWithContext(ctx, fullPath)
+	if err != nil {
+		return nil, err
+	}
+	if secret == nil || secret.Data == nil {
+		return nil, nil
+	}
+	raw, ok := secret.Data["keys"].([]interface{})
+	if !ok {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(raw))
+	for _, k := range raw {
+		if s, ok := k.(string); ok {
+			keys = append(keys, s)
+		}
+	}
+	return keys, nil
 }
 
 // NewVaultStore initializes a new VaultStore using token authentication. The address may be
@@ -131,7 +164,7 @@ func NewVaultStore(options *VaultStoreOptions, identityName string) (store.Store
 	}
 
 	s := &VaultStore{
-		client:       &vaultKVv2Client{kv: client.KVv2(mount)},
+		client:       &vaultKVv2Client{kv: client.KVv2(mount), client: client, mount: mount},
 		mount:        mount,
 		identityName: identityName,
 	}
@@ -284,6 +317,31 @@ func (s *VaultStore) Has(stack string, component string, key string) (bool, erro
 		return false, fmt.Errorf("%w '%s': %w", store.ErrVaultRead, path, err)
 	}
 	return true, nil
+}
+
+// Keys lists the keys under a stack/component scope (or globally when both are empty), via
+// Vault KV v2's LIST operation. Vault's LIST is directory-scoped: it returns only the immediate
+// children of the given path, which maps naturally onto Atmos's hierarchical
+// stack/component/key paths (unlike a flat prefix match).
+func (s *VaultStore) Keys(stack string, component string) ([]string, error) {
+	if s.stackDelimiter == nil {
+		return nil, store.ErrStackDelimiterNotSet
+	}
+
+	path := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, "/")
+
+	keys, err := s.client.List(context.TODO(), path)
+	if err != nil {
+		return nil, fmt.Errorf("%w '%s': %w", store.ErrVaultList, path, err)
+	}
+
+	// Vault marks a folder entry with a trailing "/" (a deeper path segment, e.g. a key
+	// containing "/"); strip that marker so callers see a plain key name either way.
+	names := make([]string, len(keys))
+	for i, k := range keys {
+		names[i] = strings.TrimSuffix(k, "/")
+	}
+	return names, nil
 }
 
 // isVaultNotFound reports whether the error chain indicates a missing Vault secret (404).
