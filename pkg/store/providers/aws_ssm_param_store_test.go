@@ -42,15 +42,16 @@ func TestSSMStore_Set(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		stack        string
-		component    string
-		key          string
-		value        interface{}
-		secret       bool
-		writeRoleArn *string
-		mockSetup    func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
-		wantErr      bool
+		name              string
+		stack             string
+		component         string
+		key               string
+		value             interface{}
+		secret            bool
+		writeRoleArn      *string
+		nilStackDelimiter bool
+		mockSetup         func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
+		wantErr           bool
 	}{
 		{
 			name:      "successful_set",
@@ -220,19 +221,14 @@ func TestSSMStore_Set(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "nil_stack_delimiter",
-			stack:     "dev/usw2/app",
-			component: "service",
-			key:       "config-key",
-			value:     "test-value",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
-					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
-					Value:     aws.String(`"test-value"`),
-					Type:      types.ParameterTypeString,
-					Overwrite: aws.Bool(true),
-				}).Return(&ssm.PutParameterOutput{}, nil)
-			},
+			name:              "nil_stack_delimiter",
+			stack:             "dev/usw2/app",
+			component:         "service",
+			key:               "config-key",
+			value:             "test-value",
+			nilStackDelimiter: true,
+			mockSetup:         func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
+			wantErr:           true,
 		},
 		{
 			name:      "complex_stack_name_with_multiple_delimiters",
@@ -301,6 +297,11 @@ func TestSSMStore_Set(t *testing.T) {
 
 			store.writeRoleArn = tt.writeRoleArn
 			store.secret = tt.secret
+			if tt.nilStackDelimiter {
+				store.stackDelimiter = nil
+			} else {
+				store.stackDelimiter = &stackDelimiter
+			}
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SSMStore.Set() error = %v, wantErr %v", err, tt.wantErr)

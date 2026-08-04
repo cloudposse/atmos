@@ -168,24 +168,15 @@ func TestService_ListKeyValues_GetError(t *testing.T) {
 	require.ErrorIs(t, err, assert.AnError)
 }
 
-// valueListableStore combines ListableStore and ValueListableStore in one fake -- no generated
-// mock implements both interfaces at once, and the capability check in ListKeyValues needs a
-// store that type-asserts to ValueListableStore without also satisfying it via embedding tricks.
-type valueListableStore struct {
-	*MockListableStore
-	supported bool
-}
-
-func (f *valueListableStore) ValueListingSupported() bool { return f.supported }
-
 // TestService_ListKeyValues_ValueListingNotSupported proves ListKeyValues checks
 // ValueListableStore up front and fails fast with ErrListNotSupported -- without calling Keys or
 // Get -- when value listing isn't currently supported (e.g. a GitHub Actions store run outside a
 // runner).
 func TestService_ListKeyValues_ValueListingNotSupported(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	mockStore := &valueListableStore{MockListableStore: NewMockListableStore(ctrl), supported: false}
-	// No EXPECT() calls on mockStore.MockListableStore: Keys/Get must never be invoked.
+	mockStore := NewMockValueListableStore(ctrl)
+	mockStore.EXPECT().ValueListingSupported().Return(false)
+	// No EXPECT() calls for Keys/Get: they must never be invoked.
 
 	svc := NewService(StoresConfig{"app": {Kind: KindGitHubActions}}, StoreRegistry{"app": mockStore})
 
@@ -198,10 +189,10 @@ func TestService_ListKeyValues_ValueListingNotSupported(t *testing.T) {
 // support proceeds through the normal Keys/Get enumeration unchanged.
 func TestService_ListKeyValues_ValueListingSupported(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	inner := NewMockListableStore(ctrl)
-	inner.EXPECT().Keys("prod", "vpc").Return([]string{"image_tag"}, nil)
-	inner.EXPECT().Get("prod", "vpc", "image_tag").Return("v1.2.3", nil)
-	mockStore := &valueListableStore{MockListableStore: inner, supported: true}
+	mockStore := NewMockValueListableStore(ctrl)
+	mockStore.EXPECT().ValueListingSupported().Return(true)
+	mockStore.EXPECT().Keys("prod", "vpc").Return([]string{"image_tag"}, nil)
+	mockStore.EXPECT().Get("prod", "vpc", "image_tag").Return("v1.2.3", nil)
 
 	svc := NewService(StoresConfig{"app": {Kind: KindGitHubActions}}, StoreRegistry{"app": mockStore})
 
@@ -210,22 +201,13 @@ func TestService_ListKeyValues_ValueListingSupported(t *testing.T) {
 	assert.Equal(t, []KeyValue{{Key: "image_tag", Value: "v1.2.3"}}, kvs)
 }
 
-// fakeLocalStore is a small hand-written fake (rather than a generated mock) implementing both
-// Store and LocalStore -- there is no generated MockLocalStore, and none of the generated mocks
-// in mock_store.go happen to implement IsLocal.
-type fakeLocalStore struct{}
-
-func (fakeLocalStore) Set(stack, component, key string, value any) error { return nil }
-func (fakeLocalStore) Get(stack, component, key string) (any, error)     { return nil, nil }
-func (fakeLocalStore) GetKey(key string) (any, error)                    { return nil, nil }
-func (fakeLocalStore) IsLocal() bool                                     { return true }
-
 func TestService_List(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	deletable := NewMockDeletableStore(ctrl)
 	plain := NewMockStore(ctrl)
 	statusStore := NewMockStatusStore(ctrl)
-	localStore := fakeLocalStore{}
+	localStore := NewMockLocalStore(ctrl)
+	localStore.EXPECT().IsLocal().Return(true)
 	listableStore := NewMockListableStore(ctrl)
 
 	svc := NewService(
@@ -250,57 +232,47 @@ func TestService_List(t *testing.T) {
 	descriptors := svc.List()
 	require.Len(t, descriptors, 6)
 
+	names := make([]string, len(descriptors))
+	for i, d := range descriptors {
+		names[i] = d.Name
+	}
+	// List() sorts by name -- guards against sorting regressions the map-based lookups below can't catch.
+	assert.Equal(t, []string{"app-cache", "app-listable", "app-local", "app-missing", "app-secrets", "app-status"}, names)
+
 	byName := make(map[string]Descriptor, len(descriptors))
 	for _, d := range descriptors {
 		byName[d.Name] = d
 	}
 
-	appCache := byName["app-cache"]
-	assert.Equal(t, KindRedis, appCache.Kind)
-	assert.False(t, appCache.Secret)
-	assert.False(t, appCache.Deletable)
-	assert.False(t, appCache.HasStatus)
-	assert.False(t, appCache.Local)
-	assert.False(t, appCache.Listable)
-
-	appSecrets := byName["app-secrets"]
-	assert.Equal(t, KindAWSSSM, appSecrets.Kind)
-	assert.True(t, appSecrets.Secret)
-	assert.True(t, appSecrets.Deletable)
-	assert.False(t, appSecrets.HasStatus)
-	assert.False(t, appSecrets.Local)
-	assert.False(t, appSecrets.Listable)
-
-	appStatus := byName["app-status"]
-	assert.Equal(t, KindHashicorpVault, appStatus.Kind)
-	assert.True(t, appStatus.HasStatus)
-	assert.False(t, appStatus.Deletable)
-	assert.False(t, appStatus.Local)
-	assert.False(t, appStatus.Listable)
-
-	appLocal := byName["app-local"]
-	assert.Equal(t, KindKeychain, appLocal.Kind)
-	assert.True(t, appLocal.Local)
-	assert.False(t, appLocal.HasStatus)
-	assert.False(t, appLocal.Deletable)
-	assert.False(t, appLocal.Listable)
-
-	appListable := byName["app-listable"]
-	assert.Equal(t, KindHashicorpVault, appListable.Kind)
-	assert.True(t, appListable.Listable)
-	assert.False(t, appListable.Deletable)
-	assert.False(t, appListable.HasStatus)
-	assert.False(t, appListable.Local)
-
-	// A store present in StoresConfig but missing from the live registry (construction failed)
-	// still gets a descriptor -- from config alone -- with every capability flag left false.
-	appMissing := byName["app-missing"]
-	assert.Equal(t, KindAWSSSM, appMissing.Kind)
-	assert.False(t, appMissing.Secret)
-	assert.False(t, appMissing.Deletable)
-	assert.False(t, appMissing.HasStatus)
-	assert.False(t, appMissing.Local)
-	assert.False(t, appMissing.Listable)
+	tests := []struct {
+		name          string
+		wantKind      string
+		wantSecret    bool
+		wantDeletable bool
+		wantHasStatus bool
+		wantLocal     bool
+		wantListable  bool
+	}{
+		{name: "app-cache", wantKind: KindRedis},
+		{name: "app-secrets", wantKind: KindAWSSSM, wantSecret: true, wantDeletable: true},
+		{name: "app-status", wantKind: KindHashicorpVault, wantHasStatus: true},
+		{name: "app-local", wantKind: KindKeychain, wantLocal: true},
+		{name: "app-listable", wantKind: KindHashicorpVault, wantListable: true},
+		// Configured, but missing from the live registry (construction failed): still gets a
+		// descriptor -- from config alone -- with every capability flag left false.
+		{name: "app-missing", wantKind: KindAWSSSM},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := byName[tt.name]
+			assert.Equal(t, tt.wantKind, d.Kind)
+			assert.Equal(t, tt.wantSecret, d.Secret)
+			assert.Equal(t, tt.wantDeletable, d.Deletable)
+			assert.Equal(t, tt.wantHasStatus, d.HasStatus)
+			assert.Equal(t, tt.wantLocal, d.Local)
+			assert.Equal(t, tt.wantListable, d.Listable)
+		})
+	}
 }
 
 func TestService_IsSecret(t *testing.T) {

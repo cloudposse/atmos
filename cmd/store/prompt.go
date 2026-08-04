@@ -15,6 +15,16 @@ import (
 // exercised without a live TTY. Production always calls form.Run().
 var runForm = func(form *huh.Form) error { return form.Run() }
 
+// validateStoreValue rejects an empty prompted value. Extracted from promptForStoreValue so its
+// logic is unit-testable on every platform without going through huh's form/PTY machinery, which
+// TestPromptForStoreValue_PTY needs a real TTY for and skips on Windows.
+func validateStoreValue(s string) error {
+	if s == "" {
+		return errUtils.ErrMissingInput
+	}
+	return nil
+}
+
 // promptForStoreValue interactively prompts for a value with masked input -- a store can back a
 // `secret: true` backend, so input is masked the same way `atmos secret set` masks it.
 func promptForStoreValue() (string, error) {
@@ -25,12 +35,7 @@ func promptForStoreValue() (string, error) {
 		Title("Enter value").
 		EchoMode(huh.EchoModePassword).
 		Value(&value).
-		Validate(func(s string) error {
-			if s == "" {
-				return errUtils.ErrMissingInput
-			}
-			return nil
-		})
+		Validate(validateStoreValue)
 
 	form := huh.NewForm(huh.NewGroup(input)).WithTheme(uiutils.NewAtmosHuhTheme())
 	if err := runForm(form); err != nil {

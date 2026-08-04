@@ -49,15 +49,26 @@ func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore 
 	return store
 }
 
-// gsmClientSecretCreationMock returns a setup function that configures mock expectations for secret creation.
-func gsmClientSecretCreationMock(projectID string, secretId string, secretPayload string, replication *secretmanagerpb.Replication, err error) func(m *MockGSMClient) {
-	parent := fmt.Sprintf("projects/%s", projectID)
+// gsmClientSecretCreationMock returns a setup function that configures mock expectations for
+// secret creation. The createErr and versionErr parameters control CreateSecret's and
+// AddSecretVersion's outcomes independently, so tests can exercise each call on its own: a
+// CreateSecret AlreadyExists response, which createSecret recovers from, or a genuine
+// AddSecretVersion failure.
+func gsmClientSecretCreationMock(secretId string, secretPayload string, replication *secretmanagerpb.Replication, createErr, versionErr error) func(m *MockGSMClient) {
+	parent := "projects/test-project"
 	return func(m *MockGSMClient) {
 		if replication == nil {
 			replication = &secretmanagerpb.Replication{
 				Replication: &secretmanagerpb.Replication_Automatic_{
 					Automatic: &secretmanagerpb.Replication_Automatic{},
 				},
+			}
+		}
+
+		var createRet *secretmanagerpb.Secret
+		if createErr == nil {
+			createRet = &secretmanagerpb.Secret{
+				Name: fmt.Sprintf("%s/secrets/%s", parent, secretId),
 			}
 		}
 
@@ -92,12 +103,19 @@ func gsmClientSecretCreationMock(projectID string, secretId string, secretPayloa
 			return req.Parent == expectedReq.Parent &&
 				req.SecretId == expectedReq.SecretId &&
 				replicationMatched
-		})).Return(&secretmanagerpb.Secret{
-			Name: fmt.Sprintf("%s/secrets/%s", parent, secretId),
-		}, nil)
+		})).Return(createRet, createErr)
+
+		// A CreateSecret failure other than AlreadyExists short-circuits Set() before
+		// AddSecretVersion is ever called -- see createSecret's status-code switch.
+		if createErr != nil {
+			st, ok := status.FromError(createErr)
+			if !ok || st.Code() != codes.AlreadyExists {
+				return
+			}
+		}
 
 		var ret *secretmanagerpb.SecretVersion
-		if err == nil {
+		if versionErr == nil {
 			ret = &secretmanagerpb.SecretVersion{}
 		}
 
@@ -110,7 +128,7 @@ func gsmClientSecretCreationMock(projectID string, secretId string, secretPayloa
 			}
 			return req.Parent == expectedReq.Parent &&
 				string(req.Payload.Data) == string(expectedReq.Payload.Data)
-		})).Return(ret, err)
+		})).Return(ret, versionErr)
 	}
 }
 
@@ -184,7 +202,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, nil),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, nil, nil),
 			wantErr:   false,
 		},
 		{
@@ -193,7 +211,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, nil),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, status.Error(codes.AlreadyExists, "exists"), nil),
 			wantErr:   false,
 		},
 		{
@@ -202,7 +220,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, fmt.Errorf("internal error: %w", ErrInternalError)),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, fmt.Errorf("internal error: %w", ErrInternalError), nil),
 			wantErr:   true,
 		},
 
@@ -212,7 +230,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, fmt.Errorf("transient error: %w", ErrTransientError)),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, fmt.Errorf("transient error: %w", ErrTransientError), nil),
 			wantErr:   true,
 		},
 		{
@@ -221,7 +239,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, fmt.Errorf("internal error: %w", ErrInternalError)),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `"test-value"`, nil, nil, fmt.Errorf("internal error: %w", ErrInternalError)),
 			wantErr:   true,
 		},
 		{
@@ -230,7 +248,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			value:     123,
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_config-key", `123`, nil, nil),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `123`, nil, nil, nil),
 			wantErr:   false,
 		},
 		{
@@ -239,7 +257,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "slice-key",
 			value:     []string{"value1", "value2", "value3"},
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_slice-key", `["value1","value2","value3"]`, nil, nil),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_slice-key", `["value1","value2","value3"]`, nil, nil, nil),
 		},
 		{
 			name:      "successful_set_with_map",
@@ -248,7 +266,7 @@ func TestGSMStore_Set(t *testing.T) {
 			key:       "map-key",
 			value:     map[string]interface{}{"key1": "value1", "key2": 42, "key3": true},
 
-			mockFn: gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`, nil, nil),
+			mockFn: gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`, nil, nil, nil),
 		},
 		{
 			name:      "successful_set_automatic_replication",
@@ -257,7 +275,7 @@ func TestGSMStore_Set(t *testing.T) {
 			key:       "map-key",
 			value:     map[string]interface{}{"key1": "value1", "key2": 42, "key3": true},
 			locations: []string{},
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`, nil, nil),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`, nil, nil, nil),
 		},
 		{
 			name:      "successful_set_user_managed_replication",
@@ -266,7 +284,7 @@ func TestGSMStore_Set(t *testing.T) {
 			key:       "map-key",
 			value:     map[string]interface{}{"key1": "value1", "key2": 42, "key3": true},
 			locations: []string{"us-west1", "us-central1"},
-			mockFn: gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`,
+			mockFn: gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`,
 				&secretmanagerpb.Replication{
 					Replication: &secretmanagerpb.Replication_UserManaged_{
 						UserManaged: &secretmanagerpb.Replication_UserManaged{
@@ -276,7 +294,7 @@ func TestGSMStore_Set(t *testing.T) {
 							},
 						},
 					},
-				}, nil),
+				}, nil, nil),
 		},
 		{
 			// A stack-scoped secret coordinate omits the component segment.
@@ -285,7 +303,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_config-key", `"test-value"`, nil, nil),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_config-key", `"test-value"`, nil, nil, nil),
 		},
 		{
 			// A global secret coordinate omits both the stack and component segments.
@@ -294,7 +312,7 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_config-key", `"test-value"`, nil, nil),
+			mockFn:    gsmClientSecretCreationMock("test-prefix_config-key", `"test-value"`, nil, nil, nil),
 		},
 		{
 			name:      "empty key",

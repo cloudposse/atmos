@@ -64,6 +64,30 @@ func TestConfirmAction_FormError(t *testing.T) {
 	assert.Contains(t, err.Error(), "confirmation prompt failed")
 }
 
+// TestValidateStoreValue covers the prompt's non-empty check on every platform, independent of
+// huh's form/PTY machinery -- unlike TestPromptForStoreValue_PTY below, which needs a real TTY
+// and is skipped on Windows.
+func TestValidateStoreValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr error
+	}{
+		{name: "empty", input: "", wantErr: errUtils.ErrMissingInput},
+		{name: "non-empty", input: "s3cret-value", wantErr: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateStoreValue(tt.input)
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.wantErr)
+		})
+	}
+}
+
 func TestPromptForStoreValue_FormError(t *testing.T) {
 	boom := errors.New("form boom")
 	overrideRunForm(t, func(*huh.Form) error { return boom })
@@ -109,9 +133,6 @@ func TestPromptForStoreValue_PTY(t *testing.T) {
 	assert.Equal(t, "s3cret-value", got)
 	require.NoError(t, <-writeErr)
 }
-
-// Compile-time guard: the store validator references ErrMissingInput; a rename must fail the build.
-var _ = errUtils.ErrMissingInput
 
 // Ensure os is referenced even if the pty test is skipped at runtime on unusual platforms.
 var _ = os.Stdin

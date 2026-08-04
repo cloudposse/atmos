@@ -73,7 +73,7 @@ type ListableStore interface {
 // GitHub Actions runner; outside one it implements this to report false so ListKeyValues can
 // fail fast with ErrListNotSupported instead of aborting mid-enumeration on the first Get error.
 type ValueListableStore interface {
-	Store
+	ListableStore
 	// ValueListingSupported reports whether Get can currently be called for every key Keys
 	// returns.
 	ValueListingSupported() bool

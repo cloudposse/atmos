@@ -88,10 +88,12 @@ as a secret, use `atmos secret` instead.
 ## Stack and Component Scope
 
 The `--stack` and `--component` flags are optional for every `atmos store` subcommand, and they
-are independent of each other. You can set both flags, only `--stack`, or neither flag. Atmos
-uses whichever flags you set to build the key. If you set both flags, Atmos scopes the value the
-same way [`atmos secret`](/cli/commands/secret/usage) does. If you set only `--stack`, Atmos
-scopes the value to the stack and leaves the component out of the key. If you set neither flag,
+are independent of each other. You can set both flags, only one of them, or neither. Atmos uses
+whichever flags you set to build the key — there's no requirement that stack and component are
+always used together. If you set both flags, Atmos scopes the value the same way
+[`atmos secret`](/cli/commands/secret/usage) does. If you set only `--stack`, Atmos scopes the
+value to the stack and leaves the component out of the key. If you set only `--component`, Atmos
+scopes the value to the component and leaves the stack out of the key. If you set neither flag,
 Atmos stores a global value:
 
 ```shell
@@ -100,6 +102,9 @@ atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ec
 
 # Scoped to a stack only (no component)
 atmos store set app-metadata region us-east-1 --stack=prod
+
+# Scoped to a component only (no stack)
+atmos store set app-metadata build_tool terraform --component=ecs-service
 
 # Store-global (no stack or component)
 atmos store set app-metadata shared_config '{"region":"us-east-1"}'

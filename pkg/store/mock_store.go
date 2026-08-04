@@ -547,6 +547,21 @@ func (mr *MockValueListableStoreMockRecorder) GetKey(key any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockValueListableStore)(nil).GetKey), key)
 }
 
+// Keys mocks base method.
+func (m *MockValueListableStore) Keys(stack, component string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Keys", stack, component)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Keys indicates an expected call of Keys.
+func (mr *MockValueListableStoreMockRecorder) Keys(stack, component any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Keys", reflect.TypeOf((*MockValueListableStore)(nil).Keys), stack, component)
+}
+
 // Set mocks base method.
 func (m *MockValueListableStore) Set(stack, component, key string, value any) error {
 	m.ctrl.T.Helper()
