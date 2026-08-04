@@ -47,8 +47,10 @@ func deliverApply(
 	// Cluster delivery installs/upgrades the Helm release directly.
 	if selected.Kind == target.KindKubernetes {
 		result, err := applyHelmRelease(context.Background(), spec, info.DryRun)
+		spec.Lifecycle = result.Lifecycle
+		emitLifecycleWarnings(result.Lifecycle.Warnings)
 		summary["manifest_bytes"] = len(result.Manifest)
-		summary["lifecycle"] = lifecycleSummary(result.Operation, spec.Lifecycle.Policy)
+		summary["release"] = lifecycleSummary(result.Operation, result.Lifecycle.Policy)
 		if objects, decodeErr := manifest.DecodeObjects([]byte(result.Manifest)); decodeErr == nil {
 			addObjectsToSummary(summary, objects)
 		}
@@ -57,7 +59,7 @@ func deliverApply(
 	if hasExplicitLifecycleFlags(flags) {
 		return summary, errUtils.ErrHelmLifecycleExternalTarget
 	}
-	summary["lifecycle"] = map[string]any{
+	summary["release"] = map[string]any{
 		"applied":     false,
 		"target_kind": selected.Kind,
 		"reason":      "external_target",
@@ -66,22 +68,25 @@ func deliverApply(
 	return deliverToExternalTarget(atmosConfig, info, selected, spec, summary)
 }
 
-func lifecycleSummary(operation string, policy releaseLifecycle) map[string]any {
+func lifecycleSummary(operation string, policy effectiveReleasePolicy) map[string]any {
 	summary := map[string]any{
-		"operation":           operation,
-		"wait_strategy":       string(policy.WaitStrategy),
-		"timeout":             policy.Timeout.String(),
-		"chart_hooks_enabled": !policy.DisableChartHooks,
+		"operation":   operation,
+		"timeout":     policy.Timeout.String(),
+		"chart_hooks": policy.ChartHooks,
+		"wait": map[string]any{
+			"strategy": string(policy.WaitStrategy),
+		},
 	}
 	switch operation {
 	case releaseOperationInstall:
-		summary["wait_for_jobs"] = policy.WaitForJobs
-		summary["on_failure"] = policy.failureActionStrings(operation)
-		summary["install_crds"] = !policy.SkipCRDs
+		summary["wait"].(map[string]any)["jobs"] = policy.WaitForJobs
+		summary["on_failure"] = string(policy.OnFailure)
+		summary["crds"] = string(policy.CRDs)
 	case releaseOperationUpgrade:
-		summary["wait_for_jobs"] = policy.WaitForJobs
-		summary["on_failure"] = policy.failureActionStrings(operation)
-		summary["max_history"] = policy.MaxHistory
+		summary["wait"].(map[string]any)["jobs"] = policy.WaitForJobs
+		summary["history"] = map[string]any{"max": policy.MaxHistory}
+		summary["on_failure"] = string(policy.OnFailure)
+		summary["cleanup_on_failure"] = policy.CleanupOnFailure
 	}
 	return summary
 }

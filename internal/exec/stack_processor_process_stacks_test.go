@@ -1009,10 +1009,14 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 					cfg.GenerateSectionName: map[string]any{
 						"chart": map[string]any{"path": "generated"},
 					},
-					cfg.HelmOnFailureSectionName:    []any{"rollback"},
-					cfg.HelmWaitStrategySectionName: "watcher",
-					cfg.HelmTimeoutSectionName:      "10m",
-					cfg.HelmMaxHistorySectionName:   10,
+					cfg.HelmReleaseSectionName: map[string]any{
+						cfg.HelmTimeoutSectionName: "10m",
+						cfg.HelmWaitSectionName: map[string]any{
+							cfg.HelmWaitStrategySectionName: "watcher",
+						},
+						cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+						cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "keep"},
+					},
 				},
 				cfg.ComponentsSectionName: map[string]any{
 					cfg.HelmComponentType: map[string]any{
@@ -1025,9 +1029,11 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 							cfg.RenderSectionName: map[string]any{
 								"output": map[string]any{"path": "rendered.yaml"},
 							},
-							cfg.HelmOnFailureSectionName:   []any{},
-							cfg.HelmWaitForJobsSectionName: true,
-							cfg.HelmTimeoutSectionName:     "20m",
+							cfg.HelmReleaseSectionName: map[string]any{
+								cfg.HelmTimeoutSectionName: "20m",
+								cfg.HelmWaitSectionName:    map[string]any{cfg.HelmWaitJobsSectionName: true},
+								cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
+							},
 						},
 					},
 				},
@@ -1047,11 +1053,12 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.Equal(t, []any{"values.yaml"}, app[cfg.ValuesFilesSectionName])
 				assert.Equal(t, map[string]any{"output": map[string]any{"path": "rendered.yaml"}}, app[cfg.RenderSectionName])
 				assert.Equal(t, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}, app[cfg.RepositoriesSectionName])
-				assert.Empty(t, app[cfg.HelmOnFailureSectionName])
-				assert.Equal(t, "watcher", app[cfg.HelmWaitStrategySectionName])
-				assert.Equal(t, true, app[cfg.HelmWaitForJobsSectionName])
-				assert.Equal(t, "20m", app[cfg.HelmTimeoutSectionName])
-				assert.Equal(t, 10, app[cfg.HelmMaxHistorySectionName])
+				release := app[cfg.HelmReleaseSectionName].(map[string]any)
+				assert.Equal(t, "20m", release[cfg.HelmTimeoutSectionName])
+				assert.Equal(t, "watcher", release[cfg.HelmWaitSectionName].(map[string]any)[cfg.HelmWaitStrategySectionName])
+				assert.Equal(t, true, release[cfg.HelmWaitSectionName].(map[string]any)[cfg.HelmWaitJobsSectionName])
+				assert.Equal(t, 10, release[cfg.HelmHistorySectionName].(map[string]any)[cfg.HelmHistoryMaxSectionName])
+				assert.Equal(t, "rollback", release[cfg.HelmUpgradeSectionName].(map[string]any)[cfg.HelmOnFailureSectionName])
 				secretsSection, ok := app[cfg.SecretsSectionName].(map[string]any)
 				require.True(t, ok, "stack-level secrets must flow into helm components")
 				assert.Equal(t, string(secrets.ScopeStack), secretScopeOf(t, secretsSection, "SHARED"))

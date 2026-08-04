@@ -679,38 +679,36 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 
 func TestExtractHelmLifecycleSections(t *testing.T) {
 	section := map[string]any{
-		cfg.ChartSectionName:            "charts/demo-release",
-		cfg.ValuesSectionName:           map[string]any{"cluster": "shared"},
-		cfg.RepositoriesSectionName:     []any{map[string]any{"name": "internal"}},
-		cfg.HelmOnFailureSectionName:    []any{"rollback"},
-		cfg.HelmWaitStrategySectionName: "watcher",
-		cfg.HelmTimeoutSectionName:      "30m",
-		cfg.HelmMaxHistorySectionName:   10,
-		"unrecognized":                  "ignored",
+		cfg.ChartSectionName:        "charts/demo-release",
+		cfg.ValuesSectionName:       map[string]any{"cluster": "shared"},
+		cfg.RepositoriesSectionName: []any{map[string]any{"name": "internal"}},
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmTimeoutSectionName: "30m",
+			cfg.HelmWaitSectionName: map[string]any{
+				cfg.HelmWaitStrategySectionName: "watcher",
+			},
+			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+			cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
+		},
+		"unrecognized": "ignored",
 	}
 
 	component := extractHelmComponentSection(section)
 	assert.Equal(t, "charts/demo-release", component[cfg.ChartSectionName])
-	assert.Equal(t, []any{"rollback"}, component[cfg.HelmOnFailureSectionName])
-	assert.Equal(t, "watcher", component[cfg.HelmWaitStrategySectionName])
-	assert.Equal(t, "30m", component[cfg.HelmTimeoutSectionName])
-	assert.Equal(t, 10, component[cfg.HelmMaxHistorySectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], component[cfg.HelmReleaseSectionName])
 	assert.NotContains(t, component, "unrecognized")
 
 	defaults := extractHelmLifecycleSection(section)
 	assert.NotContains(t, defaults, cfg.ChartSectionName)
 	assert.Equal(t, map[string]any{"cluster": "shared"}, defaults[cfg.ValuesSectionName])
 	assert.Equal(t, []any{map[string]any{"name": "internal"}}, defaults[cfg.RepositoriesSectionName])
-	assert.Equal(t, []any{"rollback"}, defaults[cfg.HelmOnFailureSectionName])
-	assert.Equal(t, "watcher", defaults[cfg.HelmWaitStrategySectionName])
-	assert.Equal(t, "30m", defaults[cfg.HelmTimeoutSectionName])
-	assert.Equal(t, 10, defaults[cfg.HelmMaxHistorySectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], defaults[cfg.HelmReleaseSectionName])
 
 	overrides := extractHelmOverrideSection(section)
 	assert.Equal(t, map[string]any{"cluster": "shared"}, overrides[cfg.ValuesSectionName])
 	assert.NotContains(t, overrides, cfg.ChartSectionName)
 	assert.NotContains(t, overrides, cfg.RepositoriesSectionName)
-	assert.NotContains(t, overrides, cfg.HelmTimeoutSectionName)
+	assert.NotContains(t, overrides, cfg.HelmReleaseSectionName)
 	assert.NotContains(t, overrides, "unrecognized")
 }
 

@@ -37,7 +37,11 @@ type chartSpec struct {
 	IncludeCRDs bool
 	// Repositories lists declarative chart repositories for "repo/name" refs.
 	Repositories []chartRepository
-	// Lifecycle is the canonical release policy plus presence-derived metadata.
+	// Release is the presence-aware policy tree before an action is selected.
+	Release releasePolicyInput
+	// LifecycleFlags contains only explicitly supplied invocation overrides.
+	LifecycleFlags map[string]any
+	// Lifecycle is populated with the effective selected-operation policy.
 	Lifecycle releaseLifecycleResolution
 }
 

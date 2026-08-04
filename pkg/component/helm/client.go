@@ -28,11 +28,13 @@ type actionContext struct {
 type releaseActionResult struct {
 	Manifest  string
 	Operation string
+	Lifecycle releaseLifecycleResolution
 }
 
 const (
 	releaseOperationInstall = "install"
 	releaseOperationUpgrade = "upgrade"
+	releaseOperationDelete  = "delete"
 )
 
 // newActionContext initializes a cluster-capable Helm action configuration.
@@ -74,13 +76,23 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 	histClient := action.NewHistory(actx.cfg)
 	histClient.Max = 1
 	if _, historyErr := histClient.Run(spec.ReleaseName); errors.Is(historyErr, driver.ErrReleaseNotFound) {
+		lifecycle, resolveErr := resolveReleaseLifecycleWithFlags(spec.Release, releaseOperationInstall, spec.LifecycleFlags)
+		if resolveErr != nil {
+			return releaseActionResult{Operation: releaseOperationInstall}, resolveErr
+		}
+		spec.Lifecycle = lifecycle
 		manifest, installErr := installRelease(ctx, actx, spec, dryRun)
-		return releaseActionResult{Manifest: manifest, Operation: releaseOperationInstall}, installErr
+		return releaseActionResult{Manifest: manifest, Operation: releaseOperationInstall, Lifecycle: lifecycle}, installErr
 	} else if historyErr != nil {
 		return releaseActionResult{}, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr)
 	}
+	lifecycle, resolveErr := resolveReleaseLifecycleWithFlags(spec.Release, releaseOperationUpgrade, spec.LifecycleFlags)
+	if resolveErr != nil {
+		return releaseActionResult{Operation: releaseOperationUpgrade}, resolveErr
+	}
+	spec.Lifecycle = lifecycle
 	manifest, upgradeErr := upgradeRelease(ctx, actx, spec, dryRun)
-	return releaseActionResult{Manifest: manifest, Operation: releaseOperationUpgrade}, upgradeErr
+	return releaseActionResult{Manifest: manifest, Operation: releaseOperationUpgrade, Lifecycle: lifecycle}, upgradeErr
 }
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
@@ -193,28 +205,28 @@ func deleteRelease(spec *chartSpec, dryRun bool) error {
 	return nil
 }
 
-func configureInstallLifecycle(client *action.Install, policy releaseLifecycle) {
-	client.RollbackOnFailure = policy.hasFailureAction(failureActionRollback)
+func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {
+	client.RollbackOnFailure = policy.OnFailure == failurePolicyUninstall
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout
-	client.DisableHooks = policy.DisableChartHooks
-	client.SkipCRDs = policy.SkipCRDs
+	client.DisableHooks = !policy.ChartHooks
+	client.SkipCRDs = policy.CRDs == crdPolicySkip
 }
 
-func configureUpgradeLifecycle(client *action.Upgrade, policy releaseLifecycle) {
-	client.RollbackOnFailure = policy.hasFailureAction(failureActionRollback)
+func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePolicy) {
+	client.RollbackOnFailure = policy.OnFailure == failurePolicyRollback
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout
-	client.CleanupOnFail = policy.hasFailureAction(failureActionCleanup)
+	client.CleanupOnFail = policy.CleanupOnFailure
 	client.MaxHistory = policy.MaxHistory
-	client.DisableHooks = policy.DisableChartHooks
+	client.DisableHooks = !policy.ChartHooks
 }
 
-func configureUninstallLifecycle(client *action.Uninstall, policy releaseLifecycle, dryRun bool) {
+func configureUninstallLifecycle(client *action.Uninstall, policy effectiveReleasePolicy, dryRun bool) {
 	client.WaitStrategy = policy.WaitStrategy
 	client.Timeout = policy.Timeout
-	client.DisableHooks = policy.DisableChartHooks
+	client.DisableHooks = !policy.ChartHooks
 	client.DryRun = dryRun
 }

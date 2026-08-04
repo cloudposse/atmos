@@ -1534,6 +1534,7 @@ var (
 	ErrHelmTimeoutInvalid            = errors.New("invalid helm release timeout")
 	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")
 	ErrHelmWaitForJobsRequiresWait   = errors.New("helm wait_for_jobs requires watcher or legacy wait strategy")
+	ErrHelmLifecycleFlagInapplicable = errors.New("helm release lifecycle flag does not apply to selected operation")
 	ErrHelmLifecycleExternalTarget   = errors.New("helm release lifecycle flags require a Kubernetes target")
 	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
 	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")

@@ -28,7 +28,7 @@ func buildChartSpec(
 
 	section := info.ComponentSection
 
-	lifecycle, err := resolveReleaseLifecycle(section)
+	releasePolicy, err := decodeReleasePolicy(section)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func buildChartSpec(
 		Values:       values,
 		IncludeCRDs:  true,
 		Repositories: mergeRepositories(atmosConfig, section),
-		Lifecycle:    lifecycle,
+		Release:      releasePolicy,
 	}, nil
 }
 

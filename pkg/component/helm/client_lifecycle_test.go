@@ -55,7 +55,7 @@ func testdataChartSpec(t *testing.T, releaseName string) *chartSpec {
 		ReleaseName: releaseName,
 		Namespace:   "testns",
 		Values:      map[string]any{"replicaCount": 2, "image": map[string]any{"tag": "1.0"}},
-		Lifecycle:   releaseLifecycleResolution{Policy: defaultReleaseLifecycle()},
+		Release:     releasePolicyInput{},
 	}
 }
 

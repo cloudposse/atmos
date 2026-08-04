@@ -329,27 +329,13 @@ var helmComponentSectionKeys = []string{
 	"repository",
 	"namespace",
 	"name",
-	cfg.HelmOnFailureSectionName,
-	cfg.HelmWaitStrategySectionName,
-	cfg.HelmWaitSectionName,
-	cfg.HelmWaitForJobsSectionName,
-	cfg.HelmTimeoutSectionName,
-	cfg.HelmMaxHistorySectionName,
-	cfg.HelmDisableChartHooksSectionName,
-	cfg.HelmSkipCRDsSectionName,
+	cfg.HelmReleaseSectionName,
 }
 
 var helmLifecycleSectionKeys = []string{
 	cfg.ValuesSectionName,
 	cfg.RepositoriesSectionName,
-	cfg.HelmOnFailureSectionName,
-	cfg.HelmWaitStrategySectionName,
-	cfg.HelmWaitSectionName,
-	cfg.HelmWaitForJobsSectionName,
-	cfg.HelmTimeoutSectionName,
-	cfg.HelmMaxHistorySectionName,
-	cfg.HelmDisableChartHooksSectionName,
-	cfg.HelmSkipCRDsSectionName,
+	cfg.HelmReleaseSectionName,
 }
 
 // helmOverrideSectionKeys are native Helm fields accepted in a component or

@@ -80,46 +80,52 @@ var manifestSections = map[string]sectionScope{
 // from the schema-coverage requirement, but listing them here is mandatory: a new `*SectionName`
 // constant absent from BOTH this set and manifestSections fails TestSchemaCoversAllSections.
 var nonManifestSections = map[string]struct{}{
-	"template":            {}, // Packer template sub-field.
-	"playbook":            {}, // Ansible sub-field.
-	"inventory":           {}, // Ansible sub-field.
-	"provider":            {}, // Kubernetes component sub-field (manifest provider engine).
-	"paths":               {}, // Kubernetes component sub-field (manifest paths).
-	"manifests":           {}, // Kubernetes component sub-field (inline manifests).
-	"render":              {}, // Kubernetes component sub-field (render output config).
-	"chart":               {}, // Native Helm component sub-field (chart reference).
-	"values":              {}, // Native Helm component sub-field (inline chart values).
-	"values_files":        {}, // Native Helm component sub-field (chart values file paths).
-	"repositories":        {}, // Native Helm component sub-field (chart repositories).
-	"plugins":             {}, // Helm/Helmfile component sub-field (Helm CLI plugins list).
-	"on_failure":          {}, // Native Helm release-lifecycle failure actions.
-	"wait_strategy":       {}, // Native Helm release-lifecycle field.
-	"wait":                {}, // Native Helm wait-strategy convenience alias.
-	"wait_for_jobs":       {}, // Native Helm release-lifecycle field.
-	"timeout":             {}, // Native Helm release-lifecycle field.
-	"max_history":         {}, // Native Helm release-lifecycle field.
-	"disable_chart_hooks": {}, // Native Helm release-lifecycle field.
-	"skip_crds":           {}, // Native Helm release-lifecycle field.
-	"workspace":           {}, // Terraform workspace (derived/metadata).
-	"required_version":    {}, // Introspected from Terraform, not authored.
-	"required_providers":  {}, // Introspected from Terraform, not authored.
-	"inheritance":         {}, // Describe output.
-	"integrations":        {}, // atmos.yaml / describe output.
-	"github":              {}, // Sub-field of integrations.
-	"process_env":         {}, // Describe output (resolved process env).
-	"cli_args":            {}, // Describe output.
-	"retry":               {}, // Workflow/source retry sub-field, not a manifest section.
-	"tf_cli_vars":         {}, // Derived Terraform CLI vars.
-	"env_tf_cli_args":     {}, // Derived Terraform CLI env.
-	"env_tf_cli_vars":     {}, // Derived Terraform CLI env.
-	"component_type":      {}, // Describe output.
-	"outputs":             {}, // Describe output.
-	"static":              {}, // Describe output (static remote state).
-	"component_path":      {}, // Describe output.
-	"inherits":            {}, // metadata sub-field, not a top-level section.
-	"abstract":            {}, // metadata sub-field, not a top-level section.
-	"container":           {}, // Component-type key; container components are authored under `components.container.<name>` and modeled via the components schema, not as a standalone top-level section.
-	"emulator":            {}, // Component-type key; emulator components are authored under `components.emulator.<name>` and modeled via the components schema, not as a standalone top-level section.
+	"template":           {}, // Packer template sub-field.
+	"playbook":           {}, // Ansible sub-field.
+	"inventory":          {}, // Ansible sub-field.
+	"provider":           {}, // Kubernetes component sub-field (manifest provider engine).
+	"paths":              {}, // Kubernetes component sub-field (manifest paths).
+	"manifests":          {}, // Kubernetes component sub-field (inline manifests).
+	"render":             {}, // Kubernetes component sub-field (render output config).
+	"chart":              {}, // Native Helm component sub-field (chart reference).
+	"values":             {}, // Native Helm component sub-field (inline chart values).
+	"values_files":       {}, // Native Helm component sub-field (chart values file paths).
+	"repositories":       {}, // Native Helm component sub-field (chart repositories).
+	"plugins":            {}, // Helm/Helmfile component sub-field (Helm CLI plugins list).
+	"release":            {}, // Native Helm release policy.
+	"install":            {}, // Native Helm install policy.
+	"upgrade":            {}, // Native Helm upgrade policy.
+	"delete":             {}, // Native Helm delete policy.
+	"on_failure":         {}, // Native Helm operation failure policy.
+	"cleanup_on_failure": {}, // Native Helm upgrade cleanup policy.
+	"wait":               {}, // Native Helm wait policy.
+	"strategy":           {}, // Native Helm wait strategy.
+	"jobs":               {}, // Native Helm job wait policy.
+	"timeout":            {}, // Native Helm release timeout.
+	"history":            {}, // Native Helm history policy.
+	"max":                {}, // Native Helm history maximum.
+	"chart_hooks":        {}, // Native Helm chart-hook policy.
+	"crds":               {}, // Native Helm CRD policy.
+	"workspace":          {}, // Terraform workspace (derived/metadata).
+	"required_version":   {}, // Introspected from Terraform, not authored.
+	"required_providers": {}, // Introspected from Terraform, not authored.
+	"inheritance":        {}, // Describe output.
+	"integrations":       {}, // atmos.yaml / describe output.
+	"github":             {}, // Sub-field of integrations.
+	"process_env":        {}, // Describe output (resolved process env).
+	"cli_args":           {}, // Describe output.
+	"retry":              {}, // Workflow/source retry sub-field, not a manifest section.
+	"tf_cli_vars":        {}, // Derived Terraform CLI vars.
+	"env_tf_cli_args":    {}, // Derived Terraform CLI env.
+	"env_tf_cli_vars":    {}, // Derived Terraform CLI env.
+	"component_type":     {}, // Describe output.
+	"outputs":            {}, // Describe output.
+	"static":             {}, // Describe output (static remote state).
+	"component_path":     {}, // Describe output.
+	"inherits":           {}, // metadata sub-field, not a top-level section.
+	"abstract":           {}, // metadata sub-field, not a top-level section.
+	"container":          {}, // Component-type key; container components are authored under `components.container.<name>` and modeled via the components schema, not as a standalone top-level section.
+	"emulator":           {}, // Component-type key; emulator components are authored under `components.emulator.<name>` and modeled via the components schema, not as a standalone top-level section.
 }
 
 // knownSchemaGaps tracks sections that SHOULD be in the manifest schema but currently are not.

@@ -1103,34 +1103,8 @@
             "generate": {
               "$ref": "#/definitions/generate"
             },
-            "on_failure": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": ["rollback", "cleanup"]
-              }
-            },
-            "wait_strategy": {
-              "$ref": "#/definitions/helm_wait_strategy"
-            },
-            "wait": {
-              "type": "boolean"
-            },
-            "wait_for_jobs": {
-              "type": "boolean"
-            },
-            "timeout": {
-              "type": "string"
-            },
-            "max_history": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "disable_chart_hooks": {
-              "type": "boolean"
-            },
-            "skip_crds": {
-              "type": "boolean"
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
             }
           },
           "required": []
@@ -1146,6 +1120,72 @@
         "hookOnly",
         "legacy"
       ]
+    },
+    "helm_wait_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {"$ref": "#/definitions/helm_wait_strategy"},
+        "jobs": {"type": "boolean"}
+      }
+    },
+    "helm_delete_wait_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {"$ref": "#/definitions/helm_wait_strategy"}
+      }
+    },
+    "helm_history_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max": {"type": "integer", "minimum": 0}
+      }
+    },
+    "helm_install_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "crds": {"type": "string", "enum": ["create", "skip"]},
+        "on_failure": {"type": "string", "enum": ["uninstall", "keep"]}
+      }
+    },
+    "helm_upgrade_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "on_failure": {"type": "string", "enum": ["rollback", "keep"]},
+        "cleanup_on_failure": {"type": "boolean"}
+      }
+    },
+    "helm_delete_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_delete_wait_policy"}
+      }
+    },
+    "helm_release_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "history": {"$ref": "#/definitions/helm_history_policy"},
+        "install": {"$ref": "#/definitions/helm_install_policy"},
+        "upgrade": {"$ref": "#/definitions/helm_upgrade_policy"},
+        "delete": {"$ref": "#/definitions/helm_delete_policy"}
+      }
     },
     "helm_components": {
       "title": "helm_components",
@@ -1253,34 +1293,8 @@
             "overrides": {
               "$ref": "#/definitions/helm_overrides"
             },
-            "on_failure": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": ["rollback", "cleanup"]
-              }
-            },
-            "wait_strategy": {
-              "$ref": "#/definitions/helm_wait_strategy"
-            },
-            "wait": {
-              "type": "boolean"
-            },
-            "wait_for_jobs": {
-              "type": "boolean"
-            },
-            "timeout": {
-              "type": "string"
-            },
-            "max_history": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "disable_chart_hooks": {
-              "type": "boolean"
-            },
-            "skip_crds": {
-              "type": "boolean"
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
             }
           },
           "required": []

@@ -57,18 +57,21 @@ func TestResolveUpgradeChartRef(t *testing.T) {
 }
 
 func TestConfigureReleaseLifecycleActions(t *testing.T) {
-	policy := releaseLifecycle{
-		OnFailure:         []failureAction{failureActionRollback, failureActionCleanup},
-		WaitStrategy:      kube.LegacyStrategy,
-		WaitForJobs:       true,
-		Timeout:           12 * time.Minute,
-		MaxHistory:        7,
-		DisableChartHooks: true,
-		SkipCRDs:          true,
+	policy := effectiveReleasePolicy{
+		OnFailure:        failurePolicyRollback,
+		CleanupOnFailure: true,
+		WaitStrategy:     kube.LegacyStrategy,
+		WaitForJobs:      true,
+		Timeout:          12 * time.Minute,
+		MaxHistory:       7,
+		ChartHooks:       false,
+		CRDs:             crdPolicySkip,
 	}
 
 	install := &action.Install{}
-	configureInstallLifecycle(install, policy)
+	installPolicy := policy
+	installPolicy.OnFailure = failurePolicyUninstall
+	configureInstallLifecycle(install, installPolicy)
 	assert.True(t, install.RollbackOnFailure)
 	assert.Equal(t, kube.LegacyStrategy, install.WaitStrategy)
 	assert.True(t, install.WaitForJobs)
