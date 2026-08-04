@@ -366,7 +366,7 @@ func releaseOperationError(operation string, spec *chartSpec, cause error) error
 		WithContext("namespace", spec.Namespace).
 		WithContext("wait_strategy", policy.WaitStrategy).
 		WithContext("timeout", policy.Timeout).
-		WithContext("timeout_field", cfg.HelmTimeoutSectionName).
+		WithContext("timeout_field", spec.Lifecycle.TimeoutField).
 		Err()
 }
 
