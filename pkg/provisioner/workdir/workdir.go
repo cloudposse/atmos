@@ -47,7 +47,10 @@ func WithOutputSuppressed(ctx context.Context) context.Context {
 	return context.WithValue(ctx, outputSuppressedContextKey{}, struct{}{})
 }
 
-func outputSuppressed(ctx context.Context) bool {
+// OutputSuppressed reports whether transient provisioning output is disabled for ctx.
+func OutputSuppressed(ctx context.Context) bool {
+	defer perf.Track(nil, "workdir.OutputSuppressed")()
+
 	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
 	return ok
 }
@@ -160,7 +163,7 @@ func (s *Service) Provision(
 			Err()
 	}
 
-	suppressOutput := outputSuppressed(ctx)
+	suppressOutput := OutputSuppressed(ctx)
 	if !suppressOutput {
 		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
@@ -272,7 +275,7 @@ func (s *Service) syncLocalToWorkdir(
 		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
 	}
 
-	contentHash := s.computeContentHash(workdirPath)
+	contentHash := s.computeContentHash(workdirPath, suppressOutput)
 	// Use workdirComponent (instance name) in metadata for identification.
 	metadata := buildLocalMetadata(&localMetadataParams{
 		component:        workdirComponent,
@@ -312,10 +315,12 @@ func (s *Service) validateComponentPath(
 }
 
 // computeContentHash computes the content hash, logging a warning on failure.
-func (s *Service) computeContentHash(workdirPath string) string {
+func (s *Service) computeContentHash(workdirPath string, suppressOutput bool) string {
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
-		ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		if !suppressOutput {
+			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		}
 		return ""
 	}
 	return contentHash
