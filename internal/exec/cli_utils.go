@@ -231,6 +231,17 @@ func ProcessCommandLineArgs(
 		configAndStacksInfo.Stack = stack
 	}
 
+	// Fallback: PreRunE hooks receive args with flags already stripped by Cobra's
+	// own parsing, so the raw-args scan in processArgsAndFlags never sees
+	// --dry-run there and DryRun stays false. Cobra has already parsed the flag
+	// onto the FlagSet by this point regardless of which Run stage called us, so
+	// pull it from there directly, same as the Stack fallback above.
+	if !configAndStacksInfo.DryRun {
+		if dryRun, err := flags.GetBool("dry-run"); err == nil && dryRun {
+			configAndStacksInfo.DryRun = true
+		}
+	}
+
 	return configAndStacksInfo, nil
 }
 
