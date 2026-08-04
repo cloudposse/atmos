@@ -276,6 +276,7 @@ func updateMSALCacheFromCreds(home string, azureCreds *types.AzureCredentials, u
 		KeyVaultExpiration: azureCreds.KeyVaultExpiration,
 		UserOID:            userOID,
 		TenantID:           tenantID,
+		AuthMethod:         azureCreds.AuthMethod,
 		HomeAccountID:      azureCreds.HomeAccountID,
 		ClientID:           azureCreds.ClientID,
 		IsServicePrincipal: azureCreds.IsServicePrincipal,
@@ -300,6 +301,9 @@ type msalCacheUpdate struct {
 	KeyVaultExpiration string
 	UserOID            string
 	TenantID           string
+	// AuthMethod is the AzureCredentials.AuthMethod that minted these tokens;
+	// selects the MSAL cache account_source label.
+	AuthMethod string
 	// HomeAccountID is MSAL's "{home-oid}.{home-tenant-id}" for the authenticated
 	// account, when the provider received it from MSAL. For guest (B2B) users this
 	// differs from "{UserOID}.{TenantID}" and MUST be used for the cache Account
@@ -397,6 +401,16 @@ type msalIdentifiers struct {
 	realm         string
 }
 
+// accountSourceForAuthMethod returns the MSAL cache account_source label for an
+// auth method, mirroring what az itself records: "authorization_code" for the
+// interactive browser flow, "device_code" otherwise.
+func accountSourceForAuthMethod(authMethod string) string {
+	if authMethod == types.AzureAuthMethodInteractive {
+		return "authorization_code"
+	}
+	return "device_code"
+}
+
 // addUserAccountAndTokens adds account entry and tokens for user authentication.
 func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdate) {
 	// Prefer MSAL's own home account ID: for guest (B2B) users the home tenant
@@ -425,7 +439,7 @@ func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdat
 		"local_account_id": params.UserOID,
 		"username":         extractUsernameOrFallback(params.AccessToken),
 		"authority_type":   "MSSTS",
-		"account_source":   "device_code",
+		"account_source":   accountSourceForAuthMethod(params.AuthMethod),
 	}
 	sections.account[accountKey] = accountEntry
 

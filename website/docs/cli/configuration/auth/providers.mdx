@@ -179,15 +179,66 @@ Actions token is always picked up on the next run.
 </TabItem>
 <TabItem value="azure" label="Azure">
 
-## Device Code
+## Interactive Browser
 
-For interactive browser-based authentication to Azure, similar to `az login --use-device-code`.
+The recommended provider for human logins to Azure. Performs the same interactive browser flow as `az login` (authorization code + PKCE on a localhost redirect), so it works in tenants where Conditional Access blocks the device code flow.
 
 <File title="atmos.yaml">
 ```yaml
 auth:
   providers:
     azure-interactive:
+      kind: azure/interactive
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/interactive`.</dd>
+
+  <dt>`spec.tenant_id`</dt>
+  <dd>**Required.** Azure AD tenant ID.</dd>
+
+  <dt>`spec.subscription_id`</dt>
+  <dd>Optional. Default Azure subscription ID.</dd>
+
+  <dt>`spec.location`</dt>
+  <dd>Optional. Default Azure region (e.g., `eastus`, `westeurope`).</dd>
+
+  <dt>`spec.client_id`</dt>
+  <dd>Optional. Azure AD application (client) ID. Defaults to Azure CLI's public client ID.</dd>
+
+  <dt>`spec.cloud_environment`</dt>
+  <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
+</dl>
+
+**How it works:**
+1. Atmos first tries silent authentication from the persisted MSAL cache — repeat logins complete without opening a browser
+2. If no cached session exists, Atmos opens your default browser for an authorization-code + PKCE sign-in (with MFA if configured)
+3. Atmos acquires tokens for Azure Resource Manager, Microsoft Graph, and Azure Key Vault
+4. Tokens are cached in `~/.azure/msal_token_cache.json` and `~/.azure/azureProfile.json`, so the `az` CLI and Terraform work without ever running `az login`
+
+:::note
+`azure/interactive` requires an interactive terminal and a browser. For headless environments and CI/CD, use `azure/oidc`.
+:::
+
+## Device Code
+
+For interactive browser-based authentication to Azure, similar to `az login --use-device-code`. Useful when a browser can't be opened on the machine running Atmos (e.g., SSH sessions).
+
+:::warning Conditional Access may block device code
+Microsoft-managed Conditional Access policies now block the device code flow in many tenants (error `AADSTS530035`). If device code sign-in fails with this error, use `azure/interactive` instead.
+:::
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    azure-device-code:
       kind: azure/device-code
       spec:
         tenant_id: "12345678-1234-1234-1234-123456789012"
@@ -351,7 +402,7 @@ Azure sovereign clouds use different authentication endpoints and API scopes tha
 auth:
   providers:
     azure-gov:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "12345678-1234-1234-1234-123456789012"
         subscription_id: "87654321-4321-4321-4321-210987654321"
@@ -620,9 +671,9 @@ auth:
       kind: github/oidc
       region: us-east-1
 
-    # Azure interactive login
+    # Azure interactive browser login
     azure-dev:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "12345678-1234-1234-1234-123456789012"
         subscription_id: "87654321-4321-4321-4321-210987654321"
@@ -730,7 +781,7 @@ atmos --profile platform auth login
 
 ## Tutorials
 
-- [Azure Authentication](/tutorials/azure-authentication) — Complete guide for Azure device code, OIDC, and CLI authentication
+- [Azure Authentication](/tutorials/azure-authentication) — Complete guide for Azure interactive browser, device code, OIDC, and CLI authentication
 
 ## See Also
 
