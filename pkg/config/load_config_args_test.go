@@ -134,6 +134,54 @@ components:
 	require.ErrorIs(t, err, edition.ErrInvalidEdition)
 }
 
+// TestLoadConfigFromCLIArgs_AppliesGitRootBasePath reproduces cloudposse/atmos#2863:
+// loading config via --config with an empty base_path skipped git-root discovery,
+// because loadConfigFromCLIArgs never called applyGitRootBasePath, unlike the main
+// LoadConfig auto-discovery flow (load.go). This asserts the desired end state --
+// BasePath resolved to the (mocked) git root -- so it fails before the fix lands
+// and passes once loadConfigFromCLIArgs calls applyGitRootBasePath.
+func TestLoadConfigFromCLIArgs_AppliesGitRootBasePath(t *testing.T) {
+	// The fixture atmos.yaml lives in its own temp dir, separate from the process
+	// cwd: hasLocalAtmosConfig only inspects the cwd, never the --config file's
+	// directory, so the two must be kept apart to exercise the real code path.
+	configDir := t.TempDir()
+	configFile := filepath.Join(configDir, "atmos.yaml")
+
+	configContent := `
+base_path: ""
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+	require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o644))
+
+	// cwd must be a separate, atmos-config-free directory so hasLocalAtmosConfig(cwd)
+	// returns false and git-root discovery is not skipped.
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	// Mock git-root discovery deterministically (see pkg/utils/git.go ProcessTagGitRoot,
+	// which short-circuits to TEST_GIT_ROOT when set, bypassing real git detection).
+	t.Setenv("TEST_GIT_ROOT", "/mock/git/repo/root")
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configFile},
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+	require.NoError(t, err)
+
+	// Desired end state: BasePath resolves to the git root, exactly like the main
+	// LoadConfig auto-discovery path does for the same atmos.yaml content.
+	assert.Equal(t, "/mock/git/repo/root", atmosConfig.BasePath)
+}
+
 func TestLoadConfigFromCLIArgs_InvalidConfigDir(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
