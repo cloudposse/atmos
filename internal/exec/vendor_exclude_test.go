@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -235,7 +237,21 @@ func TestCreateComponentSkipFunc_IncludeOnly(t *testing.T) {
 	}
 }
 
-// mockFileInfo is defined in copy_glob_error_paths_test.go and reused here.
+// mockFileInfo is a minimal os.FileInfo implementation for exercising skip/exclude predicates
+// without touching the real filesystem.
+type mockFileInfo struct {
+	name  string
+	size  int64
+	mode  os.FileMode
+	isDir bool
+}
+
+func (m mockFileInfo) Name() string       { return m.name }
+func (m mockFileInfo) Size() int64        { return m.size }
+func (m mockFileInfo) Mode() os.FileMode  { return m.mode }
+func (m mockFileInfo) IsDir() bool        { return m.isDir }
+func (m mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m mockFileInfo) Sys() interface{}   { return nil }
 
 // TestShouldExcludeFile tests the shouldExcludeFile function from vendor_utils.go.
 // This ensures the same fix is applied consistently to both component and general vendor logic.
