@@ -13,8 +13,8 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	vault "github.com/hashicorp/vault/api"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -296,40 +296,42 @@ func newTestSSMStore(client SSMClient) *SSMStore {
 
 func TestSSMStore_Delete(t *testing.T) {
 	t.Run("deletes via the injected client", func(t *testing.T) {
-		mockSSM := new(MockSSMClient)
-		mockSSM.On("DeleteParameter", mock.Anything, mock.Anything).
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
+		mockSSM.EXPECT().DeleteParameter(gomock.Any(), gomock.Any()).
 			Return(&ssm.DeleteParameterOutput{}, nil)
 		s := newTestSSMStore(mockSSM)
 
 		require.NoError(t, s.Delete("prod", "api", "API_KEY"))
-		mockSSM.AssertExpectations(t)
 	})
 
 	t.Run("validation errors", func(t *testing.T) {
-		s := newTestSSMStore(new(MockSSMClient))
+		ctrl := gomock.NewController(t)
+		s := newTestSSMStore(NewMockSSMClient(ctrl))
 		assert.ErrorIs(t, s.Delete("prod", "api", ""), store.ErrEmptyKey)
 	})
 
 	t.Run("scoped coordinates omit empty segments", func(t *testing.T) {
 		// Stack-scoped (empty component) and global (empty stack and component) secret
 		// coordinates are valid; the path simply omits the empty segments.
-		mockSSM := new(MockSSMClient)
-		mockSSM.On("DeleteParameter", mock.Anything, &ssm.DeleteParameterInput{
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
+		mockSSM.EXPECT().DeleteParameter(gomock.Any(), &ssm.DeleteParameterInput{
 			Name: aws.String("/atmos/prod/k"),
 		}).Return(&ssm.DeleteParameterOutput{}, nil)
-		mockSSM.On("DeleteParameter", mock.Anything, &ssm.DeleteParameterInput{
+		mockSSM.EXPECT().DeleteParameter(gomock.Any(), &ssm.DeleteParameterInput{
 			Name: aws.String("/atmos/k"),
 		}).Return(&ssm.DeleteParameterOutput{}, nil)
 		s := newTestSSMStore(mockSSM)
 
 		require.NoError(t, s.Delete("prod", "", "k"))
 		require.NoError(t, s.Delete("", "", "k"))
-		mockSSM.AssertExpectations(t)
 	})
 
 	t.Run("client error wrapped", func(t *testing.T) {
-		mockSSM := new(MockSSMClient)
-		mockSSM.On("DeleteParameter", mock.Anything, mock.Anything).
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
+		mockSSM.EXPECT().DeleteParameter(gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("access denied"))
 		s := newTestSSMStore(mockSSM)
 
@@ -340,8 +342,9 @@ func TestSSMStore_Delete(t *testing.T) {
 
 func TestSSMStore_Has(t *testing.T) {
 	t.Run("present", func(t *testing.T) {
-		mockSSM := new(MockSSMClient)
-		mockSSM.On("GetParameter", mock.Anything, mock.Anything).
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
+		mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).
 			Return(&ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{Value: aws.String(`"v"`)}}, nil)
 		s := newTestSSMStore(mockSSM)
 
@@ -351,8 +354,9 @@ func TestSSMStore_Has(t *testing.T) {
 	})
 
 	t.Run("error propagates", func(t *testing.T) {
-		mockSSM := new(MockSSMClient)
-		mockSSM.On("GetParameter", mock.Anything, mock.Anything).
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
+		mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("throttled"))
 		s := newTestSSMStore(mockSSM)
 
