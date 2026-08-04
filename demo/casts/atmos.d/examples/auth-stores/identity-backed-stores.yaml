@@ -56,7 +56,7 @@ commands:
             interval: 750ms
             command: *store_list_cmd
           - type: simulate
-            text: "# local-aws is a real emulator identity, so its store actually works"
+            text: "# local-aws is a local emulator, so let's take it for a spin"
           - type: simulate
             text: &emulator_up_cmd atmos emulator up aws -s local --ephemeral
           - type: shell
