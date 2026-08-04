@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	pstore "github.com/cloudposse/atmos/pkg/store"
@@ -217,7 +218,7 @@ func TestRunStoreListKeyValues_Empty(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, stdout.String())
-	assert.Contains(t, stderr.String(), `No keys found in store "app-metadata".`)
+	assert.Contains(t, ansi.Strip(stderr.String()), `No keys found in store "app-metadata".`)
 }
 
 func TestRunStoreListKeyValues_NotSupported(t *testing.T) {
