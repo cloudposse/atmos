@@ -72,6 +72,29 @@ func TestOnAfterAggregateRendersApplySummary(t *testing.T) {
 	assert.Contains(t, writer.summary, "| dev | api | succeeded | api | api | apps | kubernetes | - |")
 }
 
+func TestOnAfterAggregateUsesSafeDetailFences(t *testing.T) {
+	writer := &fakeWriter{}
+	err := (&Plugin{}).onAfterAggregate(&plugin.HookContext{
+		Provider: fakeProvider{writer: writer},
+		Aggregate: schema.HelmCIResultSet{
+			Command: "plan",
+			Results: []schema.HelmCIResult{
+				{
+					Stack: "dev", Component: "api", Processed: true,
+					Summary: map[string]any{"diff": "+ change\n```\nnot summary Markdown"},
+				},
+				{
+					Stack: "dev", Component: "worker", Status: "failed",
+					Error: "render failed\n```\nnot summary Markdown",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, writer.summary, "````diff\n+ change\n```\nnot summary Markdown\n````")
+	assert.Contains(t, writer.summary, "````text\nrender failed\n```\nnot summary Markdown\n````")
+}
+
 func TestOnAfterAggregateSkipsInvalidOrDisabledAndReturnsWriterError(t *testing.T) {
 	pluginUnderTest := &Plugin{}
 	require.NoError(t, pluginUnderTest.onAfterAggregate(&plugin.HookContext{Provider: fakeProvider{}, Aggregate: "invalid"}))
