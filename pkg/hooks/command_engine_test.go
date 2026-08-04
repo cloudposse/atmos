@@ -204,6 +204,8 @@ func TestCommandEngine_RoutesSubprocessOutputToContextWriters(t *testing.T) {
 			Env: map[string]string{
 				"_ATMOS_TEST_ECHO_STDOUT": "1",
 				"_ATMOS_TEST_STDOUT_BODY": "hook progress\rhook complete\n",
+				"_ATMOS_TEST_ECHO_STDERR": "1",
+				"_ATMOS_TEST_STDERR_BODY": "hook warning\n",
 			},
 		}),
 		Kind: kind,
@@ -218,7 +220,7 @@ func TestCommandEngine_RoutesSubprocessOutputToContextWriters(t *testing.T) {
 	_, err := ctx.Kind.Engine.Run(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "hook progress\rhook complete\n", stdout.String())
-	assert.Empty(t, stderr.String())
+	assert.Equal(t, "hook warning\n", stderr.String())
 }
 
 func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {

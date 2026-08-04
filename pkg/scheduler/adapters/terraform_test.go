@@ -359,12 +359,14 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 // fail for specific nodes, so tests can assert the Dispatch-level wiring
 // added to fix component hooks.RunAll not firing under bulk dispatch.
 type testNodeHooks struct {
-	mu           sync.Mutex
-	beforeCalls  []string
-	afterCalls   []string
-	beforeErr    map[string]error
-	afterErr     map[string]error
-	beforeOutput string
+	mu                  sync.Mutex
+	beforeCalls         []string
+	afterCalls          []string
+	beforeErr           map[string]error
+	afterErr            map[string]error
+	beforeOutput        string
+	beforeOutputReady   chan<- struct{}
+	beforeOutputRelease <-chan struct{}
 }
 
 func (n *testNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
@@ -373,18 +375,31 @@ func (n *testNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacks
 
 func (n *testNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	n.mu.Lock()
-	defer n.mu.Unlock()
 	key := info.Component + "@" + info.Stack
 	n.beforeCalls = append(n.beforeCalls, key)
-	if n.beforeErr != nil {
-		return n.beforeErr[key]
+	err := n.beforeErr[key]
+	beforeOutput := n.beforeOutput
+	ready := n.beforeOutputReady
+	release := n.beforeOutputRelease
+	n.mu.Unlock()
+
+	if err != nil {
+		return err
 	}
-	if n.beforeOutput != "" {
-		if writers.Stdout == nil {
-			writers.Stdout = os.Stdout
-		}
-		_, _ = fmt.Fprint(writers.Stdout, n.beforeOutput)
+	if beforeOutput == "" {
+		return nil
 	}
+	if writers.Stdout == nil {
+		writers.Stdout = os.Stdout
+	}
+	if ready != nil && release != nil {
+		_, _ = fmt.Fprint(writers.Stdout, "hook progress\r")
+		ready <- struct{}{}
+		<-release
+		_, _ = fmt.Fprint(writers.Stdout, "hook complete\n")
+		return nil
+	}
+	_, _ = fmt.Fprint(writers.Stdout, beforeOutput)
 	return nil
 }
 
@@ -454,20 +469,40 @@ func TestExecuteTerraformConcurrentHooksUseNodeWriters(t *testing.T) {
 		},
 	}
 
-	err = ExecuteTerraform(context.Background(), TerraformOptions{
-		AtmosConfig: &schema.AtmosConfiguration{},
-		Info: &schema.ConfigAndStacksInfo{
-			All:               true,
-			SubCommand:        "plan",
-			MaxConcurrency:    2,
-			TerraformLogOrder: terraformLogOrderStream,
-			NodeHooks:         &testNodeHooks{beforeOutput: "hook progress\rhook complete\n"},
-		},
-		Stacks: stacks,
-		Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
-			return TerraformExecutionResult{}, nil
-		},
-	})
+	ready := make(chan struct{}, 2)
+	release := make(chan struct{})
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- ExecuteTerraform(context.Background(), TerraformOptions{
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info: &schema.ConfigAndStacksInfo{
+				All:               true,
+				SubCommand:        "plan",
+				MaxConcurrency:    2,
+				TerraformLogOrder: terraformLogOrderStream,
+				NodeHooks: &testNodeHooks{
+					beforeOutput:        "hook progress\rhook complete\n",
+					beforeOutputReady:   ready,
+					beforeOutputRelease: release,
+				},
+			},
+			Stacks: stacks,
+			Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+				return TerraformExecutionResult{}, nil
+			},
+		})
+	}()
+
+	for range 2 {
+		select {
+		case <-ready:
+		case <-time.After(time.Second):
+			t.Fatal("concurrent hooks did not both write their partial records")
+		}
+	}
+	close(release)
+	err = <-errCh
 	require.NoError(t, err)
 	require.NoError(t, stdoutWriter.Close())
 	stdout, err := io.ReadAll(stdoutReader)
