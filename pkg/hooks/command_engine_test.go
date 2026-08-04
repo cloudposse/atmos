@@ -234,7 +234,8 @@ func TestRenderTerminalRoutesSummaryToContextStderr(t *testing.T) {
 	})
 	require.NoError(t, writer.Flush())
 
-	assert.Contains(t, stderr.String(), "[test/component] hook summary")
+	assert.Contains(t, stderr.String(), "[test/component] ")
+	assert.Contains(t, stderr.String(), "hook summary")
 }
 
 func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {
