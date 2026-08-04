@@ -353,14 +353,18 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 			cfg.RepositoriesSectionName: []any{
 				map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
 			},
-			"repository":                    "https://example.com/charts",
-			"version":                       "1.2.3",
-			"name":                          "demo",
-			"namespace":                     "apps",
-			cfg.HelmWaitStrategySectionName: "watcher",
-			cfg.HelmWaitForJobsSectionName:  true,
-			cfg.HelmTimeoutSectionName:      "15m",
-			cfg.HelmMaxHistorySectionName:   0,
+			"repository": "https://example.com/charts",
+			"version":    "1.2.3",
+			"name":       "demo",
+			"namespace":  "apps",
+			cfg.HelmReleaseSectionName: map[string]any{
+				cfg.HelmWaitSectionName: map[string]any{
+					cfg.HelmWaitStrategySectionName: "watcher",
+					cfg.HelmWaitJobsSectionName:     true,
+				},
+				cfg.HelmTimeoutSectionName: "15m",
+				cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 0},
+			},
 		},
 	}
 
@@ -372,11 +376,13 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 	assert.Equal(t, "demo", spec.ReleaseName)
 	assert.Equal(t, "apps", spec.Namespace)
 	assert.True(t, spec.IncludeCRDs)
-	assert.Equal(t, kube.StatusWatcherStrategy, spec.Lifecycle.Policy.WaitStrategy)
-	assert.True(t, spec.Lifecycle.Policy.WaitForJobs)
-	assert.Equal(t, 15*time.Minute, spec.Lifecycle.Policy.Timeout)
-	assert.Zero(t, spec.Lifecycle.Policy.MaxHistory)
-	assert.True(t, spec.Lifecycle.TimeoutExplicit)
+	resolved, err := resolveReleaseLifecycle(spec.Release, releaseOperationUpgrade, false)
+	require.NoError(t, err)
+	assert.Equal(t, kube.StatusWatcherStrategy, resolved.Policy.WaitStrategy)
+	assert.True(t, resolved.Policy.WaitForJobs)
+	assert.Equal(t, 15*time.Minute, resolved.Policy.Timeout)
+	assert.Zero(t, resolved.Policy.MaxHistory)
+	assert.True(t, resolved.TimeoutExplicit)
 	repo, found := findRepository(spec.Repositories, "bitnami")
 	require.True(t, found)
 	assert.Equal(t, "https://charts.bitnami.com/bitnami", repo.URL)
