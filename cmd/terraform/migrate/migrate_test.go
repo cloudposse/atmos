@@ -1,0 +1,1622 @@
+package migrate
+
+import (
+	"bytes"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
+	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
+)
+
+func TestMigrateCommandRegistered(t *testing.T) {
+	cmd := GetCommand(Options{ParentCommand: &cobra.Command{Use: "terraform"}})
+	require.NotNil(t, cmd)
+	assert.Equal(t, "migrate", cmd.Use)
+
+	var foundPlan, foundApply, foundList bool
+	for _, subCmd := range cmd.Commands() {
+		switch subCmd.Use {
+		case "plan [component]":
+			foundPlan = true
+		case "apply [component]":
+			foundApply = true
+		case "list [component]":
+			foundList = true
+		}
+	}
+	assert.True(t, foundPlan)
+	assert.True(t, foundApply)
+	assert.True(t, foundList)
+}
+
+func TestMigrateParserFlags(t *testing.T) {
+	require.NotNil(t, migrateParser)
+	registry := migrateParser.Registry()
+	assert.True(t, registry.Has("migration"))
+	assert.True(t, registry.Has("tfmigrate-config"))
+	assert.True(t, registry.Has("backend-config"))
+	assert.True(t, registry.Has("all"))
+	assert.True(t, registry.Has("affected"))
+}
+
+func TestMigrateParserViperBinding(t *testing.T) {
+	v := viper.New()
+	require.NoError(t, migrateParser.BindToViper(v))
+
+	v.Set("migration", "migrations/001.hcl")
+	v.Set("tfmigrate-config", ".tfmigrate.hcl")
+	v.Set("backend-config", []string{"bucket=state"})
+
+	assert.Equal(t, "migrations/001.hcl", v.GetString("migration"))
+	assert.Equal(t, ".tfmigrate.hcl", v.GetString("tfmigrate-config"))
+	assert.Equal(t, []string{"bucket=state"}, v.GetStringSlice("backend-config"))
+}
+
+func TestParseTerraformMigratePreservesIdentity(t *testing.T) {
+	tests := []struct {
+		name     string
+		action   string
+		args     []string
+		env      string
+		expected string
+	}{
+		{
+			name:     "plan with explicit identity",
+			action:   tfmigrate.ActionPlan,
+			args:     []string{"vpc", "--stack", "dev", "--identity", "aws-dev"},
+			expected: "aws-dev",
+		},
+		{
+			name:     "apply with explicit identity",
+			action:   tfmigrate.ActionApply,
+			args:     []string{"vpc", "--stack", "dev", "--identity=aws-prod"},
+			expected: "aws-prod",
+		},
+		{
+			name:     "plan with identity from environment",
+			action:   tfmigrate.ActionPlan,
+			args:     []string{"vpc", "--stack", "dev"},
+			env:      "env-identity",
+			expected: "env-identity",
+		},
+		{
+			name:     "apply with identity from environment",
+			action:   tfmigrate.ActionApply,
+			args:     []string{"vpc", "--stack", "dev"},
+			env:      "env-identity",
+			expected: "env-identity",
+		},
+		{
+			name:     "identity false disables auth",
+			action:   tfmigrate.ActionPlan,
+			args:     []string{"vpc", "--stack", "dev", "--identity=false"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parent := setupMigrateParseTest(t)
+			if tt.env != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.env)
+			}
+			cmd := newMigrateActionTestCommand(parent, tt.action)
+
+			info, opts, err := parseTerraformMigrate(cmd, tt.args, tt.action)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.action, opts.Action)
+			assert.Equal(t, "vpc", info.ComponentFromArg)
+			assert.Equal(t, "dev", info.Stack)
+			assert.Equal(t, tt.expected, info.Identity)
+		})
+	}
+}
+
+func TestParseTerraformMigrate_InvalidActionReturnsValidateError(t *testing.T) {
+	// parseTerraformMigrate is called directly with an action string here
+	// (production callers always pass tfmigrate.ActionPlan/ActionApply), so
+	// this exercises the tfmigrate.Options.Validate() error branch that a
+	// production caller could never reach through the constrained cobra
+	// commands, but the function must still guard against.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, "bogus-action")
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"vpc", "--stack", "dev"}, "bogus-action")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestParseTerraformMigrate_ParseRunOptionsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+	// An invalid --failure-mode makes shared.ParseRunOptions fail before
+	// parseTerraformMigrate ever reaches ProcessCommandLineArgs.
+	viper.GetViper().Set("failure-mode", "not-a-real-mode")
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"vpc", "--stack", "dev"}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestParseTerraformMigrate_ProcessCommandLineArgsErrorPropagates(t *testing.T) {
+	// A malformed value for a registered bool flag makes cobra's ParseFlags
+	// fail inside e.ProcessCommandLineArgs, before any component/stack
+	// resolution — must surface directly, not get swallowed.
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"vpc", "--stack", "dev", "--dry-run=not-a-bool"}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+}
+
+func TestParseTerraformMigrate_ResolveAndPromptForArgsErrorPropagates(t *testing.T) {
+	// A component argument given as an explicit relative path (e.g.
+	// "./components/terraform/missing") sets NeedsPathResolution, routing
+	// finalizeTerraformMigrateInfo through shared.ResolveComponentPath. When the
+	// path doesn't resolve to a real component in the stack, that failure must
+	// propagate out of parseTerraformMigrate.
+	fixtureDir := createMinimalAtmosFixture(t)
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{
+		"./components/terraform/missing", "--stack", "dev", "--config-path", fixtureDir,
+	}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+}
+
+func TestParseTerraformMigrate_HelpShortCircuitsWithoutError(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{"--help"}, tfmigrate.ActionPlan)
+
+	// finalizeTerraformMigrateInfo's NeedHelp branch returns (true, cmd.Usage());
+	// cmd.Usage() itself does not error for a well-formed command, so the
+	// done=true short-circuit at the parseTerraformMigrate call site returns
+	// that nil error rather than a populated ConfigAndStacksInfo.
+	require.NoError(t, err)
+}
+
+func TestParseTerraformMigrate_IdentitySelectWithNoIdentitiesConfiguredErrors(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parentCommand, tfmigrate.ActionPlan)
+
+	_, _, err := parseTerraformMigrate(cmd, []string{
+		"service", "--stack", "dev", "--config-path", fixtureDir, "--identity",
+	}, tfmigrate.ActionPlan)
+
+	// finalizeTerraformMigrateInfo routes info.Identity == "__SELECT__" into
+	// shared.HandleInteractiveIdentitySelection, which errors immediately when
+	// the fixture declares no auth identities at all.
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
+func TestParseTerraformMigrateListArgsPreservesIdentity(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		env      string
+		expected string
+	}{
+		{
+			name:     "explicit identity",
+			args:     []string{"vpc", "--stack", "dev", "--identity", "aws-dev"},
+			expected: "aws-dev",
+		},
+		{
+			name:     "identity from environment",
+			args:     []string{"vpc", "--stack", "dev"},
+			env:      "env-identity",
+			expected: "env-identity",
+		},
+		{
+			name:     "identity false disables auth",
+			args:     []string{"vpc", "--stack", "dev", "--identity=false"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "identity without value uses interactive selector",
+			args:     []string{"vpc", "--stack", "dev", "--identity"},
+			expected: cfg.IdentityFlagSelectValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupMigrateParseTest(t)
+			if tt.env != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.env)
+			}
+
+			info, err := parseTerraformMigrateListArgs(tt.args)
+			require.NoError(t, err)
+
+			assert.Equal(t, "dev", info.Stack)
+			assert.Equal(t, tt.expected, info.Identity)
+		})
+	}
+}
+
+func TestParseTerraformMigrateListArgs_ProcessCommandLineArgsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+
+	_, err := parseTerraformMigrateListArgs([]string{"vpc", "--stack", "dev", "--dry-run=not-a-bool"})
+
+	require.Error(t, err)
+}
+
+func TestRunTerraformMigrateList_ParseArgsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+
+	err := runTerraformMigrateList(cmd, []string{"vpc", "--stack", "dev", "--dry-run=not-a-bool"})
+
+	require.Error(t, err)
+}
+
+func TestRunTerraformMigrateList_ParseRunOptionsErrorPropagates(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+	viper.GetViper().Set("failure-mode", "not-a-real-mode")
+
+	err := runTerraformMigrateList(cmd, []string{"vpc", "--stack", "dev"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestRunTerraformMigrateList_IdentitySelectWithNoIdentitiesConfiguredErrors(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+
+	err := runTerraformMigrateList(cmd, []string{
+		"service", "--stack", "dev", "--config-path", fixtureDir, "--identity",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
+func TestRunTerraformMigrateList_CollectRowsErrorPropagates(t *testing.T) {
+	// A syntactically invalid atmos.yaml makes cfg.InitCliConfig fail inside
+	// collectTfmigrateListRows; the error must propagate out of
+	// runTerraformMigrateList (exercising both call sites' error branches).
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("not: [valid: yaml"), 0o644))
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+
+	err := runTerraformMigrateList(cmd, []string{
+		"service", "--stack", "dev", "--config-path", dir, "--identity=false",
+	})
+
+	require.Error(t, err)
+}
+
+func TestCollectTfmigrateListRows_SetupComponentAuthErrorPropagates(t *testing.T) {
+	// A nonexistent --identity must fail component auth setup inside
+	// collectTfmigrateListRows before ExecuteDescribeStacksWithAuthDisabled
+	// ever runs (distinct from the InitCliConfig and DescribeStacks failures
+	// exercised elsewhere in this file).
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	rows, err := collectTfmigrateListRows(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Identity:               "nonexistent-identity",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, rows)
+}
+
+func TestCollectTfmigrateListRows_DescribeStacksErrorPropagates(t *testing.T) {
+	// A stack manifest that fails to parse makes ExecuteDescribeStacksWithAuthDisabled
+	// itself fail (distinct from the InitCliConfig failure exercised above), which
+	// must propagate out of collectTfmigrateListRows.
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "service"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	_, err := collectTfmigrateListRows(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+	})
+
+	require.Error(t, err)
+}
+
+func TestCollectTfmigrateListRows_SkipsQueryMismatchedComponent(t *testing.T) {
+	// collectTfmigrateListRows must apply info.Query the same way the query
+	// execution path does: a component that fails the query predicate must be
+	// walked (via walkTfmigrateComponents) but excluded from the returned rows,
+	// not included with a mismatched hook/backend row.
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "service"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "other"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(`
+vars:
+  stage: dev
+components:
+  terraform:
+    service:
+      vars:
+        enabled: true
+    other:
+      vars:
+        enabled: false
+`), 0o644))
+
+	rows, err := collectTfmigrateListRows(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+		Query:                  ".vars.enabled == true",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the query must filter out the disabled component")
+	assert.Equal(t, "service", rows[0][tfmigrateListKeyComponent])
+	assert.Equal(t, "dev", rows[0][tfmigrateListKeyStack])
+}
+
+func TestApplyMigrateListComponentArgSurvivesRunOptions(t *testing.T) {
+	// Regression: shared.ApplyRunOptions replaces info.Components with the
+	// --components flag value, which used to silently drop the positional
+	// component argument so `migrate list <component>` listed every component.
+	info := schema.ConfigAndStacksInfo{}
+	shared.ApplyRunOptions(&info, &shared.RunOptions{})
+	applyMigrateListComponentArg(&info, []string{"vpc", "--stack", "dev"})
+	assert.Equal(t, []string{"vpc"}, info.Components)
+}
+
+func TestApplyMigrateListComponentArgMergesWithComponentsFlag(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{}
+	shared.ApplyRunOptions(&info, &shared.RunOptions{Components: []string{"eks"}})
+	applyMigrateListComponentArg(&info, []string{"vpc"})
+	assert.Equal(t, []string{"eks", "vpc"}, info.Components)
+}
+
+func TestApplyMigrateListComponentArgNoArgsListsAll(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{}
+	shared.ApplyRunOptions(&info, &shared.RunOptions{})
+	applyMigrateListComponentArg(&info, nil)
+	assert.Empty(t, info.Components)
+}
+
+func TestMigrateListParserFlags(t *testing.T) {
+	require.NotNil(t, migrateListParser)
+	registry := migrateListParser.Registry()
+	assert.True(t, registry.Has("format"))
+	assert.True(t, registry.Has("columns"))
+	assert.True(t, registry.Has("sort"))
+	assert.True(t, registry.Has("delimiter"))
+	// --all is deliberately NOT registered on list: with no positional
+	// [component] arg, list already shows every component in every stack, so
+	// --all would add no behavior (confirmed dead before removal).
+	assert.False(t, registry.Has("all"))
+}
+
+func TestTfmigrateListRow(t *testing.T) {
+	row := tfmigrateListRow("plat-ue2-dev", "s3-bucket", map[string]any{
+		cfg.WorkspaceSectionName:   "prod",
+		cfg.BackendTypeSectionName: cfg.BackendTypeS3,
+		cfg.BackendSectionName: map[string]any{
+			"bucket": "tfstate-bucket",
+			"region": "us-east-1",
+			"assume_role": map[string]any{
+				"role_arn": "arn:aws:iam::123456789012:role/tfstate",
+			},
+		},
+		cfg.HooksSectionName: map[string]any{
+			"state-migration": map[string]any{
+				"kind":      "tfmigrate",
+				"mode":      "apply",
+				"migration": "migrations/001.hcl",
+				"config":    ".tfmigrate.hcl",
+			},
+		},
+	})
+
+	assert.Equal(t, "s3-bucket", row["component"])
+	assert.Equal(t, "plat-ue2-dev", row["stack"])
+	assert.Equal(t, "prod", row["workspace"])
+	assert.Equal(t, "state-migration", row["hook"])
+	assert.Equal(t, "apply", row["mode"])
+	assert.Equal(t, "migrations/001.hcl", row["migration"])
+	assert.Equal(t, ".tfmigrate.hcl", row["config"])
+	assert.Equal(t, cfg.BackendTypeS3, row["history_storage"])
+	assert.Equal(t, "tfstate-bucket", row["history_bucket"])
+	assert.Equal(t, "tfmigrate/plat-ue2-dev/s3-bucket/prod/history.json", row["history_key"])
+	assert.Equal(t, "arn:aws:iam::123456789012:role/tfstate", row["history_role_arn"])
+	assert.Equal(t, true, row["tfmigrate_enabled"])
+}
+
+func TestTfmigrateListRow_NoHookLeavesModeBlank(t *testing.T) {
+	// A component with zero kind: tfmigrate hooks must not show Mode: dynamic
+	// - that implies a configured hook exists when none does.
+	row := tfmigrateListRow("plat-ue2-dev", "service-legacy", map[string]any{
+		cfg.WorkspaceSectionName:   "prod",
+		cfg.BackendTypeSectionName: cfg.BackendTypeS3,
+		cfg.BackendSectionName:     map[string]any{"bucket": "tfstate-bucket"},
+	})
+
+	assert.Empty(t, row["hook"])
+	assert.Empty(t, row["mode"])
+	assert.Equal(t, false, row["tfmigrate_enabled"])
+}
+
+func TestTfmigrateListRow_LocalBackendReportsHistoryStorage(t *testing.T) {
+	// Local (and any other non-s3/gcs) backend history is real - written
+	// next to the local state file, see default_config.go's
+	// writeLocalHistoryStorage - so History Storage must report it, not
+	// render blank the way only s3/gcs used to.
+	row := tfmigrateListRow("plat-ue2-dev", "vpc", map[string]any{
+		cfg.BackendTypeSectionName: "local",
+		cfg.BackendSectionName:     map[string]any{"path": "state.tfstate"},
+	})
+
+	assert.Equal(t, "local", row["history_storage"])
+}
+
+func TestTfmigrateListColumns(t *testing.T) {
+	columns, err := tfmigrateListColumns([]string{"component", "History Key=history_key"})
+	require.NoError(t, err)
+	require.Len(t, columns, 2)
+	assert.Equal(t, "Component", columns[0].Name)
+	assert.Equal(t, "{{ .component }}", columns[0].Value)
+	assert.Equal(t, "History Key", columns[1].Name)
+	assert.Equal(t, "{{ .history_key }}", columns[1].Value)
+}
+
+func TestTfmigrateListColumns_UnknownBareColumnErrors(t *testing.T) {
+	_, err := tfmigrateListColumns([]string{"component", "totally_bogus_column"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestTfmigrateListColumns_KindAndNameAreNotValidBareColumns(t *testing.T) {
+	// "kind" and "name" are tfmigrateListKey* constants, but they're used
+	// internally (reading a hook's own kind field, and the intermediate
+	// hook-lookup result map) - never populated as row keys, so accepting
+	// them as --columns values would render Go template's "<no value>"
+	// placeholder instead of erroring.
+	for _, spec := range []string{"kind", "name"} {
+		_, err := tfmigrateListColumns([]string{spec})
+		require.Error(t, err, "spec %q should be rejected", spec)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	}
+}
+
+func TestBuildTfmigrateEnvAddsHistoryNamespace(t *testing.T) {
+	env, err := buildTfmigrateEnv(&schema.AtmosConfiguration{BasePath: "."}, &schema.ConfigAndStacksInfo{
+		Command:              "tofu",
+		Stack:                "plat-ue2-dev",
+		FinalComponent:       "s3-bucket",
+		TerraformWorkspace:   "prod",
+		ComponentBackendType: cfg.BackendTypeS3,
+		ComponentBackendSection: map[string]any{
+			"bucket": "tfstate-bucket",
+			"region": "us-east-1",
+		},
+		ComponentEnvSection: map[string]any{
+			"AWS_REGION": "us-east-1",
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, env, "AWS_REGION=us-east-1")
+	assert.Contains(t, env, "ATMOS_STACK=plat-ue2-dev")
+	assert.Contains(t, env, "ATMOS_COMPONENT=s3-bucket")
+	assert.Contains(t, env, "ATMOS_TERRAFORM_WORKSPACE=prod")
+	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_KEY=tfmigrate/plat-ue2-dev/s3-bucket/prod/history.json")
+	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_STORAGE=s3")
+	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_BUCKET=tfstate-bucket")
+	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_REGION=us-east-1")
+	assert.Contains(t, env, "TFMIGRATE_EXEC_PATH=tofu")
+
+	// Regression test: --skip-init skips the normal init path that generates
+	// the varfile, so it never exists on disk in this scenario. Injecting a
+	// -var-file reference to a nonexistent file would make tfmigrate's
+	// internal `terraform plan` fail outright ("Given variables file ...
+	// does not exist"), even for components with no required variables -
+	// exactly the --skip-init + legacy-provider-address combination
+	// replace-provider migrations need.
+	for _, entry := range env {
+		assert.NotContains(t, entry, "TF_CLI_ARGS_plan", "must not reference a var-file that was never generated: %s", entry)
+	}
+}
+
+func TestBuildTfmigrateEnv_InjectsVarfileWhenItExists(t *testing.T) {
+	componentDir := t.TempDir()
+	varfileName := "plat-ue2-dev-s3-bucket.terraform.tfvars.json"
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, varfileName), []byte("{}"), 0o600))
+
+	env, err := buildTfmigrateEnv(&schema.AtmosConfiguration{
+		BasePath:                 ".",
+		TerraformDirAbsolutePath: componentDir,
+	}, &schema.ConfigAndStacksInfo{
+		Command:              "tofu",
+		Stack:                "plat-ue2-dev",
+		ContextPrefix:        "plat-ue2-dev",
+		Component:            "s3-bucket",
+		FinalComponent:       "s3-bucket",
+		ComponentBackendType: cfg.BackendTypeS3,
+		ComponentSection: map[string]any{
+			"_workdir_path": componentDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	found := false
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "TF_CLI_ARGS_plan=") {
+			found = true
+			assert.Contains(t, entry, varfileName)
+		}
+	}
+	assert.True(t, found, "expected TF_CLI_ARGS_plan to be set when the varfile exists")
+}
+
+func TestRunTerraformMigratePlanDryRunFixture(t *testing.T) {
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("dry-run", true)
+	viper.GetViper().Set("skip-init", true)
+	// The hermetic testdata fixture declares no dependencies.tools, so the
+	// dry run stays offline. The examples/hooks-tfmigrate fixture declares
+	// opentofu+tfmigrate toolchain dependencies, which this execution path
+	// would download and install — unit tests must not hit the network.
+	configPath := filepath.Join("testdata", "dryrun")
+
+	err := runTerraformMigrate(cmd, []string{
+		"service",
+		"--stack", "deploy/test",
+		"--config-path", configPath,
+		"--identity=false",
+	}, tfmigrate.ActionPlan)
+
+	require.NoError(t, err)
+}
+
+func TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly(t *testing.T) {
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("dry-run", false)
+	viper.GetViper().Set("skip-init", true)
+	// The fixture has no migrations/ directory and no --migration flag, so
+	// this exercises history mode with nothing authored yet. It must succeed
+	// without ever needing a real tfmigrate/opentofu binary, proving tfmigrate
+	// is skipped entirely (not merely dry-run-suppressed) — before this fix,
+	// zero-config history mode with no migrations/ dir made tfmigrate scan the
+	// component root and fail trying to parse Atmos's own generated
+	// backend.tf.json/tfvars.json as migration files.
+	configPath := filepath.Join("testdata", "nomigrations")
+
+	err := runTerraformMigrate(cmd, []string{
+		"service",
+		"--stack", "deploy/test",
+		"--config-path", configPath,
+		"--identity=false",
+	}, tfmigrate.ActionPlan)
+
+	require.NoError(t, err)
+}
+
+func TestRunTerraformMigrate_SelectWorkspaceErrorPropagates(t *testing.T) {
+	// With dry-run disabled (and skip-init true, so initTfmigrateComponent
+	// stays a no-op and never spawns a real terraform/tofu init),
+	// executeTfmigrateSingle's own selectTfmigrateWorkspace error branch is
+	// exercised: the fixture stack resolves a non-empty TerraformWorkspace, so
+	// selectTfmigrateWorkspace actually invokes `tofu workspace select` via
+	// ExecuteShellCommand rather than short-circuiting. An empty PATH makes
+	// that invocation fail deterministically, confirming the error propagates
+	// out of executeTfmigrateSingle instead of being swallowed.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("dry-run", false)
+	viper.GetViper().Set("skip-init", true)
+	t.Setenv("PATH", t.TempDir())
+	configPath := filepath.Join("testdata", "dryrun")
+
+	err := runTerraformMigrate(cmd, []string{
+		"service",
+		"--stack", "deploy/test",
+		"--config-path", configPath,
+		"--identity=false",
+	}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProcessStartFailed)
+}
+
+func TestNewMigrateActionCmd_RunEInvokesRunTerraformMigrate(t *testing.T) {
+	// Exercises the closure newMigrateActionCmd assigns as RunE (only ever
+	// invoked by cobra's dispatch, never called directly by other tests),
+	// confirming it forwards to runTerraformMigrate with the right action.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionCmd(tfmigrate.ActionPlan, "test action")
+	migrateParser.RegisterFlags(cmd)
+	parent.AddCommand(cmd)
+	viper.GetViper().Set("dry-run", true)
+	viper.GetViper().Set("skip-init", true)
+	configPath := filepath.Join("testdata", "dryrun")
+
+	require.NotNil(t, cmd.RunE)
+	err := cmd.RunE(cmd, []string{
+		"service",
+		"--stack", "deploy/test",
+		"--config-path", configPath,
+		"--identity=false",
+	})
+
+	require.NoError(t, err)
+}
+
+func TestRunTerraformMigrate_PropagatesParseError(t *testing.T) {
+	// runTerraformMigrate's own err != nil branch (distinct from
+	// parseTerraformMigrate's internal error branches, which are covered by
+	// calling parseTerraformMigrate directly elsewhere) is only exercised by
+	// going through runTerraformMigrate itself.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("failure-mode", "not-a-real-mode")
+
+	err := runTerraformMigrate(cmd, []string{"vpc", "--stack", "dev"}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestRunTerraformMigrate_RoutesAllFlagToMultiComponentQuery(t *testing.T) {
+	// With --all, runTerraformMigrate must route through executeTfmigrateQuery
+	// (multi-component), not executeTfmigrateSingle: it walks every component in
+	// every stack rather than requiring a positional component argument.
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	viper.GetViper().Set("dry-run", true)
+	viper.GetViper().Set("skip-init", true)
+	viper.GetViper().Set("all", true)
+	configPath := filepath.Join("testdata", "dryrun")
+
+	err := runTerraformMigrate(cmd, []string{
+		"--config-path", configPath,
+		"--identity=false",
+	}, tfmigrate.ActionPlan)
+
+	require.NoError(t, err, "--all must walk the fixture's single enabled component and succeed via dry-run")
+}
+
+func TestRunTerraformMigrate_RoutesAffectedFlagToAffectedExecution(t *testing.T) {
+	// With --affected, runTerraformMigrate must route through
+	// executeAffectedMigrateCommand rather than the single/multi-component
+	// paths. Pointing --repo-path at a directory that doesn't exist forces a
+	// fast, deterministic failure inside the affected-detection call itself
+	// (no real git repo needed), confirming the routing actually reached
+	// executeAffectedMigrateCommand instead of silently falling through to
+	// the single-component path (which would instead fail on "component is
+	// required").
+	parent := setupMigrateParseTest(t)
+	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
+	registerProcessCommandLineLocalFlags(cmd)
+	cmd.PersistentFlags().String("repo-path", "", "")
+	viper.GetViper().Set("dry-run", true)
+	viper.GetViper().Set("skip-init", true)
+	viper.GetViper().Set("affected", true)
+	configPath := filepath.Join("testdata", "dryrun")
+
+	err := runTerraformMigrate(cmd, []string{
+		"--config-path", configPath,
+		"--identity=false",
+		"--repo-path", filepath.Join(t.TempDir(), "missing-repo"),
+	}, tfmigrate.ActionPlan)
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "component is required",
+		"must fail inside the affected path, not fall through to the single-component path")
+}
+
+func TestRunTerraformMigrateListFixtureRenders(t *testing.T) {
+	setupMigrateParseTest(t)
+	cmd := &cobra.Command{Use: "list [component]"}
+	migrateListParser.RegisterFlags(cmd)
+	viper.GetViper().Set(migrateListFlagFormat, "json")
+	viper.GetViper().Set(migrateListFlagColumns, []string{"component", "stack", "hook"})
+	configPath := filepath.Join("..", "..", "..", "examples", "hooks-tfmigrate")
+
+	output := captureDataOutput(t, func() {
+		err := runTerraformMigrateList(cmd, []string{
+			"service",
+			"--stack", "deploy/test",
+			"--config-path", configPath,
+			"--identity=false",
+		})
+		require.NoError(t, err)
+	})
+
+	assert.Contains(t, output, `"Component": "service"`)
+	assert.Contains(t, output, `"Stack": "test"`)
+	assert.Contains(t, output, `"Hook": "state-migration"`)
+}
+
+func TestRenderTfmigrateListFormatsRows(t *testing.T) {
+	rows := []map[string]any{
+		tfmigrateListRow("deploy/test", "service", map[string]any{
+			cfg.WorkspaceSectionName:   "default",
+			cfg.BackendTypeSectionName: cfg.BackendTypeLocal,
+			cfg.HooksSectionName: map[string]any{
+				"state-migration": map[string]any{
+					"kind": tfmigrate.Command,
+				},
+			},
+		}),
+	}
+
+	output := captureDataOutput(t, func() {
+		err := renderTfmigrateList(rows, migrateListRenderOptions{
+			Format:  "csv",
+			Columns: []string{"component", "stack"},
+			Sort:    "component:desc",
+		})
+		require.NoError(t, err)
+	})
+
+	assert.Equal(t, "Component,Stack\nservice,deploy/test\n", output)
+}
+
+func TestTfmigrateHelpersCoverBranches(t *testing.T) {
+	t.Run("component name precedence", func(t *testing.T) {
+		assert.Equal(t, "final", tfmigrateComponentName(&schema.ConfigAndStacksInfo{
+			FinalComponent:   "final",
+			ComponentFromArg: "arg",
+			Component:        "component",
+		}))
+		assert.Equal(t, "arg", tfmigrateComponentName(&schema.ConfigAndStacksInfo{
+			ComponentFromArg: "arg",
+			Component:        "component",
+		}))
+		assert.Equal(t, "component", tfmigrateComponentName(&schema.ConfigAndStacksInfo{
+			Component: "component",
+		}))
+	})
+
+	t.Run("command default", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{}
+		atmosConfig := &schema.AtmosConfiguration{}
+		atmosConfig.Components.Terraform.Command = "tofu"
+		setTfmigrateTerraformCommand(info, atmosConfig)
+		assert.Equal(t, "tofu", info.Command)
+
+		info = &schema.ConfigAndStacksInfo{}
+		setTfmigrateTerraformCommand(info, &schema.AtmosConfiguration{})
+		assert.Equal(t, cfg.TerraformComponentType, info.Command)
+	})
+
+	t.Run("skip init and empty workspace are no-ops", func(t *testing.T) {
+		assert.NoError(t, initTfmigrateComponent(&schema.ConfigAndStacksInfo{SkipInit: true}))
+		assert.Error(t, initTfmigrateComponent(&schema.ConfigAndStacksInfo{DryRun: true}))
+		assert.NoError(t, selectTfmigrateWorkspace(&tfmigrateExecutionContext{
+			Info: schema.ConfigAndStacksInfo{},
+		}))
+	})
+
+	t.Run("compat flags empty", func(t *testing.T) {
+		assert.Empty(t, CompatFlags())
+	})
+}
+
+func TestTfmigrateSelectionHelpers(t *testing.T) {
+	t.Run("skip abstract disabled and query mismatch", func(t *testing.T) {
+		assert.True(t, shouldSkipTfmigrateComponent(map[string]any{
+			cfg.MetadataSectionName: map[string]any{"type": "abstract"},
+		}, ""))
+		assert.True(t, shouldSkipTfmigrateComponent(map[string]any{
+			cfg.MetadataSectionName: map[string]any{"enabled": false},
+		}, ""))
+		assert.True(t, shouldSkipTfmigrateComponent(map[string]any{"vars": map[string]any{"enabled": true}}, ".vars.enabled == false"))
+		assert.False(t, shouldSkipTfmigrateComponent(map[string]any{"vars": map[string]any{"enabled": true}}, ".vars.enabled == true"))
+	})
+
+	t.Run("skips on unparsable query expression", func(t *testing.T) {
+		// A syntactically invalid yq expression makes EvaluateYqExpression error;
+		// shouldSkipTfmigrateComponent must fail safe and skip the component
+		// rather than propagate the error or treat it as a match.
+		assert.True(t, shouldSkipTfmigrateComponent(map[string]any{"vars": map[string]any{"enabled": true}}, "[[[not valid yq"))
+	})
+
+	t.Run("walk skips malformed sections and stops on callback error", func(t *testing.T) {
+		stacks := map[string]any{
+			"bad":                "skip",
+			"missing-components": map[string]any{},
+			"missing-terraform": map[string]any{
+				"components": map[string]any{},
+			},
+			"good": map[string]any{
+				"components": map[string]any{
+					cfg.TerraformSectionName: map[string]any{
+						"bad-component": "skip",
+						"service":       map[string]any{"vars": map[string]any{}},
+					},
+				},
+			},
+		}
+
+		var visited []string
+		err := walkTfmigrateComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+			visited = append(visited, stackName+"/"+componentName)
+			return nil
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"good/service"}, visited)
+
+		expectedErr := assert.AnError
+		err = walkTfmigrateComponents(stacks, func(string, string, map[string]any) error {
+			return expectedErr
+		})
+		assert.ErrorIs(t, err, expectedErr)
+	})
+}
+
+func TestExecuteTfmigrateQueryReturnsComponentError(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	info := schema.ConfigAndStacksInfo{
+		Stack:                  "dev",
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Query:                  ".vars.enabled == true",
+		DryRun:                 true,
+		SkipInit:               true,
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+	}
+
+	err := executeTfmigrateQuery(&info, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Could not find the component")
+}
+
+func TestPrepareTfmigrateExecution_InitCliConfigErrorPropagates(t *testing.T) {
+	// prepareTfmigrateExecution (used by the single-component execution path,
+	// distinct from executeTfmigrateQuery's own InitCliConfig call site below)
+	// must propagate a syntactically invalid atmos.yaml as an error rather than
+	// panicking or returning a zero-value execution context.
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	execCtx, err := prepareTfmigrateExecution(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, execCtx)
+}
+
+func TestPrepareTfmigrateExecution_SetupComponentAuthErrorPropagates(t *testing.T) {
+	// A nonexistent --identity must fail component auth setup inside
+	// prepareTfmigrateExecution before ProcessStacks/TerraformPreHook ever run.
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	execCtx, err := prepareTfmigrateExecution(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Identity:               "nonexistent-identity",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, execCtx)
+}
+
+func TestExecuteTfmigrateQuery_InitCliConfigErrorPropagates(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+}
+
+func TestExecuteTfmigrateQuery_SetupComponentAuthErrorPropagates(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Identity:               "nonexistent-identity",
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+}
+
+func TestExecuteTfmigrateQuery_DescribeStacksErrorPropagates(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "service"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte("not: [valid: yaml"), 0o644))
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dir},
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+}
+
+func TestExecuteTfmigrateQuery_SkipsFilteredComponentWithoutExecuting(t *testing.T) {
+	// With a query that never matches, executeTfmigrateQuery must walk the
+	// component, skip it via shouldSkipTfmigrateComponent, and return nil
+	// without ever invoking executeTfmigrateSingleForSelection.
+	fixtureDir := createMinimalAtmosFixture(t)
+
+	previousExecuteSingle := executeTfmigrateSingleForSelection
+	called := false
+	executeTfmigrateSingleForSelection = func(*schema.ConfigAndStacksInfo, tfmigrate.Options) error {
+		called = true
+		return nil
+	}
+	t.Cleanup(func() { executeTfmigrateSingleForSelection = previousExecuteSingle })
+
+	err := executeTfmigrateQuery(&schema.ConfigAndStacksInfo{
+		Stack:                  "dev",
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		Query:                  ".vars.enabled == false", // fixture has enabled: true, so this never matches.
+		Identity:               cfg.IdentityFlagDisabledValue,
+		ProcessTemplates:       true,
+		ProcessFunctions:       true,
+	}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.NoError(t, err)
+	assert.False(t, called, "a filtered-out component must never reach executeTfmigrateSingleForSelection")
+}
+
+func TestExecuteTfmigrateAffectedRejectsDependents(t *testing.T) {
+	err := executeTfmigrateAffected(&e.DescribeAffectedCmdArgs{
+		IncludeDependents: true,
+	}, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid configuration")
+}
+
+func TestExecuteAffectedMigrateCommandRejectsDependents(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	cmd := newDescribeAffectedTestCommand()
+	require.NoError(t, cmd.PersistentFlags().Set("include-dependents", "true"))
+
+	err := executeAffectedMigrateCommand(cmd, []string{
+		"--config-path", fixtureDir,
+		"--identity=false",
+	}, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid configuration")
+}
+
+func TestExecuteAffectedMigrateCommandPropagatesParseCliArgsError(t *testing.T) {
+	// --repo-path together with --ref is an invalid combination
+	// (e.ParseDescribeAffectedCliArgs rejects it as ErrRepoPathConflict),
+	// exercising executeAffectedMigrateCommand's own error branch distinct
+	// from executeTfmigrateAffected's include-dependents rejection.
+	fixtureDir := createMinimalAtmosFixture(t)
+	cmd := newDescribeAffectedTestCommand()
+
+	err := executeAffectedMigrateCommand(cmd, []string{
+		"--config-path", fixtureDir,
+		"--identity=false",
+		"--repo-path", fixtureDir,
+		"--ref", "refs/heads/main",
+	}, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.Error(t, err)
+}
+
+func TestExecuteAffectedMigrateCommandRegistersDefaultFlags(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
+	restoreDescribeAffectedStubs(t, nil, nil)
+
+	cmd := &cobra.Command{Use: "affected"}
+	registerProcessCommandLineLocalFlags(cmd)
+	err := executeAffectedMigrateCommand(cmd, nil, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.NoError(t, err)
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("file"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("format"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("verbose"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("include-spacelift-admin-stacks"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("include-settings"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("upload"))
+	assert.Equal(t, "yaml", cmd.PersistentFlags().Lookup("format").Value.String())
+}
+
+func TestExecuteTfmigrateAffectedFiltersAndRunsTerraformItems(t *testing.T) {
+	restoreDescribeAffectedStubs(t, []schema.Affected{
+		{ComponentType: "helmfile", Component: "skip-type", Stack: "dev"},
+		{ComponentType: cfg.TerraformComponentType, Component: "skip-deleted", Stack: "dev", Deleted: true},
+		{ComponentType: cfg.TerraformComponentType, Component: "service", Stack: "prod"},
+	}, nil)
+
+	var executed []schema.ConfigAndStacksInfo
+	previousExecuteSingle := executeTfmigrateSingleForSelection
+	executeTfmigrateSingleForSelection = func(info *schema.ConfigAndStacksInfo, opts tfmigrate.Options) error {
+		executed = append(executed, *info)
+		assert.Equal(t, tfmigrate.ActionApply, opts.Action)
+		return nil
+	}
+	t.Cleanup(func() {
+		executeTfmigrateSingleForSelection = previousExecuteSingle
+	})
+
+	err := executeTfmigrateAffected(&e.DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{},
+	}, &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}, tfmigrate.Options{Action: tfmigrate.ActionApply})
+
+	require.NoError(t, err)
+	require.Len(t, executed, 1)
+	assert.Equal(t, "service", executed[0].Component)
+	assert.Equal(t, "service", executed[0].ComponentFromArg)
+	assert.Equal(t, "prod", executed[0].Stack)
+	assert.Equal(t, "prod", executed[0].StackFromArg)
+	assert.Equal(t, cfg.IdentityFlagDisabledValue, executed[0].Identity)
+}
+
+func TestExecuteTfmigrateAffectedReturnsSingleExecutionError(t *testing.T) {
+	restoreDescribeAffectedStubs(t, []schema.Affected{
+		{ComponentType: cfg.TerraformComponentType, Component: "service", Stack: "prod"},
+	}, nil)
+	expectedErr := errors.New("run tfmigrate")
+
+	previousExecuteSingle := executeTfmigrateSingleForSelection
+	executeTfmigrateSingleForSelection = func(info *schema.ConfigAndStacksInfo, opts tfmigrate.Options) error {
+		return expectedErr
+	}
+	t.Cleanup(func() {
+		executeTfmigrateSingleForSelection = previousExecuteSingle
+	})
+
+	err := executeTfmigrateAffected(&e.DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{},
+	}, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestDescribeAffectedForTfmigrateRepoPathError(t *testing.T) {
+	_, err := describeAffectedForTfmigrate(&e.DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{},
+		RepoPath:  filepath.Join(t.TempDir(), "missing"),
+	})
+	require.Error(t, err)
+}
+
+func TestDescribeAffectedForTfmigrateSelectsTargetStrategy(t *testing.T) {
+	expectedErr := errors.New("selected strategy")
+
+	tests := []struct {
+		name string
+		args e.DescribeAffectedCmdArgs
+		want string
+	}{
+		{
+			name: "repo path",
+			args: e.DescribeAffectedCmdArgs{RepoPath: "target"},
+			want: "repo-path",
+		},
+		{
+			name: "clone target ref",
+			args: e.DescribeAffectedCmdArgs{CloneTargetRef: true, Ref: "refs/heads/main", SHA: "abc123"},
+			want: "clone",
+		},
+		{
+			name: "checkout default",
+			args: e.DescribeAffectedCmdArgs{Ref: "refs/remotes/origin/main", TargetBranch: "main"},
+			want: "checkout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var called string
+			restoreDescribeAffectedStrategyStubs(t, &called, expectedErr)
+			tt.args.CLIConfig = &schema.AtmosConfiguration{}
+
+			_, err := describeAffectedForTfmigrate(&tt.args)
+
+			assert.ErrorIs(t, err, expectedErr)
+			assert.Equal(t, tt.want, called)
+		})
+	}
+}
+
+func TestFirstTfmigrateHookDefaultsAndInvalidValues(t *testing.T) {
+	// No hooks section, or a malformed one, at all: Mode must stay unset
+	// (not default to "dynamic") since there's no hook to report a mode
+	// for - migrate list must render this as blank, not a misleading
+	// "dynamic" that implies a configured hook exists.
+	assert.Empty(t, firstTfmigrateHook(map[string]any{}))
+	assert.Empty(t, firstTfmigrateHook(map[string]any{
+		cfg.HooksSectionName: "not-a-map",
+	}))
+
+	hook := firstTfmigrateHook(map[string]any{
+		cfg.HooksSectionName: map[string]any{
+			"not-tfmigrate": map[string]any{"kind": "store"},
+			"state-migration": map[string]any{
+				"kind":      tfmigrate.Command,
+				"mode":      123,
+				"migration": 456,
+				"config":    true,
+			},
+		},
+	})
+	assert.Equal(t, "state-migration", hook[tfmigrateListKeyName])
+	assert.Equal(t, tfmigrate.ModeDynamic, hook[tfmigrateListKeyMode])
+	assert.Empty(t, hook[tfmigrateListKeyMigration])
+	assert.Empty(t, hook[tfmigrateListKeyConfig])
+}
+
+func TestFirstTfmigrateHook_HooksSectionWithNoTfmigrateKindFallsThrough(t *testing.T) {
+	// A component with a real, non-empty hooks section where none of the hooks
+	// is kind: tfmigrate must exhaust the loop and fall through to the same
+	// empty result as having no hooks section at all - Mode stays unset.
+	hook := firstTfmigrateHook(map[string]any{
+		cfg.HooksSectionName: map[string]any{
+			"not-tfmigrate":      map[string]any{"kind": "store"},
+			"also-not-tfmigrate": map[string]any{"kind": "step"},
+		},
+	})
+	assert.Empty(t, hook)
+	assert.Empty(t, hook[tfmigrateListKeyName])
+}
+
+func TestFirstTfmigrateHook_MultipleMatchingHooksAreDeterministic(t *testing.T) {
+	// With 2+ kind: tfmigrate hooks on one component, the alphabetically
+	// first hook NAME wins, every time - regression test for the previous
+	// Go-map-iteration-order nondeterminism.
+	componentSection := map[string]any{
+		cfg.HooksSectionName: map[string]any{
+			"zzz-hook": map[string]any{"kind": tfmigrate.Command, "mode": tfmigrate.ModePlan},
+			"aaa-hook": map[string]any{"kind": tfmigrate.Command, "mode": tfmigrate.ModeApply},
+		},
+	}
+	for range 10 {
+		hook := firstTfmigrateHook(componentSection)
+		assert.Equal(t, "aaa-hook", hook[tfmigrateListKeyName])
+		assert.Equal(t, tfmigrate.ModeApply, hook[tfmigrateListKeyMode])
+	}
+}
+
+func TestTfmigrateListColumnDefaultsAndInvalidRender(t *testing.T) {
+	defaults, err := tfmigrateListColumns(nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, defaults)
+	assert.Equal(t, "Component", defaults[0].Name)
+
+	columns, err := tfmigrateListColumns([]string{" ", "component"})
+	require.NoError(t, err)
+	require.Len(t, columns, 1)
+	assert.Equal(t, "Component", columns[0].Name)
+
+	err = renderTfmigrateList(nil, migrateListRenderOptions{Format: "bogus"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported format")
+}
+
+func TestRenderTfmigrateList_ColumnsExcludingStackDoNotCrash(t *testing.T) {
+	// Regression test: --columns selections that omit "Stack" (whether by
+	// deliberate choice, like --columns=component,mode, or because the user
+	// only wants a subset) must not crash the default sorter, which used to
+	// unconditionally sort by "Stack" even when that column wasn't selected.
+	output := captureDataOutput(t, func() {
+		err := renderTfmigrateList([]map[string]any{
+			{"component": "vpc", "mode": "dynamic"},
+		}, migrateListRenderOptions{
+			Format:  "csv",
+			Columns: []string{"component", "mode"},
+		})
+		require.NoError(t, err)
+	})
+	assert.Equal(t, "Component,Mode\nvpc,dynamic\n", output)
+}
+
+func TestRenderTfmigrateList_UnknownColumnErrors(t *testing.T) {
+	err := renderTfmigrateList(nil, migrateListRenderOptions{
+		Format:  "csv",
+		Columns: []string{"component", "totally_bogus_column"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestRenderTfmigrateList_InvalidColumnTemplateErrors(t *testing.T) {
+	// A "=" column spec whose value already contains "{{" is used verbatim
+	// (not auto-wrapped); malformed Go template syntax there must surface as
+	// an error from column.NewSelector, before rendering is attempted.
+	err := renderTfmigrateList(nil, migrateListRenderOptions{
+		Format:  "csv",
+		Columns: []string{"Bad={{ .unterminated"},
+	})
+	require.Error(t, err)
+}
+
+func TestRenderTfmigrateList_InvalidSortSpecErrors(t *testing.T) {
+	// A sort spec missing the required "column:order" colon must surface as
+	// an error from listSort.ParseSortSpec, before rendering is attempted.
+	err := renderTfmigrateList(nil, migrateListRenderOptions{
+		Format: "csv",
+		Sort:   "component-with-no-colon",
+	})
+	require.Error(t, err)
+}
+
+func restoreDescribeAffectedStubs(t *testing.T, affected []schema.Affected, stubErr error) {
+	t.Helper()
+
+	previousRepoPath := executeDescribeAffectedWithTargetRepoPath
+	previousClone := executeDescribeAffectedWithTargetRefClone
+	previousCheckout := executeDescribeAffectedWithTargetRefCheckout
+
+	executeDescribeAffectedWithTargetRepoPath = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return affected, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefClone = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return affected, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefCheckout = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return affected, nil, nil, "", stubErr
+	}
+
+	t.Cleanup(func() {
+		executeDescribeAffectedWithTargetRepoPath = previousRepoPath
+		executeDescribeAffectedWithTargetRefClone = previousClone
+		executeDescribeAffectedWithTargetRefCheckout = previousCheckout
+	})
+}
+
+func restoreDescribeAffectedStrategyStubs(t *testing.T, called *string, stubErr error) {
+	t.Helper()
+	restoreDescribeAffectedStubs(t, nil, stubErr)
+
+	executeDescribeAffectedWithTargetRepoPath = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		*called = "repo-path"
+		return nil, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefClone = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		*called = "clone"
+		return nil, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefCheckout = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		*called = "checkout"
+		return nil, nil, nil, "", stubErr
+	}
+}
+
+func captureDataOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	ctx, err := ioLayer.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ctx)
+	t.Cleanup(data.Reset)
+
+	previousStdout := os.Stdout
+	readPipe, writePipe, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = writePipe
+	t.Cleanup(func() {
+		os.Stdout = previousStdout
+	})
+
+	var buf bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(&buf, readPipe)
+		done <- err
+	}()
+
+	fn()
+
+	require.NoError(t, writePipe.Close())
+	require.NoError(t, <-done)
+	require.NoError(t, readPipe.Close())
+
+	return buf.String()
+}
+
+func createMinimalAtmosFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "service"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "components", "terraform", "service", "main.tf"), []byte(`
+terraform {
+  required_version = ">= 1.0.0"
+}
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: terraform
+    auto_generate_backend_file: false
+    workspaces_enabled: false
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(`
+vars:
+  stage: dev
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: terraform.tfstate
+components:
+  terraform:
+    service:
+      vars:
+        enabled: true
+`), 0o644))
+	return dir
+}
+
+func newDescribeAffectedTestCommand() *cobra.Command {
+	cmd := &cobra.Command{Use: "affected"}
+	flags := cmd.PersistentFlags()
+	flags.String("base", "", "")
+	flags.String("ref", "", "")
+	flags.String("sha", "", "")
+	flags.String("repo-path", "", "")
+	flags.String("ssh-key", "", "")
+	flags.String("ssh-key-password", "", "")
+	flags.Bool("include-spacelift-admin-stacks", false, "")
+	flags.Bool("include-dependents", false, "")
+	flags.Bool("include-settings", false, "")
+	flags.Bool("upload", false, "")
+	flags.Bool("clone-target-ref", false, "")
+	flags.Bool("process-templates", true, "")
+	flags.Bool("process-functions", true, "")
+	flags.StringSlice("skip", nil, "")
+	flags.String("pager", "", "")
+	flags.StringP("stack", "s", "", "")
+	flags.String("format", "yaml", "")
+	flags.String("file", "", "")
+	flags.String("output-file", "", "")
+	flags.String("query", "", "")
+	flags.Bool("verbose", false, "")
+	flags.Bool("exclude-locked", false, "")
+	flags.String("base-path", "", "")
+	flags.StringSlice("config", nil, "")
+	flags.StringSlice("config-path", nil, "")
+	flags.StringSlice("profile", nil, "")
+	flags.StringP(cfg.IdentityFlagName, cfg.IdentityFlagShortName, "", "")
+	flags.Lookup(cfg.IdentityFlagName).NoOptDefVal = cfg.IdentityFlagSelectValue
+	return cmd
+}
+
+func setupMigrateParseTest(t *testing.T) *cobra.Command {
+	t.Helper()
+
+	previousParentCommand := parentCommand
+	previousTerraformParser := terraformParser
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "")
+
+	parent := &cobra.Command{
+		Use: "terraform",
+		FParseErrWhitelist: cobra.FParseErrWhitelist{
+			UnknownFlags: true,
+		},
+	}
+	parser := flags.NewStandardParser(
+		flags.WithCommonFlags(),
+		shared.WithBackendExecutionFlags(),
+		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing"),
+		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing"),
+		flags.WithStringSliceFlag("skip", "", nil, "Skip YAML functions"),
+		flags.WithBoolFlag("skip-init", "", false, "Skip terraform init before running command"),
+		flags.WithBoolFlag("init-pass-vars", "", false, "Pass generated varfile to init"),
+		flags.WithStringFlag("planfile", "", "", "Path to a Terraform plan file"),
+		flags.WithBoolFlag("skip-planfile", "", false, "Skip planfile generation"),
+		flags.WithBoolFlag("deploy-run-init", "", false, "Run init during deploy"),
+		flags.WithBoolFlag("verify-plan", "", false, "Verify plan before apply"),
+		flags.WithStringFlag("query", "q", "", "YQ component filter"),
+		flags.WithStringSliceFlag("components", "", nil, "Component filters"),
+		flags.WithBoolFlag("upload-status", "", false, "Upload status"),
+	)
+	parser.RegisterPersistentFlags(parent)
+	registerProcessCommandLineLocalFlags(parent)
+	require.NoError(t, parser.BindToViper(viper.GetViper()))
+
+	parentCommand = parent
+	terraformParser = parser
+
+	t.Cleanup(func() {
+		parentCommand = previousParentCommand
+		terraformParser = previousTerraformParser
+		viper.Reset()
+	})
+
+	return parent
+}
+
+func registerProcessCommandLineLocalFlags(cmd *cobra.Command) {
+	cmd.Flags().String("base-path", "", "")
+	cmd.Flags().StringSlice("config", nil, "")
+	cmd.Flags().StringSlice("config-path", nil, "")
+	cmd.Flags().StringSlice("profile", nil, "")
+	cmd.Flags().StringP("stack", "s", "", "")
+	cmd.Flags().StringP(cfg.IdentityFlagName, cfg.IdentityFlagShortName, "", "")
+	cmd.Flags().Lookup(cfg.IdentityFlagName).NoOptDefVal = cfg.IdentityFlagSelectValue
+}
+
+func newMigrateActionTestCommand(parent *cobra.Command, action string) *cobra.Command {
+	cmd := &cobra.Command{Use: action + " [component]"}
+	migrateParser.RegisterFlags(cmd)
+	parent.AddCommand(cmd)
+	return cmd
+}
+
+func TestWrapTfmigrateInitError(t *testing.T) {
+	original := errors.New("subcommand exited with code 1")
+	wrapped := wrapTfmigrateInitError(original)
+	require.Error(t, wrapped)
+	assert.ErrorIs(t, wrapped, errUtils.ErrInvalidConfig)
+	assert.ErrorIs(t, wrapped, original)
+}
