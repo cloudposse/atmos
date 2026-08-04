@@ -54,3 +54,14 @@ func TestTryWithRLockWindowsExecutesCallback(t *testing.T) {
 	require.True(t, acquired)
 	require.True(t, executed)
 }
+
+func TestTryWithRLockWindowsPropagatesCallbackError(t *testing.T) {
+	want := errors.New("callback error")
+
+	acquired, err := NewFileLockAtPath("C:/tmp/repositories.lock").TryWithRLock(func() error {
+		return want
+	})
+
+	require.ErrorIs(t, err, want)
+	require.True(t, acquired, "Windows locking is a no-op, so acquired is always true")
+}

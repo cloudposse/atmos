@@ -27,6 +27,8 @@ const (
 	deviceCodeTokenCacheFilename  = "token.json"
 	deviceCodeTokenCacheDirPerms  = 0o700
 	deviceCodeTokenCacheFilePerms = 0o600
+	// Maximum time to wait to acquire the device-code cache file lock.
+	fileLockTimeout = 10 * time.Second
 )
 
 // deviceCodeTokenCache represents a cached Azure device code access token.
@@ -561,7 +563,7 @@ func writeCacheFileWithLocking(cachePath string, data []byte, cacheType string) 
 }
 
 func withAzureFileLock(path string, fn func() error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
 	defer cancel()
 
 	if err := cache.NewFileLock(path).WithLockContext(ctx, fn); err != nil {

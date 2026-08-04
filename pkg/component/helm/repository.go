@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
+	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/repo/v1"
 )
@@ -21,6 +22,7 @@ import (
 const (
 	repositoryLockTimeout = 30 * time.Second
 	repositoryFilePerm    = 0o600
+	repositoryDirPerm     = 0o700
 )
 
 var (
@@ -40,7 +42,7 @@ func setupHelmRepositories(repositories []chartRepository) error {
 	if repoFile == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(repoFile), os.ModePerm); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(filepath.Dir(repoFile), repositoryDirPerm); err != nil {
 		return err
 	}
 
@@ -48,33 +50,7 @@ func setupHelmRepositories(repositories []chartRepository) error {
 	defer cancel()
 
 	err := cache.NewFileLockAtPath(repositoryLockPath(repoFile)).WithLockContext(ctx, func() error {
-		repoConfig, err := loadRepositoryFile(repoFile)
-		if err != nil {
-			return err
-		}
-
-		for i := range repositories {
-			item := &repositories[i]
-			entry, err := repositoryEntry(item)
-			if err != nil {
-				return err
-			}
-
-			chartRepo, err := repo.NewChartRepository(entry, getter.All(settings, getter.WithTimeout(getter.DefaultHTTPTimeout*time.Second)))
-			if err != nil {
-				return err
-			}
-			if settings.RepositoryCache != "" {
-				chartRepo.CachePath = settings.RepositoryCache
-			}
-			if _, err := chartRepo.DownloadIndexFile(); err != nil {
-				return fmt.Errorf("looks like %q is not a valid chart repository or cannot be reached: %w", item.URL, err)
-			}
-
-			repoConfig.Update(entry)
-		}
-
-		return repoConfig.WriteFile(repoFile, repositoryFilePerm)
+		return updateRepositories(settings, repoFile, repositories)
 	})
 	if err != nil {
 		if errors.Is(err, errUtils.ErrCacheLocked) {
@@ -84,6 +60,39 @@ func setupHelmRepositories(repositories []chartRepository) error {
 	}
 
 	return nil
+}
+
+// updateRepositories loads the repo file, applies each declarative repository entry
+// (downloading its index to validate reachability), and writes the result back to disk.
+// It runs entirely inside setupHelmRepositories' file-lock callback.
+func updateRepositories(settings *cli.EnvSettings, repoFile string, repositories []chartRepository) error {
+	repoConfig, err := loadRepositoryFile(repoFile)
+	if err != nil {
+		return err
+	}
+
+	for i := range repositories {
+		item := &repositories[i]
+		entry, err := repositoryEntry(item)
+		if err != nil {
+			return err
+		}
+
+		chartRepo, err := repo.NewChartRepository(entry, getter.All(settings, getter.WithTimeout(getter.DefaultHTTPTimeout*time.Second)))
+		if err != nil {
+			return err
+		}
+		if settings.RepositoryCache != "" {
+			chartRepo.CachePath = settings.RepositoryCache
+		}
+		if _, err := chartRepo.DownloadIndexFile(); err != nil {
+			return fmt.Errorf("looks like %q is not a valid chart repository or cannot be reached: %w", item.URL, err)
+		}
+
+		repoConfig.Update(entry)
+	}
+
+	return repoConfig.WriteFile(repoFile, repositoryFilePerm)
 }
 
 func repositoryLockPath(repoFile string) string {

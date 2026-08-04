@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -303,7 +304,7 @@ func CleanupIdentityFiles(realm, providerName, identityName string) error {
 	}
 
 	lockTarget := filepath.Join(providerDir, identityName+".cleanup")
-	if err := withFileLock(lockTarget, func() error {
+	lockErr := withFileLock(lockTarget, func() error {
 		adcDir := filepath.Join(providerDir, ADCSubdir, identityName)
 		configDir := filepath.Join(providerDir, ConfigSubdir, identityName)
 		var errs []error
@@ -316,8 +317,17 @@ func CleanupIdentityFiles(realm, providerName, identityName string) error {
 			return errors.Join(errs...)
 		}
 		return nil
-	}); err != nil {
-		return fmt.Errorf("cleanup identity files: %w", err)
+	})
+
+	// lockTarget is a synthetic marker with no corresponding persistent file (unlike the
+	// write helpers above, whose lock files sit next to the real file they wrote), so best-effort
+	// remove it here to avoid leaving a stray ".cleanup.lock" behind in providerDir on every call.
+	if removeErr := os.Remove(lockTarget + ".lock"); removeErr != nil && !os.IsNotExist(removeErr) {
+		log.Debug("Failed to remove cleanup lock file", "path", lockTarget+".lock", "error", removeErr)
+	}
+
+	if lockErr != nil {
+		return fmt.Errorf("cleanup identity files: %w", lockErr)
 	}
 	return nil
 }

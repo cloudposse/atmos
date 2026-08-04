@@ -1007,3 +1007,92 @@ func TestDeviceCodeProvider_updateAzureProfile_LockFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, azureCloud.ErrFileLockTimeout)
 }
+
+// TestDeviceCodeProvider_updateAzureProfile_WriteFailure verifies the
+// os.WriteFile failure branch *inside* the lock closure, distinct from
+// TestDeviceCodeProvider_updateAzureProfile_LockFailure above (which covers
+// lock *acquisition* failing before the closure ever runs). The sibling
+// ".lock" file is pre-created so locking succeeds, then the ".azure"
+// directory is made read-only so the write of the new azureProfile.json
+// fails once the lock is already held.
+func TestDeviceCodeProvider_updateAzureProfile_WriteFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	testHome := t.TempDir()
+	azureDir := filepath.Join(testHome, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.WriteFile(profilePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to write Azure profile")
+	_, statErr := os.Stat(profilePath)
+	assert.True(t, os.IsNotExist(statErr), "azureProfile.json should not exist when the write failed")
+}
+
+// TestDeviceCodeProvider_updateAzureProfile_ReadFailure verifies the
+// non-ENOENT os.ReadFile failure branch (the profile path is a directory,
+// not a missing file).
+func TestDeviceCodeProvider_updateAzureProfile_ReadFailure(t *testing.T) {
+	testHome := t.TempDir()
+	azureDir := filepath.Join(testHome, ".azure")
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.MkdirAll(profilePath, 0o700)) // Directory in place of the file.
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read Azure profile")
+}
+
+// TestDeviceCodeProvider_updateAzureProfile_ParseFailure verifies that a
+// corrupted (non-JSON) existing azureProfile.json is surfaced as a parse
+// error rather than silently discarded.
+func TestDeviceCodeProvider_updateAzureProfile_ParseFailure(t *testing.T) {
+	testHome := t.TempDir()
+	azureDir := filepath.Join(testHome, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.WriteFile(profilePath, []byte("{not valid json"), 0o600))
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse Azure profile")
+}
+
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a write failure: the trick is a no-op on Windows
+// (permissions work differently) and on Unix when running as root (root
+// bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+}

@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -525,7 +526,7 @@ func writeMSALCacheToFile(msalCachePath string, data []byte) error {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	return withFileLock(msalCachePath, func() error {
+	return withFileLock(context.Background(), msalCachePath, func() error {
 		if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
 			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}
@@ -596,7 +597,7 @@ func updateAzureProfile(home string, params ProfileUpdateParams) error {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	return withFileLock(profilePath, func() error {
+	return withFileLock(context.Background(), profilePath, func() error {
 		// Load existing profile or create new one.
 		var profile map[string]interface{}
 		data, err := os.ReadFile(profilePath)
@@ -705,7 +706,7 @@ func updateServicePrincipalEntries(home, clientID, tenantID, federatedToken stri
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	return withFileLock(entriesPath, func() error {
+	return withFileLock(context.Background(), entriesPath, func() error {
 		// Load existing entries or create a new array.
 		var entries []map[string]interface{}
 		data, err := os.ReadFile(entriesPath)

@@ -51,7 +51,7 @@ func (c *msalCache) Replace(ctx context.Context, u cache.Unmarshaler, hints cach
 		return err
 	}
 
-	return withFileLock(c.cachePath, func() error {
+	return withFileLock(ctx, c.cachePath, func() error {
 		data, err := os.ReadFile(c.cachePath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -82,7 +82,7 @@ func (c *msalCache) Export(ctx context.Context, m cache.Marshaler, hints cache.E
 		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
 	}
 
-	return withFileLock(c.cachePath, func() error {
+	return withFileLock(ctx, c.cachePath, func() error {
 		if err := os.WriteFile(c.cachePath, data, FilePermissions); err != nil {
 			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}

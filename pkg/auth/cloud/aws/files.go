@@ -67,11 +67,44 @@ var (
 	ErrRemoveProfile                 = errors.New("failed to remove profile")
 )
 
-func withFileLock(path string, fn func() error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
+// removeProfileSectionOrDeleteFile deletes profileSectionName from cfg. If no non-default
+// sections remain, filePath is removed entirely; otherwise the updated cfg is saved back to
+// filePath. Shared by RemoveConfigProfile and RemoveCredentialsProfile to keep both functions
+// within the repo's complexity/length limits.
+func removeProfileSectionOrDeleteFile(cfg *ini.File, filePath, profileSectionName, identityName, fileLabel string) error {
+	cfg.DeleteSection(profileSectionName)
+
+	// If no sections remain (or only DEFAULT section which ini library creates), remove the file.
+	hasProfiles := false
+	for _, section := range cfg.Sections() {
+		// Skip the DEFAULT section (it's always present in ini files).
+		if section.Name() != ini.DefaultSection {
+			hasProfiles = true
+			break
+		}
+	}
+
+	if !hasProfiles {
+		log.Debug("No profiles remain, removing "+fileLabel, logKeyIdentity, identityName, "file", filePath)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to remove "+fileLabel)
+			return ErrRemoveProfile
+		}
+		return nil
+	}
+
+	if err := cfg.SaveTo(filePath); err != nil {
+		errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to save "+fileLabel)
+		return ErrRemoveProfile
+	}
+	return nil
+}
+
+func withFileLock(ctx context.Context, path string, fn func() error) error {
+	lockCtx, cancel := context.WithTimeout(ctx, fileLockTimeout)
 	defer cancel()
 
-	if err := cache.NewFileLock(path).WithLockContext(ctx, fn); err != nil {
+	if err := cache.NewFileLock(path).WithLockContext(lockCtx, fn); err != nil {
 		if errors.Is(err, errUtils.ErrCacheLocked) {
 			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
 		}
@@ -185,7 +218,7 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		return ErrCreateCredentialsFile
 	}
 
-	return withFileLock(credentialsPath, func() error {
+	return withFileLock(context.Background(), credentialsPath, func() error {
 		// Load existing INI file or create new one.
 		cfg, err := LoadINIFile(credentialsPath)
 		if err != nil {
@@ -279,7 +312,7 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 		return ErrCreateConfigFile
 	}
 
-	return withFileLock(configPath, func() error {
+	return withFileLock(context.Background(), configPath, func() error {
 		// Load existing INI file or create new one.
 		cfg, err := LoadINIFile(configPath)
 		if err != nil {
@@ -341,7 +374,7 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 // RemoveConfigProfile removes an identity profile from the provider's config file.
 // Uses file locking to prevent concurrent modification conflicts.
 // If this is the last profile, the config file is removed entirely.
-func (m *AWSFileManager) RemoveConfigProfile(providerName, identityName string) error {
+func (m *AWSFileManager) RemoveConfigProfile(ctx context.Context, providerName, identityName string) error {
 	defer perf.Track(nil, "aws.files.RemoveConfigProfile")()
 
 	configPath := m.GetConfigPath(providerName)
@@ -363,7 +396,7 @@ func (m *AWSFileManager) RemoveConfigProfile(providerName, identityName string) 
 		return nil
 	}
 
-	return withFileLock(configPath, func() error {
+	return withFileLock(ctx, configPath, func() error {
 		// Load existing INI file.
 		cfg, err := LoadINIFile(configPath)
 		if err != nil {
@@ -383,36 +416,8 @@ func (m *AWSFileManager) RemoveConfigProfile(providerName, identityName string) 
 			profileSectionName = fmt.Sprintf("profile %s", identityName)
 		}
 
-		// Delete the profile section.
-		cfg.DeleteSection(profileSectionName)
-
-		// If no sections remain (or only DEFAULT section which ini library creates), remove the file.
-		sections := cfg.Sections()
-		hasProfiles := false
-		for _, section := range sections {
-			// Skip the DEFAULT section (it's always present in ini files).
-			if section.Name() != ini.DefaultSection {
-				hasProfiles = true
-				break
-			}
-		}
-
-		if !hasProfiles {
-			log.Debug(
-				"No profiles remain, removing config file",
-				logKeyProvider, providerName,
-				"config_file", configPath,
-			)
-			if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-				errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to remove config file")
-				return ErrRemoveProfile
-			}
-		} else {
-			// Save the updated config file.
-			if err := cfg.SaveTo(configPath); err != nil {
-				errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to save config file")
-				return ErrRemoveProfile
-			}
+		if err := removeProfileSectionOrDeleteFile(cfg, configPath, profileSectionName, identityName, "config file"); err != nil {
+			return err
 		}
 
 		log.Debug(
@@ -428,7 +433,7 @@ func (m *AWSFileManager) RemoveConfigProfile(providerName, identityName string) 
 // RemoveCredentialsProfile removes an identity profile from the provider's credentials file.
 // Uses file locking to prevent concurrent modification conflicts.
 // If this is the last profile, the credentials file is removed entirely.
-func (m *AWSFileManager) RemoveCredentialsProfile(providerName, identityName string) error {
+func (m *AWSFileManager) RemoveCredentialsProfile(ctx context.Context, providerName, identityName string) error {
 	defer perf.Track(nil, "aws.files.RemoveCredentialsProfile")()
 
 	credentialsPath := m.GetCredentialsPath(providerName)
@@ -450,7 +455,7 @@ func (m *AWSFileManager) RemoveCredentialsProfile(providerName, identityName str
 		return nil
 	}
 
-	return withFileLock(credentialsPath, func() error {
+	return withFileLock(ctx, credentialsPath, func() error {
 		// Load existing INI file.
 		cfg, err := LoadINIFile(credentialsPath)
 		if err != nil {
@@ -465,36 +470,8 @@ func (m *AWSFileManager) RemoveCredentialsProfile(providerName, identityName str
 		// AWS credentials use plain profile names (no "profile" prefix).
 		profileSectionName := identityName
 
-		// Delete the profile section.
-		cfg.DeleteSection(profileSectionName)
-
-		// If no sections remain (or only DEFAULT section which ini library creates), remove the file.
-		sections := cfg.Sections()
-		hasProfiles := false
-		for _, section := range sections {
-			// Skip the DEFAULT section (it's always present in ini files).
-			if section.Name() != ini.DefaultSection {
-				hasProfiles = true
-				break
-			}
-		}
-
-		if !hasProfiles {
-			log.Debug(
-				"No profiles remain, removing credentials file",
-				logKeyProvider, providerName,
-				"credentials_file", credentialsPath,
-			)
-			if err := os.Remove(credentialsPath); err != nil && !os.IsNotExist(err) {
-				errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to remove credentials file")
-				return ErrRemoveProfile
-			}
-		} else {
-			// Save the updated credentials file.
-			if err := cfg.SaveTo(credentialsPath); err != nil {
-				errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to save credentials file")
-				return ErrRemoveProfile
-			}
+		if err := removeProfileSectionOrDeleteFile(cfg, credentialsPath, profileSectionName, identityName, "credentials file"); err != nil {
+			return err
 		}
 
 		log.Debug(
@@ -647,12 +624,12 @@ func (m *AWSFileManager) DeleteIdentity(ctx context.Context, providerName, ident
 	var errs []error
 
 	// Remove identity section from credentials file (with file locking).
-	if err := m.RemoveCredentialsProfile(providerName, identityName); err != nil {
+	if err := m.RemoveCredentialsProfile(ctx, providerName, identityName); err != nil {
 		errs = append(errs, fmt.Errorf("failed to remove credentials profile: %w", err))
 	}
 
 	// Remove identity section from config file (with file locking).
-	if err := m.RemoveConfigProfile(providerName, identityName); err != nil {
+	if err := m.RemoveConfigProfile(ctx, providerName, identityName); err != nil {
 		errs = append(errs, fmt.Errorf("failed to remove config profile: %w", err))
 	}
 

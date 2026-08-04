@@ -1043,7 +1043,7 @@ func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing-subdir", "credentials")
 
 	fnCalled := false
-	err := withFileLock(path, func() error {
+	err := withFileLock(context.Background(), path, func() error {
 		fnCalled = true
 		return nil
 	})
@@ -1051,4 +1051,221 @@ func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrFileLockTimeout)
 	assert.False(t, fnCalled, "fn must not run when the lock cannot be acquired")
+}
+
+// TestAWSFileManager_WriteCredentials_WithExpiration verifies that a non-empty
+// Expiration is persisted as the section comment, which is the fallback used
+// to determine credential validity when keychain access is unavailable (e.g.
+// inside Docker containers).
+func TestAWSFileManager_WriteCredentials_WithExpiration(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", Expiration: "2099-01-01T00:00:00Z"}
+	require.NoError(t, m.WriteCredentials("prov", "dev", creds))
+
+	cfg, err := ini.Load(m.GetCredentialsPath("prov"))
+	require.NoError(t, err)
+	sec := cfg.Section("dev")
+	// ini re-serializes comments with a leading "; " marker, so assert on the
+	// substring rather than exact equality with what was originally set.
+	assert.Contains(t, sec.Comment, "atmos: expiration=2099-01-01T00:00:00Z")
+}
+
+// TestAWSFileManager_WriteCredentials_LoadFailure verifies that a non-ENOENT
+// failure while loading the existing credentials file (e.g. the path is
+// actually a directory) is surfaced as ErrLoadCredentialsFile and does not
+// fall back to treating it as a missing file.
+func TestAWSFileManager_WriteCredentials_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.MkdirAll(credsPath, PermissionRWX)) // Directory in place of the file makes ini.Load fail non-ENOENT.
+
+	err := m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLoadCredentialsFile)
+}
+
+// TestAWSFileManager_WriteConfig_LoadFailure mirrors the credentials case for
+// WriteConfig's non-ENOENT ini.Load failure branch.
+func TestAWSFileManager_WriteConfig_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.MkdirAll(configPath, PermissionRWX))
+
+	err := m.WriteConfig("prov", "dev", "us-east-1", "json")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLoadConfigFile)
+}
+
+// TestAWSFileManager_WriteCredentials_SaveFailure verifies that cfg.SaveTo
+// failures (e.g. an unwritable target directory) are surfaced as
+// ErrWriteCredentialsFile.
+func TestAWSFileManager_WriteCredentials_SaveFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	credsDir := filepath.Dir(credsPath)
+	require.NoError(t, os.MkdirAll(credsDir, PermissionRWX))
+	// Pre-create the sibling lock file so lock acquisition (which also needs to
+	// create a file in this directory) still succeeds once the directory is
+	// made read-only below; only the SaveTo of the new credentials file itself
+	// should be blocked.
+	require.NoError(t, os.WriteFile(credsPath+".lock", nil, PermissionRW))
+	require.NoError(t, os.Chmod(credsDir, 0o555)) // Read-only: blocks creating the new credentials file.
+	t.Cleanup(func() { _ = os.Chmod(credsDir, PermissionRWX) })
+
+	err := m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWriteCredentialsFile)
+}
+
+// TestAWSFileManager_WriteConfig_SaveFailure mirrors the credentials case for
+// WriteConfig's cfg.SaveTo failure branch.
+func TestAWSFileManager_WriteConfig_SaveFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	configDir := filepath.Dir(configPath)
+	require.NoError(t, os.MkdirAll(configDir, PermissionRWX))
+	require.NoError(t, os.WriteFile(configPath+".lock", nil, PermissionRW))
+	require.NoError(t, os.Chmod(configDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(configDir, PermissionRWX) })
+
+	err := m.WriteConfig("prov", "dev", "us-east-1", "json")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWriteConfigFile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_LoadFailure verifies the non-ENOENT
+// ini.Load failure branch inside RemoveConfigProfile (distinct from the "file
+// vanished after the existence check" race branch).
+func TestAWSFileManager_RemoveConfigProfile_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.MkdirAll(configPath, PermissionRWX)) // Directory in place of the file.
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_LoadFailure mirrors the config
+// case for RemoveCredentialsProfile's non-ENOENT ini.Load failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.MkdirAll(credsPath, PermissionRWX))
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_SaveFailure verifies that when other
+// profiles remain after the delete, a cfg.SaveTo failure (target file made
+// read-only) is surfaced as ErrRemoveProfile instead of being silently
+// swallowed.
+func TestAWSFileManager_RemoveConfigProfile_SaveFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("read-only file permission bits are not enforced the same way on Windows")
+	}
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteConfig("prov", "keep", "us-east-1", "json"))
+	require.NoError(t, m.WriteConfig("prov", "dev", "us-west-2", "yaml"))
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.Chmod(configPath, 0o444)) // Read-only: blocks the rewrite triggered by deleting "dev".
+	t.Cleanup(func() { _ = os.Chmod(configPath, PermissionRW) })
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_SaveFailure mirrors the config
+// case for RemoveCredentialsProfile's cfg.SaveTo failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_SaveFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("read-only file permission bits are not enforced the same way on Windows")
+	}
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteCredentials("prov", "keep", &types.AWSCredentials{AccessKeyID: "AKIA1", SecretAccessKey: "secret1"}))
+	require.NoError(t, m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA2", SecretAccessKey: "secret2"}))
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.Chmod(credsPath, 0o444))
+	t.Cleanup(func() { _ = os.Chmod(credsPath, PermissionRW) })
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_RemoveFailure verifies that when no
+// profiles remain and the file must be deleted, an os.Remove failure (the
+// containing directory made read-only, which blocks unlink on POSIX even
+// though the file itself is readable) is surfaced as ErrRemoveProfile.
+func TestAWSFileManager_RemoveConfigProfile_RemoveFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteConfig("prov", "dev", "us-east-1", "json"))
+
+	configDir := filepath.Dir(m.GetConfigPath("prov"))
+	require.NoError(t, os.Chmod(configDir, 0o555)) // Read-only: blocks unlinking the now-empty config file.
+	t.Cleanup(func() { _ = os.Chmod(configDir, PermissionRWX) })
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure mirrors the
+// config case for RemoveCredentialsProfile's os.Remove failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"}))
+
+	credsDir := filepath.Dir(m.GetCredentialsPath("prov"))
+	require.NoError(t, os.Chmod(credsDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(credsDir, PermissionRWX) })
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
 }

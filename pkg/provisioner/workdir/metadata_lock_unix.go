@@ -13,6 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/cache"
 )
 
+// metadataLockTimeout bounds how long to wait to acquire the metadata write lock
+// on Unix. There is no equivalent on Windows: metadata_lock_windows.go performs no
+// file locking at all and uses an unrelated post-op sleep, so this constant isn't shared.
+const metadataLockTimeout = 500 * time.Millisecond
+
 func init() {
 	// Set the platform-specific locking functions.
 	withMetadataFileLock = withMetadataFileLockUnix
@@ -20,7 +25,7 @@ func init() {
 }
 
 func withMetadataFileLockUnix(metadataFile string, fn func() error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), metadataLockTimeout)
 	defer cancel()
 
 	if err := cache.NewFileLock(metadataFile).WithLockContext(ctx, fn); err != nil {

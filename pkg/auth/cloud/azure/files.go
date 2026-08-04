@@ -42,11 +42,23 @@ var (
 	ErrRemoveProfile                 = errors.New("failed to remove profile")
 )
 
-func withFileLock(path string, fn func() error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
+func withFileLock(ctx context.Context, path string, fn func() error) error {
+	lockCtx, cancel := context.WithTimeout(ctx, fileLockTimeout)
 	defer cancel()
 
-	if err := cache.NewFileLock(path).WithLockContext(ctx, fn); err != nil {
+	if err := cache.NewFileLock(path).WithLockContext(lockCtx, fn); err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
+		}
+		return err
+	}
+	return nil
+}
+
+// withFileRLock executes fn while holding a shared read lock on path, suitable for
+// read-only callbacks that don't need to exclude other concurrent readers.
+func withFileRLock(path string, fn func() error) error {
+	if err := cache.NewFileLock(path).WithRLock(fn); err != nil {
 		if errors.Is(err, errUtils.ErrCacheLocked) {
 			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
 		}
@@ -112,7 +124,7 @@ func (m *AzureFileManager) WriteCredentials(providerName, identityName string, c
 		return errors.Join(ErrCreateCredentialsFile, err)
 	}
 
-	return withFileLock(credPath, func() error {
+	return withFileLock(context.Background(), credPath, func() error {
 		data, err := json.MarshalIndent(creds, "", "  ")
 		if err != nil {
 			return fmt.Errorf("%w: failed to marshal credentials: %w", ErrWriteCredentialsFile, err)
@@ -151,7 +163,7 @@ func (m *AzureFileManager) LoadCredentials(providerName string) (*types.AzureCre
 	}
 
 	var creds *types.AzureCredentials
-	if err := withFileLock(credPath, func() error {
+	if err := withFileRLock(credPath, func() error {
 		data, err := os.ReadFile(credPath)
 		if err != nil {
 			return errors.Join(ErrLoadCredentialsFile, err)

@@ -592,6 +592,118 @@ func TestCleanupIdentityFiles_LockFailure_WrapsError(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrCacheLocked), "error should preserve the underlying cache-locked sentinel")
 }
 
+// TestWriteADCFile_WriteFailure_WrapsSentinel verifies the WriteFileAtomic
+// failure branch *inside* the lock closure (distinct from the lock-acquisition
+// failure covered by TestWriteADCFile_LockFailure_WrapsSentinel above): the
+// sibling ".lock" file is pre-created so locking succeeds, then the directory
+// is made read-only so renameio's temp-file-plus-rename write fails.
+func TestWriteADCFile_WriteFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "write-fail-adc"
+
+	path, err := GetADCFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.WriteFile(path+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "ya29.token",
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteADCFile), "error should match ADC write sentinel")
+}
+
+// TestWritePropertiesFile_WriteFailure_WrapsSentinel mirrors the ADC case for
+// WritePropertiesFile's WriteFileAtomic failure branch.
+func TestWritePropertiesFile_WriteFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "write-fail-props"
+
+	path, err := GetPropertiesFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.WriteFile(path+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WritePropertiesFile(testRealm, providerName, identityName, "my-project", "us-central1")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWritePropertiesFile), "error should match properties write sentinel")
+}
+
+// TestWriteAccessTokenFile_WriteFailure_WrapsSentinel mirrors the ADC case for
+// WriteAccessTokenFile's WriteFileAtomic failure branch.
+func TestWriteAccessTokenFile_WriteFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "write-fail-token"
+
+	path, err := GetAccessTokenFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.WriteFile(path+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WriteAccessTokenFile(testRealm, providerName, identityName, "ya29.access-token", time.Time{})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteAccessTokenFile), "error should match access token write sentinel")
+}
+
+// TestCleanupIdentityFiles_RemoveAllFailure_JoinsErrors verifies that an
+// os.RemoveAll failure for either the ADC or config subdirectory (a
+// non-ENOENT error) is preserved and joined rather than silently ignored:
+// both subdirectories get a file inside them so RemoveAll must unlink it, then
+// are made read-only so the unlink fails with permission denied.
+func TestCleanupIdentityFiles_RemoveAllFailure_JoinsErrors(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "cleanup-removeall-fail"
+
+	adcDir, err := GetADCDir(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	configDir, err := GetConfigDir(testRealm, providerName, identityName)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(adcDir, "cred.json"), []byte("{}"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "properties"), []byte(""), 0o600))
+	require.NoError(t, os.Chmod(adcDir, 0o555))
+	require.NoError(t, os.Chmod(configDir, 0o555))
+	t.Cleanup(func() {
+		_ = os.Chmod(adcDir, 0o700)
+		_ = os.Chmod(configDir, 0o700)
+	})
+
+	err = CleanupIdentityFiles(testRealm, providerName, identityName)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrRemoveDirectory), "error should wrap the remove-directory sentinel")
+	// Both directory-specific failures should be present in the joined error,
+	// not just whichever one happened to be appended first.
+	assert.Contains(t, err.Error(), adcDir, "joined error should mention the ADC directory that failed to remove")
+	assert.Contains(t, err.Error(), configDir, "joined error should mention the config directory that failed to remove")
+}
+
 func TestValidatePathSegment(t *testing.T) {
 	tests := []struct {
 		name      string

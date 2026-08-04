@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
@@ -23,6 +24,8 @@ const (
 	dockerConfigFilePerm = 0o600
 	// Docker config file name.
 	configFileName = "config.json"
+	// Maximum time to wait to acquire the Docker config file lock.
+	fileLockTimeout = 10 * time.Second
 )
 
 // ConfigManager manages Docker config.json for ECR authentication.
@@ -135,7 +138,10 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error {
 }
 
 func (m *ConfigManager) withConfigLock(fn func() error) error {
-	if err := cache.NewFileLock(m.configPath).WithLockContext(context.Background(), fn); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
+	defer cancel()
+
+	if err := cache.NewFileLock(m.configPath).WithLockContext(ctx, fn); err != nil {
 		if errors.Is(err, errUtils.ErrCacheLocked) {
 			return fmt.Errorf("%w: failed to acquire lock: %w", errUtils.ErrDockerConfigWrite, err)
 		}
