@@ -124,15 +124,28 @@ stores, Git, and CI integrations.
 
 ## Update and Safety Flags
 
-| Flag | Behavior |
-| --- | --- |
-| `--defaults` | Use defaults and `--set` values without prompting. |
-| `--dry-run` | Render a preview without generated-file writes. |
-| `--force` | Permit generation into a non-empty target without update merging. |
-| `--update` | Apply an optimistic three-way merge using the recorded source/base revision. |
-| `--merge-strategy` | Choose `manual` (default), `ours`, or `theirs` for merge conflicts. |
-| `--skip-hooks` | Skip all hooks or a comma-separated set of hook names. |
-| `--git` / `--no-git` | Control initial Git setup; generation defaults to no Git initialization. |
+<dl>
+  <dt>`--defaults`</dt>
+  <dd>Use defaults and `--set` values without prompting.</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Render a preview without generated-file writes.</dd>
+
+  <dt>`--force`</dt>
+  <dd>Permit generation into a non-empty target without update merging.</dd>
+
+  <dt>`--update`</dt>
+  <dd>Apply an optimistic three-way merge using the recorded source/base revision.</dd>
+
+  <dt>`--merge-strategy` (default `manual`)</dt>
+  <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts.</dd>
+
+  <dt>`--skip-hooks`</dt>
+  <dd>Skip all hooks or a comma-separated set of hook names.</dd>
+
+  <dt>`--git` / `--no-git`</dt>
+  <dd>Control initial Git setup; generation defaults to no Git initialization.</dd>
+</dl>
 
 ## Related Commands
 
