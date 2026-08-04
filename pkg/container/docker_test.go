@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -491,23 +492,38 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 		t.Skipf("Docker is unavailable: %v", err)
 	}
 
+	// Rootless/CI daemons can't always run the privileged Ryuk reaper, and its own
+	// image pull is one more Docker-Hub-flakiness surface; this test already
+	// terminates the network and registry explicitly via t.Cleanup, so Ryuk is
+	// unnecessary. Mirrors the same trade-off tests/floci_containers_test.go makes.
+	t.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+
 	ctx := context.Background()
 	testNetwork, err := network.New(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testNetwork.Remove(ctx) })
 
-	registry, err := testcontainers.Run(
-		ctx, "registry:2",
-		network.WithNetwork([]string{"cache-registry"}, testNetwork),
-		testcontainers.WithExposedPorts("5000/tcp"),
-		testcontainers.WithWaitStrategy(wait.ForListeningPort("5000/tcp").WithStartupTimeout(30*time.Second)),
-	)
-	require.NoError(t, err)
+	// Pull through Google's public Docker Hub mirror rather than registry-1.docker.io
+	// directly: it's a straight cache of the same images, so behavior is identical,
+	// but it sidesteps Docker Hub's own rate limiting and transient 5xx outages.
+	// isTransientPullError/pullRetryConfig are pkg/container/pull.go's existing
+	// retry policy for exactly this class of registry/network failure.
+	var registry testcontainers.Container
+	require.NoError(t, retry.WithPredicate(ctx, pullRetryConfig(), func() error {
+		var runErr error
+		registry, runErr = testcontainers.Run(
+			ctx, "mirror.gcr.io/library/registry:2",
+			network.WithNetwork([]string{"cache-registry"}, testNetwork),
+			testcontainers.WithExposedPorts("5000/tcp"),
+			testcontainers.WithWaitStrategy(wait.ForListeningPort("5000/tcp").WithStartupTimeout(30*time.Second)),
+		)
+		return runErr
+	}, isTransientPullError))
 	t.Cleanup(func() { _ = registry.Terminate(ctx) })
 
 	contextDir := t.TempDir()
 	dockerfile := filepath.Join(contextDir, "Dockerfile")
-	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
+	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM mirror.gcr.io/library/busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
 	cacheRef := "cache-registry:5000/atmos-buildx-cache:latest"
 	buildkitdConfig := filepath.Join(contextDir, "buildkitd.toml")
 	require.NoError(t, os.WriteFile(buildkitdConfig, []byte(`[registry."cache-registry:5000"]

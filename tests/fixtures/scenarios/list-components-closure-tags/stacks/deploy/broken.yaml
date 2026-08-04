@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Unrelated stack whose single component unconditionally fails template
+# rendering the moment it is fully evaluated (Sprig `fail`). Used to prove a
+# closure preview propagates a genuine evaluation error from
+# dependencies.ResolveScopedClosure instead of swallowing it. Tagged
+# `broken-tag` so it is never accidentally pulled into the istio-chain tests
+# in stacks_closure_test.go / components_closure_test.go.
+
+vars:
+  stage: broken
+
+components:
+  terraform:
+    broken:
+      metadata:
+        component: mock
+        tags:
+          - broken-tag
+      vars:
+        upstream_value: '{{ fail "broken component must only be evaluated when explicitly seeded" }}'
