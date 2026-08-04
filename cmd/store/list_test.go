@@ -168,7 +168,11 @@ func TestRunStoreListKeyValues_SecretStoreMasksOutput(t *testing.T) {
 	r, w, pipeErr := os.Pipe()
 	require.NoError(t, pipeErr)
 	os.Stdout = w
-	t.Cleanup(func() { os.Stdout = oldStdout })
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		_ = w.Close()
+		_ = r.Close()
+	})
 
 	require.NoError(t, iolib.Initialize())
 	ioCtx := iolib.GetContext()
