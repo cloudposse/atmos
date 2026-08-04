@@ -53,7 +53,6 @@ These gaps force users migrating from Helm or Helmfile to choose between depende
 - Fix apply dry-run propagation as a release-blocking safety prerequisite, then correctly propagate delete dry-run, cancellation, and deadlines through cluster operations.
 - Validate configuration before chart download or cluster mutation.
 - Keep template and diff complete by including Helm chart hook resources alongside the ordinary release manifest.
-- Allow callers to opt into fetching missing chart dependencies with Helm-compatible `--dependency-update` semantics.
 - Keep the design compatible with future pre-rollback diagnostics without requiring another public configuration rename.
 - Follow Atmos schema, stack-processing, command parsing, provider, error, logging, and testing conventions.
 
@@ -239,8 +238,6 @@ atmos helm delete demo-api -s example-prod \
 ```
 
 `template`, `diff`, and `plan` do not register release-lifecycle flags because they do not perform a release operation.
-
-All chart-loading operations (`template`, `diff`, `plan`, `apply`, and `deploy`) accept `--dependency-update`. Atmos invokes Helm's dependency manager only when a declared dependency is missing. The flag is intentionally invocation-scoped: without it, Atmos does not access dependency repositories or mutate the chart directory and instead reports both the equivalent `helm dependency build <chart>` command and the opt-in flag.
 
 ## Configuration Contract
 
