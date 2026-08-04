@@ -465,6 +465,133 @@ func TestCleanupIdentityFiles_InvalidIdentity(t *testing.T) {
 	assert.Contains(t, err.Error(), "identity name is required")
 }
 
+func TestWithFileLock_ReturnsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows file locking is a no-op fallback and never returns ErrCacheLocked")
+	}
+
+	tmp := t.TempDir()
+	// Point the lock at a path whose parent directory does not exist, so the
+	// underlying flock's O_CREATE open fails immediately without needing to
+	// wait on real lock contention. Mirrors the established style in
+	// pkg/cache/filelock_unix_test.go's TestWithLock_InvalidLockPath.
+	path := filepath.Join(tmp, "nonexistent-dir", "target-file")
+
+	called := false
+	err := withFileLock(path, func() error {
+		called = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrCacheLocked), "error should match cache locked sentinel")
+	assert.False(t, called, "fn should not have run when the lock could not be acquired")
+}
+
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a file-lock acquisition failure: this trick is a
+// no-op on Windows (permissions work differently) and on Unix when running as
+// root (root bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows file locking is a no-op fallback and never returns ErrCacheLocked")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+}
+
+func TestWriteADCFile_LockFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-adc"
+
+	// Resolve the path WriteADCFile will use, which also creates the ADC
+	// directory. Then strip write permission from that directory so the
+	// sibling ".lock" file cannot be created, forcing a lock-acquisition
+	// failure without any real lock contention.
+	path, err := GetADCFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "ya29.token",
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteADCFile), "error should match ADC write sentinel")
+}
+
+func TestWritePropertiesFile_LockFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-props"
+
+	path, err := GetPropertiesFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WritePropertiesFile(testRealm, providerName, identityName, "my-project", "us-central1")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWritePropertiesFile), "error should match properties write sentinel")
+}
+
+func TestWriteAccessTokenFile_LockFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-token"
+
+	path, err := GetAccessTokenFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WriteAccessTokenFile(testRealm, providerName, identityName, "ya29.access-token", time.Time{})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteAccessTokenFile), "error should match access token write sentinel")
+}
+
+func TestCleanupIdentityFiles_LockFailure_WrapsError(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-cleanup"
+
+	// CleanupIdentityFiles locks on providerDir/<identity>.cleanup, a file
+	// that never exists on disk, so its sibling ".lock" file lives directly
+	// under providerDir. Deny write access on providerDir itself.
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
+
+	err = CleanupIdentityFiles(testRealm, providerName, identityName)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cleanup identity files", "error should be wrapped with the cleanup context")
+	assert.True(t, errors.Is(err, errUtils.ErrCacheLocked), "error should preserve the underlying cache-locked sentinel")
+}
+
 func TestValidatePathSegment(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -1,10 +1,12 @@
 package helm
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -95,6 +97,36 @@ generated: "2026-06-30T00:00:00Z"
 	entry = loaded.Get("example")
 	require.NotNil(t, entry)
 	assert.Equal(t, "next", entry.Username)
+}
+
+func TestSetupHelmRepositories_LockUnavailable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
+	dir := t.TempDir()
+	repoFile := filepath.Join(dir, "repositories.yaml")
+	repoCache := filepath.Join(dir, "repository")
+	t.Setenv("HELM_REPOSITORY_CONFIG", repoFile)
+	t.Setenv("HELM_REPOSITORY_CACHE", repoCache)
+
+	// setupHelmRepositories always creates repoFile's parent directory first, so a
+	// missing-parent-directory trick can't make *opening* the lock file fail. Instead,
+	// pre-create the lock file with no permission bits: opening it for the flock
+	// handshake then fails immediately with "permission denied" instead of retrying
+	// until repositoryLockTimeout elapses.
+	require.NoError(t, os.MkdirAll(filepath.Dir(repoFile), os.ModePerm))
+	lockPath := repositoryLockPath(repoFile)
+	require.NoError(t, os.WriteFile(lockPath, nil, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(lockPath, 0o600) })
+
+	err := setupHelmRepositories([]chartRepository{
+		{Name: "example", URL: "https://example.com"},
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errHelmRepositoryLockTimeout))
 }
 
 func TestRepositoryEntryRejectsSlashName(t *testing.T) {

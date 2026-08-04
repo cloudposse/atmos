@@ -931,3 +931,66 @@ func TestStripBOM(t *testing.T) {
 		})
 	}
 }
+
+// TestWithAzureFileLock_WrapsErrCacheLocked verifies that withAzureFileLock wraps
+// the underlying cache.ErrCacheLocked into azureCloud.ErrFileLockTimeout, and that
+// the wrapped function never runs when the lock cannot be acquired.
+//
+// The lock file (path + ".lock") is placed under a directory that is never
+// created, so opening it fails immediately with ENOENT instead of retrying for
+// the full 10s timeout. This is the same "invalid lock path" style used by
+// pkg/cache/filelock_unix_test.go's TestWithLock_InvalidLockPath: a directory
+// pre-created at the lock path does not work here because gofrs/flock opens the
+// lock file with O_RDONLY (not O_RDWR) by default, and open()+flock() on a
+// directory succeeds on both Linux and macOS.
+func TestWithAzureFileLock_WrapsErrCacheLocked(t *testing.T) {
+	// Deliberately do not create "missing-dir": the lock file's parent
+	// directory must not exist so opening the lock file fails immediately.
+	path := filepath.Join(t.TempDir(), "missing-dir", "some-cache-file")
+
+	executed := false
+	err := withAzureFileLock(path, func() error {
+		executed = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, azureCloud.ErrFileLockTimeout)
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
+}
+
+// TestWriteCacheFileWithLocking_LockFailure verifies that writeCacheFileWithLocking returns false without overwriting existing data when the lock-protected write fails, exercising the withAzureFileLock error branch at its call site.
+// The function always creates the cache directory before locking, so an absent-parent-directory trick can't reach this call site; instead cachePath itself is pre-created as a directory so the write performed inside the lock fails cross-platform with "is a directory".
+func TestWriteCacheFileWithLocking_LockFailure(t *testing.T) {
+	cachePath := filepath.Join(t.TempDir(), "cache", "msal_token_cache.json")
+	require.NoError(t, os.MkdirAll(cachePath, 0o755))
+
+	ok := writeCacheFileWithLocking(cachePath, []byte("data"), "test cache")
+
+	assert.False(t, ok)
+	info, err := os.Stat(cachePath)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "cache path must remain untouched (still a directory) when the write fails")
+}
+
+// TestDeviceCodeProvider_updateAzureProfile_LockFailure verifies that updateAzureProfile
+// propagates a wrapped ErrFileLockTimeout when the azureProfile.json lock cannot be
+// acquired, exercising its withAzureFileLock call site. Unlike
+// writeCacheFileWithLocking, updateAzureProfile never creates the ".azure"
+// directory itself, so leaving it absent makes the lock-file open fail
+// immediately with ENOENT.
+func TestDeviceCodeProvider_updateAzureProfile_LockFailure(t *testing.T) {
+	testHome := t.TempDir()
+	// Deliberately do not create "<testHome>/.azure".
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, azureCloud.ErrFileLockTimeout)
+}

@@ -3,12 +3,15 @@ package docker
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func setupTestDockerConfigDir(t *testing.T) string {
@@ -234,4 +237,30 @@ func TestConfigManager_GetConfigPath(t *testing.T) {
 
 	expectedPath := filepath.Join(tmpDir, "config.json")
 	assert.Equal(t, expectedPath, manager.GetConfigPath())
+}
+
+func TestConfigManager_WithConfigLock_WrapsErrCacheLocked(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Point configPath at a parent directory that does not exist. gofrs/flock
+	// (as vendored here) opens its lock file with O_RDONLY|O_CREATE on most
+	// platforms, so a pre-created directory at the lock path is silently
+	// flock()-able and does NOT produce an error (unlike older flock
+	// versions that opened O_RDWR). A missing parent directory, however,
+	// fails the underlying open() immediately and deterministically on every
+	// platform, giving withConfigLock a hard, non-blocking error without
+	// needing to hold a real contending lock.
+	configPath := filepath.Join(tempDir, "nonexistent-subdir", "config.json")
+
+	manager := &ConfigManager{configPath: configPath}
+
+	executed := false
+	err := manager.withConfigLock(func() error {
+		executed = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigWrite))
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
 }

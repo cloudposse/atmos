@@ -1030,3 +1030,19 @@ func TestNewAWSFileManager_WithRealm(t *testing.T) {
 		})
 	}
 }
+
+// TestWithFileLock_WrapsErrCacheLocked verifies that withFileLock wraps ErrCacheLocked with the package's ErrFileLockTimeout sentinel and never invokes fn when the lock cannot be acquired.
+// Using a path whose ".lock" sibling lives under a directory that was never created makes the underlying open call fail immediately with ENOENT, since O_CREATE cannot materialize the missing parent directory — no waiting or real timeout involved, on either Unix or Windows.
+func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing-subdir", "credentials")
+
+	fnCalled := false
+	err := withFileLock(path, func() error {
+		fnCalled = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileLockTimeout)
+	assert.False(t, fnCalled, "fn must not run when the lock cannot be acquired")
+}

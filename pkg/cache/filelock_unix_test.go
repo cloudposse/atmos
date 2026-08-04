@@ -209,6 +209,22 @@ func TestWithRLock_FallbackWithoutLock(t *testing.T) {
 	assert.True(t, executed, "function should be executed without lock as fallback")
 }
 
+func TestTryWithRLock_Success(t *testing.T) {
+	tempDir := t.TempDir()
+	lockPath := filepath.Join(tempDir, "test-lock")
+	lock := NewFileLockAtPath(lockPath)
+
+	executed := false
+	acquired, err := lock.TryWithRLock(func() error {
+		executed = true
+		return nil
+	})
+
+	require.NoError(t, err)
+	assert.True(t, acquired, "lock should have been acquired when uncontended")
+	assert.True(t, executed, "function should have been executed under the lock")
+}
+
 func TestTryWithRLock_SkipsContendedRead(t *testing.T) {
 	tempDir := t.TempDir()
 	lockPath := filepath.Join(tempDir, "contended.lock")
@@ -253,4 +269,18 @@ func TestWithRLock_InvalidLockPath(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCacheLocked)
+}
+
+func TestTryWithRLock_InvalidLockPath(t *testing.T) {
+	// Use a path under a non-existent directory.
+	lock := &flockFileLock{lockPath: "/nonexistent/dir/test.lock"}
+
+	acquired, err := lock.TryWithRLock(func() error {
+		t.Fatal("function should not have been executed")
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheLocked)
+	assert.False(t, acquired)
 }

@@ -552,3 +552,30 @@ func TestAzureFileManager_ConcurrentAccess(t *testing.T) {
 	assert.Equal(t, "token-2", loaded.AccessToken)
 	assert.Equal(t, "tenant-789", loaded.TenantID)
 }
+
+func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort noop file lock (see pkg/cache/filelock_windows.go)
+		// that always executes fn and never returns ErrCacheLocked, so the
+		// lock-acquisition-failure path exercised here is not reachable there.
+		t.Skip("file locking is best-effort/noop on Windows; lock-failure path is not reachable")
+	}
+
+	tempDir := t.TempDir()
+	// Point the lock path (path + ".lock") at a parent directory that does not
+	// exist so that cache.NewFileLock(path).WithLockContext fails to open the
+	// lock file immediately, cross-platform-safe and without waiting on a real
+	// contended lock (mirrors pkg/cache/filelock_unix_test.go's
+	// TestWithLock_InvalidLockPath).
+	path := filepath.Join(tempDir, "nonexistent-subdir", "some-file")
+
+	executed := false
+	err := withFileLock(path, func() error {
+		executed = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileLockTimeout)
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
+}
