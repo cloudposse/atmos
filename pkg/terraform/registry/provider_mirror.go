@@ -186,12 +186,11 @@ const maxConcurrentPlatformFetches = 8
 // concurrent work.
 func fetchPlatformArchives(ctx context.Context, fetch proxy.Fetcher, req *platformArchiveRequest, platforms []registryPlatform) map[string]mirrorArchive {
 	jobs := make(chan registryPlatform)
-	results := make(chan platformArchiveResult, len(platforms))
-
 	workers := maxConcurrentPlatformFetches
 	if workers > len(platforms) {
 		workers = len(platforms)
 	}
+	results := make(chan platformArchiveResult, workers)
 
 	var wg sync.WaitGroup
 	for range workers {
