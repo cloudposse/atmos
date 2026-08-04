@@ -208,7 +208,9 @@ components:
 // the "Don't fail config loading if this step fails, just log it" contract.
 func TestLoadConfigFromCLIArgs_GitRootBasePathErrorIsNonFatal(t *testing.T) {
 	original := gitRootResolver
+	var resolverCalled bool
 	gitRootResolver = func(string) (string, error) {
+		resolverCalled = true
 		return "", errors.New("simulated git root detection failure")
 	}
 	defer func() { gitRootResolver = original }()
@@ -237,6 +239,7 @@ components:
 	var atmosConfig schema.AtmosConfiguration
 	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
 	require.NoError(t, err, "a git-root resolution failure must not fail config loading")
+	assert.True(t, resolverCalled, "gitRootResolver must have been invoked for this test to prove anything")
 	assert.Empty(t, atmosConfig.BasePath, "base_path should remain unset when git-root discovery fails")
 }
 
