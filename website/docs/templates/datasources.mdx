@@ -252,7 +252,7 @@ components:
 
 Gomplate datasources make external data available inside template expressions.
 
-> **Note:** Atmos `!include` functions and Gomplate datasources both load external data, but they serve different purposes. `!include` imports data directly into the Atmos configuration as part of YAML processing. Gomplate datasources expose data within template expressions, where it can be transformed, filtered, combined, or otherwise manipulated using Gomplate functions before being assigned to a value.
+> **Note:** Atmos [`!include`](/functions/yaml/include) functions and Gomplate datasources both load external data, but they serve different purposes. [`!include`](/functions/yaml/include) imports data directly into the Atmos configuration as part of YAML processing. Gomplate datasources expose data within template expressions, where it can be transformed, filtered, combined, or otherwise manipulated using Gomplate functions before being assigned to a value.
 
 Configure a YAML datasource:
 
@@ -290,7 +290,7 @@ Render the final configuration:
 <Terminal>
 
 ```bash
-atmos describe component app -s dev
+atmos describe component app -s dev --query '.vars'
 ```
 
 </Terminal>
