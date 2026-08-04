@@ -184,6 +184,10 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err != nil {
 		return err
 	}
+	if output != nil {
+		restoreUI := ioLayer.PushUIWriter(newSerializedWriter(os.Stderr, &output.outputMu))
+		defer restoreUI()
+	}
 
 	closeCache, err := startSharedTerraformCache(ctx, opts.AtmosConfig, opts.Info)
 	if err != nil {
@@ -1245,6 +1249,22 @@ type terraformOutput struct {
 	groupMu  sync.Mutex
 }
 
+// serializedWriter prevents UI messages and streamed component output from interleaving.
+type serializedWriter struct {
+	w  io.Writer
+	mu *sync.Mutex
+}
+
+func newSerializedWriter(w io.Writer, mu *sync.Mutex) *serializedWriter {
+	return &serializedWriter{w: w, mu: mu}
+}
+
+func (w *serializedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
+}
+
 // newTerraformOutput configures concurrent Terraform output streaming or grouping.
 func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, maxConcurrency int) (*terraformOutput, error) {
 	hideNoChanges, err := terraformPlanHideNoChangesEnabled(info)
@@ -1427,6 +1447,8 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 	}
 	o.groupMu.Lock()
 	defer o.groupMu.Unlock()
+	o.outputMu.Lock()
+	defer o.outputMu.Unlock()
 
 	label := terraformNodeLabel(node)
 	status := "succeeded"
