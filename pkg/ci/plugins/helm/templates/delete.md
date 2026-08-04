@@ -27,9 +27,9 @@
 | Field | Value |
 | --- | --- |
 | Operation | `{{ index . "operation" }}` |
-| Wait strategy | `{{ index . "wait_strategy" }}` |
+| Wait strategy | `{{ index (index . "wait") "strategy" }}` |
 | Timeout | `{{ index . "timeout" }}` |
-| Chart hooks enabled | `{{ index . "chart_hooks_enabled" }}` |
+| Chart hooks enabled | `{{ index . "chart_hooks" }}` |
 
 {{- end }}
 

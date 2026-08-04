@@ -11,12 +11,15 @@ Helm 4 does not expose a context-aware uninstall request.
 
 ## Migration notes
 
-- An omitted `timeout` remains `0s` (unbounded) for one minor release and emits a
+- An omitted `release.timeout` remains `0s` (unbounded) for one minor release and emits a
   warning. The omitted default becomes `5m` in the following minor. Configure
-  `timeout: 0s` explicitly to keep unbounded behavior without the warning.
-- An omitted `max_history` now retains ten upgrade revisions, matching the Helm
-  CLI. Configure `max_history: 0` to retain unlimited history.
-- Failure recovery uses `on_failure: [rollback, cleanup]` and the matching `--on-failure` list flag.
+  `release.timeout: 0s` explicitly to keep unbounded behavior without the warning.
+- An omitted `release.history.max` retains ten upgrade revisions, matching the
+  Helm CLI. Configure `release.history.max: 0` to retain unlimited history.
+- Failure recovery is operation-specific: use `release.install.on_failure: uninstall`
+  for failed first installs and `release.upgrade.on_failure: rollback` for failed
+  upgrades. Upgrade cleanup is controlled independently by
+  `release.upgrade.cleanup_on_failure`.
 - Boolean `--wait=true` and `--wait=false` remain accepted temporarily; use
   `--wait=watcher` and `--wait=hookOnly`.
 - Explicit lifecycle flags cannot be combined with a non-Kubernetes provision
