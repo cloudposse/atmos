@@ -6,9 +6,16 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &auth_stores_fixture "../../.context/cast-fixtures/auth-stores"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos --logs-level=Off emulator down aws -s local || true
       - type: cast
         name: identity-backed-stores
-        working_directory: "../../.context/cast-fixtures/auth-stores"
+        working_directory: *auth_stores_fixture
         title: "Auth Stores: map stores to identities"
         mode: steps
         defaults:
@@ -48,6 +55,68 @@ commands:
             duration: 450ms
             interval: 750ms
             command: *store_list_cmd
+          - type: simulate
+            text: "# local-aws is a real emulator identity, so its store actually works"
+          - type: simulate
+            text: &emulator_up_cmd atmos emulator up aws -s local --ephemeral
+          - type: shell
+            name: emulator-up
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_up_cmd
+          - type: simulate
+            text: &store_set_cmd atmos store set local/ssm image_tag sha256:abc123 --stack=dev
+          - type: shell
+            name: store-set
+            duration: 450ms
+            interval: 750ms
+            command: *store_set_cmd
+          - type: simulate
+            text: &store_get_cmd atmos store get local/ssm image_tag --stack=dev
+          - type: shell
+            name: store-get
+            duration: 450ms
+            interval: 750ms
+            command: *store_get_cmd
+          - type: simulate
+            text: &store_list_kv_cmd atmos store list local/ssm --stack=dev
+          - type: shell
+            name: store-list-kv
+            duration: 450ms
+            interval: 750ms
+            command: *store_list_kv_cmd
+          - type: simulate
+            text: "# tear it down when you're done"
+          - type: simulate
+            text: &emulator_down_cmd atmos emulator down aws -s local
+          - type: shell
+            name: emulator-down
+            when: always
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_down_cmd
+      - type: script
+        name: sanitize-runtime-values
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          import re
+
+          path = Path("../../website/static/casts/examples/auth-stores/identity-backed-stores.cast")
+          text = path.read_text()
+          text = re.sub(
+              r"(?:mirror\\.gcr\\.io/)?floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2",
+              "floci/floci:1.5.23",
+              text,
+          )
+          text = re.sub(r"(?<=atmos-local-auth-stores\\t)c88ec20bf221(?=\\trunning)", "floci/floci:1.5.23", text)
+          path.write_text(text)
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/examples/auth-stores/identity-backed-stores.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
       - type: shell
         name: validate
         command: atmos casts validate examples auth-stores identity-backed-stores
@@ -65,8 +134,32 @@ commands:
           plain = strip_ansi(text)
           assert_no_experimental(text)
           assert_body_color(text)
-          for needle in ["atmos auth list", "prod-admin", "azure-prod", "gcp-prod", "prod/ssm", "identity: prod-admin", "prod/keyvault", "prod/gsm", "atmos store list", "aws/ssm", "azure/keyvault", "gcp/secretmanager"]:
+          for needle in [
+              "atmos auth list",
+              "prod-admin",
+              "azure-prod",
+              "gcp-prod",
+              "prod/ssm",
+              "identity: prod-admin",
+              "prod/keyvault",
+              "prod/gsm",
+              "atmos store list",
+              "aws/ssm",
+              "azure/keyvault",
+              "gcp/secretmanager",
+              "local-aws",
+              "emulator aws is up",
+              "atmos store set local/ssm image_tag",
+              "Set image_tag in store local/ssm",
+              "atmos store get local/ssm image_tag",
+              "sha256:abc123",
+              "atmos store list local/ssm",
+              "emulator aws is down",
+          ]:
               if needle not in plain:
                   raise SystemExit(f"auth-stores cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:", "[store-set]", "[store-get]", "[store-list-kv]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"auth-stores cast contains {bad!r}")
           assert_no_error_output(text)
           assert_no_local_paths(text)

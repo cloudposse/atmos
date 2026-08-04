@@ -428,12 +428,12 @@ Run `atmos store list` with no arguments to check the `Listable` column for a gi
 atmos store list app-metadata --stack=prod --component=ecs-service
 ```
 
-The recording below runs this raw CRUD sequence against a local AWS emulator, so it needs no real
-`AWS` account:
+The recording below runs this raw CRUD sequence, along with identity-backed store access, against
+a local AWS emulator, so it needs no real `AWS` account:
 
-<CastPlayer src="/casts/examples/emulator-aws/stores.cast" title="atmos store: raw CRUD against a local AWS emulator" chrome controls scrubber />
+<CastPlayer src="/casts/examples/auth-stores/identity-backed-stores.cast" title="atmos auth-backed stores" chrome controls scrubber />
 
-[View the full example](/examples/emulator-aws)
+[View the full example](/examples/auth-stores)
 
 ```yaml
 steps:
