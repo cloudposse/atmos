@@ -100,6 +100,27 @@ type CacheProvider interface {
 	Cache() (cache.Backend, error)
 }
 
+// SBOMReport is a generated software bill of materials ready for publication.
+// Content is already serialized in the declared format.
+type SBOMReport struct {
+	Filename string
+	Format   string
+	Content  []byte
+}
+
+// SBOMUpload identifies a provider-side publication of an SBOM.
+type SBOMUpload struct {
+	Provider string
+	Location string
+}
+
+// SBOMUploader is an optional CI capability for publishing an SBOM generated
+// by Atmos. Providers define the destination; callers must not assume that an
+// SBOM publication imports dependencies into a provider's dependency graph.
+type SBOMUploader interface {
+	UploadSBOM(ctx context.Context, report SBOMReport) (*SBOMUpload, error)
+}
+
 // OutputWriter writes CI outputs (environment variables, job summaries, etc.).
 type OutputWriter interface {
 	// WriteOutput writes a key-value pair to CI outputs (e.g., $GITHUB_OUTPUT).
