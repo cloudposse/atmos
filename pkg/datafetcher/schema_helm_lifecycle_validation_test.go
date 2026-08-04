@@ -19,17 +19,33 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 
 	valid := map[string]any{
 		"helm": map[string]any{
-			"command":       "helm",
-			"auth":          map[string]any{},
-			"secrets":       map[string]any{},
-			"dependencies":  map[string]any{},
-			"source":        map[string]any{"uri": "github.com/cloudposse/atmos"},
-			"provision":     map[string]any{},
-			"on_failure":    []string{"rollback"},
-			"wait_strategy": "watcher",
-			"timeout":       "10m",
-			"max_history":   10,
-			"values":        map[string]any{"cluster": "shared"},
+			"command":      "helm",
+			"auth":         map[string]any{},
+			"secrets":      map[string]any{},
+			"dependencies": map[string]any{},
+			"source":       map[string]any{"uri": "github.com/cloudposse/atmos"},
+			"provision":    map[string]any{},
+			"release": map[string]any{
+				"timeout":     "10m",
+				"chart_hooks": true,
+				"wait":        map[string]any{"strategy": "watcher", "jobs": true},
+				"history":     map[string]any{"max": 10},
+				"install": map[string]any{
+					"timeout":    "60m",
+					"crds":       "create",
+					"on_failure": "uninstall",
+				},
+				"upgrade": map[string]any{
+					"timeout":            "10m",
+					"on_failure":         "rollback",
+					"cleanup_on_failure": true,
+				},
+				"delete": map[string]any{
+					"timeout": "5m",
+					"wait":    map[string]any{"strategy": "legacy"},
+				},
+			},
+			"values": map[string]any{"cluster": "shared"},
 			"overrides": map[string]any{
 				"values": map[string]any{"environment": "test"},
 				"vars":   map[string]any{"region": "us-east-1"},
@@ -49,13 +65,17 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 		"components": map[string]any{
 			"helm": map[string]any{
 				"demo-release": map[string]any{
-					"chart":               "charts/demo-release",
-					"namespace":           "demo",
-					"secrets":             map[string]any{},
-					"wait_for_jobs":       true,
-					"on_failure":          []string{"cleanup"},
-					"disable_chart_hooks": false,
-					"skip_crds":           false,
+					"chart":     "charts/demo-release",
+					"namespace": "demo",
+					"secrets":   map[string]any{},
+					"release": map[string]any{
+						"wait": map[string]any{"strategy": "watcher"},
+						"install": map[string]any{
+							"on_failure": "keep",
+							"crds":       "skip",
+						},
+						"upgrade": map[string]any{"on_failure": "keep"},
+					},
 					"overrides": map[string]any{
 						"values": map[string]any{"replicaCount": 2},
 						"vars":   map[string]any{"region": "us-west-2"},
@@ -76,45 +96,59 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 	}{
 		{
 			name:  "unknown wait strategy",
-			field: "helm.wait_strategy",
+			field: "helm.release.wait.strategy",
 			manifest: map[string]any{
-				"helm": map[string]any{"wait_strategy": "unknown"},
+				"helm": map[string]any{"release": map[string]any{"wait": map[string]any{"strategy": "unknown"}}},
 			},
 		},
 		{
 			name:  "negative history",
-			field: "components.helm.demo-release.max_history",
+			field: "components.helm.demo-release.release.history.max",
 			manifest: map[string]any{
 				"components": map[string]any{
 					"helm": map[string]any{
-						"demo-release": map[string]any{"chart": "demo", "max_history": -1},
+						"demo-release": map[string]any{"chart": "demo", "release": map[string]any{"history": map[string]any{"max": -1}}},
 					},
 				},
 			},
 		},
 		{
 			name:  "numeric timeout",
-			field: "components.helm.demo-release.timeout",
+			field: "components.helm.demo-release.release.timeout",
 			manifest: map[string]any{
 				"components": map[string]any{
 					"helm": map[string]any{
-						"demo-release": map[string]any{"chart": "demo", "timeout": 300},
+						"demo-release": map[string]any{"chart": "demo", "release": map[string]any{"timeout": 300}},
 					},
 				},
 			},
 		},
 		{
-			name:  "unknown failure action",
-			field: "helm.on_failure.0",
+			name:  "unknown upgrade failure action",
+			field: "helm.release.upgrade.on_failure",
 			manifest: map[string]any{
-				"helm": map[string]any{"on_failure": []string{"notify"}},
+				"helm": map[string]any{"release": map[string]any{"upgrade": map[string]any{"on_failure": "notify"}}},
 			},
 		},
 		{
-			name:  "non-list failure policy",
-			field: "helm.on_failure",
+			name:  "misplaced cleanup policy",
+			field: "helm.release.install",
 			manifest: map[string]any{
-				"helm": map[string]any{"on_failure": "rollback"},
+				"helm": map[string]any{"release": map[string]any{"install": map[string]any{"cleanup_on_failure": true}}},
+			},
+		},
+		{
+			name:  "replace CRDs unsupported",
+			field: "helm.release.install.crds",
+			manifest: map[string]any{
+				"helm": map[string]any{"release": map[string]any{"install": map[string]any{"crds": "replace"}}},
+			},
+		},
+		{
+			name:  "delete wait jobs unsupported",
+			field: "helm.release.delete.wait",
+			manifest: map[string]any{
+				"helm": map[string]any{"release": map[string]any{"delete": map[string]any{"wait": map[string]any{"jobs": true}}}},
 			},
 		},
 		{

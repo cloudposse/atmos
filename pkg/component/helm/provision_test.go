@@ -129,7 +129,7 @@ func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
 	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
 	require.NoError(t, err)
 	assert.Equal(t, "deploy-repo", summary[targetKey])
-	assert.Equal(t, map[string]any{"applied": false, "target_kind": "helm-apply-external", "reason": "external_target"}, summary["lifecycle"])
+	assert.Equal(t, map[string]any{"applied": false, "target_kind": "helm-apply-external", "reason": "external_target"}, summary["release"])
 	require.NotNil(t, ft.delivered)
 	assert.Equal(t, "deploy-repo", ft.delivered.TargetName)
 }
@@ -172,32 +172,36 @@ func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
 }
 
 func TestLifecycleSummary(t *testing.T) {
-	policy := releaseLifecycle{
-		OnFailure:         []failureAction{failureActionRollback, failureActionCleanup},
-		WaitStrategy:      kube.StatusWatcherStrategy,
-		WaitForJobs:       true,
-		Timeout:           5 * time.Minute,
-		MaxHistory:        7,
-		DisableChartHooks: true,
-		SkipCRDs:          true,
+	policy := effectiveReleasePolicy{
+		OnFailure:        failurePolicyRollback,
+		CleanupOnFailure: true,
+		WaitStrategy:     kube.StatusWatcherStrategy,
+		WaitForJobs:      true,
+		Timeout:          5 * time.Minute,
+		MaxHistory:       7,
+		ChartHooks:       false,
+		CRDs:             crdPolicySkip,
 	}
 
+	policy.Operation = releaseOperationInstall
 	install := lifecycleSummary(releaseOperationInstall, policy)
 	assert.Equal(t, releaseOperationInstall, install["operation"])
-	assert.Equal(t, "watcher", install["wait_strategy"])
 	assert.Equal(t, "5m0s", install["timeout"])
-	assert.Equal(t, false, install["chart_hooks_enabled"])
-	assert.Equal(t, true, install["wait_for_jobs"])
-	assert.Equal(t, []string{"rollback"}, install["on_failure"])
-	assert.Equal(t, false, install["install_crds"])
+	assert.Equal(t, false, install["chart_hooks"])
+	assert.Equal(t, map[string]any{"strategy": "watcher", "jobs": true}, install["wait"])
+	assert.Equal(t, "rollback", install["on_failure"])
+	assert.Equal(t, "skip", install["crds"])
 
+	policy.Operation = releaseOperationUpgrade
 	upgrade := lifecycleSummary(releaseOperationUpgrade, policy)
-	assert.Equal(t, true, upgrade["wait_for_jobs"])
-	assert.Equal(t, []string{"rollback", "cleanup"}, upgrade["on_failure"])
-	assert.Equal(t, 7, upgrade["max_history"])
+	assert.Equal(t, map[string]any{"strategy": "watcher", "jobs": true}, upgrade["wait"])
+	assert.Equal(t, "rollback", upgrade["on_failure"])
+	assert.Equal(t, true, upgrade["cleanup_on_failure"])
+	assert.Equal(t, map[string]any{"max": 7}, upgrade["history"])
 
-	deleted := lifecycleSummary("delete", policy)
-	assert.NotContains(t, deleted, "wait_for_jobs")
+	policy.Operation = releaseOperationDelete
+	deleted := lifecycleSummary(releaseOperationDelete, policy)
+	assert.Equal(t, map[string]any{"strategy": "watcher"}, deleted["wait"])
 	assert.NotContains(t, deleted, "on_failure")
 }
 
