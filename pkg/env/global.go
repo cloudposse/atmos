@@ -61,11 +61,13 @@ func ApplyGlobalEnvToSlice(envSlice []string, globalEnv map[string]string) []str
 		return envSlice
 	}
 
-	// Build a set of existing keys for quick lookup.
+	// Build a set of existing keys for quick lookup. Keyed by CanonicalEnvKey so a
+	// case-variant spelling already present (e.g. Windows' native "Path") correctly
+	// counts as "existing" even when globalEnv spells it "PATH".
 	existingKeys := make(map[string]bool, len(envSlice))
 	for _, envVar := range envSlice {
 		pair := splitStringAtFirstOccurrence(envVar, "=")
-		existingKeys[pair[0]] = true
+		existingKeys[CanonicalEnvKey(pair[0])] = true
 	}
 
 	// Add global env vars that don't already exist.
@@ -73,7 +75,7 @@ func ApplyGlobalEnvToSlice(envSlice []string, globalEnv map[string]string) []str
 	result = append(result, envSlice...)
 
 	for k, v := range globalEnv {
-		if !existingKeys[k] {
+		if !existingKeys[CanonicalEnvKey(k)] {
 			result = append(result, fmt.Sprintf("%s=%s", k, v))
 		}
 	}
@@ -120,18 +122,23 @@ func MergeSystemEnvSimple(newEnvList []string) []string {
 // It handles merging system env, optional global env, and component/new env.
 // If handleTFCliArgs is true, TF_CLI_ARGS_* variables get special handling (prepend instead of replace).
 func mergeSystemEnvInternal(envList []string, globalEnv map[string]string, handleTFCliArgs bool) []string {
+	// Keyed by CanonicalEnvKey so case-variant spellings of the same variable (e.g.
+	// Windows' native "Path" vs. Atmos's own "PATH") collapse into one entry instead
+	// of coexisting as two whose relative order in the output slice — and therefore
+	// which one downstream subprocess creation treats as authoritative — would
+	// otherwise depend on Go's randomized map iteration order.
 	envMap := make(map[string]string)
 
 	// Parse system environment variables.
 	for _, env := range os.Environ() {
 		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
+			envMap[CanonicalEnvKey(parts[0])] = parts[1]
 		}
 	}
 
 	// Apply global env from atmos.yaml if provided (can override system env).
 	for k, v := range globalEnv {
-		envMap[k] = v
+		envMap[CanonicalEnvKey(k)] = v
 	}
 
 	// Merge with new environment variables (highest priority).
@@ -141,17 +148,18 @@ func mergeSystemEnvInternal(envList []string, globalEnv map[string]string, handl
 			continue
 		}
 		key, value := parts[0], parts[1]
+		canonicalKey := CanonicalEnvKey(key)
 
 		// For TF_CLI_ARGS_* variables, prepend new values to existing values.
 		if handleTFCliArgs && strings.HasPrefix(key, "TF_CLI_ARGS_") {
-			if existing, exists := envMap[key]; exists {
+			if existing, exists := envMap[canonicalKey]; exists {
 				// Put the new, Atmos defined value first so it takes precedence.
-				envMap[key] = value + " " + existing
+				envMap[canonicalKey] = value + " " + existing
 				continue
 			}
 		}
 		// For all other environment variables (or TF_CLI_ARGS_* without existing value), override.
-		envMap[key] = value
+		envMap[canonicalKey] = value
 	}
 
 	// Convert back to slice.

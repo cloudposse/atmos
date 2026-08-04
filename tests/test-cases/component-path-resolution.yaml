@@ -190,6 +190,11 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../../.."
+      # Pin both vars so `env "USER" | default (env "USERNAME")` in the fixture
+      # resolves identically on Unix, Windows, and CI (usernames with spaces or
+      # missing vars would otherwise leak into the snapshot).
+      USER: "user"
+      USERNAME: "user"
     args:
       - "describe"
       - "component"
@@ -198,8 +203,6 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
-      sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   - name: describe component with relative path
@@ -211,6 +214,11 @@ tests:
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
       ATMOS_BASE_PATH: "../.."
+      # Pin both vars so `env "USER" | default (env "USERNAME")` in the fixture
+      # resolves identically on Unix, Windows, and CI (usernames with spaces or
+      # missing vars would otherwise leak into the snapshot).
+      USER: "user"
+      USERNAME: "user"
     args:
       - "describe"
       - "component"
@@ -219,8 +227,6 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
-      sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   - name: describe component with nested component path
@@ -270,6 +276,12 @@ tests:
     description: "Test that traditional component names still work with describe"
     workdir: "fixtures/scenarios/complete"
     command: "atmos"
+    env:
+      # Pin both vars so `env "USER" | default (env "USERNAME")` in the fixture
+      # resolves identically on Unix, Windows, and CI (usernames with spaces or
+      # missing vars would otherwise leak into the snapshot).
+      USER: "user"
+      USERNAME: "user"
     args:
       - "describe"
       - "component"
@@ -278,8 +290,6 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
-      sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   # Validate component tests
@@ -397,7 +407,6 @@ tests:
     expect:
       diff: []
       sanitize:
-        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
         "basePathAbsolute: .+": "basePathAbsolute: /absolute/path"
       exit_code: 0
 
