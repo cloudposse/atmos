@@ -623,6 +623,10 @@ func terraformHookEvents(subCommand string) (before, after h.HookEvent, ok bool)
 		return h.BeforeTerraformApply, h.AfterTerraformApply, true
 	case "deploy":
 		return h.BeforeTerraformDeploy, h.AfterTerraformDeploy, true
+	case "output":
+		return h.BeforeTerraformOutput, h.AfterTerraformOutput, true
+	case "refresh":
+		return h.BeforeTerraformRefresh, h.AfterTerraformRefresh, true
 	default:
 		return "", "", false
 	}

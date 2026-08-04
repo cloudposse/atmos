@@ -54,7 +54,7 @@ each level merges into the final result so you can keep configuration
 
 | Family | Events |
 | --- | --- |
-| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, and `test`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `after.terraform.plan.aggregate`, `after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. |
+| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `after.terraform.plan.aggregate`, `after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. |
 | Kubernetes | `before`/`after.kubernetes.render`, `diff`/`plan`, `apply`/`deploy`, `delete`, and `validate`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. |
 | Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. |
 | Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`. `sync` and `deploy` normalize to `apply`. |
@@ -390,6 +390,22 @@ hooks:
 
 See [Store function reference](#store-function-reference) below for
 configuration details.
+
+Scope the same hook to `after.terraform.output` instead (or in addition) to
+backfill a store from infrastructure that's already deployed — no `apply`
+required. This covers components that were applied before hooks existed, or
+outside Atmos entirely: running `atmos terraform output` reads the current
+state and populates the store the same way an after-apply hook would.
+
+```yaml
+hooks:
+  backfill:
+    events: [after.terraform.output]
+    kind: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+```
 
 ### `kind: git`
 

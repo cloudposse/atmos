@@ -26,3 +26,21 @@ func getKey(prefix string, stackDelimiter string, stack string, component string
 
 	return finalKey, nil
 }
+
+// getKeyPrefix builds the same prefix getKey composes a key under, without the final key
+// segment. ListableStore implementations use it to scope a key-enumeration call (a path, a
+// folder, a glob, or a name filter, depending on the backend) to a stack/component. An empty
+// stack and/or component collapses the same way getKey's does: a fully global scope returns just
+// prefix.
+func getKeyPrefix(prefix string, stackDelimiter string, stack string, component string, finalDelimiter string) string {
+	parts := []string{prefix}
+	if stack != "" {
+		parts = append(parts, strings.Split(stack, stackDelimiter)...)
+	}
+	if component != "" {
+		parts = append(parts, strings.Split(component, "/")...)
+	}
+
+	joined := strings.Join(parts, finalDelimiter)
+	return strings.ReplaceAll(joined, "//", "/")
+}

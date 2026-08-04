@@ -416,6 +416,48 @@ func TestApplyPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
 	assert.NoError(t, err, "PostRunE must fire normally in single-component mode")
 }
 
+// TestOutputPostRunE_SuppressedWhenMultiComponent verifies that outputCmd.PostRunE
+// returns nil without error when wasMultiComponentExecution is true (multi-component
+// mode), mirroring the apply/deploy/plan PostRunE suppression contract.
+func TestOutputPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	orig := wasMultiComponentExecution
+	defer func() { wasMultiComponentExecution = orig }()
+
+	cmd := newHookTestCmd()
+	cmd.Use = "output"
+
+	wasMultiComponentExecution = true
+	err := outputCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must be suppressed when wasMultiComponentExecution is true")
+
+	wasMultiComponentExecution = false
+	err = outputCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must fire normally in single-component mode")
+}
+
+// TestRefreshPostRunE_SuppressedWhenMultiComponent verifies that refreshCmd.PostRunE
+// returns nil without error when wasMultiComponentExecution is true (multi-component
+// mode), mirroring the apply/deploy/plan PostRunE suppression contract.
+func TestRefreshPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	orig := wasMultiComponentExecution
+	defer func() { wasMultiComponentExecution = orig }()
+
+	cmd := newHookTestCmd()
+	cmd.Use = "refresh"
+
+	wasMultiComponentExecution = true
+	err := refreshCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must be suppressed when wasMultiComponentExecution is true")
+
+	wasMultiComponentExecution = false
+	err = refreshCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must fire normally in single-component mode")
+}
+
 // TestDeployRunE_DeferGuard verifies the RunE defer-guard contract in
 // deploy.go: the global error hook (runHooksOnErrorWithOutput) must fire
 // when runErr is non-nil AND wasMultiComponentExecution is false, and must
@@ -521,6 +563,88 @@ func TestDeployRunE_DeferGuard(t *testing.T) {
 	}
 }
 
+// TestOutputRefreshRunE_DeferGuard verifies the RunE defer-guard contract
+// shared by output.go and refresh.go: the global error hook
+// (runHooksOnErrorWithOutput) must fire when runErr is non-nil AND
+// wasMultiComponentExecution is false, and must be suppressed when
+// wasMultiComponentExecution is true (multi-component mode, where
+// per-component hooks already fired inside the affected/all/query
+// dispatch). Mirrors TestDeployRunE_DeferGuard for output.go's and
+// refresh.go's guards.
+func TestOutputRefreshRunE_DeferGuard(t *testing.T) {
+	subcommands := []struct {
+		name  string
+		use   string
+		event hooks.HookEvent
+	}{
+		{name: "output", use: "output", event: hooks.AfterTerraformOutput},
+		{name: "refresh", use: "refresh", event: hooks.AfterTerraformRefresh},
+	}
+
+	for _, sub := range subcommands {
+		t.Run(sub.name, func(t *testing.T) {
+			origGuard := wasMultiComponentExecution
+			origHook := runHooksOnErrorWithOutput
+			defer func() {
+				wasMultiComponentExecution = origGuard
+				runHooksOnErrorWithOutput = origHook
+			}()
+
+			var called bool
+			var calledEvent hooks.HookEvent
+			var calledErr error
+			runHooksOnErrorWithOutput = func(event hooks.HookEvent, _ *cobra.Command, _ []string, cmdErr error, _ string) {
+				called = true
+				calledEvent = event
+				calledErr = cmdErr
+			}
+
+			cmd := newHookTestCmd()
+			cmd.Use = sub.use
+			args := []string{"--stack", "dev", "myapp"}
+
+			// invokeDefer mirrors the RunE defer-guard body in output.go/refresh.go.
+			// Any change to the production guard must be reflected here.
+			invokeDefer := func(runErr error) {
+				if runErr != nil && !wasMultiComponentExecution {
+					runHooksOnErrorWithOutput(sub.event, cmd, args, runErr, "")
+				}
+			}
+
+			runErr := errors.New("terraform " + sub.name + " failed")
+
+			tests := []struct {
+				name           string
+				runErr         error
+				multiComponent bool
+				expectCalled   bool
+			}{
+				{name: "non-nil error + single-component → hook fires", runErr: runErr, multiComponent: false, expectCalled: true},
+				{name: "non-nil error + multi-component → hook suppressed", runErr: runErr, multiComponent: true, expectCalled: false},
+				{name: "nil error + single-component → hook does not fire", runErr: nil, multiComponent: false, expectCalled: false},
+				{name: "nil error + multi-component → hook does not fire", runErr: nil, multiComponent: true, expectCalled: false},
+			}
+
+			for _, tc := range tests {
+				t.Run(tc.name, func(t *testing.T) {
+					called = false
+					calledEvent = ""
+					calledErr = nil
+					wasMultiComponentExecution = tc.multiComponent
+
+					invokeDefer(tc.runErr)
+
+					assert.Equal(t, tc.expectCalled, called, "hook firing did not match expectation")
+					if tc.expectCalled {
+						assert.Equal(t, sub.event, calledEvent, "hook event mismatch")
+						assert.Equal(t, runErr, calledErr, "hook did not receive original runErr")
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestTerraformNodeHooksAfter_DeployExitCodeForwarding verifies that the exit
 // code extracted from execErr is forwarded correctly, matching the plan
 // component hook behaviour.
@@ -598,8 +722,8 @@ func TestTerraformNodeHooksAfter_ApplyExitCodeForwarding(t *testing.T) {
 func TestWirePerComponentHook(t *testing.T) {
 	withoutCIDetection(t)
 
-	t.Run("plan/deploy/apply install a non-nil NodeHooks", func(t *testing.T) {
-		for _, sub := range []string{"plan", "deploy", "apply"} {
+	t.Run("plan/deploy/apply/output/refresh install a non-nil NodeHooks", func(t *testing.T) {
+		for _, sub := range []string{"plan", "deploy", "apply", "output", "refresh"} {
 			t.Run(sub, func(t *testing.T) {
 				info := &schema.ConfigAndStacksInfo{
 					TerraformPlanCIResultHandler: nil,
@@ -663,8 +787,8 @@ func TestWirePerComponentHook(t *testing.T) {
 	t.Run("unknown subcommand leaves NodeHooks unset", func(t *testing.T) {
 		// `init`, `validate`, etc. are valid terraform subcommands but they do
 		// not have per-component hooks today. The helper must be a no-op
-		// for anything outside the {plan, deploy, apply} set so other
-		// subcommands don't accidentally start firing hooks.
+		// for anything outside the {plan, deploy, apply, output, refresh} set
+		// so other subcommands don't accidentally start firing hooks.
 		for _, sub := range []string{"destroy", "init", "validate", ""} {
 			t.Run(sub, func(t *testing.T) {
 				info := &schema.ConfigAndStacksInfo{}
@@ -683,7 +807,7 @@ func TestWirePerComponentHook(t *testing.T) {
 		t.Chdir("../../examples/demo-stacks")
 		cmd := newHookTestCmd()
 
-		for _, sub := range []string{"plan", "deploy", "apply"} {
+		for _, sub := range []string{"plan", "deploy", "apply", "output", "refresh"} {
 			t.Run(sub, func(t *testing.T) {
 				info := &schema.ConfigAndStacksInfo{
 					Stack:            "dev",
@@ -702,7 +826,7 @@ func TestWirePerComponentHook(t *testing.T) {
 		}
 	})
 
-	t.Run("the three subcommands wire to distinct events", func(t *testing.T) {
+	t.Run("the five subcommands wire to distinct events", func(t *testing.T) {
 		// Sanity check: a future edit that copy-pastes one case over another
 		// (e.g. apply ends up using the plan event) wouldn't be caught by the
 		// nil/non-nil assertions above. Assert the wired before/after events
@@ -714,16 +838,19 @@ func TestWirePerComponentHook(t *testing.T) {
 			require.True(t, ok)
 			return nodeHooks.beforeEvent, nodeHooks.afterEvent
 		}
-		planBefore, planAfter := eventsFor("plan")
-		applyBefore, applyAfter := eventsFor("apply")
-		deployBefore, deployAfter := eventsFor("deploy")
+		subs := []string{"plan", "apply", "deploy", "output", "refresh"}
+		before := make(map[string]hooks.HookEvent, len(subs))
+		after := make(map[string]hooks.HookEvent, len(subs))
+		for _, sub := range subs {
+			before[sub], after[sub] = eventsFor(sub)
+		}
 
-		assert.NotEqual(t, planAfter, applyAfter, "plan and apply must fire different after-events")
-		assert.NotEqual(t, planAfter, deployAfter, "plan and deploy must fire different after-events")
-		assert.NotEqual(t, applyAfter, deployAfter, "apply and deploy must fire different after-events")
-		assert.NotEqual(t, planBefore, applyBefore, "plan and apply must fire different before-events")
-		assert.NotEqual(t, planBefore, deployBefore, "plan and deploy must fire different before-events")
-		assert.NotEqual(t, applyBefore, deployBefore, "apply and deploy must fire different before-events")
+		for i, a := range subs {
+			for _, b := range subs[i+1:] {
+				assert.NotEqual(t, after[a], after[b], "%s and %s must fire different after-events", a, b)
+				assert.NotEqual(t, before[a], before[b], "%s and %s must fire different before-events", a, b)
+			}
+		}
 	})
 }
 
