@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -221,6 +223,18 @@ func TestCommandEngine_RoutesSubprocessOutputToContextWriters(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hook progress\rhook complete\n", stdout.String())
 	assert.Equal(t, "hook warning\n", stderr.String())
+}
+
+func TestRenderTerminalRoutesSummaryToContextStderr(t *testing.T) {
+	var stderr bytes.Buffer
+	writer := iolib.NewLinePrefixWriter("test/component", &stderr, &sync.Mutex{})
+
+	renderTerminal(&ExecContext{Stderr: writer}, &Output{
+		Summary: &Summary{Body: "**hook summary**\n"},
+	})
+	require.NoError(t, writer.Flush())
+
+	assert.Contains(t, stderr.String(), "[test/component] hook summary")
 }
 
 func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {

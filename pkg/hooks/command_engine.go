@@ -334,26 +334,35 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 	return out
 }
 
-// renderTerminal emits the hook's user-facing output: a styled
-// markdown block via ui.MarkdownMessage when there's a summary body or
-// a markdown-formatted artifact. The leading blank line visually
-// separates the rendered block from preceding output (terraform plan,
-// the hook log line, the tool's own stdout). MarkdownMessage's renderer
-// (glamour) trims leading whitespace, so we emit the blank line as a
-// separate UI write rather than relying on a `\n` prefix in the body.
+// renderTerminal emits a styled markdown block for a hook summary or
+// markdown-formatted artifact. When a node writer is supplied, it writes the
+// rendered block through that writer so concurrent hook output stays prefixed
+// and serialized.
 func renderTerminal(ctx *ExecContext, out *Output) {
 	if out == nil {
 		return
 	}
 	if out.Summary != nil && out.Summary.Body != "" {
-		ui.Writeln("")
-		ui.MarkdownMessage(out.Summary.Body)
+		renderTerminalMarkdown(ctx, out.Summary.Body)
 		return
 	}
 	if out.Artifact != nil && ctx.Hook.Format == FormatMarkdown {
-		ui.Writeln("")
-		ui.MarkdownMessage(string(out.Artifact.Body))
+		renderTerminalMarkdown(ctx, string(out.Artifact.Body))
 	}
+}
+
+func renderTerminalMarkdown(ctx *ExecContext, content string) {
+	if ctx == nil || ctx.Stderr == nil || ui.Format == nil {
+		ui.Writeln("")
+		ui.MarkdownMessage(content)
+		return
+	}
+
+	rendered, err := ui.Format.Markdown(content)
+	if err != nil {
+		rendered = content
+	}
+	_, _ = fmt.Fprint(ctx.Stderr, "\n"+rendered)
 }
 
 func startHookLogGroup(ctx *ExecContext) func() {
